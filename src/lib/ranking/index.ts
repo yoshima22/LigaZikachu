@@ -59,7 +59,9 @@ export async function computePlayerRanking(seasonId: string): Promise<PlayerRank
     }
   }
 
-  const entries: PlayerRankingEntry[] = seasonPlayers.map((sp) => {
+  type RawEntry = Omit<PlayerRankingEntry, "position">;
+
+  const entries: RawEntry[] = seasonPlayers.map((sp) => {
     const s = statsMap.get(sp.playerId) ?? { wins: 0, losses: 0, draws: 0, points: 0 };
     return { playerId: sp.playerId, displayName: sp.player.displayName, ...s };
   });
