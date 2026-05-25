@@ -45,7 +45,7 @@ export default async function WeekDetailPage({
       ? (week.bonusRule as Record<string, unknown>)
       : null;
 
-  const positionBonus =
+  const positionBonus: Array<Record<string, unknown>> | null =
     bonusRule && Array.isArray(bonusRule.positionBonus)
       ? (bonusRule.positionBonus as Array<Record<string, unknown>>)
       : null;
@@ -156,14 +156,17 @@ export default async function WeekDetailPage({
                 <div className="space-y-1">
                   <p className="text-xs text-slate-500 font-medium">Bônus por posição:</p>
                   {positionBonus.map((pb) => {
-                    const positions = Array.isArray(pb.positions) ? (pb.positions as unknown[]) : [];
+                    const positionsRaw = Array.isArray(pb.positions) ? pb.positions : [];
+                    const positions: unknown[] = positionsRaw;
                     const bonusPerWin = typeof pb.bonusPerWin === "number" ? pb.bonusPerWin : 0;
                     const first = typeof positions[0] === "number" ? positions[0] : 0;
                     const last = typeof positions[positions.length - 1] === "number" ? positions[positions.length - 1] : first;
+                    const firstNum = typeof first === "number" ? first : 0;
+                    const lastNum = typeof last === "number" ? last : firstNum;
                     return (
-                      <div key={String(first)} className="flex items-center gap-2 text-xs">
+                      <div key={String(firstNum)} className="flex items-center gap-2 text-xs">
                         <span className="text-slate-300 font-medium">
-                          {first}º–{last}º
+                          {firstNum}º–{lastNum}º
                         </span>
                         <span className="text-slate-500">→</span>
                         <span className="text-[#FFCB05] font-semibold">+{bonusPerWin}pt/vitória</span>

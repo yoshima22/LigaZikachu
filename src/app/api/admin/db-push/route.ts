@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       ok: true,
       output: output.trim().split("\n").slice(-10) // últimas 10 linhas
     });
-  } catch (err: unknown) {
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message.substring(0, 500) }, { status: 500 });
   }
