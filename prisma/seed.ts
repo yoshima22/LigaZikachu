@@ -2,6 +2,8 @@ import {
   PrismaClient,
   Role,
   SeasonStatus,
+  TournamentStatus,
+  WeekMode,
   UserStatus,
   WeekStatus,
   MatchStatus,
@@ -9,7 +11,8 @@ import {
   DeckSubmissionStatus,
   BoosterCodeStatus,
   DistributionReason,
-  DistributionStatus
+  DistributionStatus,
+  RegistrationStatus
 } from "@prisma/client";
 import { hash } from "bcryptjs";
 
@@ -28,9 +31,156 @@ const rankingConfig = {
   tiebreakers: ["points", "strengthOfSchedule", "headToHead", "wins", "byeCount"]
 };
 
+// Configuração do ranking da 2ª edição (MD1, sem empates)
+const rankingConfig2a = {
+  version: "2.0.0",
+  format: "MD1",
+  winPoints: 3,
+  drawPoints: 0,
+  lossPoints: 0,
+  byePoints: 3,
+  topOfDayBonus: 0,
+  boosterImpactsRanking: false,
+  tiebreakers: ["wins", "wo_count_asc", "defended_badges", "opponent_win_rate"],
+  badgePoints: 3,
+  achievementPoints: { bronze: 5, silver: 7, gold: 10 }
+};
+
+// Definição das 8 semanas da 2ª edição
+const weekDefs = [
+  {
+    weekNumber: 1,
+    label: "Semana 1 — Padrão",
+    mode: WeekMode.PADRAO,
+    multiplier: 1,
+    bonusRule: null,
+    startDate: new Date("2026-06-01T00:00:00.000Z"),
+    endDate: new Date("2026-06-07T23:59:59.000Z"),
+    lockAt: new Date("2026-06-05T21:00:00.000Z"),
+    notes: "Abertura da 2ª edição. Sem restrições de deck."
+  },
+  {
+    weekNumber: 2,
+    label: "Semana 2 — GLC",
+    mode: WeekMode.GLC,
+    multiplier: 1,
+    bonusRule: {
+      extraPointsPerWin: 1,
+      badgeProgress: true,
+      officialBadgeDuel: false,
+      description: "Monotipo escolhido, energias mistas livres. +1pt extra por vitória."
+    },
+    startDate: new Date("2026-06-08T00:00:00.000Z"),
+    endDate: new Date("2026-06-14T23:59:59.000Z"),
+    lockAt: new Date("2026-06-12T21:00:00.000Z"),
+    notes: "Gym Leader Challenge. GLC dá +1 progresso de insígnia mas não é duelo oficial."
+  },
+  {
+    weekNumber: 3,
+    label: "Semana 3 — Padrão",
+    mode: WeekMode.PADRAO,
+    multiplier: 1,
+    bonusRule: null,
+    startDate: new Date("2026-06-15T00:00:00.000Z"),
+    endDate: new Date("2026-06-21T23:59:59.000Z"),
+    lockAt: new Date("2026-06-19T21:00:00.000Z"),
+    notes: "Rodada livre."
+  },
+  {
+    weekNumber: 4,
+    label: "Semana 4 — Duplas Sincronizadas",
+    mode: WeekMode.DUPLAS_SINCRONIZADAS,
+    multiplier: 1,
+    bonusRule: {
+      pairingRule: "rank_mirror",
+      pairs: [
+        { positions: [1, 8] },
+        { positions: [2, 7] },
+        { positions: [3, 6] }
+      ],
+      mirrorPosition: 4,
+      winnerTeamBonus: 3,
+      description: "Pareamento: 1º com 8º, 2º com 7º, 3º com 6º. 4º joga Dupla Espelho. Time vencedor +3pt cada."
+    },
+    startDate: new Date("2026-06-22T00:00:00.000Z"),
+    endDate: new Date("2026-06-28T23:59:59.000Z"),
+    lockAt: new Date("2026-06-26T21:00:00.000Z"),
+    notes: "Duplas sincronizadas por ranking."
+  },
+  {
+    weekNumber: 5,
+    label: "Semana 5 — Pontuação Dobrada",
+    mode: WeekMode.PONTUACAO_DOBRADA,
+    multiplier: 2,
+    bonusRule: {
+      winPoints: 6,
+      badgesDouble: false,
+      achievementsDouble: false,
+      description: "Vitórias valem 6 pontos. Insígnias e conquistas NÃO dobram."
+    },
+    startDate: new Date("2026-06-29T00:00:00.000Z"),
+    endDate: new Date("2026-07-05T23:59:59.000Z"),
+    lockAt: new Date("2026-07-03T21:00:00.000Z"),
+    notes: "Pontuação de vitória dobrada nesta semana."
+  },
+  {
+    weekNumber: 6,
+    label: "Semana 6 — Construtor Misterioso",
+    mode: WeekMode.CONSTRUTOR_MISTERIOSO,
+    multiplier: 1,
+    bonusRule: {
+      decksToSubmit: 3,
+      opponentChooses: true,
+      extraPointsPerWin: 1,
+      description: "Cada jogador prepara 3 decks; adversário escolhe qual você usa. +1pt por vitória."
+    },
+    startDate: new Date("2026-07-06T00:00:00.000Z"),
+    endDate: new Date("2026-07-12T23:59:59.000Z"),
+    lockAt: new Date("2026-07-10T21:00:00.000Z"),
+    notes: "Envie 3 decks antes do prazo. Adversário escolhe qual você usa."
+  },
+  {
+    weekNumber: 7,
+    label: "Semana 7 — Guerra de Times",
+    mode: WeekMode.GUERRA_DE_TIMES,
+    multiplier: 1,
+    bonusRule: {
+      teamA: [1, 3, 5, 7],
+      teamB: [2, 4, 6],
+      winCondition: "avg_points",
+      winnerTeamBonus: 2,
+      description: "Time A: posições 1,3,5,7. Time B: 2,4,6. Vence pela média de pontos. Time vencedor +2pt cada."
+    },
+    startDate: new Date("2026-07-13T00:00:00.000Z"),
+    endDate: new Date("2026-07-19T23:59:59.000Z"),
+    lockAt: new Date("2026-07-17T21:00:00.000Z"),
+    notes: "Disputa entre dois times formados por posição no ranking."
+  },
+  {
+    weekNumber: 8,
+    label: "Semana 8 — Batalha Final",
+    mode: WeekMode.BATALHA_FINAL,
+    multiplier: 1,
+    bonusRule: {
+      positionBonus: [
+        { positions: [1, 2], bonusPerWin: 1 },
+        { positions: [3, 4], bonusPerWin: 2 },
+        { positions: [5, 6], bonusPerWin: 3 },
+        { positions: [7, 8], bonusPerWin: 4 }
+      ],
+      description: "Bônus por posição inicial: 1-2 = +1pt/vitória; 3-4 = +2pt; 5-6 = +3pt; 7-8 = +4pt."
+    },
+    startDate: new Date("2026-07-20T00:00:00.000Z"),
+    endDate: new Date("2026-07-26T23:59:59.000Z"),
+    lockAt: new Date("2026-07-24T21:00:00.000Z"),
+    notes: "Rodada final com bônus progressivo por posição de ranking."
+  }
+];
+
 export async function main() {
   const passwordHash = await hash("LigaZikachu123", 10);
 
+  // ─── Admin ───────────────────────────────────────────────────────────────────
   const admin = await prisma.user.upsert({
     where: { email: "admin@ligazikachu.com" },
     update: {
@@ -52,11 +202,10 @@ export async function main() {
         }
       }
     },
-    include: {
-      player: true
-    }
+    include: { player: true }
   });
 
+  // ─── Players ─────────────────────────────────────────────────────────────────
   const playerSeeds = [
     { name: "Luiz", email: "luiz@ligazikachu.com", nick: "LuizZika" },
     { name: "Rodrigo", email: "rodrigo@ligazikachu.com", nick: "RodTCGL" },
@@ -90,24 +239,17 @@ export async function main() {
           }
         }
       },
-      include: {
-        player: true
-      }
+      include: { player: true }
     });
 
-    if (!user.player) {
-      throw new Error(`Player não criado para ${entry.name}`);
-    }
-
+    if (!user.player) throw new Error(`Player não criado para ${entry.name}`);
     players.push(user.player);
   }
 
+  // ─── Season legada (Temporada 1) ─────────────────────────────────────────────
   const season = await prisma.season.upsert({
     where: { slug: "liga-zikachu-temporada-1" },
-    update: {
-      status: SeasonStatus.ACTIVE,
-      rankingConfig
-    },
+    update: { status: SeasonStatus.ACTIVE, rankingConfig },
     create: {
       name: "Liga Zikachu - Temporada 1",
       slug: "liga-zikachu-temporada-1",
@@ -127,16 +269,8 @@ export async function main() {
 
   for (const [index, player] of players.entries()) {
     await prisma.seasonPlayer.upsert({
-      where: {
-        seasonId_playerId: {
-          seasonId: season.id,
-          playerId: player.id
-        }
-      },
-      update: {
-        seed: index + 1,
-        isActive: true
-      },
+      where: { seasonId_playerId: { seasonId: season.id, playerId: player.id } },
+      update: { seed: index + 1, isActive: true },
       create: {
         seasonId: season.id,
         playerId: player.id,
@@ -174,12 +308,7 @@ export async function main() {
 
   for (const entry of weeks) {
     const week = await prisma.week.upsert({
-      where: {
-        seasonId_number: {
-          seasonId: season.id,
-          number: entry.number
-        }
-      },
+      where: { seasonId_number: { seasonId: season.id, number: entry.number } },
       update: {
         startsAt: entry.startsAt,
         endsAt: entry.endsAt,
@@ -198,11 +327,11 @@ export async function main() {
         status: WeekStatus.OPEN
       }
     });
-
     persistedWeeks.push(week);
   }
 
-  const byName = Object.fromEntries(players.map((player) => [player.displayName, player]));
+  // ─── Sample matches (season legada) ──────────────────────────────────────────
+  const byName = Object.fromEntries(players.map((p) => [p.displayName, p]));
 
   const sampleMatches = [
     {
@@ -295,32 +424,26 @@ export async function main() {
 
     for (const playerId of [entry.a.id, entry.b.id]) {
       await prisma.matchConfirmation.upsert({
-        where: {
-          matchId_playerId: {
-            matchId: match.id,
-            playerId
-          }
-        },
+        where: { matchId_playerId: { matchId: match.id, playerId } },
         update: {
           status: entry.confirmationStatus,
-          confirmedAt: entry.confirmationStatus === ConfirmationStatus.CONFIRMED ? new Date() : null
+          confirmedAt:
+            entry.confirmationStatus === ConfirmationStatus.CONFIRMED ? new Date() : null
         },
         create: {
           matchId: match.id,
           playerId,
           status: entry.confirmationStatus,
-          confirmedAt: entry.confirmationStatus === ConfirmationStatus.CONFIRMED ? new Date() : null
+          confirmedAt:
+            entry.confirmationStatus === ConfirmationStatus.CONFIRMED ? new Date() : null
         }
       });
     }
 
     if (entry.status === MatchStatus.DISPUTED) {
       const existingChallenge = await prisma.challenge.findFirst({
-        where: {
-          matchId: match.id
-        }
+        where: { matchId: match.id }
       });
-
       if (!existingChallenge) {
         await prisma.challenge.create({
           data: {
@@ -338,6 +461,7 @@ export async function main() {
     }
   }
 
+  // ─── Deck submissions ────────────────────────────────────────────────────────
   await prisma.deckSubmission.createMany({
     data: [
       {
@@ -368,6 +492,7 @@ export async function main() {
     skipDuplicates: true
   });
 
+  // ─── Booster codes ───────────────────────────────────────────────────────────
   const boosterCodes = [
     { code: "LIGA-ZIKA-001", status: BoosterCodeStatus.ASSIGNED },
     { code: "LIGA-ZIKA-002", status: BoosterCodeStatus.REDEEMED },
@@ -382,9 +507,7 @@ export async function main() {
   for (const entry of boosterCodes) {
     const code = await prisma.boosterCode.upsert({
       where: { code: entry.code },
-      update: {
-        status: entry.status
-      },
+      update: { status: entry.status },
       create: {
         seasonId: season.id,
         code: entry.code,
@@ -395,13 +518,19 @@ export async function main() {
       }
     });
 
-    if (entry.status === BoosterCodeStatus.ASSIGNED || entry.status === BoosterCodeStatus.REDEEMED) {
+    if (
+      entry.status === BoosterCodeStatus.ASSIGNED ||
+      entry.status === BoosterCodeStatus.REDEEMED
+    ) {
       await prisma.codeDistribution.upsert({
         where: { boosterCodeId: code.id },
         update: {
           playerId: byName["Luiz"].id,
           seasonId: season.id,
-          status: entry.status === BoosterCodeStatus.REDEEMED ? DistributionStatus.REDEEMED : DistributionStatus.ASSIGNED
+          status:
+            entry.status === BoosterCodeStatus.REDEEMED
+              ? DistributionStatus.REDEEMED
+              : DistributionStatus.ASSIGNED
         },
         create: {
           boosterCodeId: code.id,
@@ -409,23 +538,117 @@ export async function main() {
           playerId: byName["Luiz"].id,
           assignedById: admin.id,
           reason: DistributionReason.TOP_OF_DAY,
-          status: entry.status === BoosterCodeStatus.REDEEMED ? DistributionStatus.REDEEMED : DistributionStatus.ASSIGNED,
+          status:
+            entry.status === BoosterCodeStatus.REDEEMED
+              ? DistributionStatus.REDEEMED
+              : DistributionStatus.ASSIGNED,
           redeemedAt: entry.status === BoosterCodeStatus.REDEEMED ? new Date() : null
         }
       });
     }
   }
 
+  // ─── Torneio: 2ª Edição — Desafio das Insígnias Fantasmagóricas ──────────────
+  const tournament = await prisma.tournament.upsert({
+    where: { slug: "2a-edicao-insignias-fantasmagoricas" },
+    update: {
+      status: TournamentStatus.REGISTRATION_OPEN,
+      rankingConfig: rankingConfig2a
+    },
+    create: {
+      name: "2ª Edição: Desafio das Insígnias Fantasmagóricas",
+      slug: "2a-edicao-insignias-fantasmagoricas",
+      edition: "2a-edicao",
+      description:
+        "O grande retorno da Liga Zikachu! 8 semanas de batalhas, insígnias Kanto, conquistas e modos especiais. Prepare seus decks e mostre que você é o melhor Treinador.",
+      status: TournamentStatus.REGISTRATION_OPEN,
+      startDate: new Date("2026-06-01T00:00:00.000Z"),
+      endDate: new Date("2026-07-26T23:59:59.000Z"),
+      maxPlayers: 8,
+      registrationOpensAt: new Date("2026-05-20T00:00:00.000Z"),
+      registrationClosesAt: new Date("2026-05-31T23:59:59.000Z"),
+      rankingConfig: rankingConfig2a,
+      themeMetadata: {
+        primaryColor: "#735797",
+        accentColor: "#FFCB05",
+        badge: "ghost",
+        edition: 2
+      },
+      createdById: admin.id
+    }
+  });
+
+  // ─── Semanas do torneio ──────────────────────────────────────────────────────
+  for (const wk of weekDefs) {
+    await prisma.tournamentWeek.upsert({
+      where: {
+        tournamentId_weekNumber: {
+          tournamentId: tournament.id,
+          weekNumber: wk.weekNumber
+        }
+      },
+      update: {
+        label: wk.label,
+        mode: wk.mode,
+        multiplier: wk.multiplier,
+        bonusRule: wk.bonusRule ?? undefined,
+        startDate: wk.startDate,
+        endDate: wk.endDate,
+        lockAt: wk.lockAt,
+        notes: wk.notes
+      },
+      create: {
+        tournamentId: tournament.id,
+        weekNumber: wk.weekNumber,
+        label: wk.label,
+        mode: wk.mode,
+        multiplier: wk.multiplier,
+        bonusRule: wk.bonusRule ?? undefined,
+        startDate: wk.startDate,
+        endDate: wk.endDate,
+        lockAt: wk.lockAt,
+        notes: wk.notes
+      }
+    });
+  }
+
+  // ─── Inscrições dos 6 jogadores na 2ª edição ────────────────────────────────
+  for (const player of players) {
+    await prisma.tournamentRegistration.upsert({
+      where: {
+        tournamentId_playerId: {
+          tournamentId: tournament.id,
+          playerId: player.id
+        }
+      },
+      update: {
+        status: RegistrationStatus.APPROVED,
+        decidedAt: new Date(),
+        decidedById: admin.id
+      },
+      create: {
+        tournamentId: tournament.id,
+        playerId: player.id,
+        status: RegistrationStatus.APPROVED,
+        decidedAt: new Date(),
+        decidedById: admin.id
+      }
+    });
+  }
+
+  // ─── Audit log do seed ───────────────────────────────────────────────────────
   await prisma.auditLog.create({
     data: {
       actorUserId: admin.id,
       entityType: "seed",
-      entityId: season.id,
+      entityId: tournament.id,
       action: "seed.executed",
       after: {
         season: season.slug,
-        players: playerSeeds.map((entry) => entry.name),
+        tournament: tournament.slug,
+        players: playerSeeds.map((e) => e.name),
         weeks: weeks.length,
+        tournamentWeeks: weekDefs.length,
         codes: boosterCodes.length
       }
     }

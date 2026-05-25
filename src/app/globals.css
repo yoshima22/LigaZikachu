@@ -8,16 +8,36 @@
 
 html {
   min-height: 100%;
-  background: #020617;
+  background: #1A1A2E;
 }
 
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(250, 204, 21, 0.18), transparent 28%),
-    radial-gradient(circle at right, rgba(96, 165, 250, 0.18), transparent 24%),
-    linear-gradient(180deg, #020617 0%, #0f172a 100%);
+    radial-gradient(circle at 20% 10%, rgba(255, 203, 5, 0.12), transparent 30%),
+    radial-gradient(circle at 80% 20%, rgba(115, 87, 151, 0.15), transparent 28%),
+    radial-gradient(circle at 50% 90%, rgba(61, 125, 202, 0.12), transparent 35%),
+    linear-gradient(180deg, #1A1A2E 0%, #16213E 50%, #0F3460 100%);
   color: #f8fafc;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Textura hexagonal sutil no background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34L28 66zM28 100L0 84V50l28-16 28 16v34L28 100z' fill='none' stroke='%23FFCB05' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 56px 100px;
+}
+
+/* Garante que o conteúdo fique acima da textura */
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 a {
@@ -27,4 +47,55 @@ a {
 
 * {
   border-color: #1f2937;
+}
+
+/* Scrollbar estilizada */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1A1A2E;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FFCB05;
+}
+
+/* Utilitários do design system Pokémon */
+@layer utilities {
+  .font-pixel {
+    font-family: var(--font-press-start), monospace;
+  }
+
+  .text-shimmer {
+    background: linear-gradient(90deg, #FFCB05, #fff, #FFCB05);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .card-poke {
+    background: linear-gradient(145deg, rgba(26,26,46,0.9) 0%, rgba(22,33,62,0.9) 100%);
+    border: 1px solid rgba(255, 203, 5, 0.15);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+    backdrop-filter: blur(12px);
+  }
+
+  .card-poke:hover {
+    border-color: rgba(255, 203, 5, 0.35);
+    box-shadow: 0 24px 60px rgba(255, 203, 5, 0.12);
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }

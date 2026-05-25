@@ -1,71 +1,80 @@
-# Liga Zikachu
+# Liga Zikachu Live
 
-Base inicial do app web/PWA da Liga Zikachu com Next.js, Prisma, PostgreSQL e Auth.js.
+App web/PWA da Liga Zikachu para gerenciar torneios de Pokémon TCG com Next.js, Prisma, PostgreSQL e Auth.js.
 
-## O que já foi implementado
+## Funcionalidades
 
-- estrutura inicial do projeto com App Router
-- autenticação base com Auth.js usando email + senha
-- schema Prisma completo para o domínio da liga
-- seed inicial com temporada, jogadores, semanas, partidas, decks e códigos
-- páginas públicas e protegidas para validação inicial
-- manifesto base de PWA
-- documento técnico da Fase 0 em `docs/plano-fase-0.md`
+### Slice 1 — Dashboard + Jogadores (concluído)
+- Autenticação com email + senha (Auth.js v5)
+- Dashboard administrativo e de jogador com dados reais
+- Gestão de jogadores: aprovar, suspender, editar, remover
+- Perfil de jogador com histórico de partidas, decks, conquistas e códigos
+- Ranking em tempo real calculado por vitórias/derrotas
+- Schema Prisma completo (15+ modelos)
 
-## Deploy MVP na Vercel + Supabase
+### Slice 2 — Torneios, Semanas e Tema Visual Pokémon (concluído)
+- **Torneios independentes** — múltiplos torneios paralelos com slug, edição, status e ciclo de vida completo
+- **Semanas configuradas** — 8 semanas com modos especiais do regulamento (Padrão, GLC, Duplas Sincronizadas, Pontuação Dobrada, Construtor Misterioso, Guerra de Times, Batalha Final)
+- **Inscrições** — self-register, aprovação/rejeição admin, audit log
+- **Server Actions** com validação Zod e AuditLog em todas as ações
+- **Tema visual Pokémon TCG** — paleta de 18 tipos, fontes Press Start 2P + Inter, textura hexagonal, animações
+- **Componentes poke/** — TypeBadge, EnergyBadge, TournamentCard, WeekModeBadge, TrainerAvatar
+- **Páginas de torneios**: lista, detalhe, semana, inscrições (admin), criar torneio
+- **2ª Edição: Desafio das Insígnias Fantasmagóricas** configurada no seed com todas as 8 semanas
+- Regulamento completo em `docs/regulamento-2a-edicao.md`
+- Toasts via `sonner`
 
-Como este ambiente não possui `node`, `npm` nem `vercel`, o deploy deve ser finalizado pela Vercel conectada ao repositório GitHub.
+#### Páginas de Torneios
+| Rota | Descrição |
+|------|-----------|
+| `/torneios` | Lista de todos os torneios com filtros por status |
+| `/torneios/[slug]` | Detalhe do torneio, inscritos, cronograma de semanas |
+| `/torneios/[slug]/semanas/[n]` | Detalhe da semana com modo, regras e datas |
+| `/torneios/[slug]/inscricoes` | Admin: aprovar/rejeitar inscrições |
+| `/torneios/novo` | Admin: criar novo torneio |
 
-### Variáveis de ambiente na Vercel
+## Deploy (Vercel + Supabase)
 
-Configure em `Production`, `Preview` e `Development`:
-
-- `DATABASE_URL`
-- `DIRECT_URL`
-- `AUTH_SECRET`
-- `AUTH_TRUST_HOST=true`
-- `NEXTAUTH_URL=<url-final-da-vercel>`
-- `SEED_SECRET=<segredo-forte-para-seed>`
-
-### Build command
-
-O projeto já está preparado para a Vercel executar:
-
+O build da Vercel executa automaticamente:
 ```bash
 prisma generate && prisma db push && next build
 ```
 
-Essa escolha usa `db push` no primeiro deploy para destravar o MVP sem depender de migrations versionadas geradas localmente.
+### Variáveis de ambiente
+- `DATABASE_URL` — URL de conexão pooled (Supabase)
+- `DIRECT_URL` — URL de conexão direta (Supabase, para migrations)
+- `AUTH_SECRET` — segredo do Auth.js
+- `AUTH_TRUST_HOST=true`
+- `NEXTAUTH_URL=<url-da-vercel>`
+- `SEED_SECRET=zikachu-seed-2026-trocar-depois`
 
-### Primeiro deploy
-
-1. Importe o repositório na Vercel.
-2. Preencha as variáveis acima.
-3. Faça o primeiro deploy.
-4. Após o deploy, atualize `NEXTAUTH_URL` com a URL final gerada pela Vercel e redeploy.
-
-### Seed inicial
-
-Depois que o deploy estiver verde, execute:
-
+### Seed (idempotente)
 ```bash
-curl -X POST https://<url-final-da-vercel>/api/admin/seed -H "x-seed-secret: <SEED_SECRET>"
+curl -X POST https://<url-vercel>/api/admin/seed \
+  -H "x-seed-secret: zikachu-seed-2026-trocar-depois"
 ```
 
-Se preferir, use qualquer cliente HTTP com o header `x-seed-secret`.
+O seed cria/atualiza:
+- Admin + 6 jogadores de teste
+- Temporada 1 (legada) com semanas e partidas de exemplo
+- **2ª Edição: Desafio das Insígnias Fantasmagóricas** com 8 semanas configuradas
+- Inscrições dos 6 jogadores na 2ª edição (já aprovadas)
+- Códigos booster de exemplo
 
-### Smoke test esperado
+## Credenciais de teste
+| Email | Senha | Role |
+|-------|-------|------|
+| `admin@ligazikachu.com` | `LigaZikachu123` | SUPER_ADMIN |
+| `luiz@ligazikachu.com`  | `LigaZikachu123` | PLAYER |
+| `rodrigo@ligazikachu.com` | `LigaZikachu123` | PLAYER |
 
-- `/login` abre sem erro 500
-- criação de conta funciona
-- login redireciona para `/dashboard`
-- tabela `users` recebe novos cadastros
-- seed cria 6 jogadores reais + admin
+(demais jogadores usam a mesma senha)
 
-## Fluxo local rápido
+## Documentação
+- `docs/plano-fase-0.md` — arquitetura técnica e decisões da Fase 0
+- `docs/regulamento-2a-edicao.md` — regulamento completo da 2ª edição
 
-Se houver ambiente Node local no futuro:
-
+## Fluxo local (se Node disponível)
 ```bash
 npm install
 npm run db:generate
@@ -73,10 +82,3 @@ npm run db:push
 npm run db:seed
 npm run dev
 ```
-
-## Credenciais seed
-
-- admin: `admin@ligazikachu.com`
-- senha: `LigaZikachu123`
-
-Jogadores seed usam a mesma senha.

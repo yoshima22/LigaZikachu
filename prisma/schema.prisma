@@ -28,6 +28,25 @@ enum SeasonStatus {
   ARCHIVED
 }
 
+// Status para torneios independentes (2ª edição em diante)
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  IN_PROGRESS
+  FINISHED
+}
+
+// Modos especiais de semana conforme regulamento
+enum WeekMode {
+  PADRAO
+  GLC
+  DUPLAS_SINCRONIZADAS
+  PONTUACAO_DOBRADA
+  CONSTRUTOR_MISTERIOSO
+  GUERRA_DE_TIMES
+  BATALHA_FINAL
+}
+
 enum WeekStatus {
   PLANNED
   OPEN
@@ -98,6 +117,13 @@ enum SnapshotType {
   MANUAL_RECALC
 }
 
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
 model User {
   id                       String               @id @default(cuid())
   name                     String?
@@ -128,6 +154,8 @@ model User {
   generatedSnapshots       RankingSnapshot[]    @relation("RankingSnapshotGeneratedBy")
   awardedPlayerAchievements PlayerAchievement[] @relation("PlayerAchievementAwardedBy")
   auditLogs                AuditLog[]           @relation("AuditActor")
+  createdTournaments       Tournament[]         @relation("TournamentCreatedBy")
+  decidedRegistrations     TournamentRegistration[] @relation("RegistrationDecidedBy")
 
   @@map("users")
 }
@@ -155,8 +183,74 @@ model Player {
   codeDistributions       CodeDistribution[]
   playerAchievements      PlayerAchievement[]
   rankingSnapshots        RankingSnapshot[]
+  tournamentRegistrations TournamentRegistration[]
 
   @@map("players")
+}
+
+// Torneio independente — pode existir em paralelo a seasons legadas
+model Tournament {
+  id                    String             @id @default(cuid())
+  name                  String
+  slug                  String             @unique
+  edition               String?
+  description           String?
+  status                TournamentStatus   @default(DRAFT)
+  startDate             DateTime
+  endDate               DateTime?
+  maxPlayers            Int?
+  registrationOpensAt   DateTime?
+  registrationClosesAt  DateTime?
+  bannerImageUrl        String?
+  themeMetadata         Json?
+  rankingConfig         Json
+  createdById           String
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  createdBy             User               @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  weeks                 TournamentWeek[]
+  registrations         TournamentRegistration[]
+
+  @@map("tournaments")
+}
+
+// Semanas específicas de um torneio com modo
+model TournamentWeek {
+  id           String       @id @default(cuid())
+  tournamentId String
+  weekNumber   Int
+  label        String?
+  mode         WeekMode     @default(PADRAO)
+  multiplier   Decimal      @default(1) @db.Decimal(6, 2)
+  bonusRule    Json?
+  status       WeekStatus   @default(PLANNED)
+  startDate    DateTime
+  endDate      DateTime
+  lockAt       DateTime?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, weekNumber])
+  @@map("tournament_weeks")
+}
+
+// Inscrição de jogador em torneio
+model TournamentRegistration {
+  id           String             @id @default(cuid())
+  tournamentId String
+  playerId     String
+  status       RegistrationStatus @default(PENDING)
+  registeredAt DateTime           @default(now())
+  decidedAt    DateTime?
+  decidedById  String?
+  tournament   Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player       Player             @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  decidedBy    User?              @relation("RegistrationDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([tournamentId, playerId])
+  @@map("tournament_registrations")
 }
 
 model Season {
@@ -209,9 +303,11 @@ model Week {
   seasonId         String
   number           Int
   label            String?
+  mode             WeekMode          @default(PADRAO)
   startsAt         DateTime
   endsAt           DateTime
   multiplier       Decimal           @default(1) @db.Decimal(6, 2)
+  bonusRule        Json?
   lockAt           DateTime?
   status           WeekStatus        @default(PLANNED)
   notes            String?

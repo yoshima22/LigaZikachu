@@ -82,7 +82,7 @@ export default async function DashboardPage() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Painel Administrativo</h1>
+          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug sm:text-lg">Painel Admin</h1>
           <p className="mt-1 text-sm text-slate-400">Visão geral da operação da liga</p>
         </div>
 
@@ -150,6 +150,11 @@ export default async function DashboardPage() {
             Atalhos rápidos
           </h2>
           <div className="flex flex-wrap gap-3">
+            <Link href="/torneios">
+              <Button variant="outline" className="gap-2">
+                <Trophy size={16} /> Torneios
+              </Button>
+            </Link>
             <Link href="/jogadores">
               <Button variant="outline" className="gap-2">
                 <Users size={16} /> Jogadores
@@ -211,7 +216,9 @@ export default async function DashboardPage() {
   if (!player || !activeSeason) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-white">Olá, {user.name ?? user.email}</h1>
+        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">
+          Olá, {user.name ?? user.email}
+        </h1>
         <Card>
           <EmptyState
             message="Nenhuma temporada ativa no momento. Aguarde o início da próxima temporada."
@@ -275,7 +282,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">
           Olá, {player.displayName}
         </h1>
         <p className="mt-1 text-sm text-slate-400">

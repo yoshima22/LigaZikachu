@@ -17,6 +17,7 @@ const authConfig = {
         nextUrl.pathname.startsWith("/jogadores") ||
         nextUrl.pathname.startsWith("/perfil") ||
         nextUrl.pathname.startsWith("/temporadas") ||
+        nextUrl.pathname.startsWith("/torneios") ||
         isAdminRoute;
 
       if (isAdminRoute) {
