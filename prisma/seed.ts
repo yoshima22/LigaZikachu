@@ -215,7 +215,7 @@ export async function main() {
     { name: "Nakaima", email: "nakaima@ligazikachu.com", nick: "NakaimaTCGL" }
   ];
 
-  const players = [];
+  const players: Array<{ id: string; displayName: string; ptcglNick: string | null; userId: string; whatsapp: string | null; active: boolean; notes: string | null; createdAt: Date; updatedAt: Date }> = [];
 
   for (const entry of playerSeeds) {
     const user = await prisma.user.upsert({
