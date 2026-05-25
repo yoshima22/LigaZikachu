@@ -211,6 +211,7 @@ export async function selfRegister(
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
 
     const player = await prisma.player.findUnique({ where: { userId: user.id } });
     if (!player) return { error: "Perfil de jogador não encontrado." };
@@ -336,6 +337,7 @@ export async function withdrawRegistration(
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
     const player = await prisma.player.findUnique({ where: { userId: user.id } });
     if (!player) return { error: "Jogador não encontrado." };
 

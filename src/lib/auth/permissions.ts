@@ -12,18 +12,18 @@ export function isApproved(status: UserStatus) {
 
 export async function getSessionUser() {
   const session = await auth();
-  if (!session?.user) redirect("/login");
+  if (!session?.user) return null;
   return session.user;
 }
 
 export async function requireAdmin() {
   const user = await getSessionUser();
-  if (!isAdmin(user.role)) redirect("/dashboard");
+  if (!user || !isAdmin(user.role)) redirect("/dashboard");
   return user;
 }
 
 export async function requireRole(roles: Role[]) {
   const user = await getSessionUser();
-  if (!roles.includes(user.role)) redirect("/dashboard");
+  if (!user || !roles.includes(user.role)) redirect("/dashboard");
   return user;
 }

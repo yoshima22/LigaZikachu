@@ -143,6 +143,8 @@ model User {
   sessions                 Session[]
   createdSeasons           Season[]             @relation("SeasonCreatedBy")
   createdMatches           Match[]              @relation("MatchCreatedBy")
+  reportedMatches          Match[]              @relation("MatchReportedBy")
+  confirmedMatches         Match[]              @relation("MatchConfirmedBy")
   approvedDecks            DeckSubmission[]     @relation("DeckApprovedBy")
   openedChallenges         Challenge[]          @relation("ChallengeOpenedBy")
   resolvedChallenges       Challenge[]          @relation("ChallengeResolvedBy")
@@ -177,6 +179,8 @@ model Player {
   matchesWon              Match[]              @relation("MatchWinner")
   matchesLost             Match[]              @relation("MatchLoser")
   confirmations           MatchConfirmation[]
+  reportedMatches         Match[]              @relation("MatchReportedBy")
+  confirmedMatches        Match[]              @relation("MatchConfirmedBy")
   deckSubmissions         DeckSubmission[]
   challengesAsChallenger  Challenge[]          @relation("ChallengeChallenger")
   challengesAsChallenged  Challenge[]          @relation("ChallengeChallenged")
@@ -231,6 +235,7 @@ model TournamentWeek {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches      Match[]      @relation("TournamentWeekMatches")
 
   @@unique([tournamentId, weekNumber])
   @@map("tournament_weeks")
@@ -324,40 +329,48 @@ model Week {
 }
 
 model Match {
-  id               String          @id @default(cuid())
-  seasonId         String
-  weekId           String?
-  playerAId        String
-  playerBId        String?
-  isBye            Boolean         @default(false)
-  scheduledAt      DateTime?
-  playedAt         DateTime?
-  roundLabel       String?
-  tableLabel       String?
-  bestOf           Int             @default(3)
-  playerAWins      Int             @default(0)
-  playerBWins      Int             @default(0)
-  draws            Int             @default(0)
-  winnerPlayerId   String?
-  loserPlayerId    String?
-  status           MatchStatus     @default(PENDING_CONFIRMATION)
-  resultSource     ResultSource    @default(MANUAL)
-  rankingPointsA   Decimal         @default(0) @db.Decimal(10, 2)
-  rankingPointsB   Decimal         @default(0) @db.Decimal(10, 2)
-  topOfDayEligible Boolean         @default(false)
-  notes            String?
-  createdById      String
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  season           Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  week             Week?           @relation(fields: [weekId], references: [id], onDelete: SetNull)
-  playerA          Player          @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
-  playerB          Player?         @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  winnerPlayer     Player?         @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
-  loserPlayer      Player?         @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
-  createdBy        User            @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  confirmations    MatchConfirmation[]
-  challenges       Challenge[]
+  id                String          @id @default(cuid())
+  seasonId          String
+  weekId            String?
+  tournamentWeekId  String?
+  playerAId         String
+  playerBId         String?
+  isBye             Boolean         @default(false)
+  scheduledAt       DateTime?
+  playedAt          DateTime?
+  roundLabel        String?
+  tableLabel        String?
+  bestOf            Int             @default(3)
+  playerAWins       Int             @default(0)
+  playerBWins       Int             @default(0)
+  draws             Int             @default(0)
+  winnerPlayerId    String?
+  loserPlayerId     String?
+  status            MatchStatus     @default(PENDING_CONFIRMATION)
+  resultSource      ResultSource    @default(MANUAL)
+  rankingPointsA    Decimal         @default(0) @db.Decimal(10, 2)
+  rankingPointsB    Decimal         @default(0) @db.Decimal(10, 2)
+  topOfDayEligible  Boolean         @default(false)
+  notes             String?
+  reportedById      String?
+  confirmedById     String?
+  reportedAt        DateTime?
+  confirmedAt       DateTime?
+  createdById       String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  season            Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week              Week?           @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  tournamentWeek    TournamentWeek? @relation("TournamentWeekMatches", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  playerA           Player          @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
+  playerB           Player?         @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  winnerPlayer      Player?         @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
+  loserPlayer       Player?         @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
+  reportedBy        User?           @relation("MatchReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  confirmedBy       User?           @relation("MatchConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  createdBy         User            @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmations     MatchConfirmation[]
+  challenges        Challenge[]
 
   @@index([seasonId, weekId, status])
   @@index([playerAId, playerBId, playedAt])

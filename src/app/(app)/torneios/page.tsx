@@ -28,7 +28,7 @@ export default async function TourneiosPage({
 }) {
   const { status: statusFilter } = await searchParams;
   const user = await getSessionUser();
-  const admin = isAdmin(user.role);
+  const admin = user ? isAdmin(user.role) : false;
 
   const where =
     statusFilter && statusFilter !== "ALL"

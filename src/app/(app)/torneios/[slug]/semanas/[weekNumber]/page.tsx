@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import Link from "next/link";
-import { ChevronRight, CalendarDays, Clock, Info } from "lucide-react";
+import { ChevronRight, CalendarDays, Clock, Info, Swords } from "lucide-react";
 
 export default async function WeekDetailPage({
   params
@@ -15,7 +15,7 @@ export default async function WeekDetailPage({
   const weekNum = parseInt(weekNumber, 10);
   if (isNaN(weekNum)) notFound();
 
-  await getSessionUser();
+  const user = await getSessionUser();
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
@@ -187,9 +187,17 @@ export default async function WeekDetailPage({
         </div>
       </div>
 
-      {/* Partidas — placeholder Slice 3 */}
+      {/* Partidas */}
       <div className="rounded-xl border border-dashed border-border bg-slate-900/20 px-6 py-8 text-center">
-        <p className="text-sm text-slate-500">Partidas desta semana serão exibidas na Slice 3.</p>
+        <Swords className="mx-auto h-8 w-8 text-[#FFCB05] mb-2" />
+        <p className="text-sm text-slate-400 mb-3">Veja as partidas desta semana</p>
+        <Link
+          href={`/torneios/${slug}/semanas/${weekNum}/partidas`}
+          className="inline-flex items-center gap-1 rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-semibold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors"
+        >
+          Ver Partidas
+          <ChevronRight className="h-4 w-4" />
+        </Link>
       </div>
     </div>
   );
