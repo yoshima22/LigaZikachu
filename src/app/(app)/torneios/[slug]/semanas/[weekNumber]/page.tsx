@@ -121,7 +121,7 @@ export default async function WeekDetailPage({
           </h2>
           {bonusRule ? (
             <div className="space-y-2 text-sm text-slate-300">
-              {bonusRule.description && (
+              {!!bonusRule.description && (
                 <p className="text-slate-400">{String(bonusRule.description)}</p>
               )}
               {Number(week.multiplier) !== 1 && (
@@ -130,19 +130,19 @@ export default async function WeekDetailPage({
                   <span className="text-slate-400 text-xs">multiplicador de pontos</span>
                 </div>
               )}
-              {bonusRule.extraPointsPerWin && (
+              {!!bonusRule.extraPointsPerWin && (
                 <div className="flex items-center gap-2 rounded-lg border border-[#7AC74C]/20 bg-[#7AC74C]/5 px-3 py-2">
                   <span className="text-[#7AC74C] font-bold">+{String(bonusRule.extraPointsPerWin)}pt</span>
                   <span className="text-slate-400 text-xs">bônus por vitória</span>
                 </div>
               )}
-              {bonusRule.winnerTeamBonus && (
+              {!!bonusRule.winnerTeamBonus && (
                 <div className="flex items-center gap-2 rounded-lg border border-[#EE8130]/20 bg-[#EE8130]/5 px-3 py-2">
                   <span className="text-[#EE8130] font-bold">+{String(bonusRule.winnerTeamBonus)}pt</span>
                   <span className="text-slate-400 text-xs">bônus para o time vencedor</span>
                 </div>
               )}
-              {bonusRule.decksToSubmit && (
+              {!!bonusRule.decksToSubmit && (
                 <div className="text-xs text-slate-400 bg-slate-800/50 rounded-lg px-3 py-2">
                   Envie {String(bonusRule.decksToSubmit)} decks antes do prazo. Adversário escolhe qual você usa.
                 </div>

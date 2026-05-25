@@ -51,7 +51,7 @@ export function TournamentCard({
         className={cn(
           "group relative overflow-hidden rounded-2xl border border-border bg-slate-950/70 shadow-card backdrop-blur",
           "transition-all duration-300 ease-out",
-          "hover:-translate-y-1 hover:rotate-[0.3deg] hover:shadow-card-hover hover:border-[rgba(255,203,5,0.3)]",
+          "hover:-translate-y-1 hover:rotate-[0.3deg] hover:shadow-card-hover hover:border-[#FFCB05]/30",
           className
         )}
       >
@@ -64,7 +64,7 @@ export function TournamentCard({
         {/* Shimmer no hover */}
         <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           style={{
-            background: `linear-gradient(135deg, transparent 40%, rgba(255,203,5,0.04) 50%, transparent 60%)`
+            background: `linear-gradient(135deg, transparent 40%, rgb(255 203 5 / 4%) 50%, transparent 60%)`
           }}
         />
 

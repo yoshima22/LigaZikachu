@@ -40,7 +40,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
             {/* Logo */}
             <Link href="/dashboard" className="flex items-center gap-3 group">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFCB05] shadow-[0_0_12px_rgba(255,203,5,0.3)]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFCB05] shadow-[0_0_12px_#FFCB05]/30">
                 <span className="font-pixel text-[9px] font-bold text-[#1A1A2E] leading-none">LZ</span>
               </div>
               <span className="font-pixel text-xs text-[#FFCB05] hidden sm:block leading-tight">

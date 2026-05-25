@@ -39,7 +39,7 @@ export function TrainerAvatar({
         sz.container, sz.ring,
         className
       )}
-      style={{ ringColor: accentColor, boxShadow: `0 0 0 2px ${accentColor}40` }}
+      style={{ boxShadow: `0 0 0 2px ${accentColor}40` }}
     >
       {image ? (
         // eslint-disable-next-line @next/next/no-img-element
