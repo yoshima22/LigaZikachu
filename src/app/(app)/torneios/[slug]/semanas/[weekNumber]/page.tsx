@@ -42,7 +42,7 @@ export default async function WeekDetailPage({
 
   const bonusRule =
     week.bonusRule && typeof week.bonusRule === "object"
-      ? (week.bonusRule as Record<string, unknown>)
+      ? (week.bonusRule as Record<string, string | number | boolean | null | Array<Record<string, string | number>>>)
       : null;
 
   const statusConfig: Record<string, { label: string; cls: string }> = {

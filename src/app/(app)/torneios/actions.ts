@@ -23,7 +23,7 @@ const createTournamentSchema = z.object({
   registrationOpensAt: z.string().datetime().nullish(),
   registrationClosesAt: z.string().datetime().nullish(),
   bannerImageUrl: z.string().url().nullish(),
-  themeMetadata: z.record(z.unknown()).nullish()
+  themeMetadata: z.record(z.string()).nullish()
 });
 
 const updateTournamentSchema = createTournamentSchema.partial().extend({
