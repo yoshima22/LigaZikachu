@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
-import { closeWeek } from "./semanas/[weekNumber]/partidas/actions";
+import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -182,7 +182,10 @@ export default async function TournamentAdminPage({ params }: Props) {
                     </Link>
                     {week.status === "OPEN" && (
                       <form
-                        action={closeWeek.bind(null, tournament.id, week.weekNumber)}
+                        action={async () => {
+                          "use server";
+                          await closeWeek(tournament.id, week.weekNumber);
+                        }}
                       >
                         <Button size="sm" variant="destructive">
                           Fechar

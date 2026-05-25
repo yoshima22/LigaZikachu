@@ -12,13 +12,14 @@ interface MatchCardProps {
     playerAId: string;
     playerBId: string | null;
     playerA: { id: string; displayName: string };
-    playerB: { id: string; displayName: string } | null;
+    playerB: { id: string; displayName: string };
     winnerPlayerId: string | null;
     winnerPlayer: { id: string; displayName: string } | null;
     status: string;
     roundLabel: string | null;
     rankingPointsA: number;
     rankingPointsB: number;
+    reportedById: string | null;
     notes: string | null;
     confirmations: Array<{ playerId: string; status: string }>;
   };
@@ -194,7 +195,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
                   size="sm"
                   variant="outline"
                   className="flex-1 border-green-500/50 text-green-400 hover:bg-green-500/10"
-                  onClick={() => handleReport(match.playerBId)}
+                  onClick={() => match.playerBId && handleReport(match.playerBId)}
                   disabled={loading}
                 >
                   Vitória {match.playerB.displayName}
@@ -268,7 +269,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
                 size="sm"
                 variant="default"
                 className="flex-1"
-                onClick={() => handleAdminResolve(match.playerBId)}
+                onClick={() => match.playerBId && handleAdminResolve(match.playerBId)}
                 disabled={loading}
               >
                 Vitória {match.playerB.displayName}

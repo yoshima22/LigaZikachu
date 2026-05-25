@@ -44,12 +44,48 @@ export default async function PartidasPage({ params }: Props) {
   const week = tournament.weeks[0];
   const matches = week.matches;
 
+  const matchCards = matches.map((match) => ({
+    id: match.id,
+    playerAId: match.playerAId,
+    playerBId: match.playerBId,
+    playerA: {
+      id: match.playerA.id,
+      displayName: match.playerA.displayName
+    },
+    playerB: match.playerB
+      ? {
+          id: match.playerB.id,
+          displayName: match.playerB.displayName
+        }
+      : {
+          id: "bye",
+          displayName: "Bye"
+        },
+    winnerPlayerId: match.winnerPlayerId,
+    winnerPlayer: match.winnerPlayer
+      ? {
+          id: match.winnerPlayer.id,
+          displayName: match.winnerPlayer.displayName
+        }
+      : null,
+    status: match.status,
+    roundLabel: match.roundLabel,
+    rankingPointsA: Number(match.rankingPointsA),
+    rankingPointsB: Number(match.rankingPointsB),
+    reportedById: match.reportedById,
+    notes: match.notes,
+    confirmations: match.confirmations.map((confirmation) => ({
+      playerId: confirmation.playerId,
+      status: confirmation.status
+    }))
+  }));
+
   const player = user
     ? await prisma.player.findUnique({ where: { userId: user.id } })
     : null;
 
   const myMatches = player
-    ? matches.filter(
+    ? matchCards.filter(
         (m) => m.playerAId === player.id || m.playerBId === player.id
       )
     : [];
@@ -86,7 +122,15 @@ export default async function PartidasPage({ params }: Props) {
         {isAdmin && (
           <div className="flex gap-2">
             {matches.length === 0 && week.status === "PLANNED" && (
-              <form action={generateMatchups}>
+              <form
+                action={async (formData) => {
+                  "use server";
+                  await generateMatchups({
+                    tournamentId: String(formData.get("tournamentId") ?? ""),
+                    weekNumber: Number(formData.get("weekNumber") ?? 0)
+                  });
+                }}
+              >
                 <input type="hidden" name="tournamentId" value={tournament.id} />
                 <input type="hidden" name="weekNumber" value={weekNum} />
                 <Button type="submit" variant="default">
@@ -95,7 +139,12 @@ export default async function PartidasPage({ params }: Props) {
               </form>
             )}
             {week.status === "OPEN" && (
-              <form action={closeWeek.bind(null, tournament.id, weekNum)}>
+              <form
+                action={async () => {
+                  "use server";
+                  await closeWeek(tournament.id, weekNum);
+                }}
+              >
                 <Button type="submit" variant="destructive">
                   Fechar Semana
                 </Button>
@@ -128,7 +177,7 @@ export default async function PartidasPage({ params }: Props) {
           {isAdmin ? "Todas as Partidas" : "Outras Partidas"}
         </h2>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {(isAdmin ? matches : matches.filter((m) =>
+          {(isAdmin ? matchCards : matchCards.filter((m) =>
             !player || (m.playerAId !== player.id && m.playerBId !== player.id)
           )).map((match) => (
             <MatchCard

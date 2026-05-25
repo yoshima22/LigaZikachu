@@ -55,7 +55,6 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
     playerBId: string;
     roundLabel: string;
     tournamentWeekId: string;
-    seasonId: string;
     createdById: string;
   }> = [];
 
@@ -81,7 +80,6 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
             playerBId: p2.id,
             roundLabel: `Rodada ${round} — Dupla`,
             tournamentWeekId: week.id,
-            seasonId: week.tournamentId,
             createdById: admin.id,
           });
         }
@@ -95,7 +93,6 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
             playerBId: opp.id,
             roundLabel: `Rodada ${round} — Dupla Espelho`,
             tournamentWeekId: week.id,
-            seasonId: week.tournamentId,
             createdById: admin.id,
           });
         }
@@ -117,7 +114,6 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
           playerBId: shuffledB[i].id,
           roundLabel: `Rodada ${round} — Guerra de Times`,
           tournamentWeekId: week.id,
-          seasonId: week.tournamentId,
           createdById: admin.id,
         });
       }
@@ -136,7 +132,6 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
             playerBId: shuffled[j].id,
             roundLabel: `Rodada ${round}`,
             tournamentWeekId: week.id,
-            seasonId: week.tournamentId,
             createdById: admin.id,
           });
           used.add(shuffled[i].id);
@@ -197,7 +192,10 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   if (!match.playerBId) throw new Error("Partida sem adversário");
   if (match.status !== "PENDING_CONFIRMATION") throw new Error("Partida já foi reportada");
 
-  const isPlayer = match.playerAId === user.playerId || match.playerBId === user.playerId;
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!player) throw new Error("Jogador nÃ£o encontrado");
+
+  const isPlayer = match.playerAId === player.id || match.playerBId === player.id;
   if (!isPlayer) throw new Error("Você não participa desta partida");
 
   if (winnerId !== match.playerAId && winnerId !== match.playerBId) {

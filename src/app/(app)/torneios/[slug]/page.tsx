@@ -17,6 +17,8 @@ export default async function TorneioDetailPage({
 }) {
   const { slug } = await params;
   const user = await getSessionUser();
+  if (!user) return null;
+
   const admin = user ? isAdmin(user.role) : false;
 
   const tournament = await prisma.tournament.findUnique({

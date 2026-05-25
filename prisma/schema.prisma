@@ -179,8 +179,6 @@ model Player {
   matchesWon              Match[]              @relation("MatchWinner")
   matchesLost             Match[]              @relation("MatchLoser")
   confirmations           MatchConfirmation[]
-  reportedMatches         Match[]              @relation("MatchReportedBy")
-  confirmedMatches        Match[]              @relation("MatchConfirmedBy")
   deckSubmissions         DeckSubmission[]
   challengesAsChallenger  Challenge[]          @relation("ChallengeChallenger")
   challengesAsChallenged  Challenge[]          @relation("ChallengeChallenged")
@@ -330,7 +328,7 @@ model Week {
 
 model Match {
   id                String          @id @default(cuid())
-  seasonId          String
+  seasonId          String?
   weekId            String?
   tournamentWeekId  String?
   playerAId         String
@@ -359,7 +357,7 @@ model Match {
   createdById       String
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
-  season            Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season            Season?         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   week              Week?           @relation(fields: [weekId], references: [id], onDelete: SetNull)
   tournamentWeek    TournamentWeek? @relation("TournamentWeekMatches", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
   playerA           Player          @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)

@@ -4,13 +4,16 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Users, Trophy, Calendar, ShieldCheck, LogOut, Zap } from "lucide-react";
+import { BarChart3, Crown, LayoutDashboard, Package, Users, Trophy, Calendar, ShieldCheck, LogOut, Zap } from "lucide-react";
 import { Toaster } from "sonner";
 
 const navLinks = [
   { href: "/dashboard",  label: "Dashboard",  icon: LayoutDashboard, adminOnly: false },
   { href: "/torneios",   label: "Torneios",   icon: Trophy,           adminOnly: false },
   { href: "/jogadores",  label: "Jogadores",  icon: Users,            adminOnly: false },
+  { href: "/ranking",    label: "Ranking",    icon: BarChart3,        adminOnly: false },
+  { href: "/top-do-dia", label: "Top do Dia", icon: Crown,            adminOnly: false },
+  { href: "/codigos",    label: "Codigos",    icon: Package,          adminOnly: false },
   { href: "/temporadas", label: "Temporadas", icon: Calendar,         adminOnly: true  },
   { href: "/admin",      label: "Admin",      icon: ShieldCheck,      adminOnly: true  }
 ];
