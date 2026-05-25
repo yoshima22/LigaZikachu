@@ -37,8 +37,8 @@ async function logAudit(
   entityType: string,
   entityId: string,
   action: string,
-  before?: Record<string, unknown>,
-  after?: Record<string, unknown>
+  before?: Record<string, string | number | boolean | null>,
+  after?: Record<string, string | number | boolean | null>
 ) {
   await prisma.auditLog.create({
     data: { actorUserId: actorId, entityType, entityId, action, before, after }

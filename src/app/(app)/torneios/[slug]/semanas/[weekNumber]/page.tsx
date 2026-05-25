@@ -126,7 +126,7 @@ export default async function WeekDetailPage({
               )}
               {Number(week.multiplier) !== 1 && (
                 <div className="flex items-center gap-2 rounded-lg border border-[#F7D02C]/20 bg-[#F7D02C]/5 px-3 py-2">
-                  <span className="text-[#F7D02C] font-bold">{week.multiplier}×</span>
+                  <span className="text-[#F7D02C] font-bold">{Number(week.multiplier)}×</span>
                   <span className="text-slate-400 text-xs">multiplicador de pontos</span>
                 </div>
               )}
