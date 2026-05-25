@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  PLAYER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum SeasonStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+  ARCHIVED
+}
+
+enum WeekStatus {
+  PLANNED
+  OPEN
+  LOCKED
+  CLOSED
+}
+
+enum MatchStatus {
+  DRAFT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  DISPUTED
+  CANCELED
+}
+
+enum ResultSource {
+  MANUAL
+  ADMIN_ADJUSTMENT
+  IMPORTED
+}
+
+enum ConfirmationStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum DeckSubmissionStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum ChallengeStatus {
+  OPEN
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  RESOLVED
+}
+
+enum BoosterCodeStatus {
+  AVAILABLE
+  ASSIGNED
+  REDEEMED
+  INVALIDATED
+  EXPIRED
+}
+
+enum DistributionStatus {
+  ASSIGNED
+  REDEEMED
+  REVOKED
+  EXPIRED
+}
+
+enum DistributionReason {
+  TOP_OF_DAY
+  PARTICIPATION
+  WEEKLY_WINNER
+  SEASON_REWARD
+  MANUAL_ADJUSTMENT
+}
+
+enum SnapshotType {
+  WEEKLY
+  SEASONAL
+  MANUAL_RECALC
+}
+
+model User {
+  id                       String               @id @default(cuid())
+  name                     String?
+  email                    String               @unique
+  emailVerified            DateTime?
+  image                    String?
+  passwordHash             String?
+  role                     Role                 @default(PLAYER)
+  status                   UserStatus           @default(PENDING_APPROVAL)
+  approvedById             String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  approvedBy               User?                @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedUsers            User[]               @relation("UserApprovals")
+  player                   Player?
+  accounts                 Account[]
+  sessions                 Session[]
+  createdSeasons           Season[]             @relation("SeasonCreatedBy")
+  createdMatches           Match[]              @relation("MatchCreatedBy")
+  approvedDecks            DeckSubmission[]     @relation("DeckApprovedBy")
+  openedChallenges         Challenge[]          @relation("ChallengeOpenedBy")
+  resolvedChallenges       Challenge[]          @relation("ChallengeResolvedBy")
+  createdBoosterCodes      BoosterCode[]        @relation("BoosterCodeCreatedBy")
+  invalidatedCodes         BoosterCode[]        @relation("BoosterCodeInvalidatedBy")
+  assignedDistributions    CodeDistribution[]   @relation("CodeAssignedBy")
+  revokedDistributions     CodeDistribution[]   @relation("CodeRevokedBy")
+  createdAchievements      Achievement[]        @relation("AchievementCreatedBy")
+  generatedSnapshots       RankingSnapshot[]    @relation("RankingSnapshotGeneratedBy")
+  awardedPlayerAchievements PlayerAchievement[] @relation("PlayerAchievementAwardedBy")
+  auditLogs                AuditLog[]           @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Player {
+  id                      String               @id @default(cuid())
+  userId                  String               @unique
+  displayName             String
+  whatsapp                String?
+  ptcglNick               String?
+  active                  Boolean              @default(true)
+  notes                   String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonEntries           SeasonPlayer[]
+  matchesAsPlayerA        Match[]              @relation("MatchPlayerA")
+  matchesAsPlayerB        Match[]              @relation("MatchPlayerB")
+  matchesWon              Match[]              @relation("MatchWinner")
+  matchesLost             Match[]              @relation("MatchLoser")
+  confirmations           MatchConfirmation[]
+  deckSubmissions         DeckSubmission[]
+  challengesAsChallenger  Challenge[]          @relation("ChallengeChallenger")
+  challengesAsChallenged  Challenge[]          @relation("ChallengeChallenged")
+  codeDistributions       CodeDistribution[]
+  playerAchievements      PlayerAchievement[]
+  rankingSnapshots        RankingSnapshot[]
+
+  @@map("players")
+}
+
+model Season {
+  id                 String               @id @default(cuid())
+  name               String
+  slug               String               @unique
+  description        String?
+  startDate          DateTime
+  endDate            DateTime?
+  status             SeasonStatus         @default(DRAFT)
+  rankingConfig      Json
+  topOfDayConfig     Json?
+  createdById        String
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  createdBy          User                 @relation("SeasonCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  seasonPlayers      SeasonPlayer[]
+  weeks              Week[]
+  matches            Match[]
+  deckSubmissions    DeckSubmission[]
+  challenges         Challenge[]
+  boosterCodes       BoosterCode[]
+  codeDistributions  CodeDistribution[]
+  achievements       Achievement[]
+  playerAchievements PlayerAchievement[]
+  rankingSnapshots   RankingSnapshot[]
+
+  @@map("seasons")
+}
+
+model SeasonPlayer {
+  id            String    @id @default(cuid())
+  seasonId      String
+  playerId      String
+  joinedAt      DateTime  @default(now())
+  leftAt        DateTime?
+  seed          Int?
+  initialPoints Decimal?  @db.Decimal(10, 2)
+  isActive      Boolean   @default(true)
+  notes         String?
+  season        Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player        Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, playerId])
+  @@map("season_players")
+}
+
+model Week {
+  id               String            @id @default(cuid())
+  seasonId         String
+  number           Int
+  label            String?
+  startsAt         DateTime
+  endsAt           DateTime
+  multiplier       Decimal           @default(1) @db.Decimal(6, 2)
+  lockAt           DateTime?
+  status           WeekStatus        @default(PLANNED)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  season           Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  matches          Match[]
+  deckSubmissions  DeckSubmission[]
+  challenges       Challenge[]
+  rankingSnapshots RankingSnapshot[]
+
+  @@unique([seasonId, number])
+  @@map("weeks")
+}
+
+model Match {
+  id               String          @id @default(cuid())
+  seasonId         String
+  weekId           String?
+  playerAId        String
+  playerBId        String?
+  isBye            Boolean         @default(false)
+  scheduledAt      DateTime?
+  playedAt         DateTime?
+  roundLabel       String?
+  tableLabel       String?
+  bestOf           Int             @default(3)
+  playerAWins      Int             @default(0)
+  playerBWins      Int             @default(0)
+  draws            Int             @default(0)
+  winnerPlayerId   String?
+  loserPlayerId    String?
+  status           MatchStatus     @default(PENDING_CONFIRMATION)
+  resultSource     ResultSource    @default(MANUAL)
+  rankingPointsA   Decimal         @default(0) @db.Decimal(10, 2)
+  rankingPointsB   Decimal         @default(0) @db.Decimal(10, 2)
+  topOfDayEligible Boolean         @default(false)
+  notes            String?
+  createdById      String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  season           Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week             Week?           @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  playerA          Player          @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
+  playerB          Player?         @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  winnerPlayer     Player?         @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
+  loserPlayer      Player?         @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
+  createdBy        User            @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmations    MatchConfirmation[]
+  challenges       Challenge[]
+
+  @@index([seasonId, weekId, status])
+  @@index([playerAId, playerBId, playedAt])
+  @@map("matches")
+}
+
+model MatchConfirmation {
+  id          String             @id @default(cuid())
+  matchId     String
+  playerId    String
+  status      ConfirmationStatus @default(PENDING)
+  confirmedAt DateTime?
+  comment     String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  match       Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player      Player             @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@map("match_confirmations")
+}
+
+model DeckSubmission {
+  id              String               @id @default(cuid())
+  seasonId        String
+  weekId          String?
+  playerId        String
+  deckName        String
+  deckList        String
+  archetype       String?
+  submittedAt     DateTime             @default(now())
+  editedAt        DateTime?
+  deadlineAt      DateTime
+  status          DeckSubmissionStatus @default(SUBMITTED)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  isLate          Boolean              @default(false)
+  season          Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week            Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  player          Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  approvedBy      User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, weekId, playerId])
+  @@map("deck_submissions")
+}
+
+model Challenge {
+  id              String          @id @default(cuid())
+  seasonId        String
+  weekId          String?
+  matchId         String?
+  challengerId    String
+  challengedId    String
+  openedById      String
+  resolvedById    String?
+  status          ChallengeStatus @default(OPEN)
+  reason          String
+  resolutionNotes String?
+  openedAt        DateTime        @default(now())
+  resolvedAt      DateTime?
+  season          Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week            Week?           @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  match           Match?          @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  challenger      Player          @relation("ChallengeChallenger", fields: [challengerId], references: [id], onDelete: Cascade)
+  challenged      Player          @relation("ChallengeChallenged", fields: [challengedId], references: [id], onDelete: Cascade)
+  openedBy        User            @relation("ChallengeOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  resolvedBy      User?           @relation("ChallengeResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([seasonId, status])
+  @@map("challenges")
+}
+
+model BoosterCode {
+  id              String            @id @default(cuid())
+  seasonId        String?
+  code            String            @unique
+  sourceBatch     String?
+  rewardLabel     String?
+  status          BoosterCodeStatus @default(AVAILABLE)
+  importedAt      DateTime          @default(now())
+  expiresAt       DateTime?
+  notes           String?
+  createdById     String
+  invalidatedById String?
+  invalidatedAt   DateTime?
+  season          Season?           @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  createdBy       User              @relation("BoosterCodeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  invalidatedBy   User?             @relation("BoosterCodeInvalidatedBy", fields: [invalidatedById], references: [id], onDelete: SetNull)
+  distributions   CodeDistribution[]
+
+  @@map("booster_codes")
+}
+
+model CodeDistribution {
+  id            String             @id @default(cuid())
+  boosterCodeId String             @unique
+  seasonId      String?
+  playerId      String?
+  assignedById  String
+  revokedById   String?
+  reason        DistributionReason
+  reasonDetail  String?
+  status        DistributionStatus @default(ASSIGNED)
+  assignedAt    DateTime           @default(now())
+  redeemedAt    DateTime?
+  revokedAt     DateTime?
+  boosterCode   BoosterCode        @relation(fields: [boosterCodeId], references: [id], onDelete: Cascade)
+  season        Season?            @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  player        Player?            @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  assignedBy    User               @relation("CodeAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  revokedBy     User?              @relation("CodeRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([seasonId, status])
+  @@map("code_distributions")
+}
+
+model Achievement {
+  id                 String              @id @default(cuid())
+  seasonId           String?
+  key                String
+  name               String
+  description        String?
+  icon               String?
+  criteria           Json
+  active             Boolean             @default(true)
+  createdById        String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  season             Season?             @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  createdBy          User                @relation("AchievementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  playerAchievements PlayerAchievement[]
+
+  @@unique([seasonId, key])
+  @@map("achievements")
+}
+
+model PlayerAchievement {
+  id            String       @id @default(cuid())
+  achievementId String
+  playerId      String
+  seasonId      String?
+  awardedById   String?
+  awardedAt     DateTime     @default(now())
+  notes         String?
+  achievement   Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  player        Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  season        Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  awardedBy     User?        @relation("PlayerAchievementAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
+
+  @@unique([achievementId, playerId, seasonId])
+  @@map("player_achievements")
+}
+
+model RankingSnapshot {
+  id                 String       @id @default(cuid())
+  seasonId           String
+  weekId             String?
+  playerId           String
+  snapshotType       SnapshotType @default(WEEKLY)
+  points             Decimal      @db.Decimal(10, 2)
+  wins               Int          @default(0)
+  losses             Int          @default(0)
+  draws              Int          @default(0)
+  byeCount           Int          @default(0)
+  topOfDayCount      Int          @default(0)
+  boosterCount       Int          @default(0)
+  strengthOfSchedule Decimal      @default(0) @db.Decimal(8, 4)
+  tiebreaker1        Decimal      @default(0) @db.Decimal(8, 4)
+  tiebreaker2        Decimal      @default(0) @db.Decimal(8, 4)
+  position           Int
+  basedOnMatchCount  Int          @default(0)
+  generatedAt        DateTime     @default(now())
+  generatedById      String
+  algorithmVersion   String
+  configHash         String
+  inputHash          String
+  auditPayload       Json
+  season             Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week               Week?        @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  player             Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  generatedBy        User         @relation("RankingSnapshotGeneratedBy", fields: [generatedById], references: [id], onDelete: Restrict)
+
+  @@index([seasonId, weekId, generatedAt])
+  @@unique([seasonId, weekId, playerId, snapshotType, algorithmVersion, inputHash])
+  @@map("ranking_snapshots")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String?
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
