@@ -3,9 +3,9 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { Role, UserStatus } from "@prisma/client";
 import { z } from "zod";
+import authConfig from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
-import { isAdmin } from "@/lib/auth/permissions";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -54,34 +54,14 @@ const providers = [
 ];
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt"
   },
-  pages: {
-    signIn: "/login"
-  },
   providers,
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = Boolean(auth?.user);
-      const isAppRoute =
-        nextUrl.pathname.startsWith("/dashboard") ||
-        nextUrl.pathname.startsWith("/jogadores") ||
-        nextUrl.pathname.startsWith("/perfil") ||
-        nextUrl.pathname.startsWith("/temporadas") ||
-        nextUrl.pathname.startsWith("/admin");
-
-      if (nextUrl.pathname.startsWith("/admin")) {
-        return Boolean(auth?.user?.role && isAdmin(auth.user.role));
-      }
-
-      if (isAppRoute) {
-        return isLoggedIn;
-      }
-
-      return true;
-    },
+    ...authConfig.callbacks,
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role as Role;
