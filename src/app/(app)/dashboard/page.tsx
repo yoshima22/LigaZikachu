@@ -1,54 +1,427 @@
 import { auth } from "@/auth";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/auth/permissions";
+import { computePlayerRanking } from "@/lib/ranking";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Card, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import {
+  Trophy,
+  Swords,
+  Clock,
+  Package,
+  Users,
+  ShieldAlert,
+  CheckCircle2,
+  BookOpen,
+  LayoutDashboard,
+  Calendar
+} from "lucide-react";
+import { MatchStatus, SeasonStatus, UserStatus } from "@prisma/client";
 
 export default async function DashboardPage() {
   const session = await auth();
+  if (!session?.user) return null;
+
+  const user = session.user;
+  const admin = isAdmin(user.role);
+
+  // Temporada ativa
+  const activeSeason = await prisma.season.findFirst({
+    where: { status: SeasonStatus.ACTIVE },
+    orderBy: { createdAt: "desc" },
+    include: {
+      seasonPlayers: { where: { isActive: true } },
+      weeks: {
+        where: { status: { in: ["OPEN", "LOCKED"] } },
+        orderBy: { number: "desc" },
+        take: 1
+      }
+    }
+  });
+
+  // ===== ADMIN / SUPER_ADMIN =====
+  if (admin) {
+    const seasonId = activeSeason?.id;
+    const currentWeek = activeSeason?.weeks[0] ?? null;
+
+    const [pendingMatchCount, disputedCount, availableCodesCount, recentMatches] = await Promise.all([
+      seasonId
+        ? prisma.match.count({ where: { seasonId, status: MatchStatus.PENDING_CONFIRMATION } })
+        : 0,
+      seasonId
+        ? prisma.match.count({ where: { seasonId, status: MatchStatus.DISPUTED } })
+        : 0,
+      prisma.boosterCode.count({ where: { status: "AVAILABLE", ...(seasonId ? { seasonId } : {}) } }),
+      seasonId
+        ? prisma.match.findMany({
+            where: { seasonId, status: MatchStatus.CONFIRMED },
+            orderBy: { playedAt: "desc" },
+            take: 5,
+            include: {
+              playerA: { select: { displayName: true } },
+              playerB: { select: { displayName: true } },
+              winnerPlayer: { select: { displayName: true } },
+              week: { select: { number: true } }
+            }
+          })
+        : []
+    ]);
+
+    let playersWithoutDeck = 0;
+    if (currentWeek && seasonId) {
+      const withDeck = await prisma.deckSubmission.count({
+        where: { seasonId, weekId: currentWeek.id }
+      });
+      playersWithoutDeck = (activeSeason?.seasonPlayers.length ?? 0) - withDeck;
+    }
+
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Painel Administrativo</h1>
+          <p className="mt-1 text-sm text-slate-400">Visão geral da operação da liga</p>
+        </div>
+
+        {/* Temporada ativa */}
+        {activeSeason ? (
+          <Card>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-400">Temporada ativa</p>
+                <h2 className="mt-1 text-xl font-semibold text-white">{activeSeason.name}</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <StatusBadge variant="active" label="Em andamento" />
+                  {currentWeek && (
+                    <StatusBadge variant="info" label={`Semana ${currentWeek.number} aberta`} />
+                  )}
+                  <StatusBadge variant="draft" label={`${activeSeason.seasonPlayers.length} jogadores`} />
+                </div>
+              </div>
+              <Link href="/temporadas">
+                <Button variant="outline" className="text-sm">Ver temporadas</Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <EmptyState message="Nenhuma temporada ativa no momento." icon={<Calendar size={32} />} />
+          </Card>
+        )}
+
+        {/* Pendências operacionais */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+            Pendências operacionais
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Aguardando confirmação"
+              value={pendingMatchCount}
+              icon={<Clock size={22} />}
+              highlight={pendingMatchCount > 0}
+            />
+            <StatCard
+              label="Resultados disputados"
+              value={disputedCount}
+              icon={<ShieldAlert size={22} />}
+              highlight={disputedCount > 0}
+            />
+            <StatCard
+              label="Sem deck nesta semana"
+              value={playersWithoutDeck}
+              icon={<BookOpen size={22} />}
+              highlight={playersWithoutDeck > 0}
+            />
+            <StatCard
+              label="Códigos disponíveis"
+              value={availableCodesCount}
+              icon={<Package size={22} />}
+            />
+          </div>
+        </div>
+
+        {/* Atalhos rápidos */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+            Atalhos rápidos
+          </h2>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/jogadores">
+              <Button variant="outline" className="gap-2">
+                <Users size={16} /> Jogadores
+              </Button>
+            </Link>
+            <Link href="/temporadas">
+              <Button variant="outline" className="gap-2">
+                <LayoutDashboard size={16} /> Temporadas
+              </Button>
+            </Link>
+            <Link href="/admin">
+              <Button variant="outline" className="gap-2">
+                <ShieldAlert size={16} /> Admin
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Últimos resultados confirmados */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+            Últimos resultados confirmados
+          </h2>
+          {recentMatches.length === 0 ? (
+            <Card>
+              <EmptyState message="Nenhum resultado confirmado ainda." icon={<Swords size={28} />} />
+            </Card>
+          ) : (
+            <Card className="divide-y divide-border p-0 overflow-hidden">
+              {recentMatches.map((match) => (
+                <div key={match.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                    <span className="font-medium text-white">{match.playerA.displayName}</span>
+                    <span className="text-slate-500">vs</span>
+                    <span className="text-slate-300">{match.playerB?.displayName ?? "BYE"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    {match.winnerPlayer && (
+                      <span className="text-emerald-400">▶ {match.winnerPlayer.displayName}</span>
+                    )}
+                    {match.week && <span>S{match.week.number}</span>}
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ===== PLAYER =====
+  const player = await prisma.player.findUnique({
+    where: { userId: user.id },
+    select: { id: true, displayName: true }
+  });
+
+  if (!player || !activeSeason) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">Olá, {user.name ?? user.email}</h1>
+        <Card>
+          <EmptyState
+            message="Nenhuma temporada ativa no momento. Aguarde o início da próxima temporada."
+            icon={<Trophy size={32} />}
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  const seasonId = activeSeason.id;
+  const currentWeek = activeSeason.weeks[0] ?? null;
+
+  const [ranking, nextMatch, pendingConfs, codesCount] = await Promise.all([
+    computePlayerRanking(seasonId),
+    prisma.match.findFirst({
+      where: {
+        seasonId,
+        OR: [{ playerAId: player.id }, { playerBId: player.id }],
+        status: { in: [MatchStatus.PENDING_CONFIRMATION, MatchStatus.DRAFT] },
+        scheduledAt: { gt: new Date() }
+      },
+      orderBy: { scheduledAt: "asc" },
+      include: {
+        playerA: { select: { displayName: true } },
+        playerB: { select: { displayName: true } },
+        week: { select: { number: true, label: true } }
+      }
+    }),
+    prisma.matchConfirmation.findMany({
+      where: { playerId: player.id, status: "PENDING", match: { seasonId } },
+      include: {
+        match: {
+          include: {
+            playerA: { select: { displayName: true } },
+            playerB: { select: { displayName: true } },
+            week: { select: { number: true } }
+          }
+        }
+      }
+    }),
+    prisma.codeDistribution.count({
+      where: { playerId: player.id, seasonId, status: { not: "REVOKED" } }
+    })
+  ]);
+
+  const deckSubmission = currentWeek
+    ? await prisma.deckSubmission.findFirst({
+        where: { seasonId, weekId: currentWeek.id, playerId: player.id }
+      })
+    : null;
+
+  const myEntry = ranking.find((r) => r.playerId === player.id);
+
+  const opponent = nextMatch
+    ? nextMatch.playerAId === player.id
+      ? nextMatch.playerB?.displayName
+      : nextMatch.playerA.displayName
+    : null;
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardTitle>Status da conta</CardTitle>
-          <CardDescription className="mt-2">
-            {session?.user.status === "ACTIVE"
-              ? "Acesso liberado para participar das próximas implementações do MVP."
-              : "Conta autenticada, mas aguardando aprovação para operar a liga."}
-          </CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Escopo inicial entregue</CardTitle>
-          <CardDescription className="mt-2">
-            Base com Prisma, Auth.js, seed e rotas públicas/protegidas concluída.
-          </CardDescription>
-        </Card>
-        <Card>
-          <CardTitle>Próximos módulos</CardTitle>
-          <CardDescription className="mt-2">
-            Jogadores, temporadas, semanas, partidas, ranking e painel admin.
-          </CardDescription>
-        </Card>
-      </section>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-white">
+          Olá, {player.displayName}
+        </h1>
+        <p className="mt-1 text-sm text-slate-400">
+          {activeSeason.name}
+          {currentWeek && ` · Semana ${currentWeek.number}`}
+        </p>
+      </div>
 
-      <section className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+      {/* Stats rápidos */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Posição no ranking"
+          value={myEntry ? `#${myEntry.position}` : "—"}
+          icon={<Trophy size={22} />}
+          description={myEntry ? `${myEntry.points} pts` : "Sem partidas confirmadas"}
+          highlight={!!myEntry && myEntry.position === 1}
+        />
+        <StatCard
+          label="Vitórias"
+          value={myEntry?.wins ?? 0}
+          icon={<CheckCircle2 size={22} />}
+        />
+        <StatCard
+          label="Derrotas"
+          value={myEntry?.losses ?? 0}
+          icon={<Swords size={22} />}
+        />
+        <StatCard
+          label="Códigos recebidos"
+          value={codesCount}
+          icon={<Package size={22} />}
+          description="nesta temporada"
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Próxima partida */}
         <Card>
-          <CardTitle>Mapa da Fase 1</CardTitle>
-          <CardDescription className="mt-2">
-            A fundação já suporta a evolução para as telas e fluxos principais definidos no plano aprovado.
-          </CardDescription>
-          <ul className="mt-4 space-y-2 text-sm text-slate-200">
-            <li>• Autenticação com aprovação</li>
-            <li>• Estrutura multi-temporada pronta no banco</li>
-            <li>• Seeds para smoke test do ranking e códigos</li>
-            <li>• Documento técnico consolidado em `docs/plano-fase-0.md`</li>
+          <CardTitle className="mb-3 flex items-center gap-2">
+            <Calendar size={18} className="text-primary" /> Próxima partida
+          </CardTitle>
+          {nextMatch ? (
+            <div className="space-y-1 text-sm">
+              <p className="text-white">
+                vs{" "}
+                <span className="font-semibold text-primary">{opponent}</span>
+              </p>
+              {nextMatch.week && (
+                <p className="text-slate-400">
+                  {nextMatch.week.label ?? `Semana ${nextMatch.week.number}`}
+                </p>
+              )}
+              {nextMatch.scheduledAt && (
+                <p className="text-slate-400">
+                  {new Date(nextMatch.scheduledAt).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
+                </p>
+              )}
+              <StatusBadge
+                className="mt-2"
+                variant="warning"
+                label={
+                  nextMatch.status === MatchStatus.PENDING_CONFIRMATION
+                    ? "Aguardando confirmação"
+                    : "Rascunho"
+                }
+              />
+            </div>
+          ) : (
+            <EmptyState message="Nenhuma partida agendada." icon={<Calendar size={24} />} />
+          )}
+        </Card>
+
+        {/* Deck da semana */}
+        <Card>
+          <CardTitle className="mb-3 flex items-center gap-2">
+            <BookOpen size={18} className="text-primary" /> Deck da semana
+          </CardTitle>
+          {!currentWeek ? (
+            <EmptyState message="Nenhuma semana aberta." icon={<BookOpen size={24} />} />
+          ) : deckSubmission ? (
+            <div className="space-y-2">
+              <p className="font-medium text-white">{deckSubmission.deckName}</p>
+              <StatusBadge
+                variant={
+                  deckSubmission.status === "APPROVED"
+                    ? "active"
+                    : deckSubmission.isLate
+                    ? "warning"
+                    : "info"
+                }
+                label={
+                  deckSubmission.status === "APPROVED"
+                    ? "Aprovado"
+                    : deckSubmission.status === "REJECTED"
+                    ? "Rejeitado"
+                    : deckSubmission.isLate
+                    ? "Enviado com atraso"
+                    : "Enviado"
+                }
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <StatusBadge variant="pending" label="Deck pendente" />
+              <p className="text-xs text-slate-400">
+                Semana {currentWeek.number} · Envie seu deck antes do prazo
+              </p>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Partidas pendentes de confirmação */}
+      <Card>
+        <CardTitle className="mb-3 flex items-center gap-2">
+          <Clock size={18} className="text-primary" /> Partidas aguardando sua confirmação
+        </CardTitle>
+        {pendingConfs.length === 0 ? (
+          <EmptyState message="Nenhuma partida aguarda confirmação." icon={<CheckCircle2 size={24} />} />
+        ) : (
+          <ul className="divide-y divide-border">
+            {pendingConfs.map((conf) => {
+              const isA = conf.match.playerAId === player.id;
+              const opp = isA
+                ? conf.match.playerB?.displayName
+                : conf.match.playerA.displayName;
+              return (
+                <li key={conf.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                  <div>
+                    <span className="text-white">vs {opp}</span>
+                    {conf.match.week && (
+                      <span className="ml-2 text-xs text-slate-400">S{conf.match.week.number}</span>
+                    )}
+                  </div>
+                  <StatusBadge variant="warning" label="Pendente" />
+                </li>
+              );
+            })}
           </ul>
-        </Card>
-        <Card>
-          <CardTitle>Checklist de smoke test</CardTitle>
-          <CardDescription className="mt-2">
-            Login, acesso protegido, leitura do dashboard e validação de seed em staging.
-          </CardDescription>
-        </Card>
-      </section>
+        )}
+      </Card>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
+import { isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 
 export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -9,6 +10,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   if (!session?.user) {
     redirect("/login");
   }
+
+  const admin = isAdmin(session.user.role);
 
   return (
     <div className="min-h-screen">
@@ -20,17 +23,30 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               {session.user.name ?? session.user.email} · {session.user.role}
             </p>
           </div>
-          <nav className="flex items-center gap-2">
+          <nav className="flex flex-wrap items-center gap-1">
             <Link href="/dashboard">
-              <Button variant="ghost">Dashboard</Button>
+              <Button variant="ghost" className="text-sm">Dashboard</Button>
             </Link>
+            <Link href="/jogadores">
+              <Button variant="ghost" className="text-sm">Jogadores</Button>
+            </Link>
+            {admin && (
+              <>
+                <Link href="/temporadas">
+                  <Button variant="ghost" className="text-sm">Temporadas</Button>
+                </Link>
+                <Link href="/admin">
+                  <Button variant="ghost" className="text-sm">Admin</Button>
+                </Link>
+              </>
+            )}
             <form
               action={async () => {
                 "use server";
                 await signOut({ redirectTo: "/login" });
               }}
             >
-              <Button type="submit" variant="outline">
+              <Button type="submit" variant="outline" className="text-sm">
                 Sair
               </Button>
             </form>
