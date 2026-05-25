@@ -4,8 +4,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge, type BadgeVariant } from "@/components/ui/status-badge";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { BoosterCodeStatus, DistributionStatus } from "@prisma/client";
+import {
+  BoosterCodeStatus,
+  DistributionStatus,
+  SeasonStatus
+} from "@prisma/client";
 import { Package, Ticket } from "lucide-react";
+import { CodeAdminPanel } from "./_components/code-admin-panel";
+import { CodeRowActions } from "./_components/code-row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +116,7 @@ export default async function CodesPage() {
                         </td>
                         <td className="px-5 py-3 text-slate-400">
                           {formatDate(distribution.assignedAt)}
+                          <CodeRowActions distributionId={distribution.id} distributionStatus={distribution.status} />
                         </td>
                       </tr>
                     );
@@ -123,7 +130,7 @@ export default async function CodesPage() {
     );
   }
 
-  const [codes, totals] = await Promise.all([
+  const [codes, totals, seasons, players, availableCount] = await Promise.all([
     prisma.boosterCode.findMany({
       include: {
         season: { select: { name: true } },
@@ -131,7 +138,9 @@ export default async function CodesPage() {
           include: {
             player: { select: { displayName: true } },
             assignedBy: { select: { name: true, email: true } }
-          }
+          },
+          orderBy: { assignedAt: "desc" },
+          take: 1
         }
       },
       orderBy: [{ status: "asc" }, { importedAt: "desc" }],
@@ -140,10 +149,34 @@ export default async function CodesPage() {
     prisma.boosterCode.groupBy({
       by: ["status"],
       _count: { _all: true }
+    }),
+    prisma.season.findMany({
+      select: { id: true, name: true, status: true },
+      orderBy: [{ status: "asc" }, { startDate: "desc" }]
+    }),
+    prisma.player.findMany({
+      where: {
+        active: true,
+        user: {
+          status: "ACTIVE"
+        }
+      },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" }
+    }),
+    prisma.boosterCode.count({
+      where: {
+        status: BoosterCodeStatus.AVAILABLE,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+      }
     })
   ]);
 
   const totalByStatus = new Map(totals.map((item) => [item.status, item._count._all]));
+  const defaultSeasonId =
+    seasons.find((season) => season.status === SeasonStatus.ACTIVE)?.id ??
+    seasons[0]?.id ??
+    "";
 
   return (
     <div className="space-y-6">
@@ -155,6 +188,13 @@ export default async function CodesPage() {
           Estoque, atribuicoes e historico inicial de codigos da liga.
         </p>
       </div>
+
+      <CodeAdminPanel
+        seasons={seasons}
+        players={players}
+        defaultSeasonId={defaultSeasonId}
+        availableCount={availableCount}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {Object.values(BoosterCodeStatus).map((status) => {
@@ -186,6 +226,7 @@ export default async function CodesPage() {
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Jogador</th>
                   <th className="px-5 py-3">Importado em</th>
+                  <th className="px-5 py-3">Acoes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -208,6 +249,15 @@ export default async function CodesPage() {
                         {latestDistribution?.player?.displayName ?? "-"}
                       </td>
                       <td className="px-5 py-3 text-slate-400">{formatDate(code.importedAt)}</td>
+                      <td className="px-5 py-3">
+                        <CodeRowActions
+                          admin
+                          codeId={code.id}
+                          codeStatus={code.status}
+                          distributionId={latestDistribution?.id}
+                          distributionStatus={latestDistribution?.status}
+                        />
+                      </td>
                     </tr>
                   );
                 })}
