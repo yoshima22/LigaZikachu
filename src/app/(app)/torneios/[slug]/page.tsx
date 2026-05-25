@@ -103,12 +103,20 @@ export default async function TorneioDetailPage({
           </div>
           <div className="flex gap-2">
             {admin && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/torneios/${slug}/inscricoes`}>
-                  <Settings size={14} className="mr-1" />
-                  Gerenciar
-                </Link>
-              </Button>
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/torneios/${slug}/inscricoes`}>
+                    <Settings size={14} className="mr-1" />
+                    Gerenciar
+                  </Link>
+                </Button>
+                <Button variant="default" size="sm" asChild className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                  <Link href={`/torneios/${slug}/admin`}>
+                    <Trophy size={14} className="mr-1" />
+                    Painel
+                  </Link>
+                </Button>
+              </>
             )}
             <RegisterButton
               tournamentId={tournament.id}
