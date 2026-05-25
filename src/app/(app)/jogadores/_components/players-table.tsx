@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { User, Pencil, ShieldOff, ShieldCheck, CheckCircle, Trash2, X } from "lucide-react";
@@ -59,7 +60,7 @@ function EditPlayerModal({ player, onClose }: EditModalProps) {
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError("");
     startTransition(async () => {

@@ -2,9 +2,12 @@ import { ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant = "default" | "outline" | "ghost";
+type ButtonSize = "default" | "sm" | "lg" | "icon";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  size?: ButtonSize;
+  asChild?: boolean;
 }
 
 const variants: Record<ButtonVariant, string> = {
@@ -13,8 +16,15 @@ const variants: Record<ButtonVariant, string> = {
   ghost: "bg-transparent text-foreground hover:bg-white/5"
 };
 
+const sizes: Record<ButtonSize, string> = {
+  default: "h-11 px-4 text-sm",
+  sm: "h-8 px-3 text-xs",
+  lg: "h-12 px-6 text-base",
+  icon: "h-11 w-11 p-0"
+};
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant = "default", type = "button", ...props },
+  { className, variant = "default", size = "default", asChild: _asChild, type = "button", ...props },
   ref
 ) {
   return (
@@ -22,8 +32,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center rounded-xl font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50",
         variants[variant],
+        sizes[size],
         className
       )}
       {...props}
