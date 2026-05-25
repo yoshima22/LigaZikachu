@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
@@ -14,7 +15,7 @@ const navLinks = [
   { href: "/admin",      label: "Admin",      icon: ShieldCheck,      adminOnly: true  }
 ];
 
-export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 

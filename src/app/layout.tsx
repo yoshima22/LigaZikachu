@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
 import { Inter, Press_Start_2P } from "next/font/google";
 import "./globals.css";
 
@@ -25,7 +26,7 @@ export const viewport: Viewport = {
   themeColor: "#1A1A2E"
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${pressStart.variable}`}>
       <body>{children}</body>

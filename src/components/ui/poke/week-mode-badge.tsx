@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
-import {
-  Swords, Zap, Users, Star, Wrench, Shield, Flag
-} from "lucide-react";
+import { Swords, Zap, Users, Star, Wrench, Shield, Flag } from "lucide-react";
+import type { ReactNode } from "react";
 
 export type WeekMode =
   | "PADRAO"
@@ -18,7 +17,7 @@ const modeConfig: Record<WeekMode, {
   bg: string;
   text: string;
   border: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   description: string;
 }> = {
   PADRAO: {
