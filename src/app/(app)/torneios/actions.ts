@@ -49,7 +49,7 @@ async function logAudit(
 
 export async function createTournament(
   raw: z.infer<typeof createTournamentSchema>
-): Promise<{ error?: string; slug?: string }> {
+): Promise<{ error?: string; slug?: string; id?: string }> {
   try {
     const actor = await requireAdmin();
     const data = createTournamentSchema.parse(raw);
@@ -89,7 +89,7 @@ export async function createTournament(
     });
 
     revalidatePath("/torneios");
-    return { slug: tournament.slug };
+    return { slug: tournament.slug, id: tournament.id };
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };

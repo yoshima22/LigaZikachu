@@ -62,12 +62,9 @@ export function CreateTournamentForm() {
         return;
       }
 
-      if (result.slug) {
-        // Seed as semanas padrão automaticamente
-        const t = await fetch("/api/admin/tournament-id?slug=" + result.slug).then((r) => r.json()).catch(() => null);
-        if (t?.id) {
-          await seedDefaultWeeks(t.id);
-        }
+      if (result.slug && result.id) {
+        // Seed as semanas padrão automaticamente usando o ID já retornado
+        await seedDefaultWeeks(result.id);
         toast.success("Torneio criado com sucesso!");
         router.push(`/torneios/${result.slug}`);
       }
