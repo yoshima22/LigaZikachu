@@ -42,7 +42,12 @@ export default async function WeekDetailPage({
 
   const bonusRule =
     week.bonusRule && typeof week.bonusRule === "object"
-      ? (week.bonusRule as Record<string, string | number | boolean | null | Array<Record<string, string | number>>>)
+      ? (week.bonusRule as Record<string, unknown>)
+      : null;
+
+  const positionBonus =
+    bonusRule && Array.isArray(bonusRule.positionBonus)
+      ? (bonusRule.positionBonus as Array<Record<string, unknown>>)
       : null;
 
   const statusConfig: Record<string, { label: string; cls: string }> = {
@@ -147,18 +152,24 @@ export default async function WeekDetailPage({
                   Envie {String(bonusRule.decksToSubmit)} decks antes do prazo. Adversário escolhe qual você usa.
                 </div>
               )}
-              {week.mode === "BATALHA_FINAL" && Array.isArray(bonusRule.positionBonus) && (
+              {week.mode === "BATALHA_FINAL" && positionBonus && (
                 <div className="space-y-1">
                   <p className="text-xs text-slate-500 font-medium">Bônus por posição:</p>
-                  {(bonusRule.positionBonus as Array<{ positions: number[]; bonusPerWin: number }>).map((pb) => (
-                    <div key={pb.positions.join()} className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-300 font-medium">
-                        {pb.positions[0]}º–{pb.positions[pb.positions.length - 1]}º
-                      </span>
-                      <span className="text-slate-500">→</span>
-                      <span className="text-[#FFCB05] font-semibold">+{pb.bonusPerWin}pt/vitória</span>
-                    </div>
-                  ))}
+                  {positionBonus.map((pb) => {
+                    const positions = Array.isArray(pb.positions) ? (pb.positions as unknown[]) : [];
+                    const bonusPerWin = typeof pb.bonusPerWin === "number" ? pb.bonusPerWin : 0;
+                    const first = typeof positions[0] === "number" ? positions[0] : 0;
+                    const last = typeof positions[positions.length - 1] === "number" ? positions[positions.length - 1] : first;
+                    return (
+                      <div key={String(first)} className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-300 font-medium">
+                          {first}º–{last}º
+                        </span>
+                        <span className="text-slate-500">→</span>
+                        <span className="text-[#FFCB05] font-semibold">+{bonusPerWin}pt/vitória</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
