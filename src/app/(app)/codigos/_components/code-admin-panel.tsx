@@ -90,12 +90,14 @@ export function CodeAdminPanel({
 
   async function handleImport(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    console.log("[DEBUG] handleImport chamado");
     if (!rawCodes.trim()) {
       toast.error("Informe ao menos um codigo.");
       return;
     }
     setIsImporting(true);
     try {
+      console.log("[DEBUG] Chamando importBoosterCodesAction...");
       const result = await importBoosterCodesAction({
         rawCodes,
         seasonId: importSeasonId || null,
@@ -104,6 +106,7 @@ export function CodeAdminPanel({
         expiresAt: expiresAt || null,
         notes: notes || null
       });
+      console.log("[DEBUG] Resultado:", result);
 
       if (result?.error) {
         toast.error(result.error);
@@ -117,6 +120,7 @@ export function CodeAdminPanel({
       setExpiresAt("");
       setNotes("");
     } catch (err) {
+      console.error("[DEBUG] Erro:", err);
       toast.error(err instanceof Error ? err.message : "Erro ao importar codigos");
     } finally {
       setIsImporting(false);

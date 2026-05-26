@@ -104,16 +104,22 @@ export async function importBoosterCodesAction(
   input: z.infer<typeof importCodesSchema>
 ): Promise<{ error?: string; imported?: number }> {
   try {
+    console.log("[SERVER DEBUG] importBoosterCodesAction chamado");
     const actor = await requireAdmin();
+    console.log("[SERVER DEBUG] Admin:", actor.id);
     const data = importCodesSchema.parse(input);
+    console.log("[SERVER DEBUG] Dados validados, rawCodes length:", data.rawCodes.length);
     const parsedCodes = parseRawCodes(data.rawCodes);
+    console.log("[SERVER DEBUG] Codigos parseados:", parsedCodes.length, parsedCodes.slice(0, 3));
     const normalizedCodes = assertNoDuplicateCodes(parsedCodes);
+    console.log("[SERVER DEBUG] Codigos normalizados:", normalizedCodes.length);
 
     if (normalizedCodes.length === 0) {
       return { error: "Nenhum codigo valido foi encontrado." };
     }
 
     const duplicates = await findDuplicateCodesInDatabase(normalizedCodes);
+    console.log("[SERVER DEBUG] Duplicados:", duplicates.length);
     if (duplicates.length > 0) {
       return {
         error: `Codigos ja cadastrados: ${duplicates.map((code) => code.code).join(", ")}`
@@ -126,6 +132,7 @@ export async function importBoosterCodesAction(
     const rewardLabel = normalizeOptionalString(data.rewardLabel);
     const notes = normalizeOptionalString(data.notes);
 
+    console.log("[SERVER DEBUG] Criando", normalizedCodes.length, "codigos...");
     await prisma.$transaction(async (tx) => {
       await tx.boosterCode.createMany({
         data: normalizedCodes.map((code) => ({
@@ -157,8 +164,10 @@ export async function importBoosterCodesAction(
     });
 
     revalidatePath("/codigos");
+    console.log("[SERVER DEBUG] Sucesso!");
     return { imported: normalizedCodes.length };
   } catch (err) {
+    console.error("[SERVER DEBUG] Erro:", err);
     if (err instanceof z.ZodError) {
       return { error: err.issues.map((issue) => issue.message).join(", ") };
     }
