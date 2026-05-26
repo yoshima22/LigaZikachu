@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { DistributionReason, SeasonStatus } from "@prisma/client";
 import { Download, Send, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -60,8 +60,8 @@ export function CodeAdminPanel({
   const [quantity, setQuantity] = useState("1");
   const [reason, setReason] = useState<DistributionReason>(DistributionReason.MANUAL_ADJUSTMENT);
   const [reasonDetail, setReasonDetail] = useState("");
-  const [isImporting, startImportTransition] = useTransition();
-  const [isDistributing, startDistributionTransition] = useTransition();
+  const [isImporting, setIsImporting] = useState(false);
+  const [isDistributing, setIsDistributing] = useState(false);
 
   const parsedPreview = useMemo(() => {
     return rawCodes
@@ -88,9 +88,14 @@ export function CodeAdminPanel({
       .filter(Boolean).length;
   }, [rawCodes]);
 
-  function handleImport(e: FormEvent<HTMLFormElement>) {
+  async function handleImport(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    startImportTransition(async () => {
+    if (!rawCodes.trim()) {
+      toast.error("Informe ao menos um codigo.");
+      return;
+    }
+    setIsImporting(true);
+    try {
       const result = await importBoosterCodesAction({
         rawCodes,
         seasonId: importSeasonId || null,
@@ -100,25 +105,29 @@ export function CodeAdminPanel({
         notes: notes || null
       });
 
-      if (result.error) {
+      if (result?.error) {
         toast.error(result.error);
         return;
       }
 
-      toast.success(`${result.imported ?? 0} codigo(s) importado(s).`);
+      toast.success(`${result?.imported ?? 0} codigo(s) importado(s).`);
       setRawCodes("");
       setSourceBatch("");
       setRewardLabel("");
       setExpiresAt("");
       setNotes("");
-    });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao importar codigos");
+    } finally {
+      setIsImporting(false);
+    }
   }
 
-  function handleDistribution(e: FormEvent<HTMLFormElement>) {
+  async function handleDistribution(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = Number.parseInt(quantity, 10);
-
-    startDistributionTransition(async () => {
+    setIsDistributing(true);
+    try {
       const result = await reserveCodesForPlayerAction({
         playerId,
         seasonId: distributionSeasonId || null,
@@ -127,15 +136,19 @@ export function CodeAdminPanel({
         reasonDetail: reasonDetail || null
       });
 
-      if (result.error) {
+      if (result?.error) {
         toast.error(result.error);
         return;
       }
 
-      toast.success(`${result.distributed ?? 0} codigo(s) distribuido(s).`);
+      toast.success(`${result?.distributed ?? 0} codigo(s) distribuido(s).`);
       setQuantity("1");
       setReasonDetail("");
-    });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao distribuir codigos");
+    } finally {
+      setIsDistributing(false);
+    }
   }
 
   return (
