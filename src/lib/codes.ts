@@ -185,17 +185,36 @@ async function distributeCodesInsideTransaction(
     throw new Error("Algum codigo deixou de estar disponivel durante a distribuicao.");
   }
 
-  await tx.codeDistribution.createMany({
-    data: codes.map((code) => ({
-      boosterCodeId: code.id,
-      seasonId: input.seasonId ?? code.seasonId,
-      playerId: input.playerId,
-      assignedById: input.assignedById,
-      reason: input.reason ?? DistributionReason.MANUAL_ADJUSTMENT,
-      reasonDetail: input.reasonDetail,
-      status: DistributionStatus.ASSIGNED
-    }))
-  });
+  const assignedAt = new Date();
+  await Promise.all(
+    codes.map((code) =>
+      tx.codeDistribution.upsert({
+        where: { boosterCodeId: code.id },
+        create: {
+          boosterCodeId: code.id,
+          seasonId: input.seasonId ?? code.seasonId,
+          playerId: input.playerId,
+          assignedById: input.assignedById,
+          reason: input.reason ?? DistributionReason.MANUAL_ADJUSTMENT,
+          reasonDetail: input.reasonDetail,
+          status: DistributionStatus.ASSIGNED,
+          assignedAt
+        },
+        update: {
+          seasonId: input.seasonId ?? code.seasonId,
+          playerId: input.playerId,
+          assignedById: input.assignedById,
+          revokedById: null,
+          reason: input.reason ?? DistributionReason.MANUAL_ADJUSTMENT,
+          reasonDetail: input.reasonDetail,
+          status: DistributionStatus.ASSIGNED,
+          assignedAt,
+          redeemedAt: null,
+          revokedAt: null
+        }
+      })
+    )
+  );
 
   return tx.boosterCode.findMany({
     where: {

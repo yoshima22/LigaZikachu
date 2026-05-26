@@ -239,6 +239,8 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
                   {codesResult.codes.map((code) => {
                     const status = codeStatusMap[code.status];
                     const latestDistribution = code.distributions[0];
+                    const activeDistribution =
+                      latestDistribution?.status === DistributionStatus.REVOKED ? null : latestDistribution;
                     return (
                       <tr key={code.id}>
                         <td className="px-5 py-3">
@@ -262,7 +264,7 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
                           <StatusBadge variant={status.variant} label={status.label} />
                         </td>
                         <td className="px-5 py-3 text-slate-300">
-                          {latestDistribution?.player?.displayName ?? (
+                          {activeDistribution?.player?.displayName ?? (
                             <span className="text-slate-600 italic">Sem dono</span>
                           )}
                         </td>
@@ -272,8 +274,8 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
                             admin
                             codeId={code.id}
                             codeStatus={code.status}
-                            distributionId={latestDistribution?.id}
-                            distributionStatus={latestDistribution?.status}
+                            distributionId={activeDistribution?.id}
+                            distributionStatus={activeDistribution?.status}
                             players={players}
                           />
                         </td>

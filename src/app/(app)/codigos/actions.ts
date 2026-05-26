@@ -430,6 +430,7 @@ export async function revokeCodeDistributionAction(
       await tx.codeDistribution.update({
         where: { id },
         data: {
+          playerId: null,
           status: DistributionStatus.REVOKED,
           revokedAt: new Date(),
           revokedById: actor.id
