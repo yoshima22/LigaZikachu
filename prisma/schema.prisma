@@ -399,7 +399,7 @@ model MatchConfirmation {
 
 model DeckSubmission {
   id              String               @id @default(cuid())
-  seasonId        String?
+  seasonId        String
   weekId          String?
   tournamentId    String?
   tournamentWeekId String?
@@ -416,7 +416,7 @@ model DeckSubmission {
   approvedAt      DateTime?
   rejectionReason String?
   isLate          Boolean              @default(false)
-  season          Season?              @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  season          Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   week            Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
   tournament      Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
   tournamentWeek  TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
@@ -424,7 +424,7 @@ model DeckSubmission {
   approvedBy      User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@unique([seasonId, weekId, playerId])
-  @@unique([tournamentWeekId, playerId, deckNumber])
+  @@index([tournamentWeekId, playerId, deckNumber])
   @@index([tournamentId, tournamentWeekId, status])
   @@map("deck_submissions")
 }
