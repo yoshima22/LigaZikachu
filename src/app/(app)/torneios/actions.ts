@@ -35,6 +35,11 @@ const updateTournamentSchema = createTournamentSchema.partial().extend({
   id: z.string().min(1)
 });
 
+const updateTournamentSeasonSchema = z.object({
+  tournamentId: z.string().min(1),
+  seasonId: z.string().nullish()
+});
+
 const updateWeekDeckLockSchema = z.object({
   weekId: z.string().min(1),
   deckLockAt: z.string().nullish()
@@ -192,6 +197,95 @@ export async function updateTournament(
 
 // ─── Status transitions ──────────────────────────────────────────────────────
 
+export async function updateTournamentSeason(
+  raw: z.infer<typeof updateTournamentSeasonSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = updateTournamentSeasonSchema.parse(raw);
+    const seasonId = data.seasonId?.trim() || null;
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: data.tournamentId },
+      select: { id: true, slug: true, seasonId: true }
+    });
+    if (!tournament) return { error: "Torneio nao encontrado." };
+
+    if (seasonId) {
+      const season = await prisma.season.findUnique({ where: { id: seasonId }, select: { id: true } });
+      if (!season) return { error: "Temporada nao encontrada." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.tournament.update({
+        where: { id: data.tournamentId },
+        data: { seasonId }
+      });
+
+      if (seasonId) {
+        const weeks = await tx.tournamentWeek.findMany({
+          where: { tournamentId: data.tournamentId },
+          select: { id: true }
+        });
+        const weekIds = weeks.map((week) => week.id);
+
+        if (weekIds.length > 0) {
+          await tx.match.updateMany({
+            where: { tournamentWeekId: { in: weekIds } },
+            data: { seasonId }
+          });
+        }
+
+        await tx.deckSubmission.updateMany({
+          where: { tournamentId: data.tournamentId },
+          data: { seasonId }
+        });
+
+        const registrations = await tx.tournamentRegistration.findMany({
+          where: {
+            tournamentId: data.tournamentId,
+            status: { in: [RegistrationStatus.APPROVED, RegistrationStatus.PENDING] }
+          },
+          select: { playerId: true }
+        });
+
+        for (const registration of registrations) {
+          await tx.seasonPlayer.upsert({
+            where: {
+              seasonId_playerId: {
+                seasonId,
+                playerId: registration.playerId
+              }
+            },
+            update: { isActive: true, leftAt: null },
+            create: { seasonId, playerId: registration.playerId }
+          });
+        }
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournament",
+          entityId: data.tournamentId,
+          action: "tournament.season_updated",
+          before: { seasonId: tournament.seasonId },
+          after: { seasonId }
+        }
+      });
+    });
+
+    revalidatePath("/torneios");
+    revalidatePath("/temporadas");
+    revalidatePath("/torneios/" + tournament.slug);
+    revalidatePath("/torneios/" + tournament.slug + "/admin");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function publishTournament(
   tournamentId: string
 ): Promise<{ error?: string }> {
@@ -263,6 +357,21 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
             decidedById: actor.id
           }
         });
+      }
+
+      if (tournament.seasonId) {
+        for (const registration of tournament.registrations) {
+          await tx.seasonPlayer.upsert({
+            where: {
+              seasonId_playerId: {
+                seasonId: tournament.seasonId,
+                playerId: registration.playerId
+              }
+            },
+            update: { isActive: true, leftAt: null },
+            create: { seasonId: tournament.seasonId, playerId: registration.playerId }
+          });
+        }
       }
 
       let createdMatches = 0;
@@ -679,7 +788,24 @@ export async function approveRegistration(
       }
     });
 
-    const t = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { slug: true } });
+    const t = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { slug: true, seasonId: true }
+    });
+
+    if (t?.seasonId) {
+      await prisma.seasonPlayer.upsert({
+        where: {
+          seasonId_playerId: {
+            seasonId: t.seasonId,
+            playerId
+          }
+        },
+        update: { isActive: true, leftAt: null },
+        create: { seasonId: t.seasonId, playerId }
+      });
+    }
+
     await logAudit(actor.id, "tournamentRegistration", reg.id, "registration.approved", { status: "PENDING" }, { status: "APPROVED" });
     revalidatePath(`/torneios/${t?.slug ?? tournamentId}/inscricoes`);
     return {};

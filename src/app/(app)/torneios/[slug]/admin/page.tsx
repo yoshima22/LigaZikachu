@@ -11,6 +11,7 @@ import {
   finishTournament,
   publishTournament,
   startTournament,
+  updateTournamentSeason,
   updateTournamentWeekSettings
 } from "../../actions";
 import { TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
@@ -66,6 +67,9 @@ export default async function TournamentAdminPage({ params }: Props) {
         include: { player: true },
         orderBy: { registeredAt: "desc" },
       },
+      season: {
+        select: { id: true, name: true, slug: true, status: true },
+      },
       _count: {
         select: { registrations: true },
       },
@@ -73,6 +77,11 @@ export default async function TournamentAdminPage({ params }: Props) {
   });
 
   if (!tournament) notFound();
+
+  const seasons = await prisma.season.findMany({
+    orderBy: [{ startDate: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true }
+  });
 
   const totalMatches = tournament.weeks.reduce(
     (acc, w) => acc + w.matches.length,
@@ -112,6 +121,61 @@ export default async function TournamentAdminPage({ params }: Props) {
       <h1 className="text-2xl font-bold text-white font-pixel">
         Painel Admin — {tournament.name}
       </h1>
+
+      <Card className="border-slate-800 bg-slate-900/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base text-white">
+            <Calendar size={18} className="text-[#FFCB05]" />
+            Temporada do Campeonato
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-sm text-slate-400">Temporada vinculada</p>
+            <p className="text-lg font-semibold text-white">
+              {tournament.season ? tournament.season.name : "Sem temporada vinculada"}
+            </p>
+            <p className="mt-1 max-w-2xl text-xs text-slate-500">
+              Esse vinculo agrupa campeonatos dentro de uma temporada e e necessario para decklists,
+              ranking geral por temporada e historico dos jogadores.
+            </p>
+          </div>
+          <form
+            className="flex flex-col gap-3 sm:flex-row sm:items-end"
+            action={async (formData) => {
+              "use server";
+              await updateTournamentSeason({
+                tournamentId: tournament.id,
+                seasonId: String(formData.get("seasonId") ?? "")
+              });
+            }}
+          >
+            <label className="flex-1 space-y-1 text-xs text-slate-400">
+              <span>Escolher temporada</span>
+              <select
+                name="seasonId"
+                defaultValue={tournament.seasonId ?? ""}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              >
+                <option value="">Sem temporada</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name} ({season.status})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+              Salvar temporada
+            </Button>
+          </form>
+          {seasons.length === 0 && (
+            <p className="text-xs text-amber-300">
+              Nenhuma temporada cadastrada ainda. Crie uma temporada em Temporadas antes de vincular este torneio.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-slate-800 bg-slate-900/50">
         <CardHeader>
