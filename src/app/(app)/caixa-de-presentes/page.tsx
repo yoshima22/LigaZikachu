@@ -69,10 +69,13 @@ export default async function GiftBoxPage() {
   }
 
   const gifts = await prisma.playerGift.findMany({
-    where: { playerId: player.id },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }]
+    where: {
+      playerId: player.id,
+      status: GiftStatus.UNCLAIMED
+    },
+    orderBy: { createdAt: "desc" }
   });
-  const unclaimedCount = gifts.filter((gift) => gift.status === GiftStatus.UNCLAIMED).length;
+  const unclaimedCount = gifts.length;
 
   return (
     <div className="space-y-6">
@@ -101,7 +104,7 @@ export default async function GiftBoxPage() {
 
       {gifts.length === 0 ? (
         <Card>
-          <EmptyState message="Nenhum presente recebido ainda." icon={<Gift size={28} />} />
+          <EmptyState message="Nenhum presente pendente. Presentes recebidos aparecem em suas areas correspondentes." icon={<Gift size={28} />} />
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -110,7 +113,6 @@ export default async function GiftBoxPage() {
             const payload = getBoosterPayload(gift.payload);
             const rewardDetail =
               payload.rewardLabel ?? payload.sourceBatch ?? payload.reasonDetail ?? gift.description;
-            const showCode = gift.type === GiftType.BOOSTER_CODE && gift.status === GiftStatus.CLAIMED && payload.code;
 
             return (
               <Card key={gift.id} className="flex flex-col gap-4">
@@ -140,11 +142,7 @@ export default async function GiftBoxPage() {
                     <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
                       <Ticket size={13} /> Codigo
                     </div>
-                    {showCode ? (
-                      <p className="break-all font-mono text-sm font-semibold text-[#FFCB05]">{payload.code}</p>
-                    ) : (
-                      <p className="text-sm text-slate-400">Receba este presente para revelar o codigo.</p>
-                    )}
+                    <p className="text-sm text-slate-400">Receba este presente para enviar o codigo para Meus Codigos.</p>
                   </div>
                 )}
 

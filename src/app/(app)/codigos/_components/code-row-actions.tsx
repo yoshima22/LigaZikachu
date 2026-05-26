@@ -98,13 +98,13 @@ export function CodeRowActions({
                   toast.error(result.error);
                   return;
                 }
-                toast.success("Codigo marcado como resgatado.");
+                toast.success(admin ? "Codigo marcado como resgatado." : "Codigo marcado como ativado.");
               })
             }
             className={actionButton + " border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"}
           >
             <CheckCircle2 size={13} />
-            Resgatado
+            {admin ? "Resgatado" : "Marcar ativado"}
           </button>
         )}
 

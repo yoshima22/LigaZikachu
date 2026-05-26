@@ -10,12 +10,16 @@ import {
   BoosterCodeStatus,
   DistributionStatus,
   DistributionReason,
-  SeasonStatus
+  GiftStatus,
+  GiftType,
+  SeasonStatus,
+  type Prisma
 } from "@prisma/client";
 import { Package, Ticket } from "lucide-react";
 import { CodeAdminPanel } from "./_components/code-admin-panel";
 import { CodeRowActions } from "./_components/code-row-actions";
 import { CodeFilters } from "./_components/code-filters";
+import { PlayerCodeFilters } from "./_components/player-code-filters";
 import { assignSpecificCodesToPlayerAction, listBoosterCodesAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +38,27 @@ const distributionStatusMap: Record<DistributionStatus, { label: string; variant
   REVOKED: { label: "Revogado", variant: "danger" },
   EXPIRED: { label: "Expirado", variant: "warning" }
 };
+
+const playerCodeStatusMap: Record<DistributionStatus, { label: string; variant: BadgeVariant }> = {
+  ASSIGNED: { label: "Nao ativado", variant: "info" },
+  REDEEMED: { label: "Ativado", variant: "success" },
+  REVOKED: { label: "Revogado", variant: "danger" },
+  EXPIRED: { label: "Expirado", variant: "warning" }
+};
+
+interface BoosterGiftPayload {
+  code?: string;
+  boosterCodeId?: string;
+  distributionId?: string | null;
+  rewardLabel?: string | null;
+  sourceBatch?: string | null;
+  reasonDetail?: string | null;
+}
+
+function getBoosterGiftPayload(payload: unknown): BoosterGiftPayload {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  return payload as BoosterGiftPayload;
+}
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -58,35 +83,197 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);
+  const sp = await searchParams;
 
   // ===== PLAYER VIEW =====
   if (!admin) {
+    const player = await prisma.player.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true, displayName: true }
+    });
+
+    if (!player) {
+      return (
+        <Card>
+          <EmptyState
+            message="Crie seu perfil de jogador para receber e consultar codigos."
+            icon={<Ticket size={28} />}
+          />
+        </Card>
+      );
+    }
+
+    const page = Number(sp.page) || 1;
+    const pageSize = 50;
+    const search = sp.search || "";
+    const statusFilter = Object.values(DistributionStatus).includes(sp.status as DistributionStatus)
+      ? (sp.status as DistributionStatus)
+      : undefined;
+
+    const claimedCodeGifts = await prisma.playerGift.findMany({
+      where: {
+        playerId: player.id,
+        type: GiftType.BOOSTER_CODE,
+        status: GiftStatus.CLAIMED
+      },
+      select: {
+        claimedAt: true,
+        payload: true
+      },
+      orderBy: { claimedAt: "desc" }
+    });
+
+    const giftByDistributionId = new Map<string, { claimedAt: Date | null; payload: BoosterGiftPayload }>();
+    const giftByCodeId = new Map<string, { claimedAt: Date | null; payload: BoosterGiftPayload }>();
+
+    for (const gift of claimedCodeGifts) {
+      const payload = getBoosterGiftPayload(gift.payload);
+      const giftInfo = { claimedAt: gift.claimedAt, payload };
+      if (payload.distributionId) giftByDistributionId.set(payload.distributionId, giftInfo);
+      if (payload.boosterCodeId) giftByCodeId.set(payload.boosterCodeId, giftInfo);
+    }
+
+    const claimedDistributionIds = [...giftByDistributionId.keys()];
+    const claimedBoosterCodeIds = [...giftByCodeId.keys()];
+    const hasClaimedCodes = claimedDistributionIds.length > 0 || claimedBoosterCodeIds.length > 0;
+
+    const ownershipFilters: Prisma.CodeDistributionWhereInput[] = [];
+    if (claimedDistributionIds.length > 0) ownershipFilters.push({ id: { in: claimedDistributionIds } });
+    if (claimedBoosterCodeIds.length > 0) ownershipFilters.push({ boosterCodeId: { in: claimedBoosterCodeIds } });
+
+    const where: Prisma.CodeDistributionWhereInput = hasClaimedCodes
+      ? {
+          playerId: player.id,
+          ...(statusFilter ? { status: statusFilter } : {}),
+          OR: ownershipFilters,
+          ...(search
+            ? {
+                AND: [
+                  {
+                    OR: [
+                      { reasonDetail: { contains: search, mode: "insensitive" } },
+                      { boosterCode: { is: { code: { contains: search, mode: "insensitive" } } } },
+                      { boosterCode: { is: { rewardLabel: { contains: search, mode: "insensitive" } } } },
+                      { boosterCode: { is: { sourceBatch: { contains: search, mode: "insensitive" } } } }
+                    ]
+                  }
+                ]
+              }
+            : {})
+        }
+      : { id: "__no_claimed_codes__" };
+
+    const skip = (page - 1) * pageSize;
+    const [distributions, total] = await Promise.all([
+      prisma.codeDistribution.findMany({
+        where,
+        include: {
+          boosterCode: {
+            include: {
+              season: { select: { name: true } }
+            }
+          }
+        },
+        orderBy: [{ assignedAt: "desc" }],
+        skip,
+        take: pageSize
+      }),
+      prisma.codeDistribution.count({ where })
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
     return (
       <div className="space-y-6">
         <div>
           <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Meus codigos</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Codigos enviados pela liga agora chegam primeiro na sua Caixa de Presentes.
+            Codigos recebidos da Caixa de Presentes ficam aqui para consulta e ativacao.
           </p>
         </div>
 
-        <Card>
-          <EmptyState
-            message="Abra sua Caixa de Presentes para receber codigos, insignias e outros premios."
-            icon={<Ticket size={28} />}
-            action={
-              <Button asChild>
-                <Link href="/caixa-de-presentes">Ir para Caixa de Presentes</Link>
-              </Button>
-            }
-          />
-        </Card>
+        <PlayerCodeFilters totalPages={totalPages} currentPage={page} />
+
+        <p className="text-xs text-slate-500">
+          {total} codigo(s) recebido(s)
+          {total > pageSize && ` (mostrando ${distributions.length})`}
+        </p>
+
+        {distributions.length === 0 ? (
+          <Card>
+            <EmptyState
+              message="Nenhum codigo recebido ainda. Abra presentes pendentes para enviar codigos para esta lista."
+              icon={<Ticket size={28} />}
+              action={
+                <Button asChild>
+                  <Link href="/caixa-de-presentes">Ir para Caixa de Presentes</Link>
+                </Button>
+              }
+            />
+          </Card>
+        ) : (
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Codigo</th>
+                    <th className="px-5 py-3">Temporada</th>
+                    <th className="px-5 py-3">Recompensa</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Recebido em</th>
+                    <th className="px-5 py-3">Ativado em</th>
+                    <th className="px-5 py-3">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {distributions.map((distribution) => {
+                    const status = playerCodeStatusMap[distribution.status];
+                    const giftInfo =
+                      giftByDistributionId.get(distribution.id) ??
+                      giftByCodeId.get(distribution.boosterCodeId);
+                    const rewardDetail =
+                      distribution.boosterCode.rewardLabel ??
+                      distribution.boosterCode.sourceBatch ??
+                      distribution.reasonDetail ??
+                      giftInfo?.payload.reasonDetail ??
+                      "-";
+
+                    return (
+                      <tr key={distribution.id}>
+                        <td className="px-5 py-3 font-mono text-xs font-semibold text-white">
+                          {distribution.boosterCode.code}
+                        </td>
+                        <td className="px-5 py-3 text-slate-300">
+                          {distribution.boosterCode.season?.name ?? "-"}
+                        </td>
+                        <td className="px-5 py-3 text-slate-300">{rewardDetail}</td>
+                        <td className="px-5 py-3">
+                          <StatusBadge variant={status.variant} label={status.label} />
+                        </td>
+                        <td className="px-5 py-3 text-slate-400">{formatDate(giftInfo?.claimedAt ?? null)}</td>
+                        <td className="px-5 py-3 text-slate-400">{formatDate(distribution.redeemedAt)}</td>
+                        <td className="px-5 py-3">
+                          <CodeRowActions
+                            codeId={distribution.boosterCodeId}
+                            codeStatus={distribution.boosterCode.status}
+                            distributionId={distribution.id}
+                            distributionStatus={distribution.status}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
       </div>
     );
   }
 
   // ===== ADMIN VIEW =====
-  const sp = await searchParams;
   const page = Number(sp.page) || 1;
   const search = sp.search || "";
   const statusFilter = sp.status as BoosterCodeStatus | undefined;
