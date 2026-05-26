@@ -40,6 +40,14 @@ const updateWeekDeckLockSchema = z.object({
   deckLockAt: z.string().nullish()
 });
 
+const updateTournamentWeekSettingsSchema = z.object({
+  weekId: z.string().min(1),
+  label: z.string().trim().max(120).nullish(),
+  mode: z.nativeEnum(WeekMode),
+  status: z.nativeEnum(WeekStatus),
+  deckLockAt: z.string().nullish()
+});
+
 const submitTournamentWeekDeckSchema = z.object({
   tournamentWeekId: z.string().min(1),
   deckNumber: z.coerce.number().int().min(1).max(3).default(1),
@@ -268,6 +276,68 @@ export async function updateTournamentWeekDeckLock(
 }
 
 // ─── Inscrições ──────────────────────────────────────────────────────────────
+
+export async function updateTournamentWeekSettings(
+  raw: z.infer<typeof updateTournamentWeekSettingsSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = updateTournamentWeekSettingsSchema.parse(raw);
+    const rawDate = data.deckLockAt?.trim();
+    const deckLockAt = rawDate ? new Date(rawDate) : null;
+
+    if (deckLockAt && Number.isNaN(deckLockAt.getTime())) {
+      return { error: "Data de fechamento de decklist invalida." };
+    }
+
+    const before = await prisma.tournamentWeek.findUnique({
+      where: { id: data.weekId },
+      include: { tournament: { select: { slug: true } } }
+    });
+    if (!before) return { error: "Semana de torneio nao encontrada." };
+
+    const label = data.label?.trim() || null;
+    const updated = await prisma.tournamentWeek.update({
+      where: { id: data.weekId },
+      data: {
+        label,
+        mode: data.mode,
+        status: data.status,
+        deckLockAt
+      }
+    });
+
+    await logAudit(
+      actor.id,
+      "tournamentWeek",
+      data.weekId,
+      "tournament_week.settings_updated",
+      {
+        label: before.label,
+        mode: before.mode,
+        status: before.status,
+        deckLockAt: before.deckLockAt?.toISOString() ?? null
+      },
+      {
+        label: updated.label,
+        mode: updated.mode,
+        status: updated.status,
+        deckLockAt: updated.deckLockAt?.toISOString() ?? null
+      }
+    );
+
+    revalidatePath("/torneios/" + before.tournament.slug);
+    revalidatePath("/torneios/" + before.tournament.slug + "/admin");
+    revalidatePath("/torneios/" + before.tournament.slug + "/semanas/" + before.weekNumber);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((i) => i.message).join(", ") };
+    }
+
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
 
 export async function submitTournamentWeekDeck(
   raw: z.infer<typeof submitTournamentWeekDeckSchema>

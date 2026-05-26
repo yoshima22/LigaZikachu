@@ -7,11 +7,41 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
-import { updateTournamentWeekDeckLock } from "../../actions";
+import {
+  finishTournament,
+  publishTournament,
+  startTournament,
+  updateTournamentWeekSettings
+} from "../../actions";
+import { TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
+
+const weekModeLabels: Record<WeekMode, string> = {
+  PADRAO: "Padrao",
+  GLC: "GLC",
+  DUPLAS_SINCRONIZADAS: "Duplas Sincronizadas",
+  PONTUACAO_DOBRADA: "Pontuacao Dobrada",
+  CONSTRUTOR_MISTERIOSO: "Construtor Misterioso",
+  GUERRA_DE_TIMES: "Guerra de Times",
+  BATALHA_FINAL: "Batalha Final"
+};
+
+const weekStatusLabels: Record<WeekStatus, string> = {
+  PLANNED: "Planejada",
+  OPEN: "Aberta",
+  LOCKED: "Bloqueada",
+  CLOSED: "Encerrada"
+};
+
+const tournamentStatusLabels: Record<TournamentStatus, string> = {
+  DRAFT: "Rascunho",
+  REGISTRATION_OPEN: "Inscricoes abertas",
+  IN_PROGRESS: "Em andamento",
+  FINISHED: "Encerrado"
+};
 
 export default async function TournamentAdminPage({ params }: Props) {
   const { slug } = await params;
@@ -58,9 +88,6 @@ export default async function TournamentAdminPage({ params }: Props) {
   );
   const pendingMatches = totalMatches - confirmedMatches - disputedMatches;
 
-  const currentWeek = tournament.weeks.find((w) => w.status === "OPEN") ||
-    tournament.weeks.find((w) => w.status === "PLANNED");
-
   const toDateTimeLocal = (value: Date | null | undefined) => {
     if (!value) return "";
 
@@ -85,6 +112,68 @@ export default async function TournamentAdminPage({ params }: Props) {
       <h1 className="text-2xl font-bold text-white font-pixel">
         Painel Admin — {tournament.name}
       </h1>
+
+      <Card className="border-slate-800 bg-slate-900/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base text-white">
+            <Trophy size={18} className="text-[#FFCB05]" />
+            Status do Torneio
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-slate-400">Status atual</p>
+            <p className="text-lg font-semibold text-white">
+              {tournamentStatusLabels[tournament.status]}
+            </p>
+            <p className="mt-1 max-w-2xl text-xs text-slate-500">
+              Publique o torneio para remover do rascunho e abrir inscricoes para jogadores.
+              Depois disso, voce pode iniciar ou encerrar conforme o andamento.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {tournament.status === "DRAFT" && (
+              <form
+                action={async () => {
+                  "use server";
+                  await publishTournament(tournament.id);
+                }}
+              >
+                <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                  Publicar e abrir inscricoes
+                </Button>
+              </form>
+            )}
+            {tournament.status === "REGISTRATION_OPEN" && (
+              <form
+                action={async () => {
+                  "use server";
+                  await startTournament(tournament.id);
+                }}
+              >
+                <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                  Iniciar torneio
+                </Button>
+              </form>
+            )}
+            {tournament.status === "IN_PROGRESS" && (
+              <form
+                action={async () => {
+                  "use server";
+                  await finishTournament(tournament.id);
+                }}
+              >
+                <Button type="submit" variant="outline">
+                  Encerrar torneio
+                </Button>
+              </form>
+            )}
+            <Button variant="outline" asChild>
+              <Link href={`/torneios/${slug}`}>Ver pagina publica</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -204,15 +293,51 @@ export default async function TournamentAdminPage({ params }: Props) {
                   </div>
                 </div>
                 <form
-                  className="mt-4 grid gap-2 border-t border-slate-800 pt-4 sm:grid-cols-[minmax(0,1fr)_auto]"
+                  className="mt-4 grid gap-3 border-t border-slate-800 pt-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(180px,0.8fr)_minmax(160px,0.7fr)_minmax(220px,1fr)_auto]"
                   action={async (formData) => {
                     "use server";
-                    await updateTournamentWeekDeckLock({
+                    await updateTournamentWeekSettings({
                       weekId: week.id,
+                      label: String(formData.get("label") ?? ""),
+                      mode: String(formData.get("mode") ?? week.mode) as WeekMode,
+                      status: String(formData.get("status") ?? week.status) as WeekStatus,
                       deckLockAt: String(formData.get("deckLockAt") ?? "")
                     });
                   }}
                 >
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Nome do dia/semana</span>
+                    <input
+                      name="label"
+                      defaultValue={week.label ?? ""}
+                      placeholder={`Semana ${week.weekNumber}`}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Modo de jogo</span>
+                    <select
+                      name="mode"
+                      defaultValue={week.mode}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+                    >
+                      {Object.entries(weekModeLabels).map(([mode, label]) => (
+                        <option key={mode} value={mode}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Status do dia</span>
+                    <select
+                      name="status"
+                      defaultValue={week.status}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+                    >
+                      {Object.entries(weekStatusLabels).map(([status, label]) => (
+                        <option key={status} value={status}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="space-y-1 text-xs text-slate-400">
                     <span>Fechamento do cadastro de deck</span>
                     <input
@@ -223,13 +348,12 @@ export default async function TournamentAdminPage({ params }: Props) {
                     />
                   </label>
                   <div className="flex items-end">
-                    <Button size="sm" variant="outline" type="submit">
-                      Salvar prazo
+                    <Button size="sm" type="submit" className="w-full bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                      Salvar dia
                     </Button>
                   </div>
-                  <p className="sm:col-span-2 text-xs text-slate-500">
-                    Antes desse prazo, cada jogador ve apenas a propria decklist.
-                    Depois, as listas dos inscritos ficam liberadas.
+                  <p className="text-xs text-slate-500 md:col-span-2 lg:col-span-5">
+                    Aqui o admin define o modo do dia, abre/bloqueia/encerra o dia e controla o fechamento das decklists.
                   </p>
                 </form>
               </CardContent>
