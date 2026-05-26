@@ -435,7 +435,14 @@ function parseRawCodes(rawCodes: string) {
   }
 
   // Suporta separadores: nova linha, vírgula, ponto-e-vírgula, espaço, tab
-  return trimmed
+  // Remove ; no final de cada linha antes de processar
+  const cleaned = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.replace(/;+\s*$/, "").trim())
+    .filter(Boolean)
+    .join("\n");
+
+  return cleaned
     .split(/[\r?\n,;\s]+/)
     .map(normalizeBoosterCode)
     .filter(Boolean);

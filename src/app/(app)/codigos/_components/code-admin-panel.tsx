@@ -66,6 +66,10 @@ export function CodeAdminPanel({
   const parsedPreview = useMemo(() => {
     return rawCodes
       .trim()
+      .split(/\r?\n/)
+      .map((line) => line.replace(/;+\s*$/, "").trim())
+      .filter(Boolean)
+      .join("\n")
       .split(/[\r?\n,;\s]+/)
       .map((code) => code.trim())
       .filter(Boolean)
@@ -75,6 +79,10 @@ export function CodeAdminPanel({
   const parsedCount = useMemo(() => {
     return rawCodes
       .trim()
+      .split(/\r?\n/)
+      .map((line) => line.replace(/;+\s*$/, "").trim())
+      .filter(Boolean)
+      .join("\n")
       .split(/[\r?\n,;\s]+/)
       .map((code) => code.trim())
       .filter(Boolean).length;
