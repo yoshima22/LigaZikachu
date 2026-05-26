@@ -218,14 +218,6 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
 
       <CodeFilters
         players={players}
-        onSearch={(filters) => {
-          const params = new URLSearchParams();
-          if (filters.search) params.set("search", filters.search);
-          if (filters.status && filters.status !== "ALL") params.set("status", filters.status);
-          if (filters.playerId && filters.playerId !== "ALL") params.set("playerId", filters.playerId);
-          if (filters.page > 1) params.set("page", String(filters.page));
-          return `/codigos?${params.toString()}`;
-        }}
         totalPages={codesResult.totalPages}
         currentPage={codesResult.page}
       />

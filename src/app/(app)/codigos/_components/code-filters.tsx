@@ -2,18 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 interface CodeFiltersProps {
   players: Array<{ id: string; displayName: string }>;
-  onSearch: (filters: {
-    search: string;
-    status: string;
-    playerId: string;
-    page: number;
-  }) => string;
   totalPages: number;
   currentPage: number;
 }
@@ -25,13 +20,15 @@ const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-widest t
 
 export function CodeFilters({
   players,
-  onSearch,
   totalPages,
   currentPage,
 }: CodeFiltersProps) {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("ALL");
-  const [playerId, setPlayerId] = useState("ALL");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [status, setStatus] = useState(searchParams.get("status") ?? "ALL");
+  const [playerId, setPlayerId] = useState(searchParams.get("playerId") ?? "ALL");
 
   const statusOptions = [
     { value: "ALL", label: "Todos os status" },
@@ -43,12 +40,28 @@ export function CodeFilters({
   ];
 
   function buildUrl(page: number) {
-    return onSearch({ search, status, playerId, page });
+    const params = new URLSearchParams(searchParams.toString());
+    if (search) params.set("search", search);
+    else params.delete("search");
+    if (status && status !== "ALL") params.set("status", status);
+    else params.delete("status");
+    if (playerId && playerId !== "ALL") params.set("playerId", playerId);
+    else params.delete("playerId");
+    if (page > 1) params.set("page", String(page));
+    else params.delete("page");
+    return `${pathname}?${params.toString()}`;
   }
 
   return (
     <div className="space-y-3">
-      <form action={buildUrl(1)} className="flex flex-wrap gap-3 items-end">
+      <form
+        action={buildUrl(1)}
+        className="flex flex-wrap gap-3 items-end"
+        onSubmit={(e) => {
+          e.preventDefault();
+          window.location.href = buildUrl(1);
+        }}
+      >
         <div className="flex-1 min-w-[200px]">
           <label className={labelClass}>Buscar codigo</label>
           <div className="relative">
@@ -65,7 +78,12 @@ export function CodeFilters({
 
         <div className="w-[180px]">
           <label className={labelClass}>Status</label>
-          <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
+          <select
+            name="status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className={inputClass}
+          >
             {statusOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -74,7 +92,12 @@ export function CodeFilters({
 
         <div className="w-[200px]">
           <label className={labelClass}>Jogador</label>
-          <select name="playerId" value={playerId} onChange={(e) => setPlayerId(e.target.value)} className={inputClass}>
+          <select
+            name="playerId"
+            value={playerId}
+            onChange={(e) => setPlayerId(e.target.value)}
+            className={inputClass}
+          >
             <option value="ALL">Todos os jogadores</option>
             <option value="NONE">Sem dono</option>
             {players.map((p) => (
@@ -91,12 +114,26 @@ export function CodeFilters({
           <p className="text-xs text-slate-500">Pagina {currentPage} de {totalPages}</p>
           <div className="flex gap-2">
             <Link href={buildUrl(currentPage - 1)}>
-              <Button size="sm" variant="outline" disabled={currentPage <= 1}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={currentPage <= 1}
+                onClick={(e) => {
+                  if (currentPage <= 1) e.preventDefault();
+                }}
+              >
                 <ChevronLeft size={14} />
               </Button>
             </Link>
             <Link href={buildUrl(currentPage + 1)}>
-              <Button size="sm" variant="outline" disabled={currentPage >= totalPages}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={currentPage >= totalPages}
+                onClick={(e) => {
+                  if (currentPage >= totalPages) e.preventDefault();
+                }}
+              >
                 <ChevronRight size={14} />
               </Button>
             </Link>
