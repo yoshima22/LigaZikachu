@@ -243,7 +243,6 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
         {match.status === "PENDING_CONFIRMATION" &&
           isParticipant &&
           match.winnerPlayerId &&
-          match.reportedById !== currentPlayerId &&
           myConfirmation?.status !== "CONFIRMED" && (
             <div className="flex gap-2">
               <Button

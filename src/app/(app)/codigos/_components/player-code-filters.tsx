@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { DistributionStatus } from "@prisma/client";
+import { BoosterCodeStatus, DistributionStatus } from "@prisma/client";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ export function PlayerCodeFilters({ totalPages, currentPage }: PlayerCodeFilters
     { value: "ALL", label: "Todos os status" },
     { value: DistributionStatus.ASSIGNED, label: "Nao ativado" },
     { value: DistributionStatus.REDEEMED, label: "Ativado" },
+    { value: BoosterCodeStatus.INVALIDATED, label: "Invalidado" },
   ];
 
   function buildUrl(page: number) {

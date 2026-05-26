@@ -42,13 +42,21 @@ export function CodeRowActions({
   const [reasonDetail, setReasonDetail] = useState("");
 
   const canMarkRedeemed =
-    distributionId && distributionStatus === DistributionStatus.ASSIGNED;
+    distributionId &&
+    distributionStatus === DistributionStatus.ASSIGNED &&
+    codeStatus !== BoosterCodeStatus.INVALIDATED;
   const canRevoke = admin && distributionId && distributionStatus === DistributionStatus.ASSIGNED;
   const canInvalidate = admin && codeId && codeStatus === BoosterCodeStatus.AVAILABLE;
+  const canPlayerInvalidate =
+    !admin &&
+    codeId &&
+    distributionId &&
+    codeStatus !== BoosterCodeStatus.INVALIDATED &&
+    (distributionStatus === DistributionStatus.ASSIGNED || distributionStatus === DistributionStatus.REDEEMED);
   const canSend = admin && codeId && codeStatus === BoosterCodeStatus.AVAILABLE && players.length > 0;
   const canDelete = admin && codeId;
 
-  if (!canMarkRedeemed && !canRevoke && !canInvalidate && !canSend && !canDelete) return null;
+  if (!canMarkRedeemed && !canRevoke && !canInvalidate && !canPlayerInvalidate && !canSend && !canDelete) return null;
 
   function runDelete() {
     if (!codeId) return;
@@ -143,12 +151,15 @@ export function CodeRowActions({
           </button>
         )}
 
-        {canInvalidate && (
+        {(canInvalidate || canPlayerInvalidate) && (
           <button
             type="button"
             disabled={isPending}
             onClick={() => {
-              if (!confirm("Invalidar este codigo disponivel?")) return;
+              const message = admin
+                ? "Invalidar este codigo disponivel?"
+                : "Marcar este codigo como invalido para revisao do admin?";
+              if (!confirm(message)) return;
 
               startTransition(async () => {
                 const result = await invalidateBoosterCodeAction({ id: codeId });
@@ -156,7 +167,7 @@ export function CodeRowActions({
                   toast.error(result.error);
                   return;
                 }
-                toast.success("Codigo invalidado.");
+                toast.success(admin ? "Codigo invalidado." : "Codigo marcado como invalido.");
               });
             }}
             className={actionButton + " border-red-500/30 text-red-400 hover:bg-red-500/10"}

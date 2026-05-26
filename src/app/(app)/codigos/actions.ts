@@ -485,19 +485,50 @@ export async function invalidateBoosterCodeAction(
   input: z.infer<typeof idSchema>
 ): Promise<{ error?: string }> {
   try {
-    const actor = await requireAdmin();
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
+
     const { id } = idSchema.parse(input);
     const code = await prisma.boosterCode.findUnique({
       where: { id },
-      select: { id: true, code: true, status: true }
+      include: {
+        distributions: {
+          include: {
+            player: { select: { id: true, userId: true } }
+          },
+          take: 1
+        }
+      }
     });
 
     if (!code) {
       return { error: "Codigo nao encontrado." };
     }
 
-    if (code.status !== BoosterCodeStatus.AVAILABLE) {
-      return { error: "Apenas codigos disponiveis podem ser invalidados." };
+    const admin = isAdmin(actor.role);
+    const ownedDistribution = code.distributions.find(
+      (distribution) => distribution.player?.userId === actor.id
+    );
+
+    if (admin) {
+      if (code.status !== BoosterCodeStatus.AVAILABLE) {
+        return { error: "Apenas codigos disponiveis podem ser invalidados pelo admin nesta tela." };
+      }
+    } else {
+      if (!ownedDistribution) {
+        return { error: "Sem permissao para invalidar este codigo." };
+      }
+
+      if (
+        ownedDistribution.status !== DistributionStatus.ASSIGNED &&
+        ownedDistribution.status !== DistributionStatus.REDEEMED
+      ) {
+        return { error: "Este codigo nao pode mais ser invalidado pelo jogador." };
+      }
+
+      if (code.status !== BoosterCodeStatus.ASSIGNED && code.status !== BoosterCodeStatus.REDEEMED) {
+        return { error: "Este codigo nao esta em um estado valido para revisao." };
+      }
     }
 
     await prisma.$transaction([
@@ -522,6 +553,7 @@ export async function invalidateBoosterCodeAction(
     ]);
 
     revalidatePath("/codigos");
+    if (ownedDistribution?.playerId) revalidatePath(`/jogadores/${ownedDistribution.playerId}`);
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) {

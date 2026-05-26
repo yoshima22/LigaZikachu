@@ -106,8 +106,11 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
     const page = Number(sp.page) || 1;
     const pageSize = 50;
     const search = sp.search || "";
-    const statusFilter = Object.values(DistributionStatus).includes(sp.status as DistributionStatus)
+    const distributionStatusFilter = Object.values(DistributionStatus).includes(sp.status as DistributionStatus)
       ? (sp.status as DistributionStatus)
+      : undefined;
+    const codeStatusFilter = Object.values(BoosterCodeStatus).includes(sp.status as BoosterCodeStatus)
+      ? (sp.status as BoosterCodeStatus)
       : undefined;
 
     const claimedCodeGifts = await prisma.playerGift.findMany({
@@ -144,7 +147,8 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
     const where: Prisma.CodeDistributionWhereInput = hasClaimedCodes
       ? {
           playerId: player.id,
-          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(distributionStatusFilter ? { status: distributionStatusFilter } : {}),
+          ...(codeStatusFilter ? { boosterCode: { is: { status: codeStatusFilter } } } : {}),
           OR: ownershipFilters,
           ...(search
             ? {
@@ -228,7 +232,10 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {distributions.map((distribution) => {
-                    const status = playerCodeStatusMap[distribution.status];
+                    const status =
+                      distribution.boosterCode.status === BoosterCodeStatus.INVALIDATED
+                        ? codeStatusMap.INVALIDATED
+                        : playerCodeStatusMap[distribution.status];
                     const giftInfo =
                       giftByDistributionId.get(distribution.id) ??
                       giftByCodeId.get(distribution.boosterCodeId);

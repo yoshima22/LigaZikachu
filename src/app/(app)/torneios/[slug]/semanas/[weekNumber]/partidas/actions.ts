@@ -268,10 +268,6 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   const participantIds = [match.playerAId, match.playerBId];
   if (!participantIds.includes(player.id)) throw new Error("Voce nao participa desta partida");
 
-  if (match.reportedById === user.id) {
-    return { success: true, confirmed: false };
-  }
-
   const now = new Date();
   const confirmations = await prisma.$transaction(async (tx) => {
     await tx.matchConfirmation.upsert({
@@ -311,6 +307,9 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   }
 
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
+  revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
+  revalidatePath("/ranking");
+  revalidatePath("/dashboard");
 
   return { success: true, confirmed: allConfirmed };
 }
