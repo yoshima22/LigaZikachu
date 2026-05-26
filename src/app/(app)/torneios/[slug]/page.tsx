@@ -37,6 +37,8 @@ export default async function TorneioDetailPage({
   });
 
   if (!tournament) notFound();
+  if (!admin && tournament.status === "DRAFT") notFound();
+
 
   const player = await prisma.player.findUnique({ where: { userId: user.id } });
   let myRegistration: { status: RegistrationStatus } | null = null;
@@ -159,6 +161,13 @@ export default async function TorneioDetailPage({
                     <p className="text-xs text-slate-500">
                       {fmt(wk.startDate)} – {fmt(wk.endDate)}
                     </p>
+                    {myRegistration?.status === "APPROVED" && (
+                      <p className="mt-1 text-xs text-[#FFCB05]">
+                        {wk.deckLockAt && new Date() < wk.deckLockAt
+                          ? "Enviar ou editar decklist"
+                          : "Ver decklists do dia"}
+                      </p>
+                    )}
                   </div>
                   <WeekModeBadge mode={wk.mode as WeekMode} short />
                   <ChevronRight size={14} className="text-slate-500" />

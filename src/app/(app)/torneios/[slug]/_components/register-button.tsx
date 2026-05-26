@@ -89,7 +89,7 @@ export function RegisterButton({
   if (!canRegister) return null;
 
   return (
-    <Button onClick={handleRegister} disabled={isPending} size="sm">
+    <Button onClick={handleRegister} disabled={isPending} size="sm" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
       <UserPlus size={14} className="mr-1.5" />
       {isPending ? "Inscrevendo..." : "Inscrever-se"}
     </Button>

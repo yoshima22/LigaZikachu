@@ -30,10 +30,17 @@ export default async function TourneiosPage({
   const user = await getSessionUser();
   const admin = user ? isAdmin(user.role) : false;
 
-  const where =
-    statusFilter && statusFilter !== "ALL"
+  const where = admin
+    ? statusFilter && statusFilter !== "ALL"
       ? { status: statusFilter as TournamentStatus }
-      : undefined;
+      : undefined
+    : statusFilter && statusFilter !== "ALL" && statusFilter !== "DRAFT"
+      ? { status: statusFilter as TournamentStatus }
+      : { status: { not: "DRAFT" as const } };
+
+  const statusFilterEntries = Object.entries(STATUS_FILTER_LABELS).filter(
+    ([key]) => admin || key !== "DRAFT"
+  );
 
   const tournaments = await prisma.tournament.findMany({
     where,
@@ -77,7 +84,7 @@ export default async function TourneiosPage({
 
       {/* Filtros de status */}
       <div className="flex flex-wrap gap-2">
-        {Object.entries(STATUS_FILTER_LABELS).map(([key, label]) => {
+        {statusFilterEntries.map(([key, label]) => {
           const active = (statusFilter ?? "ALL") === key;
           return (
             <Link

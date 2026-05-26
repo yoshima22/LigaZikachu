@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
-import { TournamentStatus, RegistrationStatus, WeekMode, WeekStatus } from "@prisma/client";
+import { DeckSubmissionStatus, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus } from "@prisma/client";
+import {
+  canSubmitTournamentWeekDeck,
+  getDeckSubmissionDeadline,
+  isDeckRegistrationLocked
+} from "@/lib/decks";
 
 // ─── Schemas de validação ────────────────────────────────────────────────────
 
@@ -33,6 +38,14 @@ const updateTournamentSchema = createTournamentSchema.partial().extend({
 const updateWeekDeckLockSchema = z.object({
   weekId: z.string().min(1),
   deckLockAt: z.string().nullish()
+});
+
+const submitTournamentWeekDeckSchema = z.object({
+  tournamentWeekId: z.string().min(1),
+  deckNumber: z.coerce.number().int().min(1).max(3).default(1),
+  deckName: z.string().trim().min(2, "Informe o nome do deck.").max(120),
+  archetype: z.string().trim().max(120).nullish(),
+  deckList: z.string().trim().min(10, "Cole a lista completa do deck.").max(12000)
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -255,6 +268,123 @@ export async function updateTournamentWeekDeckLock(
 }
 
 // ─── Inscrições ──────────────────────────────────────────────────────────────
+
+export async function submitTournamentWeekDeck(
+  raw: z.infer<typeof submitTournamentWeekDeckSchema>
+): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Nao autenticado." };
+
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil de jogador nao encontrado." };
+
+    const data = submitTournamentWeekDeckSchema.parse(raw);
+    const week = await prisma.tournamentWeek.findUnique({
+      where: { id: data.tournamentWeekId },
+      include: {
+        tournament: {
+          select: {
+            id: true,
+            slug: true,
+            seasonId: true
+          }
+        }
+      }
+    });
+    if (!week) return { error: "Dia de campeonato nao encontrado." };
+
+    const seasonId = week.tournament.seasonId;
+    if (!seasonId) {
+      return { error: "Este campeonato ainda nao esta vinculado a uma temporada." };
+    }
+
+    const registration = await prisma.tournamentRegistration.findUnique({
+      where: {
+        tournamentId_playerId: {
+          tournamentId: week.tournamentId,
+          playerId: player.id
+        }
+      },
+      select: { status: true }
+    });
+
+    if (
+      !canSubmitTournamentWeekDeck({
+        viewerRole: user.role,
+        registrationStatus: registration?.status ?? null,
+        week
+      })
+    ) {
+      return isDeckRegistrationLocked(week)
+        ? { error: "O prazo de cadastro de decklist para este dia ja foi fechado." }
+        : { error: "Apenas jogadores aprovados neste campeonato podem enviar decklist." };
+    }
+
+    const deadline = getDeckSubmissionDeadline(week) ?? week.endDate;
+    const now = new Date();
+    const existing = await prisma.deckSubmission.findFirst({
+      where: {
+        tournamentWeekId: week.id,
+        playerId: player.id,
+        deckNumber: data.deckNumber
+      }
+    });
+
+    const payload = {
+      seasonId,
+      tournamentId: week.tournamentId,
+      tournamentWeekId: week.id,
+      playerId: player.id,
+      deckNumber: data.deckNumber,
+      deckName: data.deckName,
+      archetype: data.archetype || null,
+      deckList: data.deckList,
+      deadlineAt: deadline,
+      status: DeckSubmissionStatus.SUBMITTED,
+      editedAt: existing ? now : null,
+      isLate: now > deadline
+    };
+
+    const submission = existing
+      ? await prisma.deckSubmission.update({
+          where: { id: existing.id },
+          data: payload
+        })
+      : await prisma.deckSubmission.create({
+          data: payload
+        });
+
+    await logAudit(
+      user.id,
+      "deckSubmission",
+      submission.id,
+      existing ? "deck_submission.updated" : "deck_submission.created",
+      existing
+        ? {
+            deckName: existing.deckName,
+            deckNumber: existing.deckNumber,
+            status: existing.status
+          }
+        : undefined,
+      {
+        deckName: submission.deckName,
+        deckNumber: submission.deckNumber,
+        tournamentWeekId: week.id
+      }
+    );
+
+    revalidatePath("/torneios/" + week.tournament.slug);
+    revalidatePath("/torneios/" + week.tournament.slug + "/semanas/" + week.weekNumber);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((i) => i.message).join(", ") };
+    }
+
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
 
 export async function selfRegister(
   tournamentId: string
