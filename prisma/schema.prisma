@@ -143,6 +143,8 @@ model User {
   sessions                 Session[]
   createdSeasons           Season[]             @relation("SeasonCreatedBy")
   createdMatches           Match[]              @relation("MatchCreatedBy")
+  reportedMatches          Match[]              @relation("MatchReportedBy")
+  confirmedMatches         Match[]              @relation("MatchConfirmedBy")
   approvedDecks            DeckSubmission[]     @relation("DeckApprovedBy")
   openedChallenges         Challenge[]          @relation("ChallengeOpenedBy")
   resolvedChallenges       Challenge[]          @relation("ChallengeResolvedBy")
