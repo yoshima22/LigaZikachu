@@ -62,11 +62,11 @@ O seed cria/atualiza:
 - Códigos booster de exemplo
 
 ## Credenciais de teste
-| Email | Senha | Role |
-|-------|-------|------|
-| `admin@ligazikachu.com` | `LigaZikachu123` | SUPER_ADMIN |
-| `luiz@ligazikachu.com`  | `LigaZikachu123` | PLAYER |
-| `rodrigo@ligazikachu.com` | `LigaZikachu123` | PLAYER |
+| Email | Role |
+|-------|------|
+| `admin@ligazikachu.com` | SUPER_ADMIN |
+| `luiz@ligazikachu.com`  | PLAYER |
+| `rodrigo@ligazikachu.com` | PLAYER |
 
 (demais jogadores usam a mesma senha)
 
