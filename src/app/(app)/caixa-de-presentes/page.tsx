@@ -29,6 +29,8 @@ interface BoosterPayload {
   boosterCodeId?: string;
   distributionId?: string | null;
   seasonId?: string | null;
+  rewardLabel?: string | null;
+  sourceBatch?: string | null;
   reason?: string;
   reasonDetail?: string | null;
 }
@@ -106,6 +108,8 @@ export default async function GiftBoxPage() {
           {gifts.map((gift) => {
             const status = giftStatusMap[gift.status];
             const payload = getBoosterPayload(gift.payload);
+            const rewardDetail =
+              payload.rewardLabel ?? payload.sourceBatch ?? payload.reasonDetail ?? gift.description;
             const showCode = gift.type === GiftType.BOOSTER_CODE && gift.status === GiftStatus.CLAIMED && payload.code;
 
             return (
@@ -118,7 +122,18 @@ export default async function GiftBoxPage() {
                   <StatusBadge variant={status.variant} label={status.label} />
                 </div>
 
-                {gift.description && <p className="text-sm text-slate-300">{gift.description}</p>}
+                {gift.description && gift.description !== rewardDetail && (
+                  <p className="text-sm text-slate-300">{gift.description}</p>
+                )}
+
+                {rewardDetail && (
+                  <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[#FFCB05]/80">
+                      Recompensa
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-slate-100">{rewardDetail}</p>
+                  </div>
+                )}
 
                 {gift.type === GiftType.BOOSTER_CODE && (
                   <div className="rounded-xl border border-border bg-slate-900/60 p-3">

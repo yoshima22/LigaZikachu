@@ -294,7 +294,12 @@ export async function deleteBoosterCodeAction(
     if (!code) return { error: "Codigo nao encontrado." };
 
     await prisma.$transaction(async (tx) => {
-      await deleteGiftsForCode(tx, code.id, code.distributions.map((distribution) => distribution.id));
+      await deleteGiftsForCode(
+        tx,
+        code.id,
+        code.distributions.map((distribution) => distribution.id),
+        code.code
+      );
 
       await tx.boosterCode.delete({ where: { id: code.id } });
 
@@ -405,7 +410,7 @@ export async function revokeCodeDistributionAction(
     const distribution = await prisma.codeDistribution.findUnique({
       where: { id },
       include: {
-        boosterCode: { select: { id: true, status: true } }
+        boosterCode: { select: { id: true, code: true, status: true } }
       }
     });
 
@@ -421,20 +426,30 @@ export async function revokeCodeDistributionAction(
       return { error: "Codigo ja resgatado nao pode ser revogado." };
     }
 
-    await prisma.$transaction([
-      prisma.codeDistribution.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.codeDistribution.update({
         where: { id },
         data: {
           status: DistributionStatus.REVOKED,
           revokedAt: new Date(),
           revokedById: actor.id
         }
-      }),
-      prisma.boosterCode.update({
+      });
+
+      await tx.boosterCode.update({
         where: { id: distribution.boosterCodeId },
         data: { status: BoosterCodeStatus.AVAILABLE }
-      }),
-      prisma.auditLog.create({
+      });
+
+      await deleteGiftsForCode(
+        tx,
+        distribution.boosterCodeId,
+        [distribution.id],
+        distribution.boosterCode.code,
+        distribution.playerId
+      );
+
+      await tx.auditLog.create({
         data: {
           actorUserId: actor.id,
           entityType: "codeDistribution",
@@ -449,10 +464,11 @@ export async function revokeCodeDistributionAction(
             codeStatus: BoosterCodeStatus.AVAILABLE
           }
         }
-      })
-    ]);
+      });
+    });
 
     revalidatePath("/codigos");
+    revalidatePath("/caixa-de-presentes");
     if (distribution.playerId) revalidatePath(`/jogadores/${distribution.playerId}`);
     return {};
   } catch (err) {
@@ -619,12 +635,14 @@ async function createGiftsForDistributedCodes({
         playerId,
         type: GiftType.BOOSTER_CODE,
         title: "Codigo de booster",
-        description: reasonDetail ?? reasonLabel(reason),
+        description: code.rewardLabel ?? code.sourceBatch ?? reasonDetail ?? reasonLabel(reason),
         payload: {
           code: code.code,
           boosterCodeId: code.id,
           distributionId: distribution?.id ?? null,
           seasonId: distribution?.seasonId ?? code.seasonId ?? null,
+          rewardLabel: code.rewardLabel ?? null,
+          sourceBatch: code.sourceBatch ?? null,
           reason,
           reasonDetail: reasonDetail ?? null
         }
@@ -653,16 +671,26 @@ async function createGiftsForDistributedCodes({
 async function deleteGiftsForCode(
   tx: Prisma.TransactionClient,
   boosterCodeId: string,
-  distributionIds: string[]
+  distributionIds: string[],
+  code?: string,
+  playerId?: string | null
 ) {
+  const filters: Prisma.PlayerGiftWhereInput[] = [
+    { payload: { path: ["boosterCodeId"], equals: boosterCodeId } },
+    ...distributionIds.map((distributionId) => ({
+      payload: { path: ["distributionId"], equals: distributionId }
+    }))
+  ];
+
+  if (code) {
+    filters.push({ payload: { path: ["code"], equals: code } });
+  }
+
   await tx.playerGift.deleteMany({
     where: {
-      OR: [
-        { payload: { path: ["boosterCodeId"], equals: boosterCodeId } },
-        ...distributionIds.map((distributionId) => ({
-          payload: { path: ["distributionId"], equals: distributionId }
-        }))
-      ]
+      ...(playerId ? { playerId } : {}),
+      type: GiftType.BOOSTER_CODE,
+      OR: filters
     }
   });
 }
