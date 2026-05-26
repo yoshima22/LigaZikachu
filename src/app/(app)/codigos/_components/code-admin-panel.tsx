@@ -66,10 +66,18 @@ export function CodeAdminPanel({
   const parsedPreview = useMemo(() => {
     return rawCodes
       .trim()
-      .split(/[\s,;]+/)
+      .split(/[\r?\n,;\s]+/)
       .map((code) => code.trim())
       .filter(Boolean)
       .slice(0, 4);
+  }, [rawCodes]);
+
+  const parsedCount = useMemo(() => {
+    return rawCodes
+      .trim()
+      .split(/[\r?\n,;\s]+/)
+      .map((code) => code.trim())
+      .filter(Boolean).length;
   }, [rawCodes]);
 
   function handleImport(e: FormEvent<HTMLFormElement>) {
@@ -129,7 +137,7 @@ export function CodeAdminPanel({
           <div>
             <h2 className="text-sm font-semibold text-white">Importar codigos</h2>
             <p className="mt-1 text-xs text-slate-400">
-              Cole uma lista, linhas simples ou CSV com coluna code.
+              Cole uma lista separada por quebra de linha, virgula, ponto-e-virgula ou espaco.
             </p>
           </div>
           <Upload className="mt-0.5 text-slate-500" size={18} />
@@ -146,13 +154,13 @@ export function CodeAdminPanel({
               onChange={(event) => setRawCodes(event.target.value)}
               rows={7}
               required
-              placeholder={"LIGA-ZIKA-009\nLIGA-ZIKA-010\n\nou CSV: code,sourceBatch"}
+              placeholder={"LIGA-ZIKA-001\nLIGA-ZIKA-002\nLIGA-ZIKA-003\n\nOu separados por ; ou ,"}
               className={`${inputClass} resize-y font-mono text-xs`}
             />
             {parsedPreview.length > 0 && (
               <p className="mt-2 text-xs text-slate-500">
                 Previa: {parsedPreview.join(", ")}
-                {parsedPreview.length === 4 ? "..." : ""}
+                {parsedCount > 4 ? ` (+${parsedCount - 4} outros)` : ""}
               </p>
             )}
           </div>
@@ -234,7 +242,7 @@ export function CodeAdminPanel({
 
           <Button type="submit" disabled={isImporting}>
             <Download size={16} className="mr-2" />
-            {isImporting ? "Importando..." : "Importar codigos"}
+            {isImporting ? "Importando..." : `Importar ${parsedCount > 0 ? parsedCount : ""} codigo(s)`}
           </Button>
         </form>
       </Card>
@@ -307,7 +315,7 @@ export function CodeAdminPanel({
                 id="quantity"
                 type="number"
                 min="1"
-                max="100"
+                max="500"
                 value={quantity}
                 onChange={(event) => setQuantity(event.target.value)}
                 required

@@ -28,7 +28,7 @@ const importCodesSchema = z.object({
 const reserveCodesSchema = z.object({
   playerId: z.string().min(1, "Selecione um jogador."),
   seasonId: z.string().nullish(),
-  quantity: z.number().int().min(1).max(100),
+  quantity: z.number().int().min(1).max(500),
   reason: z.nativeEnum(DistributionReason),
   reasonDetail: z.string().max(240).nullish()
 });
@@ -36,6 +36,69 @@ const reserveCodesSchema = z.object({
 const idSchema = z.object({
   id: z.string().min(1)
 });
+
+const listCodesSchema = z.object({
+  search: z.string().max(100).optional(),
+  status: z.nativeEnum(BoosterCodeStatus).optional(),
+  playerId: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(500).default(50),
+});
+
+export async function listBoosterCodesAction(
+  input: z.infer<typeof listCodesSchema>
+) {
+  const admin = await requireAdmin();
+  const data = listCodesSchema.parse(input);
+
+  const where: Record<string, unknown> = {};
+
+  if (data.search) {
+    where.code = { contains: data.search, mode: "insensitive" };
+  }
+  if (data.status) {
+    where.status = data.status;
+  }
+  if (data.playerId) {
+    where.distributions = {
+      some: {
+        playerId: data.playerId,
+        status: { not: DistributionStatus.REVOKED }
+      }
+    };
+  }
+
+  const skip = (data.page - 1) * data.pageSize;
+
+  const [codes, total] = await Promise.all([
+    prisma.boosterCode.findMany({
+      where,
+      include: {
+        season: { select: { name: true } },
+        distributions: {
+          include: {
+            player: { select: { displayName: true } },
+            assignedBy: { select: { name: true, email: true } }
+          },
+          orderBy: { assignedAt: "desc" },
+          take: 1
+        }
+      },
+      orderBy: [{ status: "asc" }, { importedAt: "desc" }],
+      skip,
+      take: data.pageSize,
+    }),
+    prisma.boosterCode.count({ where }),
+  ]);
+
+  return {
+    codes,
+    total,
+    page: data.page,
+    pageSize: data.pageSize,
+    totalPages: Math.ceil(total / data.pageSize),
+  };
+}
 
 export async function importBoosterCodesAction(
   input: z.infer<typeof importCodesSchema>
@@ -351,6 +414,8 @@ export async function invalidateBoosterCodeAction(
 
 function parseRawCodes(rawCodes: string) {
   const trimmed = rawCodes.trim();
+  if (!trimmed) return [];
+
   const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -369,8 +434,9 @@ function parseRawCodes(rawCodes: string) {
       .filter(Boolean);
   }
 
+  // Suporta separadores: nova linha, vírgula, ponto-e-vírgula, espaço, tab
   return trimmed
-    .split(/[\s,;]+/)
+    .split(/[\r?\n,;\s]+/)
     .map(normalizeBoosterCode)
     .filter(Boolean);
 }

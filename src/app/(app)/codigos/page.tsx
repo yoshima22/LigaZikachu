@@ -1,9 +1,11 @@
-import { auth } from "@/auth";
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge, type BadgeVariant } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import {
   BoosterCodeStatus,
   DistributionStatus,
@@ -12,6 +14,8 @@ import {
 import { Package, Ticket } from "lucide-react";
 import { CodeAdminPanel } from "./_components/code-admin-panel";
 import { CodeRowActions } from "./_components/code-row-actions";
+import { CodeFilters } from "./_components/code-filters";
+import { listBoosterCodesAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +43,22 @@ function formatDate(date: Date | null) {
   });
 }
 
-export default async function CodesPage() {
+interface CodesPageProps {
+  searchParams: Promise<{
+    search?: string;
+    status?: string;
+    playerId?: string;
+    page?: string;
+  }>;
+}
+
+export default async function CodesPage({ searchParams }: CodesPageProps) {
   const session = await auth();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);
 
+  // ===== PLAYER VIEW =====
   if (!admin) {
     const player = await prisma.player.findUnique({
       where: { userId: session.user.id },
@@ -69,12 +83,8 @@ export default async function CodesPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">
-            Meus codigos
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Codigos de booster atribuidos ao seu jogador.
-          </p>
+          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Meus codigos</h1>
+          <p className="mt-1 text-sm text-slate-400">Codigos de booster atribuidos ao seu jogador.</p>
         </div>
 
         {distributions.length === 0 ? (
@@ -116,7 +126,10 @@ export default async function CodesPage() {
                         </td>
                         <td className="px-5 py-3 text-slate-400">
                           {formatDate(distribution.assignedAt)}
-                          <CodeRowActions distributionId={distribution.id} distributionStatus={distribution.status} />
+                          <CodeRowActions
+                            distributionId={distribution.id}
+                            distributionStatus={distribution.status}
+                          />
                         </td>
                       </tr>
                     );
@@ -130,21 +143,20 @@ export default async function CodesPage() {
     );
   }
 
-  const [codes, totals, seasons, players, availableCount] = await Promise.all([
-    prisma.boosterCode.findMany({
-      include: {
-        season: { select: { name: true } },
-        distributions: {
-          include: {
-            player: { select: { displayName: true } },
-            assignedBy: { select: { name: true, email: true } }
-          },
-          orderBy: { assignedAt: "desc" },
-          take: 1
-        }
-      },
-      orderBy: [{ status: "asc" }, { importedAt: "desc" }],
-      take: 200
+  // ===== ADMIN VIEW =====
+  const sp = await searchParams;
+  const page = Number(sp.page) || 1;
+  const search = sp.search || "";
+  const statusFilter = sp.status as BoosterCodeStatus | undefined;
+  const playerFilter = sp.playerId;
+
+  const [codesResult, totals, seasons, players, availableCount] = await Promise.all([
+    listBoosterCodesAction({
+      search,
+      status: statusFilter,
+      playerId: playerFilter === "NONE" ? undefined : playerFilter,
+      page,
+      pageSize: 50,
     }),
     prisma.boosterCode.groupBy({
       by: ["status"],
@@ -157,9 +169,7 @@ export default async function CodesPage() {
     prisma.player.findMany({
       where: {
         active: true,
-        user: {
-          status: "ACTIVE"
-        }
+        user: { status: "ACTIVE" }
       },
       select: { id: true, displayName: true },
       orderBy: { displayName: "asc" }
@@ -181,12 +191,8 @@ export default async function CodesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">
-          Codigos de booster
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Estoque, atribuicoes e historico inicial de codigos da liga.
-        </p>
+        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Codigos de booster</h1>
+        <p className="mt-1 text-sm text-slate-400">Estoque, atribuicoes e historico de codigos da liga.</p>
       </div>
 
       <CodeAdminPanel
@@ -210,9 +216,28 @@ export default async function CodesPage() {
         })}
       </div>
 
-      {codes.length === 0 ? (
+      <CodeFilters
+        players={players}
+        onSearch={(filters) => {
+          const params = new URLSearchParams();
+          if (filters.search) params.set("search", filters.search);
+          if (filters.status && filters.status !== "ALL") params.set("status", filters.status);
+          if (filters.playerId && filters.playerId !== "ALL") params.set("playerId", filters.playerId);
+          if (filters.page > 1) params.set("page", String(filters.page));
+          return `/codigos?${params.toString()}`;
+        }}
+        totalPages={codesResult.totalPages}
+        currentPage={codesResult.page}
+      />
+
+      <p className="text-xs text-slate-500">
+        {codesResult.total} codigo(s) encontrado(s)
+        {codesResult.total > codesResult.pageSize && ` (mostrando ${codesResult.codes.length})`}
+      </p>
+
+      {codesResult.codes.length === 0 ? (
         <Card>
-          <EmptyState message="Nenhum codigo cadastrado." icon={<Package size={28} />} />
+          <EmptyState message="Nenhum codigo encontrado." icon={<Package size={28} />} />
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
@@ -230,7 +255,7 @@ export default async function CodesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {codes.map((code) => {
+                {codesResult.codes.map((code) => {
                   const status = codeStatusMap[code.status];
                   const latestDistribution = code.distributions[0];
                   return (
@@ -246,7 +271,9 @@ export default async function CodesPage() {
                         <StatusBadge variant={status.variant} label={status.label} />
                       </td>
                       <td className="px-5 py-3 text-slate-300">
-                        {latestDistribution?.player?.displayName ?? "-"}
+                        {latestDistribution?.player?.displayName ?? (
+                          <span className="text-slate-600 italic">Sem dono</span>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-slate-400">{formatDate(code.importedAt)}</td>
                       <td className="px-5 py-3">

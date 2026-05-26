@@ -1,0 +1,108 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+
+interface CodeFiltersProps {
+  players: Array<{ id: string; displayName: string }>;
+  onSearch: (filters: {
+    search: string;
+    status: string;
+    playerId: string;
+    page: number;
+  }) => string;
+  totalPages: number;
+  currentPage: number;
+}
+
+const inputClass =
+  "w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/30";
+
+const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500";
+
+export function CodeFilters({
+  players,
+  onSearch,
+  totalPages,
+  currentPage,
+}: CodeFiltersProps) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("ALL");
+  const [playerId, setPlayerId] = useState("ALL");
+
+  const statusOptions = [
+    { value: "ALL", label: "Todos os status" },
+    { value: "AVAILABLE", label: "Disponivel" },
+    { value: "ASSIGNED", label: "Atribuido" },
+    { value: "REDEEMED", label: "Resgatado" },
+    { value: "INVALIDATED", label: "Invalidado" },
+    { value: "EXPIRED", label: "Expirado" },
+  ];
+
+  function buildUrl(page: number) {
+    return onSearch({ search, status, playerId, page });
+  }
+
+  return (
+    <div className="space-y-3">
+      <form action={buildUrl(1)} className="flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[200px]">
+          <label className={labelClass}>Buscar codigo</label>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Input
+              name="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Digite parte do codigo..."
+              className="pl-9 bg-slate-900/70 border-border text-slate-100 placeholder:text-slate-600"
+            />
+          </div>
+        </div>
+
+        <div className="w-[180px]">
+          <label className={labelClass}>Status</label>
+          <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
+            {statusOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="w-[200px]">
+          <label className={labelClass}>Jogador</label>
+          <select name="playerId" value={playerId} onChange={(e) => setPlayerId(e.target.value)} className={inputClass}>
+            <option value="ALL">Todos os jogadores</option>
+            <option value="NONE">Sem dono</option>
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>{p.displayName}</option>
+            ))}
+          </select>
+        </div>
+
+        <Button type="submit" className="mb-0.5">Filtrar</Button>
+      </form>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500">Pagina {currentPage} de {totalPages}</p>
+          <div className="flex gap-2">
+            <Link href={buildUrl(currentPage - 1)}>
+              <Button size="sm" variant="outline" disabled={currentPage <= 1}>
+                <ChevronLeft size={14} />
+              </Button>
+            </Link>
+            <Link href={buildUrl(currentPage + 1)}>
+              <Button size="sm" variant="outline" disabled={currentPage >= totalPages}>
+                <ChevronRight size={14} />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
