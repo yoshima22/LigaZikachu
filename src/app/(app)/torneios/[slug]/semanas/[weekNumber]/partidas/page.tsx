@@ -117,6 +117,7 @@ export default async function PartidasPage({ params }: Props) {
     roundLabel: match.roundLabel,
     rankingPointsA: Number(match.rankingPointsA),
     rankingPointsB: Number(match.rankingPointsB),
+    winnerDefendedPrizes: match.winnerDefendedPrizes,
     reportedById: match.reportedById,
     notes: match.notes,
     playerADecks: visibleDecksByPlayer.get(match.playerAId) ?? [],

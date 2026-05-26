@@ -16,6 +16,7 @@ export interface PlayerRankingEntry {
   gymChallenges: number;
   successfulChallenges: number;
   failedChallenges: number;
+  defendedChallenges: number;
 }
 
 interface RankingScope {
@@ -225,6 +226,7 @@ async function computeRankingFromMatches({
         isBye: true,
         playerAWins: true,
         playerBWins: true,
+        winnerDefendedPrizes: true,
         winnerPlayerId: true,
         loserPlayerId: true,
         draws: true,
@@ -238,8 +240,10 @@ async function computeRankingFromMatches({
       where: challengeWhere ?? {},
       select: {
         challengerId: true,
+        challengedId: true,
         status: true,
-        challenger: { select: { displayName: true } }
+        challenger: { select: { displayName: true } },
+        challenged: { select: { displayName: true } }
       }
     })
   ]);
@@ -299,6 +303,7 @@ async function computeRankingFromMatches({
     const loserStats = match.loserPlayerId ? getStats(statsMap, match.loserPlayerId) : null;
 
     winnerStats.wins += 1;
+    winnerStats.defendedPrizes += match.winnerDefendedPrizes;
     winnerStats.points +=
       match.winnerPlayerId === match.playerAId ? pointsA || 3 : pointsB || 3;
 
@@ -319,6 +324,11 @@ async function computeRankingFromMatches({
     }
     if (challenge.status === ChallengeStatus.REJECTED) {
       challengerStats.failedChallenges += 1;
+      challengerStats.points -= 2;
+
+      const defenderStats = getStats(statsMap, challenge.challengedId);
+      displayNameMap.set(challenge.challengedId, challenge.challenged.displayName);
+      defenderStats.defendedChallenges += 1;
     }
   }
 
@@ -337,7 +347,8 @@ async function computeRankingFromMatches({
       b.wins - a.wins ||
       b.defendedPrizes - a.defendedPrizes ||
       b.successfulChallenges - a.successfulChallenges ||
-      b.gameDiff - a.gameDiff ||
+      b.defendedChallenges - a.defendedChallenges ||
+      b.gymChallenges - a.gymChallenges ||
       a.byeCount - b.byeCount ||
       a.displayName.localeCompare(b.displayName, "pt-BR")
   );
@@ -358,7 +369,8 @@ function emptyStats(playerId: string): RankingStats {
     defendedPrizes: 0,
     gymChallenges: 0,
     successfulChallenges: 0,
-    failedChallenges: 0
+    failedChallenges: 0,
+    defendedChallenges: 0
   };
 }
 

@@ -174,6 +174,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
 const reportResultSchema = z.object({
   matchId: z.string().min(1),
   winnerId: z.string().min(1),
+  winnerDefendedPrizes: z.coerce.number().int().min(0).max(99).default(0),
   notes: z.string().optional(),
 });
 
@@ -181,7 +182,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   const user = await getSessionUser();
   if (!user) throw new Error("Não autenticado");
 
-  const { matchId, winnerId, notes } = reportResultSchema.parse(input);
+  const { matchId, winnerId, winnerDefendedPrizes, notes } = reportResultSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -211,6 +212,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
       loserPlayerId: loserId,
       playerAWins: winnerId === match.playerAId ? 1 : 0,
       playerBWins: winnerId === match.playerBId ? 1 : 0,
+      winnerDefendedPrizes,
       status: "PENDING_CONFIRMATION",
       reportedById: user.id,
       reportedAt: new Date(),
@@ -358,12 +360,13 @@ export async function disputeMatchResult(input: z.infer<typeof disputeSchema>) {
 const adminResolveSchema = z.object({
   matchId: z.string().min(1),
   winnerId: z.string().min(1),
+  winnerDefendedPrizes: z.coerce.number().int().min(0).max(99).default(0),
   notes: z.string().optional(),
 });
 
 export async function adminResolveMatch(input: z.infer<typeof adminResolveSchema>) {
   const admin = await requireAdmin();
-  const { matchId, winnerId, notes } = adminResolveSchema.parse(input);
+  const { matchId, winnerId, winnerDefendedPrizes, notes } = adminResolveSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -388,6 +391,7 @@ export async function adminResolveMatch(input: z.infer<typeof adminResolveSchema
       loserPlayerId: loserId,
       playerAWins: winnerId === match.playerAId ? 1 : 0,
       playerBWins: winnerId === match.playerBId ? 1 : 0,
+      winnerDefendedPrizes,
       status: "CONFIRMED",
       resultSource: "ADMIN_ADJUSTMENT",
       rankingPointsA: winnerId === match.playerAId ? winPoints : 0,
@@ -402,7 +406,7 @@ export async function adminResolveMatch(input: z.infer<typeof adminResolveSchema
       entityType: "match",
       entityId: matchId,
       action: "match.admin_resolved",
-      after: { winnerId, notes },
+      after: { winnerId, winnerDefendedPrizes, notes },
     },
   });
 

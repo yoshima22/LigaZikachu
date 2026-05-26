@@ -349,6 +349,7 @@ model Match {
   playerAWins       Int             @default(0)
   playerBWins       Int             @default(0)
   draws             Int             @default(0)
+  winnerDefendedPrizes Int           @default(0)
   winnerPlayerId    String?
   loserPlayerId     String?
   status            MatchStatus     @default(PENDING_CONFIRMATION)

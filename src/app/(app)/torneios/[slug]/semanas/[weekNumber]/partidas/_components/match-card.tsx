@@ -25,6 +25,7 @@ interface MatchCardProps {
     roundLabel: string | null;
     rankingPointsA: number;
     rankingPointsB: number;
+    winnerDefendedPrizes: number;
     reportedById: string | null;
     notes: string | null;
     confirmations: Array<{ playerId: string; status: string }>;
@@ -40,6 +41,9 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [showDispute, setShowDispute] = useState(false);
+  const [winnerDefendedPrizes, setWinnerDefendedPrizes] = useState(
+    String(match.winnerDefendedPrizes ?? 0)
+  );
 
   const isPlayerA = match.playerAId === currentPlayerId;
   const isPlayerB = match.playerBId === currentPlayerId;
@@ -71,7 +75,11 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
   async function handleReport(winnerId: string) {
     setLoading(true);
     try {
-      await reportMatchResult({ matchId: match.id, winnerId });
+      await reportMatchResult({
+        matchId: match.id,
+        winnerId,
+        winnerDefendedPrizes: Number(winnerDefendedPrizes) || 0
+      });
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
@@ -133,7 +141,11 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
   async function handleAdminResolve(winnerId: string) {
     setLoading(true);
     try {
-      await adminResolveMatch({ matchId: match.id, winnerId });
+      await adminResolveMatch({
+        matchId: match.id,
+        winnerId,
+        winnerDefendedPrizes: Number(winnerDefendedPrizes) || 0
+      });
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
@@ -215,7 +227,19 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
         {match.status === "PENDING_CONFIRMATION" &&
           isParticipant &&
           !match.winnerPlayerId && (
-            <div className="flex gap-2">
+            <div className="space-y-2">
+              <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                Premios defendidos pelo vencedor
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={winnerDefendedPrizes}
+                onChange={(event) => setWinnerDefendedPrizes(event.target.value)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+              <div className="flex gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -236,6 +260,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
                   Vitória {match.playerB.displayName}
                 </Button>
               )}
+              </div>
             </div>
           )}
 
@@ -288,7 +313,19 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
 
         {/* Admin resolve */}
         {isAdmin && match.status === "DISPUTED" && (
-          <div className="flex gap-2">
+          <div className="space-y-2">
+            <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Premios defendidos pelo vencedor
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={99}
+              value={winnerDefendedPrizes}
+              onChange={(event) => setWinnerDefendedPrizes(event.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+            />
+            <div className="flex gap-2">
             <Button
               size="sm"
               variant="default"
@@ -307,11 +344,19 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
                 disabled={loading}
               >
                 Vitória {match.playerB.displayName}
-              </Button>
-            )}
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {match.winnerPlayerId && (
+        <p className="mt-2 text-xs text-slate-400">
+          Premios defendidos pelo vencedor:{" "}
+          <span className="font-semibold text-[#FFCB05]">{match.winnerDefendedPrizes}</span>
+        </p>
+      )}
 
       {match.notes && (
         <p className="mt-2 text-xs text-slate-500 italic">{match.notes}</p>
