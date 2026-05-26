@@ -1,10 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch } from "../actions";
 import { useRouter } from "next/navigation";
+
+interface PlayerDeckSummary {
+  deckNumber: number;
+  deckName: string;
+  archetype: string | null;
+  deckList: string;
+}
 
 interface MatchCardProps {
   match: {
@@ -22,6 +28,8 @@ interface MatchCardProps {
     reportedById: string | null;
     notes: string | null;
     confirmations: Array<{ playerId: string; status: string }>;
+    playerADecks: PlayerDeckSummary[];
+    playerBDecks: PlayerDeckSummary[];
   };
   currentPlayerId?: string;
   isAdmin: boolean;
@@ -97,6 +105,31 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
     }
   }
 
+  function DeckBadges({ decks }: { decks: PlayerDeckSummary[] }) {
+    if (decks.length === 0) {
+      return <p className="mt-1 text-[10px] text-slate-500">Deck oculto</p>;
+    }
+
+    return (
+      <div className="mt-2 space-y-1">
+        {decks.map((deck) => {
+          const subtitle = deck.archetype ? " - " + deck.archetype : "";
+
+          return (
+            <details key={deck.deckNumber} className="rounded-md border border-slate-700/70 bg-slate-950/70 px-2 py-1 text-left">
+              <summary className="cursor-pointer text-[10px] font-semibold text-[#FFCB05]">
+                Deck {deck.deckNumber}: {deck.deckName}{subtitle}
+              </summary>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
+                {deck.deckList}
+              </pre>
+            </details>
+          );
+        })}
+      </div>
+    );
+  }
+
   async function handleAdminResolve(winnerId: string) {
     setLoading(true);
     try {
@@ -141,6 +174,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
             : "bg-slate-800/50"
         }`}>
           <p className="font-semibold text-white text-sm">{match.playerA.displayName}</p>
+          <DeckBadges decks={match.playerADecks} />
           {match.status === "CONFIRMED" && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsA}pt</p>
           )}
@@ -156,6 +190,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
           <p className="font-semibold text-white text-sm">
             {match.playerB?.displayName || "Bye"}
           </p>
+          {match.playerBId && <DeckBadges decks={match.playerBDecks} />}
           {match.status === "CONFIRMED" && match.playerBId && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsB}pt</p>
           )}

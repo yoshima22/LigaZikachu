@@ -243,43 +243,56 @@ const confirmResultSchema = z.object({
 
 export async function confirmMatchResult(input: z.infer<typeof confirmResultSchema>) {
   const user = await getSessionUser();
-  if (!user) throw new Error("Não autenticado");
+  if (!user) throw new Error("Nao autenticado");
 
   const { matchId } = confirmResultSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { playerA: true, playerB: true, confirmations: true, tournamentWeek: { include: { tournament: true } } },
+    include: {
+      playerA: true,
+      playerB: true,
+      confirmations: true,
+      tournamentWeek: { include: { tournament: true } }
+    },
   });
 
-  if (!match) throw new Error("Partida não encontrada");
-  if (!match.playerBId) throw new Error("Partida sem adversário");
+  if (!match) throw new Error("Partida nao encontrada");
+  if (!match.playerBId) throw new Error("Partida sem adversario");
+  if (!match.winnerPlayerId) throw new Error("Nenhum resultado foi reportado para esta partida");
+  if (match.status !== "PENDING_CONFIRMATION") throw new Error("Esta partida nao esta pendente de confirmacao");
 
-  const player = await prisma.player.findUnique({ where: { userId: user.id } });
-  if (!player) throw new Error("Jogador não encontrado");
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!player) throw new Error("Jogador nao encontrado");
 
-  const isPlayer = match.playerAId === player.id || match.playerBId === player.id;
-  if (!isPlayer) throw new Error("Você não participa desta partida");
+  const participantIds = [match.playerAId, match.playerBId];
+  if (!participantIds.includes(player.id)) throw new Error("Voce nao participa desta partida");
 
   if (match.reportedById === user.id) {
     return { success: true, confirmed: false };
   }
 
-  await prisma.matchConfirmation.upsert({
-    where: { matchId_playerId: { matchId, playerId: player.id } },
-    update: { status: "CONFIRMED", confirmedAt: new Date() },
-    create: { matchId, playerId: player.id, status: "CONFIRMED", confirmedAt: new Date() },
+  const now = new Date();
+  const confirmations = await prisma.$transaction(async (tx) => {
+    await tx.matchConfirmation.upsert({
+      where: { matchId_playerId: { matchId, playerId: player.id } },
+      update: { status: "CONFIRMED", confirmedAt: now },
+      create: { matchId, playerId: player.id, status: "CONFIRMED", confirmedAt: now },
+    });
+
+    return tx.matchConfirmation.findMany({
+      where: { matchId, playerId: { in: participantIds } },
+    });
   });
 
-  // Verificar se ambos confirmaram
-  const confirmations = await prisma.matchConfirmation.findMany({
-    where: { matchId },
-  });
+  const confirmedPlayerIds = new Set(
+    confirmations
+      .filter((confirmation) => confirmation.status === "CONFIRMED")
+      .map((confirmation) => confirmation.playerId)
+  );
+  const allConfirmed = participantIds.every((participantId) => confirmedPlayerIds.has(participantId));
 
-  const allConfirmed = confirmations.length >= 2 && confirmations.every((c) => c.status === "CONFIRMED");
-
-  if (allConfirmed && match.winnerPlayerId) {
-    // Calcular pontos de ranking
+  if (allConfirmed) {
     const week = match.tournamentWeek;
     const multiplier = week ? Number(week.multiplier) : 1;
     const winPoints = 3 * multiplier;
@@ -290,7 +303,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
       data: {
         status: "CONFIRMED",
         confirmedById: user.id,
-        confirmedAt: new Date(),
+        confirmedAt: now,
         rankingPointsA: match.winnerPlayerId === match.playerAId ? winPoints : lossPoints,
         rankingPointsB: match.winnerPlayerId === match.playerBId ? winPoints : lossPoints,
       },

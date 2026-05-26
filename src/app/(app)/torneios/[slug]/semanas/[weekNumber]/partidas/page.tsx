@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { canViewTournamentWeekDecklist } from "@/lib/decks";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { Button } from "@/components/ui/button";
 import { generateMatchups, closeWeek } from "./actions";
@@ -32,6 +33,12 @@ export default async function PartidasPage({ params }: Props) {
             },
             orderBy: { roundLabel: "asc" },
           },
+          deckSubmissions: {
+            include: {
+              player: { select: { id: true, displayName: true } }
+            },
+            orderBy: [{ player: { displayName: "asc" } }, { deckNumber: "asc" }]
+          },
         },
       },
     },
@@ -43,6 +50,44 @@ export default async function PartidasPage({ params }: Props) {
 
   const week = tournament.weeks[0];
   const matches = week.matches;
+
+  const player = user
+    ? await prisma.player.findUnique({ where: { userId: user.id } })
+    : null;
+
+  const registration = player
+    ? await prisma.tournamentRegistration.findUnique({
+        where: {
+          tournamentId_playerId: {
+            tournamentId: tournament.id,
+            playerId: player.id
+          }
+        },
+        select: { status: true }
+      })
+    : null;
+
+  const visibleDecksByPlayer = new Map<string, Array<{ deckNumber: number; deckName: string; archetype: string | null; deckList: string }>>();
+  for (const submission of week.deckSubmissions) {
+    if (!user) continue;
+
+    const canView = canViewTournamentWeekDecklist({
+      viewerRole: user.role,
+      isOwner: submission.playerId === player?.id,
+      registrationStatus: registration?.status ?? null,
+      week
+    });
+    if (!canView) continue;
+
+    const decks = visibleDecksByPlayer.get(submission.playerId) ?? [];
+    decks.push({
+      deckNumber: submission.deckNumber,
+      deckName: submission.deckName,
+      archetype: submission.archetype,
+      deckList: submission.deckList
+    });
+    visibleDecksByPlayer.set(submission.playerId, decks);
+  }
 
   const matchCards = matches.map((match) => ({
     id: match.id,
@@ -74,15 +119,13 @@ export default async function PartidasPage({ params }: Props) {
     rankingPointsB: Number(match.rankingPointsB),
     reportedById: match.reportedById,
     notes: match.notes,
+    playerADecks: visibleDecksByPlayer.get(match.playerAId) ?? [],
+    playerBDecks: match.playerBId ? visibleDecksByPlayer.get(match.playerBId) ?? [] : [],
     confirmations: match.confirmations.map((confirmation) => ({
       playerId: confirmation.playerId,
       status: confirmation.status
     }))
   }));
-
-  const player = user
-    ? await prisma.player.findUnique({ where: { userId: user.id } })
-    : null;
 
   const myMatches = player
     ? matchCards.filter(

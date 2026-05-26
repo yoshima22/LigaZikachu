@@ -81,9 +81,33 @@ export default async function DashboardPage() {
 
     return (
       <div className="space-y-8">
-        <div>
-          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug sm:text-lg">Painel Admin</h1>
-          <p className="mt-1 text-sm text-slate-400">Visão geral da operação da liga</p>
+        {/* Banner Pokemon */}
+        <div className="relative overflow-hidden rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#2a1a3e] to-[#1A1A2E] p-6 sm:p-8">
+          <div className="absolute top-0 right-0 h-32 w-32 opacity-10">
+            <svg viewBox="0 0 100 100" className="h-full w-full">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="#FFCB05" strokeWidth="2"/>
+              <path d="M5 50 L95 50" stroke="#FFCB05" strokeWidth="2"/>
+              <circle cx="50" cy="50" r="12" fill="#FFCB05"/>
+            </svg>
+          </div>
+          <div className="relative z-10">
+            <h1 className="font-pixel text-lg sm:text-xl text-[#FFCB05] leading-snug drop-shadow-[0_0_10px_#FFCB05]/20">
+              Painel Admin
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">Visão geral da operação da liga</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/torneios">
+                <Button size="sm" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                  <Trophy size={14} className="mr-1" /> Torneios
+                </Button>
+              </Link>
+              <Link href="/jogadores">
+                <Button size="sm" variant="outline">
+                  <Users size={14} className="mr-1" /> Jogadores
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
 
         {/* Temporada ativa */}
