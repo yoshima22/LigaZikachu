@@ -110,6 +110,7 @@ export default async function WeekDetailPage({
         canViewTournamentWeekDecklist({
           viewerRole: user.role,
           isOwner: submission.playerId === player?.id,
+          registrationStatus: registration?.status ?? null,
           week
         })
       )
@@ -272,7 +273,7 @@ export default async function WeekDetailPage({
               Decklists do Dia
             </h2>
             <p className="mt-1 text-xs text-slate-400">
-              Antes do fechamento, cada jogador ve apenas a propria lista. Depois do fechamento, as listas ficam liberadas.
+              Antes do fechamento, cada jogador ve apenas a propria lista. Depois do fechamento, jogadores inscritos podem ver as listas uns dos outros.
             </p>
           </div>
           <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-slate-300">
@@ -284,9 +285,9 @@ export default async function WeekDetailPage({
           <p className="text-sm text-slate-500">
             Entre com uma conta de jogador para se inscrever e enviar decklist.
           </p>
-        ) : registration?.status !== "APPROVED" && !admin ? (
+        ) : registration?.status !== "APPROVED" && registration?.status !== "PENDING" && !admin ? (
           <p className="text-sm text-slate-500">
-            Sua inscricao precisa estar aprovada para enviar decklist deste dia.
+            Voce precisa estar inscrito neste torneio para enviar decklist deste dia.
           </p>
         ) : canSubmitDeck ? (
           <div className="space-y-3">

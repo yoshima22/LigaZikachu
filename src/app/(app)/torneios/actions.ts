@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
-import { DeckSubmissionStatus, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus } from "@prisma/client";
+import { DeckSubmissionStatus, MatchStatus, ResultSource, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus } from "@prisma/client";
 import {
   canSubmitTournamentWeekDeck,
   getDeckSubmissionDeadline,
@@ -57,6 +57,36 @@ const submitTournamentWeekDeckSchema = z.object({
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function buildRoundRobinRounds(playerIds: string[]) {
+  const players: Array<string | null> = [...playerIds];
+  if (players.length % 2 === 1) players.push(null);
+
+  const rounds: Array<Array<{ playerAId: string; playerBId: string }>> = [];
+  const size = players.length;
+  const rotating = [...players];
+
+  for (let round = 0; round < size - 1; round++) {
+    const pairings: Array<{ playerAId: string; playerBId: string }> = [];
+
+    for (let index = 0; index < size / 2; index++) {
+      const left = rotating[index];
+      const right = rotating[size - 1 - index];
+      if (left && right) {
+        pairings.push(
+          round % 2 === 0
+            ? { playerAId: left, playerBId: right }
+            : { playerAId: right, playerBId: left }
+        );
+      }
+    }
+
+    rounds.push(pairings);
+    rotating.splice(1, 0, rotating.pop() ?? null);
+  }
+
+  return rounds;
+}
 
 async function logAudit(
   actorId: string,
@@ -189,19 +219,125 @@ export async function publishTournament(
 export async function startTournament(tournamentId: string): Promise<{ error?: string }> {
   try {
     const actor = await requireAdmin();
-    const t = await prisma.tournament.findUnique({ where: { id: tournamentId } });
-    if (!t) return { error: "Torneio não encontrado." };
-    if (t.status !== TournamentStatus.REGISTRATION_OPEN)
-      return { error: "Apenas torneios com inscrições abertas podem ser iniciados." };
-
-    await prisma.tournament.update({
+    const tournament = await prisma.tournament.findUnique({
       where: { id: tournamentId },
-      data: { status: TournamentStatus.IN_PROGRESS }
+      include: {
+        weeks: { orderBy: { weekNumber: "asc" } },
+        registrations: {
+          where: {
+            status: { in: [RegistrationStatus.APPROVED, RegistrationStatus.PENDING] }
+          },
+          orderBy: { registeredAt: "asc" },
+          include: { player: { select: { id: true } } }
+        }
+      }
     });
 
-    await logAudit(actor.id, "tournament", tournamentId, "tournament.started", { status: "REGISTRATION_OPEN" }, { status: "IN_PROGRESS" });
+    if (!tournament) return { error: "Torneio nao encontrado." };
+    if (tournament.status !== TournamentStatus.REGISTRATION_OPEN) {
+      return { error: "Apenas torneios com inscricoes abertas podem ser iniciados." };
+    }
+    if (tournament.weeks.length === 0) {
+      return { error: "Configure ao menos um dia/semana antes de iniciar o torneio." };
+    }
+    if (tournament.registrations.length < 2) {
+      return { error: "Precisa de pelo menos 2 jogadores inscritos para montar a chave." };
+    }
+
+    const existingMatches = await prisma.match.count({
+      where: { tournamentWeekId: { in: tournament.weeks.map((week) => week.id) } }
+    });
+    const now = new Date();
+
+    const result = await prisma.$transaction(async (tx) => {
+      const pendingPlayerIds = tournament.registrations
+        .filter((registration) => registration.status === RegistrationStatus.PENDING)
+        .map((registration) => registration.playerId);
+
+      if (pendingPlayerIds.length > 0) {
+        await tx.tournamentRegistration.updateMany({
+          where: { tournamentId, playerId: { in: pendingPlayerIds } },
+          data: {
+            status: RegistrationStatus.APPROVED,
+            decidedAt: now,
+            decidedById: actor.id
+          }
+        });
+      }
+
+      let createdMatches = 0;
+      if (existingMatches === 0) {
+        const playerIds = tournament.registrations.map((registration) => registration.player.id);
+        const rounds = buildRoundRobinRounds(playerIds);
+        const matches = rounds.flatMap((round, roundIndex) => {
+          const week = tournament.weeks[roundIndex % tournament.weeks.length];
+
+          return round.map((pairing, tableIndex) => ({
+            seasonId: tournament.seasonId,
+            tournamentWeekId: week.id,
+            playerAId: pairing.playerAId,
+            playerBId: pairing.playerBId,
+            roundLabel: "Rodada " + (roundIndex + 1),
+            tableLabel: "Mesa " + (tableIndex + 1),
+            bestOf: 1,
+            status: MatchStatus.PENDING_CONFIRMATION,
+            resultSource: ResultSource.MANUAL,
+            topOfDayEligible: true,
+            createdById: actor.id
+          }));
+        });
+
+        if (matches.length > 0) {
+          await tx.match.createMany({ data: matches });
+          createdMatches = matches.length;
+        }
+
+        await Promise.all(
+          tournament.weeks.map((week, index) =>
+            tx.tournamentWeek.update({
+              where: { id: week.id },
+              data: { status: index === 0 ? WeekStatus.OPEN : WeekStatus.PLANNED }
+            })
+          )
+        );
+      }
+
+      await tx.tournament.update({
+        where: { id: tournamentId },
+        data: { status: TournamentStatus.IN_PROGRESS }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournament",
+          entityId: tournamentId,
+          action: "tournament.started",
+          before: { status: tournament.status },
+          after: {
+            status: TournamentStatus.IN_PROGRESS,
+            generatedMatches: createdMatches,
+            autoApprovedPlayers: pendingPlayerIds.length
+          }
+        }
+      });
+
+      return { createdMatches, autoApprovedPlayers: pendingPlayerIds.length };
+    });
+
     revalidatePath("/torneios");
-    revalidatePath(`/torneios/${t.slug}`);
+    revalidatePath("/torneios/" + tournament.slug);
+    revalidatePath("/torneios/" + tournament.slug + "/admin");
+    for (const week of tournament.weeks) {
+      revalidatePath("/torneios/" + tournament.slug + "/semanas/" + week.weekNumber);
+      revalidatePath("/torneios/" + tournament.slug + "/semanas/" + week.weekNumber + "/partidas");
+    }
+
+    if (existingMatches > 0) return {};
+    if (result.createdMatches === 0) {
+      return { error: "Torneio iniciado, mas nenhuma partida foi gerada." };
+    }
+
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -388,7 +524,7 @@ export async function submitTournamentWeekDeck(
     ) {
       return isDeckRegistrationLocked(week)
         ? { error: "O prazo de cadastro de decklist para este dia ja foi fechado." }
-        : { error: "Apenas jogadores aprovados neste campeonato podem enviar decklist." };
+        : { error: "Apenas jogadores inscritos neste campeonato podem enviar decklist." };
     }
 
     const deadline = getDeckSubmissionDeadline(week) ?? week.endDate;

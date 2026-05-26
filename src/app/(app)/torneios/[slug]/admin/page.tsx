@@ -234,6 +234,16 @@ export default async function TournamentAdminPage({ params }: Props) {
           <Calendar size={18} className="text-[#FFCB05]" />
           Semanas
         </h2>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-xs text-slate-400">
+          <p className="mb-2 font-semibold text-slate-200">O que significa cada status do dia</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            <p><strong className="text-slate-300">Planejada:</strong> dia configurado, partidas podem ja existir, mas ainda nao e o dia ativo.</p>
+            <p><strong className="text-[#7AC74C]">Aberta:</strong> dia ativo para jogar, reportar/importar e validar resultados.</p>
+            <p><strong className="text-[#F7D02C]">Bloqueada:</strong> periodo de alterar deck acabou; jogadores inscritos veem as listas uns dos outros.</p>
+            <p><strong className="text-[#6390F0]">Encerrada:</strong> dia fechado; use quando resultados e premiacoes daquele dia ja foram tratados.</p>
+          </div>
+        </div>
         <div className="grid gap-3">
           {tournament.weeks.map((week) => (
             <Card

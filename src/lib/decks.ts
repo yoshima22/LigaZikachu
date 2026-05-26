@@ -9,6 +9,7 @@ interface DeckDeadlineInput {
 interface DeckAccessInput {
   viewerRole: Role;
   isOwner: boolean;
+  registrationStatus?: RegistrationStatus | null;
   week: DeckDeadlineInput;
   now?: Date;
 }
@@ -37,22 +38,20 @@ export function canSubmitTournamentWeekDeck({
 }: DeckSubmitInput) {
   if (isAdminRole(viewerRole)) return true;
 
-  return (
-    registrationStatus === RegistrationStatus.APPROVED &&
-    !isDeckRegistrationLocked(week, now)
-  );
+  return isActiveRegistration(registrationStatus) && !isDeckRegistrationLocked(week, now);
 }
 
 export function canViewTournamentWeekDecklist({
   viewerRole,
   isOwner,
+  registrationStatus,
   week,
   now = new Date()
 }: DeckAccessInput) {
   if (isAdminRole(viewerRole)) return true;
   if (isOwner) return true;
 
-  return isDeckRegistrationLocked(week, now);
+  return isActiveRegistration(registrationStatus) && isDeckRegistrationLocked(week, now);
 }
 
 export function getDeckVisibilityState(week: DeckDeadlineInput, now: Date = new Date()) {
@@ -64,6 +63,10 @@ export function getDeckVisibilityState(week: DeckDeadlineInput, now: Date = new 
     locked,
     label: !deadline ? "Sem prazo definido" : locked ? "Listas liberadas" : "Listas ocultas ate o fechamento"
   };
+}
+
+function isActiveRegistration(status?: RegistrationStatus | null) {
+  return status === RegistrationStatus.APPROVED || status === RegistrationStatus.PENDING;
 }
 
 function isAdminRole(role: Role) {
