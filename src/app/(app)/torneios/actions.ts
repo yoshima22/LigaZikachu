@@ -30,6 +30,11 @@ const updateTournamentSchema = createTournamentSchema.partial().extend({
   id: z.string().min(1)
 });
 
+const updateWeekDeckLockSchema = z.object({
+  weekId: z.string().min(1),
+  deckLockAt: z.string().nullish()
+});
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function logAudit(
@@ -200,6 +205,51 @@ export async function finishTournament(tournamentId: string): Promise<{ error?: 
     revalidatePath(`/torneios/${t.slug}`);
     return {};
   } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function updateTournamentWeekDeckLock(
+  raw: z.infer<typeof updateWeekDeckLockSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = updateWeekDeckLockSchema.parse(raw);
+    const rawDate = data.deckLockAt?.trim();
+    const deckLockAt = rawDate ? new Date(rawDate) : null;
+
+    if (deckLockAt && Number.isNaN(deckLockAt.getTime())) {
+      return { error: "Data de fechamento de decklist invalida." };
+    }
+
+    const before = await prisma.tournamentWeek.findUnique({
+      where: { id: data.weekId },
+      include: { tournament: { select: { slug: true } } }
+    });
+    if (!before) return { error: "Semana de torneio nao encontrada." };
+
+    await prisma.tournamentWeek.update({
+      where: { id: data.weekId },
+      data: { deckLockAt }
+    });
+
+    await logAudit(
+      actor.id,
+      "tournamentWeek",
+      data.weekId,
+      "tournament_week.deck_lock_updated",
+      { deckLockAt: before.deckLockAt?.toISOString() ?? null },
+      { deckLockAt: deckLockAt?.toISOString() ?? null }
+    );
+
+    revalidatePath(`/torneios/${before.tournament.slug}/admin`);
+    revalidatePath(`/torneios/${before.tournament.slug}/semanas/${before.weekNumber}`);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((i) => i.message).join(", ") };
+    }
+
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
@@ -397,7 +447,13 @@ export async function seedDefaultWeeks(tournamentId: string): Promise<{ error?: 
 
       await prisma.tournamentWeek.upsert({
         where: { tournamentId_weekNumber: { tournamentId, weekNumber: wk.weekNumber } },
-        update: { mode: wk.mode, multiplier: wk.multiplier, status: WeekStatus.PLANNED },
+        update: {
+          mode: wk.mode,
+          multiplier: wk.multiplier,
+          lockAt,
+          deckLockAt: lockAt,
+          status: WeekStatus.PLANNED
+        },
         create: {
           tournamentId,
           weekNumber: wk.weekNumber,
@@ -407,6 +463,7 @@ export async function seedDefaultWeeks(tournamentId: string): Promise<{ error?: 
           startDate,
           endDate,
           lockAt,
+          deckLockAt: lockAt,
           status: WeekStatus.PLANNED
         }
       });

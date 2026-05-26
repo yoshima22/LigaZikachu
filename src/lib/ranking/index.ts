@@ -45,20 +45,37 @@ export async function computeGlobalRanking(): Promise<PlayerRankingEntry[]> {
 }
 
 export async function computeSeasonRanking(seasonId: string): Promise<PlayerRankingEntry[]> {
-  const seasonPlayers = await prisma.seasonPlayer.findMany({
-    where: { seasonId, isActive: true },
-    include: { player: { select: { id: true, displayName: true } } }
-  });
+  const [seasonPlayers, tournamentRegistrations] = await Promise.all([
+    prisma.seasonPlayer.findMany({
+      where: { seasonId, isActive: true },
+      include: { player: { select: { id: true, displayName: true } } }
+    }),
+    prisma.tournamentRegistration.findMany({
+      where: {
+        status: "APPROVED",
+        tournament: { seasonId }
+      },
+      include: { player: { select: { id: true, displayName: true } } }
+    })
+  ]);
+
+  const seedPlayers = new Map<string, RankingSeedPlayer>();
+  for (const sp of seasonPlayers) {
+    seedPlayers.set(sp.playerId, { playerId: sp.playerId, displayName: sp.player.displayName });
+  }
+  for (const registration of tournamentRegistrations) {
+    seedPlayers.set(registration.playerId, {
+      playerId: registration.playerId,
+      displayName: registration.player.displayName
+    });
+  }
 
   return computeRankingFromMatches({
     matchWhere: {
-      seasonId,
-      status: MatchStatus.CONFIRMED
+      status: MatchStatus.CONFIRMED,
+      OR: [{ seasonId }, { tournamentWeek: { tournament: { seasonId } } }]
     },
-    seedPlayers: seasonPlayers.map((sp) => ({
-      playerId: sp.playerId,
-      displayName: sp.player.displayName
-    }))
+    seedPlayers: [...seedPlayers.values()]
   });
 }
 

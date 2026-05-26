@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
+import { updateTournamentWeekDeckLock } from "../../actions";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -59,6 +60,14 @@ export default async function TournamentAdminPage({ params }: Props) {
 
   const currentWeek = tournament.weeks.find((w) => w.status === "OPEN") ||
     tournament.weeks.find((w) => w.status === "PLANNED");
+
+  const toDateTimeLocal = (value: Date | null | undefined) => {
+    if (!value) return "";
+
+    const date = new Date(value);
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return localDate.toISOString().slice(0, 16);
+  };
 
   return (
     <div className="space-y-6">
@@ -194,6 +203,35 @@ export default async function TournamentAdminPage({ params }: Props) {
                     )}
                   </div>
                 </div>
+                <form
+                  className="mt-4 grid gap-2 border-t border-slate-800 pt-4 sm:grid-cols-[minmax(0,1fr)_auto]"
+                  action={async (formData) => {
+                    "use server";
+                    await updateTournamentWeekDeckLock({
+                      weekId: week.id,
+                      deckLockAt: String(formData.get("deckLockAt") ?? "")
+                    });
+                  }}
+                >
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Fechamento do cadastro de deck</span>
+                    <input
+                      type="datetime-local"
+                      name="deckLockAt"
+                      defaultValue={toDateTimeLocal(week.deckLockAt ?? week.lockAt)}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+                    />
+                  </label>
+                  <div className="flex items-end">
+                    <Button size="sm" variant="outline" type="submit">
+                      Salvar prazo
+                    </Button>
+                  </div>
+                  <p className="sm:col-span-2 text-xs text-slate-500">
+                    Antes desse prazo, cada jogador ve apenas a propria decklist.
+                    Depois, as listas dos inscritos ficam liberadas.
+                  </p>
+                </form>
               </CardContent>
             </Card>
           ))}

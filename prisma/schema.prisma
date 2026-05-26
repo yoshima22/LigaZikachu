@@ -206,12 +206,15 @@ model Tournament {
   bannerImageUrl        String?
   themeMetadata         Json?
   rankingConfig         Json
+  seasonId              String?
   createdById           String
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   createdBy             User               @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   weeks                 TournamentWeek[]
   registrations         TournamentRegistration[]
+  season                Season?            @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  deckSubmissions       DeckSubmission[]
 
   @@map("tournaments")
 }
@@ -229,11 +232,13 @@ model TournamentWeek {
   startDate    DateTime
   endDate      DateTime
   lockAt       DateTime?
+  deckLockAt   DateTime?
   notes        String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   matches      Match[]      @relation("TournamentWeekMatches")
+  deckSubmissions DeckSubmission[]
 
   @@unique([tournamentId, weekNumber])
   @@map("tournament_weeks")
@@ -272,6 +277,7 @@ model Season {
   createdBy          User                 @relation("SeasonCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   seasonPlayers      SeasonPlayer[]
   weeks              Week[]
+  tournaments        Tournament[]
   matches            Match[]
   deckSubmissions    DeckSubmission[]
   challenges         Challenge[]
@@ -393,9 +399,12 @@ model MatchConfirmation {
 
 model DeckSubmission {
   id              String               @id @default(cuid())
-  seasonId        String
+  seasonId        String?
   weekId          String?
+  tournamentId    String?
+  tournamentWeekId String?
   playerId        String
+  deckNumber      Int                  @default(1)
   deckName        String
   deckList        String
   archetype       String?
@@ -407,12 +416,16 @@ model DeckSubmission {
   approvedAt      DateTime?
   rejectionReason String?
   isLate          Boolean              @default(false)
-  season          Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season          Season?              @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   week            Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  tournament      Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  tournamentWeek  TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
   player          Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
   approvedBy      User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@unique([seasonId, weekId, playerId])
+  @@unique([tournamentWeekId, playerId, deckNumber])
+  @@index([tournamentId, tournamentWeekId, status])
   @@map("deck_submissions")
 }
 

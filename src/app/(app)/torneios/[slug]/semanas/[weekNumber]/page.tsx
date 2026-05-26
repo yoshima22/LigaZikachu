@@ -5,6 +5,7 @@ import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import Link from "next/link";
 import { ChevronRight, CalendarDays, Clock, Crown, Info, Swords } from "lucide-react";
 import { computeTournamentWeekTopOfDay } from "@/lib/ranking";
+import { getDeckVisibilityState } from "@/lib/decks";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export default async function WeekDetailPage({
   if (!week) notFound();
 
   const topDoDiaRanking = await computeTournamentWeekTopOfDay(week.id);
+  const deckVisibility = getDeckVisibilityState(week);
 
   const fmt = (d: Date | null | undefined) =>
     d
@@ -117,6 +119,17 @@ export default async function WeekDetailPage({
                 <dd className="text-slate-200 capitalize">{fmt(week.lockAt)}</dd>
               </div>
             )}
+            <div>
+              <dt className="text-xs text-slate-500 mb-0.5 flex items-center gap-1">
+                <Clock size={11} /> Fechamento de decklists
+              </dt>
+              <dd className="text-slate-200 capitalize">
+                {fmt(deckVisibility.deadline)}
+              </dd>
+              <p className="mt-1 text-xs text-slate-500">
+                {deckVisibility.label}
+              </p>
+            </div>
           </dl>
         </div>
 

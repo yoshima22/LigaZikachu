@@ -553,7 +553,8 @@ export async function main() {
     where: { slug: "2a-edicao-insignias-fantasmagoricas" },
     update: {
       status: TournamentStatus.REGISTRATION_OPEN,
-      rankingConfig: rankingConfig2a
+      rankingConfig: rankingConfig2a,
+      seasonId: season.id
     },
     create: {
       name: "2ª Edição: Desafio das Insígnias Fantasmagóricas",
@@ -564,6 +565,7 @@ export async function main() {
       status: TournamentStatus.REGISTRATION_OPEN,
       startDate: new Date("2026-06-01T00:00:00.000Z"),
       endDate: new Date("2026-07-26T23:59:59.000Z"),
+      seasonId: season.id,
       maxPlayers: 8,
       registrationOpensAt: new Date("2026-05-20T00:00:00.000Z"),
       registrationClosesAt: new Date("2026-05-31T23:59:59.000Z"),
@@ -595,6 +597,7 @@ export async function main() {
         startDate: wk.startDate,
         endDate: wk.endDate,
         lockAt: wk.lockAt,
+        deckLockAt: wk.lockAt,
         notes: wk.notes
       },
       create: {
@@ -607,6 +610,7 @@ export async function main() {
         startDate: wk.startDate,
         endDate: wk.endDate,
         lockAt: wk.lockAt,
+        deckLockAt: wk.lockAt,
         notes: wk.notes
       }
     });
