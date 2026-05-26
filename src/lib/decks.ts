@@ -1,9 +1,10 @@
-import { RegistrationStatus, Role } from "@prisma/client";
+import { RegistrationStatus, Role, WeekStatus } from "@prisma/client";
 
 interface DeckDeadlineInput {
   deckLockAt?: Date | null;
   lockAt?: Date | null;
   endDate?: Date | null;
+  status?: WeekStatus;
 }
 
 interface DeckAccessInput {
@@ -26,6 +27,8 @@ export function getDeckSubmissionDeadline(week: DeckDeadlineInput) {
 }
 
 export function isDeckRegistrationLocked(week: DeckDeadlineInput, now: Date = new Date()) {
+  if (week.status === WeekStatus.LOCKED || week.status === WeekStatus.CLOSED) return true;
+
   const deadline = getDeckSubmissionDeadline(week);
   return Boolean(deadline && now >= deadline);
 }
@@ -61,7 +64,7 @@ export function getDeckVisibilityState(week: DeckDeadlineInput, now: Date = new 
   return {
     deadline,
     locked,
-    label: !deadline ? "Sem prazo definido" : locked ? "Listas liberadas" : "Listas ocultas ate o fechamento"
+    label: locked ? "Listas liberadas" : deadline ? "Listas ocultas ate o fechamento" : "Sem prazo definido"
   };
 }
 
