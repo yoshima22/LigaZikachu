@@ -24,44 +24,126 @@ interface RankingScope {
 
 type RankingStats = Omit<PlayerRankingEntry, "position" | "displayName">;
 
+interface RankingSeedPlayer {
+  playerId: string;
+  displayName: string;
+}
+
+interface RankingInput {
+  matchWhere: Prisma.MatchWhereInput;
+  seedPlayers?: RankingSeedPlayer[];
+  onlyPlayersWithMatches?: boolean;
+}
+
+export async function computeGlobalRanking(): Promise<PlayerRankingEntry[]> {
+  return computeRankingFromMatches({
+    matchWhere: {
+      status: MatchStatus.CONFIRMED
+    },
+    onlyPlayersWithMatches: true
+  });
+}
+
 export async function computeSeasonRanking(seasonId: string): Promise<PlayerRankingEntry[]> {
-  return computeRanking(seasonId);
+  const seasonPlayers = await prisma.seasonPlayer.findMany({
+    where: { seasonId, isActive: true },
+    include: { player: { select: { id: true, displayName: true } } }
+  });
+
+  return computeRankingFromMatches({
+    matchWhere: {
+      seasonId,
+      status: MatchStatus.CONFIRMED
+    },
+    seedPlayers: seasonPlayers.map((sp) => ({
+      playerId: sp.playerId,
+      displayName: sp.player.displayName
+    }))
+  });
 }
 
 export async function computePlayerRanking(seasonId: string): Promise<PlayerRankingEntry[]> {
   return computeSeasonRanking(seasonId);
 }
 
+export async function computeTournamentRanking(
+  tournamentId: string
+): Promise<PlayerRankingEntry[]> {
+  const registrations = await prisma.tournamentRegistration.findMany({
+    where: {
+      tournamentId,
+      status: "APPROVED"
+    },
+    include: {
+      player: { select: { id: true, displayName: true } }
+    }
+  });
+
+  return computeRankingFromMatches({
+    matchWhere: {
+      status: MatchStatus.CONFIRMED,
+      tournamentWeek: {
+        tournamentId
+      }
+    },
+    seedPlayers: registrations.map((registration) => ({
+      playerId: registration.playerId,
+      displayName: registration.player.displayName
+    }))
+  });
+}
+
 export async function computeWeeklyRanking(
   seasonId: string,
   weekId: string
 ): Promise<PlayerRankingEntry[]> {
-  return computeRanking(seasonId, { weekId, onlyPlayersWithMatches: true });
+  return computeLegacySeasonScopedRanking(seasonId, { weekId, onlyPlayersWithMatches: true });
 }
 
 export async function computeTopOfDayRanking(
   seasonId: string,
   date: Date = new Date()
 ): Promise<PlayerRankingEntry[]> {
+  return computeLegacySeasonScopedRanking(seasonId, {
+    ...dayBounds(date),
+    topOfDayOnly: true,
+    onlyPlayersWithMatches: true
+  });
+}
+
+export async function computeTournamentWeekTopOfDay(
+  tournamentWeekId: string
+): Promise<PlayerRankingEntry[]> {
+  return computeRankingFromMatches({
+    matchWhere: {
+      tournamentWeekId,
+      status: MatchStatus.CONFIRMED
+    },
+    onlyPlayersWithMatches: true
+  });
+}
+
+function dayBounds(date: Date) {
   const start = new Date(date);
   start.setHours(0, 0, 0, 0);
 
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
 
-  return computeRanking(seasonId, {
-    playedFrom: start,
-    playedTo: end,
-    topOfDayOnly: true,
-    onlyPlayersWithMatches: true
-  });
+  return { playedFrom: start, playedTo: end };
 }
 
-async function computeRanking(
+async function computeLegacySeasonScopedRanking(
   seasonId: string,
   scope: RankingScope = {}
 ): Promise<PlayerRankingEntry[]> {
-  const matchWhere: Prisma.MatchWhereInput = {
+  const seasonPlayers = await prisma.seasonPlayer.findMany({
+    where: { seasonId, isActive: true },
+    include: { player: { select: { id: true, displayName: true } } }
+  });
+
+  return computeRankingFromMatches({
+    matchWhere: {
     seasonId,
     status: MatchStatus.CONFIRMED,
     ...(scope.weekId ? { weekId: scope.weekId } : {}),
@@ -74,37 +156,52 @@ async function computeRanking(
           }
         }
       : {})
-  };
+    },
+    seedPlayers: seasonPlayers.map((sp) => ({
+      playerId: sp.playerId,
+      displayName: sp.player.displayName
+    })),
+    onlyPlayersWithMatches: scope.onlyPlayersWithMatches
+  });
+}
 
-  const [matches, seasonPlayers] = await Promise.all([
-    prisma.match.findMany({
-      where: matchWhere,
-      select: {
-        playerAId: true,
-        playerBId: true,
-        isBye: true,
-        playerAWins: true,
-        playerBWins: true,
-        winnerPlayerId: true,
-        loserPlayerId: true,
-        draws: true,
-        rankingPointsA: true,
-        rankingPointsB: true
-      }
-    }),
-    prisma.seasonPlayer.findMany({
-      where: { seasonId, isActive: true },
-      include: { player: { select: { id: true, displayName: true } } }
-    })
-  ]);
+async function computeRankingFromMatches({
+  matchWhere,
+  seedPlayers = [],
+  onlyPlayersWithMatches = false
+}: RankingInput): Promise<PlayerRankingEntry[]> {
+  const matches = await prisma.match.findMany({
+    where: matchWhere,
+    select: {
+      playerAId: true,
+      playerBId: true,
+      isBye: true,
+      playerAWins: true,
+      playerBWins: true,
+      winnerPlayerId: true,
+      loserPlayerId: true,
+      draws: true,
+      rankingPointsA: true,
+      rankingPointsB: true,
+      playerA: { select: { displayName: true } },
+      playerB: { select: { displayName: true } }
+    }
+  });
 
   const statsMap = new Map<string, RankingStats>();
+  const displayNameMap = new Map<string, string>();
 
-  for (const sp of seasonPlayers) {
-    statsMap.set(sp.playerId, emptyStats(sp.playerId));
+  for (const player of seedPlayers) {
+    statsMap.set(player.playerId, emptyStats(player.playerId));
+    displayNameMap.set(player.playerId, player.displayName);
   }
 
   for (const match of matches) {
+    displayNameMap.set(match.playerAId, match.playerA.displayName);
+    if (match.playerBId && match.playerB) {
+      displayNameMap.set(match.playerBId, match.playerB.displayName);
+    }
+
     const playerAStats = getStats(statsMap, match.playerAId);
     const playerBStats = match.playerBId ? getStats(statsMap, match.playerBId) : null;
     const pointsA = decimalToNumber(match.rankingPointsA);
@@ -156,12 +253,14 @@ async function computeRanking(
     }
   }
 
-  const entries = seasonPlayers
-    .map((sp) => {
-      const stats = statsMap.get(sp.playerId) ?? emptyStats(sp.playerId);
-      return { displayName: sp.player.displayName, ...stats };
+  const entries = [...statsMap.values()]
+    .map((stats) => {
+      return {
+        displayName: displayNameMap.get(stats.playerId) ?? "Jogador removido",
+        ...stats
+      };
     })
-    .filter((entry) => !scope.onlyPlayersWithMatches || entry.matchesPlayed > 0);
+    .filter((entry) => !onlyPlayersWithMatches || entry.matchesPlayed > 0);
 
   entries.sort(
     (a, b) =>

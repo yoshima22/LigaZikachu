@@ -11,7 +11,7 @@ const navLinks = [
   { href: "/dashboard",  label: "Dashboard",  icon: LayoutDashboard, adminOnly: false },
   { href: "/torneios",   label: "Torneios",   icon: Trophy,           adminOnly: false },
   { href: "/jogadores",  label: "Jogadores",  icon: Users,            adminOnly: false },
-  { href: "/ranking",    label: "Ranking",    icon: BarChart3,        adminOnly: false },
+  { href: "/ranking",    label: "Ranking Geral", icon: BarChart3,     adminOnly: false },
   { href: "/top-do-dia", label: "Top do Dia", icon: Crown,            adminOnly: false },
   { href: "/codigos",    label: "Codigos",    icon: Package,          adminOnly: false },
   { href: "/temporadas", label: "Temporadas", icon: Calendar,         adminOnly: true  },

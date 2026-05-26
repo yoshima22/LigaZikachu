@@ -1,20 +1,26 @@
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { computeTopOfDayRanking } from "@/lib/ranking";
 import { prisma } from "@/lib/prisma";
-import { SeasonStatus } from "@prisma/client";
-import { Crown } from "lucide-react";
+import { CalendarDays, Crown } from "lucide-react";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function TopDoDiaPage() {
-  const activeSeason = await prisma.season.findFirst({
-    where: { status: SeasonStatus.ACTIVE },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true }
+  const weeks = await prisma.tournamentWeek.findMany({
+    include: {
+      tournament: { select: { name: true, slug: true } },
+      _count: {
+        select: {
+          matches: {
+            where: { status: "CONFIRMED" }
+          }
+        }
+      }
+    },
+    orderBy: [{ startDate: "desc" }, { weekNumber: "desc" }],
+    take: 12
   });
-
-  const ranking = activeSeason ? await computeTopOfDayRanking(activeSeason.id) : [];
 
   return (
     <div className="space-y-6">
@@ -23,49 +29,58 @@ export default async function TopDoDiaPage() {
           Top do Dia
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          Recorte diario com partidas confirmadas e marcadas como elegiveis.
+          Top do Dia e calculado dentro de um dia/semana de campeonato. Escolha um dia para ver a previa.
         </p>
       </div>
 
-      {ranking.length === 0 ? (
+      {weeks.length === 0 ? (
         <Card>
           <EmptyState
-            message="Nenhuma partida elegivel foi confirmada hoje."
+            message="Nenhum dia de campeonato foi configurado ainda."
             icon={<Crown size={32} />}
           />
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">#</th>
-                  <th className="px-5 py-3">Jogador</th>
-                  <th className="px-5 py-3">Pts</th>
-                  <th className="px-5 py-3">V</th>
-                  <th className="px-5 py-3">Partidas</th>
-                  <th className="px-5 py-3">Saldo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {ranking.map((entry) => (
-                  <tr key={entry.playerId}>
-                    <td className="px-5 py-3 font-semibold text-[#FFCB05]">
-                      #{entry.position}
-                    </td>
-                    <td className="px-5 py-3 font-medium text-white">{entry.displayName}</td>
-                    <td className="px-5 py-3 text-white">{entry.points}</td>
-                    <td className="px-5 py-3 text-emerald-400">{entry.wins}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.matchesPlayed}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.gameDiff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <div className="grid gap-3">
+          {weeks.map((week) => (
+            <Link
+              key={week.id}
+              href={`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`}
+              className="block"
+            >
+              <Card className="transition hover:border-[#FFCB05]/40 hover:bg-slate-900/80">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-widest text-slate-500">
+                      {week.tournament.name}
+                    </p>
+                    <h2 className="mt-1 font-semibold text-white">
+                      {week.label ?? `Semana ${week.weekNumber}`}
+                    </h2>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                      <CalendarDays size={12} />
+                      {formatDate(week.startDate)} ate {formatDate(week.endDate)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-semibold text-[#FFCB05]">
+                      {week._count.matches}
+                    </p>
+                    <p className="text-xs text-slate-500">resultados validados</p>
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );
+}
+
+function formatDate(date: Date) {
+  return date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short"
+  });
 }

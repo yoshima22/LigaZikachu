@@ -120,6 +120,11 @@ export default async function TorneioDetailPage({
                 </Button>
               </>
             )}
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/torneios/${slug}/ranking`}>
+                Ranking do Campeonato
+              </Link>
+            </Button>
             <RegisterButton
               tournamentId={tournament.id}
               tournamentStatus={tournament.status}

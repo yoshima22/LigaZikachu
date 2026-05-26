@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { getSessionUser } from "@/lib/auth/permissions";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import Link from "next/link";
-import { ChevronRight, CalendarDays, Clock, Info, Swords } from "lucide-react";
+import { ChevronRight, CalendarDays, Clock, Crown, Info, Swords } from "lucide-react";
+import { computeTournamentWeekTopOfDay } from "@/lib/ranking";
+
+export const dynamic = "force-dynamic";
 
 export default async function WeekDetailPage({
   params
@@ -14,8 +16,6 @@ export default async function WeekDetailPage({
   const { slug, weekNumber } = await params;
   const weekNum = parseInt(weekNumber, 10);
   if (isNaN(weekNum)) notFound();
-
-  const user = await getSessionUser();
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
@@ -27,6 +27,8 @@ export default async function WeekDetailPage({
     where: { tournamentId_weekNumber: { tournamentId: tournament.id, weekNumber: weekNum } }
   });
   if (!week) notFound();
+
+  const topDoDiaRanking = await computeTournamentWeekTopOfDay(week.id);
 
   const fmt = (d: Date | null | undefined) =>
     d
@@ -185,6 +187,62 @@ export default async function WeekDetailPage({
             <p className="text-xs text-slate-500 border-t border-border pt-3">{week.notes}</p>
           )}
         </div>
+      </div>
+
+      {/* Top do Dia */}
+      <div className="rounded-xl border border-border bg-slate-950/50 p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 font-semibold text-slate-200">
+              <Crown size={16} className="text-[#FFCB05]" />
+              Top do Dia
+            </h2>
+            <p className="mt-1 text-xs text-slate-400">
+              Previa calculada somente com partidas validadas desta semana/dia.
+            </p>
+          </div>
+          <Link
+            href={`/torneios/${slug}/semanas/${weekNum}/partidas`}
+            className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/5"
+          >
+            Validar resultados
+          </Link>
+        </div>
+
+        {topDoDiaRanking.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Nenhum resultado validado neste dia ainda. O Top do Dia so deve ser calculado depois da validacao.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="text-left text-xs uppercase tracking-widest text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4">#</th>
+                  <th className="py-2 pr-4">Jogador</th>
+                  <th className="py-2 pr-4">Pts</th>
+                  <th className="py-2 pr-4">V</th>
+                  <th className="py-2 pr-4">D</th>
+                  <th className="py-2 pr-4">Partidas</th>
+                  <th className="py-2 pr-4">Saldo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {topDoDiaRanking.map((entry) => (
+                  <tr key={entry.playerId}>
+                    <td className="py-2 pr-4 font-semibold text-[#FFCB05]">#{entry.position}</td>
+                    <td className="py-2 pr-4 font-medium text-white">{entry.displayName}</td>
+                    <td className="py-2 pr-4 text-white">{entry.points}</td>
+                    <td className="py-2 pr-4 text-emerald-400">{entry.wins}</td>
+                    <td className="py-2 pr-4 text-red-400">{entry.losses}</td>
+                    <td className="py-2 pr-4 text-slate-300">{entry.matchesPlayed}</td>
+                    <td className="py-2 pr-4 text-slate-300">{entry.gameDiff}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Partidas */}
