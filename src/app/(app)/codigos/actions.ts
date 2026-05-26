@@ -444,6 +444,8 @@ function parseRawCodes(rawCodes: string) {
 
   return cleaned
     .split(/[\r?\n,;\s]+/)
+    .map((code) => code.trim())
+    .filter((code) => code.length > 0)
     .map(normalizeBoosterCode)
     .filter(Boolean);
 }

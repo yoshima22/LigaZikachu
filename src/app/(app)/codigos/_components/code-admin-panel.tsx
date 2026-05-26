@@ -72,7 +72,7 @@ export function CodeAdminPanel({
       .join("\n")
       .split(/[\r?\n,;\s]+/)
       .map((code) => code.trim())
-      .filter(Boolean)
+      .filter((code) => code.length > 0)
       .slice(0, 4);
   }, [rawCodes]);
 
@@ -85,7 +85,7 @@ export function CodeAdminPanel({
       .join("\n")
       .split(/[\r?\n,;\s]+/)
       .map((code) => code.trim())
-      .filter(Boolean).length;
+      .filter((code) => code.length > 0).length;
   }, [rawCodes]);
 
   async function handleImport(e: FormEvent<HTMLFormElement>) {
