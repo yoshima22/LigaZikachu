@@ -218,16 +218,18 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     },
   });
 
-  // Criar confirmacoes pendentes para ambos
+  const reporterPlayerId = player.id;
+  const opponentPlayerId = reporterPlayerId === match.playerAId ? match.playerBId : match.playerAId;
+
   await prisma.matchConfirmation.upsert({
-    where: { matchId_playerId: { matchId, playerId: match.playerAId } },
-    update: { status: "PENDING" },
-    create: { matchId, playerId: match.playerAId, status: "PENDING" },
+    where: { matchId_playerId: { matchId, playerId: reporterPlayerId } },
+    update: { status: "CONFIRMED", confirmedAt: new Date() },
+    create: { matchId, playerId: reporterPlayerId, status: "CONFIRMED", confirmedAt: new Date() },
   });
   await prisma.matchConfirmation.upsert({
-    where: { matchId_playerId: { matchId, playerId: match.playerBId } },
-    update: { status: "PENDING" },
-    create: { matchId, playerId: match.playerBId, status: "PENDING" },
+    where: { matchId_playerId: { matchId, playerId: opponentPlayerId } },
+    update: { status: "PENDING", confirmedAt: null },
+    create: { matchId, playerId: opponentPlayerId, status: "PENDING" },
   });
 
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
@@ -260,7 +262,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   if (!isPlayer) throw new Error("Você não participa desta partida");
 
   if (match.reportedById === user.id) {
-    throw new Error("Quem reportou não pode confirmar");
+    return { success: true, confirmed: false };
   }
 
   await prisma.matchConfirmation.upsert({

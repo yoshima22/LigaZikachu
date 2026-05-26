@@ -29,9 +29,12 @@ export function DeckSubmissionForm({
   const [deckName, setDeckName] = useState(existingSubmission?.deckName ?? "");
   const [archetype, setArchetype] = useState(existingSubmission?.archetype ?? "");
   const [deckList, setDeckList] = useState(existingSubmission?.deckList ?? "");
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    setMessage(null);
 
     startTransition(async () => {
       const result = await submitTournamentWeekDeck({
@@ -43,11 +46,14 @@ export function DeckSubmissionForm({
       });
 
       if (result.error) {
+        setMessage({ type: "error", text: result.error });
         toast.error(result.error);
         return;
       }
 
-      toast.success(existingSubmission ? "Decklist atualizada." : "Decklist enviada.");
+      const successMessage = existingSubmission ? "Decklist atualizada." : "Decklist enviada.";
+      setMessage({ type: "success", text: successMessage });
+      toast.success(successMessage);
     });
   }
 
@@ -108,6 +114,19 @@ export function DeckSubmissionForm({
           placeholder="Cole aqui a decklist exportada do PTCG Live"
         />
       </label>
+
+      {message && (
+        <p
+          className={[
+            "mt-3 rounded-lg border px-3 py-2 text-xs",
+            message.type === "success"
+              ? "border-[#7AC74C]/30 bg-[#7AC74C]/10 text-[#7AC74C]"
+              : "border-red-500/30 bg-red-500/10 text-red-300"
+          ].join(" ")}
+        >
+          {message.text}
+        </p>
+      )}
 
       <div className="mt-3 flex justify-end">
         <Button type="submit" size="sm" disabled={isPending}>
