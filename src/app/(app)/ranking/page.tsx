@@ -1,12 +1,24 @@
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { computeGlobalRanking } from "@/lib/ranking";
+import { RankingTable } from "@/components/ranking/ranking-table";
+import { prisma } from "@/lib/prisma";
 import { Trophy } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function RankingPage() {
-  const ranking = await computeGlobalRanking();
+export default async function RankingPage({
+  searchParams
+}: {
+  searchParams: Promise<{ seasonId?: string }>;
+}) {
+  const { seasonId } = await searchParams;
+  const seasons = await prisma.season.findMany({
+    select: { id: true, name: true },
+    orderBy: { startDate: "desc" }
+  });
+  const selectedSeasonId = seasonId && seasons.some((season) => season.id === seasonId) ? seasonId : "";
+  const ranking = await computeGlobalRanking(selectedSeasonId || undefined);
 
   return (
     <div className="space-y-6">
@@ -15,9 +27,38 @@ export default async function RankingPage() {
           Ranking Geral
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          Historico acumulado de todas as partidas validadas em campeonatos ativos ou encerrados.
+          Historico acumulado de partidas validadas. Use o filtro para ver todas as temporadas ou uma temporada especifica.
         </p>
       </div>
+
+      <Card className="p-4">
+        <form className="flex flex-wrap items-end gap-3">
+          <div className="min-w-64 flex-1">
+            <label htmlFor="seasonId" className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+              Temporada
+            </label>
+            <select
+              id="seasonId"
+              name="seasonId"
+              defaultValue={selectedSeasonId}
+              className="w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-sm text-slate-100"
+            >
+              <option value="">Todas</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-semibold text-[#1A1A2E] hover:bg-[#FFD700]"
+          >
+            Consultar
+          </button>
+        </form>
+      </Card>
 
       {ranking.length === 0 ? (
         <Card>
@@ -28,40 +69,7 @@ export default async function RankingPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">#</th>
-                  <th className="px-5 py-3">Jogador</th>
-                  <th className="px-5 py-3">Pts</th>
-                  <th className="px-5 py-3">V</th>
-                  <th className="px-5 py-3">E</th>
-                  <th className="px-5 py-3">D</th>
-                  <th className="px-5 py-3">Partidas</th>
-                  <th className="px-5 py-3">BYE</th>
-                  <th className="px-5 py-3">Saldo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {ranking.map((entry) => (
-                  <tr key={entry.playerId}>
-                    <td className="px-5 py-3 font-semibold text-[#FFCB05]">
-                      #{entry.position}
-                    </td>
-                    <td className="px-5 py-3 font-medium text-white">{entry.displayName}</td>
-                    <td className="px-5 py-3 text-white">{entry.points}</td>
-                    <td className="px-5 py-3 text-emerald-400">{entry.wins}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.draws}</td>
-                    <td className="px-5 py-3 text-red-400">{entry.losses}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.matchesPlayed}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.byeCount}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.gameDiff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <RankingTable ranking={ranking} />
         </Card>
       )}
     </div>

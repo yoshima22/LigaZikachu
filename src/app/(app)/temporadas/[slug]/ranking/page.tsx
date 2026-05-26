@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, Trophy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RankingTable } from "@/components/ranking/ranking-table";
 import { computeSeasonRanking } from "@/lib/ranking";
 import { prisma } from "@/lib/prisma";
 
@@ -72,38 +73,7 @@ export default async function SeasonRankingPage({
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">#</th>
-                  <th className="px-5 py-3">Jogador</th>
-                  <th className="px-5 py-3">Pts</th>
-                  <th className="px-5 py-3">V</th>
-                  <th className="px-5 py-3">E</th>
-                  <th className="px-5 py-3">D</th>
-                  <th className="px-5 py-3">Partidas</th>
-                  <th className="px-5 py-3">Saldo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {ranking.map((entry) => (
-                  <tr key={entry.playerId}>
-                    <td className="px-5 py-3 font-semibold text-[#FFCB05]">
-                      #{entry.position}
-                    </td>
-                    <td className="px-5 py-3 font-medium text-white">{entry.displayName}</td>
-                    <td className="px-5 py-3 text-white">{entry.points}</td>
-                    <td className="px-5 py-3 text-emerald-400">{entry.wins}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.draws}</td>
-                    <td className="px-5 py-3 text-red-400">{entry.losses}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.matchesPlayed}</td>
-                    <td className="px-5 py-3 text-slate-300">{entry.gameDiff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <RankingTable ranking={ranking} />
         </Card>
       )}
     </div>

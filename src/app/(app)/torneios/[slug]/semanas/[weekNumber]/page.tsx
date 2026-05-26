@@ -5,6 +5,7 @@ import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import Link from "next/link";
 import { ChevronRight, CalendarDays, Clock, Crown, Eye, Info, Lock, Swords } from "lucide-react";
 import { computeTournamentWeekTopOfDay } from "@/lib/ranking";
+import { RankingTable } from "@/components/ranking/ranking-table";
 import {
   canSubmitTournamentWeekDeck,
   canViewTournamentWeekDecklist,
@@ -370,34 +371,7 @@ export default async function WeekDetailPage({
             Nenhum resultado validado neste dia ainda. O Top do Dia so deve ser calculado depois da validacao.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="text-left text-xs uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="py-2 pr-4">#</th>
-                  <th className="py-2 pr-4">Jogador</th>
-                  <th className="py-2 pr-4">Pts</th>
-                  <th className="py-2 pr-4">V</th>
-                  <th className="py-2 pr-4">D</th>
-                  <th className="py-2 pr-4">Partidas</th>
-                  <th className="py-2 pr-4">Saldo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {topDoDiaRanking.map((entry) => (
-                  <tr key={entry.playerId}>
-                    <td className="py-2 pr-4 font-semibold text-[#FFCB05]">#{entry.position}</td>
-                    <td className="py-2 pr-4 font-medium text-white">{entry.displayName}</td>
-                    <td className="py-2 pr-4 text-white">{entry.points}</td>
-                    <td className="py-2 pr-4 text-emerald-400">{entry.wins}</td>
-                    <td className="py-2 pr-4 text-red-400">{entry.losses}</td>
-                    <td className="py-2 pr-4 text-slate-300">{entry.matchesPlayed}</td>
-                    <td className="py-2 pr-4 text-slate-300">{entry.gameDiff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <RankingTable ranking={topDoDiaRanking} compact />
         )}
       </div>
 

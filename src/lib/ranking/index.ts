@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { MatchStatus, type Prisma } from "@prisma/client";
+import { ChallengeStatus, MatchStatus, type Prisma } from "@prisma/client";
 
 export interface PlayerRankingEntry {
   playerId: string;
@@ -12,6 +12,10 @@ export interface PlayerRankingEntry {
   matchesPlayed: number;
   byeCount: number;
   gameDiff: number;
+  defendedPrizes: number;
+  gymChallenges: number;
+  successfulChallenges: number;
+  failedChallenges: number;
 }
 
 interface RankingScope {
@@ -31,11 +35,16 @@ interface RankingSeedPlayer {
 
 interface RankingInput {
   matchWhere: Prisma.MatchWhereInput;
+  challengeWhere?: Prisma.ChallengeWhereInput;
   seedPlayers?: RankingSeedPlayer[];
   onlyPlayersWithMatches?: boolean;
 }
 
-export async function computeGlobalRanking(): Promise<PlayerRankingEntry[]> {
+export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRankingEntry[]> {
+  if (seasonId) {
+    return computeSeasonRanking(seasonId);
+  }
+
   return computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED
@@ -75,6 +84,9 @@ export async function computeSeasonRanking(seasonId: string): Promise<PlayerRank
       status: MatchStatus.CONFIRMED,
       OR: [{ seasonId }, { tournamentWeek: { tournament: { seasonId } } }]
     },
+    challengeWhere: {
+      OR: [{ seasonId }, { match: { tournamentWeek: { tournament: { seasonId } } } }]
+    },
     seedPlayers: [...seedPlayers.values()]
   });
 }
@@ -101,6 +113,13 @@ export async function computeTournamentRanking(
       status: MatchStatus.CONFIRMED,
       tournamentWeek: {
         tournamentId
+      }
+    },
+    challengeWhere: {
+      match: {
+        tournamentWeek: {
+          tournamentId
+        }
       }
     },
     seedPlayers: registrations.map((registration) => ({
@@ -135,6 +154,11 @@ export async function computeTournamentWeekTopOfDay(
     matchWhere: {
       tournamentWeekId,
       status: MatchStatus.CONFIRMED
+    },
+    challengeWhere: {
+      match: {
+        tournamentWeekId
+      }
     },
     onlyPlayersWithMatches: true
   });
@@ -174,6 +198,10 @@ async function computeLegacySeasonScopedRanking(
         }
       : {})
     },
+    challengeWhere: {
+      seasonId,
+      ...(scope.weekId ? { weekId: scope.weekId } : {})
+    },
     seedPlayers: seasonPlayers.map((sp) => ({
       playerId: sp.playerId,
       displayName: sp.player.displayName
@@ -184,26 +212,37 @@ async function computeLegacySeasonScopedRanking(
 
 async function computeRankingFromMatches({
   matchWhere,
+  challengeWhere,
   seedPlayers = [],
   onlyPlayersWithMatches = false
 }: RankingInput): Promise<PlayerRankingEntry[]> {
-  const matches = await prisma.match.findMany({
-    where: matchWhere,
-    select: {
-      playerAId: true,
-      playerBId: true,
-      isBye: true,
-      playerAWins: true,
-      playerBWins: true,
-      winnerPlayerId: true,
-      loserPlayerId: true,
-      draws: true,
-      rankingPointsA: true,
-      rankingPointsB: true,
-      playerA: { select: { displayName: true } },
-      playerB: { select: { displayName: true } }
-    }
-  });
+  const [matches, challenges] = await Promise.all([
+    prisma.match.findMany({
+      where: matchWhere,
+      select: {
+        playerAId: true,
+        playerBId: true,
+        isBye: true,
+        playerAWins: true,
+        playerBWins: true,
+        winnerPlayerId: true,
+        loserPlayerId: true,
+        draws: true,
+        rankingPointsA: true,
+        rankingPointsB: true,
+        playerA: { select: { displayName: true } },
+        playerB: { select: { displayName: true } }
+      }
+    }),
+    prisma.challenge.findMany({
+      where: challengeWhere ?? {},
+      select: {
+        challengerId: true,
+        status: true,
+        challenger: { select: { displayName: true } }
+      }
+    })
+  ]);
 
   const statsMap = new Map<string, RankingStats>();
   const displayNameMap = new Map<string, string>();
@@ -270,6 +309,19 @@ async function computeRankingFromMatches({
     }
   }
 
+  for (const challenge of challenges) {
+    displayNameMap.set(challenge.challengerId, challenge.challenger.displayName);
+    const challengerStats = getStats(statsMap, challenge.challengerId);
+
+    challengerStats.gymChallenges += 1;
+    if (challenge.status === ChallengeStatus.ACCEPTED || challenge.status === ChallengeStatus.RESOLVED) {
+      challengerStats.successfulChallenges += 1;
+    }
+    if (challenge.status === ChallengeStatus.REJECTED) {
+      challengerStats.failedChallenges += 1;
+    }
+  }
+
   const entries = [...statsMap.values()]
     .map((stats) => {
       return {
@@ -283,6 +335,8 @@ async function computeRankingFromMatches({
     (a, b) =>
       b.points - a.points ||
       b.wins - a.wins ||
+      b.defendedPrizes - a.defendedPrizes ||
+      b.successfulChallenges - a.successfulChallenges ||
       b.gameDiff - a.gameDiff ||
       a.byeCount - b.byeCount ||
       a.displayName.localeCompare(b.displayName, "pt-BR")
@@ -300,7 +354,11 @@ function emptyStats(playerId: string): RankingStats {
     draws: 0,
     matchesPlayed: 0,
     byeCount: 0,
-    gameDiff: 0
+    gameDiff: 0,
+    defendedPrizes: 0,
+    gymChallenges: 0,
+    successfulChallenges: 0,
+    failedChallenges: 0
   };
 }
 
