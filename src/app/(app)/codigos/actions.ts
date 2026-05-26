@@ -6,14 +6,16 @@ import {
   BoosterCodeStatus,
   DistributionReason,
   DistributionStatus,
-  GiftType
+  GiftType,
+  type Prisma
 } from "@prisma/client";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
   assertNoDuplicateCodes,
   findDuplicateCodesInDatabase,
   normalizeBoosterCode,
-  reserveBoosterCodes
+  reserveBoosterCodes,
+  distributeBoosterCodesToPlayer
 } from "@/lib/codes";
 import { prisma } from "@/lib/prisma";
 
@@ -31,6 +33,13 @@ const reserveCodesSchema = z.object({
   seasonId: z.string().nullish(),
   quantity: z.number().int().min(1).max(500),
   reason: z.nativeEnum(DistributionReason),
+  reasonDetail: z.string().max(240).nullish()
+});
+
+const assignSpecificCodesSchema = z.object({
+  playerId: z.string().min(1, "Selecione um jogador."),
+  boosterCodeIds: z.array(z.string().min(1)).min(1, "Selecione ao menos um codigo."),
+  reason: z.nativeEnum(DistributionReason).default(DistributionReason.MANUAL_ADJUSTMENT),
   reasonDetail: z.string().max(240).nullish()
 });
 
@@ -52,7 +61,7 @@ export async function listBoosterCodesAction(
   const admin = await requireAdmin();
   const data = listCodesSchema.parse(input);
 
-  const where: Record<string, unknown> = {};
+  const where: Prisma.BoosterCodeWhereInput = {};
 
   if (data.search) {
     where.code = { contains: data.search, mode: "insensitive" };
@@ -203,53 +212,110 @@ export async function reserveCodesForPlayerAction(
       reasonDetail: reasonDetail ?? undefined
     });
 
-    const giftPayloads = distributedCodes.map((code) => {
-      const distribution =
-        code.distributions.find((item) => item.playerId === data.playerId) ?? code.distributions[0];
-
-      return { code, distribution };
+    await createGiftsForDistributedCodes({
+      actorId: actor.id,
+      playerId: data.playerId,
+      playerName: player.displayName,
+      codes: distributedCodes,
+      reason: data.reason,
+      reasonDetail
     });
-
-    await prisma.$transaction([
-      prisma.playerGift.createMany({
-        data: giftPayloads.map(({ code, distribution }) => ({
-          playerId: data.playerId,
-          type: GiftType.BOOSTER_CODE,
-          title: "Codigo de booster",
-          description: reasonDetail ?? reasonLabel(data.reason),
-          payload: {
-            code: code.code,
-            boosterCodeId: code.id,
-            distributionId: distribution?.id ?? null,
-            seasonId: seasonId ?? code.seasonId ?? null,
-            reason: data.reason,
-            reasonDetail: reasonDetail ?? null
-          }
-        }))
-      }),
-      prisma.auditLog.createMany({
-        data: giftPayloads.map(({ code, distribution }) => ({
-          actorUserId: actor.id,
-          entityType: "codeDistribution",
-          entityId: distribution?.id ?? code.id,
-          action: "booster_code.distributed",
-          after: {
-            boosterCodeId: code.id,
-            code: code.code,
-            playerId: data.playerId,
-            playerName: player.displayName,
-            seasonId,
-            reason: data.reason,
-            giftCreated: true
-          }
-        }))
-      })
-    ]);
 
     revalidatePath("/codigos");
     revalidatePath("/caixa-de-presentes");
     revalidatePath(`/jogadores/${data.playerId}`);
     return { distributed: distributedCodes.length };
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((issue) => issue.message).join(", ") };
+    }
+
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function assignSpecificCodesToPlayerAction(
+  input: z.infer<typeof assignSpecificCodesSchema>
+): Promise<{ error?: string; distributed?: number }> {
+  try {
+    const actor = await requireAdmin();
+    const data = assignSpecificCodesSchema.parse(input);
+    const reasonDetail = normalizeOptionalString(data.reasonDetail);
+
+    const player = await prisma.player.findUnique({
+      where: { id: data.playerId },
+      select: { id: true, displayName: true }
+    });
+
+    if (!player) return { error: "Jogador nao encontrado." };
+
+    const distributedCodes = await distributeBoosterCodesToPlayer({
+      playerId: data.playerId,
+      assignedById: actor.id,
+      boosterCodeIds: data.boosterCodeIds,
+      reason: data.reason,
+      reasonDetail: reasonDetail ?? undefined
+    });
+
+    await createGiftsForDistributedCodes({
+      actorId: actor.id,
+      playerId: data.playerId,
+      playerName: player.displayName,
+      codes: distributedCodes,
+      reason: data.reason,
+      reasonDetail
+    });
+
+    revalidatePath("/codigos");
+    revalidatePath("/caixa-de-presentes");
+    revalidatePath(`/jogadores/${data.playerId}`);
+    return { distributed: distributedCodes.length };
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((issue) => issue.message).join(", ") };
+    }
+
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function deleteBoosterCodeAction(
+  input: z.infer<typeof idSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const { id } = idSchema.parse(input);
+
+    const code = await prisma.boosterCode.findUnique({
+      where: { id },
+      include: { distributions: { select: { id: true, status: true, playerId: true } } }
+    });
+
+    if (!code) return { error: "Codigo nao encontrado." };
+
+    await prisma.$transaction(async (tx) => {
+      await deleteGiftsForCode(tx, code.id, code.distributions.map((distribution) => distribution.id));
+
+      await tx.boosterCode.delete({ where: { id: code.id } });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "boosterCode",
+          entityId: code.id,
+          action: "booster_code.deleted",
+          before: {
+            code: code.code,
+            status: code.status,
+            distributions: code.distributions.length
+          }
+        }
+      });
+    });
+
+    revalidatePath("/codigos");
+    revalidatePath("/caixa-de-presentes");
+    return {};
   } catch (err) {
     if (err instanceof z.ZodError) {
       return { error: err.issues.map((issue) => issue.message).join(", ") };
@@ -523,6 +589,82 @@ function splitCsvLine(line: string) {
 function normalizeOptionalId(value?: string | null) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+type DistributedCodeWithRelations = Awaited<ReturnType<typeof reserveBoosterCodes>>[number];
+
+async function createGiftsForDistributedCodes({
+  actorId,
+  playerId,
+  playerName,
+  codes,
+  reason,
+  reasonDetail
+}: {
+  actorId: string;
+  playerId: string;
+  playerName: string;
+  codes: DistributedCodeWithRelations[];
+  reason: DistributionReason;
+  reasonDetail?: string | null;
+}) {
+  const giftPayloads = codes.map((code) => {
+    const distribution = code.distributions.find((item) => item.playerId === playerId) ?? code.distributions[0];
+    return { code, distribution };
+  });
+
+  await prisma.$transaction([
+    prisma.playerGift.createMany({
+      data: giftPayloads.map(({ code, distribution }) => ({
+        playerId,
+        type: GiftType.BOOSTER_CODE,
+        title: "Codigo de booster",
+        description: reasonDetail ?? reasonLabel(reason),
+        payload: {
+          code: code.code,
+          boosterCodeId: code.id,
+          distributionId: distribution?.id ?? null,
+          seasonId: distribution?.seasonId ?? code.seasonId ?? null,
+          reason,
+          reasonDetail: reasonDetail ?? null
+        }
+      }))
+    }),
+    prisma.auditLog.createMany({
+      data: giftPayloads.map(({ code, distribution }) => ({
+        actorUserId: actorId,
+        entityType: "codeDistribution",
+        entityId: distribution?.id ?? code.id,
+        action: "booster_code.distributed",
+        after: {
+          boosterCodeId: code.id,
+          code: code.code,
+          playerId,
+          playerName,
+          seasonId: distribution?.seasonId ?? code.seasonId ?? null,
+          reason,
+          giftCreated: true
+        }
+      }))
+    })
+  ]);
+}
+
+async function deleteGiftsForCode(
+  tx: Prisma.TransactionClient,
+  boosterCodeId: string,
+  distributionIds: string[]
+) {
+  await tx.playerGift.deleteMany({
+    where: {
+      OR: [
+        { payload: { path: ["boosterCodeId"], equals: boosterCodeId } },
+        ...distributionIds.map((distributionId) => ({
+          payload: { path: ["distributionId"], equals: distributionId }
+        }))
+      ]
+    }
+  });
 }
 
 function reasonLabel(reason: DistributionReason) {

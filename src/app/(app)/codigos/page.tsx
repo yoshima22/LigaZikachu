@@ -9,13 +9,14 @@ import { auth } from "@/auth";
 import {
   BoosterCodeStatus,
   DistributionStatus,
+  DistributionReason,
   SeasonStatus
 } from "@prisma/client";
 import { Package, Ticket } from "lucide-react";
 import { CodeAdminPanel } from "./_components/code-admin-panel";
 import { CodeRowActions } from "./_components/code-row-actions";
 import { CodeFilters } from "./_components/code-filters";
-import { listBoosterCodesAction } from "./actions";
+import { assignSpecificCodesToPlayerAction, listBoosterCodesAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -173,58 +174,117 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
           <EmptyState message="Nenhum codigo encontrado." icon={<Package size={28} />} />
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">Codigo</th>
-                  <th className="px-5 py-3">Temporada</th>
-                  <th className="px-5 py-3">Recompensa</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Jogador</th>
-                  <th className="px-5 py-3">Importado em</th>
-                  <th className="px-5 py-3">Acoes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {codesResult.codes.map((code) => {
-                  const status = codeStatusMap[code.status];
-                  const latestDistribution = code.distributions[0];
-                  return (
-                    <tr key={code.id}>
-                      <td className="px-5 py-3 font-mono text-xs font-semibold text-white">
-                        {code.code}
-                      </td>
-                      <td className="px-5 py-3 text-slate-300">{code.season?.name ?? "-"}</td>
-                      <td className="px-5 py-3 text-slate-300">
-                        {code.rewardLabel ?? code.sourceBatch ?? "-"}
-                      </td>
-                      <td className="px-5 py-3">
-                        <StatusBadge variant={status.variant} label={status.label} />
-                      </td>
-                      <td className="px-5 py-3 text-slate-300">
-                        {latestDistribution?.player?.displayName ?? (
-                          <span className="text-slate-600 italic">Sem dono</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-slate-400">{formatDate(code.importedAt)}</td>
-                      <td className="px-5 py-3">
-                        <CodeRowActions
-                          admin
-                          codeId={code.id}
-                          codeStatus={code.status}
-                          distributionId={latestDistribution?.id}
-                          distributionStatus={latestDistribution?.status}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <form
+          action={async (formData) => {
+            "use server";
+            const codeIds = formData.getAll("codeIds").map(String).filter(Boolean);
+            const targetPlayerId = String(formData.get("bulkPlayerId") ?? "");
+            const reasonDetail = String(formData.get("bulkReasonDetail") ?? "");
+
+            await assignSpecificCodesToPlayerAction({
+              boosterCodeIds: codeIds,
+              playerId: targetPlayerId,
+              reason: DistributionReason.MANUAL_ADJUSTMENT,
+              reasonDetail: reasonDetail || null
+            });
+          }}
+          className="space-y-3"
+        >
+          <Card className="flex flex-wrap items-end gap-3 p-4">
+            <div className="min-w-56 flex-1">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+                Enviar selecionados para
+              </label>
+              <select
+                name="bulkPlayerId"
+                className="w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-sm text-slate-100"
+                required
+              >
+                {players.map((player) => (
+                  <option key={player.id} value={player.id}>{player.displayName}</option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-56 flex-1">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+                Detalhe do presente
+              </label>
+              <input
+                name="bulkReasonDetail"
+                placeholder="Opcional"
+                className="w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
+              />
+            </div>
+            <Button type="submit" disabled={players.length === 0}>
+              Enviar codigos selecionados
+            </Button>
+          </Card>
+
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Selecionar</th>
+                    <th className="px-5 py-3">Codigo</th>
+                    <th className="px-5 py-3">Temporada</th>
+                    <th className="px-5 py-3">Recompensa</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Jogador</th>
+                    <th className="px-5 py-3">Importado em</th>
+                    <th className="px-5 py-3">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {codesResult.codes.map((code) => {
+                    const status = codeStatusMap[code.status];
+                    const latestDistribution = code.distributions[0];
+                    return (
+                      <tr key={code.id}>
+                        <td className="px-5 py-3">
+                          <input
+                            type="checkbox"
+                            name="codeIds"
+                            value={code.id}
+                            disabled={code.status !== BoosterCodeStatus.AVAILABLE}
+                            className="h-4 w-4 rounded border-border bg-slate-900 text-[#FFCB05] disabled:opacity-30"
+                            aria-label={`Selecionar codigo ${code.code}`}
+                          />
+                        </td>
+                        <td className="px-5 py-3 font-mono text-xs font-semibold text-white">
+                          {code.code}
+                        </td>
+                        <td className="px-5 py-3 text-slate-300">{code.season?.name ?? "-"}</td>
+                        <td className="px-5 py-3 text-slate-300">
+                          {code.rewardLabel ?? code.sourceBatch ?? "-"}
+                        </td>
+                        <td className="px-5 py-3">
+                          <StatusBadge variant={status.variant} label={status.label} />
+                        </td>
+                        <td className="px-5 py-3 text-slate-300">
+                          {latestDistribution?.player?.displayName ?? (
+                            <span className="text-slate-600 italic">Sem dono</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-slate-400">{formatDate(code.importedAt)}</td>
+                        <td className="px-5 py-3">
+                          <CodeRowActions
+                            admin
+                            codeId={code.id}
+                            codeStatus={code.status}
+                            distributionId={latestDistribution?.id}
+                            distributionStatus={latestDistribution?.status}
+                            players={players}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </form>
       )}
     </div>
   );
