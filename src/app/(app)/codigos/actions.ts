@@ -5,7 +5,8 @@ import { z } from "zod";
 import {
   BoosterCodeStatus,
   DistributionReason,
-  DistributionStatus
+  DistributionStatus,
+  GiftType
 } from "@prisma/client";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
@@ -102,27 +103,25 @@ export async function listBoosterCodesAction(
 
 export async function importBoosterCodesAction(
   input: z.infer<typeof importCodesSchema>
-): Promise<{ error?: string; imported?: number }> {
+): Promise<{ error?: string; imported?: number; skipped?: string[] }> {
   try {
-    console.log("[SERVER DEBUG] importBoosterCodesAction chamado");
     const actor = await requireAdmin();
-    console.log("[SERVER DEBUG] Admin:", actor.id);
     const data = importCodesSchema.parse(input);
-    console.log("[SERVER DEBUG] Dados validados, rawCodes length:", data.rawCodes.length);
     const parsedCodes = parseRawCodes(data.rawCodes);
-    console.log("[SERVER DEBUG] Codigos parseados:", parsedCodes.length, parsedCodes.slice(0, 3));
     const normalizedCodes = assertNoDuplicateCodes(parsedCodes);
-    console.log("[SERVER DEBUG] Codigos normalizados:", normalizedCodes.length);
 
     if (normalizedCodes.length === 0) {
       return { error: "Nenhum codigo valido foi encontrado." };
     }
 
     const duplicates = await findDuplicateCodesInDatabase(normalizedCodes);
-    console.log("[SERVER DEBUG] Duplicados:", duplicates.length);
-    if (duplicates.length > 0) {
+    const duplicateCodes = duplicates.map((d) => d.code);
+    const codesToImport = normalizedCodes.filter((code) => !duplicateCodes.includes(code));
+
+    if (codesToImport.length === 0) {
       return {
-        error: `Codigos ja cadastrados: ${duplicates.map((code) => code.code).join(", ")}`
+        error: "Todos os codigos ja estao cadastrados.",
+        skipped: duplicateCodes
       };
     }
 
@@ -132,10 +131,9 @@ export async function importBoosterCodesAction(
     const rewardLabel = normalizeOptionalString(data.rewardLabel);
     const notes = normalizeOptionalString(data.notes);
 
-    console.log("[SERVER DEBUG] Criando", normalizedCodes.length, "codigos...");
     await prisma.$transaction(async (tx) => {
       await tx.boosterCode.createMany({
-        data: normalizedCodes.map((code) => ({
+        data: codesToImport.map((code) => ({
           code,
           seasonId,
           sourceBatch,
@@ -153,7 +151,8 @@ export async function importBoosterCodesAction(
           entityId: sourceBatch ?? "manual-import",
           action: "booster_codes.imported",
           after: {
-            count: normalizedCodes.length,
+            count: codesToImport.length,
+            skipped: duplicateCodes.length,
             seasonId,
             sourceBatch,
             rewardLabel,
@@ -164,10 +163,11 @@ export async function importBoosterCodesAction(
     });
 
     revalidatePath("/codigos");
-    console.log("[SERVER DEBUG] Sucesso!");
-    return { imported: normalizedCodes.length };
+    return {
+      imported: codesToImport.length,
+      skipped: duplicateCodes.length > 0 ? duplicateCodes : undefined
+    };
   } catch (err) {
-    console.error("[SERVER DEBUG] Erro:", err);
     if (err instanceof z.ZodError) {
       return { error: err.issues.map((issue) => issue.message).join(", ") };
     }
@@ -183,6 +183,7 @@ export async function reserveCodesForPlayerAction(
     const actor = await requireAdmin();
     const data = reserveCodesSchema.parse(input);
     const seasonId = normalizeOptionalId(data.seasonId);
+    const reasonDetail = normalizeOptionalString(data.reasonDetail);
 
     const player = await prisma.player.findUnique({
       where: { id: data.playerId },
@@ -199,27 +200,54 @@ export async function reserveCodesForPlayerAction(
       quantity: data.quantity,
       seasonId: seasonId ?? undefined,
       reason: data.reason,
-      reasonDetail: normalizeOptionalString(data.reasonDetail) ?? undefined
+      reasonDetail: reasonDetail ?? undefined
     });
 
-    await prisma.auditLog.createMany({
-      data: distributedCodes.map((code) => ({
-        actorUserId: actor.id,
-        entityType: "codeDistribution",
-        entityId: code.distributions[0]?.id ?? code.id,
-        action: "booster_code.distributed",
-        after: {
-          boosterCodeId: code.id,
-          code: code.code,
-          playerId: data.playerId,
-          playerName: player.displayName,
-          seasonId,
-          reason: data.reason
-        }
-      }))
+    const giftPayloads = distributedCodes.map((code) => {
+      const distribution =
+        code.distributions.find((item) => item.playerId === data.playerId) ?? code.distributions[0];
+
+      return { code, distribution };
     });
+
+    await prisma.$transaction([
+      prisma.playerGift.createMany({
+        data: giftPayloads.map(({ code, distribution }) => ({
+          playerId: data.playerId,
+          type: GiftType.BOOSTER_CODE,
+          title: "Codigo de booster",
+          description: reasonDetail ?? reasonLabel(data.reason),
+          payload: {
+            code: code.code,
+            boosterCodeId: code.id,
+            distributionId: distribution?.id ?? null,
+            seasonId: seasonId ?? code.seasonId ?? null,
+            reason: data.reason,
+            reasonDetail: reasonDetail ?? null
+          }
+        }))
+      }),
+      prisma.auditLog.createMany({
+        data: giftPayloads.map(({ code, distribution }) => ({
+          actorUserId: actor.id,
+          entityType: "codeDistribution",
+          entityId: distribution?.id ?? code.id,
+          action: "booster_code.distributed",
+          after: {
+            boosterCodeId: code.id,
+            code: code.code,
+            playerId: data.playerId,
+            playerName: player.displayName,
+            seasonId,
+            reason: data.reason,
+            giftCreated: true
+          }
+        }))
+      })
+    ]);
 
     revalidatePath("/codigos");
+    revalidatePath("/caixa-de-presentes");
     revalidatePath(`/jogadores/${data.playerId}`);
     return { distributed: distributedCodes.length };
   } catch (err) {
@@ -495,6 +523,18 @@ function splitCsvLine(line: string) {
 function normalizeOptionalId(value?: string | null) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function reasonLabel(reason: DistributionReason) {
+  const labels: Record<DistributionReason, string> = {
+    TOP_OF_DAY: "Premio de Top do Dia",
+    PARTICIPATION: "Premio de participacao",
+    WEEKLY_WINNER: "Premio semanal",
+    SEASON_REWARD: "Premio da temporada",
+    MANUAL_ADJUSTMENT: "Presente enviado pela administracao"
+  };
+
+  return labels[reason];
 }
 
 function normalizeOptionalString(value?: string | null) {

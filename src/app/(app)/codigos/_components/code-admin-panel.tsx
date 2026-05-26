@@ -90,14 +90,12 @@ export function CodeAdminPanel({
 
   async function handleImport(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    console.log("[DEBUG] handleImport chamado");
     if (!rawCodes.trim()) {
       toast.error("Informe ao menos um codigo.");
       return;
     }
     setIsImporting(true);
     try {
-      console.log("[DEBUG] Chamando importBoosterCodesAction...");
       const result = await importBoosterCodesAction({
         rawCodes,
         seasonId: importSeasonId || null,
@@ -106,21 +104,36 @@ export function CodeAdminPanel({
         expiresAt: expiresAt || null,
         notes: notes || null
       });
-      console.log("[DEBUG] Resultado:", result);
 
       if (result?.error) {
+        if (result.skipped?.length) {
+          toast.warning(`${result.skipped.length} codigo(s) ja estavam cadastrados e foram removidos da importacao.`);
+          setRawCodes("");
+          return;
+        }
+
         toast.error(result.error);
         return;
       }
 
-      toast.success(`${result?.imported ?? 0} codigo(s) importado(s).`);
+      const msg = result?.imported
+        ? `${result.imported} codigo(s) valido(s) importado(s).`
+        : "";
+      const skippedMsg = result?.skipped?.length
+        ? `${result.skipped.length} codigo(s) ja existiam e foram ignorados.`
+        : "";
+
+      if (result?.skipped?.length) {
+        toast.warning([msg, skippedMsg].filter(Boolean).join(" "));
+      } else {
+        toast.success(msg || "Codigos importados.");
+      }
       setRawCodes("");
       setSourceBatch("");
       setRewardLabel("");
       setExpiresAt("");
       setNotes("");
     } catch (err) {
-      console.error("[DEBUG] Erro:", err);
       toast.error(err instanceof Error ? err.message : "Erro ao importar codigos");
     } finally {
       setIsImporting(false);
@@ -145,7 +158,7 @@ export function CodeAdminPanel({
         return;
       }
 
-      toast.success(`${result?.distributed ?? 0} codigo(s) distribuido(s).`);
+      toast.success(`${result?.distributed ?? 0} codigo(s) enviado(s) para a caixa de presentes do jogador.`);
       setQuantity("1");
       setReasonDetail("");
     } catch (err) {

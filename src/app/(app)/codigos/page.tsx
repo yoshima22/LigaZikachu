@@ -60,85 +60,26 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
 
   // ===== PLAYER VIEW =====
   if (!admin) {
-    const player = await prisma.player.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true, displayName: true }
-    });
-
-    const distributions = player
-      ? await prisma.codeDistribution.findMany({
-          where: {
-            playerId: player.id,
-            status: { not: DistributionStatus.REVOKED }
-          },
-          include: {
-            boosterCode: true,
-            season: { select: { name: true } },
-            assignedBy: { select: { name: true, email: true } }
-          },
-          orderBy: { assignedAt: "desc" }
-        })
-      : [];
-
     return (
       <div className="space-y-6">
         <div>
           <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Meus codigos</h1>
-          <p className="mt-1 text-sm text-slate-400">Codigos de booster atribuidos ao seu jogador.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Codigos enviados pela liga agora chegam primeiro na sua Caixa de Presentes.
+          </p>
         </div>
 
-        {distributions.length === 0 ? (
-          <Card>
-            <EmptyState
-              message="Nenhum codigo foi atribuido a voce ainda."
-              icon={<Ticket size={28} />}
-            />
-          </Card>
-        ) : (
-          <Card className="overflow-hidden p-0">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-border text-sm">
-                <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3">Codigo</th>
-                    <th className="px-5 py-3">Temporada</th>
-                    <th className="px-5 py-3">Motivo</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3">Atribuido em</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {distributions.map((distribution) => {
-                    const status = distributionStatusMap[distribution.status];
-                    return (
-                      <tr key={distribution.id}>
-                        <td className="px-5 py-3 font-mono text-xs font-semibold text-white">
-                          {distribution.boosterCode.code}
-                        </td>
-                        <td className="px-5 py-3 text-slate-300">
-                          {distribution.season?.name ?? "-"}
-                        </td>
-                        <td className="px-5 py-3 text-slate-300">
-                          {distribution.reasonDetail ?? distribution.reason}
-                        </td>
-                        <td className="px-5 py-3">
-                          <StatusBadge variant={status.variant} label={status.label} />
-                        </td>
-                        <td className="px-5 py-3 text-slate-400">
-                          {formatDate(distribution.assignedAt)}
-                          <CodeRowActions
-                            distributionId={distribution.id}
-                            distributionStatus={distribution.status}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )}
+        <Card>
+          <EmptyState
+            message="Abra sua Caixa de Presentes para receber codigos, insignias e outros premios."
+            icon={<Ticket size={28} />}
+            action={
+              <Button asChild>
+                <Link href="/caixa-de-presentes">Ir para Caixa de Presentes</Link>
+              </Button>
+            }
+          />
+        </Card>
       </div>
     );
   }

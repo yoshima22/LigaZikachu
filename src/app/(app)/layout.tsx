@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Crown, LayoutDashboard, Package, Users, Trophy, Calendar, ShieldCheck, LogOut, Zap } from "lucide-react";
+import { BarChart3, Crown, Gift, LayoutDashboard, Package, Users, Trophy, Calendar, ShieldCheck, LogOut, Zap } from "lucide-react";
 import { Toaster } from "sonner";
 
 const navLinks = [
@@ -14,6 +14,7 @@ const navLinks = [
   { href: "/ranking",    label: "Ranking Geral", icon: BarChart3,     adminOnly: false },
   { href: "/top-do-dia", label: "Top do Dia", icon: Crown,            adminOnly: false },
   { href: "/codigos",    label: "Codigos",    icon: Package,          adminOnly: false },
+  { href: "/caixa-de-presentes", label: "Presentes", icon: Gift,       adminOnly: false },
   { href: "/temporadas", label: "Temporadas", icon: Calendar,         adminOnly: true  },
   { href: "/admin",      label: "Admin",      icon: ShieldCheck,      adminOnly: true  }
 ];

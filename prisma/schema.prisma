@@ -186,6 +186,7 @@ model Player {
   playerAchievements      PlayerAchievement[]
   rankingSnapshots        RankingSnapshot[]
   tournamentRegistrations TournamentRegistration[]
+  gifts                   PlayerGift[]
 
   @@map("players")
 }
@@ -587,6 +588,36 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("audit_logs")
+}
+
+model PlayerGift {
+  id          String     @id @default(cuid())
+  playerId    String
+  type        GiftType   @default(BOOSTER_CODE)
+  title       String
+  description String?
+  payload     Json?      // { code: "...", boosterCodeId: "...", etc }
+  status      GiftStatus @default(UNCLAIMED)
+  claimedAt   DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+  player      Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, status])
+  @@map("player_gifts")
+}
+
+enum GiftType {
+  BOOSTER_CODE
+  BADGE
+  ACHIEVEMENT
+  CUSTOM
+}
+
+enum GiftStatus {
+  UNCLAIMED
+  CLAIMED
+  EXPIRED
 }
 
 model Account {
