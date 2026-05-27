@@ -296,63 +296,76 @@ export default async function DashboardPage() {
     orderBy: { startDate: "desc" }
   });
   const currentTournamentWeek = activeTournament?.weeks[0] ?? null;
+  const approvedTournamentIds = await prisma.tournamentRegistration.findMany({
+    where: {
+      playerId: player.id,
+      status: "APPROVED",
+      tournament: {
+        seasonId,
+        status: { in: ["REGISTRATION_OPEN", "IN_PROGRESS", "FINISHED"] }
+      }
+    },
+    select: { tournamentId: true }
+  });
+  const tournamentIds = approvedTournamentIds.map((registration) => registration.tournamentId);
 
   const [ranking, nextMatch, pendingConfs, codesCount] = await Promise.all([
     computePlayerRanking(seasonId),
-    prisma.match.findFirst({
-      where: {
-        status: { in: [MatchStatus.PENDING_CONFIRMATION, MatchStatus.DRAFT] },
-        AND: [
-          { OR: [{ playerAId: player.id }, { playerBId: player.id }] },
-          {
-            OR: [
-              { seasonId },
-              { tournamentWeek: { tournament: { seasonId } } }
-            ]
-          }
-        ]
-      },
-      orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
-      include: {
-        playerA: { select: { displayName: true } },
-        playerB: { select: { displayName: true } },
-        week: { select: { number: true, label: true } },
-        tournamentWeek: {
-          select: {
-            weekNumber: true,
-            label: true,
-            tournament: { select: { slug: true, name: true } }
-          }
-        }
-      }
-    }),
-    prisma.matchConfirmation.findMany({
-      where: {
-        playerId: player.id,
-        status: "PENDING",
-        match: {
-          OR: [
-            { seasonId },
-            { tournamentWeek: { tournament: { seasonId } } }
-          ]
-        }
-      },
-      include: {
-        match: {
+    tournamentIds.length > 0
+      ? prisma.match.findFirst({
+          where: {
+            status: { in: [MatchStatus.PENDING_CONFIRMATION, MatchStatus.DRAFT] },
+            tournamentWeek: {
+              tournamentId: { in: tournamentIds },
+              tournament: { status: "IN_PROGRESS" }
+            },
+            OR: [{ playerAId: player.id }, { playerBId: player.id }]
+          },
+          orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
           include: {
             playerA: { select: { displayName: true } },
             playerB: { select: { displayName: true } },
-            week: { select: { number: true } },
+            week: { select: { number: true, label: true } },
             tournamentWeek: {
               select: {
                 weekNumber: true,
+                label: true,
                 tournament: { select: { slug: true, name: true } }
               }
             }
           }
-        }
-      }
-    }),
+        })
+      : null,
+    tournamentIds.length > 0
+      ? prisma.matchConfirmation.findMany({
+          where: {
+            playerId: player.id,
+            status: "PENDING",
+            match: {
+              status: MatchStatus.PENDING_CONFIRMATION,
+              tournamentWeek: {
+                tournamentId: { in: tournamentIds },
+                tournament: { status: "IN_PROGRESS" }
+              }
+            }
+          },
+          include: {
+            match: {
+              include: {
+                playerA: { select: { displayName: true } },
+                playerB: { select: { displayName: true } },
+                week: { select: { number: true } },
+                tournamentWeek: {
+                  select: {
+                    weekNumber: true,
+                    tournament: { select: { slug: true, name: true } }
+                  }
+                }
+              }
+            }
+          }
+        })
+      : [],
     prisma.codeDistribution.count({
       where: { playerId: player.id, seasonId, status: { not: "REVOKED" } }
     })
