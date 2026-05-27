@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updatePlayerProfile } from "./actions";
+import { updatePlayerProfile } from "../actions";
 
 interface EditProfileFormProps {
   player: {
