@@ -346,7 +346,7 @@ export default async function DashboardPage() {
             tournamentWeek: {
               select: {
                 weekNumber: true,
-                tournament: { select: { slug: true } }
+                tournament: { select: { slug: true, name: true } }
               }
             }
           }
@@ -375,6 +375,9 @@ export default async function DashboardPage() {
     activeTournament && currentTournamentWeek
       ? `/torneios/${activeTournament.slug}/semanas/${currentTournamentWeek.weekNumber}`
       : "/torneios";
+  const nextMatchHref = nextMatch?.tournamentWeek
+    ? `/torneios/${nextMatch.tournamentWeek.tournament.slug}/semanas/${nextMatch.tournamentWeek.weekNumber}/partidas`
+    : "/torneios";
 
   const myEntry = ranking.find((r) => r.playerId === player.id);
 
@@ -430,6 +433,7 @@ export default async function DashboardPage() {
             <Calendar size={18} className="text-primary" /> Próxima partida
           </CardTitle>
           {nextMatch ? (
+            <Link href={nextMatchHref} className="block rounded-xl p-2 transition-colors hover:bg-white/[0.03]">
             <div className="space-y-1 text-sm">
               <p className="text-white">
                 vs{" "}
@@ -466,6 +470,7 @@ export default async function DashboardPage() {
                 }
               />
             </div>
+            </Link>
           ) : (
             <EmptyState message="Nenhuma partida agendada." icon={<Calendar size={24} />} />
           )}
@@ -480,7 +485,15 @@ export default async function DashboardPage() {
             <EmptyState message="Nenhuma semana aberta." icon={<BookOpen size={24} />} />
           ) : deckSubmission ? (
             <Link href={deckHref} className="block space-y-2 hover:opacity-80 transition-opacity">
+              {activeTournament && (
+                <p className="text-xs font-medium text-slate-400">{activeTournament.name}</p>
+              )}
               <p className="font-medium text-white">{deckSubmission.deckName}</p>
+              {currentTournamentWeek && (
+                <p className="text-xs text-slate-500">
+                  {currentTournamentWeek.label ?? `Semana ${currentTournamentWeek.weekNumber}`}
+                </p>
+              )}
               <StatusBadge
                 variant={
                   deckSubmission.status === "APPROVED"
@@ -526,14 +539,27 @@ export default async function DashboardPage() {
                 ? conf.match.playerB?.displayName
                 : conf.match.playerA.displayName;
               return (
-                <li key={conf.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                  <div>
-                    <span className="text-white">vs {opp}</span>
-                    {conf.match.week && (
-                      <span className="ml-2 text-xs text-slate-400">S{conf.match.week.number}</span>
-                    )}
-                  </div>
-                  <StatusBadge variant="warning" label="Pendente" />
+                <li key={conf.id}>
+                  <Link
+                    href={
+                      conf.match.tournamentWeek
+                        ? `/torneios/${conf.match.tournamentWeek.tournament.slug}/semanas/${conf.match.tournamentWeek.weekNumber}/partidas`
+                        : "/torneios"
+                    }
+                    className="flex items-center justify-between gap-3 py-3 text-sm hover:bg-white/[0.03]"
+                  >
+                    <div>
+                      <span className="text-white">vs {opp}</span>
+                      {conf.match.tournamentWeek ? (
+                        <span className="ml-2 text-xs text-slate-400">
+                          {conf.match.tournamentWeek.tournament.name} - S{conf.match.tournamentWeek.weekNumber}
+                        </span>
+                      ) : conf.match.week ? (
+                        <span className="ml-2 text-xs text-slate-400">S{conf.match.week.number}</span>
+                      ) : null}
+                    </div>
+                    <StatusBadge variant="warning" label="Pendente" />
+                  </Link>
                 </li>
               );
             })}

@@ -157,33 +157,45 @@ export async function editPlayerAction(
   }
 }
 
-export async function removeFromSeasonAction(playerId: string, seasonId: string) {
-  const actor = await getAdminActor();
-  if (actor.role !== Role.SUPER_ADMIN) throw new Error("Apenas SUPER_ADMIN pode remover jogadores da temporada");
+export async function removeFromSeasonAction(
+  playerId: string,
+  seasonId: string
+): Promise<{ error?: string }> {
+  try {
+    const actor = await getAdminActor();
+    if (actor.role !== Role.SUPER_ADMIN) {
+      return { error: "Apenas SUPER_ADMIN pode remover jogadores da temporada" };
+    }
 
-  const sp = await prisma.seasonPlayer.findUnique({
-    where: { seasonId_playerId: { seasonId, playerId } },
-    select: { id: true, isActive: true }
-  });
-  if (!sp) throw new Error("Jogador nao esta nesta temporada");
+    if (!seasonId) return { error: "Nenhuma temporada ativa selecionada." };
 
-  await prisma.$transaction([
-    prisma.seasonPlayer.update({
+    const sp = await prisma.seasonPlayer.findUnique({
       where: { seasonId_playerId: { seasonId, playerId } },
-      data: { isActive: false, leftAt: new Date() }
-    }),
-    prisma.auditLog.create({
-      data: {
-        actorUserId: actor.id,
-        entityType: "seasonPlayer",
-        entityId: sp.id,
-        action: "seasonPlayer.removed",
-        before: { isActive: true },
-        after: { isActive: false },
-        metadata: { seasonId, playerId }
-      }
-    })
-  ]);
+      select: { id: true, isActive: true }
+    });
+    if (!sp) return { error: "Jogador nao esta nesta temporada" };
 
-  revalidatePath("/jogadores");
+    await prisma.$transaction([
+      prisma.seasonPlayer.update({
+        where: { seasonId_playerId: { seasonId, playerId } },
+        data: { isActive: false, leftAt: new Date() }
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "seasonPlayer",
+          entityId: sp.id,
+          action: "seasonPlayer.removed",
+          before: { isActive: true },
+          after: { isActive: false },
+          metadata: { seasonId, playerId }
+        }
+      })
+    ]);
+
+    revalidatePath("/jogadores");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
 }

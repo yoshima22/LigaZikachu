@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { User, Pencil, ShieldOff, ShieldCheck, CheckCircle, Trash2, X } from "lucide-react";
 import { Role, UserStatus } from "@prisma/client";
+import { toast } from "sonner";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -254,14 +255,20 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                       {isSuperAdmin && (
                         <button
                           title="Remover da temporada"
+                          disabled={!seasonId || p.userId === currentUserId}
                           onClick={() => {
                             if (confirm(`Remover ${p.displayName} da temporada?`)) {
-                              startTransition(() =>
-                                removeFromSeasonAction(p.playerId, seasonId)
-                              );
+                              startTransition(async () => {
+                                const result = await removeFromSeasonAction(p.playerId, seasonId);
+                                if (result?.error) {
+                                  toast.error(result.error);
+                                  return;
+                                }
+                                toast.success("Jogador removido da temporada.");
+                              });
                             }
                           }}
-                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10"
+                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -323,6 +330,26 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                   >
                     <Pencil size={15} />
                   </button>
+                  {isSuperAdmin && (
+                    <button
+                      disabled={!seasonId || p.userId === currentUserId}
+                      onClick={() => {
+                        if (confirm(`Remover ${p.displayName} da temporada?`)) {
+                          startTransition(async () => {
+                            const result = await removeFromSeasonAction(p.playerId, seasonId);
+                            if (result?.error) {
+                              toast.error(result.error);
+                              return;
+                            }
+                            toast.success("Jogador removido da temporada.");
+                          });
+                        }
+                      }}
+                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
