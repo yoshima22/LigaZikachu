@@ -168,6 +168,7 @@ model Player {
   displayName             String
   whatsapp                String?
   ptcglNick               String?
+  avatarUrl               String?
   active                  Boolean              @default(true)
   notes                   String?
   createdAt               DateTime             @default(now())
