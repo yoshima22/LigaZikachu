@@ -241,23 +241,23 @@ function MobileNavGroup({
   const open = openMenu === id;
 
   return (
-    <div className="rounded-xl border border-border bg-slate-950/40">
+    <div className="relative">
       <button
         type="button"
         onClick={() => setOpenMenu(open ? null : id)}
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-300"
+        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
       >
         {label}
         <ChevronDown size={13} className={`transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="border-t border-border p-1">
+        <div className="absolute left-0 top-10 z-50 w-full rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
             <Link
               key={href}
               href={href}
               onClick={() => setOpenMenu(null)}
-              className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-[#FFCB05]"
+              className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
             >
               <ItemIcon size={13} />
               {itemLabel}
