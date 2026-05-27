@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft } from "lucide-react";
 import { MatchStatus, SeasonStatus } from "@prisma/client";
+import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 
 export default async function PlayerDetailPage({
   params
@@ -61,7 +62,7 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
 
-  const [ranking, recentMatches, codesCount] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers] = await Promise.all([
     activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -84,7 +85,13 @@ export default async function PlayerDetailPage({
             status: { not: "REVOKED" }
           }
         })
-      : 0
+      : 0,
+    isAdminUser
+      ? prisma.player.findMany({
+          select: { id: true, displayName: true },
+          orderBy: { displayName: "asc" }
+        })
+      : []
   ]);
 
   const myEntry = (ranking as Awaited<ReturnType<typeof computePlayerRanking>>).find(
@@ -286,6 +293,13 @@ export default async function PlayerDetailPage({
                       <p className="truncate text-sm font-semibold text-white">{playerBadge.badge.name}</p>
                       <p className="truncate text-xs text-slate-400">{playerBadge.badge.tournament.name}</p>
                       <p className="text-xs text-[#FFCB05]">+3 pontos</p>
+                      {isAdminUser && (
+                        <PlayerBadgeAdminActions
+                          badgeId={playerBadge.badgeId}
+                          currentPlayerId={player.id}
+                          players={allPlayers}
+                        />
+                      )}
                     </div>
                   </div>
                 ))}

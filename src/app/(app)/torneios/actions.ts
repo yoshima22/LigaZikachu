@@ -245,12 +245,26 @@ export async function deleteTournament(
 
     await prisma.$transaction(async (tx) => {
       if (weekIds.length > 0) {
+        const matches = await tx.match.findMany({
+          where: { tournamentWeekId: { in: weekIds } },
+          select: { id: true }
+        });
+        const matchIds = matches.map((match) => match.id);
+
+        if (matchIds.length > 0) {
+          await tx.challenge.deleteMany({
+            where: { matchId: { in: matchIds } }
+          });
+        }
+
         await tx.matchConfirmation.deleteMany({
           where: { match: { tournamentWeekId: { in: weekIds } } }
         });
         await tx.match.deleteMany({ where: { tournamentWeekId: { in: weekIds } } });
       }
 
+      await tx.playerBadge.deleteMany({ where: { badge: { tournamentId } } });
+      await tx.leagueBadge.deleteMany({ where: { tournamentId } });
       await tx.deckSubmission.deleteMany({ where: { tournamentId } });
       await tx.tournamentRegistration.deleteMany({ where: { tournamentId } });
       await tx.tournamentWeek.deleteMany({ where: { tournamentId } });

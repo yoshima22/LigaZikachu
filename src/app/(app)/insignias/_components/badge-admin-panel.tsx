@@ -2,13 +2,15 @@
 
 import type { ChangeEvent, FormEvent } from "react";
 import { useState, useTransition } from "react";
-import { Award, Plus, ShieldX, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { Award, Plus, ShieldX, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   assignLeagueBadgeAction,
   createLeagueBadgeAction,
+  deleteLeagueBadgeAction,
   removeLeagueBadgeAction
 } from "../actions";
 
@@ -119,6 +121,20 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
     });
   }
 
+  function deleteBadge(badgeId: string) {
+    if (!confirm("Deletar esta insignia? Ela sera removida tambem do jogador dono, se houver.")) return;
+
+    startTransition(async () => {
+      const result = await deleteLeagueBadgeAction({ badgeId });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success("Insignia deletada.");
+    });
+  }
+
   return (
     <div className="space-y-6">
       {admin && (
@@ -189,18 +205,29 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
             <div className="flex gap-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={badge.imageUrl} alt={badge.name} className="h-20 w-20 rounded-2xl object-cover" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-white">{badge.name}</h3>
                 <p className="mt-1 text-xs text-slate-400">{badge.tournamentName}</p>
                 <p className="text-xs text-[#FFCB05]">+3 pontos</p>
                 {badge.seasonName && <p className="text-xs text-slate-500">{badge.seasonName}</p>}
               </div>
+              {admin && (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => deleteBadge(badge.id)}
+                  className="h-8 rounded-lg border border-red-500/30 px-2 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                  title="Deletar insignia"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
 
             <div className="mt-4 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dono(s)</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dono atual</p>
               {badge.owners.length === 0 ? (
-                <p className="text-xs text-slate-500">Nenhum jogador possui esta insignia.</p>
+                <p className="text-xs text-slate-500">Sem dono no momento.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {badge.owners.map((owner) => (
@@ -208,7 +235,9 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
                       key={owner.id}
                       className="inline-flex items-center gap-2 rounded-full border border-[#FFCB05]/20 bg-[#FFCB05]/10 px-2.5 py-1 text-xs text-[#FFCB05]"
                     >
-                      {owner.playerName}
+                      <Link href={`/jogadores/${owner.playerId}`} className="hover:text-white">
+                        {owner.playerName}
+                      </Link>
                       {admin && (
                         <button
                           type="button"
@@ -246,7 +275,7 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
                   className="inline-flex items-center gap-1 rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-semibold text-[#1A1A2E] disabled:opacity-50"
                 >
                   <UserPlus size={14} />
-                  Atribuir
+                  {badge.owners.length > 0 ? "Mover" : "Atribuir"}
                 </button>
               </div>
             )}

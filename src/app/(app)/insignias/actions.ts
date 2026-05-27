@@ -23,6 +23,10 @@ const badgePlayerSchema = z.object({
   playerId: z.string().min(1, "Selecione um jogador.")
 });
 
+const badgeSchema = z.object({
+  badgeId: z.string().min(1)
+});
+
 export async function createLeagueBadgeAction(
   input: z.infer<typeof createBadgeSchema>
 ): Promise<{ error?: string }> {
@@ -92,22 +96,36 @@ export async function assignLeagueBadgeAction(
     if (!badge) return { error: "Insignia nao encontrada." };
     if (!player) return { error: "Jogador nao encontrado." };
 
-    const awarded = await prisma.playerBadge.upsert({
-      where: {
-        badgeId_playerId: {
+    const previousOwners = await prisma.playerBadge.findMany({
+      where: { badgeId: badge.id },
+      include: { player: { select: { displayName: true } } }
+    });
+
+    const awarded = await prisma.$transaction(async (tx) => {
+      await tx.playerBadge.deleteMany({
+        where: {
           badgeId: badge.id,
-          playerId: player.id
+          playerId: { not: player.id }
         }
-      },
-      update: {
-        awardedById: actor.id,
-        awardedAt: new Date()
-      },
-      create: {
-        badgeId: badge.id,
-        playerId: player.id,
-        awardedById: actor.id
-      }
+      });
+
+      return tx.playerBadge.upsert({
+        where: {
+          badgeId_playerId: {
+            badgeId: badge.id,
+            playerId: player.id
+          }
+        },
+        update: {
+          awardedById: actor.id,
+          awardedAt: new Date()
+        },
+        create: {
+          badgeId: badge.id,
+          playerId: player.id,
+          awardedById: actor.id
+        }
+      });
     });
 
     await prisma.auditLog.create({
@@ -115,7 +133,13 @@ export async function assignLeagueBadgeAction(
         actorUserId: actor.id,
         entityType: "playerBadge",
         entityId: awarded.id,
-        action: "league_badge.assigned",
+        action: previousOwners.length > 0 ? "league_badge.moved" : "league_badge.assigned",
+        before: {
+          owners: previousOwners.map((owner) => ({
+            playerId: owner.playerId,
+            playerName: owner.player.displayName
+          }))
+        },
         after: {
           badgeId: badge.id,
           badgeName: badge.name,
@@ -127,6 +151,61 @@ export async function assignLeagueBadgeAction(
     });
 
     revalidateBadgePaths(badge.tournament.slug, badge.tournament.season?.slug, player.id);
+    for (const owner of previousOwners) {
+      revalidatePath(`/jogadores/${owner.playerId}`);
+    }
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((issue) => issue.message).join(", ") };
+    }
+
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function deleteLeagueBadgeAction(
+  input: z.infer<typeof badgeSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const { badgeId } = badgeSchema.parse(input);
+
+    const badge = await prisma.leagueBadge.findUnique({
+      where: { id: badgeId },
+      include: {
+        tournament: { select: { id: true, name: true, slug: true, season: { select: { slug: true } } } },
+        owners: { include: { player: { select: { displayName: true } } } }
+      }
+    });
+
+    if (!badge) return { error: "Insignia nao encontrada." };
+
+    await prisma.$transaction([
+      prisma.leagueBadge.delete({ where: { id: badge.id } }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "leagueBadge",
+          entityId: badge.id,
+          action: "league_badge.deleted",
+          before: {
+            name: badge.name,
+            tournamentId: badge.tournamentId,
+            tournamentName: badge.tournament.name,
+            owners: badge.owners.map((owner) => ({
+              playerId: owner.playerId,
+              playerName: owner.player.displayName
+            }))
+          }
+        }
+      })
+    ]);
+
+    revalidateBadgePaths(badge.tournament.slug, badge.tournament.season?.slug);
+    for (const owner of badge.owners) {
+      revalidatePath(`/jogadores/${owner.playerId}`);
+    }
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) {
