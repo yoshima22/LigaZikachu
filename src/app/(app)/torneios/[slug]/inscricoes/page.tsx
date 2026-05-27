@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/permissions";
+import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { TrainerAvatar } from "@/components/ui/poke/trainer-avatar";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { RegistrationActions } from "./_components/registration-actions";
+import { addTournamentPlayer } from "../../actions";
 
 export default async function InscricoesPage({
   params
@@ -12,7 +13,8 @@ export default async function InscricoesPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  await requireAdmin();
+  const user = await getSessionUser();
+  if (!user) return null;
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
@@ -30,6 +32,16 @@ export default async function InscricoesPage({
   });
 
   if (!tournament) notFound();
+  const canManage = isAdmin(user.role) || tournament.createdById === user.id;
+  if (!canManage) notFound();
+  const players = await prisma.player.findMany({
+    where: {
+      active: true,
+      tournamentRegistrations: { none: { tournamentId: tournament.id } }
+    },
+    orderBy: { displayName: "asc" },
+    select: { id: true, displayName: true }
+  });
 
   const groups = {
     PENDING:   tournament.registrations.filter((r) => r.status === "PENDING"),
@@ -60,6 +72,34 @@ export default async function InscricoesPage({
         <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Gerenciar Inscrições</h1>
         <p className="mt-1 text-sm text-slate-400">{tournament.name}</p>
       </div>
+
+      <form
+        className="flex flex-col gap-3 rounded-xl border border-border bg-slate-950/50 p-4 sm:flex-row sm:items-end"
+        action={async (formData) => {
+          "use server";
+          await addTournamentPlayer({
+            tournamentId: tournament.id,
+            playerId: String(formData.get("playerId") ?? "")
+          });
+        }}
+      >
+        <label className="flex-1 space-y-1 text-xs text-slate-400">
+          <span>Adicionar jogador diretamente</span>
+          <select
+            name="playerId"
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+            required
+          >
+            <option value="">Selecione um jogador</option>
+            {players.map((player) => (
+              <option key={player.id} value={player.id}>{player.displayName}</option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-semibold text-[#1A1A2E]">
+          Adicionar
+        </button>
+      </form>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

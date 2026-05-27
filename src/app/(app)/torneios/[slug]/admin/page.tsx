@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/permissions";
+import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
@@ -49,7 +49,8 @@ const tournamentStatusLabels: Record<TournamentStatus, string> = {
 
 export default async function TournamentAdminPage({ params }: Props) {
   const { slug } = await params;
-  await requireAdmin();
+  const user = await getSessionUser();
+  if (!user) return null;
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
@@ -80,6 +81,8 @@ export default async function TournamentAdminPage({ params }: Props) {
   });
 
   if (!tournament) notFound();
+  const canManage = isAdmin(user.role) || tournament.createdById === user.id;
+  if (!canManage) notFound();
 
   const seasons = await prisma.season.findMany({
     orderBy: [{ startDate: "desc" }, { name: "asc" }],

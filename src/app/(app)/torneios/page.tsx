@@ -72,14 +72,12 @@ export default async function TourneiosPage({
             {tournaments.length !== 1 ? "s" : ""}
           </p>
         </div>
-        {admin && (
-          <Button asChild>
-            <Link href="/torneios/novo">
-              <Plus size={16} className="mr-1" />
-              Novo Torneio
-            </Link>
-          </Button>
-        )}
+        <Button asChild>
+          <Link href="/torneios/novo">
+            <Plus size={16} className="mr-1" />
+            Novo Torneio
+          </Link>
+        </Button>
       </div>
 
       {/* Filtros de status */}

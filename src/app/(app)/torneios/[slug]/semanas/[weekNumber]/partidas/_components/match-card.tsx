@@ -34,9 +34,11 @@ interface MatchCardProps {
   };
   currentPlayerId?: string;
   isAdmin: boolean;
+  tournamentFormat?: string;
+  canReportResult?: boolean;
 }
 
-export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
+export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult }: MatchCardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
@@ -48,6 +50,8 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
   const isPlayerA = match.playerAId === currentPlayerId;
   const isPlayerB = match.playerBId === currentPlayerId;
   const isParticipant = isPlayerA || isPlayerB;
+  const isInPerson = tournamentFormat === "IN_PERSON";
+  const canReport = isParticipant || isAdmin || !!canReportResult;
 
   const myConfirmation = match.confirmations.find(
     (c) => c.playerId === currentPlayerId
@@ -225,7 +229,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
       <div className="mt-3 space-y-2">
         {/* Reportar resultado */}
         {match.status === "PENDING_CONFIRMATION" &&
-          isParticipant &&
+          canReport &&
           !match.winnerPlayerId && (
             <div className="space-y-2">
               <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
@@ -290,6 +294,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin }: MatchCardProps) {
               </Button>
             </div>
           )}
+
+        {isInPerson && match.status === "PENDING_CONFIRMATION" && match.winnerPlayerId && (
+          <p className="rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/10 px-3 py-2 text-xs text-[#FFCB05]">
+            Torneio presencial: o resultado e finalizado no primeiro reporte.
+          </p>
+        )}
 
         {showDispute && (
           <div className="space-y-2">

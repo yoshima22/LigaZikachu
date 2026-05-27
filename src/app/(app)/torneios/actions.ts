@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
-import { DeckSubmissionStatus, MatchStatus, ResultSource, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus, type Prisma } from "@prisma/client";
+import { DeckSubmissionStatus, MatchStatus, ResultSource, Role, SeasonStatus, TournamentFormat, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus, type Prisma } from "@prisma/client";
 import {
   canSubmitTournamentWeekDeck,
   getDeckSubmissionDeadline,
@@ -22,9 +22,12 @@ const createTournamentSchema = z.object({
     .regex(/^[a-z0-9-]+$/, "Slug só pode conter letras minúsculas, números e hífens"),
   edition: z.string().max(50).nullish(),
   description: z.string().max(1000).nullish(),
+  format: z.nativeEnum(TournamentFormat).default(TournamentFormat.ONLINE),
   startDate: z.string().datetime({ message: "Data inválida" }),
   endDate: z.string().datetime().nullish(),
   maxPlayers: z.number().int().min(2).max(256).nullish(),
+  matchesPerPlayer: z.number().int().min(1).max(12).nullish(),
+  requiresDeckSubmission: z.boolean().default(true),
   registrationOpensAt: z.string().datetime().nullish(),
   registrationClosesAt: z.string().datetime().nullish(),
   bannerImageUrl: z.string().url().nullish(),
@@ -64,6 +67,11 @@ const addTournamentWeekSchema = z.object({
 
 const removeTournamentWeekSchema = z.object({
   weekId: z.string().min(1)
+});
+
+const addTournamentPlayerSchema = z.object({
+  tournamentId: z.string().min(1),
+  playerId: z.string().min(1)
 });
 
 const applyWeekBonusSchema = z.object({
@@ -113,6 +121,51 @@ function buildRoundRobinRounds(playerIds: string[]) {
   return rounds;
 }
 
+function buildBalancedInPersonMatches(playerIds: string[], matchesPerPlayer: number) {
+  if (playerIds.length < 2) return [];
+  if ((playerIds.length * matchesPerPlayer) % 2 !== 0) {
+    throw new Error("Com numero impar de jogadores, use uma quantidade par de partidas por jogador para evitar BYE.");
+  }
+
+  const pairs = buildRoundRobinRounds(playerIds).flat();
+  const counts = new Map(playerIds.map((playerId) => [playerId, 0]));
+  const matches: Array<{ playerAId: string; playerBId: string; roundLabel: string; tableLabel: string }> = [];
+  let pass = 0;
+
+  while (playerIds.some((playerId) => (counts.get(playerId) ?? 0) < matchesPerPlayer)) {
+    let addedThisPass = 0;
+
+    for (const pair of pairs) {
+      const countA = counts.get(pair.playerAId) ?? 0;
+      const countB = counts.get(pair.playerBId) ?? 0;
+      if (countA >= matchesPerPlayer || countB >= matchesPerPlayer) continue;
+
+      matches.push({
+        playerAId: pass % 2 === 0 ? pair.playerAId : pair.playerBId,
+        playerBId: pass % 2 === 0 ? pair.playerBId : pair.playerAId,
+        roundLabel: "Rodada " + (matches.length + 1),
+        tableLabel: "Mesa " + ((matches.length % Math.max(1, Math.floor(playerIds.length / 2))) + 1)
+      });
+      counts.set(pair.playerAId, countA + 1);
+      counts.set(pair.playerBId, countB + 1);
+      addedThisPass++;
+
+      if (playerIds.every((playerId) => (counts.get(playerId) ?? 0) >= matchesPerPlayer)) break;
+    }
+
+    if (addedThisPass === 0) {
+      throw new Error("Nao foi possivel montar partidas equilibradas sem BYE com esses parametros.");
+    }
+    pass++;
+  }
+
+  return matches;
+}
+
+function canManageTournament(user: { id: string; role: Role }, tournament: { createdById: string; format: TournamentFormat }) {
+  return user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN || tournament.createdById === user.id;
+}
+
 async function logAudit(
   actorId: string,
   entityType: string,
@@ -151,13 +204,28 @@ export async function createTournament(
   raw: z.infer<typeof createTournamentSchema>
 ): Promise<{ error?: string; slug?: string; id?: string }> {
   try {
-    const actor = await requireAdmin();
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
     const data = createTournamentSchema.parse(raw);
+    const isAdmin = actor.role === Role.ADMIN || actor.role === Role.SUPER_ADMIN;
+
+    if (data.format === TournamentFormat.ONLINE && !isAdmin) {
+      return { error: "Apenas admins podem criar campeonatos online." };
+    }
 
     const existing = await prisma.tournament.findUnique({ where: { slug: data.slug } });
     if (existing) return { error: "Já existe um torneio com este slug." };
 
     const code = await generateUniqueTournamentCode();
+    const activeSeason = data.format === TournamentFormat.IN_PERSON
+      ? await prisma.season.findFirst({
+          where: { status: SeasonStatus.ACTIVE },
+          orderBy: { startDate: "desc" },
+          select: { id: true }
+        })
+      : null;
+    const requiresDeckSubmission =
+      data.format === TournamentFormat.ONLINE ? data.requiresDeckSubmission : false;
 
     const tournament = await prisma.tournament.create({
       data: {
@@ -166,9 +234,12 @@ export async function createTournament(
         slug: data.slug,
         edition: data.edition ?? null,
         description: data.description ?? null,
+        format: data.format,
         startDate: new Date(data.startDate),
         endDate: data.endDate ? new Date(data.endDate) : null,
         maxPlayers: data.maxPlayers ?? null,
+        matchesPerPlayer: data.format === TournamentFormat.IN_PERSON ? data.matchesPerPlayer ?? 4 : null,
+        requiresDeckSubmission,
         registrationOpensAt: data.registrationOpensAt ? new Date(data.registrationOpensAt) : null,
         registrationClosesAt: data.registrationClosesAt
           ? new Date(data.registrationClosesAt)
@@ -182,14 +253,56 @@ export async function createTournament(
           lossPoints: 0,
           tiebreakers: ["wins", "wo_count_asc", "defended_badges", "opponent_win_rate"]
         },
+        seasonId: activeSeason?.id ?? null,
         createdById: actor.id
       }
     });
 
+    if (data.format === TournamentFormat.IN_PERSON) {
+      const endDate = data.endDate ? new Date(data.endDate) : new Date(data.startDate);
+      endDate.setHours(23, 59, 59, 999);
+      await prisma.tournamentWeek.create({
+        data: {
+          tournamentId: tournament.id,
+          weekNumber: 1,
+          label: "Dia presencial",
+          mode: WeekMode.PADRAO,
+          multiplier: 1,
+          startDate: new Date(data.startDate),
+          endDate,
+          lockAt: new Date(data.startDate),
+          deckLockAt: new Date(data.startDate),
+          status: WeekStatus.PLANNED
+        }
+      });
+
+      const player = await prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true } });
+      if (player) {
+        await prisma.tournamentRegistration.create({
+          data: {
+            tournamentId: tournament.id,
+            playerId: player.id,
+            status: RegistrationStatus.APPROVED,
+            decidedAt: new Date(),
+            decidedById: actor.id
+          }
+        });
+
+        if (activeSeason) {
+          await prisma.seasonPlayer.upsert({
+            where: { seasonId_playerId: { seasonId: activeSeason.id, playerId: player.id } },
+            update: { isActive: true, leftAt: null },
+            create: { seasonId: activeSeason.id, playerId: player.id }
+          });
+        }
+      }
+    }
+
     await logAudit(actor.id, "tournament", tournament.id, "tournament.created", undefined, {
       name: tournament.name,
       slug: tournament.slug,
-      code: tournament.code
+      code: tournament.code,
+      format: tournament.format
     });
 
     revalidatePath("/torneios");
@@ -218,9 +331,12 @@ export async function updateTournament(
         ...(rest.slug ? { slug: rest.slug } : {}),
         ...(rest.edition !== undefined ? { edition: rest.edition ?? null } : {}),
         ...(rest.description !== undefined ? { description: rest.description ?? null } : {}),
+        ...(rest.format !== undefined ? { format: rest.format } : {}),
         ...(rest.startDate ? { startDate: new Date(rest.startDate) } : {}),
         ...(rest.endDate !== undefined ? { endDate: rest.endDate ? new Date(rest.endDate) : null } : {}),
         ...(rest.maxPlayers !== undefined ? { maxPlayers: rest.maxPlayers ?? null } : {}),
+        ...(rest.matchesPerPlayer !== undefined ? { matchesPerPlayer: rest.matchesPerPlayer ?? null } : {}),
+        ...(rest.requiresDeckSubmission !== undefined ? { requiresDeckSubmission: rest.requiresDeckSubmission } : {}),
         ...(rest.bannerImageUrl !== undefined ? { bannerImageUrl: rest.bannerImageUrl ?? null } : {}),
         ...(rest.themeMetadata !== undefined
           ? { themeMetadata: rest.themeMetadata ?? undefined }
@@ -244,7 +360,8 @@ export async function deleteTournament(
   raw: z.infer<typeof deleteTournamentSchema>
 ): Promise<{ error?: string }> {
   try {
-    const actor = await requireAdmin();
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
     const { tournamentId } = deleteTournamentSchema.parse(raw);
 
     const tournament = await prisma.tournament.findUnique({
@@ -256,6 +373,7 @@ export async function deleteTournament(
     });
 
     if (!tournament) return { error: "Torneio nao encontrado." };
+    if (!canManageTournament(actor, tournament)) return { error: "Voce nao pode deletar este torneio." };
 
     const weekIds = tournament.weeks.map((week) => week.id);
 
@@ -404,9 +522,11 @@ export async function publishTournament(
   tournamentId: string
 ): Promise<{ error?: string }> {
   try {
-    const actor = await requireAdmin();
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
     const t = await prisma.tournament.findUnique({ where: { id: tournamentId } });
     if (!t) return { error: "Torneio não encontrado." };
+    if (!canManageTournament(actor, t)) return { error: "Voce nao pode publicar este torneio." };
     if (t.status !== TournamentStatus.DRAFT)
       return { error: "Apenas torneios em rascunho podem ser publicados." };
 
@@ -426,7 +546,8 @@ export async function publishTournament(
 
 export async function startTournament(tournamentId: string): Promise<{ error?: string }> {
   try {
-    const actor = await requireAdmin();
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
     const tournament = await prisma.tournament.findUnique({
       where: { id: tournamentId },
       include: {
@@ -442,6 +563,7 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
     });
 
     if (!tournament) return { error: "Torneio nao encontrado." };
+    if (!canManageTournament(actor, tournament)) return { error: "Voce nao pode gerenciar este torneio." };
     if (tournament.status !== TournamentStatus.REGISTRATION_OPEN) {
       return { error: "Apenas torneios com inscricoes abertas podem ser iniciados." };
     }
@@ -491,24 +613,38 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
       let createdMatches = 0;
       if (existingMatches === 0) {
         const playerIds = tournament.registrations.map((registration) => registration.player.id);
-        const rounds = buildRoundRobinRounds(playerIds);
-        const matches = rounds.flatMap((round, roundIndex) => {
-          const week = tournament.weeks[roundIndex % tournament.weeks.length];
+        const matches =
+          tournament.format === TournamentFormat.IN_PERSON
+            ? buildBalancedInPersonMatches(playerIds, tournament.matchesPerPlayer ?? 4).map((pairing) => ({
+                seasonId: tournament.seasonId,
+                tournamentWeekId: tournament.weeks[0].id,
+                playerAId: pairing.playerAId,
+                playerBId: pairing.playerBId,
+                roundLabel: pairing.roundLabel,
+                tableLabel: pairing.tableLabel,
+                bestOf: 1,
+                status: MatchStatus.PENDING_CONFIRMATION,
+                resultSource: ResultSource.MANUAL,
+                topOfDayEligible: true,
+                createdById: actor.id
+              }))
+            : buildRoundRobinRounds(playerIds).flatMap((round, roundIndex) => {
+                const week = tournament.weeks[roundIndex % tournament.weeks.length];
 
-          return round.map((pairing, tableIndex) => ({
-            seasonId: tournament.seasonId,
-            tournamentWeekId: week.id,
-            playerAId: pairing.playerAId,
-            playerBId: pairing.playerBId,
-            roundLabel: "Rodada " + (roundIndex + 1),
-            tableLabel: "Mesa " + (tableIndex + 1),
-            bestOf: 1,
-            status: MatchStatus.PENDING_CONFIRMATION,
-            resultSource: ResultSource.MANUAL,
-            topOfDayEligible: true,
-            createdById: actor.id
-          }));
-        });
+                return round.map((pairing, tableIndex) => ({
+                  seasonId: tournament.seasonId,
+                  tournamentWeekId: week.id,
+                  playerAId: pairing.playerAId,
+                  playerBId: pairing.playerBId,
+                  roundLabel: "Rodada " + (roundIndex + 1),
+                  tableLabel: "Mesa " + (tableIndex + 1),
+                  bestOf: 1,
+                  status: MatchStatus.PENDING_CONFIRMATION,
+                  resultSource: ResultSource.MANUAL,
+                  topOfDayEligible: true,
+                  createdById: actor.id
+                }));
+              });
 
         if (matches.length > 0) {
           await tx.match.createMany({ data: matches });
@@ -569,9 +705,11 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
 
 export async function finishTournament(tournamentId: string): Promise<{ error?: string }> {
   try {
-    const actor = await requireAdmin();
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
     const t = await prisma.tournament.findUnique({ where: { id: tournamentId } });
     if (!t) return { error: "Torneio não encontrado." };
+    if (!canManageTournament(actor, t)) return { error: "Voce nao pode gerenciar este torneio." };
     if (t.status !== TournamentStatus.IN_PROGRESS)
       return { error: "Apenas torneios em andamento podem ser encerrados." };
 
@@ -808,6 +946,74 @@ export async function removeTournamentWeek(
   }
 }
 
+export async function addTournamentPlayer(
+  raw: z.infer<typeof addTournamentPlayerSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
+    const data = addTournamentPlayerSchema.parse(raw);
+
+    const [tournament, player] = await Promise.all([
+      prisma.tournament.findUnique({ where: { id: data.tournamentId } }),
+      prisma.player.findUnique({ where: { id: data.playerId }, select: { id: true, displayName: true } })
+    ]);
+    if (!tournament) return { error: "Torneio nao encontrado." };
+    if (!player) return { error: "Jogador nao encontrado." };
+    if (!canManageTournament(actor, tournament)) return { error: "Voce nao pode gerenciar este torneio." };
+    if (tournament.status === TournamentStatus.FINISHED) return { error: "Torneio encerrado nao aceita novos jogadores." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.tournamentRegistration.upsert({
+        where: {
+          tournamentId_playerId: {
+            tournamentId: tournament.id,
+            playerId: player.id
+          }
+        },
+        update: {
+          status: RegistrationStatus.APPROVED,
+          decidedAt: new Date(),
+          decidedById: actor.id
+        },
+        create: {
+          tournamentId: tournament.id,
+          playerId: player.id,
+          status: RegistrationStatus.APPROVED,
+          decidedAt: new Date(),
+          decidedById: actor.id
+        }
+      });
+
+      if (tournament.seasonId) {
+        await tx.seasonPlayer.upsert({
+          where: { seasonId_playerId: { seasonId: tournament.seasonId, playerId: player.id } },
+          update: { isActive: true, leftAt: null },
+          create: { seasonId: tournament.seasonId, playerId: player.id }
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournamentRegistration",
+          entityId: tournament.id,
+          action: "registration.added_by_manager",
+          after: { playerId: player.id, playerName: player.displayName }
+        }
+      });
+    });
+
+    revalidatePath(`/torneios/${tournament.slug}`);
+    revalidatePath(`/torneios/${tournament.slug}/inscricoes`);
+    revalidatePath(`/torneios/${tournament.slug}/admin`);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function applyTournamentWeekBonus(
   raw: z.infer<typeof applyWeekBonusSchema>
 ): Promise<{ error?: string }> {
@@ -1034,13 +1240,17 @@ export async function selfRegister(
     const existing = await prisma.tournamentRegistration.findUnique({
       where: { tournamentId_playerId: { tournamentId, playerId: player.id } }
     });
+    const registrationStatus =
+      tournament.format === TournamentFormat.IN_PERSON ? RegistrationStatus.APPROVED : RegistrationStatus.PENDING;
+    const decidedAt = tournament.format === TournamentFormat.IN_PERSON ? new Date() : null;
+    const decidedById = tournament.format === TournamentFormat.IN_PERSON ? user.id : null;
 
     if (existing) {
       if (existing.status === RegistrationStatus.WITHDRAWN) {
         // Reinscrição após saída
         await prisma.tournamentRegistration.update({
           where: { tournamentId_playerId: { tournamentId, playerId: player.id } },
-          data: { status: RegistrationStatus.PENDING, decidedAt: null, decidedById: null }
+          data: { status: registrationStatus, decidedAt, decidedById }
         });
       } else {
         return { error: "Você já está inscrito neste torneio." };
@@ -1050,8 +1260,18 @@ export async function selfRegister(
         data: {
           tournamentId,
           playerId: player.id,
-          status: RegistrationStatus.PENDING
+          status: registrationStatus,
+          decidedAt,
+          decidedById
         }
+      });
+    }
+
+    if (tournament.format === TournamentFormat.IN_PERSON && tournament.seasonId) {
+      await prisma.seasonPlayer.upsert({
+        where: { seasonId_playerId: { seasonId: tournament.seasonId, playerId: player.id } },
+        update: { isActive: true, leftAt: null },
+        create: { seasonId: tournament.seasonId, playerId: player.id }
       });
     }
 

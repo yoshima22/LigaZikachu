@@ -37,7 +37,8 @@ export default async function TorneioDetailPage({
   });
 
   if (!tournament) notFound();
-  if (!admin && tournament.status === "DRAFT") notFound();
+  const canManage = admin || tournament.createdById === user.id;
+  if (!canManage && tournament.status === "DRAFT") notFound();
 
 
   const player = await prisma.player.findUnique({ where: { userId: user.id } });
@@ -103,10 +104,18 @@ export default async function TorneioDetailPage({
                 <Users size={12} />
                 {approved.length}{tournament.maxPlayers ? `/${tournament.maxPlayers}` : ""} inscritos
               </span>
+              <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
+                {tournament.format === "IN_PERSON" ? "Presencial" : "Online"}
+              </span>
+              {tournament.format === "IN_PERSON" && (
+                <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2.5 py-0.5 text-xs font-semibold text-[#FFCB05]">
+                  {tournament.matchesPerPlayer ?? 4} partidas por jogador
+                </span>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
-            {admin && (
+            {canManage && (
               <>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/torneios/${slug}/inscricoes`}>
@@ -161,7 +170,7 @@ export default async function TorneioDetailPage({
                     <p className="text-xs text-slate-500">
                       {fmt(wk.startDate)} – {fmt(wk.endDate)}
                     </p>
-                    {myRegistration?.status === "APPROVED" && (
+                    {tournament.requiresDeckSubmission && myRegistration?.status === "APPROVED" && (
                       <p className="mt-1 text-xs text-[#FFCB05]">
                         {wk.deckLockAt && new Date() < wk.deckLockAt
                           ? "Enviar ou editar decklist"

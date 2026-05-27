@@ -1,10 +1,12 @@
-import { requireAdmin } from "@/lib/auth/permissions";
+import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { CreateTournamentForm } from "./_components/create-tournament-form";
 
 export default async function NovoTorneioPage() {
-  await requireAdmin();
+  const user = await getSessionUser();
+  if (!user) return null;
+  const admin = isAdmin(user.role);
 
   return (
     <div className="space-y-6">
@@ -19,7 +21,7 @@ export default async function NovoTorneioPage() {
         <p className="mt-1 text-sm text-slate-400">Preencha os dados do novo torneio.</p>
       </div>
 
-      <CreateTournamentForm />
+      <CreateTournamentForm canCreateOnline={admin} />
     </div>
   );
 }

@@ -36,6 +36,11 @@ enum TournamentStatus {
   FINISHED
 }
 
+enum TournamentFormat {
+  ONLINE
+  IN_PERSON
+}
+
 // Modos especiais de semana conforme regulamento
 enum WeekMode {
   PADRAO
@@ -203,10 +208,13 @@ model Tournament {
   slug                  String             @unique
   edition               String?
   description           String?
+  format                TournamentFormat   @default(ONLINE)
   status                TournamentStatus   @default(DRAFT)
   startDate             DateTime
   endDate               DateTime?
   maxPlayers            Int?
+  matchesPerPlayer      Int?
+  requiresDeckSubmission Boolean            @default(true)
   registrationOpensAt   DateTime?
   registrationClosesAt  DateTime?
   bannerImageUrl        String?

@@ -66,6 +66,8 @@ export default async function PartidasPage({ params }: Props) {
         select: { status: true }
       })
     : null;
+  const canReportAnyInPersonMatch =
+    tournament.format === "IN_PERSON" && (isAdmin || registration?.status === "APPROVED");
 
   const visibleDecksByPlayer = new Map<string, Array<{ deckNumber: number; deckName: string; archetype: string | null; deckList: string }>>();
   for (const submission of week.deckSubmissions) {
@@ -209,6 +211,8 @@ export default async function PartidasPage({ params }: Props) {
                 match={match}
                 currentPlayerId={player.id}
                 isAdmin={isAdmin}
+                tournamentFormat={tournament.format}
+                canReportResult={canReportAnyInPersonMatch}
               />
             ))}
           </div>
@@ -229,6 +233,8 @@ export default async function PartidasPage({ params }: Props) {
               match={match}
               currentPlayerId={player?.id}
               isAdmin={isAdmin}
+              tournamentFormat={tournament.format}
+              canReportResult={canReportAnyInPersonMatch}
             />
           ))}
         </div>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { createTournament, seedDefaultWeeks } from "../../actions";
 
-export function CreateTournamentForm() {
+export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -16,14 +16,17 @@ export function CreateTournamentForm() {
     slug: "",
     edition: "",
     description: "",
+    format: canCreateOnline ? "ONLINE" : "IN_PERSON",
     startDate: "",
     endDate: "",
     maxPlayers: "",
+    matchesPerPlayer: "4",
+    requiresDeckSubmission: "true",
     registrationOpensAt: "",
     registrationClosesAt: ""
   });
 
-  function handleChange(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  function handleChange(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
 
@@ -47,9 +50,12 @@ export function CreateTournamentForm() {
         slug: form.slug,
         edition: form.edition || null,
         description: form.description || null,
+        format: form.format as "ONLINE" | "IN_PERSON",
         startDate: form.startDate ? new Date(form.startDate).toISOString() : new Date().toISOString(),
         endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
         maxPlayers: form.maxPlayers ? parseInt(form.maxPlayers, 10) : null,
+        matchesPerPlayer: form.matchesPerPlayer ? parseInt(form.matchesPerPlayer, 10) : null,
+        requiresDeckSubmission: form.format === "ONLINE" ? form.requiresDeckSubmission === "true" : false,
         registrationOpensAt: form.registrationOpensAt
           ? new Date(form.registrationOpensAt).toISOString()
           : null,
@@ -64,8 +70,9 @@ export function CreateTournamentForm() {
       }
 
       if (result.slug && result.id) {
-        // Seed as semanas padrão automaticamente usando o ID já retornado
-        await seedDefaultWeeks(result.id);
+        if (form.format === "ONLINE") {
+          await seedDefaultWeeks(result.id);
+        }
         toast.success("Torneio criado com sucesso!");
         router.push(`/torneios/${result.slug}`);
       }
@@ -78,6 +85,26 @@ export function CreateTournamentForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="format" className={labelCls}>Tipo de campeonato</label>
+          <select id="format" name="format" value={form.format} onChange={handleChange} className={inputCls}>
+            {canCreateOnline && <option value="ONLINE">Online - exige decklist previa</option>}
+            <option value="IN_PERSON">Presencial - resultado direto</option>
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Online usa envio e bloqueio de decklists. Presencial confirma resultado no reporte.
+          </p>
+        </div>
+        <div>
+          <label htmlFor="matchesPerPlayer" className={labelCls}>Partidas por jogador presencial</label>
+          <input id="matchesPerPlayer" name="matchesPerPlayer" type="number" min="1" max="12"
+            value={form.matchesPerPlayer} onChange={handleChange} disabled={form.format !== "IN_PERSON"}
+            className={inputCls} />
+          <p className="mt-1 text-xs text-slate-500">Com numero impar de jogadores, escolha valor par para evitar BYE.</p>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="name" className={labelCls}>Nome *</label>
