@@ -211,7 +211,7 @@ export default async function DashboardPage() {
               {recentMatches.map((match) => (
                 <Link
                   key={match.id}
-                  href={`/torneios/${match.season?.slug ?? ""}/semanas/${match.week?.number ?? 1}/partidas`}
+                  href={`/torneios/${activeSeason.slug}/semanas/${match.week?.number ?? 1}/partidas`}
                   className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-slate-800/50 transition-colors"
                 >
                   <div className="flex items-center gap-2 text-sm">
