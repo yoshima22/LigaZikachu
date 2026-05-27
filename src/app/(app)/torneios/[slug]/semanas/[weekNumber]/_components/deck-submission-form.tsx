@@ -7,6 +7,20 @@ import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { submitTournamentWeekDeck } from "../../../../actions";
 
+const pokemonTypes = [
+  { value: "Grass", label: "Grama", short: "G", className: "bg-emerald-500 text-emerald-950" },
+  { value: "Fire", label: "Fogo", short: "F", className: "bg-orange-500 text-orange-950" },
+  { value: "Water", label: "Agua", short: "A", className: "bg-sky-500 text-sky-950" },
+  { value: "Lightning", label: "Eletrico", short: "E", className: "bg-yellow-300 text-yellow-950" },
+  { value: "Fighting", label: "Lutador", short: "L", className: "bg-amber-700 text-amber-50" },
+  { value: "Psychic", label: "Psiquico", short: "P", className: "bg-fuchsia-500 text-fuchsia-950" },
+  { value: "Colorless", label: "Incolor", short: "I", className: "bg-slate-200 text-slate-900" },
+  { value: "Darkness", label: "Noturno", short: "N", className: "bg-zinc-800 text-zinc-100" },
+  { value: "Metal", label: "Metalico", short: "M", className: "bg-slate-400 text-slate-950" },
+  { value: "Dragon", label: "Dragao", short: "D", className: "bg-indigo-500 text-indigo-50" },
+  { value: "Fairy", label: "Fada", short: "Fa", className: "bg-pink-300 text-pink-950" }
+];
+
 interface ExistingDeckSubmission {
   deckNumber: number;
   deckName: string;
@@ -27,7 +41,11 @@ export function DeckSubmissionForm({
 }: DeckSubmissionFormProps) {
   const [isPending, startTransition] = useTransition();
   const [deckName, setDeckName] = useState(existingSubmission?.deckName ?? "");
-  const [archetype, setArchetype] = useState(existingSubmission?.archetype ?? "");
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(
+    existingSubmission?.archetype
+      ? existingSubmission.archetype.split(",").map((item) => item.trim()).filter(Boolean)
+      : []
+  );
   const [deckList, setDeckList] = useState(existingSubmission?.deckList ?? "");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -41,7 +59,7 @@ export function DeckSubmissionForm({
         tournamentWeekId,
         deckNumber,
         deckName,
-        archetype,
+        archetype: selectedTypes.join(", "),
         deckList
       });
 
@@ -90,16 +108,39 @@ export function DeckSubmissionForm({
             placeholder="Ex.: Charizard ex"
           />
         </label>
-        <label className="space-y-1 text-xs text-slate-400">
-          <span>Arquetipo</span>
-          <input
-            value={archetype}
-            onChange={(event) => setArchetype(event.target.value)}
-            maxLength={120}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
-            placeholder="Opcional"
-          />
-        </label>
+        <div className="space-y-1 text-xs text-slate-400">
+          <span>Tipos do deck</span>
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-700 bg-slate-950 p-2 sm:grid-cols-3">
+            {pokemonTypes.map((type) => {
+              const active = selectedTypes.includes(type.value);
+              return (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() =>
+                    setSelectedTypes((current) =>
+                      current.includes(type.value)
+                        ? current.filter((item) => item !== type.value)
+                        : [...current, type.value]
+                    )
+                  }
+                  className={[
+                    "flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition",
+                    active
+                      ? "border-[#FFCB05] bg-[#FFCB05]/10 text-white"
+                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600"
+                  ].join(" ")}
+                >
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${type.className}`}>
+                    {type.short}
+                  </span>
+                  <span>{type.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-slate-500">Selecione um ou mais tipos presentes no deck.</p>
+        </div>
       </div>
 
       <label className="mt-3 block space-y-1 text-xs text-slate-400">

@@ -4,6 +4,7 @@ import { BookOpen, CheckCircle2, Swords, Trophy } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { computeGlobalRanking } from "@/lib/ranking";
+import { isDeckRegistrationLocked } from "@/lib/decks";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -22,14 +23,22 @@ export default async function PerfilPage() {
       avatarUrl: true,
       deckSubmissions: {
         orderBy: { submittedAt: "desc" },
-        take: 5,
+        take: 20,
         select: {
           id: true,
           deckName: true,
           archetype: true,
           status: true,
           tournament: { select: { name: true, slug: true } },
-          tournamentWeek: { select: { weekNumber: true } }
+          tournamentWeek: {
+            select: {
+              weekNumber: true,
+              status: true,
+              deckLockAt: true,
+              lockAt: true,
+              endDate: true
+            }
+          }
         }
       },
       playerBadges: {
@@ -86,6 +95,9 @@ export default async function PerfilPage() {
 
   const myRanking = ranking.find((entry) => entry.playerId === player.id);
   const totalGames = (myRanking?.wins ?? 0) + (myRanking?.draws ?? 0) + (myRanking?.losses ?? 0);
+  const recentDecks = player.deckSubmissions
+    .filter((deck) => deck.tournamentWeek && isDeckRegistrationLocked(deck.tournamentWeek))
+    .slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -179,18 +191,27 @@ export default async function PerfilPage() {
                 const won = match.winnerPlayerId === player.id;
                 const lost = match.loserPlayerId === player.id;
                 return (
-                  <li key={match.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                    <div>
-                      <p className="text-white">vs {opponent?.displayName ?? "BYE"}</p>
-                      <p className="text-xs text-slate-500">
-                        {match.tournamentWeek?.tournament.name ?? "Liga Zikachu"}
-                        {match.tournamentWeek ? ` - Semana ${match.tournamentWeek.weekNumber}` : ""}
-                      </p>
-                    </div>
-                    <StatusBadge
-                      variant={won ? "success" : lost ? "danger" : "info"}
-                      label={won ? "Vitoria" : lost ? "Derrota" : "Empate"}
-                    />
+                  <li key={match.id}>
+                    <Link
+                      href={
+                        match.tournamentWeek
+                          ? `/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`
+                          : "/ranking"
+                      }
+                      className="flex items-center justify-between gap-3 py-3 text-sm hover:bg-white/[0.02]"
+                    >
+                      <div>
+                        <p className="text-white">vs {opponent?.displayName ?? "BYE"}</p>
+                        <p className="text-xs text-slate-500">
+                          {match.tournamentWeek?.tournament.name ?? "Liga Zikachu"}
+                          {match.tournamentWeek ? ` - Semana ${match.tournamentWeek.weekNumber}` : ""}
+                        </p>
+                      </div>
+                      <StatusBadge
+                        variant={won ? "success" : lost ? "danger" : "info"}
+                        label={won ? "Vitoria" : lost ? "Derrota" : "Empate"}
+                      />
+                    </Link>
                   </li>
                 );
               })}
@@ -202,20 +223,30 @@ export default async function PerfilPage() {
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
             <BookOpen size={18} className="text-[#FFCB05]" /> Decks recentes
           </h2>
-          {player.deckSubmissions.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhum deck enviado ainda.</p>
+          {recentDecks.length === 0 ? (
+            <p className="text-sm text-slate-400">Nenhum deck liberado para historico ainda.</p>
           ) : (
             <ul className="divide-y divide-border">
-              {player.deckSubmissions.map((deck) => (
-                <li key={deck.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                  <div>
-                    <p className="text-white">{deck.deckName}</p>
-                    <p className="text-xs text-slate-500">
-                      {deck.tournament?.name ?? "Torneio"}
-                      {deck.tournamentWeek ? ` - Semana ${deck.tournamentWeek.weekNumber}` : ""}
-                    </p>
-                  </div>
-                  <StatusBadge variant="info" label={deck.status} />
+              {recentDecks.map((deck) => (
+                <li key={deck.id}>
+                  <Link
+                    href={
+                      deck.tournament && deck.tournamentWeek
+                        ? `/torneios/${deck.tournament.slug}/semanas/${deck.tournamentWeek.weekNumber}`
+                        : "/torneios"
+                    }
+                    className="flex items-center justify-between gap-3 py-3 text-sm hover:bg-white/[0.02]"
+                  >
+                    <div>
+                      <p className="text-white">{deck.deckName}</p>
+                      <p className="text-xs text-slate-500">
+                        {deck.tournament?.name ?? "Torneio"}
+                        {deck.tournamentWeek ? ` - Semana ${deck.tournamentWeek.weekNumber}` : ""}
+                        {deck.archetype ? ` - ${deck.archetype}` : ""}
+                      </p>
+                    </div>
+                    <StatusBadge variant="info" label={deck.status} />
+                  </Link>
                 </li>
               ))}
             </ul>
