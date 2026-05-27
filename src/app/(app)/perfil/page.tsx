@@ -14,7 +14,6 @@ export default async function PerfilPage() {
       displayName: true,
       ptcglNick: true,
       avatarUrl: true,
-      email: true,
     },
   });
 

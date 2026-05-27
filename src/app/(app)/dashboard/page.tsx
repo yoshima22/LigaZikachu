@@ -65,7 +65,13 @@ export default async function DashboardPage() {
               playerA: { select: { displayName: true } },
               playerB: { select: { displayName: true } },
               winnerPlayer: { select: { displayName: true } },
-              week: { select: { number: true } }
+              week: { select: { number: true } },
+              tournamentWeek: {
+                select: {
+                  weekNumber: true,
+                  tournament: { select: { slug: true, name: true } }
+                }
+              }
             }
           })
         : []
@@ -211,7 +217,11 @@ export default async function DashboardPage() {
               {recentMatches.map((match) => (
                 <Link
                   key={match.id}
-                  href={`/torneios/${activeSeason?.slug ?? ""}/semanas/${match.week?.number ?? 1}/partidas`}
+                  href={
+                    match.tournamentWeek
+                      ? `/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`
+                      : "/temporadas"
+                  }
                   className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-slate-800/50 transition-colors"
                 >
                   <div className="flex items-center gap-2 text-sm">
@@ -224,7 +234,13 @@ export default async function DashboardPage() {
                     {match.winnerPlayer && (
                       <span className="text-emerald-400">▶ {match.winnerPlayer.displayName}</span>
                     )}
-                    {match.week && <span>S{match.week.number}</span>}
+                    {match.tournamentWeek ? (
+                      <span>
+                        {match.tournamentWeek.tournament.name} · S{match.tournamentWeek.weekNumber}
+                      </span>
+                    ) : (
+                      match.week && <span>S{match.week.number}</span>
+                    )}
                   </div>
                 </Link>
               ))}
@@ -259,31 +275,80 @@ export default async function DashboardPage() {
 
   const seasonId = activeSeason.id;
   const currentWeek = activeSeason.weeks[0] ?? null;
+  const activeTournament = await prisma.tournament.findFirst({
+    where: {
+      seasonId,
+      status: { in: ["REGISTRATION_OPEN", "IN_PROGRESS"] },
+      registrations: {
+        some: {
+          playerId: player.id,
+          status: "APPROVED"
+        }
+      }
+    },
+    include: {
+      weeks: {
+        where: { status: { in: ["OPEN", "LOCKED"] } },
+        orderBy: { weekNumber: "desc" },
+        take: 1
+      }
+    },
+    orderBy: { startDate: "desc" }
+  });
+  const currentTournamentWeek = activeTournament?.weeks[0] ?? null;
 
   const [ranking, nextMatch, pendingConfs, codesCount] = await Promise.all([
     computePlayerRanking(seasonId),
     prisma.match.findFirst({
       where: {
-        seasonId,
-        OR: [{ playerAId: player.id }, { playerBId: player.id }],
         status: { in: [MatchStatus.PENDING_CONFIRMATION, MatchStatus.DRAFT] },
-        scheduledAt: { gt: new Date() }
+        AND: [
+          { OR: [{ playerAId: player.id }, { playerBId: player.id }] },
+          {
+            OR: [
+              { seasonId },
+              { tournamentWeek: { tournament: { seasonId } } }
+            ]
+          }
+        ]
       },
-      orderBy: { scheduledAt: "asc" },
+      orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
       include: {
         playerA: { select: { displayName: true } },
         playerB: { select: { displayName: true } },
-        week: { select: { number: true, label: true } }
+        week: { select: { number: true, label: true } },
+        tournamentWeek: {
+          select: {
+            weekNumber: true,
+            label: true,
+            tournament: { select: { slug: true, name: true } }
+          }
+        }
       }
     }),
     prisma.matchConfirmation.findMany({
-      where: { playerId: player.id, status: "PENDING", match: { seasonId } },
+      where: {
+        playerId: player.id,
+        status: "PENDING",
+        match: {
+          OR: [
+            { seasonId },
+            { tournamentWeek: { tournament: { seasonId } } }
+          ]
+        }
+      },
       include: {
         match: {
           include: {
             playerA: { select: { displayName: true } },
             playerB: { select: { displayName: true } },
-            week: { select: { number: true } }
+            week: { select: { number: true } },
+            tournamentWeek: {
+              select: {
+                weekNumber: true,
+                tournament: { select: { slug: true } }
+              }
+            }
           }
         }
       }
@@ -293,11 +358,23 @@ export default async function DashboardPage() {
     })
   ]);
 
-  const deckSubmission = currentWeek
+  const deckSubmission = currentTournamentWeek
+    ? await prisma.deckSubmission.findFirst({
+        where: {
+          tournamentId: activeTournament!.id,
+          tournamentWeekId: currentTournamentWeek.id,
+          playerId: player.id
+        }
+      })
+    : currentWeek
     ? await prisma.deckSubmission.findFirst({
         where: { seasonId, weekId: currentWeek.id, playerId: player.id }
       })
     : null;
+  const deckHref =
+    activeTournament && currentTournamentWeek
+      ? `/torneios/${activeTournament.slug}/semanas/${currentTournamentWeek.weekNumber}`
+      : "/torneios";
 
   const myEntry = ranking.find((r) => r.playerId === player.id);
 
@@ -363,6 +440,12 @@ export default async function DashboardPage() {
                   {nextMatch.week.label ?? `Semana ${nextMatch.week.number}`}
                 </p>
               )}
+              {nextMatch.tournamentWeek && (
+                <p className="text-slate-400">
+                  {nextMatch.tournamentWeek.tournament.name} ·{" "}
+                  {nextMatch.tournamentWeek.label ?? `Semana ${nextMatch.tournamentWeek.weekNumber}`}
+                </p>
+              )}
               {nextMatch.scheduledAt && (
                 <p className="text-slate-400">
                   {new Date(nextMatch.scheduledAt).toLocaleDateString("pt-BR", {
@@ -396,7 +479,7 @@ export default async function DashboardPage() {
           {!currentWeek ? (
             <EmptyState message="Nenhuma semana aberta." icon={<BookOpen size={24} />} />
           ) : deckSubmission ? (
-            <Link href={`/temporadas/${activeSeason.id}/semanas/${currentWeek.id}/deck`} className="block space-y-2 hover:opacity-80 transition-opacity">
+            <Link href={deckHref} className="block space-y-2 hover:opacity-80 transition-opacity">
               <p className="font-medium text-white">{deckSubmission.deckName}</p>
               <StatusBadge
                 variant={
