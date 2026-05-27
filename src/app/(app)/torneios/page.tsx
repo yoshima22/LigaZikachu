@@ -118,6 +118,7 @@ export default async function TourneiosPage({
             <TournamentCard
               key={t.id}
               name={t.name}
+              code={t.code}
               edition={t.edition}
               description={t.description}
               status={t.status}

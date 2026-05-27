@@ -195,6 +195,7 @@ model Player {
 // Torneio independente — pode existir em paralelo a seasons legadas
 model Tournament {
   id                    String             @id @default(cuid())
+  code                  String?            @unique
   name                  String
   slug                  String             @unique
   edition               String?

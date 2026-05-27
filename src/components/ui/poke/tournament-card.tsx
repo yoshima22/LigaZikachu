@@ -15,6 +15,7 @@ const statusConfig: Record<TournamentCardStatus, { label: string; bg: string; te
 
 interface TournamentCardProps {
   name: string;
+  code?: string | null;
   edition?: string | null;
   description?: string | null;
   status: TournamentCardStatus;
@@ -29,6 +30,7 @@ interface TournamentCardProps {
 
 export function TournamentCard({
   name,
+  code,
   edition,
   description,
   status,
@@ -92,7 +94,7 @@ export function TournamentCard({
           )}
 
           {/* Status badge */}
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <span
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
@@ -102,6 +104,11 @@ export function TournamentCard({
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
               {sc.label}
             </span>
+            {code && (
+              <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2.5 py-0.5 font-mono text-xs font-semibold text-[#FFCB05]">
+                {code}
+              </span>
+            )}
           </div>
 
           {/* Footer stats */}

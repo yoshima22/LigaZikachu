@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
+import { DeleteTournamentButton } from "./_components/delete-tournament-button";
 import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
 import {
   finishTournament,
@@ -121,6 +122,22 @@ export default async function TournamentAdminPage({ params }: Props) {
       <h1 className="text-2xl font-bold text-white font-pixel">
         Painel Admin — {tournament.name}
       </h1>
+
+      <Card className="border-slate-800 bg-slate-900/50">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-3 text-base text-white">
+            <span>Codigo e acoes do torneio</span>
+            <span className="font-mono text-[#FFCB05]">{tournament.code ?? "Sem codigo"}</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4">
+          <p className="max-w-2xl text-sm text-slate-400">
+            O codigo do torneio e gerado automaticamente para novos campeonatos.
+            Deletar um torneio remove semanas, partidas, inscricoes e decklists vinculadas.
+          </p>
+          <DeleteTournamentButton tournamentId={tournament.id} tournamentName={tournament.name} />
+        </CardContent>
+      </Card>
 
       <Card className="border-slate-800 bg-slate-900/50">
         <CardHeader>

@@ -40,6 +40,10 @@ const updateTournamentSeasonSchema = z.object({
   seasonId: z.string().nullish()
 });
 
+const deleteTournamentSchema = z.object({
+  tournamentId: z.string().min(1)
+});
+
 const updateWeekDeckLockSchema = z.object({
   weekId: z.string().min(1),
   deckLockAt: z.string().nullish()
@@ -106,6 +110,25 @@ async function logAudit(
   });
 }
 
+const TOURNAMENT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateTournamentCode() {
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += TOURNAMENT_CODE_ALPHABET[Math.floor(Math.random() * TOURNAMENT_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+async function generateUniqueTournamentCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = generateTournamentCode();
+    const existing = await prisma.tournament.findUnique({ where: { code }, select: { id: true } });
+    if (!existing) return code;
+  }
+  throw new Error("Nao foi possivel gerar um codigo unico para o torneio.");
+}
+
 // ─── Create / Update ─────────────────────────────────────────────────────────
 
 export async function createTournament(
@@ -118,8 +141,11 @@ export async function createTournament(
     const existing = await prisma.tournament.findUnique({ where: { slug: data.slug } });
     if (existing) return { error: "Já existe um torneio com este slug." };
 
+    const code = await generateUniqueTournamentCode();
+
     const tournament = await prisma.tournament.create({
       data: {
+        code,
         name: data.name,
         slug: data.slug,
         edition: data.edition ?? null,
@@ -146,7 +172,8 @@ export async function createTournament(
 
     await logAudit(actor.id, "tournament", tournament.id, "tournament.created", undefined, {
       name: tournament.name,
-      slug: tournament.slug
+      slug: tournament.slug,
+      code: tournament.code
     });
 
     revalidatePath("/torneios");
@@ -196,6 +223,63 @@ export async function updateTournament(
 }
 
 // ─── Status transitions ──────────────────────────────────────────────────────
+
+export async function deleteTournament(
+  raw: z.infer<typeof deleteTournamentSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const { tournamentId } = deleteTournamentSchema.parse(raw);
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      include: {
+        weeks: { select: { id: true } },
+        _count: { select: { registrations: true } }
+      }
+    });
+
+    if (!tournament) return { error: "Torneio nao encontrado." };
+
+    const weekIds = tournament.weeks.map((week) => week.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (weekIds.length > 0) {
+        await tx.matchConfirmation.deleteMany({
+          where: { match: { tournamentWeekId: { in: weekIds } } }
+        });
+        await tx.match.deleteMany({ where: { tournamentWeekId: { in: weekIds } } });
+      }
+
+      await tx.deckSubmission.deleteMany({ where: { tournamentId } });
+      await tx.tournamentRegistration.deleteMany({ where: { tournamentId } });
+      await tx.tournamentWeek.deleteMany({ where: { tournamentId } });
+      await tx.tournament.delete({ where: { id: tournamentId } });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournament",
+          entityId: tournamentId,
+          action: "tournament.deleted",
+          before: {
+            name: tournament.name,
+            slug: tournament.slug,
+            code: tournament.code,
+            registrations: tournament._count.registrations,
+            weeks: tournament.weeks.length
+          }
+        }
+      });
+    });
+
+    revalidatePath("/torneios");
+    revalidatePath("/dashboard");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
 
 export async function updateTournamentSeason(
   raw: z.infer<typeof updateTournamentSeasonSchema>
