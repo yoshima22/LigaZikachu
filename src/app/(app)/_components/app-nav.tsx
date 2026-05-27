@@ -1,0 +1,268 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  BarChart3,
+  Calendar,
+  ChevronDown,
+  Crown,
+  Gift,
+  LayoutDashboard,
+  Medal,
+  Package,
+  ShieldCheck,
+  Trophy,
+  User,
+  Users
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const mainLinks = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false }
+];
+
+const rankingLinks = [
+  { href: "/ranking", label: "Ranking Geral", icon: BarChart3, adminOnly: false },
+  { href: "/top-do-dia", label: "Top do Dia", icon: Crown, adminOnly: false },
+  { href: "/temporadas", label: "Temporadas", icon: Calendar, adminOnly: false }
+];
+
+const profileLinks = [
+  { href: "/perfil", label: "Meu Perfil", icon: User, adminOnly: false },
+  { href: "/insignias", label: "Insignias", icon: Medal, adminOnly: false },
+  { href: "/caixa-de-presentes", label: "Presentes", icon: Gift, adminOnly: false },
+  { href: "/codigos", label: "Codigos", icon: Package, adminOnly: false },
+  { href: "/jogadores", label: "Jogadores", icon: Users, adminOnly: false }
+];
+
+const adminLinks = [
+  { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true }
+];
+
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly: boolean;
+};
+
+export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant?: "desktop" | "mobile" }) {
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  return (
+    <div ref={rootRef}>
+      {variant === "desktop" && (
+      <nav className="hidden items-center gap-1 md:flex">
+        {mainLinks
+          .filter((link) => !link.adminOnly || admin)
+          .map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} onClick={() => setOpenMenu(null)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+              >
+                <Icon size={14} className="mr-1.5" />
+                {label}
+              </Button>
+            </Link>
+          ))}
+        <NavDropdown
+          id="ranking"
+          label="Ranking"
+          icon={BarChart3}
+          links={rankingLinks}
+          admin={admin}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+        />
+        <NavDropdown
+          id="perfil"
+          label="Perfil"
+          icon={User}
+          links={profileLinks}
+          admin={admin}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+        />
+        {adminLinks
+          .filter((link) => !link.adminOnly || admin)
+          .map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} onClick={() => setOpenMenu(null)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+              >
+                <Icon size={14} className="mr-1.5" />
+                {label}
+              </Button>
+            </Link>
+          ))}
+      </nav>
+      )}
+
+      {variant === "mobile" && (
+      <div className="grid gap-2 px-4 pb-3 md:hidden">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none">
+          {mainLinks
+            .filter((link) => !link.adminOnly || admin)
+            .map(({ href, label, icon: Icon }) => (
+              <Link key={href} href={href} onClick={() => setOpenMenu(null)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 whitespace-nowrap text-xs text-slate-400 hover:text-[#FFCB05]"
+                >
+                  <Icon size={13} className="mr-1" />
+                  {label}
+                </Button>
+              </Link>
+            ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <MobileNavGroup
+            id="mobile-ranking"
+            label="Ranking"
+            links={rankingLinks}
+            admin={admin}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+          />
+          <MobileNavGroup
+            id="mobile-perfil"
+            label="Perfil"
+            links={profileLinks}
+            admin={admin}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+          />
+        </div>
+        {admin && (
+          <Link href="/admin" onClick={() => setOpenMenu(null)}>
+            <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-slate-400 hover:text-[#FFCB05]">
+              <ShieldCheck size={13} className="mr-1" />
+              Admin
+            </Button>
+          </Link>
+        )}
+      </div>
+      )}
+    </div>
+  );
+}
+
+function NavDropdown({
+  id,
+  label,
+  icon: Icon,
+  links,
+  admin,
+  openMenu,
+  setOpenMenu
+}: {
+  id: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  links: NavLink[];
+  admin: boolean;
+  openMenu: string | null;
+  setOpenMenu: (value: string | null) => void;
+}) {
+  const visibleLinks = links.filter((link) => !link.adminOnly || admin);
+  if (visibleLinks.length === 0) return null;
+
+  const open = openMenu === id;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpenMenu(open ? null : id)}
+        className="flex h-8 items-center rounded-xl px-3 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+      >
+        <Icon size={14} className="mr-1.5" />
+        {label}
+        <ChevronDown size={13} className={`ml-1 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-10 z-50 min-w-48 rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
+          {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => setOpenMenu(null)}
+              className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]"
+            >
+              <ItemIcon size={14} />
+              {itemLabel}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileNavGroup({
+  id,
+  label,
+  links,
+  admin,
+  openMenu,
+  setOpenMenu
+}: {
+  id: string;
+  label: string;
+  links: NavLink[];
+  admin: boolean;
+  openMenu: string | null;
+  setOpenMenu: (value: string | null) => void;
+}) {
+  const visibleLinks = links.filter((link) => !link.adminOnly || admin);
+  if (visibleLinks.length === 0) return null;
+
+  const open = openMenu === id;
+
+  return (
+    <div className="rounded-xl border border-border bg-slate-950/40">
+      <button
+        type="button"
+        onClick={() => setOpenMenu(open ? null : id)}
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-slate-300"
+      >
+        {label}
+        <ChevronDown size={13} className={`transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border p-1">
+          {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => setOpenMenu(null)}
+              className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-[#FFCB05]"
+            >
+              <ItemIcon size={13} />
+              {itemLabel}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

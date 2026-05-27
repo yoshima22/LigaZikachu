@@ -13,6 +13,7 @@ import {
 } from "@/lib/decks";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { DeckSubmissionForm } from "./_components/deck-submission-form";
+import { applyTournamentWeekBonus, updateTournamentWeekSettings } from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +116,13 @@ export default async function WeekDetailPage({
           week
         })
       )
+    : [];
+  const approvedPlayers = admin
+    ? await prisma.tournamentRegistration.findMany({
+        where: { tournamentId: tournament.id, status: "APPROVED" },
+        include: { player: { select: { id: true, displayName: true } } },
+        orderBy: { player: { displayName: "asc" } }
+      })
     : [];
 
   const positionBonus: Array<Record<string, unknown>> | null =
@@ -259,8 +267,103 @@ export default async function WeekDetailPage({
           {week.notes && (
             <p className="border-t border-border pt-3 text-xs text-slate-500">{week.notes}</p>
           )}
+          {admin && (
+            <form
+              className="border-t border-border pt-3"
+              action={async (formData) => {
+                "use server";
+                await updateTournamentWeekSettings({
+                  weekId: week.id,
+                  label: week.label ?? "",
+                  mode: week.mode,
+                  status: week.status,
+                  deckLockAt: week.deckLockAt?.toISOString() ?? "",
+                  notes: String(formData.get("notes") ?? "")
+                });
+              }}
+            >
+              <label className="space-y-1 text-xs text-slate-400">
+                <span>Editar explicacao manual do modo</span>
+                <textarea
+                  name="notes"
+                  defaultValue={week.notes ?? ""}
+                  rows={4}
+                  className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+                />
+              </label>
+              <button
+                type="submit"
+                className="mt-2 rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700]"
+              >
+                Salvar explicacao
+              </button>
+            </form>
+          )}
         </div>
       </div>
+
+      {admin && (
+        <div className="rounded-xl border border-border bg-slate-950/50 p-5">
+          <h2 className="mb-3 font-semibold text-slate-200">Bonus manual do modo de jogo</h2>
+          <form
+            className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_auto]"
+            action={async (formData) => {
+              "use server";
+              await applyTournamentWeekBonus({
+                weekId: week.id,
+                playerId: String(formData.get("playerId") ?? ""),
+                points: Number(formData.get("points") ?? 0),
+                reason: String(formData.get("reason") ?? "")
+              });
+            }}
+          >
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Jogador</span>
+              <select
+                name="playerId"
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              >
+                {approvedPlayers.map((registration) => (
+                  <option key={registration.playerId} value={registration.playerId}>
+                    {registration.player.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Pontos</span>
+              <input
+                name="points"
+                type="number"
+                defaultValue={1}
+                min={-50}
+                max={50}
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Motivo</span>
+              <input
+                name="reason"
+                placeholder="Ex: bonus do modo especial"
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={approvedPlayers.length === 0}
+                className="w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50"
+              >
+                Aplicar bonus
+              </button>
+            </div>
+          </form>
+          <p className="mt-2 text-xs text-slate-500">
+            Use 0 para remover o bonus manual atual de um jogador neste dia.
+          </p>
+        </div>
+      )}
 
       <div className="rounded-xl border border-border bg-slate-950/50 p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

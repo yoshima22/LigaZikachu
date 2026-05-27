@@ -40,6 +40,7 @@ interface RankingInput {
   matchWhere: Prisma.MatchWhereInput;
   challengeWhere?: Prisma.ChallengeWhereInput;
   badgeWhere?: Prisma.PlayerBadgeWhereInput;
+  bonusWeekWhere?: Prisma.TournamentWeekWhereInput;
   seedPlayers?: RankingSeedPlayer[];
   onlyPlayersWithMatches?: boolean;
 }
@@ -52,12 +53,13 @@ export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRan
   return computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED,
-      OR: [{ weekId: { not: null } }, { tournamentWeekId: { not: null } }]
+      tournamentWeekId: { not: null }
     },
     challengeWhere: {
-      OR: [{ weekId: { not: null } }, { matchId: { not: null } }]
+      match: { tournamentWeekId: { not: null } }
     },
     badgeWhere: {},
+    bonusWeekWhere: {},
     onlyPlayersWithMatches: true
   });
 }
@@ -91,22 +93,21 @@ export async function computeSeasonRanking(seasonId: string): Promise<PlayerRank
   return computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED,
-      OR: [
-        { seasonId, weekId: { not: null } },
-        { tournamentWeek: { tournament: { seasonId } } }
-      ]
+      tournamentWeek: { tournament: { seasonId } }
     },
     challengeWhere: {
-      OR: [
-        { seasonId, weekId: { not: null } },
-        { match: { tournamentWeek: { tournament: { seasonId } } } }
-      ]
+      match: { tournamentWeek: { tournament: { seasonId } } }
     },
     badgeWhere: {
       badge: {
         tournament: {
           seasonId
         }
+      }
+    },
+    bonusWeekWhere: {
+      tournament: {
+        seasonId
       }
     },
     seedPlayers: [...seedPlayers.values()]
@@ -149,6 +150,9 @@ export async function computeTournamentRanking(
         tournamentId
       }
     },
+    bonusWeekWhere: {
+      tournamentId
+    },
     seedPlayers: registrations.map((registration) => ({
       playerId: registration.playerId,
       displayName: registration.player.displayName
@@ -186,6 +190,9 @@ export async function computeTournamentWeekTopOfDay(
       match: {
         tournamentWeekId
       }
+    },
+    bonusWeekWhere: {
+      id: tournamentWeekId
     },
     onlyPlayersWithMatches: true
   });
@@ -241,10 +248,11 @@ async function computeRankingFromMatches({
   matchWhere,
   challengeWhere,
   badgeWhere,
+  bonusWeekWhere,
   seedPlayers = [],
   onlyPlayersWithMatches = false
 }: RankingInput): Promise<PlayerRankingEntry[]> {
-  const [matches, challenges, badges] = await Promise.all([
+  const [matches, challenges, badges, bonusWeeks] = await Promise.all([
     prisma.match.findMany({
       where: matchWhere,
       select: {
@@ -280,6 +288,14 @@ async function computeRankingFromMatches({
           select: {
             playerId: true,
             player: { select: { displayName: true } }
+          }
+        }),
+    bonusWeekWhere === undefined
+      ? Promise.resolve([])
+      : prisma.tournamentWeek.findMany({
+          where: bonusWeekWhere,
+          select: {
+            bonusRule: true
           }
         })
   ]);
@@ -374,6 +390,28 @@ async function computeRankingFromMatches({
     badgeStats.badgesOwned += 1;
     badgeStats.badgePoints += 3;
     badgeStats.points += 3;
+  }
+
+  for (const week of bonusWeeks) {
+    const rule =
+      week.bonusRule && typeof week.bonusRule === "object" && !Array.isArray(week.bonusRule)
+        ? (week.bonusRule as Record<string, unknown>)
+        : null;
+    const manualBonuses = Array.isArray(rule?.manualBonuses)
+      ? (rule.manualBonuses as Array<Record<string, unknown>>)
+      : [];
+
+    for (const bonus of manualBonuses) {
+      const playerId = typeof bonus.playerId === "string" ? bonus.playerId : null;
+      const points = Number(bonus.points ?? 0);
+      if (!playerId || !Number.isFinite(points) || points === 0) continue;
+
+      const bonusStats = getStats(statsMap, playerId);
+      bonusStats.points += points;
+      if (typeof bonus.playerName === "string") {
+        displayNameMap.set(playerId, bonus.playerName);
+      }
+    }
   }
 
   const entries = [...statsMap.values()]

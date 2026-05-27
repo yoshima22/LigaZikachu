@@ -9,8 +9,10 @@ import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { DeleteTournamentButton } from "./_components/delete-tournament-button";
 import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
 import {
+  addTournamentWeek,
   finishTournament,
   publishTournament,
+  removeTournamentWeek,
   startTournament,
   updateTournamentSeason,
   updateTournamentWeekSettings
@@ -315,6 +317,16 @@ export default async function TournamentAdminPage({ params }: Props) {
           <Calendar size={18} className="text-[#FFCB05]" />
           Semanas
         </h2>
+        <form
+          action={async () => {
+            "use server";
+            await addTournamentWeek({ tournamentId: tournament.id });
+          }}
+        >
+          <Button type="submit" size="sm" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+            Adicionar dia de jogo
+          </Button>
+        </form>
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-xs text-slate-400">
           <p className="mb-2 font-semibold text-slate-200">O que significa cada status do dia</p>
@@ -381,6 +393,16 @@ export default async function TournamentAdminPage({ params }: Props) {
                         </Button>
                       </form>
                     )}
+                    <form
+                      action={async () => {
+                        "use server";
+                        await removeTournamentWeek({ weekId: week.id });
+                      }}
+                    >
+                      <Button size="sm" type="submit" variant="destructive">
+                        Remover
+                      </Button>
+                    </form>
                   </div>
                 </div>
                 <form
@@ -392,7 +414,8 @@ export default async function TournamentAdminPage({ params }: Props) {
                       label: String(formData.get("label") ?? ""),
                       mode: String(formData.get("mode") ?? week.mode) as WeekMode,
                       status: String(formData.get("status") ?? week.status) as WeekStatus,
-                      deckLockAt: String(formData.get("deckLockAt") ?? "")
+                      deckLockAt: String(formData.get("deckLockAt") ?? ""),
+                      notes: String(formData.get("notes") ?? "")
                     });
                   }}
                 >
@@ -443,6 +466,16 @@ export default async function TournamentAdminPage({ params }: Props) {
                       Salvar dia
                     </Button>
                   </div>
+                  <label className="space-y-1 text-xs text-slate-400 md:col-span-2 lg:col-span-5">
+                    <span>Explicacao manual do modo de jogo</span>
+                    <textarea
+                      name="notes"
+                      defaultValue={week.notes ?? ""}
+                      rows={3}
+                      placeholder="Explique regras especiais, bonus, restricoes ou combinados desse dia."
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+                    />
+                  </label>
                   <p className="text-xs text-slate-500 md:col-span-2 lg:col-span-5">
                     Aqui o admin define o modo do dia, abre/bloqueia/encerra o dia e controla o fechamento das decklists.
                   </p>

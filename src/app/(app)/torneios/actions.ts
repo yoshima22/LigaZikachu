@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
-import { DeckSubmissionStatus, MatchStatus, ResultSource, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus } from "@prisma/client";
+import { DeckSubmissionStatus, MatchStatus, ResultSource, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus, type Prisma } from "@prisma/client";
 import {
   canSubmitTournamentWeekDeck,
   getDeckSubmissionDeadline,
@@ -54,7 +54,23 @@ const updateTournamentWeekSettingsSchema = z.object({
   label: z.string().trim().max(120).nullish(),
   mode: z.nativeEnum(WeekMode),
   status: z.nativeEnum(WeekStatus),
-  deckLockAt: z.string().nullish()
+  deckLockAt: z.string().nullish(),
+  notes: z.string().trim().max(2000).nullish()
+});
+
+const addTournamentWeekSchema = z.object({
+  tournamentId: z.string().min(1)
+});
+
+const removeTournamentWeekSchema = z.object({
+  weekId: z.string().min(1)
+});
+
+const applyWeekBonusSchema = z.object({
+  weekId: z.string().min(1),
+  playerId: z.string().min(1),
+  points: z.coerce.number().int().min(-50).max(50),
+  reason: z.string().trim().max(240).nullish()
 });
 
 const submitTournamentWeekDeckSchema = z.object({
@@ -640,13 +656,15 @@ export async function updateTournamentWeekSettings(
     if (!before) return { error: "Semana de torneio nao encontrada." };
 
     const label = data.label?.trim() || null;
+    const notes = data.notes?.trim() || null;
     const updated = await prisma.tournamentWeek.update({
       where: { id: data.weekId },
       data: {
         label,
         mode: data.mode,
         status: data.status,
-        deckLockAt
+        deckLockAt,
+        notes
       }
     });
 
@@ -659,13 +677,15 @@ export async function updateTournamentWeekSettings(
         label: before.label,
         mode: before.mode,
         status: before.status,
-        deckLockAt: before.deckLockAt?.toISOString() ?? null
+        deckLockAt: before.deckLockAt?.toISOString() ?? null,
+        notes: before.notes
       },
       {
         label: updated.label,
         mode: updated.mode,
         status: updated.status,
-        deckLockAt: updated.deckLockAt?.toISOString() ?? null
+        deckLockAt: updated.deckLockAt?.toISOString() ?? null,
+        notes: updated.notes
       }
     );
 
@@ -678,6 +698,187 @@ export async function updateTournamentWeekSettings(
       return { error: err.issues.map((i) => i.message).join(", ") };
     }
 
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function addTournamentWeek(
+  raw: z.infer<typeof addTournamentWeekSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const { tournamentId } = addTournamentWeekSchema.parse(raw);
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      include: { weeks: { orderBy: { weekNumber: "asc" } } }
+    });
+
+    if (!tournament) return { error: "Torneio nao encontrado." };
+
+    const lastWeek = tournament.weeks.at(-1);
+    const weekNumber = (lastWeek?.weekNumber ?? 0) + 1;
+    const startDate = lastWeek ? new Date(lastWeek.endDate) : new Date(tournament.startDate);
+    if (lastWeek) startDate.setUTCDate(startDate.getUTCDate() + 1);
+    const endDate = new Date(startDate);
+    endDate.setUTCDate(endDate.getUTCDate() + 6);
+    endDate.setUTCHours(23, 59, 59, 999);
+    const deckLockAt = new Date(startDate);
+    deckLockAt.setUTCHours(21, 0, 0, 0);
+
+    const week = await prisma.tournamentWeek.create({
+      data: {
+        tournamentId,
+        weekNumber,
+        label: `Semana ${weekNumber}`,
+        mode: WeekMode.PADRAO,
+        multiplier: 1,
+        startDate,
+        endDate,
+        lockAt: deckLockAt,
+        deckLockAt,
+        status: WeekStatus.PLANNED
+      }
+    });
+
+    await logAudit(actor.id, "tournamentWeek", week.id, "tournament_week.created", undefined, {
+      tournamentId,
+      weekNumber
+    });
+
+    revalidatePath(`/torneios/${tournament.slug}`);
+    revalidatePath(`/torneios/${tournament.slug}/admin`);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function removeTournamentWeek(
+  raw: z.infer<typeof removeTournamentWeekSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const { weekId } = removeTournamentWeekSchema.parse(raw);
+
+    const week = await prisma.tournamentWeek.findUnique({
+      where: { id: weekId },
+      include: {
+        tournament: { select: { slug: true } },
+        matches: { select: { id: true } }
+      }
+    });
+
+    if (!week) return { error: "Dia nao encontrado." };
+
+    const matchIds = week.matches.map((match) => match.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (matchIds.length > 0) {
+        await tx.challenge.deleteMany({ where: { matchId: { in: matchIds } } });
+        await tx.matchConfirmation.deleteMany({ where: { matchId: { in: matchIds } } });
+        await tx.match.deleteMany({ where: { id: { in: matchIds } } });
+      }
+
+      await tx.deckSubmission.deleteMany({ where: { tournamentWeekId: week.id } });
+      await tx.tournamentWeek.delete({ where: { id: week.id } });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournamentWeek",
+          entityId: week.id,
+          action: "tournament_week.deleted",
+          before: {
+            tournamentId: week.tournamentId,
+            weekNumber: week.weekNumber,
+            matches: matchIds.length
+          }
+        }
+      });
+    });
+
+    revalidatePath(`/torneios/${week.tournament.slug}`);
+    revalidatePath(`/torneios/${week.tournament.slug}/admin`);
+    revalidatePath("/ranking");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function applyTournamentWeekBonus(
+  raw: z.infer<typeof applyWeekBonusSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = applyWeekBonusSchema.parse(raw);
+
+    const [week, player] = await Promise.all([
+      prisma.tournamentWeek.findUnique({
+        where: { id: data.weekId },
+        include: { tournament: { select: { slug: true, season: { select: { slug: true } } } } }
+      }),
+      prisma.player.findUnique({ where: { id: data.playerId }, select: { displayName: true } })
+    ]);
+
+    if (!week) return { error: "Dia nao encontrado." };
+    if (!player) return { error: "Jogador nao encontrado." };
+
+    const currentRule =
+      week.bonusRule && typeof week.bonusRule === "object" && !Array.isArray(week.bonusRule)
+        ? (week.bonusRule as Record<string, unknown>)
+        : {};
+    const currentBonuses = Array.isArray(currentRule.manualBonuses)
+      ? (currentRule.manualBonuses as Array<Record<string, unknown>>)
+      : [];
+
+    const manualBonuses: Prisma.InputJsonArray = [
+      ...currentBonuses
+        .filter((bonus) => bonus.playerId !== data.playerId)
+        .map((bonus) => bonus as Prisma.InputJsonObject),
+      {
+        playerId: data.playerId,
+        playerName: player.displayName,
+        points: data.points,
+        reason: data.reason?.trim() || "Bonus manual do modo de jogo",
+        awardedById: actor.id,
+        awardedAt: new Date().toISOString()
+      }
+    ].filter((bonus) => Number(bonus.points) !== 0);
+
+    const bonusRule: Prisma.InputJsonObject = { ...currentRule, manualBonuses };
+
+    await prisma.$transaction([
+      prisma.tournamentWeek.update({
+        where: { id: week.id },
+        data: { bonusRule }
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournamentWeek",
+          entityId: week.id,
+          action: "tournament_week.manual_bonus_applied",
+          after: {
+            playerId: data.playerId,
+            playerName: player.displayName,
+            points: data.points,
+            reason: data.reason ?? null
+          }
+        }
+      })
+    ]);
+
+    revalidatePath(`/torneios/${week.tournament.slug}/admin`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`);
+    revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
+    if (week.tournament.season?.slug) revalidatePath(`/temporadas/${week.tournament.season.slug}/ranking`);
+    revalidatePath("/ranking");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
