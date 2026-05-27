@@ -81,6 +81,12 @@ const applyWeekBonusSchema = z.object({
   reason: z.string().trim().max(240).nullish()
 });
 
+const setWeekTeamSchema = z.object({
+  weekId: z.string().min(1),
+  playerId: z.string().min(1),
+  teamName: z.string().trim().max(80).nullish()
+});
+
 const submitTournamentWeekDeckSchema = z.object({
   tournamentWeekId: z.string().min(1),
   deckNumber: z.coerce.number().int().min(1).max(3).default(1),
@@ -1082,6 +1088,73 @@ export async function applyTournamentWeekBonus(
     revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
     if (week.tournament.season?.slug) revalidatePath(`/temporadas/${week.tournament.season.slug}/ranking`);
     revalidatePath("/ranking");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function setTournamentWeekTeam(
+  raw: z.infer<typeof setWeekTeamSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = setWeekTeamSchema.parse(raw);
+
+    const [week, player] = await Promise.all([
+      prisma.tournamentWeek.findUnique({
+        where: { id: data.weekId },
+        include: { tournament: { select: { slug: true } } }
+      }),
+      prisma.player.findUnique({ where: { id: data.playerId }, select: { displayName: true } })
+    ]);
+
+    if (!week) return { error: "Dia nao encontrado." };
+    if (!player) return { error: "Jogador nao encontrado." };
+
+    const currentRule =
+      week.bonusRule && typeof week.bonusRule === "object" && !Array.isArray(week.bonusRule)
+        ? (week.bonusRule as Record<string, unknown>)
+        : {};
+    const currentTeams = Array.isArray(currentRule.teamAssignments)
+      ? (currentRule.teamAssignments as Array<Record<string, unknown>>)
+      : [];
+    const teamName = data.teamName?.trim();
+    const teamAssignments = currentTeams
+      .filter((assignment) => assignment.playerId !== data.playerId)
+      .map((assignment) => assignment as Prisma.InputJsonObject);
+    const nextTeamAssignments: Prisma.InputJsonArray = teamName
+      ? [
+          ...teamAssignments,
+          {
+            playerId: data.playerId,
+            playerName: player.displayName,
+            teamName,
+            assignedById: actor.id,
+            assignedAt: new Date().toISOString()
+          }
+        ]
+      : teamAssignments;
+
+    await prisma.$transaction([
+      prisma.tournamentWeek.update({
+        where: { id: week.id },
+        data: { bonusRule: { ...currentRule, teamAssignments: nextTeamAssignments } }
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "tournamentWeek",
+          entityId: week.id,
+          action: "tournament_week.team_assignment_updated",
+          after: { playerId: data.playerId, playerName: player.displayName, teamName: teamName ?? null }
+        }
+      })
+    ]);
+
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues.map((i) => i.message).join(", ") };

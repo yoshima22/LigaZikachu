@@ -179,6 +179,29 @@ const reportResultSchema = z.object({
   notes: z.string().optional(),
 });
 
+const deckChoiceSchema = z.object({
+  matchId: z.string().min(1),
+  deckSubmissionId: z.string().min(1),
+  applyToWeek: z.boolean().default(false),
+});
+
+const correctResultSchema = z.object({
+  matchId: z.string().min(1),
+  winnerId: z.string().min(1),
+  winnerDefendedPrizes: z.coerce.number().int().min(0).max(99).default(0),
+  notes: z.string().optional(),
+});
+
+function getMatchPoints(match: { playerAId: string; playerBId: string | null; tournamentWeek: { multiplier: unknown } | null }, winnerId: string) {
+  const multiplier = match.tournamentWeek ? Number(match.tournamentWeek.multiplier) : 1;
+  const winPoints = 3 * multiplier;
+
+  return {
+    rankingPointsA: winnerId === match.playerAId ? winPoints : 0,
+    rankingPointsB: winnerId === match.playerBId ? winPoints : 0,
+  };
+}
+
 export async function reportMatchResult(input: z.infer<typeof reportResultSchema>) {
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado");
@@ -272,6 +295,171 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
 
   return { success: true };
 }
+
+export async function chooseMatchDeck(input: z.infer<typeof deckChoiceSchema>) {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Nao autenticado");
+
+  const { matchId, deckSubmissionId, applyToWeek } = deckChoiceSchema.parse(input);
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!player) throw new Error("Jogador nao encontrado");
+
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { tournamentWeek: { include: { tournament: true } } },
+  });
+  if (!match?.tournamentWeek) throw new Error("Partida nao encontrada");
+  const tournamentWeekId = match.tournamentWeek.id;
+
+  const side =
+    match.playerAId === player.id ? "A" : match.playerBId === player.id ? "B" : null;
+  if (!side) throw new Error("Voce nao participa desta partida");
+
+  const deck = await prisma.deckSubmission.findUnique({
+    where: { id: deckSubmissionId },
+    select: { id: true, playerId: true, tournamentWeekId: true, deckName: true },
+  });
+  if (!deck || deck.playerId !== player.id || deck.tournamentWeekId !== match.tournamentWeekId) {
+    throw new Error("Deck invalido para esta partida");
+  }
+
+  if (applyToWeek) {
+    await prisma.$transaction([
+      prisma.match.updateMany({
+        where: {
+          tournamentWeekId,
+          playerAId: player.id,
+          status: { not: MatchStatus.CANCELED },
+        },
+        data: { playerADeckSubmissionId: deck.id },
+      }),
+      prisma.match.updateMany({
+        where: {
+          tournamentWeekId,
+          playerBId: player.id,
+          status: { not: MatchStatus.CANCELED },
+        },
+        data: { playerBDeckSubmissionId: deck.id },
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          entityType: "tournamentWeek",
+          entityId: tournamentWeekId,
+          action: "match_deck_choice.applied_to_week",
+          after: { playerId: player.id, deckSubmissionId: deck.id, deckName: deck.deckName },
+        },
+      }),
+    ]);
+  } else {
+    await prisma.$transaction([
+      prisma.match.update({
+        where: { id: match.id },
+        data: side === "A" ? { playerADeckSubmissionId: deck.id } : { playerBDeckSubmissionId: deck.id },
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          entityType: "match",
+          entityId: match.id,
+          action: "match_deck_choice.updated",
+          after: { playerId: player.id, deckSubmissionId: deck.id, deckName: deck.deckName },
+        },
+      }),
+    ]);
+  }
+
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}`);
+  return { success: true };
+}
+
+export async function correctMatchResult(input: z.infer<typeof correctResultSchema>) {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Nao autenticado");
+
+  const { matchId, winnerId, winnerDefendedPrizes, notes } = correctResultSchema.parse(input);
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: {
+      tournamentWeek: { include: { tournament: true } },
+      confirmations: true,
+    },
+  });
+  if (!match?.playerBId || !match.tournamentWeek) throw new Error("Partida nao encontrada");
+  const playerBId = match.playerBId;
+  if (winnerId !== match.playerAId && winnerId !== match.playerBId) throw new Error("Vencedor invalido");
+
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const isParticipant = !!player && (match.playerAId === player.id || match.playerBId === player.id);
+  const canCorrect =
+    user.role === Role.ADMIN ||
+    user.role === Role.SUPER_ADMIN ||
+    match.tournamentWeek.tournament.createdById === user.id ||
+    isParticipant;
+  if (!canCorrect) throw new Error("Voce nao pode corrigir esta partida");
+
+  const loserId = winnerId === match.playerAId ? match.playerBId : match.playerAId;
+  const points = getMatchPoints(match, winnerId);
+  const isInPerson = match.tournamentWeek.tournament.format === TournamentFormat.IN_PERSON;
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.match.update({
+      where: { id: match.id },
+      data: {
+        winnerPlayerId: winnerId,
+        loserPlayerId: loserId,
+        playerAWins: winnerId === match.playerAId ? 1 : 0,
+        playerBWins: winnerId === match.playerBId ? 1 : 0,
+        winnerDefendedPrizes,
+        rankingPointsA: points.rankingPointsA,
+        rankingPointsB: points.rankingPointsB,
+        status: isInPerson ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
+        resultSource: ResultSource.ADMIN_ADJUSTMENT,
+        reportedById: user.id,
+        reportedAt: now,
+        confirmedById: isInPerson ? user.id : null,
+        confirmedAt: isInPerson ? now : null,
+        notes: notes || match.notes,
+      },
+    });
+
+    if (!isInPerson) {
+      await tx.matchConfirmation.deleteMany({ where: { matchId: match.id } });
+      if (player) {
+        const opponentPlayerId = player.id === match.playerAId ? playerBId : match.playerAId;
+        await tx.matchConfirmation.createMany({
+          data: [
+            { matchId: match.id, playerId: player.id, status: "CONFIRMED", confirmedAt: now },
+            { matchId: match.id, playerId: opponentPlayerId, status: "PENDING" },
+          ],
+        });
+      }
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        entityType: "match",
+        entityId: match.id,
+        action: "match.result_corrected",
+        before: {
+          winnerPlayerId: match.winnerPlayerId,
+          winnerDefendedPrizes: match.winnerDefendedPrizes,
+          status: match.status,
+        },
+        after: { winnerPlayerId: winnerId, winnerDefendedPrizes },
+      },
+    });
+  });
+
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/ranking`);
+  revalidatePath("/ranking");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
 const confirmResultSchema = z.object({
   matchId: z.string().min(1),
 });
@@ -324,9 +512,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   const allConfirmed = participantIds.every((participantId) => confirmedPlayerIds.has(participantId));
 
   if (allConfirmed) {
-    const week = match.tournamentWeek;
-    const multiplier = week ? Number(week.multiplier) : 1;
-    const winPoints = 3 * multiplier;
+    const points = getMatchPoints(match, match.winnerPlayerId);
     const lossPoints = 0;
 
     await prisma.match.update({
@@ -335,8 +521,8 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
         status: "CONFIRMED",
         confirmedById: user.id,
         confirmedAt: now,
-        rankingPointsA: match.winnerPlayerId === match.playerAId ? winPoints : lossPoints,
-        rankingPointsB: match.winnerPlayerId === match.playerBId ? winPoints : lossPoints,
+        rankingPointsA: match.winnerPlayerId === match.playerAId ? points.rankingPointsA : lossPoints,
+        rankingPointsB: match.winnerPlayerId === match.playerBId ? points.rankingPointsB : lossPoints,
       },
     });
   }

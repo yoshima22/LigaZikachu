@@ -13,7 +13,7 @@ import {
 } from "@/lib/decks";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { DeckSubmissionForm } from "./_components/deck-submission-form";
-import { applyTournamentWeekBonus, updateTournamentWeekSettings } from "../../../actions";
+import { applyTournamentWeekBonus, setTournamentWeekTeam, updateTournamentWeekSettings } from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +129,46 @@ export default async function WeekDetailPage({
     bonusRule && Array.isArray(bonusRule.positionBonus)
       ? (bonusRule.positionBonus as Array<Record<string, unknown>>)
       : null;
+  const teamAssignments =
+    bonusRule && Array.isArray(bonusRule.teamAssignments)
+      ? (bonusRule.teamAssignments as Array<Record<string, unknown>>)
+      : [];
+  const teamAssignmentsByPlayer = new Map(
+    teamAssignments
+      .map((assignment) => [
+        String(assignment.playerId ?? ""),
+        {
+          playerId: String(assignment.playerId ?? ""),
+          playerName: String(assignment.playerName ?? ""),
+          teamName: String(assignment.teamName ?? "")
+        }
+      ] as const)
+      .filter(([, assignment]) => assignment.playerId && assignment.teamName)
+  );
+  const teamStats = Array.from(
+    topDoDiaRanking.reduce((map, entry) => {
+      const assignment = teamAssignmentsByPlayer.get(entry.playerId);
+      if (!assignment) return map;
+      const current = map.get(assignment.teamName) ?? {
+        teamName: assignment.teamName,
+        playerCount: 0,
+        totalPoints: 0,
+        wins: 0,
+        defendedPrizes: 0
+      };
+      current.playerCount += 1;
+      current.totalPoints += entry.points;
+      current.wins += entry.wins;
+      current.defendedPrizes += entry.defendedPrizes;
+      map.set(assignment.teamName, current);
+      return map;
+    }, new Map<string, { teamName: string; playerCount: number; totalPoints: number; wins: number; defendedPrizes: number }>())
+  )
+    .map(([, stats]) => ({
+      ...stats,
+      averagePoints: stats.playerCount > 0 ? stats.totalPoints / stats.playerCount : 0
+    }))
+    .sort((a, b) => b.averagePoints - a.averagePoints || b.wins - a.wins || b.defendedPrizes - a.defendedPrizes);
 
   const statusConfig: Record<string, { label: string; cls: string }> = {
     PLANNED: { label: "Planejada", cls: "border-slate-500/30 bg-slate-500/10 text-slate-400" },
@@ -362,6 +402,96 @@ export default async function WeekDetailPage({
           <p className="mt-2 text-xs text-slate-500">
             Use 0 para remover o bonus manual atual de um jogador neste dia.
           </p>
+        </div>
+      )}
+
+      {admin && (
+        <div className="rounded-xl border border-border bg-slate-950/50 p-5">
+          <h2 className="mb-3 font-semibold text-slate-200">Times e duplas do dia</h2>
+          <form
+            className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            action={async (formData) => {
+              "use server";
+              await setTournamentWeekTeam({
+                weekId: week.id,
+                playerId: String(formData.get("playerId") ?? ""),
+                teamName: String(formData.get("teamName") ?? "")
+              });
+            }}
+          >
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Jogador</span>
+              <select
+                name="playerId"
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              >
+                {approvedPlayers.map((registration) => (
+                  <option key={registration.playerId} value={registration.playerId}>
+                    {registration.player.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Time ou dupla</span>
+              <input
+                name="teamName"
+                placeholder="Ex: Time Amarelo ou Dupla 1"
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+              <span className="block text-[10px] text-slate-500">Deixe em branco para remover o jogador do time/dupla.</span>
+            </label>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={approvedPlayers.length === 0}
+                className="w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50"
+              >
+                Salvar time
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-border bg-slate-900/40 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Escalacoes</p>
+              {teamAssignments.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhum time ou dupla definido ainda.</p>
+              ) : (
+                <div className="space-y-1 text-sm text-slate-300">
+                  {teamAssignments.map((assignment) => (
+                    <p key={String(assignment.playerId)}>
+                      <span className="font-semibold text-white">{String(assignment.playerName)}</span>
+                      <span className="text-slate-500"> - </span>
+                      <span className="text-[#FFCB05]">{String(assignment.teamName)}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg border border-border bg-slate-900/40 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Resultado por media</p>
+              {teamStats.length === 0 ? (
+                <p className="text-sm text-slate-500">Valide partidas para calcular o time/dupla vencedor.</p>
+              ) : (
+                <div className="space-y-2">
+                  {teamStats.map((team, index) => (
+                    <div key={team.teamName} className="flex items-center justify-between rounded-lg bg-slate-950/70 px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-semibold text-white">
+                          {index === 0 ? "Vencedor: " : ""}{team.teamName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {team.playerCount} jogadores - {team.wins} vitorias - {team.defendedPrizes} premios defendidos
+                        </p>
+                      </div>
+                      <span className="font-semibold text-[#FFCB05]">{team.averagePoints.toFixed(2)} media</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

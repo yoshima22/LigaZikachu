@@ -69,7 +69,7 @@ export default async function PartidasPage({ params }: Props) {
   const canReportAnyInPersonMatch =
     tournament.format === "IN_PERSON" && (isAdmin || registration?.status === "APPROVED");
 
-  const visibleDecksByPlayer = new Map<string, Array<{ deckNumber: number; deckName: string; archetype: string | null; deckList: string }>>();
+  const visibleDecksByPlayer = new Map<string, Array<{ id: string; deckNumber: number; deckName: string; archetype: string | null; deckList: string }>>();
   for (const submission of week.deckSubmissions) {
     if (!user) continue;
 
@@ -83,6 +83,7 @@ export default async function PartidasPage({ params }: Props) {
 
     const decks = visibleDecksByPlayer.get(submission.playerId) ?? [];
     decks.push({
+      id: submission.id,
       deckNumber: submission.deckNumber,
       deckName: submission.deckName,
       archetype: submission.archetype,
@@ -120,10 +121,13 @@ export default async function PartidasPage({ params }: Props) {
     rankingPointsA: Number(match.rankingPointsA),
     rankingPointsB: Number(match.rankingPointsB),
     winnerDefendedPrizes: match.winnerDefendedPrizes,
+    playerADeckSubmissionId: match.playerADeckSubmissionId,
+    playerBDeckSubmissionId: match.playerBDeckSubmissionId,
     reportedById: match.reportedById,
     notes: match.notes,
     playerADecks: visibleDecksByPlayer.get(match.playerAId) ?? [],
     playerBDecks: match.playerBId ? visibleDecksByPlayer.get(match.playerBId) ?? [] : [],
+    currentPlayerDecks: player ? visibleDecksByPlayer.get(player.id) ?? [] : [],
     confirmations: match.confirmations.map((confirmation) => ({
       playerId: confirmation.playerId,
       status: confirmation.status

@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch } from "../actions";
+import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch } from "../actions";
 import { useRouter } from "next/navigation";
 
 interface PlayerDeckSummary {
+  id: string;
   deckNumber: number;
   deckName: string;
   archetype: string | null;
@@ -26,11 +27,14 @@ interface MatchCardProps {
     rankingPointsA: number;
     rankingPointsB: number;
     winnerDefendedPrizes: number;
+    playerADeckSubmissionId: string | null;
+    playerBDeckSubmissionId: string | null;
     reportedById: string | null;
     notes: string | null;
     confirmations: Array<{ playerId: string; status: string }>;
     playerADecks: PlayerDeckSummary[];
     playerBDecks: PlayerDeckSummary[];
+    currentPlayerDecks: PlayerDeckSummary[];
   };
   currentPlayerId?: string;
   isAdmin: boolean;
@@ -46,6 +50,11 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   const [winnerDefendedPrizes, setWinnerDefendedPrizes] = useState(
     String(match.winnerDefendedPrizes ?? 0)
   );
+  const [selectedDeckId, setSelectedDeckId] = useState(() => {
+    if (match.playerAId === currentPlayerId) return match.playerADeckSubmissionId ?? "";
+    if (match.playerBId === currentPlayerId) return match.playerBDeckSubmissionId ?? "";
+    return "";
+  });
 
   const isPlayerA = match.playerAId === currentPlayerId;
   const isPlayerB = match.playerBId === currentPlayerId;
@@ -117,7 +126,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
     }
   }
 
-  function DeckBadges({ decks }: { decks: PlayerDeckSummary[] }) {
+  function DeckBadges({ decks, selectedDeckId }: { decks: PlayerDeckSummary[]; selectedDeckId?: string | null }) {
     if (decks.length === 0) {
       return <p className="mt-1 text-[10px] text-slate-500">Deck oculto</p>;
     }
@@ -126,11 +135,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
       <div className="mt-2 space-y-1">
         {decks.map((deck) => {
           const subtitle = deck.archetype ? " - " + deck.archetype : "";
+          const selected = selectedDeckId === deck.id;
 
           return (
-            <details key={deck.deckNumber} className="rounded-md border border-slate-700/70 bg-slate-950/70 px-2 py-1 text-left">
+            <details key={deck.id} className={`rounded-md border px-2 py-1 text-left ${selected ? "border-[#FFCB05]/70 bg-[#FFCB05]/10" : "border-slate-700/70 bg-slate-950/70"}`}>
               <summary className="cursor-pointer text-[10px] font-semibold text-[#FFCB05]">
-                Deck {deck.deckNumber}: {deck.deckName}{subtitle}
+                {selected ? "Usado: " : ""}Deck {deck.deckNumber}: {deck.deckName}{subtitle}
               </summary>
               <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
                 {deck.deckList}
@@ -140,6 +150,40 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
         })}
       </div>
     );
+  }
+
+  async function handleDeckChoice(applyToWeek: boolean) {
+    if (!selectedDeckId) return;
+    setLoading(true);
+    try {
+      await chooseMatchDeck({
+        matchId: match.id,
+        deckSubmissionId: selectedDeckId,
+        applyToWeek
+      });
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCorrect(winnerId: string) {
+    setLoading(true);
+    try {
+      await correctMatchResult({
+        matchId: match.id,
+        winnerId,
+        winnerDefendedPrizes: Number(winnerDefendedPrizes) || 0,
+        notes: "Resultado corrigido pelo app"
+      });
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleAdminResolve(winnerId: string) {
@@ -190,7 +234,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
             : "bg-slate-800/50"
         }`}>
           <p className="font-semibold text-white text-sm">{match.playerA.displayName}</p>
-          <DeckBadges decks={match.playerADecks} />
+          <DeckBadges decks={match.playerADecks} selectedDeckId={match.playerADeckSubmissionId} />
           {match.status === "CONFIRMED" && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsA}pt</p>
           )}
@@ -206,7 +250,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
           <p className="font-semibold text-white text-sm">
             {match.playerB?.displayName || "Bye"}
           </p>
-          {match.playerBId && <DeckBadges decks={match.playerBDecks} />}
+          {match.playerBId && <DeckBadges decks={match.playerBDecks} selectedDeckId={match.playerBDeckSubmissionId} />}
           {match.status === "CONFIRMED" && match.playerBId && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsB}pt</p>
           )}
@@ -227,6 +271,35 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
       {/* Actions */}
       <div className="mt-3 space-y-2">
+        {isParticipant && match.currentPlayerDecks.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+            <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Deck para esta partida
+            </label>
+            <select
+              value={selectedDeckId}
+              onChange={(event) => setSelectedDeckId(event.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white"
+            >
+              <option value="">Escolher deck</option>
+              {match.currentPlayerDecks.map((deck) => (
+                <option key={deck.id} value={deck.id}>
+                  Deck {deck.deckNumber}: {deck.deckName}
+                  {deck.archetype ? ` - ${deck.archetype}` : ""}
+                </option>
+              ))}
+            </select>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button size="sm" variant="outline" onClick={() => handleDeckChoice(false)} disabled={loading || !selectedDeckId}>
+                Usar neste jogo
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => handleDeckChoice(true)} disabled={loading || !selectedDeckId}>
+                Usar em todos do dia
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Reportar resultado */}
         {match.status === "PENDING_CONFIRMATION" &&
           canReport &&
@@ -299,6 +372,35 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
           <p className="rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/10 px-3 py-2 text-xs text-[#FFCB05]">
             Torneio presencial: o resultado e finalizado no primeiro reporte.
           </p>
+        )}
+
+        {canReport && match.winnerPlayerId && match.status !== "CANCELED" && (
+          <div className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-300">
+              Corrigir resultado
+            </p>
+            <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Premios defendidos corrigidos
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={99}
+              value={winnerDefendedPrizes}
+              onChange={(event) => setWinnerDefendedPrizes(event.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="flex-1 border-amber-500/40 text-amber-300 hover:bg-amber-500/10" onClick={() => handleCorrect(match.playerAId)} disabled={loading}>
+                Corrigir: {match.playerA.displayName}
+              </Button>
+              {match.playerBId && (
+                <Button size="sm" variant="outline" className="flex-1 border-amber-500/40 text-amber-300 hover:bg-amber-500/10" onClick={() => match.playerBId && handleCorrect(match.playerBId)} disabled={loading}>
+                  Corrigir: {match.playerB.displayName}
+                </Button>
+              )}
+            </div>
+          </div>
         )}
 
         {showDispute && (

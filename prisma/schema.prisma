@@ -366,6 +366,8 @@ model Match {
   winnerDefendedPrizes Int           @default(0)
   winnerPlayerId    String?
   loserPlayerId     String?
+  playerADeckSubmissionId String?
+  playerBDeckSubmissionId String?
   status            MatchStatus     @default(PENDING_CONFIRMATION)
   resultSource      ResultSource    @default(MANUAL)
   rankingPointsA    Decimal         @default(0) @db.Decimal(10, 2)
@@ -394,6 +396,8 @@ model Match {
 
   @@index([seasonId, weekId, status])
   @@index([playerAId, playerBId, playedAt])
+  @@index([playerADeckSubmissionId])
+  @@index([playerBDeckSubmissionId])
   @@map("matches")
 }
 
