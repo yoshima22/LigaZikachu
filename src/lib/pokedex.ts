@@ -190,7 +190,7 @@ export async function getPokedexPokemon(nameOrId: string | number): Promise<Poke
       value: entry.base_stat
     })),
     officialPokedexUrl: `https://www.pokemon.com/br/pokedex/${pokemon.name}`,
-    officialTcgCardsUrl: `https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/?cardName=${encodeURIComponent(
+    officialTcgCardsUrl: `https://www.pokemon.com/br/pokemon-estampas-ilustradas/cartas-de-pokemon?cardName=${encodeURIComponent(
       pokemon.name
     )}`
   };
