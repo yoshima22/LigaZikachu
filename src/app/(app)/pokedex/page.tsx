@@ -1,16 +1,19 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ExternalLink, Search, Sparkles } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   type PokedexPokemon,
+  generationOptions,
   pokemonTypeClasses,
   pokemonTypeLabels,
+  pokemonTypeOptions,
   searchPokedexPokemon
 } from "@/lib/pokedex";
 
 type PokedexPageProps = {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; generation?: string }>;
 };
 
 export const metadata = {
@@ -20,11 +23,17 @@ export const metadata = {
 export default async function PokedexPage({ searchParams }: PokedexPageProps) {
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
+  const selectedType = params.type?.trim() ?? "";
+  const selectedGeneration = params.generation?.trim() ?? "";
   let pokemon: PokedexPokemon[] = [];
   let error: string | null = null;
 
   try {
-    pokemon = await searchPokedexPokemon(query);
+    pokemon = await searchPokedexPokemon({
+      query,
+      type: selectedType,
+      generation: selectedGeneration
+    });
   } catch {
     error = "Nao foi possivel carregar a Pokedex agora. Tente novamente em instantes.";
   }
@@ -53,22 +62,64 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
       </div>
 
       <Card>
-        <form className="flex flex-col gap-3 sm:flex-row" action="/pokedex">
-          <label className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              name="q"
-              defaultValue={query}
-              placeholder="Buscar por nome ou numero nacional"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-9 pr-3 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
-            />
+        <form className="grid gap-3 lg:grid-cols-[1fr_12rem_12rem_auto_auto]" action="/pokedex">
+          <label className="space-y-1 text-xs text-slate-400">
+            <span>Nome ou numero</span>
+            <span className="relative block">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                name="q"
+                defaultValue={query}
+                placeholder="Ex.: pikachu ou 25"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-9 pr-3 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </span>
           </label>
-          <Button type="submit" className="gap-2">
-            <Search size={16} /> Buscar
-          </Button>
+          <label className="space-y-1 text-xs text-slate-400">
+            <span>Tipo</span>
+            <select
+              name="type"
+              defaultValue={selectedType}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+            >
+              <option value="">Todos</option>
+              {pokemonTypeOptions.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-slate-400">
+            <span>Geracao</span>
+            <select
+              name="generation"
+              defaultValue={selectedGeneration}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+            >
+              <option value="">Todas</option>
+              {generationOptions.map((generation) => (
+                <option key={generation.value} value={generation.value}>
+                  {generation.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-end">
+            <Button type="submit" className="w-full gap-2">
+              <Search size={16} /> Buscar
+            </Button>
+          </div>
+          <div className="flex items-end">
+            <Link href="/pokedex" className="w-full">
+              <Button type="button" variant="outline" className="w-full">
+                Limpar
+              </Button>
+            </Link>
+          </div>
         </form>
         <p className="mt-3 text-xs text-slate-500">
-          Dados via PokeAPI. Links de cartas abrem a base oficial do Pokemon TCG em uma nova aba.
+          Dados e imagens remotas via PokeAPI. Links de cartas abrem a base oficial do Pokemon TCG em uma nova aba.
         </p>
       </Card>
 
@@ -93,8 +144,20 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
                   <CardTitle className="mt-1">{entry.displayName}</CardTitle>
                   {entry.genus && <p className="mt-1 text-xs text-slate-500">{entry.genus}</p>}
                 </div>
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/10 font-pixel text-sm text-[#FFCB05]">
-                  {String(entry.id).padStart(3, "0")}
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/10">
+                  {entry.imageUrl ? (
+                    <Image
+                      src={entry.imageUrl}
+                      alt={entry.displayName}
+                      width={96}
+                      height={96}
+                      className="h-24 w-24 object-contain drop-shadow-[0_0_14px_rgba(255,203,5,0.25)]"
+                    />
+                  ) : (
+                    <span className="font-pixel text-sm text-[#FFCB05]">
+                      {String(entry.id).padStart(3, "0")}
+                    </span>
+                  )}
                 </div>
               </div>
 

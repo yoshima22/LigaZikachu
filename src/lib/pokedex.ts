@@ -9,9 +9,21 @@ type PokemonDetailResponse = {
   name: string;
   height: number;
   weight: number;
+  sprites: {
+    front_default: string | null;
+    other?: {
+      "official-artwork"?: {
+        front_default: string | null;
+      };
+    };
+  };
   types: Array<{ slot: number; type: { name: string } }>;
   abilities: Array<{ ability: { name: string }; is_hidden: boolean }>;
   stats: Array<{ base_stat: number; stat: { name: string } }>;
+};
+
+type PokemonTypeResponse = {
+  pokemon: Array<{ pokemon: { name: string } }>;
 };
 
 type PokemonSpeciesResponse = {
@@ -24,6 +36,7 @@ export type PokedexPokemon = {
   name: string;
   displayName: string;
   genus: string | null;
+  imageUrl: string | null;
   heightMeters: number;
   weightKg: number;
   types: string[];
@@ -32,6 +45,24 @@ export type PokedexPokemon = {
   officialPokedexUrl: string;
   officialTcgCardsUrl: string;
 };
+
+export type PokedexSearchFilters = {
+  query?: string;
+  type?: string;
+  generation?: string;
+};
+
+export const generationOptions = [
+  { value: "1", label: "Geracao 1", min: 1, max: 151 },
+  { value: "2", label: "Geracao 2", min: 152, max: 251 },
+  { value: "3", label: "Geracao 3", min: 252, max: 386 },
+  { value: "4", label: "Geracao 4", min: 387, max: 493 },
+  { value: "5", label: "Geracao 5", min: 494, max: 649 },
+  { value: "6", label: "Geracao 6", min: 650, max: 721 },
+  { value: "7", label: "Geracao 7", min: 722, max: 809 },
+  { value: "8", label: "Geracao 8", min: 810, max: 905 },
+  { value: "9", label: "Geracao 9", min: 906, max: 1025 }
+];
 
 export const pokemonTypeLabels: Record<string, string> = {
   normal: "Incolor",
@@ -53,6 +84,11 @@ export const pokemonTypeLabels: Record<string, string> = {
   steel: "Metalico",
   fairy: "Fada"
 };
+
+export const pokemonTypeOptions = Object.entries(pokemonTypeLabels).map(([value, label]) => ({
+  value,
+  label
+}));
 
 export const pokemonTypeClasses: Record<string, string> = {
   normal: "border-slate-300/30 bg-slate-300/15 text-slate-100",
@@ -82,8 +118,15 @@ export function formatPokemonName(name: string) {
     .join(" ");
 }
 
-export async function searchPokedexPokemon(query: string, limit = 24) {
-  const normalizedQuery = query.trim().toLowerCase();
+export async function searchPokedexPokemon(filters: PokedexSearchFilters | string, limit = 24) {
+  const normalizedFilters =
+    typeof filters === "string" ? { query: filters } : filters;
+  const normalizedQuery = normalizedFilters.query?.trim().toLowerCase() ?? "";
+  const selectedType = normalizedFilters.type?.trim().toLowerCase() ?? "";
+  const selectedGeneration = generationOptions.find(
+    (generation) => generation.value === normalizedFilters.generation
+  );
+
   const listResponse = await fetch(`${POKE_API_BASE_URL}/pokemon?limit=1025`, {
     next: { revalidate: 60 * 60 * 24 }
   });
@@ -92,11 +135,20 @@ export async function searchPokedexPokemon(query: string, limit = 24) {
     throw new Error("Nao foi possivel consultar a PokeAPI.");
   }
 
+  const typePokemonNames = selectedType ? await getPokemonNamesByType(selectedType) : null;
   const list = (await listResponse.json()) as PokemonListResponse;
   const filtered = list.results
     .map((pokemon) => ({ ...pokemon, id: Number(pokemon.url.split("/").filter(Boolean).pop()) }))
     .filter((pokemon) => {
-      if (!normalizedQuery) return pokemon.id <= 24;
+      if (selectedGeneration && (pokemon.id < selectedGeneration.min || pokemon.id > selectedGeneration.max)) {
+        return false;
+      }
+
+      if (typePokemonNames && !typePokemonNames.has(pokemon.name)) {
+        return false;
+      }
+
+      if (!normalizedQuery) return true;
       return pokemon.name.includes(normalizedQuery) || String(pokemon.id) === normalizedQuery;
     })
     .sort((a, b) => a.id - b.id)
@@ -125,6 +177,7 @@ export async function getPokedexPokemon(nameOrId: string | number): Promise<Poke
     name: pokemon.name,
     displayName: portugueseName ?? formatPokemonName(pokemon.name),
     genus: englishGenus,
+    imageUrl: pokemon.sprites.other?.["official-artwork"]?.front_default ?? pokemon.sprites.front_default,
     heightMeters: pokemon.height / 10,
     weightKg: pokemon.weight / 10,
     types: pokemon.types.sort((a, b) => a.slot - b.slot).map((entry) => entry.type.name),
@@ -141,6 +194,19 @@ export async function getPokedexPokemon(nameOrId: string | number): Promise<Poke
       pokemon.name
     )}`
   };
+}
+
+async function getPokemonNamesByType(type: string) {
+  if (!pokemonTypeLabels[type]) return null;
+
+  const response = await fetch(`${POKE_API_BASE_URL}/type/${type}`, {
+    next: { revalidate: 60 * 60 * 24 }
+  });
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as PokemonTypeResponse;
+  return new Set(data.pokemon.map((entry) => entry.pokemon.name));
 }
 
 function formatStatName(name: string) {
