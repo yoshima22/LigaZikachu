@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updatePlayerProfile } from "../actions";
+import { updateOwnPassword, updatePlayerProfile } from "../actions";
 
 interface EditProfileFormProps {
   player: {
@@ -21,6 +21,29 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [ptcglNick, setPtcglNick] = useState(player.ptcglNick ?? "");
   const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl ?? "");
   const [loading, setLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  function handleAvatarFile(file?: File) {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Escolha um arquivo de imagem.");
+      return;
+    }
+
+    if (file.size > 850_000) {
+      toast.error("A imagem precisa ter menos de 850 KB por enquanto.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setAvatarUrl(String(reader.result));
+    reader.onerror = () => toast.error("Nao consegui carregar a imagem.");
+    reader.readAsDataURL(file);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,7 +67,32 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
     }
   }
 
+  async function handlePasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordLoading(true);
+    try {
+      const result = await updateOwnPassword({
+        currentPassword,
+        newPassword,
+        confirmPassword
+      });
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Senha atualizada.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar senha");
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
+
   return (
+    <div className="grid gap-6 lg:grid-cols-2">
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
@@ -74,13 +122,18 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
 
       <div>
         <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
-          URL da foto de perfil
+          Foto de perfil
         </label>
+        <Input
+          type="file"
+          accept="image/*"
+          onChange={(event) => handleAvatarFile(event.target.files?.[0])}
+          className="mb-2"
+        />
         <Input
           value={avatarUrl}
           onChange={(e) => setAvatarUrl(e.target.value)}
-          type="url"
-          placeholder="https://..."
+          placeholder="Cole uma URL ou carregue uma imagem acima"
           className="bg-slate-900/70 border-border text-slate-100"
         />
         {avatarUrl && (
@@ -97,5 +150,54 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
         {loading ? "Salvando..." : "Salvar alteracoes"}
       </Button>
     </form>
+
+    <form onSubmit={handlePasswordSubmit} className="space-y-4 rounded-2xl border border-border bg-slate-950/50 p-4">
+      <div>
+        <h3 className="text-sm font-semibold text-white">Trocar senha</h3>
+        <p className="mt-1 text-xs text-slate-500">Use pelo menos 8 caracteres.</p>
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+          Senha atual
+        </label>
+        <Input
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+          type="password"
+          minLength={8}
+          required
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+          Nova senha
+        </label>
+        <Input
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+          type="password"
+          minLength={8}
+          maxLength={72}
+          required
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+          Confirmar nova senha
+        </label>
+        <Input
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          type="password"
+          minLength={8}
+          maxLength={72}
+          required
+        />
+      </div>
+      <Button type="submit" disabled={passwordLoading}>
+        {passwordLoading ? "Salvando..." : "Atualizar senha"}
+      </Button>
+    </form>
+    </div>
   );
 }

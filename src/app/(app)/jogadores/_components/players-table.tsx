@@ -57,6 +57,7 @@ function EditPlayerModal({ player, onClose }: EditModalProps) {
   const [ptcglNick, setPtcglNick] = useState(player.ptcglNick ?? "");
   const [whatsapp, setWhatsapp] = useState(player.whatsapp ?? "");
   const [notes, setNotes] = useState(player.notes ?? "");
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -69,7 +70,8 @@ function EditPlayerModal({ player, onClose }: EditModalProps) {
         displayName,
         ptcglNick: ptcglNick || null,
         whatsapp: whatsapp || null,
-        notes: notes || null
+        notes: notes || null,
+        newPassword: newPassword || null
       });
       if (result?.error) {
         setError(result.error);
@@ -122,6 +124,18 @@ function EditPlayerModal({ player, onClose }: EditModalProps) {
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
               className="w-full resize-none rounded-xl border border-border bg-slate-800 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-slate-400">Nova senha</label>
+            <input
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              type="password"
+              minLength={8}
+              maxLength={72}
+              placeholder="Deixe vazio para nao alterar"
+              className="w-full rounded-xl border border-border bg-slate-800 px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
