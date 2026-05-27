@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Medal,
   Package,
+  Search,
   ShieldCheck,
   Trophy,
   User,
@@ -20,7 +21,8 @@ import { Button } from "@/components/ui/button";
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false }
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false },
+  { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false }
 ];
 
 const rankingLinks = [
