@@ -1,0 +1,9 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/zikachu_background</item>
+        <item name="android:navigationBarColor">@color/zikachu_background</item>
+        <item name="android:statusBarColor">@color/zikachu_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>
