@@ -209,7 +209,11 @@ export default async function DashboardPage() {
           ) : (
             <Card className="divide-y divide-border p-0 overflow-hidden">
               {recentMatches.map((match) => (
-                <div key={match.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                <Link
+                  key={match.id}
+                  href={`/torneios/${match.season?.slug ?? ""}/semanas/${match.week?.number ?? 1}/partidas`}
+                  className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-slate-800/50 transition-colors"
+                >
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
                     <span className="font-medium text-white">{match.playerA.displayName}</span>
@@ -222,7 +226,7 @@ export default async function DashboardPage() {
                     )}
                     {match.week && <span>S{match.week.number}</span>}
                   </div>
-                </div>
+                </Link>
               ))}
             </Card>
           )}
@@ -392,7 +396,7 @@ export default async function DashboardPage() {
           {!currentWeek ? (
             <EmptyState message="Nenhuma semana aberta." icon={<BookOpen size={24} />} />
           ) : deckSubmission ? (
-            <div className="space-y-2">
+            <Link href={`/temporadas/${activeSeason.id}/semanas/${currentWeek.id}/deck`} className="block space-y-2 hover:opacity-80 transition-opacity">
               <p className="font-medium text-white">{deckSubmission.deckName}</p>
               <StatusBadge
                 variant={
@@ -412,7 +416,7 @@ export default async function DashboardPage() {
                     : "Enviado"
                 }
               />
-            </div>
+            </Link>
           ) : (
             <div className="space-y-3">
               <StatusBadge variant="pending" label="Deck pendente" />
