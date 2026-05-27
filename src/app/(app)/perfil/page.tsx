@@ -14,6 +14,22 @@ export default async function PerfilPage() {
       displayName: true,
       ptcglNick: true,
       avatarUrl: true,
+      playerBadges: {
+        include: {
+          badge: {
+            include: {
+              tournament: {
+                select: {
+                  name: true,
+                  slug: true,
+                  season: { select: { name: true } }
+                }
+              }
+            }
+          }
+        },
+        orderBy: { awardedAt: "desc" }
+      }
     },
   });
 
@@ -51,6 +67,34 @@ export default async function PerfilPage() {
       <Card className="p-6">
         <h2 className="text-sm font-semibold text-white mb-4">Editar perfil</h2>
         <EditProfileForm player={player} />
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-sm font-semibold text-white mb-4">Insignias</h2>
+        {player.playerBadges.length === 0 ? (
+          <p className="text-sm text-slate-400">Nenhuma insignia atribuida ainda.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {player.playerBadges.map((playerBadge) => (
+              <div
+                key={playerBadge.id}
+                className="flex items-center gap-3 rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/10 p-3"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={playerBadge.badge.imageUrl}
+                  alt={playerBadge.badge.name}
+                  className="h-14 w-14 rounded-xl object-cover"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{playerBadge.badge.name}</p>
+                  <p className="truncate text-xs text-slate-400">{playerBadge.badge.tournament.name}</p>
+                  <p className="text-xs text-[#FFCB05]">+3 pontos</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

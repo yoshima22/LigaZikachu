@@ -158,6 +158,8 @@ model User {
   auditLogs                AuditLog[]           @relation("AuditActor")
   createdTournaments       Tournament[]         @relation("TournamentCreatedBy")
   decidedRegistrations     TournamentRegistration[] @relation("RegistrationDecidedBy")
+  createdLeagueBadges      LeagueBadge[]        @relation("LeagueBadgeCreatedBy")
+  awardedPlayerBadges      PlayerBadge[]        @relation("PlayerBadgeAwardedBy")
 
   @@map("users")
 }
@@ -184,6 +186,7 @@ model Player {
   challengesAsChallenger  Challenge[]          @relation("ChallengeChallenger")
   challengesAsChallenged  Challenge[]          @relation("ChallengeChallenged")
   codeDistributions       CodeDistribution[]
+  playerBadges            PlayerBadge[]
   playerAchievements      PlayerAchievement[]
   rankingSnapshots        RankingSnapshot[]
   tournamentRegistrations TournamentRegistration[]
@@ -218,6 +221,7 @@ model Tournament {
   registrations         TournamentRegistration[]
   season                Season?            @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   deckSubmissions       DeckSubmission[]
+  badges                LeagueBadge[]
 
   @@map("tournaments")
 }
@@ -457,6 +461,37 @@ model Challenge {
 
   @@index([seasonId, status])
   @@map("challenges")
+}
+
+model LeagueBadge {
+  id           String        @id @default(cuid())
+  tournamentId String
+  name         String
+  imageUrl     String        @db.Text
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  tournament   Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation("LeagueBadgeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  owners       PlayerBadge[]
+
+  @@index([tournamentId])
+  @@map("league_badges")
+}
+
+model PlayerBadge {
+  id          String      @id @default(cuid())
+  badgeId     String
+  playerId    String
+  awardedById String?
+  awardedAt   DateTime    @default(now())
+  badge       LeagueBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  awardedBy   User?       @relation("PlayerBadgeAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
+
+  @@unique([badgeId, playerId])
+  @@index([playerId])
+  @@map("player_badges")
 }
 
 model BoosterCode {

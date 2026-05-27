@@ -36,6 +36,21 @@ export default async function PlayerDetailPage({
       },
       playerAchievements: {
         include: { achievement: { select: { name: true, description: true, icon: true } } }
+      },
+      playerBadges: {
+        include: {
+          badge: {
+            include: {
+              tournament: {
+                select: {
+                  name: true,
+                  season: { select: { name: true } }
+                }
+              }
+            }
+          }
+        },
+        orderBy: { awardedAt: "desc" }
       }
     }
   });
@@ -248,6 +263,35 @@ export default async function PlayerDetailPage({
               </ul>
             )}
           </Card>
+
+          {/* Conquistas */}
+          {player.playerBadges.length > 0 && (
+            <Card>
+              <CardTitle className="mb-4 flex items-center gap-2">
+                <Trophy size={18} className="text-primary" /> Insignias
+              </CardTitle>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {player.playerBadges.map((playerBadge) => (
+                  <div
+                    key={playerBadge.id}
+                    className="flex items-center gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/10 p-3"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={playerBadge.badge.imageUrl}
+                      alt={playerBadge.badge.name}
+                      className="h-12 w-12 rounded-lg object-cover"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{playerBadge.badge.name}</p>
+                      <p className="truncate text-xs text-slate-400">{playerBadge.badge.tournament.name}</p>
+                      <p className="text-xs text-[#FFCB05]">+3 pontos</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Conquistas */}
           {player.playerAchievements.length > 0 && (

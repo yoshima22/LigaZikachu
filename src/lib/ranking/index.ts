@@ -17,6 +17,8 @@ export interface PlayerRankingEntry {
   successfulChallenges: number;
   failedChallenges: number;
   defendedChallenges: number;
+  badgesOwned: number;
+  badgePoints: number;
 }
 
 interface RankingScope {
@@ -37,6 +39,7 @@ interface RankingSeedPlayer {
 interface RankingInput {
   matchWhere: Prisma.MatchWhereInput;
   challengeWhere?: Prisma.ChallengeWhereInput;
+  badgeWhere?: Prisma.PlayerBadgeWhereInput;
   seedPlayers?: RankingSeedPlayer[];
   onlyPlayersWithMatches?: boolean;
 }
@@ -50,6 +53,7 @@ export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRan
     matchWhere: {
       status: MatchStatus.CONFIRMED
     },
+    badgeWhere: {},
     onlyPlayersWithMatches: true
   });
 }
@@ -88,6 +92,13 @@ export async function computeSeasonRanking(seasonId: string): Promise<PlayerRank
     challengeWhere: {
       OR: [{ seasonId }, { match: { tournamentWeek: { tournament: { seasonId } } } }]
     },
+    badgeWhere: {
+      badge: {
+        tournament: {
+          seasonId
+        }
+      }
+    },
     seedPlayers: [...seedPlayers.values()]
   });
 }
@@ -121,6 +132,11 @@ export async function computeTournamentRanking(
         tournamentWeek: {
           tournamentId
         }
+      }
+    },
+    badgeWhere: {
+      badge: {
+        tournamentId
       }
     },
     seedPlayers: registrations.map((registration) => ({
@@ -214,10 +230,11 @@ async function computeLegacySeasonScopedRanking(
 async function computeRankingFromMatches({
   matchWhere,
   challengeWhere,
+  badgeWhere,
   seedPlayers = [],
   onlyPlayersWithMatches = false
 }: RankingInput): Promise<PlayerRankingEntry[]> {
-  const [matches, challenges] = await Promise.all([
+  const [matches, challenges, badges] = await Promise.all([
     prisma.match.findMany({
       where: matchWhere,
       select: {
@@ -245,7 +262,16 @@ async function computeRankingFromMatches({
         challenger: { select: { displayName: true } },
         challenged: { select: { displayName: true } }
       }
-    })
+    }),
+    badgeWhere === undefined
+      ? Promise.resolve([])
+      : prisma.playerBadge.findMany({
+          where: badgeWhere,
+          select: {
+            playerId: true,
+            player: { select: { displayName: true } }
+          }
+        })
   ]);
 
   const statsMap = new Map<string, RankingStats>();
@@ -332,6 +358,14 @@ async function computeRankingFromMatches({
     }
   }
 
+  for (const badge of badges) {
+    displayNameMap.set(badge.playerId, badge.player.displayName);
+    const badgeStats = getStats(statsMap, badge.playerId);
+    badgeStats.badgesOwned += 1;
+    badgeStats.badgePoints += 3;
+    badgeStats.points += 3;
+  }
+
   const entries = [...statsMap.values()]
     .map((stats) => {
       return {
@@ -339,7 +373,7 @@ async function computeRankingFromMatches({
         ...stats
       };
     })
-    .filter((entry) => !onlyPlayersWithMatches || entry.matchesPlayed > 0);
+    .filter((entry) => !onlyPlayersWithMatches || entry.matchesPlayed > 0 || entry.badgesOwned > 0);
 
   entries.sort(
     (a, b) =>
@@ -370,7 +404,9 @@ function emptyStats(playerId: string): RankingStats {
     gymChallenges: 0,
     successfulChallenges: 0,
     failedChallenges: 0,
-    defendedChallenges: 0
+    defendedChallenges: 0,
+    badgesOwned: 0,
+    badgePoints: 0
   };
 }
 
