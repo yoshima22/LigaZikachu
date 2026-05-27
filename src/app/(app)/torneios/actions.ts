@@ -123,7 +123,7 @@ function generateTournamentCode() {
 async function generateUniqueTournamentCode() {
   for (let attempt = 0; attempt < 20; attempt++) {
     const code = generateTournamentCode();
-    const existing = await prisma.tournament.findUnique({ where: { code }, select: { id: true } });
+    const existing = await prisma.tournament.findFirst({ where: { code }, select: { id: true } });
     if (!existing) return code;
   }
   throw new Error("Nao foi possivel gerar um codigo unico para o torneio.");
