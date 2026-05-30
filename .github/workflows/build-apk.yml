@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'android-webview/**'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
 jobs:
@@ -26,15 +27,28 @@ jobs:
         with:
           gradle-version: '8.6'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '12266719'
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Install build tools
+        run: sdkmanager "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android-webview/local.properties
+
       - name: Write google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          echo "$GOOGLE_SERVICES_JSON" > android-webview/app/google-services.json
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > android-webview/app/google-services.json
 
       - name: Build debug APK
         working-directory: android-webview
-        run: gradle assembleDebug
+        run: gradle assembleDebug --no-daemon --info
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
