@@ -17,7 +17,9 @@ async function getAccessToken(): Promise<string | null> {
     const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if (!raw) return null;
 
-    const sa = JSON.parse(raw) as {
+    // Restaurar quebras de linha na private_key que podem ser escapadas como \\n
+    const normalized = raw.replace(/\\n/g, "\n");
+    const sa = JSON.parse(normalized) as {
       client_email: string;
       private_key: string;
       project_id: string;
@@ -68,7 +70,8 @@ async function getProjectId(): Promise<string | null> {
   try {
     const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if (!raw) return null;
-    const sa = JSON.parse(raw) as { project_id: string };
+    const normalized = raw.replace(/\\n/g, "\n");
+    const sa = JSON.parse(normalized) as { project_id: string };
     return sa.project_id;
   } catch { return null; }
 }

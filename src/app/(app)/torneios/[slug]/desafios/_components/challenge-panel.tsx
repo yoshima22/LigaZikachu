@@ -397,7 +397,6 @@ export function ChallengePanel({
                   type="button"
                   disabled={
                     !form.challengedId ||
-                    (form.type === ChallengeType.BADGE && !form.badgeId) ||
                     pending
                   }
                   onClick={handleCreate}

@@ -117,7 +117,7 @@ export default async function PlayerDetailPage({
       where: { playerId, isPublic: true },
       select: { id: true, name: true, archetype: true, deckList: true, updatedAt: true },
       orderBy: { updatedAt: "desc" }
-    })
+    }).catch(() => [] as { id: string; name: string; archetype: string | null; deckList: string; updatedAt: Date }[])
   ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
