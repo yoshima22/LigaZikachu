@@ -7,13 +7,35 @@ export async function GET() {
 
   const geminiKey = process.env.GEMINI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
 
   const results: Record<string, unknown> = {
     gemini_key_present: !!geminiKey,
     gemini_key_prefix: geminiKey ? geminiKey.substring(0, 10) + "..." : null,
     anthropic_key_present: !!anthropicKey,
     anthropic_key_prefix: anthropicKey ? anthropicKey.substring(0, 10) + "..." : null,
+    groq_key_present: !!groqKey,
+    groq_key_prefix: groqKey ? groqKey.substring(0, 10) + "..." : null,
   };
+
+  // Testar Groq
+  if (groqKey) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          max_tokens: 10,
+          messages: [{ role: "user", content: "ok" }]
+        })
+      });
+      const body = await res.text();
+      results["groq:llama-3.1-8b-instant"] = { status: res.status, ok: res.ok, body: body.slice(0, 100) };
+    } catch (e) {
+      results["groq:llama-3.1-8b-instant"] = { error: String(e) };
+    }
+  }
 
   // Testar modelos Gemini
   if (geminiKey) {

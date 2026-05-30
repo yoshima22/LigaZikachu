@@ -59,9 +59,28 @@ const PROF_LINES = {
 };
 
 function buildRuleBasedResponse(lastMessage: string): { message: string; cardNames: string[] } {
-  const lower = lastMessage.toLowerCase();
+  const lower = lastMessage.toLowerCase().trim();
 
-  // Detectar intenção pela mensagem
+  // Saudações e perguntas gerais — SEM sugestão de cartas
+  const isGreeting = /^(oi|olá|ola|salve|hey|hi|hello|tudo|como vai|online|funcionando|aí|ae|e aí|eai|test)/.test(lower)
+    || lower.length < 20;
+
+  if (isGreeting) {
+    return {
+      message: "Salve, parceiro! 🔥 Sou o Professor Enguiça, seu treinador de decks da Liga Zikachu!\n\nPode mandar sua lista de deck ou me perguntar sobre cartas, estratégias e meta. Tô aqui pra te ajudar a evoluir! ⚡",
+      cardNames: []
+    };
+  }
+
+  // Perguntas fora do TCG
+  if (!/deck|carta|pokémon|pokemon|tcg|energy|trainer|energia|type|tipo|compra|busca|meta|estratégi/.test(lower)) {
+    return {
+      message: "Parceiro, isso tá fora do meu quadrado! 🃏 Só falo de Pokémon TCG aqui. Me manda seu deck ou pergunta sobre cartas que eu te ajudo!",
+      cardNames: []
+    };
+  }
+
+  // Perguntas sobre TCG com sugestões
   if (lower.includes("compra") || lower.includes("draw") || lower.includes("consistên")) {
     return { message: PROF_LINES.draw, cardNames: CARD_DB.DRAW.slice(0, 3) };
   }
@@ -72,7 +91,6 @@ function buildRuleBasedResponse(lastMessage: string): { message: string; cardNam
     return { message: PROF_LINES.energy_excess, cardNames: CARD_DB.ENGINE.slice(0, 2) };
   }
 
-  // Resposta genérica com sugestões variadas
   return {
     message: PROF_LINES.general,
     cardNames: [...CARD_DB.DRAW.slice(0, 2), ...CARD_DB.SEARCH.slice(0, 2)]
@@ -117,6 +135,47 @@ async function callGemini(
   if (data.error) throw new Error(data.error.message);
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  return parseAIResponse(text);
+}
+
+// ── Groq (Llama 3 — gratuito, 14.400 req/dia) ────────────────────────────────
+
+async function callGroq(messages: ChatMessage[]): Promise<{ message: string; cardNames: string[] }> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("no_key");
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      max_tokens: 1024,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...messages.map((m) => ({
+          role: m.role === "professor" ? "assistant" : "user",
+          content: m.content
+        }))
+      ]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`Groq ${res.status}: ${err.slice(0, 100)}`);
+  }
+
+  const data = await res.json() as {
+    choices?: Array<{ message: { content: string } }>;
+    error?: { message: string };
+  };
+  if (data.error) throw new Error(data.error.message);
+
+  const text = data.choices?.[0]?.message?.content ?? "{}";
   return parseAIResponse(text);
 }
 
@@ -179,7 +238,13 @@ async function getAIResponse(messages: ChatMessage[]): Promise<{ message: string
     }
   }
 
-  // 2. Claude (tenta múltiplos modelos)
+  // 2. Groq / Llama (gratuito — recomendado)
+  if (process.env.GROQ_API_KEY) {
+    try { return { ...await callGroq(messages), usedFallback: false }; }
+    catch (e) { console.warn("[Prof] Groq falhou:", e instanceof Error ? e.message : e); }
+  }
+
+  // 3. Claude (tenta múltiplos modelos)
   if (process.env.ANTHROPIC_API_KEY) {
     for (const model of ["claude-haiku-4-5", "claude-3-haiku-20240307", "claude-3-5-haiku-20241022"]) {
       try { return { ...await callClaude(messages, model), usedFallback: false }; }
