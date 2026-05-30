@@ -49,24 +49,35 @@ async function callGemini(messages: ChatMessage[]): Promise<{ message: string; c
     parts: [{ text: m.content }]
   }));
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents,
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
-      })
-    }
-  );
+  // gemini-2.0-flash é o modelo free tier atual (2025)
+  const model = "gemini-2.0-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents,
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[Gemini] HTTP ${res.status}:`, errText.slice(0, 300));
+    throw new Error(`Gemini error ${res.status}: ${errText.slice(0, 100)}`);
+  }
 
   const data = await res.json() as {
-    candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
+    candidates?: Array<{ content: { parts: Array<{ text: string }> } }>;
+    error?: { message: string };
   };
+
+  if (data.error) {
+    console.error("[Gemini] API error:", data.error.message);
+    throw new Error(data.error.message);
+  }
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
   return parseAIResponse(text);
@@ -254,11 +265,23 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
 
     return { message, suggestedCards };
   } catch (err) {
-    console.error("[Professor Enguiça error]", err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[Professor Enguiça error]", errMsg);
+
+    // Mensagens de erro com personalidade
+    const isKeyError = errMsg.includes("API_KEY") || errMsg.includes("401") || errMsg.includes("403");
+    const isQuotaError = errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED");
+
+    const friendlyMsg = isKeyError
+      ? "Parceiro, minha chave de acesso tá travada! Fala pro admin verificar a GEMINI_API_KEY na Vercel. 🔑"
+      : isQuotaError
+      ? "Ei, esgotei minha cota por hoje! Tenta mais tarde ou fala pro admin configurar uma chave diferente. ⏳"
+      : "Ixe, caiu a conexão aqui! Tenta de novo em alguns segundos, parceiro. 📡";
+
     return {
-      message: "Ixe, deu um erro aqui no meu rádio! Tenta de novo, parceiro. 📻",
+      message: friendlyMsg,
       suggestedCards: [],
-      error: err instanceof Error ? err.message : "Erro desconhecido"
+      error: errMsg
     };
   }
 }

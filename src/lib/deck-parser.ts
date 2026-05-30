@@ -56,7 +56,7 @@ export function parseDeckList(raw: string): ParsedDeck {
   const totalCards = entries.reduce((s, e) => s + e.quantity, 0);
   if (totalCards === 0) errors.push("Nenhuma carta detectada. Verifique o formato.");
 
-  return { entries, totalCards, valid: errors.length === 0 };
+  return { entries, totalCards, valid: errors.length === 0, errors };
 }
 
 // ── Heurísticas de categorização ──────────────────────────────────────────────
