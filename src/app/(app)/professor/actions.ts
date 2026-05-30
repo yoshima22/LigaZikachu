@@ -147,69 +147,53 @@ function buildSmartFallback(message: string, cards: TcgCard[]): string {
 
 // ── Chamadas de IA (simples, sem JSON) ────────────────────────────────────────
 
+// Modelos Groq disponíveis — do mais inteligente para o mais rápido
+const GROQ_MODELS = [
+  "llama-3.3-70b-versatile",   // 70B — principal, muito mais inteligente
+  "llama-3.1-70b-versatile",   // fallback 70B
+  "llama3-70b-8192",            // outro 70B
+  "llama-3.1-8b-instant",      // último recurso — rápido mas menor
+];
+
 async function callAI(prompt: string): Promise<string> {
-  // 1. Groq (recomendado — grátis)
-  if (process.env.GROQ_API_KEY) {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) return "";
+
+  for (const model of GROQ_MODELS) {
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant", max_tokens: 300, temperature: 0.9,
-          messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }]
+          model,
+          max_tokens: 400,
+          temperature: 0.85,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt }
+          ]
         })
       });
-      if (res.ok) {
-        const d = await res.json() as { choices?: Array<{ message: { content: string } }> };
-        const text = d.choices?.[0]?.message?.content?.trim();
-        if (text) return text;
-      }
-    } catch (e) { console.warn("[Prof Groq]", e); }
-  }
 
-  // 2. Gemini
-  if (process.env.GEMINI_API_KEY) {
-    for (const model of ["gemini-2.0-flash-lite", "gemini-2.0-flash"]) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 300, temperature: 0.9 }
-          })
-        });
-        if (res.ok) {
-          const d = await res.json() as { candidates?: Array<{ content: { parts: Array<{ text: string }> } }> };
-          const text = d.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          if (text) return text;
-        }
-      } catch { continue; }
+      if (!res.ok) {
+        const err = await res.text().catch(() => "");
+        console.warn(`[Prof Groq/${model}] ${res.status}:`, err.slice(0, 100));
+        continue;
+      }
+
+      const d = await res.json() as { choices?: Array<{ message: { content: string } }> };
+      const text = d.choices?.[0]?.message?.content?.trim();
+      if (text) {
+        console.log(`[Prof] Usando ${model}`);
+        return text;
+      }
+    } catch (e) {
+      console.warn(`[Prof Groq/${model}] erro:`, e instanceof Error ? e.message : e);
     }
   }
 
-  // 3. Claude
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5", max_tokens: 300, system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
-      if (res.ok) {
-        const d = await res.json() as { content?: Array<{ type: string; text: string }> };
-        const text = d.content?.find(c => c.type === "text")?.text?.trim();
-        if (text) return text;
-      }
-    } catch (e) { console.warn("[Prof Claude]", e); }
-  }
-
-  return ""; // sem IA
+  console.warn("[Prof] Nenhum modelo Groq funcionou");
+  return "";
 }
 
 // ── ACTION: Chat geral ────────────────────────────────────────────────────────
