@@ -102,7 +102,7 @@ export function MyDecksClient({ decks }: { decks: Deck[] }) {
             {editingId === deck.id ? (
               <div className="p-4">
                 <DeckForm
-                  init={{ name: deck.name, archetype: deck.archetype ?? "", deckList: deck.deckList, isPublic: deck.isPublic }}
+                  init={{ name: deck.name, archetype: deck.archetype ? deck.archetype.split(",").map((t) => t.trim()).filter(Boolean) : [], deckList: deck.deckList, isPublic: deck.isPublic }}
                   onSave={(form) => handleUpdate(deck.id, form)}
                   onCancel={() => setEditingId(null)}
                   pending={pending} label="Atualizar"

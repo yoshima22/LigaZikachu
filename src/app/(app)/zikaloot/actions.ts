@@ -6,15 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ZikaCoinTxType, ShopItemType } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
-
-// ── Criar loteria ─────────────────────────────────────────────────────────────
-
-export type PrizeConfig =
-  | { type: "COINS"; amount: number }
-  | { type: "STICKER"; cardId: string; cardName: string }
-  | { type: "TICKET"; itemId: string }
-  | { type: "COSMETIC"; itemId: string; itemName: string }
-  | { type: "CUSTOM" };
+import type { PrizeConfig } from "@/lib/zikaloot-types";
 
 const createSchema = z.object({
   name: z.string().trim().min(2).max(100),
