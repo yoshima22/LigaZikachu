@@ -9,6 +9,7 @@ interface Props {
   label?: string;
   maxMb?: number;
   hint?: string;
+  accept?: string;
 }
 
 export function ImageUpload({ value, onChange, label = "Imagem", maxMb = 2, hint }: Props) {

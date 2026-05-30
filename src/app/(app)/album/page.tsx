@@ -9,16 +9,19 @@ import { PackShelf } from "./_components/pack-shelf";
 
 export const dynamic = "force-dynamic";
 
+const PAGE_SIZE = 100;
+
 export default async function AlbumPage({
   searchParams
 }: {
-  searchParams: Promise<{ gen?: string }>;
+  searchParams: Promise<{ gen?: string; page?: string }>;
 }) {
   const [session, sp] = await Promise.all([auth(), searchParams]);
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);
   const selectedGen = sp.gen ? parseInt(sp.gen) : null;
+  const currentPage = Math.max(1, sp.page ? parseInt(sp.page) : 1);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -33,7 +36,9 @@ export default async function AlbumPage({
         active: true,
         ...(selectedGen ? { generation: selectedGen } : {})
       },
-      orderBy: [{ generation: "asc" }, { nationalId: "asc" }]
+      orderBy: [{ generation: "asc" }, { nationalId: "asc" }],
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE
     }),
     player
       ? prisma.playerSticker.findMany({
@@ -51,6 +56,11 @@ export default async function AlbumPage({
   ]);
 
   const ownedMap = new Map(ownedStickers.map((s) => [s.cardId, s]));
+
+  const totalCardsInFilter = await prisma.pokemonCard.count({
+    where: { active: true, ...(selectedGen ? { generation: selectedGen } : {}) }
+  });
+  const totalPages = Math.ceil(totalCardsInFilter / PAGE_SIZE);
 
   // Estatísticas por geração
   const genStats = await prisma.pokemonCard.groupBy({
@@ -189,6 +199,20 @@ export default async function AlbumPage({
           )}
         </div>
       ) : (
+        <>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {currentPage > 1 && (
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage - 1}`}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Anterior</Link>
+            )}
+            <span className="text-xs text-slate-500">Página {currentPage}/{totalPages} · {totalCardsInFilter} Pokémon</span>
+            {currentPage < totalPages && (
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage + 1}`}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">Próxima →</Link>
+            )}
+          </div>
+        )}
         <AlbumCollection
           cards={allCards.map((c) => ({
             id: c.id,
@@ -204,6 +228,20 @@ export default async function AlbumPage({
           selectedGen={selectedGen}
           approvedPlayers={otherPlayers}
         />
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {currentPage > 1 && (
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage - 1}`}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Anterior</Link>
+            )}
+            <span className="text-xs text-slate-500">Página {currentPage}/{totalPages}</span>
+            {currentPage < totalPages && (
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage + 1}`}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">Próxima →</Link>
+            )}
+          </div>
+        )}
+        </>
       )}
     </div>
   );

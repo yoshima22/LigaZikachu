@@ -143,7 +143,7 @@ export default async function PerfilPage() {
             {player.displayName.charAt(0)}
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className={`min-w-0 flex-1 ${equippedBanner?.item.imageUrl ? "rounded-xl bg-slate-950/60 px-3 py-2 backdrop-blur" : ""}`}>
           <p className="text-xs uppercase tracking-widest text-slate-500">Meu perfil</p>
           <h1 className="font-pixel text-base text-[#FFCB05]">{player.displayName}</h1>
           {equippedTitle && (

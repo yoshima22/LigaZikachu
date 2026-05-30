@@ -1,0 +1,161 @@
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/auth/permissions";
+import { ZikaLootStatus, ShopItemType } from "@prisma/client";
+import { Ticket, Trophy } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { LootBoard } from "./_components/loot-board";
+import { AdminLootPanel } from "./_components/admin-loot-panel";
+
+export const dynamic = "force-dynamic";
+
+const statusLabel: Record<ZikaLootStatus, string> = {
+  SCHEDULED: "Aguardando sorteio",
+  DRAWN: "Sorteada",
+  NO_WINNER: "Sem vencedor — novo sorteio agendado",
+  CANCELLED: "Cancelada"
+};
+
+export default async function ZikaLootPage() {
+  const session = await auth();
+  if (!session?.user) return null;
+
+  const admin = isAdmin(session.user.role);
+
+  const player = await prisma.player.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true }
+  });
+
+  const [loots, myPicks, ticketCount] = await Promise.all([
+    prisma.zikaLoot.findMany({
+      orderBy: { drawAt: "desc" },
+      take: 10,
+      include: {
+        picks: {
+          select: { number: true, playerId: true, player: { select: { displayName: true } } }
+        },
+        winner: { select: { displayName: true } }
+      }
+    }),
+    player
+      ? prisma.zikaLootPick.findMany({ where: { playerId: player.id }, select: { lootId: true, number: true } })
+      : [],
+    player
+      ? prisma.playerInventory.count({ where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET }, equipped: false } })
+      : 0
+  ]);
+
+  const myPickMap = new Map(myPicks.map((p) => [p.lootId, p.number]));
+  const activeLoot = loots.find((l) => l.status === ZikaLootStatus.SCHEDULED);
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
+            <h1 className="font-pixel text-base text-[#FFCB05]">ZikaLoot</h1>
+            <p className="mt-1 text-sm text-slate-400">
+              200 números. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2">
+              <Ticket size={16} className="text-[#FFCB05]" />
+              <span className="text-sm font-bold text-[#FFCB05]">{ticketCount} ticket{ticketCount !== 1 ? "s" : ""}</span>
+            </div>
+          </div>
+        </div>
+
+        {activeLoot && (
+          <div className="mt-4 rounded-xl border border-[#FFCB05]/20 bg-slate-950/40 p-4">
+            <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Loteria ativa</p>
+            <p className="font-semibold text-white">{activeLoot.name}</p>
+            {activeLoot.description && <p className="text-xs text-slate-400 mt-0.5">{activeLoot.description}</p>}
+            <div className="mt-2 flex flex-wrap gap-4">
+              <div>
+                <p className="text-[10px] text-slate-500">Prêmio</p>
+                <p className="text-sm font-semibold text-[#7AC74C]">{activeLoot.prize}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-500">Sorteio em</p>
+                <p className="text-sm text-slate-300">
+                  {new Date(activeLoot.drawAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-500">Números escolhidos</p>
+                <p className="text-sm text-slate-300">{activeLoot.picks.length}/200</p>
+              </div>
+            </div>
+            {myPickMap.has(activeLoot.id) && (
+              <p className="mt-2 text-xs text-[#FFCB05]">
+                ✓ Seu número: <strong>{myPickMap.get(activeLoot.id)}</strong>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Board de números */}
+      {activeLoot && (
+        <LootBoard
+          lootId={activeLoot.id}
+          picks={activeLoot.picks.map((p) => ({ number: p.number, playerName: p.player.displayName }))}
+          myNumber={myPickMap.get(activeLoot.id) ?? null}
+          hasTicket={ticketCount > 0}
+          isLoggedIn={!!player}
+          drawAt={activeLoot.drawAt.toISOString()}
+        />
+      )}
+
+      {/* Admin panel */}
+      {admin && <AdminLootPanel loots={loots.map((l) => ({
+        id: l.id,
+        name: l.name,
+        prize: l.prize,
+        status: l.status,
+        drawAt: l.drawAt.toISOString(),
+        drawnNumber: l.drawnNumber,
+        winnerName: l.winner?.displayName ?? null,
+        picksCount: l.picks.length
+      }))} />}
+
+      {/* Histórico */}
+      <div className="space-y-3">
+        <h2 className="font-semibold text-slate-200 flex items-center gap-2">
+          <Trophy size={16} className="text-[#FFCB05]" /> Histórico de Loterias
+        </h2>
+        {loots.filter((l) => l.status !== ZikaLootStatus.SCHEDULED).length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhum sorteio realizado ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {loots.filter((l) => l.status !== ZikaLootStatus.SCHEDULED).map((l) => (
+              <Card key={l.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="font-semibold text-slate-200">{l.name}</p>
+                  <p className="text-xs text-slate-500">{statusLabel[l.status]} · {l.picks.length} participantes</p>
+                  {l.drawnNumber && (
+                    <p className="text-sm mt-1">
+                      Número sorteado: <strong className="text-[#FFCB05]">{l.drawnNumber}</strong>
+                      {l.winner ? (
+                        <span className="ml-2 text-[#7AC74C]">🏆 {l.winner.displayName}</span>
+                      ) : (
+                        <span className="ml-2 text-slate-500">— sem vencedor</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600">
+                  {new Date(l.drawAt).toLocaleDateString("pt-BR")}
+                </p>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

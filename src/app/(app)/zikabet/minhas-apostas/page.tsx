@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Swords } from "lucide-react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { UndoBetButton } from "./_components/undo-bet-button";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,12 @@ export default async function MinhasApostasPage() {
           }
         }
       },
-      betOnPlayer: { select: { displayName: true } }
+      betOnPlayer: { select: { displayName: true } },
+      match: {
+        select: {
+          tournamentWeek: { select: { status: true } }
+        }
+      }
     }
   });
 
@@ -117,6 +123,11 @@ export default async function MinhasApostasPage() {
                     <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusColor[bet.status]}`}>
                       {statusLabel[bet.status]}
                     </span>
+                    {bet.status === "OPEN" && ["OPEN","PLANNED"].includes(bet.match?.tournamentWeek?.status ?? "") && (
+                      <div className="flex justify-end">
+                        <UndoBetButton betId={bet.id} />
+                      </div>
+                    )}
                     <p className="text-sm font-bold text-slate-200">{bet.amount.toLocaleString("pt-BR")} ZC</p>
                     {bet.status === "OPEN" && (
                       <p className="text-xs text-slate-500">→ {bet.potentialReturn.toLocaleString("pt-BR")} ZC</p>

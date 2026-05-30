@@ -172,6 +172,7 @@ model User {
   awardedPlayerBadges      PlayerBadge[]        @relation("PlayerBadgeAwardedBy")
   coinAdjustments          ZikaCoinTransaction[] @relation("ZkTxAdmin")
   createdShopItems         ShopItem[]           @relation("ShopItemCreatedBy")
+  createdZikaLoots         ZikaLoot[]           @relation("ZikaLootCreatedBy")
 
   @@map("users")
 }
@@ -209,6 +210,9 @@ model Player {
   betsPlaced              ZikaBet[]             @relation("ZkBetByPlayer")
   betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
   stickers                PlayerSticker[]
+  zikalootWins            ZikaLoot[]            @relation("ZikaLootWinner")
+  zikalootPicks           ZikaLootPick[]
+  savedDecks              SavedDeck[]
 
   @@map("players")
 }
@@ -776,6 +780,54 @@ model StickerPack {
   @@map("sticker_packs")
 }
 
+// ── ZikaLoot ──────────────────────────────────────────────────────────────────
+
+model ZikaLoot {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  prize       String
+  drawAt      DateTime
+  drawnNumber Int?
+  status      ZikaLootStatus @default(SCHEDULED)
+  winnerId    String?
+  createdById String
+  createdAt   DateTime       @default(now())
+  winner      Player?        @relation("ZikaLootWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  createdBy   User           @relation("ZikaLootCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  picks       ZikaLootPick[]
+  @@map("zika_loot")
+}
+
+model ZikaLootPick {
+  id       String   @id @default(cuid())
+  lootId   String
+  playerId String
+  number   Int
+  pickedAt DateTime @default(now())
+  loot     ZikaLoot @relation(fields: [lootId], references: [id], onDelete: Cascade)
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@unique([lootId, number])
+  @@unique([lootId, playerId])
+  @@map("zika_loot_picks")
+}
+
+// ── Decks Salvos ──────────────────────────────────────────────────────────────
+
+model SavedDeck {
+  id        String   @id @default(cuid())
+  playerId  String
+  name      String
+  archetype String?
+  deckList  String   @db.Text
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@index([playerId])
+  @@map("saved_decks")
+}
+
 // ── ZikaBet ───────────────────────────────────────────────────────────────────
 
 model ZikaBet {
@@ -873,6 +925,14 @@ enum ShopItemType {
   TITLE
   BANNER
   FRAME
+  ZIKALOOT_TICKET
+}
+
+enum ZikaLootStatus {
+  SCHEDULED
+  DRAWN
+  NO_WINNER
+  CANCELLED
 }
 
 enum ShopItemRarity {

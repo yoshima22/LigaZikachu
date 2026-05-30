@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Swords,
+  Ticket,
   Trophy,
   User,
   Users
@@ -39,6 +40,7 @@ const colecaoLinks = [
   { href: "/album", label: "Álbum", icon: BookOpen, adminOnly: false },
   { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
   { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
+  { href: "/zikaloot", label: "ZikaLoot", icon: Ticket, adminOnly: false },
   { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },
   { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false }
 ];

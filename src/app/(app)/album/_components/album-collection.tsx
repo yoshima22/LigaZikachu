@@ -2,6 +2,11 @@
 
 import Image from "next/image";
 import { Gift, Star, X } from "lucide-react";
+
+function capitalize(str: string) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1).replace(/-/g, " ");
+}
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { toggleFavoriteSticker, sendStickerGift } from "../actions";
@@ -131,6 +136,11 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
                 owned ? `${RARITY_COLORS[card.rarity]} ${RARITY_GLOW[card.rarity]}` : "border-slate-800 opacity-40 grayscale"
               }`}
             >
+              {/* Número da Pokédex */}
+              <p className="px-1 pt-1 text-center text-[9px] font-semibold text-slate-500">
+                #{String(card.nationalId).padStart(3, "0")}
+              </p>
+
               <div className="aspect-square relative">
                 {owned && card.imageUrl ? (
                   <Image
@@ -143,19 +153,8 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
-                    <p className="font-pixel text-xs text-slate-600">#{String(card.nationalId).padStart(3, "0")}</p>
+                    <p className="font-pixel text-[10px] text-slate-600">?</p>
                   </div>
-                )}
-
-                {isDuplicate && (
-                  <button
-                    type="button"
-                    title="Enviar duplicata"
-                    onClick={() => { setGiftCard(card); setGiftTargetId(""); }}
-                    className="absolute right-1 top-1 flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 text-[9px] font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20"
-                  >
-                    ×{owned.quantity} <Gift size={8} />
-                  </button>
                 )}
 
                 {owned && (
@@ -163,18 +162,26 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
                     type="button"
                     disabled={pending && favLoading === card.id}
                     onClick={() => handleFavorite(card.id)}
-                    className="absolute bottom-1 right-1 text-slate-600 hover:text-[#FFCB05] transition-colors"
+                    className="absolute bottom-1 left-1 text-slate-600 hover:text-[#FFCB05] transition-colors"
                   >
-                    <Star
-                      size={12}
-                      className={owned.isFavorite ? "fill-[#FFCB05] text-[#FFCB05]" : ""}
-                    />
+                    <Star size={13} className={owned.isFavorite ? "fill-[#FFCB05] text-[#FFCB05]" : ""} />
+                  </button>
+                )}
+
+                {isDuplicate && (
+                  <button
+                    type="button"
+                    title={`Enviar duplicata (×${owned.quantity})`}
+                    onClick={() => { setGiftCard(card); setGiftTargetId(""); }}
+                    className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-[#FFCB05]/20 border border-[#FFCB05]/40 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05] hover:bg-[#FFCB05]/40"
+                  >
+                    ×{owned.quantity} <Gift size={10} />
                   </button>
                 )}
               </div>
               <div className="px-1 pb-1 text-center">
                 <p className="truncate text-[9px] text-slate-300 leading-tight">
-                  {owned ? card.displayName : `#${String(card.nationalId).padStart(3, "0")}`}
+                  {owned ? capitalize(card.displayName) : "???"}
                 </p>
               </div>
             </div>

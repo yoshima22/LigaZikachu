@@ -293,6 +293,55 @@ export async function calculateAutoOdds(
   }
 }
 
+// ── Jogador desfaz aposta (só se semana ainda OPEN) ──────────────────────────
+
+export async function undoBet(betId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Não autenticado." };
+
+    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    if (!player) return { error: "Jogador não encontrado." };
+
+    const bet = await prisma.zikaBet.findUnique({
+      where: { id: betId },
+      include: {
+        match: {
+          include: { tournamentWeek: { select: { status: true } } }
+        }
+      }
+    });
+    if (!bet) return { error: "Aposta não encontrada." };
+    if (bet.playerId !== player.id) return { error: "Esta aposta não é sua." };
+    if (bet.status !== ZikaBetStatus.OPEN) return { error: "Só é possível desfazer apostas abertas." };
+
+    const weekStatus = bet.match.tournamentWeek?.status;
+    if (weekStatus !== "OPEN" && weekStatus !== "PLANNED")
+      return { error: "O dia de jogo já foi bloqueado — apostas não podem mais ser desfeitas." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.zikaBet.update({
+        where: { id: betId },
+        data: { status: ZikaBetStatus.CANCELLED, settledAt: new Date() }
+      });
+      await creditCoins(tx, {
+        playerId: player.id,
+        type: ZikaCoinTxType.BET_REFUNDED,
+        amount: bet.amount,
+        description: "Aposta desfeita pelo jogador",
+        matchId: bet.matchId
+      });
+    });
+
+    revalidatePath("/zikabet");
+    revalidatePath("/zikabet/minhas-apostas");
+    revalidatePath("/carteira");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ── Admin cancelar aposta ─────────────────────────────────────────────────────
 
 export async function cancelBet(betId: string): Promise<{ error?: string }> {

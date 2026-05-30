@@ -41,6 +41,38 @@ export async function createShopItem(
   }
 }
 
+export async function updateShopItem(
+  itemId: string,
+  raw: z.infer<typeof createItemSchema>
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const data = createItemSchema.parse(raw);
+    await prisma.shopItem.update({
+      where: { id: itemId },
+      data: { ...data, imageUrl: data.imageUrl || null, description: data.description || null }
+    });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function deleteShopItem(itemId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.shopItem.delete({ where: { id: itemId } });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function toggleShopItem(itemId: string, active: boolean): Promise<{ error?: string }> {
   try {
     await requireAdmin();
