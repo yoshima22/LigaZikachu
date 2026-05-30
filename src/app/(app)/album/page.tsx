@@ -53,14 +53,6 @@ export default async function AlbumPage({
     orderBy: { generation: "asc" }
   });
 
-  const genOwnedStats = player
-    ? await prisma.playerSticker.groupBy({
-        by: [],
-        where: { playerId: player.id },
-        _count: { id: true }
-      })
-    : [];
-
   // Owned per generation
   const ownedPerGen: Record<number, number> = {};
   if (player) {
