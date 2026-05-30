@@ -8,12 +8,6 @@ import { ShopGrid } from "./_components/shop-grid";
 
 export const dynamic = "force-dynamic";
 
-const rarityLabel: Record<string, string> = {
-  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Rara", EPIC: "Épica", LEGENDARY: "Lendária"
-};
-
-export { rarityLabel };
-
 export default async function ShopPage() {
   const session = await auth();
   if (!session?.user) return null;
