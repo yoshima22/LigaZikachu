@@ -4,7 +4,7 @@ import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Award, ChevronRight, Shield, Swords, Zap } from "lucide-react";
 import { ChallengeStatus, ChallengeType } from "@prisma/client";
-import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "./actions";
+import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "./config";
 import { ChallengePanel } from "./_components/challenge-panel";
 
 export const dynamic = "force-dynamic";

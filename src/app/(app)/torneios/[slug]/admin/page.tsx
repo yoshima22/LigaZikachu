@@ -20,10 +20,9 @@ import {
 import { TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
 import {
   updateTournamentAnnouncement,
-  updateChallengeConfig,
-  parseChallengeConfig,
-  DEFAULT_CHALLENGE_CONFIG
+  updateChallengeConfig
 } from "../desafios/actions";
+import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "../desafios/config";
 
 interface Props {
   params: Promise<{ slug: string }>;

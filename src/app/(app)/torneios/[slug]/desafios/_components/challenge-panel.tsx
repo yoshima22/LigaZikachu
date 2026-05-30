@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ChallengeType } from "@prisma/client";
 import { Award, CheckCircle, Plus, Swords, X, XCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { ChallengeConfig } from "../actions";
+import type { ChallengeConfig } from "../config";
 import {
   createChallenge,
   respondToChallenge,
