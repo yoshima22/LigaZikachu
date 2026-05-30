@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Zap } from "lucide-react";
 import { Toaster } from "sonner";
 import { AppNav } from "./_components/app-nav";
+import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
   const session = await auth();
@@ -90,6 +91,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
         {/* Main content */}
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
+        <FcmTokenRegistrar />
       </div>
     </>
   );

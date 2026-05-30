@@ -8,24 +8,32 @@ export type NotificationPayload = {
 };
 
 // ── FCM HTTP v1 ───────────────────────────────────────────────────────────────
-// A API legada (fcm.googleapis.com/fcm/send + Server Key) foi descontinuada.
-// A v1 usa OAuth2 com Service Account.
-// Configure FIREBASE_SERVICE_ACCOUNT_JSON na Vercel com o conteúdo do JSON da conta de serviço.
 
-async function getAccessToken(): Promise<string | null> {
+async function getServiceAccount() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
   try {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (!raw) return null;
-
-    // Restaurar quebras de linha na private_key que podem ser escapadas como \\n
+    // Restaurar quebras de linha na private_key (podem vir escapadas como \\n da Vercel)
     const normalized = raw.replace(/\\n/g, "\n");
-    const sa = JSON.parse(normalized) as {
+    return JSON.parse(normalized) as {
       client_email: string;
       private_key: string;
       project_id: string;
     };
+  } catch {
+    console.error("[FCM] Falha ao parsear FIREBASE_SERVICE_ACCOUNT_JSON");
+    return null;
+  }
+}
 
-    // Criar JWT para OAuth2
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const sa = await getServiceAccount();
+    if (!sa?.client_email || !sa?.private_key) {
+      console.error("[FCM] Service account inválido — faltam client_email ou private_key");
+      return null;
+    }
+
     const now = Math.floor(Date.now() / 1000);
     const header = { alg: "RS256", typ: "JWT" };
     const payload = {
@@ -36,19 +44,15 @@ async function getAccessToken(): Promise<string | null> {
       exp: now + 3600
     };
 
-    const encode = (obj: object) =>
-      Buffer.from(JSON.stringify(obj)).toString("base64url");
-
+    const encode = (obj: object) => Buffer.from(JSON.stringify(obj)).toString("base64url");
     const unsigned = `${encode(header)}.${encode(payload)}`;
 
-    // Importar crypto para assinar com RS256
     const { createSign } = await import("crypto");
     const sign = createSign("RSA-SHA256");
     sign.update(unsigned);
     const signature = sign.sign(sa.private_key, "base64url");
     const jwt = `${unsigned}.${signature}`;
 
-    // Trocar JWT por access token
     const res = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -58,30 +62,29 @@ async function getAccessToken(): Promise<string | null> {
       })
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("[FCM] Falha ao obter access token:", err);
+      return null;
+    }
+
     const data = await res.json() as { access_token?: string };
     return data.access_token ?? null;
-  } catch {
+  } catch (e) {
+    console.error("[FCM] Erro no getAccessToken:", e);
     return null;
   }
 }
 
-async function getProjectId(): Promise<string | null> {
-  try {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (!raw) return null;
-    const normalized = raw.replace(/\\n/g, "\n");
-    const sa = JSON.parse(normalized) as { project_id: string };
-    return sa.project_id;
-  } catch { return null; }
-}
-
 async function sendFcmMessage(token: string, payload: NotificationPayload): Promise<void> {
-  const [accessToken, projectId] = await Promise.all([getAccessToken(), getProjectId()]);
-  if (!accessToken || !projectId) return;
+  const sa = await getServiceAccount();
+  if (!sa?.project_id) return;
 
-  await fetch(
-    `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+  const accessToken = await getAccessToken();
+  if (!accessToken) return;
+
+  const res = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`,
     {
       method: "POST",
       headers: {
@@ -101,12 +104,17 @@ async function sendFcmMessage(token: string, payload: NotificationPayload): Prom
           },
           android: {
             priority: "high",
-            notification: { sound: "default", click_action: "FLUTTER_NOTIFICATION_CLICK" }
+            notification: { sound: "default" }
           }
         }
       })
     }
   );
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("[FCM] Falha ao enviar mensagem:", err);
+  }
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
@@ -115,13 +123,26 @@ export async function sendNotificationToUser(
   userId: string,
   payload: NotificationPayload
 ): Promise<void> {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) return;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    console.warn("[FCM] FIREBASE_SERVICE_ACCOUNT_JSON não configurado");
+    return;
+  }
 
-  const tokens = await prisma.userFcmToken.findMany({
-    where: { userId },
-    select: { token: true }
-  });
-  if (tokens.length === 0) return;
+  let tokens: { token: string }[] = [];
+  try {
+    tokens = await prisma.userFcmToken.findMany({
+      where: { userId },
+      select: { token: true }
+    });
+  } catch {
+    console.error("[FCM] Tabela user_fcm_tokens não encontrada ou erro ao buscar tokens");
+    return;
+  }
+
+  if (tokens.length === 0) {
+    console.log(`[FCM] Nenhum token registrado para userId=${userId}`);
+    return;
+  }
 
   await Promise.allSettled(tokens.map((t) => sendFcmMessage(t.token, payload)));
 }
@@ -133,7 +154,8 @@ export async function sendNotificationToPlayers(
   const players = await prisma.player.findMany({
     where: { id: { in: playerIds } },
     select: { userId: true }
-  });
+  }).catch(() => [] as { userId: string }[]);
+
   await Promise.allSettled(
     players.map((p) => sendNotificationToUser(p.userId, payload))
   );
