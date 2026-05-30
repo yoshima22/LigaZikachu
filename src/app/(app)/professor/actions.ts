@@ -40,11 +40,18 @@ Frases curtas. Humor de campeonato. Português brasileiro informal.
 
 REGRAS:
 1. Só fala de Pokémon TCG. Para outros assuntos: "Parceiro, isso tá fora do meu quadrado! 🃏"
-2. Quando receber dados de cartas reais, use essas informações para explicar.
-3. Nunca invente nome, habilidade ou custo de carta.
-4. Resposta curta e direta — sem enrolar.
+2. Nunca invente nome ou efeito de carta — use apenas cartas que você conhece do TCG.
+3. Lembre do contexto anterior da conversa.
+4. Quando sugerir cartas específicas, liste os nomes em inglês no campo "cards".
 
-FORMATO: Responda apenas com a mensagem em texto. Sem JSON, sem markdown, só o texto.`;
+FORMATO DE RESPOSTA (JSON obrigatório):
+{
+  "message": "sua resposta aqui (2-4 frases no máximo)",
+  "cards": ["Professor's Research", "Iono"]
+}
+
+Use "cards": [] quando não precisar sugerir cartas.
+Os cards serão buscados na TCG API e mostrados como imagens reais — não repita o nome deles na mensagem.`;
 
 // ── Extrair nomes de cartas da mensagem do usuário ────────────────────────────
 
@@ -155,9 +162,25 @@ const GROQ_MODELS = [
   "llama-3.1-8b-instant",      // último recurso — rápido mas menor
 ];
 
-async function callAI(prompt: string): Promise<string> {
+interface AIResult { message: string; cardNames: string[] }
+
+async function callAI(
+  messages: ChatMessage[],
+  extraContext?: string
+): Promise<AIResult> {
   const groqKey = process.env.GROQ_API_KEY;
-  if (!groqKey) return "";
+  if (!groqKey) return { message: "", cardNames: [] };
+
+  // Passar histórico completo (últimas 10 mensagens para não estourar tokens)
+  const history = messages.slice(-10).map(m => ({
+    role: m.role === "professor" ? "assistant" : "user",
+    content: m.content
+  }));
+
+  // Injetar contexto extra como mensagem de sistema adicional
+  const systemFull = extraContext
+    ? `${SYSTEM_PROMPT}\n\nCONTEXTO ADICIONAL:\n${extraContext}`
+    : SYSTEM_PROMPT;
 
   for (const model of GROQ_MODELS) {
     try {
@@ -166,34 +189,43 @@ async function callAI(prompt: string): Promise<string> {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
           model,
-          max_tokens: 400,
+          max_tokens: 500,
           temperature: 0.85,
+          response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt }
+            { role: "system", content: systemFull },
+            ...history
           ]
         })
       });
 
       if (!res.ok) {
-        const err = await res.text().catch(() => "");
-        console.warn(`[Prof Groq/${model}] ${res.status}:`, err.slice(0, 100));
+        console.warn(`[Prof/${model}] ${res.status}`);
         continue;
       }
 
       const d = await res.json() as { choices?: Array<{ message: { content: string } }> };
-      const text = d.choices?.[0]?.message?.content?.trim();
-      if (text) {
-        console.log(`[Prof] Usando ${model}`);
-        return text;
+      const raw = d.choices?.[0]?.message?.content?.trim() ?? "{}";
+
+      try {
+        const parsed = JSON.parse(raw) as { message?: string; cards?: string[] };
+        if (parsed.message) {
+          console.log(`[Prof] ${model} → ${parsed.cards?.length ?? 0} cards`);
+          return {
+            message: parsed.message,
+            cardNames: parsed.cards ?? []
+          };
+        }
+      } catch {
+        // Se não parseou como JSON, usa como texto direto
+        if (raw.length > 5) return { message: raw, cardNames: [] };
       }
     } catch (e) {
-      console.warn(`[Prof Groq/${model}] erro:`, e instanceof Error ? e.message : e);
+      console.warn(`[Prof/${model}]:`, e instanceof Error ? e.message : e);
     }
   }
 
-  console.warn("[Prof] Nenhum modelo Groq funcionou");
-  return "";
+  return { message: "", cardNames: [] };
 }
 
 // ── ACTION: Chat geral ────────────────────────────────────────────────────────
@@ -216,22 +248,28 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
       };
     }
 
-    // Buscar cartas relevantes SEMPRE
-    const cards = await findRelevantCards(lastMsg);
+    // 1. Chamar IA com histórico completo — ela decide quais cartas mostrar
+    const { message: aiMessage, cardNames } = await callAI(messages);
 
-    // Montar prompt com contexto real
-    const cardContext = cards.length > 0
-      ? `\n\nCartas encontradas no banco:\n${cards.map(c => `- ${c.name} (${c.supertype}${c.subtypes?.length ? "/" + c.subtypes[0] : ""}): ${(c.text ?? "").slice(0, 100)}`).join("\n")}`
-      : "";
+    // 2. Resolver nomes PT→EN e buscar cartas reais na TCG API
+    const resolvedNames = cardNames.map(resolveCardName);
+    const aiCards = resolvedNames.length > 0
+      ? await fetchCardsByNames(resolvedNames)
+      : [];
 
-    const prompt = `${lastMsg}${cardContext}\n\nResponda como Professor Enguiça. Máximo 2 frases. Se tiver cartas acima, mencione uma pelo nome. Sem JSON.`;
+    // 3. Se a IA não sugeriu cartas, tentar por contexto da mensagem
+    const contextCards = aiCards.length === 0
+      ? await findRelevantCards(lastMsg)
+      : [];
 
-    const aiText = await callAI(prompt);
-    const message = aiText || buildSmartFallback(lastMsg, cards);
+    const finalCards = aiCards.length > 0 ? aiCards : contextCards;
+
+    // 4. Fallback de mensagem se a IA falhou
+    const message = aiMessage || buildSmartFallback(lastMsg, finalCards);
 
     return {
       message,
-      suggestedCards: cards.map(c => ({ ...c, reason: c.subtypes?.[0] ?? c.supertype }))
+      suggestedCards: finalCards.map(c => ({ ...c, reason: c.subtypes?.[0] ?? c.supertype }))
     };
   } catch (err) {
     console.error("[Prof error]", err);
@@ -252,10 +290,13 @@ export async function analyzeDeckAction(deckList: string): Promise<DeckAnalysisR
     const suggestions: DeckSuggestion[] = await buildSuggestions(analysis);
 
     const deckSummary = `Deck: ${analysis.totalCards}/60 cartas. Draw: ${analysis.drawCount}. Search: ${analysis.searchCount}. Energias: ${analysis.categories.energy}. Problemas: ${analysis.issues.join("; ") || "nenhum crítico"}.`;
-    const cardList = suggestions.map(s => `${s.card.name}: ${s.reason}`).join("; ");
-    const prompt = `${deckSummary}\nCartas sugeridas pelo sistema: ${cardList}\n\nComente em 2-3 frases como Professor Enguiça. Mencione os problemas principais. Sem JSON.`;
+    const cardList = suggestions.map(s => s.card.name).join(", ");
+    const context = `${deckSummary}\nO sistema já selecionou estas cartas para mostrar: ${cardList}. Explique POR QUÊ cada uma resolve os problemas do deck. Seja direto.`;
 
-    const aiText = await callAI(prompt);
+    const { message: aiText } = await callAI(
+      [{ role: "user", content: `Analise meu deck e explique as sugestões.` }],
+      context
+    );
     const fallback = analysis.drawCount < 3 ? "Parceiro, teu deck tá na seca de compra! Adiciona mais apoiadores de draw que a vida melhora muito."
       : analysis.searchCount < 3 ? "Tô vendo que você não acha seus Pokémon fácil. Mais bolas de busca resolve boa parte disso!"
       : analysis.categories.energy > 15 ? "Energia demais não é força — é peso! Troca o excesso por aceleração de energia."
@@ -279,11 +320,15 @@ export async function analyzeMatchAction(matchSummary: string): Promise<MatchAna
     const issues = detectMatchIssues(matchSummary);
     const suggestions = await fetchMatchSuggestions(issues);
 
-    const context = issues.length > 0 ? `Problemas detectados: ${issues.map(i => i.problem).join("; ")}.` : "";
-    const cardList = suggestions.map(s => s.card.name).join(", ");
-    const prompt = `Relato: "${matchSummary}"\n${context}\nCartas sugeridas: ${cardList || "nenhuma específica"}.\n\nExplique em 2-3 frases como Professor Enguiça: problema principal e sugestão estratégica. Sem JSON.`;
+    const context = `Relato do jogador: "${matchSummary}"
+Problemas detectados pelo sistema: ${issues.map(i => i.problem).join("; ") || "nenhum específico"}
+Cartas selecionadas para mostrar: ${suggestions.map(s => s.card.name).join(", ") || "nenhuma"}
+Explique o problema principal, a causa provável no deck e o que as cartas sugeridas resolvem.`;
 
-    const aiText = await callAI(prompt);
+    const { message: aiText } = await callAI(
+      [{ role: "user", content: matchSummary }],
+      context
+    );
     const fallback = issues.length > 0
       ? `Parceiro, identificamos ${issues.length} problema(s): ${issues.map(i => i.problem.toLowerCase()).join(" e ")}. As cartas abaixo podem resolver isso!`
       : "Combate difícil! Olha as sugestões abaixo e adapta ao seu estilo.";
