@@ -44,12 +44,7 @@ export default async function MinhasApostasPage() {
           }
         }
       },
-      betOnPlayer: { select: { displayName: true } },
-      match: {
-        select: {
-          tournamentWeek: { select: { status: true } }
-        }
-      }
+      betOnPlayer: { select: { displayName: true } }
     }
   });
 
@@ -123,7 +118,7 @@ export default async function MinhasApostasPage() {
                     <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusColor[bet.status]}`}>
                       {statusLabel[bet.status]}
                     </span>
-                    {bet.status === "OPEN" && ["OPEN","PLANNED"].includes(bet.match?.tournamentWeek?.status ?? "") && (
+                    {bet.status === "OPEN" && ["OPEN","PLANNED"].includes(bet.match.tournamentWeek?.status ?? "") && (
                       <div className="flex justify-end">
                         <UndoBetButton betId={bet.id} />
                       </div>
