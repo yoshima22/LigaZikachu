@@ -649,6 +649,10 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
     data: { status: "CLOSED" },
   });
 
+  // Liquidar apostas da ZikaBet deste dia
+  const { settleDayBets } = await import("@/app/(app)/zikabet/actions");
+  await settleDayBets(week.id, admin.id);
+
   await prisma.auditLog.create({
     data: {
       actorUserId: admin.id,
@@ -660,6 +664,7 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
 
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
+  revalidatePath("/zikabet");
 
   return { success: true };
 }

@@ -15,6 +15,7 @@ import {
   Search,
   ShieldCheck,
   ShoppingBag,
+  Swords,
   Trophy,
   User,
   Users
@@ -35,6 +36,7 @@ const rankingLinks = [
 const colecaoLinks = [
   { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
   { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
+  { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
   { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },
   { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false }
 ];

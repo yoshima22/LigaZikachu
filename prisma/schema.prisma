@@ -206,6 +206,8 @@ model Player {
   badgeProgress           BadgeProgress[]
   wallet                  ZikaCoinWallet?
   inventory               PlayerInventory[]
+  betsPlaced              ZikaBet[]             @relation("ZkBetByPlayer")
+  betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
 
   @@map("players")
 }
@@ -233,6 +235,7 @@ model Tournament {
   seasonId              String?
   announcement          String?
   challengeConfig       Json?
+  betConfig             Json?
   createdById           String
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
@@ -411,7 +414,11 @@ model Match {
   challenges        Challenge[]
 
   @@index([seasonId, weekId, status])
+  playerAOdds      Decimal?              @db.Decimal(6,2)
+  playerBOdds      Decimal?              @db.Decimal(6,2)
+  betsEnabled      Boolean               @default(false)
   coinTransactions ZikaCoinTransaction[] @relation("ZkTxMatch")
+  bets             ZikaBet[]
   @@index([playerAId, playerBId, playedAt])
   @@index([playerADeckSubmissionId])
   @@index([playerBDeckSubmissionId])
@@ -712,7 +719,38 @@ enum GiftStatus {
   EXPIRED
 }
 
+// ── ZikaBet ───────────────────────────────────────────────────────────────────
+
+model ZikaBet {
+  id              String        @id @default(cuid())
+  playerId        String
+  matchId         String
+  betOnPlayerId   String
+  amount          Int
+  odds            Decimal       @db.Decimal(6,2)
+  potentialReturn Int
+  status          ZikaBetStatus @default(OPEN)
+  placedAt        DateTime      @default(now())
+  settledAt       DateTime?
+  player          Player        @relation("ZkBetByPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  match           Match         @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  betOnPlayer     Player        @relation("ZkBetOnPlayer", fields: [betOnPlayerId], references: [id], onDelete: Cascade)
+  @@unique([playerId, matchId])
+  @@index([playerId])
+  @@index([matchId])
+  @@map("zika_bets")
+}
+
 // ── ZikaCoins ──────────────────────────────────────────────────────────────────
+
+enum ZikaBetStatus {
+  OPEN
+  CLOSED
+  WON
+  LOST
+  REFUNDED
+  CANCELLED
+}
 
 enum ZikaCoinTxType {
   PARTICIPATION_REWARD
