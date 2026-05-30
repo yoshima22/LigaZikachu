@@ -61,7 +61,7 @@ export default async function TournamentAdminPage({ params }: Props) {
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
     include: {
-      _count: { select: { challenges: true } },
+      _count: { select: { registrations: true, challenges: true } },
       weeks: {
         orderBy: { weekNumber: "asc" },
         include: {
@@ -80,9 +80,6 @@ export default async function TournamentAdminPage({ params }: Props) {
       },
       season: {
         select: { id: true, name: true, slug: true, status: true },
-      },
-      _count: {
-        select: { registrations: true },
       },
     },
   });
