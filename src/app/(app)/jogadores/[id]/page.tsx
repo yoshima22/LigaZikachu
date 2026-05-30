@@ -62,7 +62,7 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
 
-  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, publicDecks] = await Promise.all([
     activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -107,6 +107,11 @@ export default async function PlayerDetailPage({
     prisma.playerInventory.findMany({
       where: { playerId, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true } } }
+    }),
+    prisma.savedDeck.findMany({
+      where: { playerId, isPublic: true },
+      select: { id: true, name: true, archetype: true, deckList: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" }
     })
   ]);
 
@@ -238,6 +243,26 @@ export default async function PlayerDetailPage({
             />
           </div>
         </div>
+      )}
+
+      {/* Decks Públicos */}
+      {publicDecks.length > 0 && (
+        <Card>
+          <CardTitle className="mb-4 flex items-center gap-2">
+            <BookOpen size={18} className="text-primary" /> Meus Decks
+          </CardTitle>
+          <div className="space-y-3">
+            {publicDecks.map((d) => (
+              <div key={d.id} className="rounded-lg border border-border bg-slate-900/40 p-3">
+                <p className="font-semibold text-slate-200 text-sm">{d.name}</p>
+                {d.archetype && <p className="text-xs text-slate-500 mb-2">{d.archetype}</p>}
+                <pre className="max-h-48 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">
+                  {d.deckList}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

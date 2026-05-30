@@ -33,9 +33,10 @@ export default async function ShopPage() {
       : new Set<string>()
   ]);
 
-  const titles  = items.filter((i) => i.type === "TITLE");
-  const banners = items.filter((i) => i.type === "BANNER");
-  const frames  = items.filter((i) => i.type === "FRAME");
+  const titles   = items.filter((i) => i.type === "TITLE");
+  const banners  = items.filter((i) => i.type === "BANNER");
+  const frames   = items.filter((i) => i.type === "FRAME");
+  const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
 
   return (
     <div className="space-y-8">
@@ -91,6 +92,15 @@ export default async function ShopPage() {
               title="Molduras de Avatar"
               items={frames.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
               ownedIds={ownedIds}
+              balance={wallet?.balance ?? 0}
+              playerId={player?.id ?? null}
+            />
+          )}
+          {tickets.length > 0 && (
+            <ShopGrid
+              title="Tickets ZikaLoot"
+              items={tickets.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+              ownedIds={new Set()} // tickets não são únicos — sempre pode comprar mais
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />

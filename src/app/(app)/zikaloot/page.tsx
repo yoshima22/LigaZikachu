@@ -42,7 +42,10 @@ export default async function ZikaLootPage() {
       ? prisma.zikaLootPick.findMany({ where: { playerId: player.id }, select: { lootId: true, number: true } })
       : [],
     player
-      ? prisma.playerInventory.count({ where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET }, equipped: false } })
+      ? prisma.playerInventory.findFirst({
+          where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET } },
+          select: { quantity: true }
+        }).then((r) => r?.quantity ?? 0)
       : 0
   ]);
 
@@ -104,10 +107,12 @@ export default async function ZikaLootPage() {
         <LootBoard
           lootId={activeLoot.id}
           picks={activeLoot.picks.map((p) => ({ number: p.number, playerName: p.player.displayName }))}
+          blockedNumbers={activeLoot.drawnNumbers}
           myNumber={myPickMap.get(activeLoot.id) ?? null}
           hasTicket={ticketCount > 0}
           isLoggedIn={!!player}
           drawAt={activeLoot.drawAt.toISOString()}
+          previousDraws={activeLoot.drawnNumbers}
         />
       )}
 

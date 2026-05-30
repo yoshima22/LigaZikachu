@@ -71,7 +71,7 @@ function PackForm({ form, setForm, onSave, onCancel, pending, label }: {
         value={form.imageUrl}
         onChange={(url) => setForm({ ...form, imageUrl: url })}
         label="Imagem do pacote (upload ou URL)"
-        maxMb={1}
+        maxMb={6}
       />
       <label className="flex items-center gap-2 text-xs text-slate-400 self-end pb-2">
         <input type="checkbox" checked={form.rarityBoost} onChange={(e) => setForm({ ...form, rarityBoost: e.target.checked })}

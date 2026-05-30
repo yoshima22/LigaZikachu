@@ -14,7 +14,7 @@ const PAGE_SIZE = 100;
 export default async function AlbumPage({
   searchParams
 }: {
-  searchParams: Promise<{ gen?: string; page?: string }>;
+  searchParams: Promise<{ gen?: string; page?: string; owned?: string }>;
 }) {
   const [session, sp] = await Promise.all([auth(), searchParams]);
   if (!session?.user) return null;
@@ -22,6 +22,7 @@ export default async function AlbumPage({
   const admin = isAdmin(session.user.role);
   const selectedGen = sp.gen ? parseInt(sp.gen) : null;
   const currentPage = Math.max(1, sp.page ? parseInt(sp.page) : 1);
+  const onlyOwned = sp.owned === "1";
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -34,7 +35,8 @@ export default async function AlbumPage({
     prisma.pokemonCard.findMany({
       where: {
         active: true,
-        ...(selectedGen ? { generation: selectedGen } : {})
+        ...(selectedGen ? { generation: selectedGen } : {}),
+        ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {})
       },
       orderBy: [{ generation: "asc" }, { nationalId: "asc" }],
       skip: (currentPage - 1) * PAGE_SIZE,
@@ -58,7 +60,11 @@ export default async function AlbumPage({
   const ownedMap = new Map(ownedStickers.map((s) => [s.cardId, s]));
 
   const totalCardsInFilter = await prisma.pokemonCard.count({
-    where: { active: true, ...(selectedGen ? { generation: selectedGen } : {}) }
+    where: {
+      active: true,
+      ...(selectedGen ? { generation: selectedGen } : {}),
+      ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {})
+    }
   });
   const totalPages = Math.ceil(totalCardsInFilter / PAGE_SIZE);
 
@@ -136,6 +142,28 @@ export default async function AlbumPage({
           </div>
         )}
       </div>
+
+      {/* Filtro de exibição */}
+      {player && (
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/album${selectedGen ? `?gen=${selectedGen}` : ""}`}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              !onlyOwned ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Todos
+          </Link>
+          <Link
+            href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}owned=1`}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              onlyOwned ? "border-[#7AC74C]/50 bg-[#7AC74C]/10 text-[#7AC74C]" : "border-border text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Apenas os meus ({totalOwned})
+          </Link>
+        </div>
+      )}
 
       {/* Progresso por geração */}
       {genStats.length > 0 && player && (

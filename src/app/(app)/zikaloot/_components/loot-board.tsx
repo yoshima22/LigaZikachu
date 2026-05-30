@@ -7,17 +7,20 @@ import { pickLootNumber } from "../actions";
 interface Props {
   lootId: string;
   picks: { number: number; playerName: string }[];
+  blockedNumbers?: number[];
   myNumber: number | null;
   hasTicket: boolean;
   isLoggedIn: boolean;
   drawAt: string;
+  previousDraws?: number[];
 }
 
-export function LootBoard({ lootId, picks, myNumber, hasTicket, isLoggedIn, drawAt }: Props) {
+export function LootBoard({ lootId, picks, blockedNumbers = [], myNumber, hasTicket, isLoggedIn, drawAt, previousDraws = [] }: Props) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<number | null>(null);
 
   const takenMap = new Map(picks.map((p) => [p.number, p.playerName]));
+  const blockedSet = new Set(blockedNumbers);
   const isExpired = new Date() >= new Date(drawAt);
 
   const handlePick = () => {
@@ -52,18 +55,21 @@ export function LootBoard({ lootId, picks, myNumber, hasTicket, isLoggedIn, draw
       <div className="grid grid-cols-10 gap-1 sm:grid-cols-20">
         {Array.from({ length: 200 }, (_, i) => i + 1).map((n) => {
           const taken = takenMap.get(n);
+          const isBlocked = blockedSet.has(n);
           const isMe = n === myNumber;
           const isSel = n === selected;
           return (
             <button
               key={n}
               type="button"
-              title={taken ? `${taken}` : `Número ${n}`}
-              disabled={!!myNumber || !!taken || isExpired || !hasTicket || !isLoggedIn || pending}
+              title={isBlocked ? `Sorteado anteriormente (sem dono)` : taken ? `${taken}` : `Número ${n}`}
+              disabled={!!myNumber || !!taken || isBlocked || isExpired || !hasTicket || !isLoggedIn || pending}
               onClick={() => setSelected(isSel ? null : n)}
               className={`aspect-square rounded text-[10px] font-semibold transition-all ${
                 isMe
                   ? "bg-[#FFCB05] text-[#1A1A2E]"
+                  : isBlocked
+                  ? "bg-red-900/30 text-red-700 cursor-not-allowed line-through"
                   : taken
                   ? "bg-slate-700 text-slate-500 cursor-not-allowed"
                   : isSel
@@ -90,6 +96,14 @@ export function LootBoard({ lootId, picks, myNumber, hasTicket, isLoggedIn, draw
           <button type="button" onClick={() => setSelected(null)}
             className="text-xs text-slate-500 hover:text-slate-300">Cancelar</button>
         </div>
+      )}
+
+      {previousDraws.length > 0 && (
+        <p className="text-xs text-slate-500">
+          Números já sorteados sem dono (bloqueados):
+          {" "}<span className="text-red-400">{previousDraws.join(", ")}</span>
+          {" "}— próximo sorteio em 24h após o último.
+        </p>
       )}
 
       <div className="flex flex-wrap gap-4 text-xs text-slate-500">

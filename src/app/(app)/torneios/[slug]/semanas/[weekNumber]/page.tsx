@@ -100,6 +100,14 @@ export default async function WeekDetailPage({
   const currentPlayerDecks = player
     ? week.deckSubmissions.filter((submission) => submission.playerId === player.id)
     : [];
+
+  const savedDecks = player
+    ? await prisma.savedDeck.findMany({
+        where: { playerId: player.id },
+        select: { id: true, name: true, archetype: true, deckList: true },
+        orderBy: { updatedAt: "desc" }
+      })
+    : [];
   const canSubmitDeck =
     !!user &&
     !!player &&
@@ -552,6 +560,7 @@ export default async function WeekDetailPage({
                   key={deckNumber}
                   tournamentWeekId={week.id}
                   deckNumber={deckNumber}
+                  savedDecks={savedDecks}
                   existingSubmission={
                     currentPlayerDecks.find((deck) => deck.deckNumber === deckNumber) ?? null
                   }

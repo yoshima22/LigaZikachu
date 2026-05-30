@@ -12,7 +12,8 @@ import {
   approvePlayerAction,
   toggleSuspendPlayerAction,
   editPlayerAction,
-  deletePlayerAction
+  deletePlayerAction,
+  updateUserEmailAction
 } from "../actions";
 
 export interface PlayerRow {
@@ -55,6 +56,7 @@ interface EditModalProps {
 
 function EditPlayerModal({ player, onClose }: EditModalProps) {
   const [displayName, setDisplayName] = useState(player.displayName);
+  const [email, setEmail] = useState(player.email);
   const [ptcglNick, setPtcglNick] = useState(player.ptcglNick ?? "");
   const [whatsapp, setWhatsapp] = useState(player.whatsapp ?? "");
   const [notes, setNotes] = useState(player.notes ?? "");
@@ -74,11 +76,15 @@ function EditPlayerModal({ player, onClose }: EditModalProps) {
         notes: notes || null,
         newPassword: newPassword || null
       });
-      if (result?.error) {
-        setError(result.error);
-      } else {
-        onClose();
+      if (result?.error) { setError(result.error); return; }
+
+      // Atualizar email se mudou
+      if (email !== player.email) {
+        const emailResult = await updateUserEmailAction(player.userId, email);
+        if (emailResult?.error) { setError(emailResult.error); return; }
       }
+
+      onClose();
     });
   };
 
@@ -93,6 +99,15 @@ function EditPlayerModal({ player, onClose }: EditModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs text-slate-400">Email da conta</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-xl border border-border bg-slate-800 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
           <div>
             <label className="mb-1.5 block text-xs text-slate-400">Nome de exibição *</label>
             <input

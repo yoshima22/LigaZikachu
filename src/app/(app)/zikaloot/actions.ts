@@ -53,9 +53,10 @@ export async function pickLootNumber(
 
     // Verificar se tem ticket disponível
     const ticket = await prisma.playerInventory.findFirst({
-      where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET }, equipped: false }
+      where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET } },
+      select: { id: true, quantity: true }
     });
-    if (!ticket) return { error: "Você não possui um Ticket ZikaLoot. Compre um na ZikaShop ou ganhe pela Caixa de Presentes." };
+    if (!ticket || ticket.quantity < 1) return { error: "Você não possui um Ticket ZikaLoot. Compre um na ZikaShop ou ganhe pela Caixa de Presentes." };
 
     // Verificar se já escolheu
     const existing = await prisma.zikaLootPick.findUnique({
@@ -69,12 +70,15 @@ export async function pickLootNumber(
     });
     if (taken) return { error: "Este número já foi escolhido por outro jogador." };
 
-    await prisma.$transaction([
-      // Remover um ticket do inventário
-      prisma.playerInventory.delete({ where: { id: ticket.id } }),
-      // Registrar escolha
-      prisma.zikaLootPick.create({ data: { lootId, playerId: player.id, number } })
-    ]);
+    await prisma.$transaction(async (tx) => {
+      // Decrementar ticket (ou remover se última unidade)
+      if (ticket.quantity > 1) {
+        await tx.playerInventory.update({ where: { id: ticket.id }, data: { quantity: { decrement: 1 } } });
+      } else {
+        await tx.playerInventory.delete({ where: { id: ticket.id } });
+      }
+      await tx.zikaLootPick.create({ data: { lootId, playerId: player.id, number } });
+    });
 
     revalidatePath("/zikaloot");
     return {};
@@ -119,10 +123,16 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
       revalidatePath("/zikaloot");
       return { drawnNumber, winner: winningPick.player.displayName };
     } else {
-      // Ninguém escolheu — marcar como sem vencedor
+      // Ninguém escolheu — bloquear número, agendar novo sorteio em 24h
+      const nextDraw = new Date(Date.now() + 24 * 60 * 60 * 1000);
       await prisma.zikaLoot.update({
         where: { id: lootId },
-        data: { status: ZikaLootStatus.NO_WINNER, drawnNumber }
+        data: {
+          drawnNumber,
+          drawnNumbers: { push: drawnNumber },
+          // Manter SCHEDULED e atualizar drawAt para 24h depois
+          drawAt: nextDraw
+        }
       });
       revalidatePath("/zikaloot");
       return { drawnNumber, winner: null };

@@ -788,8 +788,9 @@ model ZikaLoot {
   description String?
   prize       String
   drawAt      DateTime
-  drawnNumber Int?
-  status      ZikaLootStatus @default(SCHEDULED)
+  drawnNumber  Int?
+  drawnNumbers Int[]
+  status       ZikaLootStatus @default(SCHEDULED)
   winnerId    String?
   createdById String
   createdAt   DateTime       @default(now())
@@ -965,6 +966,7 @@ model PlayerInventory {
   playerId    String
   itemId      String
   equipped    Boolean   @default(false)
+  quantity    Int       @default(1)
   purchasedAt DateTime  @default(now())
   player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   item        ShopItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)

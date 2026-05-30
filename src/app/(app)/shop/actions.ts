@@ -99,10 +99,13 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
     if (!item) return { error: "Item não encontrado." };
     if (!item.active) return { error: "Este item não está disponível." };
 
-    const alreadyOwns = await prisma.playerInventory.findUnique({
-      where: { playerId_itemId: { playerId: player.id, itemId } }
-    });
-    if (alreadyOwns) return { error: "Você já possui este item." };
+    // Tickets ZikaLoot podem ser comprados várias vezes
+    if (item.type !== ShopItemType.ZIKALOOT_TICKET) {
+      const alreadyOwns = await prisma.playerInventory.findUnique({
+        where: { playerId_itemId: { playerId: player.id, itemId } }
+      });
+      if (alreadyOwns) return { error: "Você já possui este item." };
+    }
 
     const wallet = await getOrCreateWallet(player.id);
     if (wallet.balance < item.price)
@@ -115,9 +118,15 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
         amount: -item.price,
         description: `Compra: ${item.name}`
       });
-      await tx.playerInventory.create({
-        data: { playerId: player.id, itemId }
-      });
+      if (item.type === ShopItemType.ZIKALOOT_TICKET) {
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: player.id, itemId } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: player.id, itemId, quantity: 1 }
+        });
+      } else {
+        await tx.playerInventory.create({ data: { playerId: player.id, itemId } });
+      }
     });
 
     revalidatePath("/shop");

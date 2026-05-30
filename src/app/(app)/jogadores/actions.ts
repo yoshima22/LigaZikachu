@@ -157,6 +157,32 @@ export async function editPlayerAction(
   }
 }
 
+export async function updateUserEmailAction(
+  userId: string,
+  newEmail: string
+): Promise<{ error?: string }> {
+  try {
+    const actor = await getAdminActor();
+    const email = newEmail.toLowerCase().trim();
+    if (!email.includes("@")) return { error: "Email inválido." };
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing && existing.id !== userId) return { error: "Este email já está em uso por outra conta." };
+
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { email } }),
+      prisma.auditLog.create({
+        data: { actorUserId: actor.id, entityType: "user", entityId: userId, action: "user.email_changed", after: { email } }
+      })
+    ]);
+
+    revalidatePath("/jogadores");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function deletePlayerAction(userId: string): Promise<{ error?: string }> {
   try {
     const actor = await getAdminActor();

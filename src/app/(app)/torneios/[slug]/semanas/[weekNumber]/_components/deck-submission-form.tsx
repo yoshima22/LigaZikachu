@@ -41,16 +41,25 @@ interface ExistingDeckSubmission {
   deckList: string;
 }
 
+interface SavedDeckOption {
+  id: string;
+  name: string;
+  archetype: string | null;
+  deckList: string;
+}
+
 interface DeckSubmissionFormProps {
   tournamentWeekId: string;
   deckNumber: number;
   existingSubmission?: ExistingDeckSubmission | null;
+  savedDecks?: SavedDeckOption[];
 }
 
 export function DeckSubmissionForm({
   tournamentWeekId,
   deckNumber,
-  existingSubmission
+  existingSubmission,
+  savedDecks = []
 }: DeckSubmissionFormProps) {
   const [isPending, startTransition] = useTransition();
   const [deckName, setDeckName] = useState(existingSubmission?.deckName ?? "");
@@ -93,6 +102,31 @@ export function DeckSubmissionForm({
       onSubmit={handleSubmit}
       className="rounded-xl border border-border bg-slate-950/50 p-4"
     >
+      {savedDecks.length > 0 && (
+        <div className="mb-3">
+          <label className="block space-y-1 text-xs text-slate-400">
+            <span>Carregar deck salvo</span>
+            <select
+              onChange={(e) => {
+                const d = savedDecks.find((s) => s.id === e.target.value);
+                if (d) {
+                  setDeckName(d.name);
+                  setDeckList(d.deckList);
+                  setSelectedTypes(d.archetype ? d.archetype.split(",").map((t) => t.trim()).filter(Boolean) : []);
+                }
+              }}
+              defaultValue=""
+              className="w-full rounded-lg border border-[#FFCB05]/30 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+            >
+              <option value="">— Preencher manualmente —</option>
+              {savedDecks.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}{d.archetype ? ` (${d.archetype})` : ""}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-white">
