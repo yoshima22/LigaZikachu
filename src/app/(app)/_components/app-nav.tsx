@@ -16,6 +16,7 @@ import {
   Search,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Swords,
   Ticket,
   Trophy,
@@ -37,6 +38,7 @@ const rankingLinks = [
 
 const colecaoLinks = [
   { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
+  { href: "/professor", label: "Prof. Enguiça", icon: Sparkles, adminOnly: false },
   { href: "/album", label: "Álbum", icon: BookOpen, adminOnly: false },
   { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
   { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
