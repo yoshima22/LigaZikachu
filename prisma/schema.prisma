@@ -790,6 +790,7 @@ model ZikaLoot {
   drawAt      DateTime
   drawnNumber  Int?
   drawnNumbers Int[]
+  prizeConfig  Json?
   status       ZikaLootStatus @default(SCHEDULED)
   winnerId    String?
   createdById String

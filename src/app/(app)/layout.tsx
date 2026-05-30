@@ -68,7 +68,6 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                 <p className="text-xs font-medium text-slate-200 leading-tight">
                   {session.user.name ?? session.user.email}
                 </p>
-                <p className="text-[10px] text-[#FFCB05]/70">{session.user.role}</p>
               </Link>
               <form
                 action={async () => {

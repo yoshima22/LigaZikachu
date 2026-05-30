@@ -15,15 +15,26 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", prize: "", drawAt: "" });
+  const [prizeType, setPrizeType] = useState<"CUSTOM"|"COINS"|"STICKER"|"TICKET"|"COSMETIC">("CUSTOM");
+  const [prizeAmount, setPrizeAmount] = useState(500);
+  const [prizeItemId, setPrizeItemId] = useState("");
 
   const handleCreate = () => {
     startTransition(async () => {
       try {
+        const prizeConfig =
+          prizeType === "COINS" ? { type: "COINS" as const, amount: prizeAmount } :
+          prizeType === "TICKET" && prizeItemId ? { type: "TICKET" as const, itemId: prizeItemId } :
+          prizeType === "COSMETIC" && prizeItemId ? { type: "COSMETIC" as const, itemId: prizeItemId, itemName: prizeItemId } :
+          prizeType === "STICKER" && prizeItemId ? { type: "STICKER" as const, cardId: prizeItemId, cardName: prizeItemId } :
+          { type: "CUSTOM" as const };
+
         const result = await createZikaLoot({
           name: form.name,
           description: form.description || undefined,
           prize: form.prize,
-          drawAt: new Date(form.drawAt).toISOString()
+          drawAt: new Date(form.drawAt).toISOString(),
+          prizeConfig
         });
         if (result.error) { toast.error(result.error); return; }
         toast.success("Loteria criada!"); setShowCreate(false);
@@ -87,6 +98,32 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
             <input type="datetime-local" value={form.drawAt} onChange={(e) => setForm({ ...form, drawAt: e.target.value })}
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
           </label>
+          <label className="space-y-1 text-xs text-slate-400">
+            <span>Tipo de prêmio automático</span>
+            <select value={prizeType} onChange={(e) => setPrizeType(e.target.value as typeof prizeType)}
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]">
+              <option value="CUSTOM">Manual (apenas notificação)</option>
+              <option value="COINS">ZikaCoins</option>
+              <option value="STICKER">Figurinha (ID da carta)</option>
+              <option value="TICKET">Ticket ZikaLoot (ID do item)</option>
+              <option value="COSMETIC">Cosmético/Moldura (ID do item)</option>
+            </select>
+          </label>
+          {prizeType === "COINS" && (
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Quantidade de ZikaCoins</span>
+              <input type="number" min={1} value={prizeAmount} onChange={(e) => setPrizeAmount(Number(e.target.value))}
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+            </label>
+          )}
+          {(prizeType === "STICKER" || prizeType === "TICKET" || prizeType === "COSMETIC") && (
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>{prizeType === "STICKER" ? "ID da carta (PokemonCard)" : "ID do item (ShopItem)"}</span>
+              <input value={prizeItemId} onChange={(e) => setPrizeItemId(e.target.value)}
+                placeholder="cma1b2c3d..."
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+            </label>
+          )}
           <div className="flex gap-2 sm:col-span-2">
             <Button type="button" disabled={!form.name || !form.prize || !form.drawAt || pending} onClick={handleCreate}
               className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">Criar</Button>

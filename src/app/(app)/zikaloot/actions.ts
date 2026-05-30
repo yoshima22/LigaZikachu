@@ -9,11 +9,19 @@ import { creditCoins } from "@/lib/zikacoins";
 
 // ── Criar loteria ─────────────────────────────────────────────────────────────
 
+export type PrizeConfig =
+  | { type: "COINS"; amount: number }
+  | { type: "STICKER"; cardId: string; cardName: string }
+  | { type: "TICKET"; itemId: string }
+  | { type: "COSMETIC"; itemId: string; itemName: string }
+  | { type: "CUSTOM" };
+
 const createSchema = z.object({
   name: z.string().trim().min(2).max(100),
   description: z.string().trim().max(500).optional(),
   prize: z.string().trim().min(1).max(500),
-  drawAt: z.string().datetime()
+  drawAt: z.string().datetime(),
+  prizeConfig: z.record(z.unknown()).optional()
 });
 
 export async function createZikaLoot(raw: z.infer<typeof createSchema>): Promise<{ error?: string }> {
@@ -21,7 +29,7 @@ export async function createZikaLoot(raw: z.infer<typeof createSchema>): Promise
     const actor = await requireAdmin();
     const data = createSchema.parse(raw);
     await prisma.zikaLoot.create({
-      data: { ...data, description: data.description ?? null, createdById: actor.id }
+      data: { ...data, description: data.description ?? null, prizeConfig: data.prizeConfig ?? null, createdById: actor.id }
     });
     revalidatePath("/zikaloot");
     return {};
@@ -104,21 +112,70 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
     const winningPick = loot.picks.find((p) => p.number === drawnNumber);
 
     if (winningPick) {
+      const prizeConfig = loot.prizeConfig as PrizeConfig | null;
       await prisma.$transaction(async (tx) => {
         await tx.zikaLoot.update({
           where: { id: lootId },
           data: { status: ZikaLootStatus.DRAWN, drawnNumber, winnerId: winningPick.playerId }
         });
-        // Notificar vencedor via presente
-        await tx.playerGift.create({
-          data: {
+
+        // Enviar prêmio automaticamente conforme configuração
+        if (prizeConfig?.type === "COINS") {
+          await creditCoins(tx, {
             playerId: winningPick.playerId,
-            type: "CUSTOM",
-            title: `🎉 ZikaLoot: ${loot.name}`,
-            description: `Você ganhou! Número ${drawnNumber} sorteado. Prêmio: ${loot.prize}`,
-            payload: { lootId, drawnNumber, prize: loot.prize }
+            type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
+            amount: prizeConfig.amount,
+            description: `Prêmio ZikaLoot: ${loot.name}`
+          });
+          await tx.playerGift.create({
+            data: {
+              playerId: winningPick.playerId,
+              type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Parabéns! Número ${drawnNumber} sorteado — você recebeu ${prizeConfig.amount} ZikaCoins!`,
+              payload: { lootId, drawnNumber }
+            }
+          });
+        } else if (prizeConfig?.type === "STICKER") {
+          await tx.playerGift.create({
+            data: {
+              playerId: winningPick.playerId,
+              type: "STICKER",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Você ganhou a figurinha ${prizeConfig.cardName}!`,
+              payload: { lootId, drawnNumber, cardId: prizeConfig.cardId, cardName: prizeConfig.cardName }
+            }
+          });
+        } else if (prizeConfig?.type === "TICKET" || prizeConfig?.type === "COSMETIC") {
+          const item = await tx.shopItem.findUnique({ where: { id: prizeConfig.itemId } });
+          if (item) {
+            await tx.playerInventory.upsert({
+              where: { playerId_itemId: { playerId: winningPick.playerId, itemId: item.id } },
+              update: { quantity: { increment: 1 } },
+              create: { playerId: winningPick.playerId, itemId: item.id, quantity: 1 }
+            });
+            await tx.playerGift.create({
+              data: {
+                playerId: winningPick.playerId,
+                type: "CUSTOM",
+                title: `🎉 ZikaLoot: ${loot.name}`,
+                description: `Você ganhou: ${item.name}! Verifique seu inventário.`,
+                payload: { lootId, drawnNumber, itemId: item.id }
+              }
+            });
           }
-        });
+        } else {
+          // CUSTOM — apenas notificação
+          await tx.playerGift.create({
+            data: {
+              playerId: winningPick.playerId,
+              type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Você ganhou! Número ${drawnNumber} sorteado. Prêmio: ${loot.prize}`,
+              payload: { lootId, drawnNumber, prize: loot.prize }
+            }
+          });
+        }
       });
       revalidatePath("/zikaloot");
       return { drawnNumber, winner: winningPick.player.displayName };

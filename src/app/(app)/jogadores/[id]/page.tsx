@@ -248,15 +248,22 @@ export default async function PlayerDetailPage({
       {/* Decks Públicos */}
       {publicDecks.length > 0 && (
         <Card>
-          <CardTitle className="mb-4 flex items-center gap-2">
-            <BookOpen size={18} className="text-primary" /> Meus Decks
-          </CardTitle>
+          <div className="mb-4 flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen size={18} className="text-primary" /> Meus Decks
+            </CardTitle>
+            {publicDecks.length > 3 && (
+              <Link href={`/jogadores/${playerId}/decks`} className="text-xs text-[#FFCB05] hover:underline">
+                Ver todos ({publicDecks.length}) →
+              </Link>
+            )}
+          </div>
           <div className="space-y-3">
-            {publicDecks.map((d) => (
+            {publicDecks.slice(0, 3).map((d) => (
               <div key={d.id} className="rounded-lg border border-border bg-slate-900/40 p-3">
                 <p className="font-semibold text-slate-200 text-sm">{d.name}</p>
                 {d.archetype && <p className="text-xs text-slate-500 mb-2">{d.archetype}</p>}
-                <pre className="max-h-48 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">
+                <pre className="max-h-36 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">
                   {d.deckList}
                 </pre>
               </div>

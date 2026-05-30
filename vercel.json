@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/zikaloot/draw",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

@@ -3,36 +3,10 @@
 import { useState, useTransition } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
-import {
-  Brain,
-  Circle,
-  Diamond,
-  Droplet,
-  Dumbbell,
-  Flame,
-  Heart,
-  Leaf,
-  Moon,
-  Save,
-  Shield,
-  Zap
-} from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PokemonTypeSelector } from "@/components/ui/pokemon-type-selector";
 import { submitTournamentWeekDeck } from "../../../../actions";
-
-const pokemonTypes = [
-  { value: "Grass", label: "Grama", icon: Leaf, className: "bg-emerald-500 text-emerald-950" },
-  { value: "Fire", label: "Fogo", icon: Flame, className: "bg-orange-500 text-orange-950" },
-  { value: "Water", label: "Agua", icon: Droplet, className: "bg-sky-500 text-sky-950" },
-  { value: "Lightning", label: "Eletrico", icon: Zap, className: "bg-yellow-300 text-yellow-950" },
-  { value: "Fighting", label: "Lutador", icon: Dumbbell, className: "bg-amber-700 text-amber-50" },
-  { value: "Psychic", label: "Psiquico", icon: Brain, className: "bg-fuchsia-500 text-fuchsia-950" },
-  { value: "Colorless", label: "Incolor", icon: Circle, className: "bg-slate-200 text-slate-900" },
-  { value: "Darkness", label: "Noturno", icon: Moon, className: "bg-zinc-800 text-zinc-100" },
-  { value: "Metal", label: "Metalico", icon: Shield, className: "bg-slate-400 text-slate-950" },
-  { value: "Dragon", label: "Dragao", icon: Diamond, className: "bg-indigo-500 text-indigo-50" },
-  { value: "Fairy", label: "Fada", icon: Heart, className: "bg-pink-300 text-pink-950" }
-];
 
 interface ExistingDeckSubmission {
   deckNumber: number;
@@ -155,40 +129,7 @@ export function DeckSubmissionForm({
             placeholder="Ex.: Charizard ex"
           />
         </label>
-        <div className="space-y-1 text-xs text-slate-400">
-          <span>Tipos do deck</span>
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-700 bg-slate-950 p-2 sm:grid-cols-3">
-            {pokemonTypes.map((type) => {
-              const active = selectedTypes.includes(type.value);
-              const TypeIcon = type.icon;
-              return (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() =>
-                    setSelectedTypes((current) =>
-                      current.includes(type.value)
-                        ? current.filter((item) => item !== type.value)
-                        : [...current, type.value]
-                    )
-                  }
-                  className={[
-                    "flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition",
-                    active
-                      ? "border-[#FFCB05] bg-[#FFCB05]/10 text-white"
-                      : "border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600"
-                  ].join(" ")}
-                >
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full ${type.className}`}>
-                    <TypeIcon size={14} strokeWidth={2.4} aria-hidden="true" />
-                  </span>
-                  <span>{type.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[10px] text-slate-500">Selecione um ou mais tipos presentes no deck.</p>
-        </div>
+        <PokemonTypeSelector selected={selectedTypes} onChange={setSelectedTypes} />
       </div>
 
       <label className="mt-3 block space-y-1 text-xs text-slate-400">

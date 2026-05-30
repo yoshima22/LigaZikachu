@@ -29,7 +29,7 @@ export default async function PerfilPage() {
           deckName: true,
           archetype: true,
           status: true,
-          tournament: { select: { name: true, slug: true } },
+          tournament: { select: { name: true, slug: true, status: true } },
           tournamentWeek: {
             select: {
               weekNumber: true,
@@ -115,7 +115,8 @@ export default async function PerfilPage() {
     .filter((deck) =>
       deck.tournamentWeek &&
       isDeckRegistrationLocked(deck.tournamentWeek) &&
-      deck.tournament  // só decks vinculados a torneios
+      deck.tournament &&
+      deck.tournament.status !== "DRAFT"  // excluir torneios rascunho/fantasma
     )
     .slice(0, 5);
 

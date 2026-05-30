@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Globe, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Globe, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PokemonTypeSelector } from "@/components/ui/pokemon-type-selector";
 import { saveDeck, updateDeck, deleteDeck } from "../actions";
 
 interface Deck { id: string; name: string; archetype: string | null; deckList: string; isPublic: boolean; updatedAt: string; }
 
-const EMPTY = { name: "", archetype: "", deckList: "", isPublic: false };
+const EMPTY = { name: "", archetype: [] as string[], deckList: "", isPublic: false };
 
 function DeckForm({ init, onSave, onCancel, pending, label }: {
   init: typeof EMPTY; onSave: (d: typeof EMPTY) => void;
@@ -17,18 +18,12 @@ function DeckForm({ init, onSave, onCancel, pending, label }: {
   const [form, setForm] = useState(init);
   return (
     <div className="space-y-3 rounded-xl border border-border bg-slate-900/50 p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-xs text-slate-400">
-          <span>Nome do deck *</span>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
-            placeholder="Ex: Charizard ex" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
-        </label>
-        <label className="space-y-1 text-xs text-slate-400">
-          <span>Arquétipo / tipos</span>
-          <input value={form.archetype} onChange={(e) => setForm({ ...form, archetype: e.target.value })}
-            placeholder="Ex: Fire, Water" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
-        </label>
-      </div>
+      <label className="space-y-1 text-xs text-slate-400 block">
+        <span>Nome do deck *</span>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
+          placeholder="Ex: Charizard ex" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+      </label>
+      <PokemonTypeSelector selected={form.archetype} onChange={(types) => setForm({ ...form, archetype: types })} />
       <label className="space-y-1 text-xs text-slate-400 block">
         <span>Lista completa *</span>
         <textarea value={form.deckList} onChange={(e) => setForm({ ...form, deckList: e.target.value })} required
@@ -54,9 +49,14 @@ export function MyDecksClient({ decks }: { decks: Deck[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const toStr = (f: typeof EMPTY) => ({
+    name: f.name, deckList: f.deckList, isPublic: f.isPublic,
+    archetype: f.archetype.length > 0 ? f.archetype.join(", ") : undefined
+  });
+
   const handleSave = (form: typeof EMPTY) => startTransition(async () => {
     try {
-      const result = await saveDeck({ name: form.name, archetype: form.archetype || undefined, deckList: form.deckList, isPublic: form.isPublic });
+      const result = await saveDeck(toStr(form));
       if (result.error) { toast.error(result.error); return; }
       toast.success("Deck salvo!"); setShowCreate(false);
     } catch { toast.error("Erro ao salvar."); }
@@ -64,7 +64,7 @@ export function MyDecksClient({ decks }: { decks: Deck[] }) {
 
   const handleUpdate = (id: string, form: typeof EMPTY) => startTransition(async () => {
     try {
-      const result = await updateDeck(id, { name: form.name, archetype: form.archetype || undefined, deckList: form.deckList, isPublic: form.isPublic });
+      const result = await updateDeck(id, toStr(form));
       if (result.error) { toast.error(result.error); return; }
       toast.success("Deck atualizado!"); setEditingId(null);
     } catch { toast.error("Erro ao atualizar."); }
@@ -125,7 +125,9 @@ export function MyDecksClient({ decks }: { decks: Deck[] }) {
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button type="button" disabled={pending}
-                      onClick={() => setEditingId(deck.id)}
+                      onClick={() => {
+                        setEditingId(deck.id);
+                      }}
                       className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200"><Pencil size={14} /></button>
                     <button type="button" disabled={pending}
                       onClick={() => handleDelete(deck.id, deck.name)}
