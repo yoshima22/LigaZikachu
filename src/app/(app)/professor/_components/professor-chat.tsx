@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useTransition } from "react";
 import Image from "next/image";
-import { Send, Zap, BookOpen, Swords, FlaskConical, AlertTriangle, CheckCircle } from "lucide-react";
-import { askProfessor, analyzeDeckAction, type ChatMessage, type ProfessorResponse, type DeckAnalysisResult } from "../actions";
+import { Send, Zap, BookOpen, Swords, FlaskConical, AlertTriangle, CheckCircle, Trophy } from "lucide-react";
+import { askProfessor, analyzeDeckAction, analyzeMatchAction, type ChatMessage, type ProfessorResponse, type DeckAnalysisResult, type MatchAnalysisResult } from "../actions";
 import type { TcgCard } from "@/lib/card-service";
 
 const WELCOME: ChatMessage = {
@@ -204,8 +204,74 @@ function DeckAnalyzerPanel() {
   );
 }
 
+function MatchAnalyzerPanel() {
+  const [input, setInput] = useState("");
+  const [result, setResult] = useState<MatchAnalysisResult | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const analyze = () => {
+    if (!input.trim() || pending) return;
+    setResult(null);
+    startTransition(async () => {
+      try { setResult(await analyzeMatchAction(input)); }
+      catch { setResult({ problems: [], message: "Erro ao analisar. Tenta de novo!", suggestedCards: [] }); }
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border bg-slate-900/50 p-4 space-y-3">
+        <p className="text-sm font-semibold text-slate-200">Descreva o combate</p>
+        <p className="text-xs text-slate-500">
+          Exemplo: <em>"Perdi de 6-3. Comecei sem atacante, comprei muita energia e não achei carta de busca."</em>
+        </p>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={pending}
+          rows={5}
+          placeholder="Descreva o que aconteceu: placar, problemas de mão, o que o adversário fez, por que você perdeu ou ganhou..."
+          className="w-full resize-none rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05] placeholder:text-slate-700"
+        />
+        <button type="button" disabled={!input.trim() || pending} onClick={analyze}
+          className="flex items-center gap-2 rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
+          <Trophy size={16} /> {pending ? "Analisando..." : "Analisar Combate"}
+        </button>
+      </div>
+
+      {result && (
+        <div className="space-y-4">
+          {result.problems.length > 0 && (
+            <div className="space-y-1.5">
+              {result.problems.map((p, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {p}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-3">
+            <ProfAvatar size={32} />
+            <div className="rounded-2xl bg-slate-900 px-4 py-3 text-sm text-slate-200 leading-relaxed flex-1">
+              <p className="whitespace-pre-wrap">{result.message}</p>
+            </div>
+          </div>
+          {result.suggestedCards.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-3 font-semibold">Cartas para testar</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {result.suggestedCards.map((c) => <CardSuggestion key={c.id} card={c} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProfessorChat() {
-  const [activeTab, setActiveTab] = useState<"chat" | "deck">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "deck" | "match">("chat");
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [display, setDisplay] = useState<DisplayMessage[]>([
     { role: "professor", content: WELCOME.content }
@@ -281,29 +347,23 @@ export function ProfessorChat() {
   return (
     <div className="flex flex-col gap-4">
       {/* Tabs */}
-      <div className="flex rounded-xl border border-border overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setActiveTab("chat")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold transition-colors ${
-            activeTab === "chat" ? "bg-[#FFCB05]/10 text-[#FFCB05]" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Zap size={15} /> Chat com o Professor
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("deck")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold transition-colors ${
-            activeTab === "deck" ? "bg-[#FFCB05]/10 text-[#FFCB05]" : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <FlaskConical size={15} /> Analisar Deck
-        </button>
+      <div className="flex rounded-xl border border-border overflow-hidden text-xs sm:text-sm">
+        {([
+          { id: "chat", label: "Chat", icon: Zap },
+          { id: "deck", label: "Analisar Deck", icon: FlaskConical },
+          { id: "match", label: "Analisar Combate", icon: Trophy }
+        ] as const).map(({ id, label, icon: Icon }) => (
+          <button key={id} type="button" onClick={() => setActiveTab(id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 font-semibold transition-colors ${
+              activeTab === id ? "bg-[#FFCB05]/10 text-[#FFCB05]" : "text-slate-400 hover:text-slate-200"
+            }`}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
       </div>
 
-      {/* Deck Analyzer */}
       {activeTab === "deck" && <DeckAnalyzerPanel />}
+      {activeTab === "match" && <MatchAnalyzerPanel />}
 
       {/* Chat */}
       {activeTab === "chat" && <>
