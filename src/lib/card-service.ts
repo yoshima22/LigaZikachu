@@ -2,6 +2,8 @@
 // Documentação: https://pokemontcg.io/
 // Chave opcional: defina POKEMON_TCG_API_KEY para mais rate limit
 
+import { resolveCardName } from "./card-names-ptbr";
+
 const TCG_BASE = "https://api.pokemontcg.io/v2";
 
 function headers(): Record<string, string> {
@@ -80,7 +82,7 @@ export async function searchCards(query: string, pageSize = 8): Promise<TcgCard[
 
 export async function fetchCardsByNames(names: string[]): Promise<TcgCard[]> {
   const results = await Promise.allSettled(
-    names.map((name) => searchCards(name, 1))
+    names.map((rawName) => searchCards(resolveCardName(rawName), 1))
   );
   return results
     .filter((r): r is PromiseFulfilledResult<TcgCard[]> => r.status === "fulfilled")
