@@ -128,7 +128,7 @@ export async function createChallenge(
     const [tournament, player] = await Promise.all([
       prisma.tournament.findUnique({
         where: { id: data.tournamentId },
-        select: { id: true, slug: true, seasonId: true, challengeConfig: true }
+        select: { id: true, name: true, slug: true, seasonId: true, challengeConfig: true }
       }),
       prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true, displayName: true } })
     ]);
