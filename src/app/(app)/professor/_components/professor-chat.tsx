@@ -71,6 +71,34 @@ interface DisplayMessage {
   isLoading?: boolean;
 }
 
+// URL da foto do Professor — defina NEXT_PUBLIC_PROFESSOR_IMAGE_URL na Vercel
+// ou deixe em branco para usar o ícone padrão
+const PROFESSOR_IMAGE = process.env.NEXT_PUBLIC_PROFESSOR_IMAGE_URL ?? "";
+
+function ProfAvatar({ size = 32 }: { size?: number }) {
+  if (PROFESSOR_IMAGE) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={PROFESSOR_IMAGE}
+        alt="Professor Enguiça"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-full object-cover border-2 border-[#FFCB05]/40"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700]"
+      style={{ width: size, height: size }}
+    >
+      <Zap size={Math.round(size * 0.45)} className="text-[#1A1A2E]" strokeWidth={2.5} />
+    </div>
+  );
+}
+
 function DeckAnalyzerPanel() {
   const [deckInput, setDeckInput] = useState("");
   const [result, setResult] = useState<DeckAnalysisResult | null>(null);
@@ -295,11 +323,9 @@ export function ProfessorChat() {
       <div className="flex flex-col gap-4 rounded-2xl border border-border bg-slate-950/50 p-4 min-h-[400px] max-h-[600px] overflow-y-auto">
         {display.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            {/* Avatar */}
+            {/* Avatar do Professor */}
             {msg.role === "professor" && (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700]">
-                <Zap size={14} className="text-[#1A1A2E]" strokeWidth={2.5} />
-              </div>
+              <ProfAvatar size={32} />
             )}
 
             <div className={`max-w-[80%] space-y-3 ${msg.role === "user" ? "items-end" : ""}`}>
