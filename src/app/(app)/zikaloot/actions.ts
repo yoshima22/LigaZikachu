@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { ZikaLootStatus, ZikaCoinTxType, ShopItemType } from "@prisma/client";
+import { ZikaLootStatus, ZikaCoinTxType, ShopItemType, Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
 
@@ -21,7 +21,7 @@ export async function createZikaLoot(raw: z.infer<typeof createSchema>): Promise
     const actor = await requireAdmin();
     const data = createSchema.parse(raw);
     await prisma.zikaLoot.create({
-      data: { ...data, description: data.description ?? null, prizeConfig: data.prizeConfig ?? null, createdById: actor.id }
+      data: { ...data, description: data.description ?? null, prizeConfig: data.prizeConfig ?? Prisma.JsonNull, createdById: actor.id }
     });
     revalidatePath("/zikaloot");
     return {};
