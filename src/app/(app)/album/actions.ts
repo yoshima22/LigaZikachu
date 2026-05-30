@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
+import { sendNotificationToUser } from "@/lib/notifications";
 import { pickRarity, DUPLICATE_COINS, GENERATION_RANGES } from "@/lib/sticker-pack";
 
 export type PackOpenResult = {
@@ -205,6 +206,16 @@ export async function sendStickerGift(cardId: string, targetPlayerId: string): P
         }
       })
     ]);
+
+    // Notificar destinatário
+    const targetUser = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { userId: true, displayName: true } });
+    if (targetUser) {
+      await sendNotificationToUser(targetUser.userId, {
+        title: "🎴 Figurinha recebida!",
+        body: `${player.displayName} te enviou ${sticker.card.displayName}. Verifique sua Caixa de Presentes!`,
+        url: "/caixa-de-presentes"
+      });
+    }
 
     revalidatePath("/album");
     return {};

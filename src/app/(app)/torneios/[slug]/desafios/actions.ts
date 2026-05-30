@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ChallengeStatus, ChallengeType, Prisma } from "@prisma/client";
 import { parseChallengeConfig } from "./config";
+import { sendNotificationToUser } from "@/lib/notifications";
 
 // ─── Anúncio ─────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,19 @@ export async function createChallenge(
         reason: data.reason
       }
     });
+
+    // Notificar jogador desafiado
+    const challengedPlayer = await prisma.player.findUnique({
+      where: { id: data.challengedId },
+      select: { userId: true, displayName: true }
+    });
+    if (challengedPlayer) {
+      await sendNotificationToUser(challengedPlayer.userId, {
+        title: "⚔️ Você foi desafiado!",
+        body: `${player.displayName} te desafiou em ${tournament.name}. Verifique a aba de Desafios!`,
+        url: `/torneios/${tournament.slug}/desafios`
+      });
+    }
 
     revalidatePath(`/torneios/${tournament.slug}/desafios`);
     return {};

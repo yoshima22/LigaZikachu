@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ZikaCoinTxType, ShopItemType, Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
+import { sendNotificationToUser } from "@/lib/notifications";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
 
 const createSchema = z.object({
@@ -99,7 +100,7 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
   try {
     const loot = await prisma.zikaLoot.findUnique({
       where: { id: lootId },
-      include: { picks: { include: { player: { select: { id: true, displayName: true } } } } }
+      include: { picks: { include: { player: { select: { id: true, displayName: true, userId: true } } } } }
     });
     if (!loot) return { drawnNumber: 0, winner: null, error: "Loteria não encontrada." };
     if (loot.status !== ZikaLootStatus.SCHEDULED)
@@ -181,6 +182,13 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
           });
         }
       });
+      // Push notification para o vencedor
+      await sendNotificationToUser(winningPick.player.userId, {
+        title: "🏆 Você ganhou na ZikaLoot!",
+        body: `Número ${drawnNumber} sorteado em "${loot.name}". Verifique sua Caixa de Presentes!`,
+        url: "/caixa-de-presentes"
+      });
+
       revalidatePath("/zikaloot");
       return { drawnNumber, winner: winningPick.player.displayName };
     } else {
