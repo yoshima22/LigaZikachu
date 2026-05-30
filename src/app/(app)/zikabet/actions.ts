@@ -244,33 +244,28 @@ export async function calculateAutoOdds(
         tournamentWeek: { include: { tournament: { select: { id: true } } } }
       }
     });
-    if (!match || !match.playerB) return { playerAOdds: 1.5, playerBOdds: 1.5 };
+    if (!match || !match.playerB || !match.playerBId) return { playerAOdds: 1.5, playerBOdds: 1.5 };
 
+    const playerAId = match.playerAId;
+    const playerBId = match.playerBId; // now narrowed to string
     const tournamentId = match.tournamentWeek?.tournament?.id;
+    const weekFilter = tournamentId ? { tournamentWeek: { tournamentId } } : {};
 
     // Buscar stats de cada jogador no torneio (vitórias e derrotas)
     const [statsA, statsB] = await Promise.all([
       prisma.match.aggregate({
-        where: {
-          OR: [{ playerAId: match.playerAId }, { playerBId: match.playerAId }],
-          status: "CONFIRMED",
-          ...(tournamentId ? { tournamentWeek: { tournamentId } } : {})
-        },
+        where: { OR: [{ playerAId }, { playerBId: playerAId }], status: "CONFIRMED", ...weekFilter },
         _count: { id: true }
       }),
       prisma.match.aggregate({
-        where: {
-          OR: [{ playerAId: match.playerBId }, { playerBId: match.playerBId }],
-          status: "CONFIRMED",
-          ...(tournamentId ? { tournamentWeek: { tournamentId } } : {})
-        },
+        where: { OR: [{ playerAId: playerBId }, { playerBId }], status: "CONFIRMED", ...weekFilter },
         _count: { id: true }
       })
     ]);
 
     const [winsA, winsB] = await Promise.all([
-      prisma.match.count({ where: { winnerPlayerId: match.playerAId, status: "CONFIRMED", ...(tournamentId ? { tournamentWeek: { tournamentId } } : {}) } }),
-      prisma.match.count({ where: { winnerPlayerId: match.playerBId, status: "CONFIRMED", ...(tournamentId ? { tournamentWeek: { tournamentId } } : {}) } })
+      prisma.match.count({ where: { winnerPlayerId: playerAId, status: "CONFIRMED", ...weekFilter } }),
+      prisma.match.count({ where: { winnerPlayerId: playerBId, status: "CONFIRMED", ...weekFilter } })
     ]);
 
     const totalA = statsA._count.id || 1;
