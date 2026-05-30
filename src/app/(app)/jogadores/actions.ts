@@ -157,6 +157,56 @@ export async function editPlayerAction(
   }
 }
 
+export async function deletePlayerAction(userId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await getAdminActor();
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { player: { select: { id: true, displayName: true, status: true } } }
+    });
+    if (!user) return { error: "Usuário não encontrado." };
+    if (!user.player) return { error: "Jogador não encontrado." };
+
+    const isSuperAdmin = actor.role === Role.SUPER_ADMIN;
+    const canDelete =
+      isSuperAdmin ||
+      user.status === "PENDING_APPROVAL" ||
+      user.status === "REJECTED";
+
+    if (!canDelete) {
+      return { error: "Apenas SUPER_ADMIN pode excluir contas ativas. Use suspender para desativar." };
+    }
+
+    const playerId = user.player.id;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.playerBadge.deleteMany({ where: { playerId } });
+      await tx.deckSubmission.deleteMany({ where: { playerId } });
+      await tx.tournamentRegistration.deleteMany({ where: { playerId } });
+      await tx.seasonPlayer.deleteMany({ where: { playerId } });
+      await tx.boosterCode.updateMany({ where: { assignedToId: playerId }, data: { assignedToId: null, status: "AVAILABLE" } });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "user",
+          entityId: userId,
+          action: "user.deleted",
+          before: { displayName: user.player!.displayName, status: user.status },
+          after: {}
+        }
+      });
+      await tx.player.delete({ where: { id: playerId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    revalidatePath("/jogadores");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function removeFromSeasonAction(
   playerId: string,
   seasonId: string

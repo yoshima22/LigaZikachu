@@ -12,7 +12,7 @@ import {
   approvePlayerAction,
   toggleSuspendPlayerAction,
   editPlayerAction,
-  removeFromSeasonAction
+  deletePlayerAction
 } from "../actions";
 
 export interface PlayerRow {
@@ -252,23 +252,25 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                       >
                         <Pencil size={16} />
                       </button>
-                      {isSuperAdmin && (
+                      {canAdmin && p.userId !== currentUserId && (
                         <button
-                          title="Remover da temporada"
-                          disabled={!seasonId || p.userId === currentUserId}
+                          title="Excluir conta"
                           onClick={() => {
-                            if (confirm(`Remover ${p.displayName} da temporada?`)) {
+                            const warn = isSuperAdmin
+                              ? `Excluir PERMANENTEMENTE a conta de ${p.displayName}? Esta ação não pode ser desfeita.`
+                              : `Excluir a conta pendente de ${p.displayName}?`;
+                            if (confirm(warn)) {
                               startTransition(async () => {
-                                const result = await removeFromSeasonAction(p.playerId, seasonId);
+                                const result = await deletePlayerAction(p.userId);
                                 if (result?.error) {
                                   toast.error(result.error);
                                   return;
                                 }
-                                toast.success("Jogador removido da temporada.");
+                                toast.success("Conta excluída.");
                               });
                             }
                           }}
-                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -330,22 +332,24 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                   >
                     <Pencil size={15} />
                   </button>
-                  {isSuperAdmin && (
+                  {canAdmin && p.userId !== currentUserId && (
                     <button
-                      disabled={!seasonId || p.userId === currentUserId}
                       onClick={() => {
-                        if (confirm(`Remover ${p.displayName} da temporada?`)) {
+                        const warn = isSuperAdmin
+                          ? `Excluir PERMANENTEMENTE a conta de ${p.displayName}?`
+                          : `Excluir a conta pendente de ${p.displayName}?`;
+                        if (confirm(warn)) {
                           startTransition(async () => {
-                            const result = await removeFromSeasonAction(p.playerId, seasonId);
+                            const result = await deletePlayerAction(p.userId);
                             if (result?.error) {
                               toast.error(result.error);
                               return;
                             }
-                            toast.success("Jogador removido da temporada.");
+                            toast.success("Conta excluída.");
                           });
                         }
                       }}
-                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10"
                     >
                       <Trash2 size={15} />
                     </button>

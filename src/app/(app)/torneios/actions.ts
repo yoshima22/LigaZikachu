@@ -969,6 +969,18 @@ export async function addTournamentPlayer(
     if (!canManageTournament(actor, tournament)) return { error: "Voce nao pode gerenciar este torneio." };
     if (tournament.status === TournamentStatus.FINISHED) return { error: "Torneio encerrado nao aceita novos jogadores." };
 
+    if (tournament.maxPlayers) {
+      const existing = await prisma.tournamentRegistration.findUnique({
+        where: { tournamentId_playerId: { tournamentId: tournament.id, playerId: player.id } }
+      });
+      if (!existing) {
+        const count = await prisma.tournamentRegistration.count({
+          where: { tournamentId: tournament.id, status: { in: [RegistrationStatus.APPROVED, RegistrationStatus.PENDING] } }
+        });
+        if (count >= tournament.maxPlayers) return { error: `Limite de ${tournament.maxPlayers} jogadores atingido.` };
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.tournamentRegistration.upsert({
         where: {
@@ -1371,6 +1383,18 @@ export async function approveRegistration(
     if (reg.status !== RegistrationStatus.PENDING)
       return { error: "Inscrição não está pendente." };
 
+    const t = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { slug: true, seasonId: true, maxPlayers: true }
+    });
+
+    if (t?.maxPlayers) {
+      const count = await prisma.tournamentRegistration.count({
+        where: { tournamentId, status: RegistrationStatus.APPROVED }
+      });
+      if (count >= t.maxPlayers) return { error: `Limite de ${t.maxPlayers} jogadores aprovados atingido.` };
+    }
+
     await prisma.tournamentRegistration.update({
       where: { tournamentId_playerId: { tournamentId, playerId } },
       data: {
@@ -1378,11 +1402,6 @@ export async function approveRegistration(
         decidedAt: new Date(),
         decidedById: actor.id
       }
-    });
-
-    const t = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-      select: { slug: true, seasonId: true }
     });
 
     if (t?.seasonId) {
