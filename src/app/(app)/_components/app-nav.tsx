@@ -6,6 +6,7 @@ import {
   BarChart3,
   Calendar,
   ChevronDown,
+  Coins,
   Crown,
   Gift,
   LayoutDashboard,
@@ -13,6 +14,7 @@ import {
   Package,
   Search,
   ShieldCheck,
+  ShoppingBag,
   Trophy,
   User,
   Users
@@ -21,14 +23,20 @@ import { Button } from "@/components/ui/button";
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false },
-  { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false }
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false }
 ];
 
 const rankingLinks = [
   { href: "/ranking", label: "Ranking Geral", icon: BarChart3, adminOnly: false },
   { href: "/top-do-dia", label: "Top do Dia", icon: Crown, adminOnly: false },
   { href: "/temporadas", label: "Temporadas", icon: Calendar, adminOnly: false }
+];
+
+const colecaoLinks = [
+  { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
+  { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
+  { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },
+  { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false }
 ];
 
 const profileLinks = [
@@ -93,6 +101,15 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
           setOpenMenu={setOpenMenu}
         />
         <NavDropdown
+          id="colecao"
+          label="Coleção"
+          icon={ShoppingBag}
+          links={colecaoLinks}
+          admin={admin}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+        />
+        <NavDropdown
           id="perfil"
           label="Perfil"
           icon={User}
@@ -145,6 +162,15 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
             setOpenMenu={setOpenMenu}
           />
           <MobileNavGroup
+            id="mobile-colecao"
+            label="Coleção"
+            icon={ShoppingBag}
+            links={colecaoLinks}
+            admin={admin}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+          />
+          <MobileNavGroup
             id="mobile-perfil"
             label="Perfil"
             icon={User}
@@ -153,14 +179,14 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
           />
-        {admin && (
-          <Link href="/admin" onClick={() => setOpenMenu(null)}>
-            <Button variant="ghost" size="sm" className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
-              <ShieldCheck size={13} className="mr-1" />
-              Admin
-            </Button>
-          </Link>
-        )}
+          {admin && (
+            <Link href="/admin" onClick={() => setOpenMenu(null)}>
+              <Button variant="ghost" size="sm" className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
+                <ShieldCheck size={13} className="mr-1" />
+                Admin
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
       )}

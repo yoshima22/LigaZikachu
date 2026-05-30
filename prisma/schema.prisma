@@ -170,6 +170,8 @@ model User {
   decidedRegistrations     TournamentRegistration[] @relation("RegistrationDecidedBy")
   createdLeagueBadges      LeagueBadge[]        @relation("LeagueBadgeCreatedBy")
   awardedPlayerBadges      PlayerBadge[]        @relation("PlayerBadgeAwardedBy")
+  coinAdjustments          ZikaCoinTransaction[] @relation("ZkTxAdmin")
+  createdShopItems         ShopItem[]           @relation("ShopItemCreatedBy")
 
   @@map("users")
 }
@@ -202,6 +204,8 @@ model Player {
   tournamentRegistrations TournamentRegistration[]
   gifts                   PlayerGift[]
   badgeProgress           BadgeProgress[]
+  wallet                  ZikaCoinWallet?
+  inventory               PlayerInventory[]
 
   @@map("players")
 }
@@ -239,6 +243,7 @@ model Tournament {
   deckSubmissions       DeckSubmission[]
   badges                LeagueBadge[]
   challenges            Challenge[]        @relation("TournamentChallenges")
+  coinTransactions      ZikaCoinTransaction[] @relation("ZkTxTournament")
 
   @@map("tournaments")
 }
@@ -262,8 +267,9 @@ model TournamentWeek {
   updatedAt    DateTime     @updatedAt
   tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   matches      Match[]      @relation("TournamentWeekMatches")
-  deckSubmissions DeckSubmission[]
-  challenges   Challenge[]  @relation("TournamentWeekChallenges")
+  deckSubmissions  DeckSubmission[]
+  challenges       Challenge[]         @relation("TournamentWeekChallenges")
+  coinTransactions ZikaCoinTransaction[] @relation("ZkTxWeek")
 
   @@unique([tournamentId, weekNumber])
   @@map("tournament_weeks")
@@ -405,6 +411,7 @@ model Match {
   challenges        Challenge[]
 
   @@index([seasonId, weekId, status])
+  coinTransactions ZikaCoinTransaction[] @relation("ZkTxMatch")
   @@index([playerAId, playerBId, playedAt])
   @@index([playerADeckSubmissionId])
   @@index([playerBDeckSubmissionId])
@@ -703,6 +710,112 @@ enum GiftStatus {
   UNCLAIMED
   CLAIMED
   EXPIRED
+}
+
+// ── ZikaCoins ──────────────────────────────────────────────────────────────────
+
+enum ZikaCoinTxType {
+  PARTICIPATION_REWARD
+  MATCH_WIN_REWARD
+  MATCH_LOSS_REWARD
+  TOP_DAY_REWARD
+  ACHIEVEMENT_REWARD
+  BADGE_REWARD
+  BET_PLACED
+  BET_WON
+  BET_LOST
+  BET_REFUNDED
+  SHOP_PURCHASE
+  STICKER_PACK_PURCHASE
+  DUPLICATE_STICKER_CONVERSION
+  ADMIN_ADJUSTMENT
+}
+
+enum ZikaCoinTxStatus {
+  COMPLETED
+  PENDING
+  CANCELLED
+}
+
+model ZikaCoinWallet {
+  id           String                @id @default(cuid())
+  playerId     String                @unique
+  balance      Int                   @default(0)
+  totalEarned  Int                   @default(0)
+  totalSpent   Int                   @default(0)
+  updatedAt    DateTime              @updatedAt @default(now())
+  player       Player                @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  transactions ZikaCoinTransaction[]
+  @@map("zikacoin_wallets")
+}
+
+model ZikaCoinTransaction {
+  id               String              @id @default(cuid())
+  walletId         String
+  type             ZikaCoinTxType
+  amount           Int
+  balanceBefore    Int
+  balanceAfter     Int
+  description      String?
+  tournamentId     String?
+  tournamentWeekId String?
+  matchId          String?
+  adminId          String?
+  status           ZikaCoinTxStatus    @default(COMPLETED)
+  createdAt        DateTime            @default(now())
+  wallet           ZikaCoinWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  tournament       Tournament?         @relation("ZkTxTournament", fields: [tournamentId], references: [id], onDelete: SetNull)
+  tournamentWeek   TournamentWeek?     @relation("ZkTxWeek", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  match            Match?              @relation("ZkTxMatch", fields: [matchId], references: [id], onDelete: SetNull)
+  admin            User?               @relation("ZkTxAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  @@index([walletId, createdAt])
+  @@map("zikacoin_transactions")
+}
+
+// ── Shop ──────────────────────────────────────────────────────────────────────
+
+enum ShopItemType {
+  TITLE
+  BANNER
+  FRAME
+}
+
+enum ShopItemRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+model ShopItem {
+  id          String          @id @default(cuid())
+  type        ShopItemType
+  name        String
+  description String?
+  imageUrl    String?         @db.Text
+  rarity      ShopItemRarity  @default(COMMON)
+  price       Int
+  active      Boolean         @default(true)
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   User            @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  ownerships  PlayerInventory[]
+  @@map("shop_items")
+}
+
+model PlayerInventory {
+  id          String    @id @default(cuid())
+  playerId    String
+  itemId      String
+  equipped    Boolean   @default(false)
+  purchasedAt DateTime  @default(now())
+  player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  item        ShopItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  @@unique([playerId, itemId])
+  @@index([playerId])
+  @@map("player_inventory")
 }
 
 model Account {
