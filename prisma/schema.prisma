@@ -712,6 +712,7 @@ enum GiftType {
   BADGE
   ACHIEVEMENT
   CUSTOM
+  STICKER
 }
 
 enum GiftStatus {
@@ -765,6 +766,7 @@ model StickerPack {
   id          String   @id @default(cuid())
   name        String
   description String?
+  imageUrl    String?  @db.Text
   price       Int
   cardCount   Int      @default(3)
   generation  Int?

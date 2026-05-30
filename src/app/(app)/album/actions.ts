@@ -130,6 +130,8 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
   }
 }
 
+const MAX_FAVORITES = 6;
+
 export async function toggleFavoriteSticker(cardId: string): Promise<{ error?: string }> {
   try {
     const actor = await getSessionUser();
@@ -142,10 +144,67 @@ export async function toggleFavoriteSticker(cardId: string): Promise<{ error?: s
     });
     if (!sticker) return { error: "Você não possui esta figurinha." };
 
+    if (!sticker.isFavorite) {
+      const favCount = await prisma.playerSticker.count({
+        where: { playerId: player.id, isFavorite: true }
+      });
+      if (favCount >= MAX_FAVORITES)
+        return { error: `Você já tem ${MAX_FAVORITES} favoritos. Remova um antes de adicionar outro.` };
+    }
+
     await prisma.playerSticker.update({
       where: { playerId_cardId: { playerId: player.id, cardId } },
       data: { isFavorite: !sticker.isFavorite }
     });
+
+    revalidatePath("/album");
+    revalidatePath("/perfil");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Enviar figurinha duplicada para outro jogador ──────────────────────────────
+
+export async function sendStickerGift(cardId: string, targetPlayerId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    if (!player) return { error: "Jogador não encontrado." };
+    if (player.id === targetPlayerId) return { error: "Você não pode enviar para si mesmo." };
+
+    const sticker = await prisma.playerSticker.findUnique({
+      where: { playerId_cardId: { playerId: player.id, cardId } },
+      include: { card: { select: { displayName: true, rarity: true } } }
+    });
+    if (!sticker) return { error: "Você não possui esta figurinha." };
+    if (sticker.quantity < 2) return { error: "Você precisa ter pelo menos 2 cópias para enviar uma." };
+
+    const targetPlayer = await prisma.player.findUnique({
+      where: { id: targetPlayerId },
+      select: { id: true, displayName: true }
+    });
+    if (!targetPlayer) return { error: "Jogador destino não encontrado." };
+
+    await prisma.$transaction([
+      // Decrementar quantidade do remetente
+      prisma.playerSticker.update({
+        where: { playerId_cardId: { playerId: player.id, cardId } },
+        data: { quantity: { decrement: 1 } }
+      }),
+      // Criar presente na caixa do destinatário
+      prisma.playerGift.create({
+        data: {
+          playerId: targetPlayerId,
+          type: "STICKER",
+          title: `Figurinha: ${sticker.card.displayName}`,
+          description: `${player.id === player.id ? "Um colega" : player.id} te enviou uma figurinha duplicada!`,
+          payload: { cardId, cardName: sticker.card.displayName, rarity: sticker.card.rarity, senderId: player.id }
+        }
+      })
+    ]);
 
     revalidatePath("/album");
     return {};

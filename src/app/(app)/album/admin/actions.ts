@@ -21,7 +21,7 @@ export async function importPokemonRange(
     await requireAdmin();
     const { from, to } = importSchema.parse(raw);
     if (to < from) return { imported: 0, error: "Intervalo inválido." };
-    if (to - from > 50) return { imported: 0, error: "Máximo de 50 Pokémon por importação." };
+    if (to - from > 200) return { imported: 0, error: "Máximo de 200 Pokémon por importação." };
 
     let imported = 0;
 
@@ -97,6 +97,7 @@ export async function setPokemonRarity(cardId: string, rarity: PokemonRarity): P
 const packSchema = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(300).optional(),
+  imageUrl: z.string().url().optional().or(z.literal("")),
   price: z.number().int().min(1),
   cardCount: z.number().int().min(1).max(10),
   generation: z.number().int().min(1).max(9).nullable(),
@@ -107,12 +108,88 @@ export async function createStickerPack(raw: z.infer<typeof packSchema>): Promis
   try {
     await requireAdmin();
     const data = packSchema.parse(raw);
-    await prisma.stickerPack.create({ data: { ...data, description: data.description || null } });
+    await prisma.stickerPack.create({
+      data: {
+        ...data,
+        description: data.description || null,
+        imageUrl: data.imageUrl || null
+      }
+    });
     revalidatePath("/album");
     revalidatePath("/album/admin");
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function updateStickerPack(packId: string, raw: z.infer<typeof packSchema>): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const data = packSchema.parse(raw);
+    await prisma.stickerPack.update({
+      where: { id: packId },
+      data: { ...data, description: data.description || null, imageUrl: data.imageUrl || null }
+    });
+    revalidatePath("/album");
+    revalidatePath("/album/admin");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function deleteStickerPack(packId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.stickerPack.delete({ where: { id: packId } });
+    revalidatePath("/album");
+    revalidatePath("/album/admin");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Gerenciar álbum de um jogador ─────────────────────────────────────────────
+
+export async function resetPlayerAlbum(playerId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.playerSticker.deleteMany({ where: { playerId } });
+    revalidatePath("/album/admin");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function removePlayerSticker(playerId: string, cardId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.playerSticker.deleteMany({ where: { playerId, cardId } });
+    revalidatePath("/album/admin");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function addCardToPlayer(playerId: string, nationalId: number): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const card = await prisma.pokemonCard.findUnique({ where: { nationalId } });
+    if (!card) return { error: `Pokémon #${nationalId} não encontrado no banco.` };
+    await prisma.playerSticker.upsert({
+      where: { playerId_cardId: { playerId, cardId: card.id } },
+      update: { quantity: { increment: 1 } },
+      create: { playerId, cardId: card.id, quantity: 1 }
+    });
+    revalidatePath("/album/admin");
+    return {};
+  } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }

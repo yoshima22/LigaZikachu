@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { Star } from "lucide-react";
+import { Gift, Star, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { toggleFavoriteSticker } from "../actions";
+import { toggleFavoriteSticker, sendStickerGift } from "../actions";
 
 const RARITY_COLORS: Record<string, string> = {
   COMMON:    "border-slate-700",
@@ -42,11 +42,14 @@ interface Props {
   ownedMap: Record<string, OwnedInfo>;
   generations: number[];
   selectedGen: number | null;
+  approvedPlayers?: { id: string; displayName: string }[];
 }
 
-export function AlbumCollection({ cards, ownedMap, selectedGen }: Props) {
+export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers = [] }: Props) {
   const [pending, startTransition] = useTransition();
   const [favLoading, setFavLoading] = useState<string | null>(null);
+  const [giftCard, setGiftCard] = useState<Card | null>(null);
+  const [giftTargetId, setGiftTargetId] = useState("");
 
   const handleFavorite = (cardId: string) => {
     setFavLoading(cardId);
@@ -59,7 +62,53 @@ export function AlbumCollection({ cards, ownedMap, selectedGen }: Props) {
     });
   };
 
+  const handleSendGift = () => {
+    if (!giftCard || !giftTargetId) { toast.error("Selecione um destinatário."); return; }
+    startTransition(async () => {
+      try {
+        const result = await sendStickerGift(giftCard.id, giftTargetId);
+        if (result.error) { toast.error(result.error); return; }
+        toast.success(`${giftCard.displayName} enviada!`);
+        setGiftCard(null);
+        setGiftTargetId("");
+      } catch { toast.error("Erro ao enviar."); }
+    });
+  };
+
   return (
+    <>
+    {/* Modal de enviar figurinha */}
+    {giftCard && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-slate-900 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-white">Enviar figurinha</h3>
+            <button type="button" onClick={() => setGiftCard(null)} className="text-slate-400 hover:text-white"><X size={18} /></button>
+          </div>
+          <p className="text-sm text-slate-400">
+            Enviar <span className="font-semibold text-white">{giftCard.displayName}</span> para um colega via Caixa de Presentes.
+          </p>
+          <label className="space-y-1 text-xs text-slate-400 block">
+            <span>Destinatário</span>
+            <select value={giftTargetId} onChange={(e) => setGiftTargetId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]">
+              <option value="">Selecione</option>
+              {approvedPlayers.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button type="button" disabled={!giftTargetId || pending} onClick={handleSendGift}
+              className="flex-1 rounded-lg bg-[#FFCB05] py-2 text-sm font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
+              Enviar
+            </button>
+            <button type="button" onClick={() => setGiftCard(null)} className="flex-1 rounded-lg border border-border py-2 text-sm text-slate-300">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-slate-200">
@@ -99,9 +148,14 @@ export function AlbumCollection({ cards, ownedMap, selectedGen }: Props) {
                 )}
 
                 {isDuplicate && (
-                  <span className="absolute right-1 top-1 rounded-full bg-slate-900/80 px-1 text-[9px] font-bold text-[#FFCB05]">
-                    ×{owned.quantity}
-                  </span>
+                  <button
+                    type="button"
+                    title="Enviar duplicata"
+                    onClick={() => { setGiftCard(card); setGiftTargetId(""); }}
+                    className="absolute right-1 top-1 flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 text-[9px] font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20"
+                  >
+                    ×{owned.quantity} <Gift size={8} />
+                  </button>
                 )}
 
                 {owned && (
@@ -128,5 +182,6 @@ export function AlbumCollection({ cards, ownedMap, selectedGen }: Props) {
         })}
       </div>
     </div>
+    </>
   );
 }

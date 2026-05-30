@@ -25,7 +25,7 @@ export default async function AlbumPage({
     select: { id: true }
   });
 
-  const [wallet, packs, allCards, ownedStickers] = await Promise.all([
+  const [wallet, packs, allCards, ownedStickers, otherPlayers] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
     prisma.stickerPack.findMany({ where: { active: true }, orderBy: { price: "asc" } }),
     prisma.pokemonCard.findMany({
@@ -39,6 +39,13 @@ export default async function AlbumPage({
       ? prisma.playerSticker.findMany({
           where: { playerId: player.id },
           select: { cardId: true, quantity: true, isFavorite: true }
+        })
+      : [],
+    player
+      ? prisma.player.findMany({
+          where: { active: true, id: { not: player.id } },
+          select: { id: true, displayName: true },
+          orderBy: { displayName: "asc" }
         })
       : []
   ]);
@@ -160,7 +167,7 @@ export default async function AlbumPage({
       {/* Pacotes disponíveis */}
       {packs.length > 0 && (
         <PackShelf
-          packs={packs.map((p) => ({ ...p, description: p.description ?? null }))}
+          packs={packs.map((p) => ({ ...p, description: p.description ?? null, imageUrl: p.imageUrl ?? null }))}
           balance={wallet?.balance ?? 0}
           isLoggedIn={!!player}
         />
@@ -195,6 +202,7 @@ export default async function AlbumPage({
           ownedMap={Object.fromEntries(ownedMap)}
           generations={generations}
           selectedGen={selectedGen}
+          approvedPlayers={otherPlayers}
         />
       )}
     </div>

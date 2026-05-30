@@ -35,10 +35,14 @@ export default async function ZikaBetPage() {
       weeks: {
         where: { status: { in: ["OPEN", "PLANNED"] } },
         orderBy: { weekNumber: "asc" },
-        take: 3,
+        take: 5,
         include: {
+          // Admin vê todas as partidas para poder configurar odds
+          // Jogador vê só as que têm apostas habilitadas
           matches: {
-            where: { betsEnabled: true, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } },
+            where: admin
+              ? { isBye: false, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } }
+              : { betsEnabled: true, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } },
             include: {
               playerA: { select: { id: true, displayName: true } },
               playerB: { select: { id: true, displayName: true } },
@@ -127,7 +131,8 @@ export default async function ZikaBetPage() {
       {/* Partidas com apostas abertas */}
       {tournaments.map((t) => {
         const config = parseBetConfig(t.betConfig);
-        const openMatches = t.weeks.flatMap((w) => w.matches.map((m) => ({ ...m, week: w })));
+        const allMatches = t.weeks.flatMap((w) => w.matches.map((m) => ({ ...m, week: w })));
+        const bettableMatches = allMatches.filter((m) => m.betsEnabled);
 
         if (!config.enabled && !admin) return null;
 
@@ -144,30 +149,42 @@ export default async function ZikaBetPage() {
               )}
             </div>
 
-            {openMatches.length === 0 ? (
+            {/* Admin: configurar odds em TODAS as partidas abertas */}
+            {admin && allMatches.length > 0 && (
+              <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3">
+                <p className="text-xs font-semibold text-[#FFCB05]">
+                  Configurar odds (admin) — marque "Apostas abertas" para liberar para jogadores
+                </p>
+                {allMatches.map((m) => (
+                  <OddsForm
+                    key={m.id}
+                    matchId={m.id}
+                    playerAName={m.playerA?.displayName ?? "BYE"}
+                    playerBName={m.playerB?.displayName ?? "BYE"}
+                    playerAOdds={m.playerAOdds ? Number(m.playerAOdds) : 1.5}
+                    playerBOdds={m.playerBOdds ? Number(m.playerBOdds) : 1.5}
+                    betsEnabled={m.betsEnabled}
+                  />
+                ))}
+              </div>
+            )}
+
+            {!admin && allMatches.length === 0 && (
               <p className="text-sm text-slate-500">Nenhuma partida com apostas abertas.</p>
-            ) : (
+            )}
+
+            {config.enabled && (
               <div className="space-y-3">
-                {/* Admin: configurar odds */}
-                {admin && (
-                  <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3">
-                    <p className="text-xs font-semibold text-[#FFCB05]">Configurar odds (admin)</p>
-                    {openMatches.map((m) => (
-                      <OddsForm
-                        key={m.id}
-                        matchId={m.id}
-                        playerAName={m.playerA?.displayName ?? "BYE"}
-                        playerBName={m.playerB?.displayName ?? "BYE"}
-                        playerAOdds={m.playerAOdds ? Number(m.playerAOdds) : 1.5}
-                        playerBOdds={m.playerBOdds ? Number(m.playerBOdds) : 1.5}
-                        betsEnabled={m.betsEnabled}
-                      />
-                    ))}
+                {/* Cards de apostas para jogadores */}
+                {bettableMatches.length === 0 && admin && (
+                  <p className="text-sm text-slate-500">Nenhuma partida com apostas liberadas ainda. Configure as odds acima e marque "Apostas abertas".</p>
+                )}
+                {bettableMatches.map((m) => {
                   </div>
                 )}
 
                 {/* Cards para apostar */}
-                {config.enabled && openMatches.map((m) => {
+                {bettableMatches.map((m) => {
                   const myBet = Array.isArray(m.bets) && m.bets.length > 0 ? m.bets[0] : null;
                   if (!m.playerB) return null;
                   return (

@@ -39,6 +39,20 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
   }
 
   const now = new Date();
+
+  // Figurinha: adicionar ao álbum do jogador ao resgatar
+  if (gift.type === "STICKER" && gift.payload && typeof gift.payload === "object") {
+    const payload = gift.payload as Record<string, unknown>;
+    const cardId = typeof payload.cardId === "string" ? payload.cardId : null;
+    if (cardId) {
+      await prisma.playerSticker.upsert({
+        where: { playerId_cardId: { playerId: player.id, cardId } },
+        update: { quantity: { increment: 1 } },
+        create: { playerId: player.id, cardId, quantity: 1 }
+      });
+    }
+  }
+
   await prisma.$transaction([
     prisma.playerGift.update({
       where: { id: giftId },

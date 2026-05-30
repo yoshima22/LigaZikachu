@@ -20,6 +20,7 @@ interface Pack {
   id: string;
   name: string;
   description: string | null;
+  imageUrl: string | null;
   price: number;
   cardCount: number;
   generation: number | null;
@@ -66,9 +67,16 @@ export function PackShelf({ packs, balance, isLoggedIn }: Props) {
           const isOpening = openingId === pack.id && pending;
 
           return (
-            <div key={pack.id} className={`rounded-xl border bg-slate-950/60 p-4 space-y-3 ${
+            <div key={pack.id} className={`rounded-xl border bg-slate-950/60 overflow-hidden space-y-3 ${
               pack.rarityBoost ? "border-[#FFCB05]/30 bg-gradient-to-b from-[#FFCB05]/5 to-transparent" : "border-border"
             }`}>
+              {pack.imageUrl && (
+                <div className="aspect-[2/1] w-full overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={pack.imageUrl} alt={pack.name} className="h-full w-full object-cover" />
+                </div>
+              )}
+              <div className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold text-white">{pack.name}</p>
@@ -95,6 +103,7 @@ export function PackShelf({ packs, balance, isLoggedIn }: Props) {
                 >
                   {isOpening ? "Abrindo…" : canAfford ? "Abrir" : "Sem saldo"}
                 </button>
+              </div>
               </div>
             </div>
           );
