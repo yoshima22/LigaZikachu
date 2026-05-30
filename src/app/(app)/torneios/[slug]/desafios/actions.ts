@@ -266,18 +266,7 @@ export async function resolveChallenge(
         }
       });
 
-      // Se desafiante perdeu: aplica penalidade via auditLog (ranking calcula a partir disso)
-      if (!data.challengerWon) {
-        await tx.auditLog.create({
-          data: {
-            actorUserId: actor.id,
-            entityType: "challenge",
-            entityId: data.challengeId,
-            action: "challenge.challenger_lost",
-            after: { penalty: config.challengerPenalty, challengerId: challenge.challengerId }
-          }
-        });
-      }
+      // Se desafiante perdeu: status REJECTED já faz o ranking aplicar -2pts via computeTournamentRanking
 
       // Se desafiante ganhou e era desafio por insígnia: transferir insígnia automaticamente
       if (data.challengerWon && challenge.type === ChallengeType.BADGE && challenge.badgeId) {
@@ -309,7 +298,7 @@ export async function resolveChallenge(
 
 // ─── Cancelar desafio ─────────────────────────────────────────────────────────
 
-export async function cancelChallenge(challengeId: string): Promise<{ error?: string }> {
+export async function deleteChallenge(challengeId: string): Promise<{ error?: string }> {
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
@@ -326,13 +315,12 @@ export async function cancelChallenge(challengeId: string): Promise<{ error?: st
     const isOwner = challenge.challenger.userId === actor.id;
     const isAdminUser = actor.role === "ADMIN" || actor.role === "SUPER_ADMIN";
     if (!isOwner && !isAdminUser) return { error: "Sem permissão." };
-    if (challenge.status === ChallengeStatus.RESOLVED)
-      return { error: "Não é possível cancelar um desafio já resolvido." };
 
-    await prisma.challenge.update({
-      where: { id: challengeId },
-      data: { status: ChallengeStatus.REJECTED, resolutionNotes: "Cancelado." }
-    });
+    const deletable = [ChallengeStatus.OPEN, ChallengeStatus.UNDER_REVIEW];
+    if (!deletable.includes(challenge.status as ChallengeStatus))
+      return { error: "Só é possível excluir desafios abertos ou em análise." };
+
+    await prisma.challenge.delete({ where: { id: challengeId } });
 
     if (challenge.tournament?.slug)
       revalidatePath(`/torneios/${challenge.tournament.slug}/desafios`);

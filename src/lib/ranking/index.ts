@@ -139,11 +139,10 @@ export async function computeTournamentRanking(
       }
     },
     challengeWhere: {
-      match: {
-        tournamentWeek: {
-          tournamentId
-        }
-      }
+      OR: [
+        { match: { tournamentWeek: { tournamentId } } },
+        { tournamentId, matchId: null }
+      ]
     },
     badgeWhere: {
       badge: {

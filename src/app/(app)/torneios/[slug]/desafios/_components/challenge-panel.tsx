@@ -10,7 +10,7 @@ import {
   createChallenge,
   respondToChallenge,
   resolveChallenge,
-  cancelChallenge,
+  deleteChallenge,
   setBadgeProgress
 } from "../actions";
 
@@ -89,63 +89,73 @@ export function ChallengePanel({
 
   const handleCreateChallenge = () => {
     startTransition(async () => {
-      const result = await createChallenge({
-        tournamentId,
-        challengedId: form.challengedId,
-        type: form.type,
-        badgeId: form.type === ChallengeType.BADGE && form.badgeId ? form.badgeId : undefined,
-        tournamentWeekId: form.weekId || undefined,
-        reason: form.reason
-      });
-      if (result.error) { toast.error(result.error); return; }
-      toast.success("Desafio solicitado com sucesso!");
-      setShowCreate(false);
-      setForm({ ...form, challengedId: "", reason: "", badgeId: "", weekId: "" });
+      try {
+        const result = await createChallenge({
+          tournamentId,
+          challengedId: form.challengedId,
+          type: form.type,
+          badgeId: form.type === ChallengeType.BADGE && form.badgeId ? form.badgeId : undefined,
+          tournamentWeekId: form.weekId || undefined,
+          reason: form.reason
+        });
+        if (result.error) { toast.error(result.error); return; }
+        toast.success("Desafio solicitado com sucesso!");
+        setShowCreate(false);
+        setForm({ ...form, challengedId: "", reason: "", badgeId: "", weekId: "" });
+      } catch { toast.error("Erro ao criar desafio. Tente novamente."); }
     });
   };
 
   const handleRespond = (challengeId: string, accept: boolean) => {
     startTransition(async () => {
-      const result = await respondToChallenge(challengeId, accept);
-      if (result.error) { toast.error(result.error); return; }
-      toast.success(accept ? "Desafio aprovado!" : "Desafio rejeitado.");
+      try {
+        const result = await respondToChallenge(challengeId, accept);
+        if (result.error) { toast.error(result.error); return; }
+        toast.success(accept ? "Desafio aprovado!" : "Desafio rejeitado.");
+      } catch { toast.error("Erro ao responder desafio. Tente novamente."); }
     });
   };
 
   const handleResolve = (challengerWon: boolean) => {
     if (!resolveForm) return;
     startTransition(async () => {
-      const result = await resolveChallenge({
-        challengeId: resolveForm.challengeId,
-        challengerWon,
-        matchId: resolveForm.matchId || undefined,
-        notes: resolveForm.notes || undefined
-      });
-      if (result.error) { toast.error(result.error); return; }
-      toast.success(challengerWon ? "Desafio resolvido — insígnia transferida!" : "Desafio encerrado — penalidade aplicada.");
-      setResolveForm(null);
+      try {
+        const result = await resolveChallenge({
+          challengeId: resolveForm.challengeId,
+          challengerWon,
+          matchId: resolveForm.matchId || undefined,
+          notes: resolveForm.notes || undefined
+        });
+        if (result.error) { toast.error(result.error); return; }
+        toast.success(challengerWon ? "Desafio resolvido — insígnia transferida!" : "Desafio encerrado — penalidade aplicada.");
+        setResolveForm(null);
+      } catch { toast.error("Erro ao registrar resultado. Tente novamente."); }
     });
   };
 
-  const handleCancel = (challengeId: string) => {
-    if (!confirm("Cancelar este desafio?")) return;
+  const handleDelete = (challengeId: string) => {
+    if (!confirm("Excluir este desafio permanentemente?")) return;
     startTransition(async () => {
-      const result = await cancelChallenge(challengeId);
-      if (result.error) { toast.error(result.error); return; }
-      toast.success("Desafio cancelado.");
+      try {
+        const result = await deleteChallenge(challengeId);
+        if (result.error) { toast.error(result.error); return; }
+        toast.success("Desafio excluído.");
+      } catch { toast.error("Erro ao excluir desafio. Tente novamente."); }
     });
   };
 
   const handleSetProgress = () => {
     startTransition(async () => {
-      const result = await setBadgeProgress(
-        progressForm.badgeId,
-        progressForm.playerId,
-        progressForm.points,
-        progressForm.notes || undefined
-      );
-      if (result.error) { toast.error(result.error); return; }
-      toast.success("Progresso atualizado!");
+      try {
+        const result = await setBadgeProgress(
+          progressForm.badgeId,
+          progressForm.playerId,
+          progressForm.points,
+          progressForm.notes || undefined
+        );
+        if (result.error) { toast.error(result.error); return; }
+        toast.success("Progresso atualizado!");
+      } catch { toast.error("Erro ao salvar progresso. Tente novamente."); }
     });
   };
 
@@ -412,6 +422,7 @@ export function ChallengePanel({
                     {isAdmin && (c.status === "OPEN" || c.status === "UNDER_REVIEW") && (
                       <>
                         <button
+                          type="button"
                           disabled={pending}
                           onClick={() => handleRespond(c.id, true)}
                           className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#7AC74C] hover:bg-[#7AC74C]/10"
@@ -419,6 +430,7 @@ export function ChallengePanel({
                           <CheckCircle size={13} /> Aprovar
                         </button>
                         <button
+                          type="button"
                           disabled={pending}
                           onClick={() => handleRespond(c.id, false)}
                           className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10"
@@ -447,6 +459,7 @@ export function ChallengePanel({
                             />
                             <div className="flex gap-1">
                               <button
+                                type="button"
                                 disabled={pending}
                                 onClick={() => handleResolve(true)}
                                 className="flex-1 rounded-lg bg-[#7AC74C] px-2 py-1 text-xs font-semibold text-white"
@@ -454,6 +467,7 @@ export function ChallengePanel({
                                 Desafiante venceu
                               </button>
                               <button
+                                type="button"
                                 disabled={pending}
                                 onClick={() => handleResolve(false)}
                                 className="flex-1 rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white"
@@ -461,6 +475,7 @@ export function ChallengePanel({
                                 Desafiante perdeu
                               </button>
                               <button
+                                type="button"
                                 onClick={() => setResolveForm(null)}
                                 className="rounded-lg border border-border px-2 py-1 text-xs text-slate-400"
                               >
@@ -479,14 +494,15 @@ export function ChallengePanel({
                       </>
                     )}
 
-                    {/* Cancelar (próprio jogador ou admin, apenas em estados abertos) */}
+                    {/* Excluir (criador ou admin, apenas em estados abertos) */}
                     {(c.isMyChallenge || isAdmin) && ["OPEN", "UNDER_REVIEW"].includes(c.status) && (
                       <button
+                        type="button"
                         disabled={pending}
-                        onClick={() => handleCancel(c.id)}
-                        className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:text-slate-300"
+                        onClick={() => handleDelete(c.id)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:text-red-400"
                       >
-                        <X size={13} /> Cancelar
+                        <X size={13} /> Excluir
                       </button>
                     )}
                   </div>
