@@ -105,7 +105,8 @@ export function ProfessorChat() {
 
         setDisplay((d) => {
           const updated = [...d];
-          const loadingIdx = updated.findLastIndex((m) => m.isLoading);
+          let loadingIdx = -1;
+          for (let i = updated.length - 1; i >= 0; i--) { if (updated[i].isLoading) { loadingIdx = i; break; } }
           if (loadingIdx >= 0) {
             updated[loadingIdx] = {
               role: "professor",
@@ -121,7 +122,8 @@ export function ProfessorChat() {
       } catch {
         setDisplay((d) => {
           const updated = [...d];
-          const loadingIdx = updated.findLastIndex((m) => m.isLoading);
+          let loadingIdx = -1;
+          for (let i = updated.length - 1; i >= 0; i--) { if (updated[i].isLoading) { loadingIdx = i; break; } }
           if (loadingIdx >= 0) {
             updated[loadingIdx] = {
               role: "professor",
