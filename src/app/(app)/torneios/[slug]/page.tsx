@@ -6,7 +6,7 @@ import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import { TrainerAvatar } from "@/components/ui/poke/trainer-avatar";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Award, CalendarDays, ChevronRight, Crown, Settings, Trophy, Users } from "lucide-react";
+import { Award, CalendarDays, ChevronRight, Crown, Megaphone, Settings, Swords, Trophy, Users } from "lucide-react";
 import type { RegistrationStatus } from "@prisma/client";
 import { RegisterButton } from "./_components/register-button";
 import { computeTournamentRanking, computeTournamentWeekTopOfDay } from "@/lib/ranking";
@@ -162,6 +162,12 @@ export default async function TorneioDetailPage({
                 Ranking do Campeonato
               </Link>
             </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/torneios/${slug}/desafios`}>
+                <Swords size={14} className="mr-1" />
+                Desafios
+              </Link>
+            </Button>
             <RegisterButton
               tournamentId={tournament.id}
               tournamentStatus={tournament.status}
@@ -170,6 +176,14 @@ export default async function TorneioDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Anúncio */}
+      {tournament.announcement && (
+        <div className="flex items-start gap-3 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-5 py-4">
+          <Megaphone size={16} className="mt-0.5 shrink-0 text-[#FFCB05]" />
+          <p className="whitespace-pre-wrap text-sm text-slate-200">{tournament.announcement}</p>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Semanas */}

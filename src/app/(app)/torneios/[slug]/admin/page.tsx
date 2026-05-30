@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle } from "lucide-react";
+import { Award, Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle, Megaphone } from "lucide-react";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { DeleteTournamentButton } from "./_components/delete-tournament-button";
 import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
@@ -18,6 +18,12 @@ import {
   updateTournamentWeekSettings
 } from "../../actions";
 import { TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
+import {
+  updateTournamentAnnouncement,
+  updateChallengeConfig,
+  parseChallengeConfig,
+  DEFAULT_CHALLENGE_CONFIG
+} from "../desafios/actions";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -55,6 +61,7 @@ export default async function TournamentAdminPage({ params }: Props) {
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
     include: {
+      _count: { select: { challenges: true } },
       weeks: {
         orderBy: { weekNumber: "asc" },
         include: {
@@ -83,6 +90,8 @@ export default async function TournamentAdminPage({ params }: Props) {
   if (!tournament) notFound();
   const canManage = isAdmin(user.role) || tournament.createdById === user.id;
   if (!canManage) notFound();
+
+  const challengeConfig = parseChallengeConfig(tournament.challengeConfig ?? DEFAULT_CHALLENGE_CONFIG);
 
   const seasons = await prisma.season.findMany({
     orderBy: [{ startDate: "desc" }, { name: "asc" }],
@@ -488,6 +497,157 @@ export default async function TournamentAdminPage({ params }: Props) {
           ))}
         </div>
       </section>
+
+      {/* Anúncio do torneio */}
+      <Card className="border-slate-800 bg-slate-900/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base text-white">
+            <Megaphone size={18} className="text-[#FFCB05]" />
+            Anúncio / Aviso do Torneio
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-xs text-slate-500">
+            Este texto aparece em destaque na página pública do torneio. Use para avisos, lembretes ou informações importantes.
+          </p>
+          <form
+            className="space-y-3"
+            action={async (formData) => {
+              "use server";
+              await updateTournamentAnnouncement(
+                tournament.id,
+                String(formData.get("announcement") ?? "")
+              );
+            }}
+          >
+            <textarea
+              name="announcement"
+              defaultValue={tournament.announcement ?? ""}
+              rows={4}
+              placeholder="Ex: A próxima rodada acontece no sábado às 15h. Deck de GLC obrigatório."
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+            />
+            <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+              Salvar anúncio
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Configuração de Desafios */}
+      <Card className="border-slate-800 bg-slate-900/50">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-2 text-base text-white">
+            <span className="flex items-center gap-2">
+              <Award size={18} className="text-[#FFCB05]" />
+              Sistema de Desafios
+            </span>
+            <Link href={`/torneios/${slug}/desafios`} className="text-xs text-[#FFCB05] hover:underline">
+              Ver aba de desafios →
+            </Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-slate-500">
+            Configure quais tipos de desafio estão habilitados e as regras de pontuação.
+            Desafio por Insígnia: jogadores acumulam pontos em uma insígnia e podem desafiar o dono.
+            Desafio Livre: qualquer jogador pode ser desafiado independente de insígnia.
+          </p>
+          <form
+            className="grid gap-4"
+            action={async (formData) => {
+              "use server";
+              await updateChallengeConfig({
+                tournamentId: tournament.id,
+                badgeChallenge: formData.get("badgeChallenge") === "on",
+                freeChallenge: formData.get("freeChallenge") === "on",
+                pointsPerBadge: Number(formData.get("pointsPerBadge") ?? 3),
+                pointsToChallenge: Number(formData.get("pointsToChallenge") ?? 3),
+                challengerPenalty: Number(formData.get("challengerPenalty") ?? 2),
+                maxChallengesReceivedPerWeek: Number(formData.get("maxChallengesReceivedPerWeek") ?? 1)
+              });
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 cursor-pointer hover:border-[#FFCB05]/40">
+                <input
+                  type="checkbox"
+                  name="badgeChallenge"
+                  defaultChecked={challengeConfig.badgeChallenge}
+                  className="mt-0.5 accent-[#FFCB05]"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-white">Desafio por Insígnia</p>
+                  <p className="text-xs text-slate-500">Jogador acumula pontos em uma insígnia e pode desafiar o dono.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 cursor-pointer hover:border-[#FFCB05]/40">
+                <input
+                  type="checkbox"
+                  name="freeChallenge"
+                  defaultChecked={challengeConfig.freeChallenge}
+                  className="mt-0.5 accent-[#FFCB05]"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-white">Desafio Livre</p>
+                  <p className="text-xs text-slate-500">Qualquer jogador pode ser desafiado, sem insígnia envolvida.</p>
+                </div>
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="space-y-1 text-xs text-slate-400">
+                <span>Bônus por posse de insígnia (pts)</span>
+                <input
+                  type="number"
+                  name="pointsPerBadge"
+                  defaultValue={challengeConfig.pointsPerBadge}
+                  min={1}
+                  max={20}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-400">
+                <span>Pontos mínimos para desafiar</span>
+                <input
+                  type="number"
+                  name="pointsToChallenge"
+                  defaultValue={challengeConfig.pointsToChallenge}
+                  min={1}
+                  max={20}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-400">
+                <span>Penalidade ao perder desafio (pts)</span>
+                <input
+                  type="number"
+                  name="challengerPenalty"
+                  defaultValue={challengeConfig.challengerPenalty}
+                  min={0}
+                  max={20}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-400">
+                <span>Desafios recebidos por semana</span>
+                <input
+                  type="number"
+                  name="maxChallengesReceivedPerWeek"
+                  defaultValue={challengeConfig.maxChallengesReceivedPerWeek}
+                  min={1}
+                  max={10}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+                />
+              </label>
+            </div>
+
+            <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+              Salvar configuração de desafios
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Inscritos */}
       <section className="space-y-3">
