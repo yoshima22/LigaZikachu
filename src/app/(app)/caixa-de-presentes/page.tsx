@@ -21,7 +21,8 @@ const giftTypeLabels: Record<GiftType, string> = {
   BOOSTER_CODE: "Codigo de booster",
   BADGE: "Insignia",
   ACHIEVEMENT: "Conquista",
-  CUSTOM: "Presente"
+  CUSTOM: "Presente",
+  STICKER: "Figurinha"
 };
 
 interface BoosterPayload {
