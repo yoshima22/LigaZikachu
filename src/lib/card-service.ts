@@ -65,9 +65,19 @@ function mapCard(raw: Record<string, unknown>): TcgCard {
 
 // ── Buscar cartas por nome exato ou parcial ──────────────────────────────────
 
+// Nomes que são Supporters — força filtro de supertype para evitar pegar o Pokémon
+const KNOWN_SUPPORTERS = new Set([
+  "iono", "professor's research", "boss's orders", "marnie", "judge",
+  "cynthia", "n", "sonia", "hop", "raihan", "arven", "lillie",
+  "colress's experiment", "irida", "melony", "acerola"
+]);
+
 export async function searchCards(query: string, pageSize = 8): Promise<TcgCard[]> {
   try {
-    const q = encodeURIComponent(`name:"${query}"`);
+    const isKnownSupporter = KNOWN_SUPPORTERS.has(query.toLowerCase());
+    const nameQ = `name:"${query}"`;
+    const typeQ = isKnownSupporter ? ` supertype:Trainer subtypes:Supporter` : "";
+    const q = encodeURIComponent(`${nameQ}${typeQ}`);
     const url = `${TCG_BASE}/cards?q=${q}&pageSize=${pageSize}&orderBy=-set.releaseDate`;
     const res = await fetch(url, { headers: headers(), next: { revalidate: 3600 } });
     if (!res.ok) return [];

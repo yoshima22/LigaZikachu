@@ -72,40 +72,68 @@ const PROF_LINES = {
 function buildRuleBasedResponse(lastMessage: string): { message: string; cardNames: string[] } {
   const lower = lastMessage.toLowerCase().trim();
 
-  // Saudações e perguntas gerais — SEM sugestão de cartas
-  const isGreeting = /^(oi|olá|ola|salve|hey|hi|hello|tudo|como vai|online|funcionando|aí|ae|e aí|eai|test)/.test(lower)
-    || lower.length < 20;
-
+  // Saudações curtas — apresentação sem cartas
+  const isGreeting = /^(oi|olá|ola|salve|hey|hi|hello|tudo|como vai|online|funcionando|test)/.test(lower)
+    || lower.length < 15;
   if (isGreeting) {
     return {
-      message: "Salve, parceiro! 🔥 Sou o Professor Enguiça, seu treinador de decks da Liga Zikachu!\n\nPode mandar sua lista de deck ou me perguntar sobre cartas, estratégias e meta. Tô aqui pra te ajudar a evoluir! ⚡",
+      message: "Salve, parceiro! 🔥 Sou o Professor Enguiça, treinador de decks da Liga Zikachu!\n\nManda sua lista de deck, pergunta sobre uma carta específica ou me pede sugestões de estratégia. Tô aqui pra te ajudar! ⚡",
       cardNames: []
     };
   }
 
-  // Bloquear apenas tópicos claramente fora do TCG (muito específicos)
-  const clearlyOffTopic = /receita|culinária|política|futebol|música|filme|série|novela|notícia|clima|tempo|matemática|história|geografia/.test(lower);
-  if (clearlyOffTopic) {
+  // Apenas bloquear tópicos completamente fora do TCG
+  const offTopic = /receita|culinária|política|futebol|música|filme|série|novela|notícia|clima|temperatura|matemática|física|química|biologia/.test(lower);
+  if (offTopic) {
     return {
-      message: "Parceiro, isso tá fora do meu quadrado! 🃏 Só falo de Pokémon TCG aqui. Me manda seu deck ou pergunta sobre cartas que eu te ajudo!",
+      message: "Parceiro, isso tá fora do meu quadrado! 🃏 Só falo de Pokémon TCG aqui. Me manda seu deck ou pergunta sobre cartas!",
       cardNames: []
     };
   }
 
-  // Perguntas sobre TCG com sugestões
-  if (lower.includes("compra") || lower.includes("draw") || lower.includes("consistên")) {
+  // Perguntar sobre uma carta específica — sem sugestões extras
+  if (/o que (é|sabe|tem|faz)|como funciona|me fala|me conta|explica/.test(lower)) {
+    return {
+      message: "Parceiro, ainda tô no modo offline — minha IA tá fora do ar agora. Mas configura a GROQ_API_KEY na Vercel que eu viro um especialista! Enquanto isso, busca o nome da carta na aba da Pokédex. 😅",
+      cardNames: []
+    };
+  }
+
+  // Paralisia, status, controle
+  if (/paralis|status|confus|envene|dormindo|sono|queimad|confund/.test(lower)) {
+    return { message: "Pra travar o adversário, essas cartas aqui são pedra:", cardNames: ["Iono", "Boss's Orders", "Path to the Peak"] };
+  }
+
+  // Compra / draw
+  if (/compra|draw|roub|puxar carta|mão vazia|consistên/.test(lower)) {
     return { message: PROF_LINES.draw, cardNames: CARD_DB.DRAW.slice(0, 3) };
   }
-  if (lower.includes("busca") || lower.includes("search") || lower.includes("achar")) {
+
+  // Busca / search
+  if (/busca|search|achar|encontrar|pegar do baralho/.test(lower)) {
     return { message: PROF_LINES.search, cardNames: CARD_DB.SEARCH.slice(0, 3) };
   }
-  if (lower.includes("energia") || lower.includes("energy")) {
-    return { message: PROF_LINES.energy_excess, cardNames: CARD_DB.ENGINE.slice(0, 2) };
+
+  // Energia / energy
+  if (/energia|energy|acelera|aceleração/.test(lower)) {
+    return { message: PROF_LINES.energy_excess, cardNames: CARD_DB.ENERGY_ACCEL.slice(0, 3) };
   }
 
+  // Estádio / stadium
+  if (/estádio|stadium|arena|campo/.test(lower)) {
+    return { message: "Estádios que mudam o jogo:", cardNames: CARD_DB.STADIUM.slice(0, 3) };
+  }
+
+  // Genérico — variado para não sempre repetir os mesmos
+  const rand = Math.floor(Date.now() / 10000) % 3; // muda a cada ~10s
+  const combos = [
+    [...CARD_DB.DRAW.slice(0, 2), ...CARD_DB.SEARCH.slice(0, 2)],
+    [...CARD_DB.SEARCH.slice(0, 2), ...CARD_DB.STADIUM.slice(0, 2)],
+    [...CARD_DB.DRAW.slice(1, 3), ...CARD_DB.ENERGY_ACCEL.slice(0, 2)]
+  ];
   return {
-    message: PROF_LINES.general,
-    cardNames: [...CARD_DB.DRAW.slice(0, 2), ...CARD_DB.SEARCH.slice(0, 2)]
+    message: "Ativa a IA na Vercel (GROQ_API_KEY) que eu respondo melhor! Por enquanto, aqui vão algumas pedras clássicas:",
+    cardNames: combos[rand]
   };
 }
 
