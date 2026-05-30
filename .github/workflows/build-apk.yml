@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'android-webview/**'
-  workflow_dispatch: # permite rodar manualmente pelo GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,27 +21,24 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
 
       - name: Write google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo "$GOOGLE_SERVICES_JSON" > android-webview/app/google-services.json
-
-      - name: Make gradlew executable
-        run: chmod +x android-webview/gradlew
-        continue-on-error: true
+        run: |
+          echo "$GOOGLE_SERVICES_JSON" > android-webview/app/google-services.json
 
       - name: Build debug APK
         working-directory: android-webview
-        run: |
-          JAVA_HOME=$JAVA_HOME_21_X64
-          gradle assembleDebug
+        run: gradle assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-${{ github.run_number }}
+          name: liga-zikachu-apk-${{ github.run_number }}
           path: android-webview/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
