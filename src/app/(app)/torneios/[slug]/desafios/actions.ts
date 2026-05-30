@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { ChallengeStatus, ChallengeType } from "@prisma/client";
+import { ChallengeStatus, ChallengeType, Prisma } from "@prisma/client";
 import { parseChallengeConfig } from "./config";
 
 // ─── Anúncio ─────────────────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ export async function undoResolveChallenge(challengeId: string): Promise<{ error
           resolvedById: null,
           resolutionNotes: null,
           matchId: null,
-          metadata: null
+          metadata: Prisma.JsonNull
         }
       });
     });
