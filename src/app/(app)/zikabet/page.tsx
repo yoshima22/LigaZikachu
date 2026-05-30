@@ -180,11 +180,6 @@ export default async function ZikaBetPage() {
                   <p className="text-sm text-slate-500">Nenhuma partida com apostas liberadas ainda. Configure as odds acima e marque "Apostas abertas".</p>
                 )}
                 {bettableMatches.map((m) => {
-                  </div>
-                )}
-
-                {/* Cards para apostar */}
-                {bettableMatches.map((m) => {
                   const myBet = Array.isArray(m.bets) && m.bets.length > 0 ? m.bets[0] : null;
                   if (!m.playerB) return null;
                   return (
