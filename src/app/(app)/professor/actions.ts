@@ -2,6 +2,7 @@
 
 import { fetchCardsByNames } from "@/lib/card-service";
 import type { TcgCard } from "@/lib/card-service";
+import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
 
 export interface ChatMessage {
   role: "user" | "professor";
@@ -121,6 +122,107 @@ function parseAIResponse(text: string): { message: string; cardNames: string[] }
     };
   } catch {
     return { message: text, cardNames: [] };
+  }
+}
+
+// ── Análise de Deck ───────────────────────────────────────────────────────────
+
+export interface DeckAnalysisResult {
+  totalCards: number;
+  issues: string[];
+  message: string;
+  suggestedCards: Array<TcgCard & { reason: string }>;
+  error?: string;
+}
+
+export async function analyzeDeckAction(deckList: string): Promise<DeckAnalysisResult> {
+  try {
+    const parsed = parseDeckList(deckList);
+    if (parsed.totalCards === 0) {
+      return {
+        totalCards: 0,
+        issues: ["Não consegui ler o deck. Verifique se está no formato: `4 Ultra Ball`"],
+        message: "Ixe, não consegui ler seu deck, parceiro! Use o formato:\n\n4 Ultra Ball\n2 Boss's Orders\n...",
+        suggestedCards: []
+      };
+    }
+
+    const analysis = analyzeDeck(parsed);
+
+    // Montar lista de cartas para o prompt da IA
+    const deckText = parsed.entries
+      .slice(0, 40) // limitar para não estourar tokens
+      .map((e) => `${e.quantity}x ${e.name}`)
+      .join("\n");
+
+    const analysisContext = [
+      `Total de cartas: ${analysis.totalCards}/60`,
+      `Energias estimadas: ${analysis.categories.energy}`,
+      `Cartas de compra (Supporters draw): ${analysis.drawCount}`,
+      `Cartas de busca: ${analysis.searchCount}`,
+      analysis.hints.length > 0 ? `Problemas detectados:\n${analysis.hints.join("\n")}` : "Deck bem balanceado estruturalmente."
+    ].join("\n");
+
+    const prompt = `Analise este deck de Pokémon TCG e sugira melhorias:
+
+DECK:
+${deckText}
+
+ANÁLISE AUTOMÁTICA:
+${analysisContext}
+
+Com base nisso, sugira melhorias específicas com cartas reais. Formato JSON obrigatório.`;
+
+    const messages: ChatMessage[] = [{ role: "user", content: prompt }];
+
+    let result = { message: "", cardNames: [] as string[] };
+    if (process.env.GEMINI_API_KEY) {
+      result = await callGemini(messages);
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      result = await callClaude(messages);
+    } else {
+      // Fallback sem IA: usar apenas as regras locais
+      const fallbackCards: Record<string, string> = {
+        DRAW: "Professor's Research",
+        SEARCH: "Ultra Ball",
+        ENERGY: "Nest Ball"
+      };
+      const suggestions: string[] = [];
+      if (analysis.drawCount < 3) suggestions.push(fallbackCards.DRAW, "Iono");
+      if (analysis.searchCount < 3) suggestions.push(fallbackCards.SEARCH, "Nest Ball");
+
+      result = {
+        message: [
+          analysis.issues.length > 0
+            ? `Detectei alguns pontos a melhorar no seu deck, parceiro! ${analysis.issues[0]}`
+            : "Deck com estrutura razoável! Aqui vão algumas sugestões gerais:",
+          ...analysis.issues.slice(1)
+        ].join("\n"),
+        cardNames: suggestions.slice(0, 4)
+      };
+    }
+
+    let suggestedCards: Array<TcgCard & { reason: string }> = [];
+    if (result.cardNames.length > 0) {
+      const cards = await fetchCardsByNames(result.cardNames);
+      suggestedCards = cards.map((c) => ({ ...c, reason: c.name }));
+    }
+
+    return {
+      totalCards: analysis.totalCards,
+      issues: analysis.issues,
+      message: result.message,
+      suggestedCards
+    };
+  } catch (err) {
+    console.error("[DeckAnalyzer error]", err);
+    return {
+      totalCards: 0,
+      issues: [],
+      message: "Deu um erro ao analisar o deck. Tenta de novo! 📻",
+      suggestedCards: [],
+      error: err instanceof Error ? err.message : "Erro"
+    };
   }
 }
 
