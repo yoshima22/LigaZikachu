@@ -21,38 +21,79 @@ const SYSTEM_PROMPT = `Você é o Professor Enguiça, o treinador de decks da Li
 Você é direto, animado, usa gírias leves do dia a dia e fala português brasileiro informal.
 Você é especialista em Pokémon TCG (jogo de cartas) e APENAS nisso.
 
-REGRAS OBRIGATÓRIAS:
-1. NUNCA responda sobre assuntos fora de Pokémon TCG. Se perguntarem algo não relacionado (política, culinária, outros jogos, etc), diga: "Parceiro, isso tá fora do meu quadrado! Só falo de Pokémon TCG aqui. 🃏"
-2. SEMPRE que sugerir cartas, use nomes EXATOS de cartas reais do Pokémon TCG.
-3. Nunca invente cartas, conjuntos ou mecânicas que não existam.
-4. Máximo 5 sugestões de cartas por resposta. Menos é mais.
-5. Seja objetivo — foco em deck, estratégia, cartas e meta.
+REGRAS:
+1. NUNCA responda sobre assuntos fora de Pokémon TCG.
+2. Use nomes EXATOS de cartas reais do Pokémon TCG.
+3. Máximo 5 sugestões de cartas por resposta.
+4. Seja objetivo — foco em deck, estratégia e meta.
 
-FORMATO DE RESPOSTA (JSON obrigatório):
+FORMATO OBRIGATÓRIO (sempre JSON):
 {
-  "message": "sua mensagem amigável aqui",
-  "cards": ["Professor's Research", "Ultra Ball", "Boss's Orders"]
+  "message": "sua mensagem amigável",
+  "cards": ["Professor's Research", "Ultra Ball"]
 }
 
-Use "cards": [] quando a pergunta não precisar de sugestão de cartas.
-Lembre: o sistema busca as imagens e dados reais das cartas automaticamente.`;
+Use "cards": [] quando não precisar sugerir cartas.`;
 
-// ── Gemini Flash (gratuito) ───────────────────────────────────────────────────
+// ── Banco de cartas por categoria (fallback sem IA) ───────────────────────────
 
-async function callGemini(messages: ChatMessage[]): Promise<{ message: string; cardNames: string[] }> {
+const CARD_DB: Record<string, string[]> = {
+  DRAW:   ["Professor's Research", "Iono", "Colress's Experiment", "Cynthia", "Marnie"],
+  SEARCH: ["Ultra Ball", "Nest Ball", "Arven", "Pokégear 3.0", "Level Ball"],
+  RECOVERY: ["Superior Energy Retrieval", "Rescue Carrier", "Bravery Charm"],
+  ENGINE: ["Rotom V", "Radiant Greninja", "Lumineon V"],
+  ENERGY_ACCEL: ["Dark Patch", "Magma Basin", "Superior Energy Retrieval"],
+  STADIUM: ["Lost City", "Path to the Peak", "Beach Court"]
+};
+
+// Respostas com personalidade do Professor sem IA
+const PROF_LINES = {
+  greeting: "Salve, parceiro! Aqui vai minha análise do seu deck:",
+  draw: "Cara, seu deck tá na seca de compra! Bota mais Supporters de draw que a vida melhora:",
+  search: "Tá difícil achar seus Pokémon né? Adiciona buscadores que isso some:",
+  both: "Parceiro, você precisa de mais compra E mais busca. Olha isso aqui:",
+  energy_excess: "Tá colocando muita energia não, brother! Deck moderno anda com 8-12. Troca algumas por suporte:",
+  balanced: "Deck com estrutura boa! Se quiser dar um upgrade, considera essas cartas:",
+  incomplete: "Deck incompleto ainda, mas posso ajudar a completar! Olha essas pedras:",
+  general: "Deixa eu analisar isso pra você, parceiro! Aqui vai o que eu indicaria:"
+};
+
+function buildRuleBasedResponse(lastMessage: string): { message: string; cardNames: string[] } {
+  const lower = lastMessage.toLowerCase();
+
+  // Detectar intenção pela mensagem
+  if (lower.includes("compra") || lower.includes("draw") || lower.includes("consistên")) {
+    return { message: PROF_LINES.draw, cardNames: CARD_DB.DRAW.slice(0, 3) };
+  }
+  if (lower.includes("busca") || lower.includes("search") || lower.includes("achar")) {
+    return { message: PROF_LINES.search, cardNames: CARD_DB.SEARCH.slice(0, 3) };
+  }
+  if (lower.includes("energia") || lower.includes("energy")) {
+    return { message: PROF_LINES.energy_excess, cardNames: CARD_DB.ENGINE.slice(0, 2) };
+  }
+
+  // Resposta genérica com sugestões variadas
+  return {
+    message: PROF_LINES.general,
+    cardNames: [...CARD_DB.DRAW.slice(0, 2), ...CARD_DB.SEARCH.slice(0, 2)]
+  };
+}
+
+// ── Chamadas de IA com cascata ────────────────────────────────────────────────
+
+async function callGemini(
+  messages: ChatMessage[],
+  model = "gemini-2.0-flash"
+): Promise<{ message: string; cardNames: string[] }> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { message: "", cardNames: [] };
+  if (!apiKey) throw new Error("no_key");
 
-  // Construir histórico para Gemini
   const contents = messages.map((m) => ({
     role: m.role === "professor" ? "model" : "user",
     parts: [{ text: m.content }]
   }));
 
-  // gemini-2.0-flash é o modelo free tier atual (2025)
-  const model = "gemini-2.0-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -64,9 +105,8 @@ async function callGemini(messages: ChatMessage[]): Promise<{ message: string; c
   });
 
   if (!res.ok) {
-    const errText = await res.text();
-    console.error(`[Gemini] HTTP ${res.status}:`, errText.slice(0, 300));
-    throw new Error(`Gemini error ${res.status}: ${errText.slice(0, 100)}`);
+    const err = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${err.slice(0, 100)}`);
   }
 
   const data = await res.json() as {
@@ -74,25 +114,15 @@ async function callGemini(messages: ChatMessage[]): Promise<{ message: string; c
     error?: { message: string };
   };
 
-  if (data.error) {
-    console.error("[Gemini] API error:", data.error.message);
-    throw new Error(data.error.message);
-  }
+  if (data.error) throw new Error(data.error.message);
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
   return parseAIResponse(text);
 }
 
-// ── Claude Haiku (fallback) ───────────────────────────────────────────────────
-
 async function callClaude(messages: ChatMessage[]): Promise<{ message: string; cardNames: string[] }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { message: "", cardNames: [] };
-
-  const apiMessages = messages.map((m) => ({
-    role: m.role === "professor" ? "assistant" : "user",
-    content: m.content
-  }));
+  if (!apiKey) throw new Error("no_key");
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -105,38 +135,93 @@ async function callClaude(messages: ChatMessage[]): Promise<{ message: string; c
       model: "claude-haiku-4-5",
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
-      messages: apiMessages
+      messages: messages.map((m) => ({
+        role: m.role === "professor" ? "assistant" : "user",
+        content: m.content
+      }))
     })
   });
 
-  if (!res.ok) throw new Error(`Claude error: ${res.status}`);
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${err.slice(0, 100)}`);
+  }
 
-  const data = await res.json() as {
-    content: Array<{ type: string; text: string }>;
-  };
-
+  const data = await res.json() as { content: Array<{ type: string; text: string }> };
   const text = data.content.find((c) => c.type === "text")?.text ?? "{}";
   return parseAIResponse(text);
 }
 
-// ── Parser de resposta da IA ──────────────────────────────────────────────────
+// ── Parser da resposta da IA ──────────────────────────────────────────────────
 
 function parseAIResponse(text: string): { message: string; cardNames: string[] } {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return { message: text, cardNames: [] };
-
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as { message?: string; cards?: string[] };
-    return {
-      message: parsed.message ?? text,
-      cardNames: parsed.cards ?? []
-    };
+    const p = JSON.parse(jsonMatch[0]) as { message?: string; cards?: string[] };
+    return { message: p.message ?? text, cardNames: p.cards ?? [] };
   } catch {
     return { message: text, cardNames: [] };
   }
 }
 
-// ── Análise de Deck ───────────────────────────────────────────────────────────
+// ── Orquestrador com cascata ──────────────────────────────────────────────────
+
+async function getAIResponse(messages: ChatMessage[]): Promise<{ message: string; cardNames: string[]; usedFallback: boolean }> {
+  // 1. Gemini 2.0 Flash
+  if (process.env.GEMINI_API_KEY) {
+    try { return { ...await callGemini(messages, "gemini-2.0-flash"), usedFallback: false }; }
+    catch (e) { console.warn("[Prof] gemini-2.0-flash falhou:", e instanceof Error ? e.message : e); }
+
+    // 2. Gemini 1.5 Flash
+    try { return { ...await callGemini(messages, "gemini-1.5-flash"), usedFallback: false }; }
+    catch (e) { console.warn("[Prof] gemini-1.5-flash falhou:", e instanceof Error ? e.message : e); }
+
+    // 3. Gemini 1.5 Flash 8B (mais leve)
+    try { return { ...await callGemini(messages, "gemini-1.5-flash-8b"), usedFallback: false }; }
+    catch (e) { console.warn("[Prof] gemini-1.5-flash-8b falhou:", e instanceof Error ? e.message : e); }
+  }
+
+  // 4. Claude Haiku
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return { ...await callClaude(messages), usedFallback: false }; }
+    catch (e) { console.warn("[Prof] Claude falhou:", e instanceof Error ? e.message : e); }
+  }
+
+  // 5. Fallback baseado em regras (sem IA — sempre funciona)
+  console.log("[Prof] Usando fallback baseado em regras");
+  const lastMsg = messages[messages.length - 1]?.content ?? "";
+  return { ...buildRuleBasedResponse(lastMsg), usedFallback: true };
+}
+
+// ── Action principal: chat ────────────────────────────────────────────────────
+
+export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorResponse> {
+  try {
+    const { message, cardNames, usedFallback } = await getAIResponse(messages);
+
+    const finalMessage = usedFallback && !process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY
+      ? `${message}\n\n_(Dica pro admin: adicione GEMINI_API_KEY na Vercel para respostas personalizadas!)_`
+      : message;
+
+    let suggestedCards: Array<TcgCard & { reason: string }> = [];
+    if (cardNames.length > 0) {
+      const cards = await fetchCardsByNames(cardNames);
+      suggestedCards = cards.map((c) => ({ ...c, reason: c.name }));
+    }
+
+    return { message: finalMessage, suggestedCards };
+  } catch (err) {
+    console.error("[Professor Enguiça fatal]", err);
+    return {
+      message: "Ixe, deu ruim no servidor! Tenta de novo em alguns segundos. 📡",
+      suggestedCards: [],
+      error: err instanceof Error ? err.message : "Erro"
+    };
+  }
+}
+
+// ── Action: análise de deck ───────────────────────────────────────────────────
 
 export interface DeckAnalysisResult {
   totalCards: number;
@@ -152,136 +237,51 @@ export async function analyzeDeckAction(deckList: string): Promise<DeckAnalysisR
     if (parsed.totalCards === 0) {
       return {
         totalCards: 0,
-        issues: ["Não consegui ler o deck. Verifique se está no formato: `4 Ultra Ball`"],
-        message: "Ixe, não consegui ler seu deck, parceiro! Use o formato:\n\n4 Ultra Ball\n2 Boss's Orders\n...",
+        issues: ["Não consegui ler o deck. Verifique o formato."],
+        message: "Ixe, não consegui ler seu deck, parceiro! Use o formato:\n\n4 Ultra Ball\n2 Boss's Orders",
         suggestedCards: []
       };
     }
 
     const analysis = analyzeDeck(parsed);
 
-    // Montar lista de cartas para o prompt da IA
-    const deckText = parsed.entries
-      .slice(0, 40) // limitar para não estourar tokens
-      .map((e) => `${e.quantity}x ${e.name}`)
-      .join("\n");
-
+    // Usar IA se disponível, senão usar fallback de regras
+    const deckText = parsed.entries.slice(0, 40).map((e) => `${e.quantity}x ${e.name}`).join("\n");
     const analysisContext = [
-      `Total de cartas: ${analysis.totalCards}/60`,
-      `Energias estimadas: ${analysis.categories.energy}`,
-      `Cartas de compra (Supporters draw): ${analysis.drawCount}`,
-      `Cartas de busca: ${analysis.searchCount}`,
-      analysis.hints.length > 0 ? `Problemas detectados:\n${analysis.hints.join("\n")}` : "Deck bem balanceado estruturalmente."
+      `Total: ${analysis.totalCards}/60`,
+      `Energias: ~${analysis.categories.energy}`,
+      `Draw cards: ${analysis.drawCount}`,
+      `Search cards: ${analysis.searchCount}`,
+      ...(analysis.hints.length > 0 ? analysis.hints : ["Deck estruturalmente equilibrado."])
     ].join("\n");
 
-    const prompt = `Analise este deck de Pokémon TCG e sugira melhorias:
+    const prompt = `Analise este deck de Pokémon TCG:\n\nDECK:\n${deckText}\n\nANÁLISE:\n${analysisContext}\n\nSugira melhorias com cartas reais. JSON obrigatório.`;
 
-DECK:
-${deckText}
+    const { message, cardNames } = await getAIResponse([{ role: "user", content: prompt }]);
 
-ANÁLISE AUTOMÁTICA:
-${analysisContext}
-
-Com base nisso, sugira melhorias específicas com cartas reais. Formato JSON obrigatório.`;
-
-    const messages: ChatMessage[] = [{ role: "user", content: prompt }];
-
-    let result = { message: "", cardNames: [] as string[] };
-    if (process.env.GEMINI_API_KEY) {
-      result = await callGemini(messages);
-    } else if (process.env.ANTHROPIC_API_KEY) {
-      result = await callClaude(messages);
-    } else {
-      // Fallback sem IA: usar apenas as regras locais
-      const fallbackCards: Record<string, string> = {
-        DRAW: "Professor's Research",
-        SEARCH: "Ultra Ball",
-        ENERGY: "Nest Ball"
-      };
+    // Se IA não sugeriu cartas, usar regras
+    const finalCardNames = cardNames.length > 0 ? cardNames : (() => {
       const suggestions: string[] = [];
-      if (analysis.drawCount < 3) suggestions.push(fallbackCards.DRAW, "Iono");
-      if (analysis.searchCount < 3) suggestions.push(fallbackCards.SEARCH, "Nest Ball");
-
-      result = {
-        message: [
-          analysis.issues.length > 0
-            ? `Detectei alguns pontos a melhorar no seu deck, parceiro! ${analysis.issues[0]}`
-            : "Deck com estrutura razoável! Aqui vão algumas sugestões gerais:",
-          ...analysis.issues.slice(1)
-        ].join("\n"),
-        cardNames: suggestions.slice(0, 4)
-      };
-    }
+      if (analysis.drawCount < 3) suggestions.push(...CARD_DB.DRAW.slice(0, 2));
+      if (analysis.searchCount < 3) suggestions.push(...CARD_DB.SEARCH.slice(0, 2));
+      if (analysis.categories.energy > 15) suggestions.push(...CARD_DB.ENGINE.slice(0, 1));
+      return suggestions.slice(0, 5);
+    })();
 
     let suggestedCards: Array<TcgCard & { reason: string }> = [];
-    if (result.cardNames.length > 0) {
-      const cards = await fetchCardsByNames(result.cardNames);
+    if (finalCardNames.length > 0) {
+      const cards = await fetchCardsByNames(finalCardNames);
       suggestedCards = cards.map((c) => ({ ...c, reason: c.name }));
     }
 
-    return {
-      totalCards: analysis.totalCards,
-      issues: analysis.issues,
-      message: result.message,
-      suggestedCards
-    };
+    return { totalCards: analysis.totalCards, issues: analysis.issues, message, suggestedCards };
   } catch (err) {
     console.error("[DeckAnalyzer error]", err);
     return {
-      totalCards: 0,
-      issues: [],
+      totalCards: 0, issues: [],
       message: "Deu um erro ao analisar o deck. Tenta de novo! 📻",
       suggestedCards: [],
       error: err instanceof Error ? err.message : "Erro"
-    };
-  }
-}
-
-// ── Action principal ──────────────────────────────────────────────────────────
-
-export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorResponse> {
-  try {
-    // Prioridade: Gemini (gratuito) → Claude (pago) → mensagem de fallback
-    let result = { message: "", cardNames: [] as string[] };
-
-    if (process.env.GEMINI_API_KEY) {
-      result = await callGemini(messages);
-    } else if (process.env.ANTHROPIC_API_KEY) {
-      result = await callClaude(messages);
-    } else {
-      return {
-        message: "E aí, parceiro! Sou o Professor Enguiça, mas meu servidor de IA não está configurado ainda. Peça pro admin adicionar a GEMINI_API_KEY nas configurações da Vercel! 🔧",
-        suggestedCards: []
-      };
-    }
-
-    const { message, cardNames } = result;
-
-    let suggestedCards: Array<TcgCard & { reason: string }> = [];
-    if (cardNames.length > 0) {
-      const cards = await fetchCardsByNames(cardNames);
-      suggestedCards = cards.map((card) => ({ ...card, reason: card.name }));
-    }
-
-    return { message, suggestedCards };
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.error("[Professor Enguiça error]", errMsg);
-
-    // Mensagens de erro com personalidade
-    const isKeyError = errMsg.includes("API_KEY") || errMsg.includes("401") || errMsg.includes("403");
-    const isQuotaError = errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED");
-
-    const friendlyMsg = isKeyError
-      ? "Parceiro, minha chave de acesso tá travada! Fala pro admin verificar a GEMINI_API_KEY na Vercel. 🔑"
-      : isQuotaError
-      ? "Ei, esgotei minha cota por hoje! Tenta mais tarde ou fala pro admin configurar uma chave diferente. ⏳"
-      : "Ixe, caiu a conexão aqui! Tenta de novo em alguns segundos, parceiro. 📡";
-
-    return {
-      message: friendlyMsg,
-      suggestedCards: [],
-      error: errMsg
     };
   }
 }
