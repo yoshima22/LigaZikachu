@@ -316,8 +316,8 @@ export async function deleteChallenge(challengeId: string): Promise<{ error?: st
     const isAdminUser = actor.role === "ADMIN" || actor.role === "SUPER_ADMIN";
     if (!isOwner && !isAdminUser) return { error: "Sem permissão." };
 
-    const deletable = [ChallengeStatus.OPEN, ChallengeStatus.UNDER_REVIEW];
-    if (!deletable.includes(challenge.status as ChallengeStatus))
+    const deletable: string[] = [ChallengeStatus.OPEN, ChallengeStatus.UNDER_REVIEW];
+    if (!deletable.includes(challenge.status))
       return { error: "Só é possível excluir desafios abertos ou em análise." };
 
     await prisma.challenge.delete({ where: { id: challengeId } });
