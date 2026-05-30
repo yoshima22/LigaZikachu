@@ -130,7 +130,7 @@ export async function createChallenge(
         where: { id: data.tournamentId },
         select: { id: true, slug: true, seasonId: true, challengeConfig: true }
       }),
-      prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true } })
+      prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true, displayName: true } })
     ]);
 
     if (!tournament) return { error: "Torneio não encontrado." };
