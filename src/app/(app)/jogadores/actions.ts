@@ -163,7 +163,7 @@ export async function deletePlayerAction(userId: string): Promise<{ error?: stri
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { player: { select: { id: true, displayName: true, status: true } } }
+      include: { player: { select: { id: true, displayName: true } } }
     });
     if (!user) return { error: "Usuário não encontrado." };
     if (!user.player) return { error: "Jogador não encontrado." };
