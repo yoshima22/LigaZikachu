@@ -180,12 +180,16 @@ export async function deletePlayerAction(userId: string): Promise<{ error?: stri
 
     const playerId = user.player.id;
 
+    const matchCount = await prisma.match.count({ where: { playerAId: playerId } });
+    if (matchCount > 0) {
+      return { error: "Jogador com partidas registradas não pode ser excluído. Use suspender para desativar a conta." };
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.playerBadge.deleteMany({ where: { playerId } });
       await tx.deckSubmission.deleteMany({ where: { playerId } });
       await tx.tournamentRegistration.deleteMany({ where: { playerId } });
       await tx.seasonPlayer.deleteMany({ where: { playerId } });
-      await tx.boosterCode.updateMany({ where: { assignedToId: playerId }, data: { assignedToId: null, status: "AVAILABLE" } });
       await tx.auditLog.create({
         data: {
           actorUserId: actor.id,
