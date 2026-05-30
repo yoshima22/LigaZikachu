@@ -29,26 +29,26 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: '12266719'
 
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses || true
-
-      - name: Install build tools
-        run: sdkmanager "build-tools;34.0.0" "platforms;android-34"
+      - name: Install build tools and platform
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android-webview/local.properties
 
-      - name: Write google-services.json
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: printf '%s' "$GOOGLE_SERVICES_JSON" > android-webview/app/google-services.json
+      - name: Verify google-services.json exists
+        run: |
+          if [ ! -f android-webview/app/google-services.json ]; then
+            echo "ERRO: google-services.json não encontrado!"
+            exit 1
+          fi
+          echo "google-services.json OK — project_id: $(cat android-webview/app/google-services.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["project_info"]["project_id"])')"
 
       - name: Build debug APK
         working-directory: android-webview
-        run: gradle assembleDebug --no-daemon --info
+        run: gradle assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
