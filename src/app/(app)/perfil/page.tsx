@@ -12,14 +12,13 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
 
 async function MeusDecksPreview({ playerId }: { playerId: string }) {
-  const { prisma: db } = await import("@/lib/prisma");
-  const decks = await db.savedDeck.findMany({
+  const decks = await prisma.savedDeck.findMany({
     where: { playerId },
     orderBy: { updatedAt: "desc" },
     take: 3,
     select: { id: true, name: true, archetype: true, isPublic: true }
   });
-  const total = await db.savedDeck.count({ where: { playerId } });
+  const total = await prisma.savedDeck.count({ where: { playerId } });
   if (total === 0) return null;
 
   return (

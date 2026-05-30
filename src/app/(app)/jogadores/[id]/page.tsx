@@ -33,8 +33,12 @@ export default async function PlayerDetailPage({
       },
       deckSubmissions: {
         orderBy: { submittedAt: "desc" },
-        take: 5,
-        select: { id: true, deckName: true, status: true, submittedAt: true, isLate: true }
+        take: 10,
+        select: {
+          id: true, deckName: true, status: true, submittedAt: true, isLate: true,
+          tournament: { select: { name: true, slug: true, status: true } },
+          tournamentWeek: { select: { weekNumber: true, status: true, deckLockAt: true, lockAt: true, endDate: true } }
+        }
       },
       playerAchievements: {
         include: { achievement: { select: { name: true, description: true, icon: true } } }
@@ -336,11 +340,15 @@ export default async function PlayerDetailPage({
             <CardTitle className="mb-4 flex items-center gap-2">
               <BookOpen size={18} className="text-primary" /> Decks enviados
             </CardTitle>
-            {player.deckSubmissions.length === 0 ? (
-              <EmptyState message="Nenhum deck enviado." icon={<BookOpen size={24} />} />
-            ) : (
+            {(() => {
+              const validDecks = player.deckSubmissions.filter(
+                (d) => d.tournament && d.tournament.status !== "DRAFT" && d.tournamentWeek
+              );
+              return validDecks.length === 0 ? (
+                <EmptyState message="Nenhum deck enviado." icon={<BookOpen size={24} />} />
+              ) : (
               <ul className="divide-y divide-border">
-                {player.deckSubmissions.map((deck) => (
+                {validDecks.map((deck) => (
                   <li key={deck.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                     <span className="text-white">{deck.deckName}</span>
                     <div className="flex items-center gap-2">
@@ -365,7 +373,8 @@ export default async function PlayerDetailPage({
                   </li>
                 ))}
               </ul>
-            )}
+              );
+            })()}
           </Card>
 
           {/* Conquistas */}
