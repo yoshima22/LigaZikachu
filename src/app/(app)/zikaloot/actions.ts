@@ -20,8 +20,14 @@ export async function createZikaLoot(raw: z.infer<typeof createSchema>): Promise
   try {
     const actor = await requireAdmin();
     const data = createSchema.parse(raw);
+    const { prizeConfig: rawPrize, ...rest } = data;
     await prisma.zikaLoot.create({
-      data: { ...data, description: data.description ?? null, prizeConfig: data.prizeConfig ?? Prisma.JsonNull, createdById: actor.id }
+      data: {
+        ...rest,
+        description: rest.description ?? null,
+        prizeConfig: rawPrize ? (rawPrize as Prisma.InputJsonValue) : Prisma.JsonNull,
+        createdById: actor.id
+      }
     });
     revalidatePath("/zikaloot");
     return {};
