@@ -108,7 +108,7 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
               value={form.imageUrl}
               onChange={(url) => setForm({ ...form, imageUrl: url })}
               label="Imagem (upload ou URL)"
-              hint={form.type === "BANNER" ? "Proporção recomendada 3:1 — ex: 1500×500px" : undefined}
+              hint={(form.type as string) === "BANNER" ? "Proporção recomendada 3:1 — ex: 1500×500px" : undefined}
             />
             <label className="space-y-1 text-xs text-slate-400">
               <span>Descrição</span>
