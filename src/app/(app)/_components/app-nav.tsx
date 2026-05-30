@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
+  BookOpen,
   Calendar,
   ChevronDown,
   Coins,
@@ -35,6 +36,7 @@ const rankingLinks = [
 
 const colecaoLinks = [
   { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
+  { href: "/album", label: "Álbum", icon: BookOpen, adminOnly: false },
   { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
   { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
   { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },

@@ -208,6 +208,7 @@ model Player {
   inventory               PlayerInventory[]
   betsPlaced              ZikaBet[]             @relation("ZkBetByPlayer")
   betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
+  stickers                PlayerSticker[]
 
   @@map("players")
 }
@@ -717,6 +718,60 @@ enum GiftStatus {
   UNCLAIMED
   CLAIMED
   EXPIRED
+}
+
+// ── Álbum de Figurinhas ───────────────────────────────────────────────────────
+
+enum PokemonRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+model PokemonCard {
+  id          String        @id @default(cuid())
+  nationalId  Int           @unique
+  name        String
+  displayName String
+  generation  Int
+  types       String[]
+  imageUrl    String?       @db.Text
+  rarity      PokemonRarity @default(COMMON)
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  stickers    PlayerSticker[]
+  @@index([generation])
+  @@index([rarity])
+  @@map("pokemon_cards")
+}
+
+model PlayerSticker {
+  id            String      @id @default(cuid())
+  playerId      String
+  cardId        String
+  quantity      Int         @default(1)
+  isFavorite    Boolean     @default(false)
+  firstObtained DateTime    @default(now())
+  player        Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  card          PokemonCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  @@unique([playerId, cardId])
+  @@index([playerId])
+  @@map("player_stickers")
+}
+
+model StickerPack {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Int
+  cardCount   Int      @default(3)
+  generation  Int?
+  rarityBoost Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  @@map("sticker_packs")
 }
 
 // ── ZikaBet ───────────────────────────────────────────────────────────────────
