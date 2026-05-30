@@ -113,7 +113,7 @@ const createChallengeSchema = z.object({
   type: z.nativeEnum(ChallengeType),
   badgeId: z.string().optional(),
   tournamentWeekId: z.string().optional(),
-  reason: z.string().trim().min(3, "Motivo obrigatório.").max(500)
+  reason: z.string().trim().max(500).optional()
 });
 
 export async function createChallenge(
@@ -156,8 +156,9 @@ export async function createChallenge(
         return { error: "Este jogador já atingiu o limite de desafios recebidos nesta semana." };
     }
 
-    // Para Desafio por Insígnia: verificar pontuação mínima
-    if (data.type === ChallengeType.BADGE && data.badgeId) {
+    // Para Desafio por Insígnia: insígnia obrigatória + verificar pontuação mínima
+    if (data.type === ChallengeType.BADGE) {
+      if (!data.badgeId) return { error: "Selecione a insígnia que deseja disputar." };
       const progress = await prisma.badgeProgress.findUnique({
         where: { badgeId_playerId: { badgeId: data.badgeId, playerId: player.id } }
       });
@@ -249,12 +250,28 @@ export async function resolveChallenge(
       }
     });
     if (!challenge) return { error: "Desafio não encontrado." };
-    if (challenge.status !== ChallengeStatus.ACCEPTED)
-      return { error: "O desafio precisa estar aprovado para ser resolvido." };
-
-    const config = parseChallengeConfig(challenge.tournament?.challengeConfig);
+    const resolvable: string[] = [ChallengeStatus.ACCEPTED, ChallengeStatus.RESOLVED, ChallengeStatus.REJECTED];
+    if (!resolvable.includes(challenge.status))
+      return { error: "O desafio precisa estar aprovado para registrar resultado." };
 
     await prisma.$transaction(async (tx) => {
+      let previousBadgeOwnerId: string | null = null;
+
+      if (data.challengerWon && challenge.type === ChallengeType.BADGE && challenge.badgeId) {
+        // Guardar dono atual antes de transferir
+        const currentOwner = await tx.playerBadge.findFirst({
+          where: { badgeId: challenge.badgeId }
+        });
+        previousBadgeOwnerId = currentOwner?.playerId ?? null;
+
+        // Remover insígnia do dono atual
+        await tx.playerBadge.deleteMany({ where: { badgeId: challenge.badgeId } });
+        // Dar insígnia ao desafiante
+        await tx.playerBadge.create({
+          data: { badgeId: challenge.badgeId, playerId: challenge.challengerId, awardedById: actor.id }
+        });
+      }
+
       await tx.challenge.update({
         where: { id: data.challengeId },
         data: {
@@ -262,29 +279,10 @@ export async function resolveChallenge(
           matchId: data.matchId ?? null,
           resolvedById: actor.id,
           resolvedAt: new Date(),
-          resolutionNotes: data.notes ?? null
+          resolutionNotes: data.notes ?? null,
+          metadata: { previousBadgeOwnerId, challengerWon: data.challengerWon }
         }
       });
-
-      // Se desafiante perdeu: status REJECTED já faz o ranking aplicar -2pts via computeTournamentRanking
-
-      // Se desafiante ganhou e era desafio por insígnia: transferir insígnia automaticamente
-      if (data.challengerWon && challenge.type === ChallengeType.BADGE && challenge.badgeId) {
-        // Remover insígnia do dono atual
-        await tx.playerBadge.deleteMany({
-          where: { badgeId: challenge.badgeId, NOT: { playerId: challenge.challengerId } }
-        });
-        // Dar insígnia ao desafiante
-        await tx.playerBadge.upsert({
-          where: { badgeId_playerId: { badgeId: challenge.badgeId, playerId: challenge.challengerId } },
-          update: { awardedById: actor.id, awardedAt: new Date() },
-          create: {
-            badgeId: challenge.badgeId,
-            playerId: challenge.challengerId,
-            awardedById: actor.id
-          }
-        });
-      }
     });
 
     if (challenge.tournament?.slug)
@@ -292,6 +290,58 @@ export async function resolveChallenge(
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ─── Desfazer resultado ────────────────────────────────────────────────────────
+
+export async function undoResolveChallenge(challengeId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+
+    const challenge = await prisma.challenge.findUnique({
+      where: { id: challengeId },
+      include: { tournament: { select: { slug: true } } }
+    });
+    if (!challenge) return { error: "Desafio não encontrado." };
+    if (challenge.status !== ChallengeStatus.RESOLVED && challenge.status !== ChallengeStatus.REJECTED)
+      return { error: "Apenas desafios resolvidos podem ser desfeitos." };
+
+    const meta = challenge.metadata as Record<string, unknown> | null;
+    const challengerWon = meta?.challengerWon === true;
+    const previousBadgeOwnerId = typeof meta?.previousBadgeOwnerId === "string"
+      ? meta.previousBadgeOwnerId
+      : null;
+
+    await prisma.$transaction(async (tx) => {
+      // Reverter transferência de insígnia se houve
+      if (challengerWon && challenge.type === ChallengeType.BADGE && challenge.badgeId) {
+        await tx.playerBadge.deleteMany({ where: { badgeId: challenge.badgeId } });
+        if (previousBadgeOwnerId) {
+          await tx.playerBadge.create({
+            data: { badgeId: challenge.badgeId, playerId: previousBadgeOwnerId, awardedById: actor.id }
+          });
+        }
+      }
+
+      await tx.challenge.update({
+        where: { id: challengeId },
+        data: {
+          status: ChallengeStatus.ACCEPTED,
+          resolvedAt: null,
+          resolvedById: null,
+          resolutionNotes: null,
+          matchId: null,
+          metadata: null
+        }
+      });
+    });
+
+    if (challenge.tournament?.slug)
+      revalidatePath(`/torneios/${challenge.tournament.slug}/desafios`);
+    return {};
+  } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }

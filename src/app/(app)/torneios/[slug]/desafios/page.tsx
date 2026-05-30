@@ -44,7 +44,7 @@ export default async function DesafiosPage({
           },
           progress: {
             include: { player: { select: { id: true, displayName: true } } },
-            orderBy: { points: "desc" }
+            orderBy: [{ points: "desc" }, { player: { displayName: "asc" } }]
           },
           challenges: {
             where: { status: { in: [ChallengeStatus.OPEN, ChallengeStatus.UNDER_REVIEW, ChallengeStatus.ACCEPTED] } },
@@ -278,12 +278,25 @@ export default async function DesafiosPage({
           ownerName: b.owners[0]?.player.displayName ?? null,
           myProgress: b.progress.find((p) => p.playerId === player?.id)?.points ?? 0
         }))}
+        badgeProgressMatrix={tournament.badges.map((b) => ({
+          badgeId: b.id,
+          badgeName: b.name,
+          players: tournament.registrations.map((r) => {
+            const prog = b.progress.find((p) => p.playerId === r.player.id);
+            return {
+              playerId: r.player.id,
+              playerName: r.player.displayName,
+              points: prog?.points ?? 0,
+              notes: prog?.notes ?? null
+            };
+          })
+        }))}
         weeks={tournament.weeks}
         challenges={tournament.challenges.map((c) => ({
           id: c.id,
           type: c.type,
           status: c.status,
-          reason: c.reason,
+          reason: c.reason ?? null,
           resolutionNotes: c.resolutionNotes ?? null,
           openedAt: c.openedAt.toISOString(),
           resolvedAt: c.resolvedAt?.toISOString() ?? null,

@@ -473,8 +473,9 @@ model Challenge {
   openedById       String
   resolvedById     String?
   status           ChallengeStatus @default(OPEN)
-  reason           String
+  reason           String?
   resolutionNotes  String?
+  metadata         Json?
   openedAt         DateTime        @default(now())
   resolvedAt       DateTime?
   season           Season?         @relation(fields: [seasonId], references: [id], onDelete: SetNull)
