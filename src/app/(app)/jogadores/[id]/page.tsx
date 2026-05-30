@@ -108,11 +108,11 @@ export default async function PlayerDetailPage({
       include: { card: { select: { nationalId: true, displayName: true, imageUrl: true, rarity: true } } },
       orderBy: { firstObtained: "asc" },
       take: 6
-    }),
+    }).catch(() => [] as { id: string; card: { nationalId: number; displayName: string; imageUrl: string | null; rarity: string } }[]),
     prisma.playerInventory.findMany({
       where: { playerId, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true } } }
-    }),
+    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null } }[]),
     prisma.savedDeck.findMany({
       where: { playerId, isPublic: true },
       select: { id: true, name: true, archetype: true, deckList: true, updatedAt: true },
