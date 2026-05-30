@@ -4,9 +4,10 @@
 
 const TCG_BASE = "https://api.pokemontcg.io/v2";
 
-function headers() {
+function headers(): Record<string, string> {
   const key = process.env.POKEMON_TCG_API_KEY;
-  return key ? { "X-Api-Key": key } : {};
+  if (key) return { "X-Api-Key": key };
+  return {};
 }
 
 export interface TcgCard {
