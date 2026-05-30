@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft } from "lucide-react";
+import { pokemonTypes } from "@/components/ui/pokemon-type-selector";
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 
@@ -259,15 +260,33 @@ export default async function PlayerDetailPage({
             )}
           </div>
           <div className="space-y-3">
-            {publicDecks.slice(0, 3).map((d) => (
-              <div key={d.id} className="rounded-lg border border-border bg-slate-900/40 p-3">
-                <p className="font-semibold text-slate-200 text-sm">{d.name}</p>
-                {d.archetype && <p className="text-xs text-slate-500 mb-2">{d.archetype}</p>}
-                <pre className="max-h-36 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">
-                  {d.deckList}
-                </pre>
-              </div>
-            ))}
+            {publicDecks.slice(0, 3).map((d) => {
+              const typeValues = d.archetype
+                ? d.archetype.split(",").map((t) => t.trim()).filter(Boolean)
+                : [];
+              return (
+                <div key={d.id} className="rounded-lg border border-border bg-slate-900/40 p-3">
+                  <p className="font-semibold text-slate-200 text-sm">{d.name}</p>
+                  {typeValues.length > 0 && (
+                    <div className="mt-1.5 mb-2 flex flex-wrap gap-1.5">
+                      {typeValues.map((tv) => {
+                        const pt = pokemonTypes.find((p) => p.value === tv);
+                        if (!pt) return null;
+                        const Icon = pt.icon;
+                        return (
+                          <span key={tv} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${pt.className}`}>
+                            <Icon size={10} /> {pt.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <pre className="max-h-36 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">
+                    {d.deckList}
+                  </pre>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}

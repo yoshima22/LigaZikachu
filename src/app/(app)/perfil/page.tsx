@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MatchStatus } from "@prisma/client";
-import { BookOpen, CheckCircle2, Swords, Trophy } from "lucide-react";
+import { BookOpen, CheckCircle2, ExternalLink, Swords, Trophy } from "lucide-react";
+import { pokemonTypes } from "@/components/ui/pokemon-type-selector";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { computeGlobalRanking } from "@/lib/ranking";
@@ -9,6 +10,60 @@ import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
+
+async function MeusDecksPreview({ playerId }: { playerId: string }) {
+  const { prisma: db } = await import("@/lib/prisma");
+  const decks = await db.savedDeck.findMany({
+    where: { playerId },
+    orderBy: { updatedAt: "desc" },
+    take: 3,
+    select: { id: true, name: true, archetype: true, isPublic: true }
+  });
+  const total = await db.savedDeck.count({ where: { playerId } });
+  if (total === 0) return null;
+
+  return (
+    <Card className="p-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+          <BookOpen size={16} className="text-[#FFCB05]" /> Meus Decks
+        </h2>
+        <Link href="/perfil/meus-decks" className="flex items-center gap-1 text-xs text-[#FFCB05] hover:underline">
+          Gerenciar todos ({total}) <ExternalLink size={11} />
+        </Link>
+      </div>
+      <div className="space-y-2">
+        {decks.map((d) => {
+          const types = d.archetype ? d.archetype.split(",").map((t) => t.trim()).filter(Boolean) : [];
+          return (
+            <div key={d.id} className="flex items-center gap-3 rounded-lg border border-border bg-slate-900/40 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-200 flex items-center gap-1.5">
+                  {d.name}
+                  {!d.isPublic && <span className="text-[10px] text-slate-600">(privado)</span>}
+                </p>
+                {types.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {types.map((tv) => {
+                      const pt = pokemonTypes.find((p) => p.value === tv);
+                      if (!pt) return null;
+                      const Icon = pt.icon;
+                      return (
+                        <span key={tv} className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${pt.className}`}>
+                          <Icon size={9} /> {pt.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 export default async function PerfilPage() {
   const session = await auth();
@@ -276,6 +331,8 @@ export default async function PerfilPage() {
             </ul>
           )}
         </Card>
+
+        <MeusDecksPreview playerId={player.id} />
 
         <Card className="p-6">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">

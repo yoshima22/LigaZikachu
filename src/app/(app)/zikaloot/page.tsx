@@ -6,6 +6,7 @@ import { Ticket, Trophy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LootBoard } from "./_components/loot-board";
 import { AdminLootPanel } from "./_components/admin-loot-panel";
+import { checkAndRunPendingDraws } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export default async function ZikaLootPage() {
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);
+
+  // Executar sorteios que passaram do horário automaticamente
+  await checkAndRunPendingDraws();
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },

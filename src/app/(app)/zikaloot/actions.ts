@@ -110,68 +110,74 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
     const winningPick = loot.picks.find((p) => p.number === drawnNumber);
 
     if (winningPick) {
-      const prizeConfig = loot.prizeConfig as PrizeConfig | null;
+      const rawConfig = loot.prizeConfig as PrizeConfig | null;
+      // Suporta tanto { prizes: [] } (novo) quanto item único (legado)
+      const prizes: import("@/lib/zikaloot-types").PrizeItem[] =
+        rawConfig?.prizes?.length ? rawConfig.prizes
+        : rawConfig ? [rawConfig as unknown as import("@/lib/zikaloot-types").PrizeItem]
+        : [];
+
       await prisma.$transaction(async (tx) => {
         await tx.zikaLoot.update({
           where: { id: lootId },
           data: { status: ZikaLootStatus.DRAWN, drawnNumber, winnerId: winningPick.playerId }
         });
 
-        // Enviar prêmio automaticamente conforme configuração
-        if (prizeConfig?.type === "COINS") {
-          await creditCoins(tx, {
-            playerId: winningPick.playerId,
-            type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
-            amount: prizeConfig.amount,
-            description: `Prêmio ZikaLoot: ${loot.name}`
-          });
-          await tx.playerGift.create({
-            data: {
+        // Processar cada prêmio da lista
+        for (const prize of prizes) {
+          if (prize.type === "COINS") {
+            await creditCoins(tx, {
               playerId: winningPick.playerId,
-              type: "CUSTOM",
-              title: `🎉 ZikaLoot: ${loot.name}`,
-              description: `Parabéns! Número ${drawnNumber} sorteado — você recebeu ${prizeConfig.amount} ZikaCoins!`,
-              payload: { lootId, drawnNumber }
-            }
-          });
-        } else if (prizeConfig?.type === "STICKER") {
-          await tx.playerGift.create({
-            data: {
-              playerId: winningPick.playerId,
-              type: "STICKER",
-              title: `🎉 ZikaLoot: ${loot.name}`,
-              description: `Você ganhou a figurinha ${prizeConfig.cardName}!`,
-              payload: { lootId, drawnNumber, cardId: prizeConfig.cardId, cardName: prizeConfig.cardName }
-            }
-          });
-        } else if (prizeConfig?.type === "TICKET" || prizeConfig?.type === "COSMETIC") {
-          const item = await tx.shopItem.findUnique({ where: { id: prizeConfig.itemId } });
-          if (item) {
-            await tx.playerInventory.upsert({
-              where: { playerId_itemId: { playerId: winningPick.playerId, itemId: item.id } },
-              update: { quantity: { increment: 1 } },
-              create: { playerId: winningPick.playerId, itemId: item.id, quantity: 1 }
+              type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
+              amount: prize.amount,
+              description: `Prêmio ZikaLoot: ${loot.name}`
             });
-            await tx.playerGift.create({
-              data: {
-                playerId: winningPick.playerId,
-                type: "CUSTOM",
+            await tx.playerGift.create({ data: {
+              playerId: winningPick.playerId, type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Parabéns! Você recebeu ${prize.amount} ZikaCoins!`,
+              payload: { lootId, drawnNumber }
+            }});
+          } else if (prize.type === "STICKER") {
+            await tx.playerGift.create({ data: {
+              playerId: winningPick.playerId, type: "STICKER",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Você ganhou a figurinha ${prize.cardName}!`,
+              payload: { lootId, drawnNumber, cardId: prize.cardId, cardName: prize.cardName }
+            }});
+          } else if (prize.type === "TICKET" || prize.type === "COSMETIC") {
+            const item = await tx.shopItem.findUnique({ where: { id: prize.itemId } });
+            if (item) {
+              await tx.playerInventory.upsert({
+                where: { playerId_itemId: { playerId: winningPick.playerId, itemId: item.id } },
+                update: { quantity: { increment: 1 } },
+                create: { playerId: winningPick.playerId, itemId: item.id, quantity: 1 }
+              });
+              await tx.playerGift.create({ data: {
+                playerId: winningPick.playerId, type: "CUSTOM",
                 title: `🎉 ZikaLoot: ${loot.name}`,
                 description: `Você ganhou: ${item.name}! Verifique seu inventário.`,
                 payload: { lootId, drawnNumber, itemId: item.id }
-              }
-            });
-          }
-        } else {
-          // CUSTOM — apenas notificação
-          await tx.playerGift.create({
-            data: {
-              playerId: winningPick.playerId,
-              type: "CUSTOM",
-              title: `🎉 ZikaLoot: ${loot.name}`,
-              description: `Você ganhou! Número ${drawnNumber} sorteado. Prêmio: ${loot.prize}`,
-              payload: { lootId, drawnNumber, prize: loot.prize }
+              }});
             }
+          } else if (prize.type === "CUSTOM") {
+            await tx.playerGift.create({ data: {
+              playerId: winningPick.playerId, type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: prize.description || `Você ganhou! Prêmio: ${loot.prize}`,
+              payload: { lootId, drawnNumber }
+            }});
+          }
+        }
+
+        // Fallback se não há prizeConfig: notificação simples
+        if (prizes.length === 0) {
+          await tx.playerGift.create({ data: {
+            playerId: winningPick.playerId, type: "CUSTOM",
+            title: `🎉 ZikaLoot: ${loot.name}`,
+            description: `Você ganhou! Número ${drawnNumber} sorteado. Prêmio: ${loot.prize}`,
+            payload: { lootId, drawnNumber, prize: loot.prize }
+          }
           });
         }
       });
@@ -198,6 +204,32 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
 }
 
 // ── Cancelar loteria ──────────────────────────────────────────────────────────
+
+export async function deleteZikaLoot(lootId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.zikaLoot.delete({ where: { id: lootId } });
+    revalidatePath("/zikaloot");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Executar sorteios pendentes (chamado ao carregar a página) ─────────────────
+
+export async function checkAndRunPendingDraws(): Promise<void> {
+  try {
+    const now = new Date();
+    const due = await prisma.zikaLoot.findMany({
+      where: { status: ZikaLootStatus.SCHEDULED, drawAt: { lte: now } },
+      select: { id: true }
+    });
+    for (const loot of due) {
+      await runDraw(loot.id);
+    }
+  } catch { /* silently ignore */ }
+}
 
 export async function cancelZikaLoot(lootId: string): Promise<{ error?: string }> {
   try {
