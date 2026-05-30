@@ -120,7 +120,7 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
 
       {variant === "mobile" && (
       <div className="grid gap-2 px-4 pb-3 md:hidden">
-        <div className="flex gap-1 overflow-x-auto scrollbar-none">
+        <div className="flex flex-wrap items-center gap-1">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
             .map(({ href, label, icon: Icon }) => (
@@ -128,18 +128,17 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="shrink-0 whitespace-nowrap text-xs text-slate-400 hover:text-[#FFCB05]"
+                  className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
                 >
                   <Icon size={13} className="mr-1" />
                   {label}
                 </Button>
               </Link>
             ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
           <MobileNavGroup
             id="mobile-ranking"
             label="Ranking"
+            icon={BarChart3}
             links={rankingLinks}
             admin={admin}
             openMenu={openMenu}
@@ -148,20 +147,21 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
           <MobileNavGroup
             id="mobile-perfil"
             label="Perfil"
+            icon={User}
             links={profileLinks}
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
           />
-        </div>
         {admin && (
           <Link href="/admin" onClick={() => setOpenMenu(null)}>
-            <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-slate-400 hover:text-[#FFCB05]">
+            <Button variant="ghost" size="sm" className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
               <ShieldCheck size={13} className="mr-1" />
               Admin
             </Button>
           </Link>
         )}
+        </div>
       </div>
       )}
     </div>
@@ -223,6 +223,7 @@ function NavDropdown({
 function MobileNavGroup({
   id,
   label,
+  icon: Icon,
   links,
   admin,
   openMenu,
@@ -230,6 +231,7 @@ function MobileNavGroup({
 }: {
   id: string;
   label: string;
+  icon: typeof LayoutDashboard;
   links: NavLink[];
   admin: boolean;
   openMenu: string | null;
@@ -245,13 +247,14 @@ function MobileNavGroup({
       <button
         type="button"
         onClick={() => setOpenMenu(open ? null : id)}
-        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+        className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
       >
+        <Icon size={13} />
         {label}
         <ChevronDown size={13} className={`transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-10 z-50 w-full rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
+        <div className="absolute left-0 top-9 z-50 min-w-44 rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
             <Link
               key={href}

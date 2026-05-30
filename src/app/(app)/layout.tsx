@@ -33,7 +33,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           {/* Top bar with glow effect */}
           <div className="h-0.5 bg-gradient-to-r from-transparent via-[#FFCB05] to-transparent opacity-60"></div>
           
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
             {/* Logo - Pokemon style */}
             <Link href="/dashboard" className="flex items-center gap-3 group">
               <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-[0_0_20px_#FFCB05]/40 group-hover:shadow-[0_0_30px_#FFCB05]/60 transition-all duration-300">
@@ -74,7 +74,9 @@ export default async function AppLayout({ children }: Readonly<{ children: React
             </div>
           </div>
 
-          <AppNav admin={admin} variant="mobile" />
+          <div className="mx-auto max-w-7xl">
+            <AppNav admin={admin} variant="mobile" />
+          </div>
         </header>
 
         {/* Main content */}

@@ -106,14 +106,30 @@ export default async function AdminPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Contas pendentes" value={pendingUsers} icon={<ShieldCheck size={22} />} highlight={pendingUsers > 0} />
-        <StatCard label="Torneios ativos" value={activeTournaments} icon={<Trophy size={22} />} />
-        <StatCard label="Partidas pendentes" value={pendingMatches} icon={<Swords size={22} />} highlight={pendingMatches > 0} />
-        <StatCard label="Disputas abertas" value={disputedMatches} icon={<AlertTriangle size={22} />} highlight={disputedMatches > 0} />
-        <StatCard label="Rascunhos" value={draftTournaments} icon={<BookOpen size={22} />} />
-        <StatCard label="Decks enviados" value={pendingDecks} icon={<BookOpen size={22} />} />
-        <StatCard label="Codigos disponiveis" value={availableCodes} icon={<Package size={22} />} />
-        <StatCard label="Codigos invalidos" value={invalidCodes} icon={<AlertTriangle size={22} />} highlight={invalidCodes > 0} />
+        <Link href="/jogadores?status=PENDING_APPROVAL">
+          <StatCard label="Contas pendentes" value={pendingUsers} icon={<ShieldCheck size={22} />} highlight={pendingUsers > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/torneios">
+          <StatCard label="Torneios ativos" value={activeTournaments} icon={<Trophy size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/torneios">
+          <StatCard label="Partidas pendentes" value={pendingMatches} icon={<Swords size={22} />} highlight={pendingMatches > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/torneios">
+          <StatCard label="Disputas abertas" value={disputedMatches} icon={<AlertTriangle size={22} />} highlight={disputedMatches > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/torneios">
+          <StatCard label="Rascunhos" value={draftTournaments} icon={<BookOpen size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/torneios">
+          <StatCard label="Decks enviados" value={pendingDecks} icon={<BookOpen size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/codigos">
+          <StatCard label="Codigos disponiveis" value={availableCodes} icon={<Package size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
+        <Link href="/codigos">
+          <StatCard label="Codigos invalidos" value={invalidCodes} icon={<AlertTriangle size={22} />} highlight={invalidCodes > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+        </Link>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

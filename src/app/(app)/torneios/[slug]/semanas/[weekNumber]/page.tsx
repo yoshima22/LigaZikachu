@@ -30,10 +30,11 @@ export default async function WeekDetailPage({
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
-    select: { id: true, name: true, slug: true, status: true, seasonId: true }
+    select: { id: true, name: true, slug: true, status: true, seasonId: true, format: true }
   });
   if (!tournament) notFound();
   if (!admin && tournament.status === "DRAFT") notFound();
+  const isInPerson = tournament.format === "IN_PERSON";
 
   const week = await prisma.tournamentWeek.findUnique({
     where: { tournamentId_weekNumber: { tournamentId: tournament.id, weekNumber: weekNum } },
@@ -460,11 +461,30 @@ export default async function WeekDetailPage({
               ) : (
                 <div className="space-y-1 text-sm text-slate-300">
                   {teamAssignments.map((assignment) => (
-                    <p key={String(assignment.playerId)}>
-                      <span className="font-semibold text-white">{String(assignment.playerName)}</span>
-                      <span className="text-slate-500"> - </span>
-                      <span className="text-[#FFCB05]">{String(assignment.teamName)}</span>
-                    </p>
+                    <div key={String(assignment.playerId)} className="flex items-center justify-between gap-2">
+                      <p>
+                        <span className="font-semibold text-white">{String(assignment.playerName)}</span>
+                        <span className="text-slate-500"> - </span>
+                        <span className="text-[#FFCB05]">{String(assignment.teamName)}</span>
+                      </p>
+                      <form
+                        action={async () => {
+                          "use server";
+                          await setTournamentWeekTeam({
+                            weekId: week.id,
+                            playerId: String(assignment.playerId),
+                            teamName: ""
+                          });
+                        }}
+                      >
+                        <button
+                          type="submit"
+                          className="shrink-0 rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+                        >
+                          remover
+                        </button>
+                      </form>
+                    </div>
                   ))}
                 </div>
               )}
@@ -495,7 +515,7 @@ export default async function WeekDetailPage({
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-slate-950/50 p-5">
+      {!isInPerson && <div className="rounded-xl border border-border bg-slate-950/50 p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 font-semibold text-slate-200">
@@ -578,7 +598,7 @@ export default async function WeekDetailPage({
             ))
           )}
         </div>
-      </div>
+      </div>}
 
       <div className="rounded-xl border border-border bg-slate-950/50 p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
