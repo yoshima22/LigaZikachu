@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
-// Endpoint de diagnóstico — só admin pode acessar
-// GET /api/professor/test
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,13 +10,14 @@ export async function GET() {
 
   const results: Record<string, unknown> = {
     gemini_key_present: !!geminiKey,
-    gemini_key_prefix: geminiKey ? geminiKey.substring(0, 8) + "..." : null,
+    gemini_key_prefix: geminiKey ? geminiKey.substring(0, 10) + "..." : null,
     anthropic_key_present: !!anthropicKey,
+    anthropic_key_prefix: anthropicKey ? anthropicKey.substring(0, 10) + "..." : null,
   };
 
-  // Testar cada modelo Gemini
+  // Testar modelos Gemini
   if (geminiKey) {
-    const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+    const models = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"];
     for (const model of models) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
@@ -26,22 +25,45 @@ export async function GET() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "Diga apenas: ok" }] }],
-            generationConfig: { maxOutputTokens: 10 }
+            contents: [{ role: "user", parts: [{ text: "ok" }] }],
+            generationConfig: { maxOutputTokens: 5 }
           })
         });
-
         const body = await res.text();
-        results[model] = {
-          status: res.status,
-          ok: res.ok,
-          response: body.slice(0, 200)
-        };
+        results[`gemini:${model}`] = { status: res.status, ok: res.ok, body: body.slice(0, 150) };
+        if (res.ok) break; // Para no primeiro que funcionar
       } catch (e) {
-        results[model] = { error: String(e) };
+        results[`gemini:${model}`] = { error: String(e) };
       }
     }
   }
 
-  return NextResponse.json(results, { status: 200 });
+  // Testar Claude
+  if (anthropicKey) {
+    const models = ["claude-haiku-4-5", "claude-3-haiku-20240307", "claude-3-5-haiku-20241022"];
+    for (const model of models) {
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": anthropicKey,
+            "anthropic-version": "2023-06-01"
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 10,
+            messages: [{ role: "user", content: "ok" }]
+          })
+        });
+        const body = await res.text();
+        results[`claude:${model}`] = { status: res.status, ok: res.ok, body: body.slice(0, 150) };
+        if (res.ok) break;
+      } catch (e) {
+        results[`claude:${model}`] = { error: String(e) };
+      }
+    }
+  }
+
+  return NextResponse.json(results);
 }

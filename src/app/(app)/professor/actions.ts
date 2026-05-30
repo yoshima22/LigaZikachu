@@ -120,7 +120,10 @@ async function callGemini(
   return parseAIResponse(text);
 }
 
-async function callClaude(messages: ChatMessage[]): Promise<{ message: string; cardNames: string[] }> {
+async function callClaude(
+  messages: ChatMessage[],
+  model = "claude-haiku-4-5"
+): Promise<{ message: string; cardNames: string[] }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("no_key");
 
@@ -132,7 +135,7 @@ async function callClaude(messages: ChatMessage[]): Promise<{ message: string; c
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5",
+      model,
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: messages.map((m) => ({
@@ -168,24 +171,20 @@ function parseAIResponse(text: string): { message: string; cardNames: string[] }
 // ── Orquestrador com cascata ──────────────────────────────────────────────────
 
 async function getAIResponse(messages: ChatMessage[]): Promise<{ message: string; cardNames: string[]; usedFallback: boolean }> {
-  // 1. Gemini 2.0 Flash
+  // 1. Gemini 2.0 Flash Lite (quota mais generosa no free tier)
   if (process.env.GEMINI_API_KEY) {
-    try { return { ...await callGemini(messages, "gemini-2.0-flash"), usedFallback: false }; }
-    catch (e) { console.warn("[Prof] gemini-2.0-flash falhou:", e instanceof Error ? e.message : e); }
-
-    // 2. Gemini 1.5 Flash
-    try { return { ...await callGemini(messages, "gemini-1.5-flash"), usedFallback: false }; }
-    catch (e) { console.warn("[Prof] gemini-1.5-flash falhou:", e instanceof Error ? e.message : e); }
-
-    // 3. Gemini 1.5 Flash 8B (mais leve)
-    try { return { ...await callGemini(messages, "gemini-1.5-flash-8b"), usedFallback: false }; }
-    catch (e) { console.warn("[Prof] gemini-1.5-flash-8b falhou:", e instanceof Error ? e.message : e); }
+    for (const model of ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"]) {
+      try { return { ...await callGemini(messages, model), usedFallback: false }; }
+      catch (e) { console.warn(`[Prof] ${model} falhou:`, e instanceof Error ? e.message : e); }
+    }
   }
 
-  // 4. Claude Haiku
+  // 2. Claude (tenta múltiplos modelos)
   if (process.env.ANTHROPIC_API_KEY) {
-    try { return { ...await callClaude(messages), usedFallback: false }; }
-    catch (e) { console.warn("[Prof] Claude falhou:", e instanceof Error ? e.message : e); }
+    for (const model of ["claude-haiku-4-5", "claude-3-haiku-20240307", "claude-3-5-haiku-20241022"]) {
+      try { return { ...await callClaude(messages, model), usedFallback: false }; }
+      catch (e) { console.warn(`[Prof] Claude ${model} falhou:`, e instanceof Error ? e.message : e); }
+    }
   }
 
   // 5. Fallback baseado em regras (sem IA — sempre funciona)
