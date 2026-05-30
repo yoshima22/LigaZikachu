@@ -9,18 +9,6 @@ import { PackShelf } from "./_components/pack-shelf";
 
 export const dynamic = "force-dynamic";
 
-export const RARITY_COLORS: Record<string, string> = {
-  COMMON:    "border-slate-600 text-slate-400",
-  UNCOMMON:  "border-[#7AC74C]/50 text-[#7AC74C]",
-  RARE:      "border-[#6390F0]/50 text-[#6390F0]",
-  EPIC:      "border-[#735797]/50 text-[#735797]",
-  LEGENDARY: "border-[#FFCB05]/50 text-[#FFCB05]"
-};
-
-export const RARITY_LABELS: Record<string, string> = {
-  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Rara", EPIC: "Épica", LEGENDARY: "Lendária"
-};
-
 export default async function AlbumPage({
   searchParams
 }: {
