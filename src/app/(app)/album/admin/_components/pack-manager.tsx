@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Pencil, Trash2, X, Check } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { createStickerPack, updateStickerPack, deleteStickerPack, toggleStickerPack } from "../actions";
 
 interface Pack {
@@ -55,7 +56,6 @@ function PackForm({ form, setForm, onSave, onCancel, pending, label }: {
       {([
         { key: "name", label: "Nome", type: "text" },
         { key: "description", label: "Descrição", type: "text" },
-        { key: "imageUrl", label: "URL da imagem (opcional)", type: "text" },
         { key: "price", label: "Preço (ZC)", type: "number" },
         { key: "cardCount", label: "Cartas por pacote", type: "number" },
         { key: "generation", label: "Geração (vazio = todas)", type: "number" }
@@ -67,6 +67,12 @@ function PackForm({ form, setForm, onSave, onCancel, pending, label }: {
             className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
         </label>
       ))}
+      <ImageUpload
+        value={form.imageUrl}
+        onChange={(url) => setForm({ ...form, imageUrl: url })}
+        label="Imagem do pacote (upload ou URL)"
+        maxMb={1}
+      />
       <label className="flex items-center gap-2 text-xs text-slate-400 self-end pb-2">
         <input type="checkbox" checked={form.rarityBoost} onChange={(e) => setForm({ ...form, rarityBoost: e.target.checked })}
           className="accent-[#FFCB05]" />

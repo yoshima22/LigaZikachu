@@ -62,7 +62,7 @@ type NavLink = {
   adminOnly: boolean;
 };
 
-export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant?: "desktop" | "mobile" }) {
+export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -121,6 +121,7 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
           admin={admin}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
+          badgeHrefs={{ "/caixa-de-presentes": giftCount }}
         />
         {adminLinks
           .filter((link) => !link.adminOnly || admin)
@@ -182,6 +183,7 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
+            badgeHrefs={{ "/caixa-de-presentes": giftCount }}
           />
           {admin && (
             <Link href="/admin" onClick={() => setOpenMenu(null)}>
@@ -199,49 +201,41 @@ export function AppNav({ admin, variant = "desktop" }: { admin: boolean; variant
 }
 
 function NavDropdown({
-  id,
-  label,
-  icon: Icon,
-  links,
-  admin,
-  openMenu,
-  setOpenMenu
+  id, label, icon: Icon, links, admin, openMenu, setOpenMenu, badgeHrefs = {}
 }: {
-  id: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  links: NavLink[];
-  admin: boolean;
-  openMenu: string | null;
-  setOpenMenu: (value: string | null) => void;
+  id: string; label: string; icon: typeof LayoutDashboard; links: NavLink[];
+  admin: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
+  badgeHrefs?: Record<string, number>;
 }) {
   const visibleLinks = links.filter((link) => !link.adminOnly || admin);
   if (visibleLinks.length === 0) return null;
-
   const open = openMenu === id;
+  const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpenMenu(open ? null : id)}
-        className="flex h-8 items-center rounded-xl px-3 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
-      >
+      <button type="button" onClick={() => setOpenMenu(open ? null : id)}
+        className="flex h-8 items-center rounded-xl px-3 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
         <Icon size={14} className="mr-1.5" />
         {label}
+        {totalBadge > 0 && (
+          <span className="ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+            {totalBadge}
+          </span>
+        )}
         <ChevronDown size={13} className={`ml-1 transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="absolute right-0 top-10 z-50 min-w-48 rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setOpenMenu(null)}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]"
-            >
-              <ItemIcon size={14} />
-              {itemLabel}
+            <Link key={href} href={href} onClick={() => setOpenMenu(null)}
+              className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]">
+              <span className="flex items-center gap-2"><ItemIcon size={14} />{itemLabel}</span>
+              {badgeHrefs[href] > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                  {badgeHrefs[href]}
+                </span>
+              )}
             </Link>
           ))}
         </div>
@@ -251,49 +245,41 @@ function NavDropdown({
 }
 
 function MobileNavGroup({
-  id,
-  label,
-  icon: Icon,
-  links,
-  admin,
-  openMenu,
-  setOpenMenu
+  id, label, icon: Icon, links, admin, openMenu, setOpenMenu, badgeHrefs = {}
 }: {
-  id: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  links: NavLink[];
-  admin: boolean;
-  openMenu: string | null;
-  setOpenMenu: (value: string | null) => void;
+  id: string; label: string; icon: typeof LayoutDashboard; links: NavLink[];
+  admin: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
+  badgeHrefs?: Record<string, number>;
 }) {
   const visibleLinks = links.filter((link) => !link.adminOnly || admin);
   if (visibleLinks.length === 0) return null;
-
   const open = openMenu === id;
+  const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpenMenu(open ? null : id)}
-        className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
-      >
+      <button type="button" onClick={() => setOpenMenu(open ? null : id)}
+        className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
         <Icon size={13} />
         {label}
+        {totalBadge > 0 && (
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+            {totalBadge}
+          </span>
+        )}
         <ChevronDown size={13} className={`transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="absolute left-0 top-9 z-50 min-w-44 rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setOpenMenu(null)}
-              className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
-            >
-              <ItemIcon size={13} />
-              {itemLabel}
+            <Link key={href} href={href} onClick={() => setOpenMenu(null)}
+              className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
+              <span className="flex items-center gap-2"><ItemIcon size={13} />{itemLabel}</span>
+              {badgeHrefs[href] > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                  {badgeHrefs[href]}
+                </span>
+              )}
             </Link>
           ))}
         </div>

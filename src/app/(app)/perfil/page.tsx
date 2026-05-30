@@ -71,12 +71,14 @@ export default async function PerfilPage() {
     );
   }
 
-  const [ranking, recentMatches, dreamTeam] = await Promise.all([
+  const [ranking, recentMatches, dreamTeam, equippedItems] = await Promise.all([
     computeGlobalRanking(),
     prisma.match.findMany({
       where: {
         OR: [{ playerAId: player.id }, { playerBId: player.id }],
-        status: MatchStatus.CONFIRMED
+        status: MatchStatus.CONFIRMED,
+        // Apenas partidas de torneios reais (não rascunho)
+        tournamentWeek: { tournament: { status: { not: "DRAFT" } } }
       },
       orderBy: { playedAt: "desc" },
       take: 5,
@@ -96,33 +98,57 @@ export default async function PerfilPage() {
       include: { card: { select: { nationalId: true, displayName: true, imageUrl: true, rarity: true } } },
       orderBy: { firstObtained: "asc" },
       take: 6
+    }),
+    prisma.playerInventory.findMany({
+      where: { playerId: player.id, equipped: true },
+      include: { item: { select: { type: true, name: true, imageUrl: true } } }
     })
   ]);
+
+  const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
+  const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
+  const equippedTitle  = equippedItems.find((i) => i.item.type === "TITLE");
 
   const myRanking = ranking.find((entry) => entry.playerId === player.id);
   const totalGames = (myRanking?.wins ?? 0) + (myRanking?.draws ?? 0) + (myRanking?.losses ?? 0);
   const recentDecks = player.deckSubmissions
-    .filter((deck) => deck.tournamentWeek && isDeckRegistrationLocked(deck.tournamentWeek))
+    .filter((deck) =>
+      deck.tournamentWeek &&
+      isDeckRegistrationLocked(deck.tournamentWeek) &&
+      deck.tournament  // só decks vinculados a torneios
+    )
     .slice(0, 5);
 
   return (
     <div className="space-y-6">
-      <Card className="flex flex-wrap items-center gap-5 p-6">
+      <Card className="overflow-hidden p-0">
+        {/* Banner */}
+        {equippedBanner?.item.imageUrl ? (
+          <div className="relative h-28 w-full overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={equippedBanner.item.imageUrl} alt="Banner" className="h-full w-full object-cover object-center" />
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0f0f1a]/70" />
+          </div>
+        ) : null}
+        <div className={`flex flex-wrap items-center gap-5 p-6 ${equippedBanner?.item.imageUrl ? "-mt-12 relative" : ""}`}>
         {player.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={player.avatarUrl}
             alt={player.displayName}
-            className="h-20 w-20 rounded-2xl border-2 border-[#FFCB05]/30 object-cover"
+            className={`h-20 w-20 rounded-2xl object-cover ${equippedFrame ? "ring-4 ring-[#FFCB05]" : "border-2 border-[#FFCB05]/30"}`}
           />
         ) : (
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFCB05] to-[#FFD700] text-2xl font-bold text-[#1A1A2E]">
+          <div className={`flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFCB05] to-[#FFD700] text-2xl font-bold text-[#1A1A2E] ${equippedFrame ? "ring-4 ring-[#FFCB05]" : ""}`}>
             {player.displayName.charAt(0)}
           </div>
         )}
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-widest text-slate-500">Meu perfil</p>
           <h1 className="font-pixel text-base text-[#FFCB05]">{player.displayName}</h1>
+          {equippedTitle && (
+            <p className="text-xs font-semibold text-[#FFCB05]/80">{equippedTitle.item.name}</p>
+          )}
           <p className="text-sm text-slate-400">{player.ptcglNick || "Sem nick do jogo"}</p>
           <p className="mt-2 text-xs text-slate-500">Esta e a sua pagina de perfil e edicao.</p>
         </div>
@@ -132,6 +158,7 @@ export default async function PerfilPage() {
         >
           Ver como publico
         </Link>
+        </div>
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

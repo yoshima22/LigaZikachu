@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { setMatchOdds } from "../actions";
+import { setMatchOdds, calculateAutoOdds } from "../actions";
 
 interface Props {
   matchId: string;
@@ -24,6 +24,17 @@ export function OddsForm({ matchId, playerAName, playerBName, playerAOdds, playe
         if (result.error) { toast.error(result.error); return; }
         toast.success("Odds salvas!");
       } catch { toast.error("Erro ao salvar odds."); }
+    });
+  };
+
+  const handleAutoOdds = () => {
+    startTransition(async () => {
+      try {
+        const result = await calculateAutoOdds(matchId);
+        if (result.error) { toast.error(result.error); return; }
+        setForm((f) => ({ ...f, playerAOdds: result.playerAOdds, playerBOdds: result.playerBOdds }));
+        toast.success(`Odds sugeridas: ${playerAName.split(" ")[0]} ${result.playerAOdds}x · ${playerBName.split(" ")[0]} ${result.playerBOdds}x`);
+      } catch { toast.error("Erro ao calcular odds."); }
     });
   };
 
@@ -51,6 +62,10 @@ export function OddsForm({ matchId, playerAName, playerBName, playerAOdds, playe
           className="accent-[#FFCB05]" />
         Apostas abertas
       </label>
+      <button type="button" disabled={pending} onClick={handleAutoOdds}
+        className="rounded-lg border border-border px-2 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-60">
+        Auto
+      </button>
       <button type="button" disabled={pending} onClick={handle}
         className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60">
         Salvar

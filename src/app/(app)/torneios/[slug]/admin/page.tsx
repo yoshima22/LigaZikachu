@@ -13,6 +13,8 @@ import {
   finishTournament,
   publishTournament,
   removeTournamentWeek,
+  reopenRegistrations,
+  removePlayerRegistration,
   startTournament,
   updateTournamentSeason,
   updateTournamentWeekSettings
@@ -256,6 +258,18 @@ export default async function TournamentAdminPage({ params }: Props) {
               >
                 <Button type="submit" variant="outline">
                   Encerrar torneio
+                </Button>
+              </form>
+            )}
+            {(tournament.status === "IN_PROGRESS" || tournament.status === "DRAFT") && (
+              <form
+                action={async () => {
+                  "use server";
+                  await reopenRegistrations(tournament.id);
+                }}
+              >
+                <Button type="submit" variant="outline" className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10">
+                  Reabrir inscrições
                 </Button>
               </form>
             )}
@@ -668,17 +682,31 @@ export default async function TournamentAdminPage({ params }: Props) {
                   <p className="text-xs text-slate-500">{reg.player.ptcglNick}</p>
                 </div>
               </div>
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full ${
-                  reg.status === "APPROVED"
-                    ? "bg-green-500/20 text-green-400"
-                    : reg.status === "PENDING"
-                    ? "bg-yellow-500/20 text-yellow-400"
-                    : "bg-red-500/20 text-red-400"
-                }`}
-              >
-                {reg.status}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    reg.status === "APPROVED"
+                      ? "bg-green-500/20 text-green-400"
+                      : reg.status === "PENDING"
+                      ? "bg-yellow-500/20 text-yellow-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}
+                >
+                  {reg.status}
+                </span>
+                {(reg.status === "APPROVED" || reg.status === "PENDING") && (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await removePlayerRegistration(tournament.id, reg.player.id);
+                    }}
+                  >
+                    <button type="submit" className="rounded-lg px-2 py-0.5 text-xs text-red-400 hover:bg-red-500/10">
+                      Remover
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
           ))}
         </div>

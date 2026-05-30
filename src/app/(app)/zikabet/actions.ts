@@ -229,6 +229,75 @@ export async function settleDayBets(weekId: string, adminId: string): Promise<vo
   }
 }
 
+// ── Calcular odds automáticas ─────────────────────────────────────────────────
+
+export async function calculateAutoOdds(
+  matchId: string
+): Promise<{ playerAOdds: number; playerBOdds: number; error?: string }> {
+  try {
+    await requireAdmin();
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        playerA: { select: { id: true } },
+        playerB: { select: { id: true } },
+        tournamentWeek: { include: { tournament: { select: { id: true } } } }
+      }
+    });
+    if (!match || !match.playerB) return { playerAOdds: 1.5, playerBOdds: 1.5 };
+
+    const tournamentId = match.tournamentWeek?.tournament?.id;
+
+    // Buscar stats de cada jogador no torneio (vitórias e derrotas)
+    const [statsA, statsB] = await Promise.all([
+      prisma.match.aggregate({
+        where: {
+          OR: [{ playerAId: match.playerAId }, { playerBId: match.playerAId }],
+          status: "CONFIRMED",
+          ...(tournamentId ? { tournamentWeek: { tournamentId } } : {})
+        },
+        _count: { id: true }
+      }),
+      prisma.match.aggregate({
+        where: {
+          OR: [{ playerAId: match.playerBId }, { playerBId: match.playerBId }],
+          status: "CONFIRMED",
+          ...(tournamentId ? { tournamentWeek: { tournamentId } } : {})
+        },
+        _count: { id: true }
+      })
+    ]);
+
+    const [winsA, winsB] = await Promise.all([
+      prisma.match.count({ where: { winnerPlayerId: match.playerAId, status: "CONFIRMED", ...(tournamentId ? { tournamentWeek: { tournamentId } } : {}) } }),
+      prisma.match.count({ where: { winnerPlayerId: match.playerBId, status: "CONFIRMED", ...(tournamentId ? { tournamentWeek: { tournamentId } } : {}) } })
+    ]);
+
+    const totalA = statsA._count.id || 1;
+    const totalB = statsB._count.id || 1;
+    const wrA = winsA / totalA;
+    const wrB = winsB / totalB;
+
+    // Se ambos sem histórico, odds iguais
+    const sumWR = wrA + wrB;
+    const probA = sumWR > 0 ? wrA / sumWR : 0.5;
+    const probB = sumWR > 0 ? wrB / sumWR : 0.5;
+
+    // Aplicar 5% de margem e arredondar para 0.05
+    const margin = 0.95;
+    const rawA = probA > 0.02 ? margin / probA : 10;
+    const rawB = probB > 0.02 ? margin / probB : 10;
+    const round = (v: number) => Math.round(v / 0.05) * 0.05;
+
+    return {
+      playerAOdds: Math.max(1.05, round(rawA)),
+      playerBOdds: Math.max(1.05, round(rawB))
+    };
+  } catch (err) {
+    return { playerAOdds: 1.5, playerBOdds: 1.5, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Admin cancelar aposta ─────────────────────────────────────────────────────
 
 export async function cancelBet(betId: string): Promise<{ error?: string }> {

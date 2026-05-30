@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { createShopItem, toggleShopItem } from "../../actions";
 
 const rarityOpts = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY"] as const;
@@ -103,12 +104,12 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
                 {rarityOpts.map((r) => <option key={r} value={r}>{rarityLabel[r]}</option>)}
               </select>
             </label>
-            <label className="space-y-1 text-xs text-slate-400">
-              <span>URL da imagem</span>
-              <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                placeholder="https://..."
-                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
-            </label>
+            <ImageUpload
+              value={form.imageUrl}
+              onChange={(url) => setForm({ ...form, imageUrl: url })}
+              label="Imagem (upload ou URL)"
+              hint={form.type === "BANNER" ? "Proporção recomendada 3:1 — ex: 1500×500px" : undefined}
+            />
             <label className="space-y-1 text-xs text-slate-400">
               <span>Descrição</span>
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}

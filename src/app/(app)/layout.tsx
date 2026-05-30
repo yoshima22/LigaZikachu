@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { isAdmin } from "@/lib/auth/permissions";
+import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { LogOut, Zap } from "lucide-react";
 import { Toaster } from "sonner";
@@ -13,6 +14,15 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   if (!session?.user) redirect("/login");
 
   const admin = isAdmin(session.user.role);
+
+  // Contar presentes não resgatados
+  const player = await prisma.player.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true }
+  });
+  const giftCount = player
+    ? await prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } })
+    : 0;
 
   return (
     <>
@@ -50,7 +60,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" />
+            <AppNav admin={admin} variant="desktop" giftCount={giftCount} />
 
             {/* User + logout */}
             <div className="flex items-center gap-3">
@@ -75,7 +85,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" />
+            <AppNav admin={admin} variant="mobile" giftCount={giftCount} />
           </div>
         </header>
 

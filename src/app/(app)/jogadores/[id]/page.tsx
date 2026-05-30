@@ -62,19 +62,25 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
 
-  const [ranking, recentMatches, codesCount, allPlayers] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems] = await Promise.all([
     activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
         OR: [{ playerAId: playerId }, { playerBId: playerId }],
-        status: MatchStatus.CONFIRMED
+        status: MatchStatus.CONFIRMED,
+        tournamentWeek: { tournament: { status: { not: "DRAFT" } } }
       },
       orderBy: { playedAt: "desc" },
       take: 5,
       include: {
         playerA: { select: { id: true, displayName: true } },
         playerB: { select: { id: true, displayName: true } },
-        week: { select: { number: true, label: true } }
+        tournamentWeek: {
+          select: {
+            weekNumber: true,
+            tournament: { select: { name: true, slug: true } }
+          }
+        }
       }
     }),
     isSelf || isAdminUser
@@ -91,8 +97,22 @@ export default async function PlayerDetailPage({
           select: { id: true, displayName: true },
           orderBy: { displayName: "asc" }
         })
-      : []
+      : [],
+    prisma.playerSticker.findMany({
+      where: { playerId, isFavorite: true },
+      include: { card: { select: { nationalId: true, displayName: true, imageUrl: true, rarity: true } } },
+      orderBy: { firstObtained: "asc" },
+      take: 6
+    }),
+    prisma.playerInventory.findMany({
+      where: { playerId, equipped: true },
+      include: { item: { select: { type: true, name: true, imageUrl: true } } }
+    })
   ]);
+
+  const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
+  const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
+  const equippedTitle  = equippedItems.find((i) => i.item.type === "TITLE");
 
   const myEntry = (ranking as Awaited<ReturnType<typeof computePlayerRanking>>).find(
     (r) => r.playerId === playerId
@@ -126,26 +146,31 @@ export default async function PlayerDetailPage({
       </Link>
 
       {/* Header */}
-      <Card>
-        <div className="flex flex-wrap items-start gap-5">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-700 text-xl font-bold text-white">
+      <Card className="overflow-hidden p-0">
+        {equippedBanner?.item.imageUrl && (
+          <div className="relative h-24 w-full overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={equippedBanner.item.imageUrl} alt="Banner" className="h-full w-full object-cover object-center" />
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0f0f1a]/70" />
+          </div>
+        )}
+        <div className={`flex flex-wrap items-start gap-5 p-6 ${equippedBanner?.item.imageUrl ? "-mt-10 relative" : ""}`}>
+          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-700 text-xl font-bold text-white ${equippedFrame ? "ring-4 ring-[#FFCB05]" : ""}`}>
             {player.user.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={player.user.image}
-                alt={player.displayName}
-                className="h-16 w-16 rounded-2xl object-cover"
-              />
+              <img src={player.user.image} alt={player.displayName} className="h-16 w-16 rounded-2xl object-cover" />
             ) : (
               <User size={28} className="text-slate-400" />
             )}
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-white">{player.displayName}</h1>
+            {equippedTitle && (
+              <p className="text-xs font-semibold text-[#FFCB05]/80">{equippedTitle.item.name}</p>
+            )}
             {player.ptcglNick && (
               <p className="mt-0.5 text-sm text-slate-400">@{player.ptcglNick}</p>
             )}
-            <p className="mt-0.5 text-sm text-slate-500">{player.user.email}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <StatusBadge variant={badge.variant} label={badge.label} />
               {player.user.role !== "PLAYER" && (
@@ -158,6 +183,26 @@ export default async function PlayerDetailPage({
           </div>
         </div>
       </Card>
+
+      {/* Time dos Sonhos */}
+      {dreamTeam.length > 0 && (
+        <Card className="p-6">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">⭐ Time dos Sonhos</h2>
+          <div className="flex flex-wrap gap-3">
+            {dreamTeam.map((s) => (
+              <div key={s.id} className="flex flex-col items-center gap-1 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-2 w-20">
+                {s.card.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.card.imageUrl} alt={s.card.displayName} className="h-14 w-14 object-contain" />
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-800 text-xs text-slate-500">#{s.card.nationalId}</div>
+                )}
+                <p className="text-center text-[10px] font-medium text-slate-300 leading-tight truncate w-full">{s.card.displayName}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Stats da temporada ativa */}
       {activeSeason && (
@@ -216,9 +261,10 @@ export default async function PlayerDetailPage({
                       <span className="text-white">
                         vs {opp?.displayName ?? "BYE"}
                       </span>
-                      {match.week && (
+                      {match.tournamentWeek && (
                         <span className="ml-2 text-xs text-slate-500">
-                          S{match.week.number}
+                          S{match.tournamentWeek.weekNumber}
+                          {match.tournamentWeek.tournament && ` · ${match.tournamentWeek.tournament.name}`}
                         </span>
                       )}
                     </div>

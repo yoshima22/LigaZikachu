@@ -1484,6 +1484,58 @@ export async function withdrawRegistration(
   }
 }
 
+// ─── Reabrir inscrições ───────────────────────────────────────────────────────
+
+export async function reopenRegistrations(tournamentId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { id: true, status: true, slug: true }
+    });
+    if (!tournament) return { error: "Torneio não encontrado." };
+    if (tournament.status === TournamentStatus.FINISHED)
+      return { error: "Não é possível reabrir inscrições de um torneio encerrado." };
+
+    await prisma.tournament.update({
+      where: { id: tournamentId },
+      data: { status: TournamentStatus.REGISTRATION_OPEN }
+    });
+    await logAudit(actor.id, "tournament", tournamentId, "tournament.registrations_reopened",
+      { status: tournament.status }, { status: TournamentStatus.REGISTRATION_OPEN });
+    revalidatePath(`/torneios/${tournament.slug}`);
+    revalidatePath(`/torneios/${tournament.slug}/admin`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function removePlayerRegistration(
+  tournamentId: string,
+  playerId: string
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const reg = await prisma.tournamentRegistration.findUnique({
+      where: { tournamentId_playerId: { tournamentId, playerId } }
+    });
+    if (!reg) return { error: "Inscrição não encontrada." };
+
+    await prisma.tournamentRegistration.update({
+      where: { tournamentId_playerId: { tournamentId, playerId } },
+      data: { status: RegistrationStatus.REJECTED, decidedAt: new Date(), decidedById: actor.id }
+    });
+    const t = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { slug: true } });
+    await logAudit(actor.id, "tournamentRegistration", reg.id, "registration.removed_by_admin",
+      { status: reg.status }, { status: "REJECTED" });
+    revalidatePath(`/torneios/${t?.slug}/inscricoes`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ─── Seed default weeks ──────────────────────────────────────────────────────
 
 const defaultWeekDefs = [

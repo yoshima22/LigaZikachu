@@ -200,8 +200,8 @@ export async function sendStickerGift(cardId: string, targetPlayerId: string): P
           playerId: targetPlayerId,
           type: "STICKER",
           title: `Figurinha: ${sticker.card.displayName}`,
-          description: `${player.id === player.id ? "Um colega" : player.id} te enviou uma figurinha duplicada!`,
-          payload: { cardId, cardName: sticker.card.displayName, rarity: sticker.card.rarity, senderId: player.id }
+          description: `${player.displayName} te enviou uma figurinha duplicada!`,
+          payload: { cardId, cardName: sticker.card.displayName, rarity: sticker.card.rarity, senderId: player.id, senderName: player.displayName }
         }
       })
     ]);
