@@ -697,6 +697,17 @@ model Achievement {
   @@map("achievements")
 }
 
+model AchievementRule {
+  id            String               @id @default(cuid())
+  achievementId String
+  eventType     AchievementEventType
+  targetValue   Int                  @default(1)
+  metadataFilter Json?
+  achievement   Achievement          @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  @@index([achievementId])
+  @@map("achievement_rules")
+}
+
 model AchievementReward {
   id            String                @id @default(cuid())
   achievementId String
