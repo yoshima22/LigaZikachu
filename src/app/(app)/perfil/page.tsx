@@ -185,8 +185,8 @@ export default async function PerfilPage() {
         )}
         <div className="px-5 pb-5">
           <div className="flex items-end gap-4 -mt-8">
-            {/* Avatar com moldura real */}
-            <div className="relative shrink-0">
+            {/* Avatar com moldura — overflow-visible permite moldura estender além */}
+            <div className="relative shrink-0 overflow-visible">
               <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#0f0f1a] bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-lg">
                 {player.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -199,7 +199,12 @@ export default async function PerfilPage() {
               </div>
               {equippedFrame?.item.imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={equippedFrame.item.imageUrl} alt="Moldura" className="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+                <img
+                  src={equippedFrame.item.imageUrl}
+                  alt="Moldura"
+                  className="pointer-events-none absolute -inset-3 z-10 object-contain"
+                  style={{ width: "calc(100% + 24px)", height: "calc(100% + 24px)" }}
+                />
               )}
               {equippedFrame && !equippedFrame.item.imageUrl && (
                 <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />

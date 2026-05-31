@@ -171,8 +171,8 @@ export default async function PlayerDetailPage({
         {/* Card compacto — só envolve o conteúdo, sem expandir */}
         <div className="px-5 pb-5">
           <div className="flex items-end gap-4 -mt-8">
-            {/* Avatar com moldura */}
-            <div className="relative shrink-0">
+            {/* Avatar com moldura — overflow-visible para moldura "vazar" além do avatar */}
+            <div className="relative shrink-0 overflow-visible">
               <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#0f0f1a] bg-slate-700 shadow-lg">
                 {player.user.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -183,16 +183,16 @@ export default async function PlayerDetailPage({
                   </div>
                 )}
               </div>
-              {/* Moldura de foto (imagem sobreposta) */}
+              {/* Moldura: estende além do avatar com -inset-3 (128×128px ideal, centro transparente) */}
               {equippedFrame?.item.imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={equippedFrame.item.imageUrl}
                   alt="Moldura"
-                  className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                  className="pointer-events-none absolute -inset-3 z-10 object-contain"
+                  style={{ width: "calc(100% + 24px)", height: "calc(100% + 24px)" }}
                 />
               )}
-              {/* Fallback: ring colorido quando não tem imagem de moldura */}
               {equippedFrame && !equippedFrame.item.imageUrl && (
                 <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
               )}

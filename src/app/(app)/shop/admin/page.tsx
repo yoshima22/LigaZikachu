@@ -28,6 +28,25 @@ export default async function ShopAdminPage() {
         <p className="mt-1 text-sm text-slate-400">Cadastre e gerencie itens da loja.</p>
       </div>
 
+      {/* Guia de tamanhos */}
+      <Card>
+        <p className="mb-3 font-semibold text-slate-200">📐 Tamanhos corretos de imagem</p>
+        <div className="grid gap-2 text-xs text-slate-400 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { tipo: "Banner de perfil", size: "1200×300px", obs: "Proporção 4:1. Será cortado em telas menores (object-cover)." },
+            { tipo: "Moldura de foto", size: "128×128px PNG", obs: "Fundo TRANSPARENTE. Centro ~72×72px transparente (onde fica o avatar). Imagem maior que o avatar." },
+            { tipo: "Título de perfil", size: "Sem imagem", obs: "O nome do título é exibido como texto — imagem é opcional." },
+            { tipo: "Ticket ZikaLoot", size: "256×256px", obs: "Ícone decorativo quadrado, PNG ou JPG." },
+          ].map((g) => (
+            <div key={g.tipo} className="rounded-lg border border-border bg-slate-900/40 p-3">
+              <p className="font-semibold text-slate-200 text-xs">{g.tipo}</p>
+              <p className="mt-1 text-[#FFCB05] text-[11px]">{g.size}</p>
+              <p className="mt-0.5 text-slate-500 text-[10px]">{g.obs}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       <Card>
         <p className="mb-3 text-xs text-slate-500">
           Banners: proporção recomendada 3:1 (ex: 1500×500px). Use object-cover, imagem centralizada no mobile.

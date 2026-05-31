@@ -81,7 +81,11 @@ export default async function AdminPage() {
     prisma.deckSubmission.count({ where: { status: "SUBMITTED" } }),
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
-      take: 8,
+      take: 10,
+      where: {
+        // Excluir ações em torneios rascunho (evitar dados placeholder)
+        NOT: { action: { in: ["match.admin_resolved", "match.confirmed"] }, entityType: "match" }
+      },
       include: { actor: { select: { name: true, email: true } } }
     })
   ]);
@@ -105,6 +109,43 @@ export default async function AdminPage() {
         </div>
       </div>
 
+      {/* Ações prioritárias — itens que precisam de atenção do admin */}
+      {(pendingUsers > 0 || pendingMatches > 0 || disputedMatches > 0 || pendingDecks > 0) && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-amber-400">Ações pendentes</p>
+          <div className="flex flex-wrap gap-2">
+            {pendingUsers > 0 && (
+              <Link href="/jogadores?status=PENDING_APPROVAL">
+                <button className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors">
+                  <ShieldCheck size={16} /> {pendingUsers} conta{pendingUsers > 1 ? "s" : ""} aguardando aprovação
+                </button>
+              </Link>
+            )}
+            {pendingMatches > 0 && (
+              <Link href="/torneios">
+                <button className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors">
+                  <Swords size={16} /> {pendingMatches} partida{pendingMatches > 1 ? "s" : ""} aguardando confirmação
+                </button>
+              </Link>
+            )}
+            {disputedMatches > 0 && (
+              <Link href="/torneios">
+                <button className="flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors">
+                  <AlertTriangle size={16} /> {disputedMatches} resultado{disputedMatches > 1 ? "s" : ""} disputado{disputedMatches > 1 ? "s" : ""}
+                </button>
+              </Link>
+            )}
+            {pendingDecks > 0 && (
+              <Link href="/torneios">
+                <button className="flex items-center gap-2 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2 text-sm font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10 transition-colors">
+                  <BookOpen size={16} /> {pendingDecks} deck{pendingDecks > 1 ? "s" : ""} enviado{pendingDecks > 1 ? "s" : ""} para revisar
+                </button>
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/jogadores?status=PENDING_APPROVAL">
           <StatCard label="Contas pendentes" value={pendingUsers} icon={<ShieldCheck size={22} />} highlight={pendingUsers > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
@@ -113,16 +154,16 @@ export default async function AdminPage() {
           <StatCard label="Torneios ativos" value={activeTournaments} icon={<Trophy size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
         </Link>
         <Link href="/torneios">
-          <StatCard label="Partidas pendentes" value={pendingMatches} icon={<Swords size={22} />} highlight={pendingMatches > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+          <StatCard label="Partidas p/ confirmar" value={pendingMatches} icon={<Swords size={22} />} highlight={pendingMatches > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
         </Link>
         <Link href="/torneios">
-          <StatCard label="Disputas abertas" value={disputedMatches} icon={<AlertTriangle size={22} />} highlight={disputedMatches > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+          <StatCard label="Resultados disputados" value={disputedMatches} icon={<AlertTriangle size={22} />} highlight={disputedMatches > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
         </Link>
         <Link href="/torneios">
           <StatCard label="Rascunhos" value={draftTournaments} icon={<BookOpen size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
         </Link>
         <Link href="/torneios">
-          <StatCard label="Decks enviados" value={pendingDecks} icon={<BookOpen size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
+          <StatCard label="Decks p/ revisar" value={pendingDecks} icon={<BookOpen size={22} />} highlight={pendingDecks > 0} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />
         </Link>
         <Link href="/codigos">
           <StatCard label="Codigos disponiveis" value={availableCodes} icon={<Package size={22} />} className="cursor-pointer transition-colors hover:border-[#FFCB05]/30" />

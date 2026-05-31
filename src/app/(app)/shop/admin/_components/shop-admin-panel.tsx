@@ -69,9 +69,19 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
       <ImageUpload
         value={form.imageUrl}
         onChange={(url) => setForm({ ...form, imageUrl: url })}
-        label={isBanner ? "Imagem (ideal: 1200×300px, até 6MB)" : "Imagem (upload ou URL)"}
-        maxMb={isBanner ? 6 : 2}
-        hint={isBanner ? "Proporção 4:1 recomendada — ex: 1200×300px" : undefined}
+        label="Imagem"
+        maxMb={(form.type as string) === "BANNER" ? 6 : 2}
+        hint={
+          (form.type as string) === "BANNER"
+            ? "Banner: 1200×300px (proporção 4:1). Imagens fora dessa proporção serão cortadas."
+            : (form.type as string) === "FRAME"
+            ? "Moldura: PNG 128×128px com fundo transparente. Centro transparente (~72×72px) onde fica o avatar."
+            : (form.type as string) === "TITLE"
+            ? "Título: sem imagem necessária — o nome do item já é exibido como texto."
+            : (form.type as string) === "ZIKALOOT_TICKET"
+            ? "Ticket: imagem decorativa, qualquer proporção (sugerido 256×256px)."
+            : "Imagem opcional para o item."
+        }
       />
       <div className="flex gap-2 md:col-span-2 lg:col-span-3">
         <Button type="button" disabled={!form.name || pending} onClick={onSave}
