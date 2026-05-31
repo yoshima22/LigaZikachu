@@ -352,30 +352,34 @@ export default async function PlayerDetailPage({
                 <EmptyState message="Nenhum deck enviado." icon={<BookOpen size={24} />} />
               ) : (
               <ul className="divide-y divide-border">
-                {validDecks.map((deck) => (
+                {validDecks.map((deck) => {
+                  const tournSlug = deck.tournament?.slug;
+                  const weekNum = deck.tournamentWeek?.weekNumber;
+                  const href = tournSlug && weekNum
+                    ? `/torneios/${tournSlug}/semanas/${weekNum}`
+                    : null;
+                  return (
                   <li key={deck.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                    <span className="text-white">{deck.deckName}</span>
+                    {href ? (
+                      <Link href={href} className="text-white hover:text-[#FFCB05] transition-colors flex items-center gap-1.5">
+                        {deck.deckName}
+                        {deck.tournament?.name && (
+                          <span className="text-[10px] text-slate-500">· {deck.tournament.name}</span>
+                        )}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-400">{deck.deckName}</span>
+                    )}
                     <div className="flex items-center gap-2">
                       {deck.isLate && <StatusBadge variant="warning" label="Atrasado" />}
                       <StatusBadge
-                        variant={
-                          deck.status === "APPROVED"
-                            ? "success"
-                            : deck.status === "REJECTED"
-                            ? "danger"
-                            : "info"
-                        }
-                        label={
-                          deck.status === "APPROVED"
-                            ? "Aprovado"
-                            : deck.status === "REJECTED"
-                            ? "Rejeitado"
-                            : "Enviado"
-                        }
+                        variant={deck.status === "APPROVED" ? "success" : deck.status === "REJECTED" ? "danger" : "info"}
+                        label={deck.status === "APPROVED" ? "Aprovado" : deck.status === "REJECTED" ? "Rejeitado" : "Enviado"}
                       />
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
               );
             })()}

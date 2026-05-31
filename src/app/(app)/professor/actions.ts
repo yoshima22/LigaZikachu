@@ -1,6 +1,6 @@
 "use server";
 
-import { searchCards, fetchCardsByNames, searchStandardByFunction, searchSimilarEffect } from "@/lib/card-service";
+import { searchCards, fetchCardsByNames, searchStandardByFunction, searchSimilarEffect, isStandardLegal } from "@/lib/card-service";
 import type { TcgCard } from "@/lib/card-service";
 import { resolveCardName, PT_TO_EN } from "@/lib/card-names-ptbr";
 import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
@@ -283,13 +283,16 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
     // 1. Chamar IA com histórico completo — ela decide quais cartas mostrar
     const { message: aiMessage, cardNames } = await callAI(messages);
 
-    // 2. Resolver nomes PT→EN e buscar cartas LEGAIS no Standard prioritariamente
+    // 2. Resolver nomes PT→EN e buscar cartas reais na TCG API
     const resolvedNames = cardNames.map(resolveCardName);
-    const aiCards = resolvedNames.length > 0
-      ? await fetchCardsByNames(resolvedNames, true) // true = preferir versão legal
+    const rawAiCards = resolvedNames.length > 0
+      ? await fetchCardsByNames(resolvedNames, true)
       : [];
 
-    // 3. Se a IA não sugeriu cartas, tentar por contexto da mensagem
+    // 3. Filtrar apenas cartas Standard legais pela Regulation Mark
+    const aiCards = rawAiCards.filter(isStandardLegal);
+
+    // 4. Se a IA não sugeriu (ou todas eram ilegais), usar busca dinâmica por contexto
     const contextCards = aiCards.length === 0
       ? await findRelevantCards(lastMsg)
       : [];

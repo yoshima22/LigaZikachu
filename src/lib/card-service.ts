@@ -115,20 +115,24 @@ export async function fetchCardsByNames(names: string[], preferLegal = true): Pr
 // ── Buscar por função/categoria no Standard atual ─────────────────────────────
 // Usa a TCG API diretamente — sem hardcode de nomes
 
+// Regulation marks do Standard atual — mais confiável que legalities.standard
+const STD_MARKS = `(regulationMark:H OR regulationMark:I OR regulationMark:J)`;
+
 export async function searchStandardByFunction(
   fn: "DRAW" | "SEARCH" | "SWITCH" | "DISRUPTION" | "RECOVERY" | "ACCELERATION",
   limit = 8
 ): Promise<TcgCard[]> {
+  // Usar regulation mark como critério primário — é o mais atualizado na TCG API
   const queries: Record<string, string> = {
-    DRAW:         `subtypes:Supporter legalities.standard:Legal -name:*ex`,
-    SEARCH:       `subtypes:Item text:"search your deck" legalities.standard:Legal`,
-    SWITCH:       `subtypes:Item text:"switch" legalities.standard:Legal`,
-    DISRUPTION:   `subtypes:Supporter legalities.standard:Legal text:"opponent"`,
-    RECOVERY:     `subtypes:Item text:"recover" legalities.standard:Legal`,
-    ACCELERATION: `subtypes:Item text:"attach" text:"energy" legalities.standard:Legal`
+    DRAW:         `subtypes:Supporter ${STD_MARKS}`,
+    SEARCH:       `subtypes:Item text:"search your deck" ${STD_MARKS}`,
+    SWITCH:       `subtypes:Item (text:"Switch" OR text:"switch in") ${STD_MARKS}`,
+    DISRUPTION:   `subtypes:Supporter text:"opponent" ${STD_MARKS}`,
+    RECOVERY:     `subtypes:Item (text:"recover" OR text:"retrieve") ${STD_MARKS}`,
+    ACCELERATION: `subtypes:Item text:"attach" text:"Energy" ${STD_MARKS}`
   };
 
-  const q = encodeURIComponent(queries[fn] ?? `legalities.standard:Legal`);
+  const q = encodeURIComponent(queries[fn]);
   const url = `${TCG_BASE}/cards?q=${q}&pageSize=${limit}&orderBy=-set.releaseDate`;
 
   try {
@@ -139,10 +143,10 @@ export async function searchStandardByFunction(
   } catch { return []; }
 }
 
-// ── Buscar cartas similares por efeito de texto ────────────────────────────────
+// ── Buscar cartas similares por efeito de texto (Standard apenas) ─────────────
 
 export async function searchSimilarEffect(textKeyword: string, subtype?: string, limit = 6): Promise<TcgCard[]> {
-  const parts = [`legalities.standard:Legal`, `text:"${textKeyword}"`];
+  const parts = [STD_MARKS, `text:"${textKeyword}"`];
   if (subtype) parts.push(`subtypes:${subtype}`);
   const q = encodeURIComponent(parts.join(" "));
   const url = `${TCG_BASE}/cards?q=${q}&pageSize=${limit}&orderBy=-set.releaseDate`;
@@ -153,6 +157,15 @@ export async function searchSimilarEffect(textKeyword: string, subtype?: string,
     const json = await res.json() as { data: Record<string, unknown>[] };
     return (json.data ?? []).map(mapCard);
   } catch { return []; }
+}
+
+// ── Verificar se uma carta é Standard pelo regulation mark ────────────────────
+
+export function isStandardLegal(card: TcgCard): boolean {
+  const mark = (card as unknown as Record<string, string>).regulationMark;
+  if (mark) return ["H", "I", "J"].includes(mark);
+  // Fallback: usar legalities se não tiver mark
+  return card.legalities?.standard === "Legal";
 }
 
 // ── Buscar carta por ID ──────────────────────────────────────────────────────
