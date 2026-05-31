@@ -691,6 +691,7 @@ model Achievement {
   createdBy          User                @relation("AchievementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   playerAchievements PlayerAchievement[]
   rewards            AchievementReward[]
+  rules              AchievementRule[]
 
   @@unique([seasonId, key])
   @@map("achievements")
