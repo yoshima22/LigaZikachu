@@ -88,12 +88,12 @@ export async function awardAchievement(raw: z.infer<typeof awardSchema>): Promis
 
     // Checar se já tem (para não repetíveis)
     if (!achievement.isRepeatable) {
-      const existing = await prisma.playerAchievement.findUnique({
-        where: { achievementId_playerId_seasonId: {
+      const existing = await prisma.playerAchievement.findFirst({
+        where: {
           achievementId: data.achievementId,
           playerId: data.playerId,
           seasonId: data.seasonId ?? null
-        }}
+        }
       });
       if (existing) return { error: "Este jogador já possui esta conquista." };
     }
