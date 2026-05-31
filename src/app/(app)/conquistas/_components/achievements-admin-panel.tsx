@@ -33,11 +33,15 @@ export function AchievementsAdminPanel({ achievements, players, seasons }: Props
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [showAward, setShowAward] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    key:"", name:"", description:"", type:"MANUAL" as const,
-    rarity:"COMMON" as const, category:"TOURNAMENT" as const,
-    scope:"GLOBAL" as const, isSecret:false, isRepeatable:false,
-    suggestedPoints:"", iconUrl:"", seasonId:""
+  const [createForm, setCreateForm] = useState<{
+    key: string; name: string; description: string;
+    type: string; rarity: string; category: string; scope: string;
+    isSecret: boolean; isRepeatable: boolean;
+    suggestedPoints: string; iconUrl: string; seasonId: string;
+  }>({
+    key:"", name:"", description:"", type:"MANUAL",
+    rarity:"COMMON", category:"TOURNAMENT", scope:"GLOBAL",
+    isSecret:false, isRepeatable:false, suggestedPoints:"", iconUrl:"", seasonId:""
   });
   const [awardForm, setAwardForm] = useState({
     achievementId:"", playerId:"", seasonId:"",
