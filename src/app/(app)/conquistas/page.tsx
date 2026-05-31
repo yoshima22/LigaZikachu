@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { AchievementsAdminPanel } from "./_components/achievements-admin-panel";
 import { RewardManager } from "./_components/reward-manager";
 import { MyAchievementsPanel } from "./_components/my-achievements-panel";
+import { RulesManager } from "./_components/rules-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function ConquistasPage() {
       where: adminUser ? {} : { active: true, isSecret: false },
       include: {
         rewards: true,
+        rules: true,
         _count: { select: { playerAchievements: true } }
       },
       orderBy: [{ rarity: "asc" }, { name: "asc" }]
@@ -128,6 +130,15 @@ export default async function ConquistasPage() {
             }))}
             players={players}
             seasons={seasons}
+          />
+          <RulesManager
+            achievements={achievements.map(a => ({
+              id: a.id, name: a.name, type: a.type,
+              rules: (a as { rules?: Array<{ id: string; eventType: string; targetValue: number; metadataFilter?: unknown }> }).rules?.map(r => ({
+                id: r.id, eventType: r.eventType, targetValue: r.targetValue,
+                metadataFilter: r.metadataFilter as Record<string, unknown> | null
+              })) ?? []
+            }))}
           />
           <RewardManager
             achievements={achievements.map(a => ({

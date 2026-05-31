@@ -305,3 +305,70 @@ export async function linkAchievementToTournament(achievementId: string, tournam
 export async function getTournamentAchievements(tournamentId: string) {
   return prisma.achievement.findMany({ where: { tournamentId, active: true }, include: { rewards: true, _count: { select: { playerAchievements: true } } }, orderBy: [{ rarity: 'asc' }, { name: 'asc' }] });
 }
+
+// -- Gerenciar regras de conquistas automáticas --------------------------------
+
+const ruleSchema = z.object({
+  achievementId: z.string().min(1),
+  eventType: z.string().min(1),
+  targetValue: z.number().int().min(1).max(9999),
+  metadataFilter: z.record(z.unknown()).optional()
+});
+
+export async function addAchievementRule(raw: {
+  achievementId: string; eventType: string; targetValue: number; metadataFilter?: Record<string, unknown>
+}): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const data = ruleSchema.parse(raw);
+    await prisma.achievementRule.create({
+      data: {
+        achievementId: data.achievementId,
+        eventType: data.eventType as import('@prisma/client').AchievementEventType,
+        targetValue: data.targetValue,
+        metadataFilter: data.metadataFilter ? (data.metadataFilter as import('@prisma/client').Prisma.InputJsonValue) : import('@prisma/client').Prisma.JsonNull
+      }
+    });
+    revalidatePath('/conquistas');
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : 'Erro desconhecido' };
+  }
+}
+
+export async function removeAchievementRule(ruleId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.achievementRule.delete({ where: { id: ruleId } });
+    revalidatePath('/conquistas');
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro' };
+  }
+}
+
+// -- Buscar conquistas recentes não exibidas (para popup) ----------------------
+
+export async function getRecentUnlockedAchievements(): Promise<Array<{
+  id: string; name: string; rarity: string; iconUrl: string | null; unlockedAt: string;
+}>> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return [];
+    const since = new Date(Date.now() - 10 * 60 * 1000); // últimos 10 minutos
+    const records = await prisma.playerAchievement.findMany({
+      where: { player: { userId: actor.id }, awardedAt: { gte: since } },
+      include: { achievement: { select: { name: true, rarity: true, iconUrl: true } } },
+      orderBy: { awardedAt: 'desc' },
+      take: 5
+    });
+    return records.map(r => ({
+      id: r.id,
+      name: r.achievement.name,
+      rarity: r.achievement.rarity,
+      iconUrl: r.achievement.iconUrl,
+      unlockedAt: r.awardedAt.toISOString()
+    }));
+  } catch { return []; }
+}
