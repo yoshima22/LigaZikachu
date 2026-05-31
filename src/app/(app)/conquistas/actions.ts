@@ -306,7 +306,7 @@ export async function getTournamentAchievements(tournamentId: string) {
   return prisma.achievement.findMany({ where: { tournamentId, active: true }, include: { rewards: true, _count: { select: { playerAchievements: true } } }, orderBy: [{ rarity: 'asc' }, { name: 'asc' }] });
 }
 
-// -- Gerenciar regras de conquistas automáticas --------------------------------
+// -- Gerenciar regras de conquistas automaticas --
 
 const ruleSchema = z.object({
   achievementId: z.string().min(1),
@@ -348,7 +348,7 @@ export async function removeAchievementRule(ruleId: string): Promise<{ error?: s
   }
 }
 
-// -- Buscar conquistas recentes não exibidas (para popup) ----------------------
+// -- Buscar conquistas recentes nao exibidas (para popup) --
 
 export async function getRecentUnlockedAchievements(): Promise<Array<{
   id: string; name: string; rarity: string; iconUrl: string | null; unlockedAt: string;
@@ -356,7 +356,7 @@ export async function getRecentUnlockedAchievements(): Promise<Array<{
   try {
     const actor = await getSessionUser();
     if (!actor) return [];
-    const since = new Date(Date.now() - 10 * 60 * 1000); // últimos 10 minutos
+    const since = new Date(Date.now() - 10 * 60 * 1000); // ultimos 10 minutos
     const records = await prisma.playerAchievement.findMany({
       where: { player: { userId: actor.id }, awardedAt: { gte: since } },
       include: { achievement: { select: { name: true, rarity: true, iconUrl: true } } },
