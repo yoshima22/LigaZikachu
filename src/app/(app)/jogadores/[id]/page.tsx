@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft } from "lucide-react";
-import { pokemonTypes } from "@/components/ui/pokemon-type-selector";
+import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 
@@ -273,16 +273,11 @@ export default async function PlayerDetailPage({
                   <p className="font-semibold text-slate-200 text-sm">{d.name}</p>
                   {typeValues.length > 0 && (
                     <div className="mt-1.5 mb-2 flex flex-wrap gap-1.5">
-                      {typeValues.map((tv) => {
-                        const pt = pokemonTypes.find((p) => p.value === tv);
-                        if (!pt) return null;
-                        const Icon = pt.icon;
-                        return (
-                          <span key={tv} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${pt.className}`}>
-                            <Icon size={10} /> {pt.label}
-                          </span>
-                        );
-                      })}
+                      {typeValues.map((tv) => (
+                        <span key={tv} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${POKEMON_TYPE_COLORS[tv] ?? "bg-slate-700 text-slate-200"}`}>
+                          {POKEMON_TYPE_EMOJIS[tv] ?? "●"} {POKEMON_TYPE_LABELS[tv] ?? tv}
+                        </span>
+                      ))}
                     </div>
                   )}
                   <pre className="max-h-36 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">

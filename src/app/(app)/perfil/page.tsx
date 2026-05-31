@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { MatchStatus } from "@prisma/client";
 import { BookOpen, CheckCircle2, ExternalLink, Swords, Trophy } from "lucide-react";
-import { pokemonTypes } from "@/components/ui/pokemon-type-selector";
+import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { computeGlobalRanking } from "@/lib/ranking";
@@ -43,16 +43,11 @@ async function MeusDecksPreview({ playerId }: { playerId: string }) {
                 </p>
                 {types.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {types.map((tv) => {
-                      const pt = pokemonTypes.find((p) => p.value === tv);
-                      if (!pt) return null;
-                      const Icon = pt.icon;
-                      return (
-                        <span key={tv} className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${pt.className}`}>
-                          <Icon size={9} /> {pt.label}
-                        </span>
-                      );
-                    })}
+                    {types.map((tv) => (
+                      <span key={tv} className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${POKEMON_TYPE_COLORS[tv] ?? "bg-slate-700 text-slate-200"}`}>
+                        {POKEMON_TYPE_EMOJIS[tv] ?? "●"} {POKEMON_TYPE_LABELS[tv] ?? tv}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>

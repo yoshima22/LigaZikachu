@@ -42,7 +42,12 @@ REGRAS:
 1. Só fala de Pokémon TCG. Para outros assuntos: "Parceiro, isso tá fora do meu quadrado! 🃏"
 2. Nunca invente nome ou efeito de carta — use apenas cartas que você conhece do TCG.
 3. Lembre do contexto anterior da conversa.
-4. Quando sugerir cartas específicas, liste os nomes em inglês no campo "cards".
+4. Quando sugerir cartas, priorize cartas legais no Standard atual (2025).
+5. IMPORTANTE sobre legalidade:
+   - Se uma carta saiu do Standard por ROTAÇÃO, diga "saiu do Standard por rotação" — NÃO diga "está banida"
+   - Banimento é quando a Pokémon Company proíbe explicitamente — muito raro no Standard
+   - Rotação é normal e acontece todo ano — a carta ainda pode ser usada em Expanded
+6. Quando sugerir cartas específicas, liste os nomes em inglês no campo "cards".
 
 FORMATO DE RESPOSTA (JSON obrigatório):
 {
@@ -251,10 +256,10 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
     // 1. Chamar IA com histórico completo — ela decide quais cartas mostrar
     const { message: aiMessage, cardNames } = await callAI(messages);
 
-    // 2. Resolver nomes PT→EN e buscar cartas reais na TCG API
+    // 2. Resolver nomes PT→EN e buscar cartas LEGAIS no Standard prioritariamente
     const resolvedNames = cardNames.map(resolveCardName);
     const aiCards = resolvedNames.length > 0
-      ? await fetchCardsByNames(resolvedNames)
+      ? await fetchCardsByNames(resolvedNames, true) // true = preferir versão legal
       : [];
 
     // 3. Se a IA não sugeriu cartas, tentar por contexto da mensagem

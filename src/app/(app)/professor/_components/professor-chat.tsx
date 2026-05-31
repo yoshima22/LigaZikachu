@@ -47,6 +47,15 @@ function CardSuggestion({ card }: { card: TcgCard & { reason: string } }) {
             <p className="text-[10px] text-slate-400 line-clamp-2">{card.text}</p>
           )}
           <p className="text-[10px] text-slate-600">{card.set.name}</p>
+          {card.legalities?.standard === "Legal" && (
+            <span className="inline-block rounded px-1 py-0.5 text-[9px] font-bold bg-[#7AC74C]/20 text-[#7AC74C]">✅ Standard</span>
+          )}
+          {card.legalities?.standard === "Banned" && (
+            <span className="inline-block rounded px-1 py-0.5 text-[9px] font-bold bg-red-500/20 text-red-400">🚫 Banida</span>
+          )}
+          {!card.legalities?.standard && card.legalities?.expanded === "Legal" && (
+            <span className="inline-block rounded px-1 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-400">🔄 Só Expanded</span>
+          )}
         </div>
       </div>
 

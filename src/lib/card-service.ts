@@ -90,9 +90,21 @@ export async function searchCards(query: string, pageSize = 8): Promise<TcgCard[
 
 // ── Buscar lista de cartas por nomes (para sugestões da IA) ──────────────────
 
-export async function fetchCardsByNames(names: string[]): Promise<TcgCard[]> {
+export async function fetchCardsByNames(names: string[], preferLegal = true): Promise<TcgCard[]> {
   const results = await Promise.allSettled(
-    names.map((rawName) => searchCards(resolveCardName(rawName), 1))
+    names.map(async (rawName) => {
+      const resolved = resolveCardName(rawName);
+      const cards = await searchCards(resolved, preferLegal ? 10 : 1);
+
+      if (!preferLegal || cards.length === 0) return cards.slice(0, 1);
+
+      // Preferir versão legal no Standard quando possível
+      const legal = cards.find(c => c.legalities?.standard === "Legal");
+      if (legal) return [legal];
+
+      // Fallback: versão mais recente
+      return cards.slice(0, 1);
+    })
   );
   return results
     .filter((r): r is PromiseFulfilledResult<TcgCard[]> => r.status === "fulfilled")
