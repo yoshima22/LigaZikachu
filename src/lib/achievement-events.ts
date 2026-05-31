@@ -5,7 +5,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { AchievementEventType, ZikaCoinTxType } from "@prisma/client";
+import { AchievementEventType, Prisma } from "@prisma/client";
 
 // ── Emitir evento e verificar conquistas ─────────────────────────────────────
 
@@ -19,7 +19,7 @@ export async function emitAchievementEvent(
   try {
     // Registrar evento
     await prisma.achievementEvent.create({
-      data: { playerId, eventType, value, metadata: metadata ?? null, seasonId: seasonId ?? null }
+      data: { playerId, eventType, value, metadata: metadata ? (metadata as Prisma.InputJsonValue) : Prisma.JsonNull, seasonId: seasonId ?? null }
     });
 
     // Verificar conquistas automáticas relacionadas a esse evento
