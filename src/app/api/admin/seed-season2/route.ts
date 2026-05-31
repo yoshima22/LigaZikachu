@@ -1,7 +1,7 @@
 /**
- * Endpoint único de importação — Liga Zikachu 2ª Edição
+ * Endpoint unico de importacao — Liga Zikachu 2a Edicao
  * GET /api/admin/seed-season2
- * Protegido: só admins autenticados. Idempotente: pode rodar múltiplas vezes.
+ * Protegido: so admins autenticados. Idempotente: pode rodar multiplas vezes.
  */
 
 import { NextResponse } from "next/server";
@@ -9,6 +9,9 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth/password";
+import { WeekMode } from "@prisma/client";
+
+// ── Conquistas da 2a Edicao ───────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [
   { key:"minimalista_estrategico",  name:"Minimalista Estratégico",          desc:"Vença 2 partidas consecutivas usando no máximo 5 cartas de Apoiador no deck.",  rarity:"COMMON",    pts:5,  owner:null },
@@ -33,6 +36,94 @@ const ACHIEVEMENTS = [
   { key:"lenda_eterna",             name:"Lenda Eterna",                     desc:"Conquiste 3 insígnias simultaneamente.",  rarity:"LEGENDARY", pts:10, owner:"Erick" },
 ];
 
+// ── Semanas do torneio ────────────────────────────────────────────────────────
+
+const WEEKS = [
+  { num:1, mode:"PADRAO"               as WeekMode, label:"Semana 1 — Padrão",               start:"2025-12-08", end:"2025-12-08" },
+  { num:2, mode:"GLC"                  as WeekMode, label:"Semana 2 — GLC",                  start:"2025-12-15", end:"2025-12-15" },
+  { num:3, mode:"PADRAO"               as WeekMode, label:"Semana 3 — Padrão",               start:"2026-01-12", end:"2026-01-13" },
+  { num:4, mode:"DUPLAS_SINCRONIZADAS" as WeekMode, label:"Semana 4 — Duplas Sincronizadas", start:"2026-01-26", end:"2026-01-26" },
+  { num:5, mode:"PADRAO"               as WeekMode, label:"Semana 5 — Padrão",               start:"2026-02-04", end:"2026-02-04" },
+  { num:6, mode:"CONSTRUTOR_MISTERIOSO"as WeekMode, label:"Semana 6 — Construtor Misterioso",start:"2026-03-16", end:"2026-03-16" },
+  { num:7, mode:"GUERRA_DE_TIMES"      as WeekMode, label:"Semana 7 — Guerra de Times",      start:"2026-05-20", end:"2026-05-20" },
+];
+
+// ── Partidas (63 no total) ────────────────────────────────────────────────────
+// pA e pB = displayName dos jogadores; winner = displayName do vencedor
+
+const MATCHES: Array<{ w:number; pA:string; pB:string; winner:string; prizes:number; date:string; notes?:string }> = [
+  // Semana 1 — Padrão (08/12/2025) — 11 partidas
+  { w:1, pA:"Luiz",    pB:"Rodrigo",  winner:"Luiz",    prizes:3, date:"2025-12-08" },
+  { w:1, pA:"Moises",  pB:"Erick",    winner:"Moises",  prizes:6, date:"2025-12-08" },
+  { w:1, pA:"Cristian",pB:"Alan",     winner:"Cristian",prizes:3, date:"2025-12-08" },
+  { w:1, pA:"Nakaima", pB:"Alan",     winner:"Alan",    prizes:4, date:"2025-12-08" },
+  { w:1, pA:"Moises",  pB:"Rodrigo",  winner:"Moises",  prizes:4, date:"2025-12-08" },
+  { w:1, pA:"Nakaima", pB:"Cristian", winner:"Cristian",prizes:4, date:"2025-12-08" },
+  { w:1, pA:"Luiz",    pB:"Moises",   winner:"Luiz",    prizes:1, date:"2025-12-08" },
+  { w:1, pA:"Erick",   pB:"Cristian", winner:"Cristian",prizes:6, date:"2025-12-15", notes:"Partida reposição" },
+  { w:1, pA:"Luiz",    pB:"Erick",    winner:"Luiz",    prizes:6, date:"2025-12-08" },
+  { w:1, pA:"Alan",    pB:"Rodrigo",  winner:"Rodrigo", prizes:6, date:"2025-12-08" },
+  { w:1, pA:"Erick",   pB:"Rodrigo",  winner:"Rodrigo", prizes:6, date:"2025-12-08" },
+  // Semana 2 — GLC (15/12/2025) — 7 partidas
+  { w:2, pA:"Luiz",    pB:"Moises",   winner:"Luiz",    prizes:3, date:"2025-12-15" },
+  { w:2, pA:"Cristian",pB:"Alan",     winner:"Cristian",prizes:6, date:"2025-12-15" },
+  { w:2, pA:"Nakaima", pB:"Luiz",     winner:"Luiz",    prizes:3, date:"2025-12-15" },
+  { w:2, pA:"Alan",    pB:"Rodrigo",  winner:"Rodrigo", prizes:6, date:"2025-12-15" },
+  { w:2, pA:"Moises",  pB:"Erick",    winner:"Erick",   prizes:6, date:"2025-12-15" },
+  { w:2, pA:"Nakaima", pB:"Rodrigo",  winner:"Rodrigo", prizes:6, date:"2025-12-15" },
+  { w:2, pA:"Erick",   pB:"Cristian", winner:"Erick",   prizes:5, date:"2025-12-15" },
+  // Semana 3 — Padrão (12-13/01/2026) — 11 partidas
+  { w:3, pA:"Luiz",    pB:"Erick",    winner:"Erick",   prizes:2, date:"2026-01-12" },
+  { w:3, pA:"Nakaima", pB:"Erick",    winner:"Erick",   prizes:5, date:"2026-01-12" },
+  { w:3, pA:"Moises",  pB:"Rodrigo",  winner:"Rodrigo", prizes:2, date:"2026-01-12" },
+  { w:3, pA:"Luiz",    pB:"Cristian", winner:"Luiz",    prizes:5, date:"2026-01-12" },
+  { w:3, pA:"Nakaima", pB:"Moises",   winner:"Moises",  prizes:4, date:"2026-01-12" },
+  { w:3, pA:"Erick",   pB:"Cristian", winner:"Erick",   prizes:6, date:"2026-01-12", notes:"W/o - Energia caiu" },
+  { w:3, pA:"Alan",    pB:"Rodrigo",  winner:"Rodrigo", prizes:2, date:"2026-01-12" },
+  { w:3, pA:"Nakaima", pB:"Luiz",     winner:"Nakaima", prizes:2, date:"2026-01-12" },
+  { w:3, pA:"Moises",  pB:"Alan",     winner:"Moises",  prizes:6, date:"2026-01-12" },
+  { w:3, pA:"Luiz",    pB:"Moises",   winner:"Moises",  prizes:2, date:"2026-01-13" },
+  { w:3, pA:"Nakaima", pB:"Cristian", winner:"Cristian",prizes:1, date:"2026-01-13" },
+  // Semana 4 — Duplas (26/01/2026) — 7 partidas
+  { w:4, pA:"Erick",   pB:"Rodrigo",  winner:"Erick",   prizes:3, date:"2026-01-26" },
+  { w:4, pA:"Luiz",    pB:"Moises",   winner:"Luiz",    prizes:6, date:"2026-01-26" },
+  { w:4, pA:"Moises",  pB:"Cristian", winner:"Moises",  prizes:5, date:"2026-01-26" },
+  { w:4, pA:"Nakaima", pB:"Alan",     winner:"Alan",    prizes:6, date:"2026-01-26" },
+  { w:4, pA:"Rodrigo", pB:"Luiz",     winner:"Rodrigo", prizes:2, date:"2026-01-26" },
+  { w:4, pA:"Nakaima", pB:"Cristian", winner:"Nakaima", prizes:4, date:"2026-01-26" },
+  { w:4, pA:"Erick",   pB:"Alan",     winner:"Alan",    prizes:4, date:"2026-01-26" },
+  // Semana 5 — Padrão (04/02/2026) — 11 partidas
+  { w:5, pA:"Luiz",    pB:"Rodrigo",  winner:"Luiz",    prizes:6, date:"2026-02-04" },
+  { w:5, pA:"Erick",   pB:"Cristian", winner:"Erick",   prizes:6, date:"2026-02-04" },
+  { w:5, pA:"Cristian",pB:"Rodrigo",  winner:"Cristian",prizes:6, date:"2026-02-04" },
+  { w:5, pA:"Nakaima", pB:"Alan",     winner:"Nakaima", prizes:6, date:"2026-02-04" },
+  { w:5, pA:"Moises",  pB:"Rodrigo",  winner:"Moises",  prizes:2, date:"2026-02-04" },
+  { w:5, pA:"Nakaima", pB:"Cristian", winner:"Cristian",prizes:4, date:"2026-02-04" },
+  { w:5, pA:"Luiz",    pB:"Moises",   winner:"Luiz",    prizes:3, date:"2026-02-04" },
+  { w:5, pA:"Erick",   pB:"Alan",     winner:"Alan",    prizes:6, date:"2026-02-04" },
+  { w:5, pA:"Nakaima", pB:"Erick",    winner:"Erick",   prizes:6, date:"2026-02-04" },
+  { w:5, pA:"Cristian",pB:"Alan",     winner:"Cristian",prizes:4, date:"2026-02-04" },
+  { w:5, pA:"Alan",    pB:"Rodrigo",  winner:"Alan",    prizes:2, date:"2026-02-04" },
+  // Semana 6 — Construtor Misterioso (16/03/2026) — 7 partidas
+  { w:6, pA:"Luiz",    pB:"Cristian", winner:"Luiz",    prizes:6, date:"2026-03-16" },
+  { w:6, pA:"Moises",  pB:"Alan",     winner:"Moises",  prizes:6, date:"2026-03-16" },
+  { w:6, pA:"Erick",   pB:"Rodrigo",  winner:"Rodrigo", prizes:3, date:"2026-03-16" },
+  { w:6, pA:"Nakaima", pB:"Cristian", winner:"Cristian",prizes:4, date:"2026-03-16" },
+  { w:6, pA:"Moises",  pB:"Rodrigo",  winner:"Rodrigo", prizes:4, date:"2026-03-16" },
+  { w:6, pA:"Luiz",    pB:"Alan",     winner:"Luiz",    prizes:6, date:"2026-03-16" },
+  { w:6, pA:"Nakaima", pB:"Erick",    winner:"Erick",   prizes:6, date:"2026-03-16" },
+  // Semana 7 — Guerra de Times (20/05/2026) — 9 partidas
+  { w:7, pA:"Erick",   pB:"Rodrigo",  winner:"Rodrigo", prizes:6, date:"2026-05-20" },
+  { w:7, pA:"Luiz",    pB:"Alan",     winner:"Luiz",    prizes:3, date:"2026-05-20" },
+  { w:7, pA:"Moises",  pB:"Cristian", winner:"Moises",  prizes:2, date:"2026-05-20" },
+  { w:7, pA:"Erick",   pB:"Alan",     winner:"Alan",    prizes:5, date:"2026-05-20" },
+  { w:7, pA:"Nakaima", pB:"Rodrigo",  winner:"Nakaima", prizes:3, date:"2026-05-20" },
+  { w:7, pA:"Luiz",    pB:"Cristian", winner:"Luiz",    prizes:5, date:"2026-05-20" },
+  { w:7, pA:"Erick",   pB:"Cristian", winner:"Erick",   prizes:4, date:"2026-05-20" },
+  { w:7, pA:"Moises",  pB:"Rodrigo",  winner:"Moises",  prizes:6, date:"2026-05-20" },
+  { w:7, pA:"Nakaima", pB:"Alan",     winner:"Nakaima", prizes:4, date:"2026-05-20" },
+];
+
 export async function GET() {
   try {
     const session = await auth();
@@ -48,7 +139,7 @@ export async function GET() {
     // ── 1. Criar conta do Alan ───────────────────────────────────────────────
 
     const alanExists = await prisma.user.findFirst({
-      where: { OR: [{ email: "alan@ligazikachu.com" }, { email: "alan@liga-zikachu.app" }, { player: { displayName: "Alan" } }] }
+      where: { OR: [{ email: "alan@ligazikachu.com" }, { player: { displayName: "Alan" } }] }
     });
 
     if (!alanExists) {
@@ -71,11 +162,11 @@ export async function GET() {
           name: "Liga Zikachu — 2ª Edição",
           slug: "segunda-edicao",
           edition: "2ª Edição",
-          description: "Campeonato histórico registrado retroativamente. 8 semanas, 7 jogadores, formato presencial com insígnias e conquistas.",
+          description: "Campeonato histórico registrado retroativamente. 7 semanas, 7 jogadores, formato presencial com insígnias e conquistas.",
           format: "IN_PERSON",
           status: "FINISHED",
-          startDate: new Date("2024-01-01"),
-          endDate: new Date("2024-03-31"),
+          startDate: new Date("2025-12-08"),
+          endDate: new Date("2026-05-20"),
           matchesPerPlayer: 3,
           requiresDeckSubmission: false,
           rankingConfig: { version:"2.0.0", format:"MD1", winPoints:3, lossPoints:0, tiebreakers:["wins","defended_prizes"] },
@@ -90,7 +181,7 @@ export async function GET() {
     // ── 3. Criar conquistas e atribuir ───────────────────────────────────────
 
     const season = await prisma.season.findFirst({ orderBy: { createdAt: "desc" } });
-    let created = 0, assigned = 0;
+    let achCreated = 0, achAssigned = 0;
 
     for (const ach of ACHIEVEMENTS) {
       let achievement = await prisma.achievement.findFirst({ where: { key: ach.key } });
@@ -107,7 +198,7 @@ export async function GET() {
             seasonId: season?.id ?? null
           }
         });
-        created++;
+        achCreated++;
       }
 
       if (ach.owner) {
@@ -128,23 +219,142 @@ export async function GET() {
                 pointsAwarded: ach.pts
               }
             });
-            assigned++;
-            log.push(`  ✓ "${ach.name}" → ${ach.owner} (+${ach.pts}pts)`);
+            achAssigned++;
+            log.push(`  ✓ "${ach.name}" → ${ach.owner}`);
           } else {
             log.push(`  - "${ach.name}" → ${ach.owner} (já atribuída)`);
           }
         } else {
-          log.push(`  ⚠️ Jogador "${ach.owner}" não encontrado — conquista "${ach.name}" não atribuída`);
+          log.push(`  ⚠ Jogador "${ach.owner}" não encontrado`);
         }
       }
     }
 
-    log.push(`\n✓ ${created} conquistas criadas`);
-    log.push(`✓ ${assigned} conquistas atribuídas`);
-    log.push(`\n🎉 Importação concluída!`);
+    log.push(`\n✓ ${achCreated} conquistas criadas, ${achAssigned} atribuídas`);
+
+    // ── 4. Mapear jogadores por displayName ──────────────────────────────────
+
+    const allPlayers = await prisma.player.findMany({
+      where: { displayName: { in: ["Rodrigo","Erick","Luiz","Moises","Alan","Nakaima","Cristian"] } },
+      select: { id: true, displayName: true }
+    });
+    const playerMap = new Map(allPlayers.map(p => [p.displayName, p.id]));
+    log.push(`\n✓ Jogadores encontrados: ${allPlayers.map(p => p.displayName).join(", ")}`);
+
+    // ── 5. Registrar jogadores no torneio ────────────────────────────────────
+
+    let regCreated = 0;
+    for (const player of allPlayers) {
+      const existing = await prisma.tournamentRegistration.findUnique({
+        where: { tournamentId_playerId: { tournamentId: tournament.id, playerId: player.id } }
+      });
+      if (!existing) {
+        await prisma.tournamentRegistration.create({
+          data: {
+            tournamentId: tournament.id,
+            playerId: player.id,
+            status: "APPROVED",
+            registeredAt: new Date("2025-12-08"),
+            decidedAt: new Date("2025-12-08"),
+            decidedById: adminUser.id
+          }
+        });
+        regCreated++;
+      }
+    }
+    log.push(`✓ ${regCreated} registros de jogadores criados`);
+
+    // ── 6. Criar semanas do torneio ──────────────────────────────────────────
+
+    const weekIdMap = new Map<number, string>();
+    let weeksCreated = 0;
+
+    for (const w of WEEKS) {
+      const existing = await prisma.tournamentWeek.findUnique({
+        where: { tournamentId_weekNumber: { tournamentId: tournament.id, weekNumber: w.num } }
+      });
+      if (existing) {
+        weekIdMap.set(w.num, existing.id);
+        log.push(`  - Semana ${w.num} já existe`);
+      } else {
+        const week = await prisma.tournamentWeek.create({
+          data: {
+            tournamentId: tournament.id,
+            weekNumber: w.num,
+            label: w.label,
+            mode: w.mode,
+            status: "CLOSED",
+            startDate: new Date(w.start),
+            endDate: new Date(w.end)
+          }
+        });
+        weekIdMap.set(w.num, week.id);
+        weeksCreated++;
+        log.push(`  ✓ ${w.label}`);
+      }
+    }
+    log.push(`✓ ${weeksCreated} semanas criadas`);
+
+    // ── 7. Criar partidas ────────────────────────────────────────────────────
+
+    let matchesCreated = 0, matchesSkipped = 0;
+
+    for (const m of MATCHES) {
+      const playerAId = playerMap.get(m.pA);
+      const playerBId = playerMap.get(m.pB);
+      const winnerId  = playerMap.get(m.winner);
+      const weekId    = weekIdMap.get(m.w);
+
+      if (!playerAId || !playerBId || !winnerId || !weekId) {
+        log.push(`  ⚠ Partida S${m.w} ${m.pA} vs ${m.pB}: jogador ou semana não encontrado`);
+        matchesSkipped++;
+        continue;
+      }
+
+      const loserId = m.winner === m.pA ? playerBId : playerAId;
+
+      // Idempotente: checar se já existe partida entre esses dois nesta semana
+      const existing = await prisma.match.findFirst({
+        where: { tournamentWeekId: weekId, playerAId, playerBId }
+      });
+      if (existing) {
+        matchesSkipped++;
+        continue;
+      }
+
+      const playerAWins = m.winner === m.pA ? 1 : 0;
+      const playerBWins = m.winner === m.pB ? 1 : 0;
+
+      await prisma.match.create({
+        data: {
+          tournamentWeekId: weekId,
+          playerAId,
+          playerBId,
+          winnerPlayerId: winnerId,
+          loserPlayerId: loserId,
+          playerAWins,
+          playerBWins,
+          winnerDefendedPrizes: m.prizes,
+          bestOf: 1,
+          status: "CONFIRMED",
+          resultSource: "MANUAL",
+          playedAt: new Date(m.date),
+          reportedAt: new Date(m.date),
+          confirmedAt: new Date(m.date),
+          reportedById: adminUser.id,
+          confirmedById: adminUser.id,
+          notes: m.notes ?? null
+        }
+      });
+      matchesCreated++;
+    }
+
+    log.push(`✓ ${matchesCreated} partidas criadas, ${matchesSkipped} ignoradas`);
+    log.push(`\n🎉 Importação da 2ª Edição concluída!`);
     log.push(`📌 Torneio: /torneios/segunda-edicao`);
     log.push(`📌 Conquistas: /conquistas`);
     log.push(`📌 Alan: alan@ligazikachu.com | LigaZikachu123`);
+    log.push(`📌 Total de partidas importadas: ${matchesCreated}/63`);
 
     return NextResponse.json({ success: true, log }, { status: 200 });
   } catch (err) {
