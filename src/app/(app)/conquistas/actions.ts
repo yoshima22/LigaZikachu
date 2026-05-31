@@ -28,8 +28,11 @@ export async function createAchievement(raw: z.infer<typeof achievementSchema>):
     const actor = await requireAdmin();
     const data = achievementSchema.parse(raw);
 
-    const existing = await prisma.achievement.findUnique({
-      where: { seasonId_key: { seasonId: data.seasonId ?? null, key: data.key } }
+    const existing = await prisma.achievement.findFirst({
+      where: {
+        key: data.key,
+        seasonId: data.seasonId ?? null
+      }
     });
     if (existing) return { error: "Já existe uma conquista com esta chave nesta temporada." };
 
