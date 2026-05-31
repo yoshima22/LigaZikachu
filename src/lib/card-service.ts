@@ -77,6 +77,17 @@ function mapCard(raw: Record<string, unknown>): TcgCard {
   };
 }
 
+// ── Validação Standard — definida ANTES de ser usada pelas funções de busca ──
+
+/** Regra Standard 2026: marks H, I, J (Escarlate & Violeta em diante) */
+export function isStandardLegal(card: TcgCard): boolean {
+  if (card.regulationMark) {
+    return (CURRENT_STANDARD_MARKS as readonly string[]).includes(card.regulationMark);
+  }
+  // Cartas sem mark (Energy básica, etc.) — usar campo legalities como fallback
+  return card.legalities?.standard === "Legal";
+}
+
 // ── Buscar cartas por nome exato ou parcial ──────────────────────────────────
 
 // Nomes que são Supporters — força filtro de supertype para evitar pegar o Pokémon
@@ -173,15 +184,6 @@ export async function searchSimilarEffect(textKeyword: string, subtype?: string,
     const json = await res.json() as { data: Record<string, unknown>[] };
     return (json.data ?? []).map(mapCard).filter(isStandardLegal);
   } catch { return []; }
-}
-
-// ── Verificar se uma carta é Standard pelo regulation mark ────────────────────
-
-export function isStandardLegal(card: TcgCard): boolean {
-  const mark = (card as unknown as Record<string, string>).regulationMark;
-  if (mark) return ["H", "I", "J"].includes(mark);
-  // Fallback: usar legalities se não tiver mark
-  return card.legalities?.standard === "Legal";
 }
 
 // ── Buscar carta por ID ──────────────────────────────────────────────────────
