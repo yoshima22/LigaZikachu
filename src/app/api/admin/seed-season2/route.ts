@@ -343,6 +343,7 @@ export async function GET() {
           confirmedAt: new Date(m.date),
           reportedById: adminUser.id,
           confirmedById: adminUser.id,
+          createdById: adminUser.id,
           notes: m.notes ?? null
         }
       });
