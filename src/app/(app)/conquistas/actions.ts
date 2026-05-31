@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
-import { AchievementType, AchievementRarity, AchievementCategory, AchievementScope } from "@prisma/client";
+import { AchievementType, AchievementRarity, AchievementCategory, AchievementScope, AchievementEventType, Prisma } from "@prisma/client";
 
 // ── Criar/editar conquista ────────────────────────────────────────────────────
 
@@ -324,9 +324,9 @@ export async function addAchievementRule(raw: {
     await prisma.achievementRule.create({
       data: {
         achievementId: data.achievementId,
-        eventType: data.eventType as import('@prisma/client').AchievementEventType,
+        eventType: data.eventType as AchievementEventType,
         targetValue: data.targetValue,
-        metadataFilter: data.metadataFilter ? (data.metadataFilter as import('@prisma/client').Prisma.InputJsonValue) : import('@prisma/client').Prisma.JsonNull
+        metadataFilter: data.metadataFilter ? (data.metadataFilter as Prisma.InputJsonValue) : Prisma.JsonNull
       }
     });
     revalidatePath('/conquistas');
