@@ -211,6 +211,7 @@ model Player {
   betsPlaced              ZikaBet[]             @relation("ZkBetByPlayer")
   betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
   stickers                PlayerSticker[]
+  achievementEvents       AchievementEvent[]
   zikalootWins            ZikaLoot[]            @relation("ZikaLootWinner")
   zikalootPicks           ZikaLootPick[]
   savedDecks              SavedDeck[]
@@ -605,6 +606,66 @@ model CodeDistribution {
   @@map("code_distributions")
 }
 
+// ── Enums de conquistas ───────────────────────────────────────────────────────
+
+enum AchievementType {
+  MANUAL
+  AUTOMATIC
+}
+
+enum AchievementRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+  SECRET
+}
+
+enum AchievementCategory {
+  TOURNAMENT
+  COLLECTION
+  SOCIAL
+  ENGAGEMENT
+  COSMETIC
+  SPECIAL
+}
+
+enum AchievementScope {
+  GLOBAL
+  SEASON
+  TOURNAMENT
+}
+
+enum AchievementRewardType {
+  ZIKA_COINS
+  LOOT_TICKET
+  STICKER_PACK
+  SHOP_ITEM
+  TITLE_TEXT
+  BADGE
+}
+
+enum AchievementEventType {
+  MATCH_WIN
+  MATCH_LOSS
+  DECK_SUBMITTED
+  COINS_EARNED
+  COINS_SPENT
+  SHOP_ITEM_PURCHASED
+  LOOT_WON
+  STICKER_PACK_OPENED
+  STICKER_RECEIVED
+  GIFT_SENT
+  GIFT_RECEIVED
+  TITLE_EQUIPPED
+  BANNER_EQUIPPED
+  FRAME_EQUIPPED
+  PROFESSOR_USED
+  ALBUM_GENERATION_COMPLETED
+  DAILY_LOGIN
+}
+
 model Achievement {
   id                 String              @id @default(cuid())
   seasonId           String?
@@ -612,31 +673,72 @@ model Achievement {
   name               String
   description        String?
   icon               String?
+  iconUrl            String?             @db.Text
   criteria           Json
   active             Boolean             @default(true)
+  // Novos campos
+  type               AchievementType     @default(MANUAL)
+  rarity             AchievementRarity   @default(COMMON)
+  category           AchievementCategory @default(TOURNAMENT)
+  scope              AchievementScope    @default(GLOBAL)
+  isSecret           Boolean             @default(false)
+  isRepeatable       Boolean             @default(false)
+  suggestedPoints    Int?
   createdById        String
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   season             Season?             @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   createdBy          User                @relation("AchievementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   playerAchievements PlayerAchievement[]
+  rewards            AchievementReward[]
 
   @@unique([seasonId, key])
   @@map("achievements")
 }
 
-model PlayerAchievement {
-  id            String       @id @default(cuid())
+model AchievementReward {
+  id            String                @id @default(cuid())
   achievementId String
-  playerId      String
-  seasonId      String?
-  awardedById   String?
-  awardedAt     DateTime     @default(now())
-  notes         String?
-  achievement   Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  player        Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  season        Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  awardedBy     User?        @relation("PlayerAchievementAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
+  rewardType    AchievementRewardType
+  rewardAmount  Int?
+  rewardItemId  String?               // ShopItem.id para cosméticos
+  titleText     String?               // para TITLE_TEXT
+  deliverViaGift Boolean             @default(true)
+  achievement   Achievement          @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  @@map("achievement_rewards")
+}
+
+model AchievementEvent {
+  id        String               @id @default(cuid())
+  playerId  String
+  eventType AchievementEventType
+  value     Int                  @default(1)
+  metadata  Json?
+  seasonId  String?
+  createdAt DateTime             @default(now())
+  player    Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@index([playerId, eventType])
+  @@map("achievement_events")
+}
+
+model PlayerAchievement {
+  id             String       @id @default(cuid())
+  achievementId  String
+  playerId       String
+  seasonId       String?
+  awardedById    String?
+  awardedAt      DateTime     @default(now())
+  notes          String?
+  // Novos campos
+  pointsAwarded  Int?
+  progress       Int          @default(1)
+  timesUnlocked  Int          @default(1)
+  isHighlighted  Boolean      @default(false)
+  weekId         String?
+  achievement    Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  season         Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  awardedBy      User?        @relation("PlayerAchievementAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
 
   @@unique([achievementId, playerId, seasonId])
   @@map("player_achievements")

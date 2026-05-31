@@ -50,6 +50,7 @@ const colecaoLinks = [
 const profileLinks = [
   { href: "/perfil", label: "Meu Perfil", icon: User, adminOnly: false },
   { href: "/perfil/meus-decks", label: "Meus Decks", icon: BookOpen, adminOnly: false },
+  { href: "/conquistas", label: "Conquistas", icon: Trophy, adminOnly: false },
   { href: "/insignias", label: "Insignias", icon: Medal, adminOnly: false },
   { href: "/caixa-de-presentes", label: "Presentes", icon: Gift, adminOnly: false },
   { href: "/codigos", label: "Codigos", icon: Package, adminOnly: false },

@@ -183,18 +183,18 @@ export default async function PlayerDetailPage({
                   </div>
                 )}
               </div>
-              {/* Moldura: estende além do avatar com -inset-3 (128×128px ideal, centro transparente) */}
+              {/* Moldura: -inset-8 = +32px por lado para cobrir o avatar e ir além */}
               {equippedFrame?.item.imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={equippedFrame.item.imageUrl}
                   alt="Moldura"
-                  className="pointer-events-none absolute -inset-3 z-10 object-contain"
-                  style={{ width: "calc(100% + 24px)", height: "calc(100% + 24px)" }}
+                  className="pointer-events-none absolute z-10 object-contain"
+                  style={{ inset: "-32px", width: "calc(100% + 64px)", height: "calc(100% + 64px)" }}
                 />
               )}
               {equippedFrame && !equippedFrame.item.imageUrl && (
-                <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
+                <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-[#FFCB05]" />
               )}
             </div>
 

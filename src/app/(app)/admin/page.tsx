@@ -81,11 +81,7 @@ export default async function AdminPage() {
     prisma.deckSubmission.count({ where: { status: "SUBMITTED" } }),
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
-      take: 10,
-      where: {
-        // Excluir ações em torneios rascunho (evitar dados placeholder)
-        NOT: { action: { in: ["match.admin_resolved", "match.confirmed"] }, entityType: "match" }
-      },
+      take: 8,
       include: { actor: { select: { name: true, email: true } } }
     })
   ]);

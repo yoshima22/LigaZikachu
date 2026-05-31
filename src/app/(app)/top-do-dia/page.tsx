@@ -8,8 +8,14 @@ export const dynamic = "force-dynamic";
 
 export default async function TopDoDiaPage() {
   const weeks = await prisma.tournamentWeek.findMany({
+    where: {
+      // Só mostrar semanas de torneios reais (não rascunho)
+      tournament: { status: { not: "DRAFT" } },
+      // Só semanas com pelo menos uma partida confirmada
+      matches: { some: { status: "CONFIRMED" } }
+    },
     include: {
-      tournament: { select: { name: true, slug: true } },
+      tournament: { select: { name: true, slug: true, status: true } },
       _count: {
         select: {
           matches: {

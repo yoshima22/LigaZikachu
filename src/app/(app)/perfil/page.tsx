@@ -202,8 +202,8 @@ export default async function PerfilPage() {
                 <img
                   src={equippedFrame.item.imageUrl}
                   alt="Moldura"
-                  className="pointer-events-none absolute -inset-3 z-10 object-contain"
-                  style={{ width: "calc(100% + 24px)", height: "calc(100% + 24px)" }}
+                  className="pointer-events-none absolute z-10 object-contain"
+                  style={{ inset: "-32px", width: "calc(100% + 64px)", height: "calc(100% + 64px)" }}
                 />
               )}
               {equippedFrame && !equippedFrame.item.imageUrl && (
