@@ -52,12 +52,18 @@ export function AchievementsAdminPanel({ achievements, players, seasons }: Props
     startTransition(async () => {
       try {
         const result = await createAchievement({
-          ...createForm,
+          key: createForm.key,
+          name: createForm.name,
+          description: createForm.description || undefined,
+          type: createForm.type as "MANUAL" | "AUTOMATIC",
+          rarity: createForm.rarity as "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY" | "SECRET",
+          category: createForm.category as "TOURNAMENT" | "COLLECTION" | "SOCIAL" | "ENGAGEMENT" | "COSMETIC" | "SPECIAL",
+          scope: createForm.scope as "GLOBAL" | "SEASON" | "TOURNAMENT",
+          isSecret: createForm.isSecret,
+          isRepeatable: createForm.isRepeatable,
           suggestedPoints: createForm.suggestedPoints ? parseInt(createForm.suggestedPoints) : undefined,
           iconUrl: createForm.iconUrl || undefined,
           seasonId: createForm.seasonId || undefined,
-          isSecret: createForm.isSecret,
-          isRepeatable: createForm.isRepeatable
         });
         if (result.error) { toast.error(result.error); return; }
         toast.success("Conquista criada!"); setShowCreate(false);
