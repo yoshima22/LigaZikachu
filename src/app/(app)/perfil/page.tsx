@@ -173,45 +173,58 @@ export default async function PerfilPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden p-0">
-        {/* Banner */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-slate-950">
         {equippedBanner?.item.imageUrl ? (
-          <div className="relative h-28 w-full overflow-hidden">
+          <div className="relative h-32 w-full overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={equippedBanner.item.imageUrl} alt="Banner" className="h-full w-full object-cover object-center" />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0f0f1a]/70" />
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0f0f1a]/80" />
           </div>
-        ) : null}
-        <div className={`flex flex-wrap items-center gap-5 p-6 ${equippedBanner?.item.imageUrl ? "-mt-12 relative" : ""}`}>
-        {player.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={player.avatarUrl}
-            alt={player.displayName}
-            className={`h-20 w-20 rounded-2xl object-cover ${equippedFrame ? "ring-4 ring-[#FFCB05]" : "border-2 border-[#FFCB05]/30"}`}
-          />
         ) : (
-          <div className={`flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFCB05] to-[#FFD700] text-2xl font-bold text-[#1A1A2E] ${equippedFrame ? "ring-4 ring-[#FFCB05]" : ""}`}>
-            {player.displayName.charAt(0)}
-          </div>
+          <div className="h-16 w-full bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E]" />
         )}
-        <div className={`min-w-0 flex-1 ${equippedBanner?.item.imageUrl ? "rounded-xl bg-slate-950/60 px-3 py-2 backdrop-blur" : ""}`}>
-          <p className="text-xs uppercase tracking-widest text-slate-500">Meu perfil</p>
-          <h1 className="font-pixel text-base text-[#FFCB05]">{player.displayName}</h1>
-          {equippedTitle && (
-            <p className="text-xs font-semibold text-[#FFCB05]/80">{equippedTitle.item.name}</p>
-          )}
-          <p className="text-sm text-slate-400">{player.ptcglNick || "Sem nick do jogo"}</p>
-          <p className="mt-2 text-xs text-slate-500">Esta e a sua pagina de perfil e edicao.</p>
+        <div className="px-5 pb-5">
+          <div className="flex items-end gap-4 -mt-8">
+            {/* Avatar com moldura real */}
+            <div className="relative shrink-0">
+              <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#0f0f1a] bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-lg">
+                {player.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={player.avatarUrl} alt={player.displayName} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xl font-bold text-[#1A1A2E]">
+                    {player.displayName.charAt(0)}
+                  </div>
+                )}
+              </div>
+              {equippedFrame?.item.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={equippedFrame.item.imageUrl} alt="Moldura" className="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+              )}
+              {equippedFrame && !equippedFrame.item.imageUrl && (
+                <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
+              )}
+            </div>
+            {/* Card compacto de identidade */}
+            <div className="mb-1 min-w-0 flex-1">
+              <div className="inline-block rounded-xl border border-border/60 bg-slate-900/80 px-3 py-2 backdrop-blur-sm">
+                <p className="text-[10px] uppercase tracking-widest text-slate-500">Meu perfil</p>
+                <h1 className="font-pixel text-sm text-[#FFCB05] leading-tight">{player.displayName}</h1>
+                {equippedTitle && (
+                  <p className="text-[11px] font-semibold text-[#FFCB05]/80">{equippedTitle.item.name}</p>
+                )}
+                <p className="text-xs text-slate-400">{player.ptcglNick || "Sem nick"}</p>
+              </div>
+            </div>
+            <div className="mb-1 shrink-0">
+              <Link href={`/jogadores/${player.id}`}
+                className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
+                Ver público
+              </Link>
+            </div>
+          </div>
         </div>
-        <Link
-          href={`/jogadores/${player.id}`}
-          className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-white"
-        >
-          Ver como publico
-        </Link>
-        </div>
-      </Card>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

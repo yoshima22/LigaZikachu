@@ -155,44 +155,75 @@ export default async function PlayerDetailPage({
         <ChevronLeft size={16} /> Jogadores
       </Link>
 
-      {/* Header */}
-      <Card className="overflow-hidden p-0">
-        {equippedBanner?.item.imageUrl && (
-          <div className="relative h-24 w-full overflow-hidden">
+      {/* Header — Banner + card compacto de identidade */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-slate-950">
+        {/* Banner */}
+        {equippedBanner?.item.imageUrl ? (
+          <div className="relative h-32 w-full overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={equippedBanner.item.imageUrl} alt="Banner" className="h-full w-full object-cover object-center" />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0f0f1a]/70" />
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0f0f1a]/80" />
           </div>
+        ) : (
+          <div className="h-16 w-full bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" />
         )}
-        <div className={`flex flex-wrap items-start gap-5 p-6 ${equippedBanner?.item.imageUrl ? "-mt-10 relative" : ""}`}>
-          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-700 text-xl font-bold text-white ${equippedFrame ? "ring-4 ring-[#FFCB05]" : ""}`}>
-            {player.user.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={player.user.image} alt={player.displayName} className="h-16 w-16 rounded-2xl object-cover" />
-            ) : (
-              <User size={28} className="text-slate-400" />
-            )}
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-white">{player.displayName}</h1>
-            {equippedTitle && (
-              <p className="text-xs font-semibold text-[#FFCB05]/80">{equippedTitle.item.name}</p>
-            )}
-            {player.ptcglNick && (
-              <p className="mt-0.5 text-sm text-slate-400">@{player.ptcglNick}</p>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <StatusBadge variant={badge.variant} label={badge.label} />
-              {player.user.role !== "PLAYER" && (
-                <StatusBadge variant="info" label={player.user.role} />
+
+        {/* Card compacto — só envolve o conteúdo, sem expandir */}
+        <div className="px-5 pb-5">
+          <div className="flex items-end gap-4 -mt-8">
+            {/* Avatar com moldura */}
+            <div className="relative shrink-0">
+              <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#0f0f1a] bg-slate-700 shadow-lg">
+                {player.user.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={player.user.image} alt={player.displayName} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <User size={24} className="text-slate-400" />
+                  </div>
+                )}
+              </div>
+              {/* Moldura de foto (imagem sobreposta) */}
+              {equippedFrame?.item.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={equippedFrame.item.imageUrl}
+                  alt="Moldura"
+                  className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                />
               )}
-              {activeSeason && (
-                <StatusBadge variant="draft" label={activeSeason.season.name} />
+              {/* Fallback: ring colorido quando não tem imagem de moldura */}
+              {equippedFrame && !equippedFrame.item.imageUrl && (
+                <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
               )}
             </div>
+
+            {/* Identidade — card pequeno só com nick, título e @ */}
+            <div className="mb-1 min-w-0">
+              <div className="inline-block rounded-xl border border-border/60 bg-slate-900/80 px-3 py-2 backdrop-blur-sm">
+                <h1 className="text-lg font-bold leading-tight text-white">{player.displayName}</h1>
+                {equippedTitle && (
+                  <p className="text-[11px] font-semibold text-[#FFCB05]">{equippedTitle.item.name}</p>
+                )}
+                {player.ptcglNick && (
+                  <p className="text-xs text-slate-400">@{player.ptcglNick}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Badges de status abaixo do avatar */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusBadge variant={badge.variant} label={badge.label} />
+            {player.user.role !== "PLAYER" && (
+              <StatusBadge variant="info" label={player.user.role} />
+            )}
+            {activeSeason && (
+              <StatusBadge variant="draft" label={activeSeason.season.name} />
+            )}
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Time dos Sonhos */}
       {dreamTeam.length > 0 && (
