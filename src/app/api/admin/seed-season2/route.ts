@@ -48,13 +48,13 @@ export async function GET() {
     // ── 1. Criar conta do Alan ───────────────────────────────────────────────
 
     const alanExists = await prisma.user.findFirst({
-      where: { OR: [{ email: "alan@liga-zikachu.app" }, { player: { displayName: "Alan" } }] }
+      where: { OR: [{ email: "alan@ligazikachu.com" }, { email: "alan@liga-zikachu.app" }, { player: { displayName: "Alan" } }] }
     });
 
     if (!alanExists) {
       const hash = await hashPassword("LigaZikachu123");
       const alanUser = await prisma.user.create({
-        data: { name: "Alan", email: "alan@liga-zikachu.app", passwordHash: hash, status: "ACTIVE", role: "PLAYER" }
+        data: { name: "Alan", email: "alan@ligazikachu.com", passwordHash: hash, status: "ACTIVE", role: "PLAYER" }
       });
       await prisma.player.create({ data: { userId: alanUser.id, displayName: "Alan", active: true } });
       log.push("✓ Conta do Alan criada");
@@ -144,7 +144,7 @@ export async function GET() {
     log.push(`\n🎉 Importação concluída!`);
     log.push(`📌 Torneio: /torneios/segunda-edicao`);
     log.push(`📌 Conquistas: /conquistas`);
-    log.push(`📌 Alan: alan@liga-zikachu.app | LigaZikachu123`);
+    log.push(`📌 Alan: alan@ligazikachu.com | LigaZikachu123`);
 
     return NextResponse.json({ success: true, log }, { status: 200 });
   } catch (err) {
