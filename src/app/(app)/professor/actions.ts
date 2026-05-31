@@ -1,6 +1,7 @@
 "use server";
 
 import { searchCards, fetchCardsByNames, searchStandardByFunction, searchSimilarEffect, isStandardLegal } from "@/lib/card-service";
+import { buildMetaContext, getMetaSnapshot, getArchetypeDecks } from "@/lib/limitless-service";
 import type { TcgCard } from "@/lib/card-service";
 import { resolveCardName, PT_TO_EN } from "@/lib/card-names-ptbr";
 import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
@@ -290,8 +291,11 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
       };
     }
 
-    // 1. Chamar IA com histórico completo — ela decide quais cartas mostrar
-    const { message: aiMessage, cardNames } = await callAI(messages);
+    // 0. Buscar contexto real do meta no Limitless TCG (se disponível)
+    const metaCtx = await buildMetaContext(lastMsg);
+
+    // 1. Chamar IA com histórico completo + dados reais do meta
+    const { message: aiMessage, cardNames } = await callAI(messages, metaCtx || undefined);
 
     // 2. Resolver nomes PT→EN e buscar cartas reais na TCG API
     const resolvedNames = cardNames.map(resolveCardName);
@@ -323,6 +327,47 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
     console.error("[Prof error]", err);
     return { message: "Ixe, deu ruim no servidor! Tenta de novo. 📡", suggestedCards: [] };
   }
+}
+
+// ── ACTION: Dados do meta Limitless TCG ──────────────────────────────────────
+
+export interface MetaData {
+  available: boolean;
+  archetypes: Array<{ name: string; count: number; topFinishes: number }>;
+  error?: string;
+}
+
+export async function getMetaData(): Promise<MetaData> {
+  if (!process.env.LIMITLESS_API_KEY) {
+    return { available: false, archetypes: [], error: "LIMITLESS_API_KEY não configurada. Adicione na Vercel para dados do meta." };
+  }
+  try {
+    const archetypes = await getMetaSnapshot(4);
+    return { available: true, archetypes };
+  } catch (err) {
+    return { available: false, archetypes: [], error: String(err) };
+  }
+}
+
+export interface ArchetypeDecksResult {
+  decks: Array<{ tournament: string; placement: number; deckName?: string; mainCards: string[] }>;
+}
+
+export async function getArchetypeData(archetype: string): Promise<ArchetypeDecksResult> {
+  if (!process.env.LIMITLESS_API_KEY) return { decks: [] };
+  try {
+    const raw = await getArchetypeDecks(archetype, 3);
+    return {
+      decks: raw.map(d => ({
+        tournament: d.tournament,
+        placement: d.placement,
+        deckName: d.deck.archetype ?? d.deck.name,
+        mainCards: d.deck.list
+          ? Object.entries(d.deck.list).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([c, q]) => `${q}x ${c}`)
+          : []
+      }))
+    };
+  } catch { return { decks: [] }; }
 }
 
 // ── ACTION: Análise de deck ───────────────────────────────────────────────────
