@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ZikaCoinTxType, ShopItemType, Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
+import { onLootWon } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
 
@@ -182,6 +183,9 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
           });
         }
       });
+      // Emitir evento de conquista
+      void onLootWon(winningPick.player.id).catch(() => {});
+
       // Push notification para o vencedor
       await sendNotificationToUser(winningPick.player.userId, {
         title: "🏆 Você ganhou na ZikaLoot!",

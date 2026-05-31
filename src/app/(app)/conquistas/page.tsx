@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Award, Lock, Plus, Star, Trophy, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AchievementsAdminPanel } from "./_components/achievements-admin-panel";
+import { RewardManager } from "./_components/reward-manager";
+import { MyAchievementsPanel } from "./_components/my-achievements-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,7 @@ export default async function ConquistasPage() {
 
   const adminUser = isAdmin(session.user.role);
 
-  const [achievements, players, seasons, myAchievements] = await Promise.all([
+  const [achievements, players, seasons, myAchievements, shopItems] = await Promise.all([
     prisma.achievement.findMany({
       where: adminUser ? {} : { active: true, isSecret: false },
       include: {
@@ -51,8 +53,17 @@ export default async function ConquistasPage() {
     // Conquistas do próprio usuário
     prisma.playerAchievement.findMany({
       where: { player: { userId: session.user.id } },
-      include: { achievement: { select: { id: true, name: true, rarity: true } } }
-    }).catch(() => [])
+      include: { achievement: { select: { id: true, name: true, rarity: true, iconUrl: true } } },
+      orderBy: { awardedAt: "desc" }
+    }).catch(() => []),
+    // Itens do shop para configurar recompensas
+    adminUser
+      ? prisma.shopItem.findMany({
+          where: { active: true },
+          select: { id: true, name: true, type: true },
+          orderBy: { type: "asc" }
+        })
+      : []
   ]);
 
   const myAchievementIds = new Set(myAchievements.map(a => a.achievementId));
@@ -90,19 +101,45 @@ export default async function ConquistasPage() {
         </div>
       </div>
 
+      {/* Minhas conquistas — vitrine do jogador */}
+      {!adminUser && myAchievements.length > 0 && (
+        <MyAchievementsPanel
+          achievements={myAchievements.map(a => ({
+            id: a.id,
+            name: a.achievement.name,
+            rarity: a.achievement.rarity,
+            iconUrl: a.achievement.iconUrl ?? null,
+            isHighlighted: a.isHighlighted,
+            unlockedAt: a.awardedAt.toISOString()
+          }))}
+        />
+      )}
+
       {/* Painel Admin */}
       {adminUser && (
-        <AchievementsAdminPanel
-          achievements={achievements.map(a => ({
-            id: a.id, key: a.key, name: a.name, description: a.description ?? null,
-            type: a.type, rarity: a.rarity, category: a.category, scope: a.scope,
-            isSecret: a.isSecret, isRepeatable: a.isRepeatable, active: a.active,
-            suggestedPoints: a.suggestedPoints, iconUrl: a.iconUrl ?? null,
-            playersCount: a._count.playerAchievements
-          }))}
-          players={players}
-          seasons={seasons}
-        />
+        <>
+          <AchievementsAdminPanel
+            achievements={achievements.map(a => ({
+              id: a.id, key: a.key, name: a.name, description: a.description ?? null,
+              type: a.type, rarity: a.rarity, category: a.category, scope: a.scope,
+              isSecret: a.isSecret, isRepeatable: a.isRepeatable, active: a.active,
+              suggestedPoints: a.suggestedPoints, iconUrl: a.iconUrl ?? null,
+              playersCount: a._count.playerAchievements
+            }))}
+            players={players}
+            seasons={seasons}
+          />
+          <RewardManager
+            achievements={achievements.map(a => ({
+              id: a.id, name: a.name,
+              rewards: a.rewards.map(r => ({
+                id: r.id, rewardType: r.rewardType, rewardAmount: r.rewardAmount,
+                rewardItemId: r.rewardItemId, titleText: r.titleText, deliverViaGift: r.deliverViaGift
+              }))
+            }))}
+            shopItems={shopItems}
+          />
+        </>
       )}
 
       {/* Conquistas por categoria */}

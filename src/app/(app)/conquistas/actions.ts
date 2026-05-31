@@ -168,3 +168,126 @@ export async function revokeAchievement(playerAchievementId: string): Promise<{ 
     return { error: err instanceof Error ? err.message : "Erro" };
   }
 }
+
+// ── Gerenciar recompensas de conquista ────────────────────────────────────────
+
+const rewardSchema = z.object({
+  achievementId: z.string().min(1),
+  rewardType: z.enum(["ZIKA_COINS","LOOT_TICKET","STICKER_PACK","SHOP_ITEM","TITLE_TEXT","BADGE"]),
+  rewardAmount: z.number().int().min(1).optional(),
+  rewardItemId: z.string().optional(),
+  titleText: z.string().trim().max(80).optional(),
+  deliverViaGift: z.boolean().default(true)
+});
+
+export async function addAchievementReward(raw: z.infer<typeof rewardSchema>): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const data = rewardSchema.parse(raw);
+    await prisma.achievementReward.create({
+      data: {
+        achievementId: data.achievementId,
+        rewardType: data.rewardType as import("@prisma/client").AchievementRewardType,
+        rewardAmount: data.rewardAmount ?? null,
+        rewardItemId: data.rewardItemId ?? null,
+        titleText: data.titleText ?? null,
+        deliverViaGift: data.deliverViaGift
+      }
+    });
+    revalidatePath("/conquistas");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function removeAchievementReward(rewardId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.achievementReward.delete({ where: { id: rewardId } });
+    revalidatePath("/conquistas");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+// ── Destaque no perfil (Stage 3) ──────────────────────────────────────────────
+
+export async function toggleHighlightAchievement(
+  playerAchievementId: string,
+  highlight: boolean
+): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Não autenticado." };
+
+    const pa = await prisma.playerAchievement.findUnique({
+      where: { id: playerAchievementId },
+      include: { player: { select: { userId: true } } }
+    });
+    if (!pa) return { error: "Conquista não encontrada." };
+    if (pa.player.userId !== actor.id && !isAdmin(actor.role))
+      return { error: "Sem permissão." };
+
+    if (highlight) {
+      const count = await prisma.playerAchievement.count({
+        where: { playerId: pa.playerId, isHighlighted: true }
+      });
+      if (count >= 3) return { error: "Máximo de 3 conquistas em destaque." };
+    }
+
+    await prisma.playerAchievement.update({
+      where: { id: playerAchievementId },
+      data: { isHighlighted: highlight }
+    });
+    revalidatePath("/conquistas");
+    revalidatePath(`/jogadores/${pa.playerId}`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+// ── Buscar conquistas do jogador logado ───────────────────────────────────────
+
+export async function getMyAchievements(): Promise<{
+  unlocked: Array<{
+    id: string; achievementId: string; unlockedAt: string; isHighlighted: boolean;
+    pointsAwarded: number | null;
+    achievement: { name: string; description: string | null; rarity: string; category: string; iconUrl: string | null };
+  }>;
+  error?: string;
+}> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { unlocked: [], error: "Não autenticado." };
+
+    const player = await prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true } });
+    if (!player) return { unlocked: [] };
+
+    const records = await prisma.playerAchievement.findMany({
+      where: { playerId: player.id },
+      include: { achievement: { select: { name: true, description: true, rarity: true, category: true, iconUrl: true } } },
+      orderBy: { awardedAt: "desc" }
+    });
+
+    return {
+      unlocked: records.map(r => ({
+        id: r.id,
+        achievementId: r.achievementId,
+        unlockedAt: r.awardedAt.toISOString(),
+        isHighlighted: r.isHighlighted,
+        pointsAwarded: r.pointsAwarded,
+        achievement: r.achievement
+      }))
+    };
+  } catch (err) {
+    return { unlocked: [], error: String(err) };
+  }
+}
+
+function isAdmin(role: string) {
+  return role === "ADMIN" || role === "SUPER_ADMIN";
+}

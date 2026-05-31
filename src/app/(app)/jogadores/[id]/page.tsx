@@ -67,7 +67,7 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
 
-  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, publicDecks] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks] = await Promise.all([
     activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -113,6 +113,11 @@ export default async function PlayerDetailPage({
       where: { playerId, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true } } }
     }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null } }[]),
+    prisma.playerAchievement.findMany({
+      where: { playerId, isHighlighted: true },
+      include: { achievement: { select: { name: true, rarity: true, iconUrl: true, description: true } } },
+      orderBy: { awardedAt: "desc" }
+    }).catch(() => [] as Array<{ id: string; achievement: { name: string; rarity: string; iconUrl: string | null; description: string | null } }>),
     prisma.savedDeck.findMany({
       where: { playerId, isPublic: true },
       select: { id: true, name: true, archetype: true, deckList: true, updatedAt: true },
@@ -224,6 +229,24 @@ export default async function PlayerDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Conquistas em Destaque */}
+      {highlightedAchievements.length > 0 && (
+        <Card className="p-6">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">🏆 Conquistas</h2>
+          <div className="flex flex-wrap gap-2">
+            {highlightedAchievements.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2">
+                {a.achievement.iconUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={a.achievement.iconUrl} alt="" className="h-5 w-5 object-contain" />
+                )}
+                <span className="text-sm font-semibold text-slate-200">{a.achievement.name}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Time dos Sonhos */}
       {dreamTeam.length > 0 && (

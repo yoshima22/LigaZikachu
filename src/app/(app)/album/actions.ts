@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
+import { onStickerPackOpened, onGiftSent } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { pickRarity, DUPLICATE_COINS, GENERATION_RANGES } from "@/lib/sticker-pack";
 
@@ -125,6 +126,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
 
     revalidatePath("/album");
     revalidatePath("/carteira");
+    void onStickerPackOpened(player.id).catch(() => {});
     return { cards: resultCards, totalCoinsEarned };
   } catch (err) {
     return { ...EMPTY, error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -218,6 +220,7 @@ export async function sendStickerGift(cardId: string, targetPlayerId: string): P
     }
 
     revalidatePath("/album");
+    void onGiftSent(player.id).catch(() => {});
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };

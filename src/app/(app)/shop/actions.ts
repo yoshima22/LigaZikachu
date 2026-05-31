@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ShopItemType, ShopItemRarity, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
+import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -132,6 +133,11 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
     revalidatePath("/shop");
     revalidatePath("/inventario");
     revalidatePath("/carteira");
+
+    // Emitir eventos de conquistas (fire-and-forget, não bloqueia)
+    void onShopPurchase(player.id).catch(() => {});
+    void onCoinsSpent(player.id, item.price).catch(() => {});
+
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -169,6 +175,15 @@ export async function equipItem(itemId: string, equip: boolean): Promise<{ error
 
     revalidatePath("/inventario");
     revalidatePath("/perfil");
+
+    // Emitir evento de conquista ao equipar
+    if (equip) {
+      const { onTitleEquipped, onBannerEquipped, onFrameEquipped } = await import("@/lib/achievement-events");
+      if (owned.item.type === "TITLE") void onTitleEquipped(player.id).catch(() => {});
+      if (owned.item.type === "BANNER") void onBannerEquipped(player.id).catch(() => {});
+      if (owned.item.type === "FRAME") void onFrameEquipped(player.id).catch(() => {});
+    }
+
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
