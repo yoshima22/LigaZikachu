@@ -112,6 +112,49 @@ export async function fetchCardsByNames(names: string[], preferLegal = true): Pr
     .filter((c) => c.imageSmall); // só cartas com imagem
 }
 
+// ── Buscar por função/categoria no Standard atual ─────────────────────────────
+// Usa a TCG API diretamente — sem hardcode de nomes
+
+export async function searchStandardByFunction(
+  fn: "DRAW" | "SEARCH" | "SWITCH" | "DISRUPTION" | "RECOVERY" | "ACCELERATION",
+  limit = 8
+): Promise<TcgCard[]> {
+  const queries: Record<string, string> = {
+    DRAW:         `subtypes:Supporter legalities.standard:Legal -name:*ex`,
+    SEARCH:       `subtypes:Item text:"search your deck" legalities.standard:Legal`,
+    SWITCH:       `subtypes:Item text:"switch" legalities.standard:Legal`,
+    DISRUPTION:   `subtypes:Supporter legalities.standard:Legal text:"opponent"`,
+    RECOVERY:     `subtypes:Item text:"recover" legalities.standard:Legal`,
+    ACCELERATION: `subtypes:Item text:"attach" text:"energy" legalities.standard:Legal`
+  };
+
+  const q = encodeURIComponent(queries[fn] ?? `legalities.standard:Legal`);
+  const url = `${TCG_BASE}/cards?q=${q}&pageSize=${limit}&orderBy=-set.releaseDate`;
+
+  try {
+    const res = await fetch(url, { headers: headers(), next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const json = await res.json() as { data: Record<string, unknown>[] };
+    return (json.data ?? []).map(mapCard);
+  } catch { return []; }
+}
+
+// ── Buscar cartas similares por efeito de texto ────────────────────────────────
+
+export async function searchSimilarEffect(textKeyword: string, subtype?: string, limit = 6): Promise<TcgCard[]> {
+  const parts = [`legalities.standard:Legal`, `text:"${textKeyword}"`];
+  if (subtype) parts.push(`subtypes:${subtype}`);
+  const q = encodeURIComponent(parts.join(" "));
+  const url = `${TCG_BASE}/cards?q=${q}&pageSize=${limit}&orderBy=-set.releaseDate`;
+
+  try {
+    const res = await fetch(url, { headers: headers(), next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const json = await res.json() as { data: Record<string, unknown>[] };
+    return (json.data ?? []).map(mapCard);
+  } catch { return []; }
+}
+
 // ── Buscar carta por ID ──────────────────────────────────────────────────────
 
 export async function getCardById(id: string): Promise<TcgCard | null> {

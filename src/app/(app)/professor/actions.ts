@@ -1,6 +1,6 @@
 "use server";
 
-import { searchCards, fetchCardsByNames } from "@/lib/card-service";
+import { searchCards, fetchCardsByNames, searchStandardByFunction, searchSimilarEffect } from "@/lib/card-service";
 import type { TcgCard } from "@/lib/card-service";
 import { resolveCardName, PT_TO_EN } from "@/lib/card-names-ptbr";
 import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
@@ -80,50 +80,77 @@ function extractCardNames(text: string): string[] {
   return [...new Set(found)].slice(0, 4);
 }
 
-// ── Buscar cartas relevantes para o contexto da pergunta ──────────────────────
+// ── Buscar cartas relevantes via TCG API (sem hardcode de nomes) ──────────────
+
+function deduplicateCards(cards: TcgCard[]): TcgCard[] {
+  const seen = new Set<string>();
+  return cards.filter(c => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+}
 
 async function findRelevantCards(message: string): Promise<TcgCard[]> {
   const lower = message.toLowerCase();
+  const allCards: TcgCard[] = [];
 
-  // 1. Cartas mencionadas diretamente
+  // 1. Cartas mencionadas explicitamente pelo nome
   const mentioned = extractCardNames(message);
   if (mentioned.length > 0) {
-    const cards = await fetchCardsByNames(mentioned);
-    if (cards.length > 0) return cards;
+    const namedCards = await fetchCardsByNames(mentioned, true);
+    allCards.push(...namedCards);
   }
 
-  // 2. Por categoria de pergunta
-  if (/compra|draw|roub|puxar|mão vazia|consistên/.test(lower)) {
-    return fetchCardsByNames(["Professor's Research", "Iono", "Colress's Experiment"]);
+  // 2. Busca dinâmica na TCG API por categoria — SEM hardcode de nomes
+  if (/compra|draw|roub|puxar|mão vazia|similar.*iono|alternativa.*iono|parecid.*iono/.test(lower)) {
+    // Buscar Supporters de draw legais no Standard via API
+    const drawCards = await searchStandardByFunction("DRAW", 6);
+    allCards.push(...drawCards);
   }
+
   if (/busca|search|achar|encontrar|baralho/.test(lower)) {
-    return fetchCardsByNames(["Nest Ball", "Ultra Ball", "Buddy-Buddy Poffin"]);
-  }
-  if (/paralis|trava|status|confus|controle|disrupt/.test(lower)) {
-    return fetchCardsByNames(["Iono", "Boss's Orders", "Path to the Peak"]);
-  }
-  if (/energia|energy|acelera|aceleração/.test(lower)) {
-    return fetchCardsByNames(["Superior Energy Retrieval", "Dark Patch", "Earthen Vessel"]);
-  }
-  if (/recuar|switch|fugir|benched|recuo/.test(lower)) {
-    return fetchCardsByNames(["Switch", "Escape Rope", "Switch Cart"]);
-  }
-  if (/recupera|ressurreição|revival|cemitério/.test(lower)) {
-    return fetchCardsByNames(["Night Stretcher", "Super Rod", "Rescue Board"]);
-  }
-  if (/estádio|stadium|campo/.test(lower)) {
-    return fetchCardsByNames(["Path to the Peak", "Beach Court", "Lost City"]);
+    const searchCards2 = await searchStandardByFunction("SEARCH", 6);
+    allCards.push(...searchCards2);
   }
 
-  // 3. Sem contexto específico → busca genérica direto na TCG API
-  const words = message.split(/\s+/).filter((w) => w.length > 4);
-  if (words.length > 0) {
-    const searchTerm = resolveCardName(words[0]);
-    const results = await searchCards(searchTerm, 3);
-    if (results.length > 0) return results;
+  if (/paralis|trava|disrupt|embaralha|mão adversário/.test(lower)) {
+    const disruptCards = await searchStandardByFunction("DISRUPTION", 5);
+    allCards.push(...disruptCards);
   }
 
-  return [];
+  if (/recuar|switch|fugir|recuo/.test(lower)) {
+    const switchCards = await searchStandardByFunction("SWITCH", 4);
+    allCards.push(...switchCards);
+  }
+
+  if (/energia|acelera|aceleração/.test(lower)) {
+    const accelCards = await searchStandardByFunction("ACCELERATION", 5);
+    allCards.push(...accelCards);
+  }
+
+  if (/recupera|ressurreição|cemitério|discard/.test(lower)) {
+    const recCards = await searchStandardByFunction("RECOVERY", 4);
+    allCards.push(...recCards);
+  }
+
+  // 3. Busca por texto de efeito específico mencionado
+  if (/embaralha|shuffle/.test(lower)) {
+    const shuffleCards = await searchSimilarEffect("shuffle", "Supporter", 4);
+    allCards.push(...shuffleCards);
+  }
+
+  if (allCards.length === 0) {
+    // Fallback: busca generic de cartas legais no Standard
+    const words = message.split(/\s+/).filter(w => w.length > 4 && !/^(que|como|para|isso|meu|minha|você|uma|um|com|não|mais|tem|quando|deck)$/i.test(w));
+    if (words.length > 0) {
+      const term = resolveCardName(words[0]);
+      const found = await searchCards(term, 4);
+      allCards.push(...found);
+    }
+  }
+
+  return deduplicateCards(allCards).slice(0, 5);
 }
 
 // ── Gerar resposta sem IA usando dados reais da carta ─────────────────────────

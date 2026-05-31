@@ -28,8 +28,15 @@ export function parseDeckList(raw: string): ParsedDeck {
   ];
 
   for (const line of lines) {
-    // Ignorar linhas de seção como "##Pokémon", "***", comentários
+    // Ignorar cabeçalhos de seção e metadados de export
+    // Formatos: "##Pokémon", "Pokémon:", "Pokémon (12)", "Total Cards: 60", "***", "//"
     if (/^#+/.test(line) || /^\*+/.test(line) || /^\/\//.test(line)) continue;
+    if (/^(Pokémon|Pokemon|Trainer|Treinador|Energy|Energia|Total)\s*[:(]/i.test(line)) continue;
+    if (/^(Pokémon|Pokemon|Trainer|Treinador|Energy|Energia|Total)\s*$/i.test(line)) continue;
+    if (/^Total\s*cards?\s*:/i.test(line)) continue;
+    if (/^Count\s*:/i.test(line)) continue;
+    // Ignorar linhas com apenas número (ex: "60" no fim de alguns exports)
+    if (/^\d+$/.test(line)) continue;
 
     let matched = false;
     for (const pattern of patterns) {

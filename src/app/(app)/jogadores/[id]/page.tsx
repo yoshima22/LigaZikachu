@@ -250,7 +250,7 @@ export default async function PlayerDetailPage({
         </div>
       )}
 
-      {/* Decks Públicos */}
+      {/* Decks Públicos — apenas nome + tipos, clicáveis para ver a lista */}
       {publicDecks.length > 0 && (
         <Card>
           <div className="mb-4 flex items-center justify-between">
@@ -258,32 +258,36 @@ export default async function PlayerDetailPage({
               <BookOpen size={18} className="text-primary" /> Meus Decks
             </CardTitle>
             {publicDecks.length > 3 && (
-              <Link href={`/jogadores/${playerId}/decks`} className="text-xs text-[#FFCB05] hover:underline">
-                Ver todos ({publicDecks.length}) →
-              </Link>
+              <span className="text-xs text-slate-500">{publicDecks.length} decks públicos</span>
             )}
           </div>
-          <div className="space-y-3">
-            {publicDecks.slice(0, 3).map((d) => {
+          <div className="space-y-2">
+            {publicDecks.slice(0, 6).map((d) => {
               const typeValues = d.archetype
                 ? d.archetype.split(",").map((t) => t.trim()).filter(Boolean)
                 : [];
+              // Deck list encoded for query param
+              const deckParam = encodeURIComponent(d.deckList.slice(0, 2000));
               return (
-                <div key={d.id} className="rounded-lg border border-border bg-slate-900/40 p-3">
-                  <p className="font-semibold text-slate-200 text-sm">{d.name}</p>
-                  {typeValues.length > 0 && (
-                    <div className="mt-1.5 mb-2 flex flex-wrap gap-1.5">
+                <details key={d.id} className="group rounded-lg border border-border bg-slate-900/40 overflow-hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-800/40 transition-colors list-none">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="font-semibold text-slate-200 text-sm truncate">{d.name}</span>
                       {typeValues.map((tv) => (
-                        <span key={tv} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${POKEMON_TYPE_COLORS[tv] ?? "bg-slate-700 text-slate-200"}`}>
+                        <span key={tv} className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold shrink-0 ${POKEMON_TYPE_COLORS[tv] ?? "bg-slate-700 text-slate-200"}`}>
                           {POKEMON_TYPE_EMOJIS[tv] ?? "●"} {POKEMON_TYPE_LABELS[tv] ?? tv}
                         </span>
                       ))}
                     </div>
-                  )}
-                  <pre className="max-h-36 overflow-auto rounded bg-slate-950 p-2 font-mono text-xs text-slate-300">
-                    {d.deckList}
-                  </pre>
-                </div>
+                    <span className="shrink-0 text-xs text-slate-500 group-open:hidden">Ver lista ↓</span>
+                    <span className="shrink-0 text-xs text-slate-500 hidden group-open:inline">Fechar ↑</span>
+                  </summary>
+                  <div className="border-t border-border">
+                    <pre className="max-h-64 overflow-auto px-3 py-3 font-mono text-xs text-slate-300 leading-relaxed">
+                      {d.deckList}
+                    </pre>
+                  </div>
+                </details>
               );
             })}
           </div>
@@ -337,7 +341,12 @@ export default async function PlayerDetailPage({
             </CardTitle>
             {(() => {
               const validDecks = player.deckSubmissions.filter(
-                (d) => d.tournament && d.tournament.status !== "DRAFT" && d.tournamentWeek
+                (d) =>
+                  d.tournament &&
+                  d.tournamentWeek &&
+                  !["DRAFT"].includes(d.tournament.status) &&
+                  d.deckName &&
+                  d.deckName.trim().length > 0
               );
               return validDecks.length === 0 ? (
                 <EmptyState message="Nenhum deck enviado." icon={<BookOpen size={24} />} />

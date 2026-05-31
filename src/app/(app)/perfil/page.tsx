@@ -165,7 +165,9 @@ export default async function PerfilPage() {
       deck.tournamentWeek &&
       isDeckRegistrationLocked(deck.tournamentWeek) &&
       deck.tournament &&
-      deck.tournament.status !== "DRAFT"  // excluir torneios rascunho/fantasma
+      !["DRAFT"].includes(deck.tournament.status) &&
+      deck.deckName &&
+      deck.deckName.trim().length > 0
     )
     .slice(0, 5);
 
