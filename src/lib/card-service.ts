@@ -12,20 +12,34 @@ function headers(): Record<string, string> {
   return {};
 }
 
+// ── Standard 2026: cartas com Regulation Mark H, I, J (e futuras) ─────────────
+export const CURRENT_STANDARD_MARKS = ["H", "I", "J"] as const;
+export type StandardMark = typeof CURRENT_STANDARD_MARKS[number];
+
 export interface TcgCard {
   id: string;
   name: string;
-  supertype: string;          // Pokémon | Trainer | Energy
-  subtypes: string[];         // Basic, Stage 1, Item, Supporter, etc.
-  types?: string[];           // Fire, Water, etc.
-  text?: string;              // habilidades / efeitos (primeiro texto)
+  supertype: string;
+  subtypes: string[];
+  types?: string[];
+  text?: string;
   flavorText?: string;
   imageSmall: string;
   imageLarge: string;
   set: { id: string; name: string; series: string };
   number: string;
   rarity?: string;
+  regulationMark?: string;   // A, B, C, D, E, F, G (rotated) | H, I, J (standard)
   legalities?: { standard?: string; expanded?: string; unlimited?: string };
+}
+
+/** Regra oficial: carta é Standard-legal se tiver Regulation Mark H, I, J (ou futura) */
+export function isStandardLegal(card: TcgCard): boolean {
+  if (card.regulationMark) {
+    return (CURRENT_STANDARD_MARKS as readonly string[]).includes(card.regulationMark);
+  }
+  // Cartas sem regulation mark (Energy básica, muito antigas) — usar campo legalities
+  return card.legalities?.standard === "Legal";
 }
 
 function mapCard(raw: Record<string, unknown>): TcgCard {
@@ -35,7 +49,6 @@ function mapCard(raw: Record<string, unknown>): TcgCard {
   const attacks = raw.attacks as Array<{ name: string; text?: string }> | undefined;
   const rules = raw.rules as string[] | undefined;
 
-  // Primeiro texto relevante da carta
   const text =
     abilities?.[0]?.text ??
     attacks?.[0]?.text ??
@@ -59,6 +72,7 @@ function mapCard(raw: Record<string, unknown>): TcgCard {
     },
     number: String(raw.number ?? ""),
     rarity: (raw.rarity as string) ?? undefined,
+    regulationMark: (raw.regulationMark as string) ?? undefined,
     legalities: (raw.legalities as TcgCard["legalities"]) ?? undefined
   };
 }
@@ -94,16 +108,18 @@ export async function fetchCardsByNames(names: string[], preferLegal = true): Pr
   const results = await Promise.allSettled(
     names.map(async (rawName) => {
       const resolved = resolveCardName(rawName);
-      const cards = await searchCards(resolved, preferLegal ? 10 : 1);
+      // Buscar múltiplas versões para poder filtrar pela regulation mark
+      const cards = await searchCards(resolved, 12);
+      if (cards.length === 0) return [];
 
-      if (!preferLegal || cards.length === 0) return cards.slice(0, 1);
+      if (!preferLegal) return cards.slice(0, 1);
 
-      // Preferir versão legal no Standard quando possível
-      const legal = cards.find(c => c.legalities?.standard === "Legal");
-      if (legal) return [legal];
+      // 1. Preferir versão com Regulation Mark Standard (H, I, J)
+      const legalByMark = cards.find(c => isStandardLegal(c));
+      if (legalByMark) return [legalByMark];
 
-      // Fallback: versão mais recente
-      return cards.slice(0, 1);
+      // 2. Nenhuma versão Standard encontrada → não sugerir essa carta
+      return [];
     })
   );
   return results
@@ -115,21 +131,20 @@ export async function fetchCardsByNames(names: string[], preferLegal = true): Pr
 // ── Buscar por função/categoria no Standard atual ─────────────────────────────
 // Usa a TCG API diretamente — sem hardcode de nomes
 
-// Regulation marks do Standard atual — mais confiável que legalities.standard
+// Standard 2026: H, I, J — filtro aplicado na query E no código
 const STD_MARKS = `(regulationMark:H OR regulationMark:I OR regulationMark:J)`;
 
 export async function searchStandardByFunction(
   fn: "DRAW" | "SEARCH" | "SWITCH" | "DISRUPTION" | "RECOVERY" | "ACCELERATION",
   limit = 8
 ): Promise<TcgCard[]> {
-  // Usar regulation mark como critério primário — é o mais atualizado na TCG API
   const queries: Record<string, string> = {
     DRAW:         `subtypes:Supporter ${STD_MARKS}`,
-    SEARCH:       `subtypes:Item text:"search your deck" ${STD_MARKS}`,
-    SWITCH:       `subtypes:Item (text:"Switch" OR text:"switch in") ${STD_MARKS}`,
-    DISRUPTION:   `subtypes:Supporter text:"opponent" ${STD_MARKS}`,
-    RECOVERY:     `subtypes:Item (text:"recover" OR text:"retrieve") ${STD_MARKS}`,
-    ACCELERATION: `subtypes:Item text:"attach" text:"Energy" ${STD_MARKS}`
+    SEARCH:       `(subtypes:Item OR subtypes:Supporter) text:"search your deck" ${STD_MARKS}`,
+    SWITCH:       `subtypes:Item text:"Switch" ${STD_MARKS}`,
+    DISRUPTION:   `subtypes:Supporter ${STD_MARKS}`,
+    RECOVERY:     `subtypes:Item (text:"recover" OR text:"from your discard") ${STD_MARKS}`,
+    ACCELERATION: `(subtypes:Item OR subtypes:Supporter) text:"attach" text:"Energy" ${STD_MARKS}`
   };
 
   const q = encodeURIComponent(queries[fn]);
@@ -139,7 +154,8 @@ export async function searchStandardByFunction(
     const res = await fetch(url, { headers: headers(), next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const json = await res.json() as { data: Record<string, unknown>[] };
-    return (json.data ?? []).map(mapCard);
+    // Duplo filtro: query por mark + verificação no código
+    return (json.data ?? []).map(mapCard).filter(isStandardLegal);
   } catch { return []; }
 }
 
@@ -155,7 +171,7 @@ export async function searchSimilarEffect(textKeyword: string, subtype?: string,
     const res = await fetch(url, { headers: headers(), next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const json = await res.json() as { data: Record<string, unknown>[] };
-    return (json.data ?? []).map(mapCard);
+    return (json.data ?? []).map(mapCard).filter(isStandardLegal);
   } catch { return []; }
 }
 

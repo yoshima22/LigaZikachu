@@ -91,66 +91,76 @@ function deduplicateCards(cards: TcgCard[]): TcgCard[] {
   });
 }
 
-async function findRelevantCards(message: string): Promise<TcgCard[]> {
-  const lower = message.toLowerCase();
+// Extrair contexto acumulado de toda a conversa
+function buildConversationContext(messages: ChatMessage[]): string {
+  // Últimas 6 mensagens do usuário para entender o tema
+  return messages
+    .filter(m => m.role === "user")
+    .slice(-6)
+    .map(m => m.content.toLowerCase())
+    .join(" ");
+}
+
+async function findRelevantCards(messages: ChatMessage[]): Promise<TcgCard[]> {
+  const lastMsg = messages[messages.length - 1]?.content ?? "";
+  const fullContext = buildConversationContext(messages);
   const allCards: TcgCard[] = [];
 
-  // 1. Cartas mencionadas explicitamente pelo nome
-  const mentioned = extractCardNames(message);
+  // 1. Cartas mencionadas explicitamente (com filtro Standard automático)
+  const mentioned = extractCardNames(lastMsg);
   if (mentioned.length > 0) {
     const namedCards = await fetchCardsByNames(mentioned, true);
+    // fetchCardsByNames já filtra por regulation mark — só retorna Standard-legais
     allCards.push(...namedCards);
   }
 
-  // 2. Busca dinâmica na TCG API por categoria — SEM hardcode de nomes
-  if (/compra|draw|roub|puxar|mão vazia|similar.*iono|alternativa.*iono|parecid.*iono/.test(lower)) {
-    // Buscar Supporters de draw legais no Standard via API
-    const drawCards = await searchStandardByFunction("DRAW", 6);
-    allCards.push(...drawCards);
+  // 2. Busca dinâmica por contexto acumulado da conversa
+  const ctx = fullContext; // inclui mensagens anteriores
+
+  const tasks: Promise<TcgCard[]>[] = [];
+
+  if (/compra|draw|roub|puxar|mão vazia|similar.*iono|alternativa.*iono|parecid.*iono|apoiador.*draw/.test(ctx)) {
+    tasks.push(searchStandardByFunction("DRAW", 8));
+  }
+  if (/busca|search|achar|encontrar|baralho|bola/.test(ctx)) {
+    tasks.push(searchStandardByFunction("SEARCH", 8));
+  }
+  if (/paralis|trava|disrupt|embaralha|mão adversário|bagunça/.test(ctx)) {
+    tasks.push(searchStandardByFunction("DISRUPTION", 6));
+    tasks.push(searchSimilarEffect("shuffle", "Supporter", 4));
+  }
+  if (/recuar|switch|fugir|recuo|mover/.test(ctx)) {
+    tasks.push(searchStandardByFunction("SWITCH", 6));
+  }
+  if (/energia|acelera|aceleração|attach energy/.test(ctx)) {
+    tasks.push(searchStandardByFunction("ACCELERATION", 6));
+  }
+  if (/recupera|ressurreição|cemitério|discard|recuperar/.test(ctx)) {
+    tasks.push(searchStandardByFunction("RECOVERY", 6));
   }
 
-  if (/busca|search|achar|encontrar|baralho/.test(lower)) {
-    const searchCards2 = await searchStandardByFunction("SEARCH", 6);
-    allCards.push(...searchCards2);
-  }
-
-  if (/paralis|trava|disrupt|embaralha|mão adversário/.test(lower)) {
-    const disruptCards = await searchStandardByFunction("DISRUPTION", 5);
-    allCards.push(...disruptCards);
-  }
-
-  if (/recuar|switch|fugir|recuo/.test(lower)) {
-    const switchCards = await searchStandardByFunction("SWITCH", 4);
-    allCards.push(...switchCards);
-  }
-
-  if (/energia|acelera|aceleração/.test(lower)) {
-    const accelCards = await searchStandardByFunction("ACCELERATION", 5);
-    allCards.push(...accelCards);
-  }
-
-  if (/recupera|ressurreição|cemitério|discard/.test(lower)) {
-    const recCards = await searchStandardByFunction("RECOVERY", 4);
-    allCards.push(...recCards);
-  }
-
-  // 3. Busca por texto de efeito específico mencionado
-  if (/embaralha|shuffle/.test(lower)) {
-    const shuffleCards = await searchSimilarEffect("shuffle", "Supporter", 4);
-    allCards.push(...shuffleCards);
-  }
-
-  if (allCards.length === 0) {
-    // Fallback: busca generic de cartas legais no Standard
-    const words = message.split(/\s+/).filter(w => w.length > 4 && !/^(que|como|para|isso|meu|minha|você|uma|um|com|não|mais|tem|quando|deck)$/i.test(w));
-    if (words.length > 0) {
-      const term = resolveCardName(words[0]);
-      const found = await searchCards(term, 4);
-      allCards.push(...found);
+  if (tasks.length > 0) {
+    const results = await Promise.allSettled(tasks);
+    for (const r of results) {
+      if (r.status === "fulfilled") allCards.push(...r.value);
     }
   }
 
-  return deduplicateCards(allCards).slice(0, 5);
+  // 3. Fallback: busca por palavras-chave significativas
+  if (allCards.length < 3) {
+    const words = lastMsg.split(/\s+/).filter(w =>
+      w.length > 4 &&
+      !/^(que|como|para|isso|meu|minha|você|uma|um|com|não|mais|tem|quando|deck|carta|seria)$/i.test(w)
+    );
+    for (const word of words.slice(0, 2)) {
+      const found = await searchCards(resolveCardName(word), 6);
+      // Filtrar por Standard antes de adicionar
+      allCards.push(...found.filter(isStandardLegal));
+    }
+  }
+
+  // Deduplicar e retornar até 6 cartas (Standard legais garantidas)
+  return deduplicateCards(allCards.filter(isStandardLegal)).slice(0, 6);
 }
 
 // ── Gerar resposta sem IA usando dados reais da carta ─────────────────────────
@@ -292,12 +302,15 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
     // 3. Filtrar apenas cartas Standard legais pela Regulation Mark
     const aiCards = rawAiCards.filter(isStandardLegal);
 
-    // 4. Se a IA não sugeriu (ou todas eram ilegais), usar busca dinâmica por contexto
-    const contextCards = aiCards.length === 0
-      ? await findRelevantCards(lastMsg)
+    // 4. Se a IA não sugeriu cards válidos, busca contextual com histórico completo
+    const contextCards = aiCards.length < 3
+      ? await findRelevantCards(messages)
       : [];
 
-    const finalCards = aiCards.length > 0 ? aiCards : contextCards;
+    // Mesclar: cartas da IA + contexto, sem repetir
+    const finalCards = deduplicateCards([...aiCards, ...contextCards])
+      .filter(isStandardLegal)
+      .slice(0, 6); // sempre pelo menos 5-6 cartas
 
     // 4. Fallback de mensagem se a IA falhou
     const message = aiMessage || buildSmartFallback(lastMsg, finalCards);
