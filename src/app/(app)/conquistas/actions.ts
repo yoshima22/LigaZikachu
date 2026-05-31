@@ -291,3 +291,17 @@ export async function getMyAchievements(): Promise<{
 function isAdmin(role: string) {
   return role === "ADMIN" || role === "SUPER_ADMIN";
 }
+
+// -- Vincular conquista a torneio --
+export async function linkAchievementToTournament(achievementId: string, tournamentId: string | null): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.achievement.update({ where: { id: achievementId }, data: { tournamentId: tournamentId ?? null } });
+    revalidatePath('/conquistas');
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : 'Erro' }; }
+}
+
+export async function getTournamentAchievements(tournamentId: string) {
+  return prisma.achievement.findMany({ where: { tournamentId, active: true }, include: { rewards: true, _count: { select: { playerAchievements: true } } }, orderBy: [{ rarity: 'asc' }, { name: 'asc' }] });
+}

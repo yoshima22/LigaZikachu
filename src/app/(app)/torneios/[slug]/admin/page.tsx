@@ -25,6 +25,7 @@ import {
   updateChallengeConfig
 } from "../desafios/actions";
 import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "../desafios/config";
+import { TournamentAchievementsPanel } from "./_components/tournament-achievements-panel";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -90,6 +91,16 @@ export default async function TournamentAdminPage({ params }: Props) {
   if (!canManage) notFound();
 
   const challengeConfig = parseChallengeConfig(tournament.challengeConfig ?? DEFAULT_CHALLENGE_CONFIG);
+
+  // Conquistas deste torneio e todas disponíveis para vincular
+  const [tournamentAchievements, allAchievements, registeredPlayers] = await Promise.all([
+    prisma.achievement.findMany({ where: { tournamentId: tournament.id, active: true }, include: { rewards: true } }),
+    prisma.achievement.findMany({ where: { active: true }, select: { id: true, name: true, rarity: true, tournamentId: true } }),
+    prisma.tournamentRegistration.findMany({
+      where: { tournamentId: tournament.id, status: "APPROVED" },
+      include: { player: { select: { id: true, displayName: true } } }
+    })
+  ]);
 
   const seasons = await prisma.season.findMany({
     orderBy: [{ startDate: "desc" }, { name: "asc" }],
@@ -658,6 +669,20 @@ export default async function TournamentAdminPage({ params }: Props) {
           </form>
         </CardContent>
       </Card>
+
+      {/* Conquistas do Torneio */}
+      <TournamentAchievementsPanel
+        tournamentId={tournament.id}
+        tournamentAchievements={tournamentAchievements.map(a => ({
+          id: a.id, name: a.name, rarity: (a as { rarity: string }).rarity ?? "COMMON",
+          rewardsCount: a.rewards.length
+        }))}
+        allAchievements={allAchievements.map(a => ({
+          id: a.id, name: a.name, rarity: a.rarity,
+          linkedToThisTournament: a.tournamentId === tournament.id
+        }))}
+        players={registeredPlayers.map(r => ({ id: r.player.id, displayName: r.player.displayName }))}
+      />
 
       {/* Inscritos */}
       <section className="space-y-3">

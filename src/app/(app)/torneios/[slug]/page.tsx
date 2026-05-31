@@ -66,6 +66,13 @@ export default async function TorneioDetailPage({
     })
   );
 
+  // Conquistas do torneio
+  const tournamentAchievements = await prisma.achievement.findMany({
+    where: { tournamentId: tournament.id, active: true },
+    select: { id: true, name: true, rarity: true, description: true, iconUrl: true, isSecret: true },
+    orderBy: [{ rarity: "asc" }, { name: "asc" }]
+  }).catch(() => []);
+
   // Insígnias do torneio
   const badges = await prisma.leagueBadge.findMany({
     where: { tournamentId: tournament.id },
@@ -290,6 +297,43 @@ export default async function TorneioDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Conquistas disponíveis no torneio */}
+      {tournamentAchievements.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="font-semibold text-slate-200 flex items-center gap-2">
+            <Trophy size={16} className="text-[#FFCB05]" />
+            Conquistas do Campeonato
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {tournamentAchievements.map(a => {
+              const rarityColor = ({
+                COMMON:"border-slate-600 text-slate-400", UNCOMMON:"border-[#7AC74C]/40 text-[#7AC74C]",
+                RARE:"border-[#6390F0]/40 text-[#6390F0]", EPIC:"border-[#735797]/50 text-[#735797]",
+                LEGENDARY:"border-[#FFCB05]/50 text-[#FFCB05]", SECRET:"border-slate-800 text-slate-600"
+              } as Record<string,string>)[a.rarity] ?? "border-border text-slate-400";
+              return (
+                <div key={a.id} className={`rounded-xl border bg-slate-950/60 p-3 ${rarityColor.split(" ")[0]}`}>
+                  <div className="flex items-start gap-2 mb-1">
+                    {a.iconUrl && <img src={a.iconUrl} alt="" className="h-6 w-6 object-contain shrink-0" />}
+                    <div>
+                      <p className={`text-sm font-semibold ${rarityColor.split(" ")[1]}`}>
+                        {a.isSecret ? "???" : a.name}
+                      </p>
+                      {!a.isSecret && a.description && (
+                        <p className="text-[11px] text-slate-400 mt-0.5">{a.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${rarityColor}`}>
+                    {a.rarity}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Insígnias do torneio */}
       {badges.length > 0 && (

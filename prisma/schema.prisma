@@ -254,6 +254,7 @@ model Tournament {
   badges                LeagueBadge[]
   challenges            Challenge[]        @relation("TournamentChallenges")
   coinTransactions      ZikaCoinTransaction[] @relation("ZkTxTournament")
+  achievements          Achievement[]      @relation("TournamentAchievements")
 
   @@map("tournaments")
 }
@@ -684,10 +685,12 @@ model Achievement {
   isSecret           Boolean             @default(false)
   isRepeatable       Boolean             @default(false)
   suggestedPoints    Int?
+  tournamentId       String?
   createdById        String
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   season             Season?             @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  tournament         Tournament?         @relation("TournamentAchievements", fields: [tournamentId], references: [id], onDelete: SetNull)
   createdBy          User                @relation("AchievementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   playerAchievements PlayerAchievement[]
   rewards            AchievementReward[]
