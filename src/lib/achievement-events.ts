@@ -96,8 +96,7 @@ async function unlockAchievement(
         achievementId,
         playerId,
         seasonId: seasonId ?? null,
-        progress,
-        source: "AUTOMATIC"
+        progress
       }
     });
 
