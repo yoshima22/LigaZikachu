@@ -1611,6 +1611,31 @@ export async function removePlayerRegistration(
   }
 }
 
+export async function deletePlayerRegistration(
+  tournamentId: string,
+  playerId: string
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const reg = await prisma.tournamentRegistration.findUnique({
+      where: { tournamentId_playerId: { tournamentId, playerId } }
+    });
+    if (!reg) return { error: "Inscrição não encontrada." };
+
+    await prisma.tournamentRegistration.delete({
+      where: { tournamentId_playerId: { tournamentId, playerId } }
+    });
+    const t = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { slug: true } });
+    await logAudit(actor.id, "tournamentRegistration", reg.id, "registration.deleted_by_admin",
+      { status: reg.status }, { deleted: true });
+    revalidatePath(`/torneios/${t?.slug}/admin`);
+    revalidatePath(`/torneios/${t?.slug}`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ─── Seed default weeks ──────────────────────────────────────────────────────
 
 const defaultWeekDefs = [

@@ -12,6 +12,7 @@ import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft } fr
 import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
+import { AdminResetPanel } from "./_components/admin-reset-panel";
 
 export default async function PlayerDetailPage({
   params
@@ -532,6 +533,10 @@ export default async function PlayerDetailPage({
           )}
         </div>
       </div>
+
+      {isAdminUser && (
+        <AdminResetPanel playerId={playerId} />
+      )}
     </div>
   );
 }

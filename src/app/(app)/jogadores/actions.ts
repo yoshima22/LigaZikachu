@@ -279,3 +279,40 @@ export async function removeFromSeasonAction(
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+export async function resetPlayerAlbum(playerId: string): Promise<{ error?: string }> {
+  try {
+    await getAdminActor();
+    await prisma.playerSticker.deleteMany({ where: { playerId } });
+    revalidatePath(`/jogadores/${playerId}`);
+    return {};
+  } catch (err) { return { error: String(err) }; }
+}
+
+export async function resetPlayerDecks(playerId: string): Promise<{ error?: string }> {
+  try {
+    await getAdminActor();
+    await prisma.savedDeck.deleteMany({ where: { playerId } });
+    revalidatePath(`/jogadores/${playerId}`);
+    return {};
+  } catch (err) { return { error: String(err) }; }
+}
+
+export async function resetPlayerAchievements(playerId: string): Promise<{ error?: string }> {
+  try {
+    await getAdminActor();
+    await prisma.playerAchievement.deleteMany({ where: { playerId } });
+    revalidatePath(`/jogadores/${playerId}`);
+    return {};
+  } catch (err) { return { error: String(err) }; }
+}
+
+export async function resetPlayerBadges(playerId: string): Promise<{ error?: string }> {
+  try {
+    await getAdminActor();
+    await prisma.playerBadge.deleteMany({ where: { playerId } });
+    revalidatePath(`/jogadores/${playerId}`);
+    return {};
+  } catch (err) { return { error: String(err) }; }
+}
+

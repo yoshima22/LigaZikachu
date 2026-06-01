@@ -14,7 +14,7 @@ import {
   publishTournament,
   removeTournamentWeek,
   reopenRegistrations,
-  removePlayerRegistration,
+  deletePlayerRegistration,
   startTournament,
   updateTournamentSeason,
   updateTournamentWeekSettings,
@@ -838,18 +838,16 @@ export default async function TournamentAdminPage({ params }: Props) {
                 >
                   {reg.status}
                 </span>
-                {(reg.status === "APPROVED" || reg.status === "PENDING") && (
-                  <form
-                    action={async () => {
-                      "use server";
-                      await removePlayerRegistration(tournament.id, reg.player.id);
-                    }}
-                  >
-                    <button type="submit" className="rounded-lg px-2 py-0.5 text-xs text-red-400 hover:bg-red-500/10">
-                      Remover
-                    </button>
-                  </form>
-                )}
+                <form
+                  action={async () => {
+                    "use server";
+                    await deletePlayerRegistration(tournament.id, reg.player.id);
+                  }}
+                >
+                  <button type="submit" className="rounded-lg px-2 py-0.5 text-xs text-red-400 hover:bg-red-500/10">
+                    Remover
+                  </button>
+                </form>
               </div>
             </div>
           ))}

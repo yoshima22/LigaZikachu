@@ -71,13 +71,14 @@ export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRan
 export async function computeSeasonRanking(seasonId: string): Promise<PlayerRankingEntry[]> {
   const [seasonPlayers, tournamentRegistrations] = await Promise.all([
     prisma.seasonPlayer.findMany({
-      where: { seasonId, isActive: true },
+      where: { seasonId, isActive: true, player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } },
       include: { player: { select: { id: true, displayName: true } } }
     }),
     prisma.tournamentRegistration.findMany({
       where: {
         status: "APPROVED",
-        tournament: { seasonId }
+        tournament: { seasonId },
+        player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }
       },
       include: { player: { select: { id: true, displayName: true } } }
     })
@@ -124,7 +125,11 @@ export async function computeTournamentRanking(
   tournamentId: string
 ): Promise<PlayerRankingEntry[]> {
   const registrations = await prisma.tournamentRegistration.findMany({
-    where: { tournamentId, status: "APPROVED" },
+    where: {
+      tournamentId,
+      status: "APPROVED",
+      player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }
+    },
     include: { player: { select: { id: true, displayName: true } } }
   });
 
