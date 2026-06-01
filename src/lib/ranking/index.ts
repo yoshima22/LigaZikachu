@@ -410,16 +410,19 @@ async function computeRankingFromMatches({
         playerB: { select: { displayName: true } }
       }
     }),
-    prisma.challenge.findMany({
-      where: challengeWhere ?? {},
-      select: {
-        challengerId: true,
-        challengedId: true,
-        status: true,
-        challenger: { select: { displayName: true } },
-        challenged: { select: { displayName: true } }
-      }
-    }),
+    // Se challengeWhere for undefined, pula a query (evita buscar TODOS os challenges)
+    challengeWhere === undefined
+      ? Promise.resolve([])
+      : prisma.challenge.findMany({
+          where: challengeWhere,
+          select: {
+            challengerId: true,
+            challengedId: true,
+            status: true,
+            challenger: { select: { displayName: true } },
+            challenged: { select: { displayName: true } }
+          }
+        }),
     badgeWhere === undefined
       ? Promise.resolve([])
       : prisma.playerBadge.findMany({
