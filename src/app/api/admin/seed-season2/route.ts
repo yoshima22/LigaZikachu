@@ -312,7 +312,21 @@ export async function GET() {
       });
       if (existing) {
         weekIdMap.set(w.num, existing.id);
-        log.push(`  - Semana ${w.num} já existe`);
+        // Para a Semana 8, sempre atualiza horários mesmo se já existir
+        if (w.num === 8) {
+          await prisma.tournamentWeek.update({
+            where: { id: existing.id },
+            data: {
+              status:     "OPEN",
+              lockAt:     new Date("2026-06-03T20:00:00-03:00"),
+              deckLockAt: new Date("2026-06-03T19:00:00-03:00"),
+              label:      w.label
+            }
+          });
+          log.push(`  ↻ Semana 8 atualizada (20h BRT início, 19h BRT deck lock)`);
+        } else {
+          log.push(`  - Semana ${w.num} já existe`);
+        }
       } else {
         // Semana 8 fica OPEN (acontece em 03/06/2026), demais CLOSED
       const weekStatus = w.num === 8 ? "OPEN" : "CLOSED";
