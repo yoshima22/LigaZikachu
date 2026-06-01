@@ -8,6 +8,19 @@ import { ShopItemType, ShopItemRarity, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 
+// ── Tabela de preços sugeridos por tipo + raridade ───────────────────────────
+// Fonte: definição interna da Liga Zikachu
+export const SUGGESTED_PRICES: Record<string, Record<string, number>> = {
+  TITLE:           { COMMON:   50, UNCOMMON:  120, RARE:   250, EPIC:   500, LEGENDARY: 1000 },
+  BANNER:          { COMMON:   80, UNCOMMON:  200, RARE:   400, EPIC:   800, LEGENDARY: 1500 },
+  FRAME:           { COMMON:  100, UNCOMMON:  250, RARE:   500, EPIC:  1000, LEGENDARY: 2000 },
+  ZIKALOOT_TICKET: { COMMON:  150, UNCOMMON:  150, RARE:   150, EPIC:   150, LEGENDARY:  150 },
+};
+
+export function getSuggestedPrice(type: string, rarity: string): number {
+  return SUGGESTED_PRICES[type]?.[rarity] ?? 100;
+}
+
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
 const createItemSchema = z.object({
@@ -82,6 +95,58 @@ export async function deleteShopItem(itemId: string): Promise<{ error?: string }
   try {
     await requireAdmin();
     await prisma.shopItem.delete({ where: { id: itemId } });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function reorderShopItem(
+  itemId: string,
+  direction: "up" | "down"
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const item = await prisma.shopItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, sortOrder: true, type: true }
+    });
+    if (!item) return { error: "Item não encontrado." };
+
+    // Busca o vizinho na mesma categoria na direção desejada
+    const neighbor = await prisma.shopItem.findFirst({
+      where: {
+        type: item.type,
+        sortOrder: direction === "up"
+          ? { lt: item.sortOrder }
+          : { gt: item.sortOrder }
+      },
+      orderBy: { sortOrder: direction === "up" ? "desc" : "asc" },
+      select: { id: true, sortOrder: true }
+    });
+
+    if (!neighbor) {
+      // Já está no extremo — normaliza os sortOrders do grupo
+      const all = await prisma.shopItem.findMany({
+        where: { type: item.type },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true }
+      });
+      await Promise.all(all.map((i, idx) =>
+        prisma.shopItem.update({ where: { id: i.id }, data: { sortOrder: idx * 10 } })
+      ));
+      revalidatePath("/shop/admin");
+      return {};
+    }
+
+    // Troca os sortOrders entre item e vizinho
+    await prisma.$transaction([
+      prisma.shopItem.update({ where: { id: item.id },     data: { sortOrder: neighbor.sortOrder } }),
+      prisma.shopItem.update({ where: { id: neighbor.id }, data: { sortOrder: item.sortOrder } }),
+    ]);
+
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
     return {};

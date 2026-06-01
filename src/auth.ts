@@ -122,10 +122,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async createUser({ user }) {
       const displayName = user.name?.trim() || user.email?.split("@")[0] || "Jogador";
 
-      await prisma.player.create({
+      const player = await prisma.player.create({
+        data: { userId: user.id!, displayName }
+      });
+
+      // Saldo inicial de 200 ZC para toda nova conta
+      const INITIAL_BALANCE = 200;
+      const wallet = await prisma.zikaCoinWallet.create({
+        data: { playerId: player.id, balance: INITIAL_BALANCE, totalEarned: INITIAL_BALANCE }
+      });
+      await prisma.zikaCoinTransaction.create({
         data: {
-          userId: user.id!,
-          displayName
+          walletId: wallet.id,
+          type: "ADMIN_ADJUSTMENT",
+          amount: INITIAL_BALANCE,
+          balanceBefore: 0,
+          balanceAfter: INITIAL_BALANCE,
+          description: "Saldo inicial de boas-vindas à Liga Zikachu"
         }
       });
     }

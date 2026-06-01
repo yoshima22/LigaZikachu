@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { Plus, Eye, EyeOff, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImageUpload } from "@/components/ui/image-upload";
-import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem } from "../../actions";
+import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem, getSuggestedPrice, SUGGESTED_PRICES } from "../../actions";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 const rarityOpts = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY"] as const;
 const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET"] as const;
@@ -289,13 +290,23 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
           className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
       </label>
       <label className="space-y-1 text-xs text-slate-400">
-        <span>Preço (ZC)</span>
+        <div className="flex items-center justify-between">
+          <span>Preço (ZC)</span>
+          <button type="button"
+            className="text-[10px] text-[#FFCB05] hover:underline"
+            onClick={() => setForm({ ...form, price: getSuggestedPrice(form.type, form.rarity) })}>
+            Sugerir ({getSuggestedPrice(form.type, form.rarity).toLocaleString("pt-BR")} ZC)
+          </button>
+        </div>
         <input type="number" min={1} value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
           className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
       </label>
       <label className="space-y-1 text-xs text-slate-400">
         <span>Raridade</span>
-        <select value={form.rarity} onChange={(e) => setForm({ ...form, rarity: e.target.value as typeof rarityOpts[number] })}
+        <select value={form.rarity} onChange={(e) => {
+          const newRarity = e.target.value as typeof rarityOpts[number];
+          setForm({ ...form, rarity: newRarity, price: getSuggestedPrice(form.type, newRarity) });
+        }}
           className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]">
           {rarityOpts.map((r) => <option key={r} value={r}>{rarityLabel[r]}</option>)}
         </select>
@@ -453,7 +464,16 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
                         </p>
                       </div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1">
+                      {/* Reordenar dentro da categoria */}
+                      <div className="flex flex-col">
+                        <button type="button" disabled={pending}
+                          onClick={() => startTransition(async () => { await reorderShopItem(item.id, "up"); })}
+                          className="rounded p-0.5 text-slate-600 hover:text-slate-300"><ChevronUp size={13} /></button>
+                        <button type="button" disabled={pending}
+                          onClick={() => startTransition(async () => { await reorderShopItem(item.id, "down"); })}
+                          className="rounded p-0.5 text-slate-600 hover:text-slate-300"><ChevronDown size={13} /></button>
+                      </div>
                       <button type="button" disabled={pending}
                         onClick={() => { setEditingId(item.id); setEditForm(itemToForm(item)); }}
                         className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200"><Pencil size={14} /></button>

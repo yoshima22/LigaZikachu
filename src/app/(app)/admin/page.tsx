@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GlobalResetPanel } from "./_components/global-reset-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -203,6 +204,8 @@ export default async function AdminPage() {
           </ul>
         )}
       </Card>
+
+      <GlobalResetPanel />
     </div>
   );
 }
