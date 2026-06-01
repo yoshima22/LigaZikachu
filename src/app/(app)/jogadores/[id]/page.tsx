@@ -76,7 +76,7 @@ export default async function PlayerDetailPage({
         tournamentWeek: { tournament: { status: { not: "DRAFT" } } }
       },
       orderBy: { playedAt: "desc" },
-      take: 5,
+      take: 10,
       include: {
         playerA: { select: { id: true, displayName: true } },
         playerB: { select: { id: true, displayName: true } },
@@ -363,10 +363,14 @@ export default async function PlayerDetailPage({
                 const opp = isA ? match.playerB : match.playerA;
                 const won = match.winnerPlayerId === playerId;
                 const lost = match.loserPlayerId === playerId;
-                return (
-                  <li key={match.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                    <div>
-                      <span className="text-white">
+                const matchHref = match.tournamentWeek?.tournament?.slug && match.tournamentWeek?.weekNumber
+                  ? `/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`
+                  : null;
+                const prizes = won ? match.winnerDefendedPrizes : null;
+                const inner = (
+                  <li key={match.id} className={`flex items-center justify-between gap-3 py-3 text-sm ${matchHref ? "cursor-pointer hover:bg-slate-800/40 rounded-lg px-2 -mx-2 transition-colors" : ""}`}>
+                    <div className="min-w-0">
+                      <span className="text-white font-medium">
                         vs {opp?.displayName ?? "BYE"}
                       </span>
                       {match.tournamentWeek && (
@@ -375,13 +379,26 @@ export default async function PlayerDetailPage({
                           {match.tournamentWeek.tournament && ` · ${match.tournamentWeek.tournament.name}`}
                         </span>
                       )}
+                      {match.playedAt && (
+                        <span className="ml-2 text-xs text-slate-600">
+                          {new Date(match.playedAt).toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit" })}
+                        </span>
+                      )}
                     </div>
-                    <StatusBadge
-                      variant={won ? "success" : lost ? "danger" : "info"}
-                      label={won ? "Vitória" : lost ? "Derrota" : "Empate"}
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      {prizes != null && prizes > 0 && (
+                        <span className="text-xs text-slate-500">{prizes} prêmios</span>
+                      )}
+                      <StatusBadge
+                        variant={won ? "success" : lost ? "danger" : "info"}
+                        label={won ? "Vitória" : lost ? "Derrota" : "Empate"}
+                      />
+                    </div>
                   </li>
                 );
+                return matchHref
+                  ? <Link key={match.id} href={matchHref}>{inner}</Link>
+                  : inner;
               })}
             </ul>
           )}

@@ -414,6 +414,46 @@ export async function GET() {
     }
 
     log.push(`✓ ${matchesCreated} partidas criadas, ${matchesSkipped} ignoradas`);
+
+    // ── 8. Aplicar bônus manuais via bonusRule nas semanas ───────────────────
+    //
+    // Semana 4 — bônus de Duplas (Rodrigo+Alan = equipe vencedora)
+    // Semana 7 — bônus extras gerais de campeonato (pontos finais da planilha)
+    // Penalidades de ginásio NÃO incluídas aqui — serão cobertas pelos
+    // registros de desafio quando forem criados.
+
+    const DUPLAS_BONUSES = [
+      { name:"Rodrigo", points:3, reason:"Equipe vencedora Semana 4 (Duplas)" },
+      { name:"Alan",    points:3, reason:"Equipe vencedora Semana 4 (Duplas)" },
+    ];
+    const EXTRAS_BONUSES = [
+      { name:"Rodrigo",  points:4, reason:"Bônus manual final de campeonato" },
+      { name:"Erick",    points:4, reason:"Bônus manual final de campeonato" },
+      { name:"Luiz",     points:6, reason:"Bônus manual final de campeonato" },
+      { name:"Moises",   points:4, reason:"Bônus manual final de campeonato" },
+      { name:"Nakaima",  points:2, reason:"Bônus manual final de campeonato" },
+      { name:"Cristian", points:2, reason:"Bônus manual final de campeonato" },
+    ];
+
+    const applyBonusToWeek = async (weekNum: number, bonuses: typeof DUPLAS_BONUSES) => {
+      const weekId = weekIdMap.get(weekNum);
+      if (!weekId) return;
+      const week = await prisma.tournamentWeek.findUnique({ where: { id: weekId }, select: { bonusRule: true } });
+      const existing = (week?.bonusRule && typeof week.bonusRule === "object" && !Array.isArray(week.bonusRule))
+        ? (week.bonusRule as Record<string, unknown>)
+        : {};
+      const existingBonuses = Array.isArray(existing.manualBonuses) ? existing.manualBonuses as Record<string, unknown>[] : [];
+      const newBonuses = bonuses
+        .map(b => ({ playerId: playerMap.get(b.name), playerName: b.name, points: b.points, reason: b.reason }))
+        .filter(b => b.playerId);
+      // Evitar duplicatas pelo reason
+      const merged = [...existingBonuses.filter(e => !newBonuses.some(n => n.playerName === e.playerName && n.reason === e.reason)), ...newBonuses];
+      await prisma.tournamentWeek.update({ where: { id: weekId }, data: { bonusRule: { ...existing, manualBonuses: merged } } });
+    };
+
+    await applyBonusToWeek(4, DUPLAS_BONUSES);
+    await applyBonusToWeek(7, EXTRAS_BONUSES);
+    log.push(`✓ Bônus manuais aplicados (Semana 4: duplas +3/+3 | Semana 7: extras finais)`);
     log.push(`\n🎉 Importação da 2ª Edição concluída!`);
     log.push(`📌 Torneio: /torneios/segunda-edicao`);
     log.push(`📌 Conquistas: /conquistas`);
