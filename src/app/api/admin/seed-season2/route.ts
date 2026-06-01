@@ -325,8 +325,9 @@ export async function GET() {
             status: weekStatus,
             startDate: new Date(w.start),
             endDate: new Date(w.end),
-            // Semana 8 ocorre às 19h BRT
-            lockAt: w.num === 8 ? new Date("2026-06-03T19:00:00-03:00") : undefined
+            // Semana 8: partidas às 20h BRT, envio de decks até 19h BRT
+            lockAt:     w.num === 8 ? new Date("2026-06-03T20:00:00-03:00") : undefined,
+            deckLockAt: w.num === 8 ? new Date("2026-06-03T19:00:00-03:00") : undefined
           }
         });
         weekIdMap.set(w.num, week.id);
@@ -377,7 +378,7 @@ export async function GET() {
             bestOf: 1,
             status: "PENDING_CONFIRMATION",
             resultSource: "MANUAL",
-            scheduledAt: new Date(`${m.date}T19:00:00-03:00`),
+            scheduledAt: new Date(`${m.date}T20:00:00-03:00`),
             createdById: adminUser.id
           }
         });

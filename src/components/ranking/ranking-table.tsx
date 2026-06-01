@@ -6,50 +6,81 @@ interface RankingTableProps {
 }
 
 export function RankingTable({ ranking, compact = false }: RankingTableProps) {
-  const cell = compact ? "py-2 pr-4" : "px-5 py-3";
+  if (ranking.length === 0) return null;
+
+  // Colunas visiveis: removidos BYE e Saldo para caber na tela
+  const cols = [
+    { label: "#",           key: "position",             color: "text-[#FFCB05] font-bold" },
+    { label: "Jogador",      key: "displayName",          color: "text-white font-medium text-left" },
+    { label: "Pts",          key: "points",               color: "text-white font-bold" },
+    { label: "Insígnias",    key: "badgesOwned",          color: "text-[#FFCB05]" },
+    { label: "Pts Insígnia", key: "badgePoints",          color: "text-[#FFCB05]" },
+    { label: "V",            key: "wins",                 color: "text-emerald-400 font-semibold" },
+    { label: "E",            key: "draws",                color: "text-slate-400" },
+    { label: "D",            key: "losses",               color: "text-red-400" },
+    { label: "J",            key: "matchesPlayed",        color: "text-slate-300" },
+    { label: "Prêmios",      key: "defendedPrizes",       color: "text-slate-300" },
+    { label: "Desafios",     key: "gymChallenges",        color: "text-slate-300" },
+    { label: "✓ Desafios",   key: "successfulChallenges", color: "text-emerald-400" },
+    { label: "Def. Gin.",    key: "defendedChallenges",   color: "text-slate-300" },
+    { label: "✗ Desafios",   key: "failedChallenges",     color: "text-red-400" },
+  ] as const;
+
+  type ColKey = typeof cols[number]["key"];
+
+  const val = (entry: PlayerRankingEntry, key: ColKey): string | number =>
+    key === "displayName" ? entry.displayName : entry[key as keyof PlayerRankingEntry] as number;
+
+  const th = compact
+    ? "px-1.5 py-1.5 text-center text-[9px] uppercase tracking-wide text-slate-500 whitespace-nowrap font-semibold"
+    : "px-2 py-2 text-center text-[10px] uppercase tracking-wide text-slate-500 whitespace-nowrap font-semibold";
+
+  const td = compact
+    ? "px-1.5 py-1.5 text-center text-[10px] whitespace-nowrap"
+    : "px-2 py-2.5 text-center text-xs whitespace-nowrap";
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-border text-sm">
-        <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-widest text-slate-500">
+    <div className="w-full rounded-xl border border-border bg-slate-950/60">
+      <table className="w-full table-fixed divide-y divide-border">
+        <colgroup>
+          <col className="w-8" />       {/* # */}
+          <col className="w-24" />      {/* Jogador */}
+          <col className="w-10" />      {/* Pts */}
+          <col className="w-14" />      {/* Insígnias */}
+          <col className="w-16" />      {/* Pts Insígnia */}
+          <col className="w-8" />       {/* V */}
+          <col className="w-8" />       {/* E */}
+          <col className="w-8" />       {/* D */}
+          <col className="w-8" />       {/* J */}
+          <col className="w-14" />      {/* Prêmios */}
+          <col className="w-14" />      {/* Desafios */}
+          <col className="w-14" />      {/* ✓ */}
+          <col className="w-14" />      {/* Def */}
+          <col className="w-14" />      {/* ✗ */}
+        </colgroup>
+        <thead className="bg-slate-900/80">
           <tr>
-            <th className={cell}>#</th>
-            <th className={cell}>Jogador</th>
-            <th className={cell}>Pts</th>
-            <th className={cell}>Insignias</th>
-            <th className={cell}>Pts Insignia</th>
-            <th className={cell}>V</th>
-            <th className={cell}>E</th>
-            <th className={cell}>D</th>
-            <th className={cell}>Partidas</th>
-            <th className={cell}>Premios Defendidos</th>
-            <th className={cell}>Desafios de Ginasio</th>
-            <th className={cell}>Desafios Bem Sucedidos</th>
-            <th className={cell}>Desafios Defendidos</th>
-            <th className={cell}>Desafios Perdidos</th>
-            <th className={cell}>BYE</th>
-            <th className={cell}>Saldo</th>
+            {cols.map(c => (
+              <th key={c.key} className={`${th} ${c.key === "displayName" ? "text-left pl-3" : ""}`}>
+                {c.label}
+              </th>
+            ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
-          {ranking.map((entry) => (
-            <tr key={entry.playerId}>
-              <td className={`${cell} font-semibold text-[#FFCB05]`}>#{entry.position}</td>
-              <td className={`${cell} font-medium text-white`}>{entry.displayName}</td>
-              <td className={`${cell} text-white`}>{entry.points}</td>
-              <td className={`${cell} text-[#FFCB05]`}>{entry.badgesOwned}</td>
-              <td className={`${cell} text-[#FFCB05]`}>{entry.badgePoints}</td>
-              <td className={`${cell} text-emerald-400`}>{entry.wins}</td>
-              <td className={`${cell} text-slate-300`}>{entry.draws}</td>
-              <td className={`${cell} text-red-400`}>{entry.losses}</td>
-              <td className={`${cell} text-slate-300`}>{entry.matchesPlayed}</td>
-              <td className={`${cell} text-slate-300`}>{entry.defendedPrizes}</td>
-              <td className={`${cell} text-slate-300`}>{entry.gymChallenges}</td>
-              <td className={`${cell} text-emerald-400`}>{entry.successfulChallenges}</td>
-              <td className={`${cell} text-slate-300`}>{entry.defendedChallenges}</td>
-              <td className={`${cell} text-red-400`}>{entry.failedChallenges}</td>
-              <td className={`${cell} text-slate-300`}>{entry.byeCount}</td>
-              <td className={`${cell} text-slate-300`}>{entry.gameDiff}</td>
+        <tbody className="divide-y divide-border/50">
+          {ranking.map((entry, i) => (
+            <tr
+              key={entry.playerId}
+              className={`transition-colors hover:bg-slate-800/30 ${i === 0 ? "bg-[#FFCB05]/5" : ""}`}
+            >
+              {cols.map(c => (
+                <td
+                  key={c.key}
+                  className={`${td} ${c.color} ${c.key === "displayName" ? "text-left pl-3 truncate" : ""}`}
+                >
+                  {c.key === "position" ? `#${entry.position}` : val(entry, c.key)}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>

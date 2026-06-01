@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { auth } from "@/auth";
 import Link from "next/link";
-import { Award, Lock, Plus, Star, Trophy, Zap } from "lucide-react";
+import { Award, Lock, Plus, Star, Trophy, Zap, Filter } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AchievementsAdminPanel } from "./_components/achievements-admin-panel";
 import { RewardManager } from "./_components/reward-manager";
@@ -30,9 +30,16 @@ const categoryIcons: Record<string, React.ReactNode> = {
   SPECIAL:    <Award size={14} />
 };
 
-export default async function ConquistasPage() {
+export default async function ConquistasPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ scope?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) return null;
+
+  const sp = searchParams ? await searchParams : {};
+  const scope = sp.scope ?? "all"; // "all" | "tournament" | "system"
 
   const adminUser = isAdmin(session.user.role);
 
@@ -70,13 +77,20 @@ export default async function ConquistasPage() {
 
   const myAchievementIds = new Set(myAchievements.map(a => a.achievementId));
 
+  // Filtro por escopo: torneio vs sistema
+  const filteredAchievements = achievements.filter(a => {
+    if (scope === "tournament") return !!a.tournamentId || a.category === "TOURNAMENT";
+    if (scope === "system")     return !a.tournamentId && a.category !== "TOURNAMENT";
+    return true; // "all"
+  });
+
   const grouped = {
-    TOURNAMENT: achievements.filter(a => a.category === "TOURNAMENT"),
-    COLLECTION: achievements.filter(a => a.category === "COLLECTION"),
-    SOCIAL:     achievements.filter(a => a.category === "SOCIAL"),
-    ENGAGEMENT: achievements.filter(a => a.category === "ENGAGEMENT"),
-    COSMETIC:   achievements.filter(a => a.category === "COSMETIC"),
-    SPECIAL:    achievements.filter(a => a.category === "SPECIAL"),
+    TOURNAMENT: filteredAchievements.filter(a => a.category === "TOURNAMENT"),
+    COLLECTION: filteredAchievements.filter(a => a.category === "COLLECTION"),
+    SOCIAL:     filteredAchievements.filter(a => a.category === "SOCIAL"),
+    ENGAGEMENT: filteredAchievements.filter(a => a.category === "ENGAGEMENT"),
+    COSMETIC:   filteredAchievements.filter(a => a.category === "COSMETIC"),
+    SPECIAL:    filteredAchievements.filter(a => a.category === "SPECIAL"),
   };
 
   return (
@@ -152,6 +166,31 @@ export default async function ConquistasPage() {
           />
         </>
       )}
+
+      {/* Filtros de escopo */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1 text-xs text-slate-500">
+          <Filter size={12} /> Filtrar:
+        </span>
+        {[
+          { key: "all",        label: `Todas (${achievements.filter(a=>a.active).length})` },
+          { key: "tournament", label: `🏆 Torneio (${achievements.filter(a => !!a.tournamentId || a.category === "TOURNAMENT").length})` },
+          { key: "system",     label: `⚙ Sistema (${achievements.filter(a => !a.tournamentId && a.category !== "TOURNAMENT").length})` },
+        ].map(opt => (
+          <Link
+            key={opt.key}
+            href={opt.key === "all" ? "/conquistas" : `/conquistas?scope=${opt.key}`}
+            className={[
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              scope === opt.key
+                ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 text-[#FFCB05]"
+                : "border-border bg-slate-900/60 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+            ].join(" ")}
+          >
+            {opt.label}
+          </Link>
+        ))}
+      </div>
 
       {/* Conquistas por categoria */}
       {Object.entries(grouped).map(([cat, items]) => {

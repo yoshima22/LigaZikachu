@@ -14,6 +14,8 @@ const rarityColors: Record<string, string> = {
   SECRET:    "border-slate-700 bg-slate-900/50"
 };
 
+const MAX_HIGHLIGHT = 10;
+
 interface Props {
   achievements: Array<{
     id: string;
@@ -30,6 +32,8 @@ export function MyAchievementsPanel({ achievements }: Props) {
 
   const highlighted = achievements.filter(a => a.isHighlighted);
   const rest = achievements.filter(a => !a.isHighlighted);
+  // "Mais X outras" — quantas além das 10 exibidas no destaque do perfil
+  const extraCount = achievements.length - highlighted.length - rest.length; // zero aqui, usado no perfil público
 
   const toggle = (id: string, current: boolean) => {
     startTransition(async () => {
@@ -43,18 +47,19 @@ export function MyAchievementsPanel({ achievements }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Vitrine — até 3 em destaque */}
+      {/* Vitrine — até 10 em destaque */}
       {highlighted.length > 0 && (
         <div>
           <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-            <Star size={12} className="text-[#FFCB05]" /> Em destaque no perfil ({highlighted.length}/3)
+            <Star size={12} className="text-[#FFCB05]" />
+            Em destaque no perfil ({highlighted.length}/{MAX_HIGHLIGHT})
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {highlighted.map(a => (
               <div key={a.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${rarityColors[a.rarity]}`}>
                 {a.iconUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.iconUrl} alt={a.name} className="h-6 w-6 object-contain" />
+                  <img src={a.iconUrl} alt={a.name} className="h-5 w-5 object-contain" />
                 )}
                 <span className="text-sm font-semibold text-slate-200">{a.name}</span>
                 <button type="button" disabled={pending} onClick={() => toggle(a.id, true)}
@@ -63,6 +68,12 @@ export function MyAchievementsPanel({ achievements }: Props) {
                 </button>
               </div>
             ))}
+            {/* Mais X outras — se tiver mais conquistas além das destacadas */}
+            {rest.length > 0 && (
+              <div className="flex items-center rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+                +{rest.length} outra{rest.length !== 1 ? "s" : ""}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -85,9 +96,9 @@ export function MyAchievementsPanel({ achievements }: Props) {
                   {new Date(a.unlockedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                 </p>
               </div>
-              {!a.isHighlighted && highlighted.length < 3 && (
+              {!a.isHighlighted && highlighted.length < MAX_HIGHLIGHT && (
                 <button type="button" disabled={pending} onClick={() => toggle(a.id, false)}
-                  title="Adicionar ao destaque"
+                  title={`Adicionar ao destaque (${highlighted.length}/${MAX_HIGHLIGHT})`}
                   className="shrink-0 text-slate-600 hover:text-[#FFCB05] transition-colors">
                   <Star size={14} />
                 </button>
@@ -99,7 +110,7 @@ export function MyAchievementsPanel({ achievements }: Props) {
           ))}
         </div>
         <p className="mt-2 text-[10px] text-slate-600">
-          Clique ⭐ para destacar até 3 conquistas no seu perfil público.
+          Clique ⭐ para destacar até {MAX_HIGHLIGHT} conquistas no seu perfil público.
         </p>
       </div>
     </div>

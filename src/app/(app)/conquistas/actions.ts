@@ -235,7 +235,7 @@ export async function toggleHighlightAchievement(
       const count = await prisma.playerAchievement.count({
         where: { playerId: pa.playerId, isHighlighted: true }
       });
-      if (count >= 3) return { error: "Máximo de 3 conquistas em destaque." };
+      if (count >= 10) return { error: "Máximo de 10 conquistas em destaque." };
     }
 
     await prisma.playerAchievement.update({
