@@ -81,6 +81,11 @@ export async function GET() {
       return badge?.id ?? null;
     };
 
+    // ── Limpar todos os desafios existentes do torneio antes de recriar ─────────
+    // Garante que rodar o seed múltiplas vezes não cria duplicatas.
+    const deleted = await prisma.challenge.deleteMany({ where: { tournamentId: tournament.id } });
+    log.push(`✓ ${deleted.count} desafios anteriores removidos`);
+
     // ── Desafios confirmados ───────────────────────────────────────────────────
     // status REJECTED = desafiante perdeu (-2pts para o desafiante)
     // status ACCEPTED = desafiante venceu (ganhou a insígnia do defensor)
@@ -122,25 +127,13 @@ export async function GET() {
         status: "ACCEPTED", notes: "Rodrigo desafiou Erick (Pedra) — Rodrigo venceu e conquistou a insígnia" },
     ];
 
-    let created = 0, skipped = 0;
+    let created = 0;
 
     for (const ch of CHALLENGES) {
       if (!ch.tournamentWeekId) {
-        log.push(`  ⚠ Semana não encontrada para um desafio — ignorado`);
-        skipped++;
+        log.push(`  ⚠ Semana não encontrada — ignorado`);
         continue;
       }
-
-      // Idempotente: checar se já existe Challenge entre esses dois nessa semana
-      const existing = await prisma.challenge.findFirst({
-        where: {
-          tournamentId: tournament.id,
-          tournamentWeekId: ch.tournamentWeekId,
-          challengerId: ch.challengerId,
-          challengedId: ch.challengedId,
-        }
-      });
-      if (existing) { skipped++; continue; }
 
       await prisma.challenge.create({
         data: {
@@ -162,7 +155,7 @@ export async function GET() {
       log.push(`  ✓ ${ch.status === "ACCEPTED" ? "⚔️ Vitória" : "🛡️ Derrota"}: ${ch.notes}`);
     }
 
-    log.push(`✓ ${created} desafios criados, ${skipped} ignorados`);
+    log.push(`✓ ${created} desafios criados`);
 
     // ── Remover penalidades manuais de ginásio da Semana 1 ───────────────────
     // Essas entradas foram adicionadas como medida temporária pelo seed principal.

@@ -248,8 +248,18 @@ export async function computeTournamentRanking(
     }
   }
 
+  // Remove admins do resultado final (garante exclusão mesmo que apareçam via matches ou challenges)
+  const adminPlayerIds = new Set(
+    (await prisma.player.findMany({
+      where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } },
+      select: { id: true }
+    })).map(p => p.id)
+  );
+
+  const finalEntries = entries.filter(e => !adminPlayerIds.has(e.playerId));
+
   // Re-ordena após todos os bônus
-  entries.sort(
+  finalEntries.sort(
     (a, b) =>
       b.points - a.points ||
       b.wins - a.wins ||
@@ -259,9 +269,9 @@ export async function computeTournamentRanking(
       a.byeCount - b.byeCount ||
       a.displayName.localeCompare(b.displayName, "pt-BR")
   );
-  entries.forEach((e, i) => { e.position = i + 1; });
+  finalEntries.forEach((e, i) => { e.position = i + 1; });
 
-  return entries;
+  return finalEntries;
 }
 
 export async function computeWeeklyRanking(
