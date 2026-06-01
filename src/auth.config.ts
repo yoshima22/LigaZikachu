@@ -25,10 +25,18 @@ const authConfig = {
 
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = Boolean(auth?.user);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const role = (auth?.user as any)?.role as string | undefined;
 
-      const isAdminRoute    = nextUrl.pathname.startsWith("/admin");
+      // Lê role tanto de session.user (pós-session callback) quanto do token raw
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const u = auth?.user as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const t = (auth as any)?.token ?? (auth as any);
+      const role: string | undefined =
+        u?.role ??           // session callback propagou
+        t?.role ??           // fallback no token raw
+        undefined;
+
+      const isAdminRoute = nextUrl.pathname.startsWith("/admin");
       const isProtectedRoute =
         nextUrl.pathname.startsWith("/dashboard") ||
         nextUrl.pathname.startsWith("/jogadores") ||
@@ -38,12 +46,15 @@ const authConfig = {
         isAdminRoute;
 
       if (isAdminRoute) {
+        // Se logado mas sem role na sessão → redireciona para refresh de sessão
+        // para forçar re-login com token atualizado
+        if (isLoggedIn && !role) {
+          return Response.redirect(new URL("/api/auth/signout-redirect", nextUrl));
+        }
         return Boolean(role && adminRoles.has(role));
       }
 
-      if (isProtectedRoute) {
-        return isLoggedIn;
-      }
+      if (isProtectedRoute) return isLoggedIn;
 
       return true;
     }

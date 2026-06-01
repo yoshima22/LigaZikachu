@@ -186,13 +186,14 @@ export default async function PlayerDetailPage({
         return (
           <div data-tutorial="profile-avatar" className="relative rounded-2xl border border-border bg-slate-950">
 
-            {/* ── Banner (overflow-hidden clipa só a imagem) ── */}
-            {/* aspect-ratio: 4/1 preserva a proporção 1200×300 sem cortar */}
-            {/* min-h garante altura mínima quando não há banner ou em telas muito estreitas */}
+            {/* ── Banner ── */}
+            {/* No mobile usa altura fixa (180px). Em telas maiores usa aspect-ratio 4:1.
+                clamp garante mínimo de 180px e máximo de 280px em qualquer tela. */}
             <div className="relative overflow-hidden rounded-2xl"
               style={{
-                aspectRatio: equippedBanner?.item.imageUrl ? "4 / 1" : undefined,
-                minHeight: 160,
+                height: equippedBanner?.item.imageUrl
+                  ? "clamp(180px, 25vw, 280px)"
+                  : 160,
               }}>
               {equippedBanner?.item.imageUrl ? (
                 <>
