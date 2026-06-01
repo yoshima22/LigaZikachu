@@ -174,8 +174,22 @@ model User {
   fcmTokens                UserFcmToken[]
   createdShopItems         ShopItem[]           @relation("ShopItemCreatedBy")
   createdZikaLoots         ZikaLoot[]           @relation("ZikaLootCreatedBy")
+  tutorialProgress         UserTutorialProgress[]
 
   @@map("users")
+}
+
+model UserTutorialProgress {
+  id          String    @id @default(cuid())
+  userId      String
+  pageId      String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pageId])
+  @@map("user_tutorial_progress")
 }
 
 model Player {

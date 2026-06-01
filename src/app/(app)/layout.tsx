@@ -10,6 +10,7 @@ import { Toaster } from "sonner";
 import { AppNav } from "./_components/app-nav";
 import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
 import { AchievementNotifier } from "@/components/achievement-notifier";
+import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
   const session = await auth();
@@ -94,6 +95,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
         <FcmTokenRegistrar />
         <AchievementNotifier />
+        {!admin && <WelcomeTutorial />}
       </div>
     </>
   );

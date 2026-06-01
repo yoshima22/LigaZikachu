@@ -162,7 +162,7 @@ export default async function PlayerDetailPage({
       </Link>
 
       {/* Header — Banner + card compacto de identidade */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-slate-950">
+      <div data-tutorial="profile-avatar" className="overflow-hidden rounded-2xl border border-border bg-slate-950">
         {/* Banner */}
         {equippedBanner?.item.imageUrl ? (
           <div className="relative h-32 w-full overflow-hidden">
@@ -291,7 +291,7 @@ export default async function PlayerDetailPage({
 
       {/* Decks Públicos — apenas nome + tipos, clicáveis para ver a lista */}
       {publicDecks.length > 0 && (
-        <Card>
+        <Card data-tutorial="profile-decks">
           <div className="mb-4 flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <BookOpen size={18} className="text-primary" /> Meus Decks
@@ -335,7 +335,7 @@ export default async function PlayerDetailPage({
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Histórico de partidas */}
-        <Card>
+        <Card data-tutorial="profile-matches">
           <CardTitle className="mb-4 flex items-center gap-2">
             <Swords size={18} className="text-primary" /> Últimas partidas
           </CardTitle>
@@ -479,7 +479,7 @@ export default async function PlayerDetailPage({
 
           {/* Conquistas — max 10 destacadas + "E X Outras" */}
           {(highlightedAchievements.length > 0 || player.playerAchievements.length > 0) && (
-            <Card>
+            <Card data-tutorial="profile-achievements">
               <CardTitle className="mb-4 flex items-center gap-2">
                 <Trophy size={18} className="text-primary" /> Conquistas
               </CardTitle>

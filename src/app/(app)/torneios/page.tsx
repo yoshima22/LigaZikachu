@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, Trophy } from "lucide-react";
 import type { TournamentStatus } from "@prisma/client";
+import { TutorialManager } from "@/components/tutorial/tutorial-manager";
+import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 
 const STATUS_FILTER_LABELS: Record<string, string> = {
   ALL:               "Todos",
@@ -58,6 +60,7 @@ export default async function TourneiosPage({
 
   return (
     <div className="space-y-6">
+      <TutorialManager pageId="torneios" isAdmin={admin} />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -72,16 +75,19 @@ export default async function TourneiosPage({
             {tournaments.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/torneios/novo">
-            <Plus size={16} className="mr-1" />
-            Novo Torneio
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {!admin && <TutorialHelpButton pageId="torneios" />}
+          <Button asChild>
+            <Link href="/torneios/novo">
+              <Plus size={16} className="mr-1" />
+              Novo Torneio
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filtros de status */}
-      <div className="flex flex-wrap gap-2">
+      <div data-tutorial="tournament-filters" className="flex flex-wrap gap-2">
         {statusFilterEntries.map(([key, label]) => {
           const active = (statusFilter ?? "ALL") === key;
           return (
@@ -102,34 +108,36 @@ export default async function TourneiosPage({
       </div>
 
       {/* Grid de torneios */}
-      {tournaments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-slate-900/40 py-20 text-center">
-          <Trophy size={40} className="mb-4 text-slate-600" />
-          <p className="text-base font-semibold text-slate-400">Nenhum torneio encontrado</p>
-          <p className="mt-1 text-sm text-slate-500">
-            {admin ? "Crie o primeiro torneio clicando no botão acima." : "Aguarde o início do próximo torneio."}
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tournaments.map((t) => (
-            <TournamentCard
-              key={t.id}
-              name={t.name}
-              code={t.code}
-              edition={t.edition}
-              description={t.description}
-              status={t.status}
-              slug={t.slug}
-              playerCount={t._count.registrations}
-              maxPlayers={t.maxPlayers}
-              startDate={t.startDate}
-              endDate={t.endDate}
-              bannerColor={BANNER_COLORS[t.status] ?? "#735797"}
-            />
-          ))}
-        </div>
-      )}
+      <div data-tutorial="tournament-list">
+        {tournaments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-slate-900/40 py-20 text-center">
+            <Trophy size={40} className="mb-4 text-slate-600" />
+            <p className="text-base font-semibold text-slate-400">Nenhum torneio encontrado</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {admin ? "Crie o primeiro torneio clicando no botão acima." : "Aguarde o início do próximo torneio."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {tournaments.map((t) => (
+              <TournamentCard
+                key={t.id}
+                name={t.name}
+                code={t.code}
+                edition={t.edition}
+                description={t.description}
+                status={t.status}
+                slug={t.slug}
+                playerCount={t._count.registrations}
+                maxPlayers={t.maxPlayers}
+                startDate={t.startDate}
+                endDate={t.endDate}
+                bannerColor={BANNER_COLORS[t.status] ?? "#735797"}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

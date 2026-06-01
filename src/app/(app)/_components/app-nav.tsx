@@ -26,8 +26,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 const mainLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false }
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" }
 ];
 
 const rankingLinks = [
@@ -66,6 +66,7 @@ type NavLink = {
   label: string;
   icon: typeof LayoutDashboard;
   adminOnly: boolean;
+  tutorialId?: string;
 };
 
 export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number }) {
@@ -89,8 +90,8 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: b
       <nav className="hidden items-center gap-1 md:flex">
         {mainLinks
           .filter((link) => !link.adminOnly || admin)
-          .map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} onClick={() => setOpenMenu(null)}>
+          .map(({ href, label, icon: Icon, tutorialId }) => (
+            <Link key={href} href={href} onClick={() => setOpenMenu(null)} {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
               <Button
                 variant="ghost"
                 size="sm"
@@ -128,6 +129,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: b
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
           badgeHrefs={{ "/caixa-de-presentes": giftCount }}
+          tutorialId="nav-perfil"
         />
         {adminLinks
           .filter((link) => !link.adminOnly || admin)
@@ -151,8 +153,8 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: b
         <div className="flex flex-wrap items-center gap-1">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
-            .map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href} onClick={() => setOpenMenu(null)}>
+            .map(({ href, label, icon: Icon, tutorialId }) => (
+              <Link key={href} href={href} onClick={() => setOpenMenu(null)} {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -207,11 +209,11 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: b
 }
 
 function NavDropdown({
-  id, label, icon: Icon, links, admin, openMenu, setOpenMenu, badgeHrefs = {}
+  id, label, icon: Icon, links, admin, openMenu, setOpenMenu, badgeHrefs = {}, tutorialId
 }: {
   id: string; label: string; icon: typeof LayoutDashboard; links: NavLink[];
   admin: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
-  badgeHrefs?: Record<string, number>;
+  badgeHrefs?: Record<string, number>; tutorialId?: string;
 }) {
   const visibleLinks = links.filter((link) => !link.adminOnly || admin);
   if (visibleLinks.length === 0) return null;
@@ -219,7 +221,7 @@ function NavDropdown({
   const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);
 
   return (
-    <div className="relative">
+    <div className="relative" {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
       <button type="button" onClick={() => setOpenMenu(open ? null : id)}
         className="flex h-8 items-center rounded-xl px-3 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
         <Icon size={14} className="mr-1.5" />

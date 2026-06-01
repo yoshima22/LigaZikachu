@@ -6,10 +6,13 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { computeGlobalRanking } from "@/lib/ranking";
 import { isDeckRegistrationLocked } from "@/lib/decks";
+import { isAdmin } from "@/lib/auth/permissions";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
+import { TutorialManager } from "@/components/tutorial/tutorial-manager";
+import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 
 async function MeusDecksPreview({ playerId }: { playerId: string }) {
   const decks = await prisma.savedDeck.findMany({
@@ -62,6 +65,7 @@ async function MeusDecksPreview({ playerId }: { playerId: string }) {
 export default async function PerfilPage() {
   const session = await auth();
   if (!session?.user) return null;
+  const adminUser = isAdmin(session.user.role);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -173,7 +177,13 @@ export default async function PerfilPage() {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-2xl border border-border bg-slate-950">
+      <TutorialManager pageId="perfil" isAdmin={adminUser} />
+      {!adminUser && (
+        <div className="flex justify-end">
+          <TutorialHelpButton pageId="perfil" />
+        </div>
+      )}
+      <div data-tutorial="profile-avatar" className="overflow-hidden rounded-2xl border border-border bg-slate-950">
         {equippedBanner?.item.imageUrl ? (
           <div className="relative h-32 w-full overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}

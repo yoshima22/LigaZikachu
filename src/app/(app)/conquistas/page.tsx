@@ -4,6 +4,8 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { auth } from "@/auth";
 import Link from "next/link";
 import { Award, Lock, Plus, Star, Trophy, Zap, Filter } from "lucide-react";
+import { TutorialManager } from "@/components/tutorial/tutorial-manager";
+import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { Card } from "@/components/ui/card";
 import { AchievementsAdminPanel } from "./_components/achievements-admin-panel";
 import { RewardManager } from "./_components/reward-manager";
@@ -95,6 +97,7 @@ export default async function ConquistasPage({
 
   return (
     <div className="space-y-8">
+      <TutorialManager pageId="conquistas" isAdmin={adminUser} />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -104,21 +107,25 @@ export default async function ConquistasPage({
               {myAchievements.length} conquistadas · {achievements.filter(a => a.active).length} disponíveis
             </p>
           </div>
-          {myAchievements.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {myAchievements.slice(0, 5).map(a => (
-                <div key={a.id} title={a.achievement.name}
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${rarityColors[a.achievement.rarity]}`}>
-                  {a.achievement.name}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {!adminUser && <TutorialHelpButton pageId="conquistas" />}
+            {myAchievements.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {myAchievements.slice(0, 5).map(a => (
+                  <div key={a.id} title={a.achievement.name}
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${rarityColors[a.achievement.rarity]}`}>
+                    {a.achievement.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Minhas conquistas — vitrine do jogador */}
       {!adminUser && myAchievements.length > 0 && (
+        <div data-tutorial="achievements-mine">
         <MyAchievementsPanel
           achievements={myAchievements.map(a => ({
             id: a.id,
@@ -129,6 +136,7 @@ export default async function ConquistasPage({
             unlockedAt: a.awardedAt.toISOString()
           }))}
         />
+        </div>
       )}
 
       {/* Painel Admin */}
@@ -168,7 +176,7 @@ export default async function ConquistasPage({
       )}
 
       {/* Filtros de escopo */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-tutorial="achievements-filter" className="flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1 text-xs text-slate-500">
           <Filter size={12} /> Filtrar:
         </span>

@@ -4,6 +4,8 @@ import { computeGlobalRanking } from "@/lib/ranking";
 import { RankingTable } from "@/components/ranking/ranking-table";
 import { prisma } from "@/lib/prisma";
 import { Trophy } from "lucide-react";
+import { TutorialManager } from "@/components/tutorial/tutorial-manager";
+import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +24,20 @@ export default async function RankingPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">
-          Ranking Geral
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Historico acumulado de partidas validadas. Use o filtro para ver todas as temporadas ou uma temporada especifica.
-        </p>
+      <TutorialManager pageId="ranking" />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">
+            Ranking Geral
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Historico acumulado de partidas validadas. Use o filtro para ver todas as temporadas ou uma temporada especifica.
+          </p>
+        </div>
+        <TutorialHelpButton pageId="ranking" />
       </div>
 
-      <Card className="p-4">
+      <Card className="p-4" data-tutorial="ranking-season">
         <form className="flex flex-wrap items-end gap-3">
           <div className="min-w-64 flex-1">
             <label htmlFor="seasonId" className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
@@ -68,7 +74,7 @@ export default async function RankingPage({
           />
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
+        <Card data-tutorial="ranking-table" className="overflow-hidden p-0">
           <RankingTable ranking={ranking} />
         </Card>
       )}
