@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Efeito de brilho para itens raros ──────────────────────────────────────
+   Um feixo de luz diagonal passa lentamente pela imagem.
+   Aparece uma vez por ciclo — a maioria do tempo é invisível.
+   Velocidade: RARE=7s, EPIC=6s, LEGENDARY=5s
+*/
+@keyframes glint-sweep {
+  0%, 72%  { transform: translateX(-160%) skewX(-18deg); opacity: 0; }
+  74%      { opacity: 0.6; }
+  88%      { opacity: 0.8; }
+  100%     { transform: translateX(240%) skewX(-18deg); opacity: 0; }
+}
+
+.glint-rare      { animation: glint-sweep 7s ease-in-out infinite; }
+.glint-epic      { animation: glint-sweep 6s ease-in-out infinite; }
+.glint-legendary { animation: glint-sweep 5s ease-in-out infinite; }
+
 :root {
   color-scheme: dark;
 }

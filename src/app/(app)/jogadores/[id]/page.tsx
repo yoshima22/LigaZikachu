@@ -13,6 +13,7 @@ import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 import { AdminResetPanel } from "./_components/admin-reset-panel";
+import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 
 export default async function PlayerDetailPage({
   params
@@ -112,8 +113,8 @@ export default async function PlayerDetailPage({
     }).catch(() => [] as { id: string; card: { nationalId: number; displayName: string; imageUrl: string | null; rarity: string } }[]),
     prisma.playerInventory.findMany({
       where: { playerId, equipped: true },
-      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true } } }
-    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null; metadata: unknown } }[]),
+      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true, rarity: true } } }
+    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null; metadata: unknown; rarity: string } }[]),
     prisma.playerAchievement.findMany({
       where: { playerId, isHighlighted: true },
       include: { achievement: { select: { name: true, rarity: true, iconUrl: true, description: true } } },
@@ -206,6 +207,10 @@ export default async function PlayerDetailPage({
                     }} />
                   <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/85 via-[#0f0f1a]/40 to-transparent" />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/80 via-transparent to-transparent" />
+                  {/* Brilho para banners raros/épicos/lendários */}
+                  {["RARE","EPIC","LEGENDARY"].includes(equippedBanner.item.rarity) && (
+                    <RarityShimmer rarity={equippedBanner.item.rarity} className="absolute inset-0" />
+                  )}
                 </>
               ) : (
                 <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" />
@@ -250,21 +255,49 @@ export default async function PlayerDetailPage({
                 </div>
                 {/* Frame — ancorado no centro do avatar, extravasamento livre */}
                 {equippedFrame?.item.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={equippedFrame.item.imageUrl}
-                    alt="Moldura"
-                    className="pointer-events-none absolute z-10 object-contain"
-                    style={{
-                      left: anchorLeft,
-                      top:  anchorTop,
-                      width: frameSize,
-                      height: frameSize,
-                      maxWidth: "none",   // anula o max-width: 100% do Tailwind preflight
-                      maxHeight: "none",  // anula o height: auto do Tailwind preflight
-                      transform: "translate(-50%, -50%)",
-                    }}
-                  />
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={equippedFrame.item.imageUrl}
+                      alt="Moldura"
+                      className="pointer-events-none absolute z-10 object-contain"
+                      style={{
+                        left: anchorLeft,
+                        top:  anchorTop,
+                        width: frameSize,
+                        height: frameSize,
+                        maxWidth: "none",
+                        maxHeight: "none",
+                        transform: "translate(-50%, -50%)",
+                      }}
+                    />
+                    {/* Brilho sobre molduras raras/épicas/lendárias */}
+                    {["RARE","EPIC","LEGENDARY"].includes(equippedFrame.item.rarity) && (
+                      <div
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute z-20 ${
+                          equippedFrame.item.rarity === "LEGENDARY" ? "glint-legendary" :
+                          equippedFrame.item.rarity === "EPIC"      ? "glint-epic"      :
+                          "glint-rare"
+                        }`}
+                        style={{
+                          left: anchorLeft,
+                          top:  anchorTop,
+                          width: frameSize,
+                          height: frameSize,
+                          maxWidth: "none",
+                          maxHeight: "none",
+                          transform: "translate(-50%, -50%)",
+                          background: equippedFrame.item.rarity === "LEGENDARY"
+                            ? "linear-gradient(105deg, transparent 25%, rgba(253,224,71,0.25) 42%, rgba(255,255,255,0.65) 50%, rgba(253,224,71,0.25) 58%, transparent 75%)"
+                            : equippedFrame.item.rarity === "EPIC"
+                            ? "linear-gradient(105deg, transparent 25%, rgba(192,132,252,0.22) 42%, rgba(255,255,255,0.55) 50%, rgba(192,132,252,0.22) 58%, transparent 75%)"
+                            : "linear-gradient(105deg, transparent 25%, rgba(147,197,253,0.20) 42%, rgba(255,255,255,0.55) 50%, rgba(147,197,253,0.20) 58%, transparent 75%)",
+                          borderRadius: "inherit",
+                        }}
+                      />
+                    )}
+                  </>
                 )}
                 {equippedFrame && !equippedFrame.item.imageUrl && (
                   <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
