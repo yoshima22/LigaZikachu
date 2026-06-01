@@ -161,94 +161,47 @@ export default async function PlayerDetailPage({
         <ChevronLeft size={16} /> Jogadores
       </Link>
 
-      {/* Header — Banner cobre toda a área, identidade sobreposta */}
-      {/* overflow-visible: permite que molduras (frames) ultrapassem as bordas do card */}
-      <div data-tutorial="profile-avatar" className="rounded-2xl border border-border bg-slate-950" style={{ overflow: "visible" }}>
-        {/* Container do banner: overflow-hidden apenas aqui para clipar a imagem */}
-        <div className="relative min-h-[180px] overflow-hidden rounded-2xl">
-          {/* Banner de fundo */}
-          {equippedBanner?.item.imageUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={equippedBanner.item.imageUrl}
-                alt="Banner"
-                className="absolute inset-0 h-full w-full object-cover object-center"
-              />
-              {/* Gradiente para legibilidade: forte à esquerda/baixo onde fica o texto */}
-              <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/85 via-[#0f0f1a]/40 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/80 via-transparent to-transparent" />
-            </>
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" />
-          )}
+      {/* ── Header do perfil ─────────────────────────────────────────────────────
+           Estrutura em 3 camadas para molduras funcionarem sem clipping:
+           1. Outer card: position:relative, SEM overflow — frame pode extravasar
+           2. Banner: overflow-hidden apenas para a imagem de fundo
+           3. Avatar+Frame: absolutamente posicionado NO CARD EXTERNO (fora do overflow-hidden)
+      */}
+      {(() => {
+        const AVATAR = 80;
+        const frameMeta = equippedFrame?.item.metadata as
+          | { frameScale?: number; frameOffsetX?: number; frameOffsetY?: number }
+          | null | undefined;
+        const fScale   = frameMeta?.frameScale  ?? 2.0;
+        const fOffsetX = frameMeta?.frameOffsetX ?? 0;
+        const fOffsetY = frameMeta?.frameOffsetY ?? 0;
+        const frameSize  = AVATAR * fScale;
+        const anchorLeft = AVATAR / 2 + fOffsetX;
+        const anchorTop  = AVATAR / 2 + fOffsetY;
+        // Avatar posicionado: left=20px, bottom=44px (altura da barra de status)
+        const AVATAR_LEFT   = 20;
+        const STATUS_HEIGHT = 44;
 
-          {/* Identidade sobreposta ao banner, posicionada embaixo à esquerda */}
-          <div className="relative z-10 flex h-full items-end p-5 pt-14">
-            <div className="flex items-end gap-5">
-              {/* Avatar com moldura — tamanho maior */}
-              {(() => {
-                // DEBUG: log metadados no servidor (remover após confirmar funcionamento)
-                const rawMeta = equippedFrame?.item.metadata;
-                console.log("[FrameDebug] raw metadata:", JSON.stringify(rawMeta));
-                const frameMeta = rawMeta as
-                  | { frameScale?: number; frameOffsetX?: number; frameOffsetY?: number }
-                  | null | undefined;
-                const AVATAR = 80; // px
-                const scale   = frameMeta?.frameScale  ?? 2.0;
-                const offsetX = frameMeta?.frameOffsetX ?? 0;
-                const offsetY = frameMeta?.frameOffsetY ?? 0;
-                console.log("[FrameDebug] applied values:", { scale, offsetX, offsetY, frameSize: AVATAR * scale });
-                const frameSize = AVATAR * scale;
-                // Âncora no centro do avatar com transform translate(-50%,-50%)
-                // Garante crescimento simétrico ao aumentar escala (sem deslocar p/ esquerda)
-                const anchorLeft = AVATAR / 2 + offsetX;
-                const anchorTop  = AVATAR / 2 + offsetY;
-                return (
-                  <div className="relative shrink-0 overflow-visible">
-                    <div
-                      className="overflow-hidden rounded-2xl border-2 border-[#0f0f1a]/60 bg-slate-700 shadow-xl"
-                      style={{ width: AVATAR, height: AVATAR }}
-                    >
-                      {player.user.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={player.user.image} alt={player.displayName} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <User size={32} className="text-slate-400" />
-                        </div>
-                      )}
-                    </div>
-                    {equippedFrame?.item.imageUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={equippedFrame.item.imageUrl}
-                        alt="Moldura"
-                        className="pointer-events-none absolute z-10 object-contain"
-                        style={{
-                          left: anchorLeft,
-                          top:  anchorTop,
-                          width: frameSize,
-                          height: frameSize,
-                          transform: "translate(-50%, -50%)",
-                        }}
-                      />
-                    )}
-                    {equippedFrame && !equippedFrame.item.imageUrl && (
-                      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
-                    )}
-                  </div>
-                );
-              })()}
-              {/* DEBUG — visível apenas para admin, remover após confirmar */}
-              {isAdminUser && equippedFrame && (
-                <div className="absolute -bottom-6 left-0 text-[9px] text-slate-500 whitespace-nowrap z-50">
-                  meta:{JSON.stringify(equippedFrame.item.metadata ?? "null")}
-                </div>
+        return (
+          <div data-tutorial="profile-avatar" className="relative rounded-2xl border border-border bg-slate-950">
+
+            {/* ── Banner (overflow-hidden clipa só a imagem) ── */}
+            <div className="relative overflow-hidden rounded-2xl" style={{ minHeight: 180 }}>
+              {equippedBanner?.item.imageUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={equippedBanner.item.imageUrl} alt="Banner"
+                    className="absolute inset-0 h-full w-full object-cover object-center" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/85 via-[#0f0f1a]/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/80 via-transparent to-transparent" />
+                </>
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" />
               )}
 
-              {/* Identidade — texto grande diretamente no gradiente */}
-              <div className="min-w-0 pb-1">
+              {/* Texto de identidade — margem esquerda reserva espaço do avatar */}
+              <div className="absolute bottom-0 left-0 right-0 p-5"
+                style={{ paddingLeft: AVATAR_LEFT + AVATAR + 20 }}>
                 <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
                   {player.displayName}
                 </h1>
@@ -258,37 +211,80 @@ export default async function PlayerDetailPage({
                   </p>
                 )}
                 {player.ptcglNick && (
-                  <p className="text-sm text-slate-300/80 drop-shadow">
-                    @{player.ptcglNick}
-                  </p>
+                  <p className="text-sm text-slate-300/80 drop-shadow">@{player.ptcglNick}</p>
                 )}
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Barra de status + botão de configurações — abaixo do banner */}
-        <div className="border-t border-border/40 px-5 py-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/60">
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge variant={badge.variant} label={badge.label} />
-            {player.user.role !== "PLAYER" && (
-              <StatusBadge variant="info" label={player.user.role} />
-            )}
-            {activeSeason && (
-              <StatusBadge variant="draft" label={activeSeason.season.name} />
-            )}
-          </div>
-          {isSelf && (
-            <Link
-              href="/perfil"
-              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-400 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] transition-colors"
+            {/* ── Avatar + Frame — FORA do overflow-hidden, livre para extravasar ── */}
+            <div
+              className="absolute z-20"
+              style={{ left: AVATAR_LEFT, bottom: STATUS_HEIGHT }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-              Configurações
-            </Link>
-          )}
-        </div>
-      </div>
+              <div className="relative" style={{ width: AVATAR, height: AVATAR }}>
+                {/* Avatar photo */}
+                <div
+                  className="overflow-hidden rounded-2xl border-2 border-[#0f0f1a]/80 bg-slate-700 shadow-xl"
+                  style={{ width: AVATAR, height: AVATAR }}
+                >
+                  {player.user.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={player.user.image} alt={player.displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <User size={32} className="text-slate-400" />
+                    </div>
+                  )}
+                </div>
+                {/* Frame — ancorado no centro do avatar, extravasamento livre */}
+                {equippedFrame?.item.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={equippedFrame.item.imageUrl}
+                    alt="Moldura"
+                    className="pointer-events-none absolute z-10 object-contain"
+                    style={{
+                      left: anchorLeft,
+                      top:  anchorTop,
+                      width: frameSize,
+                      height: frameSize,
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  />
+                )}
+                {equippedFrame && !equippedFrame.item.imageUrl && (
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
+                )}
+              </div>
+            </div>
+
+            {/* ── Barra de status — padding-left reserva espaço do avatar ── */}
+            <div
+              className="border-t border-border/40 flex flex-wrap items-center justify-between gap-2 bg-slate-950/60"
+              style={{ height: STATUS_HEIGHT, paddingLeft: AVATAR_LEFT + AVATAR + 16, paddingRight: 20 }}
+            >
+              <div className="flex flex-wrap gap-2">
+                <StatusBadge variant={badge.variant} label={badge.label} />
+                {player.user.role !== "PLAYER" && (
+                  <StatusBadge variant="info" label={player.user.role} />
+                )}
+                {activeSeason && (
+                  <StatusBadge variant="draft" label={activeSeason.season.name} />
+                )}
+              </div>
+              {isSelf && (
+                <Link
+                  href="/perfil"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-400 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                  Configurações
+                </Link>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Conquistas removidas daqui — exibidas abaixo (seção única) */}
 
