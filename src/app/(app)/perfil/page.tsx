@@ -73,6 +73,7 @@ export default async function PerfilPage() {
       id: true,
       displayName: true,
       ptcglNick: true,
+      popId: true,
       avatarUrl: true,
       deckSubmissions: {
         orderBy: { submittedAt: "desc" },

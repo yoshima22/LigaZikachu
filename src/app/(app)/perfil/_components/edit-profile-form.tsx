@@ -11,6 +11,7 @@ interface EditProfileFormProps {
   player: {
     displayName: string;
     ptcglNick: string | null;
+    popId: string | null;
     avatarUrl: string | null;
   };
 }
@@ -19,6 +20,7 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(player.displayName);
   const [ptcglNick, setPtcglNick] = useState(player.ptcglNick ?? "");
+  const [popId, setPopId] = useState(player.popId ?? "");
   const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -52,6 +54,7 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
       const result = await updatePlayerProfile({
         displayName,
         ptcglNick: ptcglNick || undefined,
+        popId: popId || undefined,
         avatarUrl: avatarUrl || undefined,
       });
       if (result?.error) {
@@ -118,6 +121,22 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
           placeholder="Seu nick no jogo..."
           className="bg-slate-900/70 border-border text-slate-100"
         />
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
+          Play! Pokémon ID (PopID)
+        </label>
+        <Input
+          value={popId}
+          onChange={(e) => setPopId(e.target.value)}
+          maxLength={30}
+          placeholder="Ex: B1234567 (opcional)"
+          className="bg-slate-900/70 border-border text-slate-100"
+        />
+        <p className="mt-1 text-[11px] text-slate-500">
+          Seu ID nos torneios oficiais Pokémon Play! — opcional, apenas para referência.
+        </p>
       </div>
 
       <div>

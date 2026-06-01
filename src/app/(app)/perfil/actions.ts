@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(60),
   ptcglNick: z.string().max(60).optional(),
+  popId: z.string().max(30).optional(),
   avatarUrl: z
     .string()
     .max(1_200_000, "A imagem esta muito grande. Use uma imagem menor.")
@@ -63,6 +64,7 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
       data: {
         displayName: data.displayName,
         ptcglNick: data.ptcglNick || null,
+        popId: data.popId || null,
         avatarUrl: data.avatarUrl || null,
       },
     }),

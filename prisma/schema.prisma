@@ -198,6 +198,7 @@ model Player {
   displayName             String
   whatsapp                String?
   ptcglNick               String?              @unique
+  popId                   String?              // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
   avatarUrl               String?
   active                  Boolean              @default(true)
   notes                   String?

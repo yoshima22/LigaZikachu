@@ -18,14 +18,19 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   const admin = isAdmin(session.user.role);
 
-  // Contar presentes não resgatados
+  // Dados do jogador para o nav
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
-    select: { id: true }
+    select: { id: true, ptcglNick: true }
   });
-  const giftCount = player
-    ? await prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } })
-    : 0;
+  const [giftCount, wallet] = await Promise.all([
+    player
+      ? prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } })
+      : 0,
+    player
+      ? prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } })
+      : null,
+  ]);
 
   return (
     <>
@@ -71,6 +76,16 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                 <p className="text-xs font-medium text-slate-200 leading-tight">
                   {session.user.name ?? session.user.email}
                 </p>
+                <div className="flex items-center justify-end gap-2 mt-0.5">
+                  {player?.ptcglNick && (
+                    <span className="text-[10px] text-slate-500">@{player.ptcglNick}</span>
+                  )}
+                  {wallet != null && (
+                    <span className="flex items-center gap-0.5 text-[10px] font-semibold text-[#FFCB05]">
+                      🪙 {wallet.balance.toLocaleString("pt-BR")} ZC
+                    </span>
+                  )}
+                </div>
               </Link>
               {/* Logout — usa rota dedicada para garantir limpeza do cookie */}
               <Link href="/api/auth/signout-redirect">
