@@ -112,8 +112,8 @@ export default async function PlayerDetailPage({
     }).catch(() => [] as { id: string; card: { nationalId: number; displayName: string; imageUrl: string | null; rarity: string } }[]),
     prisma.playerInventory.findMany({
       where: { playerId, equipped: true },
-      include: { item: { select: { type: true, name: true, imageUrl: true } } }
-    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null } }[]),
+      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true } } }
+    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null; metadata: unknown } }[]),
     prisma.playerAchievement.findMany({
       where: { playerId, isHighlighted: true },
       include: { achievement: { select: { name: true, rarity: true, iconUrl: true, description: true } } },
