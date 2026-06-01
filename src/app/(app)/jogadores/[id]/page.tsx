@@ -197,7 +197,13 @@ export default async function PlayerDetailPage({
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={equippedBanner.item.imageUrl} alt="Banner"
-                    className="absolute inset-0 h-full w-full object-cover object-center" />
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{
+                      objectPosition: (() => {
+                        const m = equippedBanner.item.metadata as { focusX?: number; focusY?: number } | null | undefined;
+                        return `${m?.focusX ?? 50}% ${m?.focusY ?? 50}%`;
+                      })()
+                    }} />
                   <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/85 via-[#0f0f1a]/40 to-transparent" />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/80 via-transparent to-transparent" />
                 </>

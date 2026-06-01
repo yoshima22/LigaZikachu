@@ -19,9 +19,13 @@ const createItemSchema = z.object({
   price: z.number().int().min(1).max(999999),
   // metadata para molduras: posicionamento e escala
   metadata: z.object({
+    // Moldura (FRAME)
     frameScale:   z.number().min(0.1).max(6).optional(),
     frameOffsetX: z.number().min(-200).max(200).optional(),
     frameOffsetY: z.number().min(-200).max(200).optional(),
+    // Banner
+    focusX: z.number().min(0).max(100).optional(),
+    focusY: z.number().min(0).max(100).optional(),
   }).optional().nullable()
 });
 

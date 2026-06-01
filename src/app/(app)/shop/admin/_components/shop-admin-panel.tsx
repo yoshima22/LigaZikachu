@@ -22,17 +22,27 @@ interface Item {
   metadata?: unknown;
 }
 
-type FrameMeta = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
+type FrameMeta  = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
+type BannerMeta = { focusX: number; focusY: number }; // object-position em % (0-100)
+
 type FormData = {
   type: typeof typeOpts[number]; name: string; description: string;
   imageUrl: string; rarity: typeof rarityOpts[number]; price: number;
   frameMeta: FrameMeta;
+  bannerMeta: BannerMeta;
 };
-const DEFAULT_FRAME_META: FrameMeta = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
-const EMPTY: FormData = { type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100, frameMeta: DEFAULT_FRAME_META };
+const DEFAULT_FRAME_META:  FrameMeta  = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
+const DEFAULT_BANNER_META: BannerMeta = { focusX: 50, focusY: 50 };
+
+const EMPTY: FormData = {
+  type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100,
+  frameMeta: DEFAULT_FRAME_META,
+  bannerMeta: DEFAULT_BANNER_META,
+};
+
 const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
   const meta = i.metadata && typeof i.metadata === "object" && !Array.isArray(i.metadata)
-    ? (i.metadata as Partial<FrameMeta>)
+    ? (i.metadata as Partial<FrameMeta & BannerMeta>)
     : {};
   return {
     type: i.type as typeof typeOpts[number], name: i.name, description: i.description ?? "",
@@ -41,9 +51,104 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
       frameScale:   meta.frameScale   ?? 2.0,
       frameOffsetX: meta.frameOffsetX ?? 0,
       frameOffsetY: meta.frameOffsetY ?? 0,
-    }
+    },
+    bannerMeta: {
+      focusX: (meta as Partial<BannerMeta>).focusX ?? 50,
+      focusY: (meta as Partial<BannerMeta>).focusY ?? 50,
+    },
   };
 };
+
+// ── Preview e editor do banner ────────────────────────────────────────────────
+
+function BannerMetaEditor({ bannerMeta, setBannerMeta, imageUrl }: {
+  bannerMeta: BannerMeta;
+  setBannerMeta: (m: BannerMeta) => void;
+  imageUrl: string;
+}) {
+  const objectPosition = `${bannerMeta.focusX}% ${bannerMeta.focusY}%`;
+  return (
+    <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-4 md:col-span-2 lg:col-span-3">
+      <p className="text-xs font-semibold text-[#FFCB05]">⚙ Ponto de foco do Banner</p>
+      <p className="text-xs text-slate-500">
+        Ajusta qual região do banner fica visível quando a imagem é cortada em telas menores.
+        O retículo amarelo indica o ponto de foco atual.
+      </p>
+
+      {/* Preview do banner em proporção 4:1 */}
+      <div className="relative w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-900"
+        style={{ aspectRatio: "4 / 1" }}>
+        {imageUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageUrl}
+              alt="Banner preview"
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ objectPosition }}
+            />
+            {/* Gradiente igual ao perfil */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/70 via-[#0f0f1a]/20 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/60 via-transparent to-transparent" />
+          </>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-600">
+            Adicione a imagem do banner acima para ver o preview
+          </div>
+        )}
+        {/* Retículo do ponto de foco */}
+        <div className="pointer-events-none absolute" style={{
+          left: `${bannerMeta.focusX}%`,
+          top:  `${bannerMeta.focusY}%`,
+          transform: "translate(-50%, -50%)",
+        }}>
+          <div className="h-6 w-px bg-[#FFCB05]" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }} />
+          <div className="w-6 h-px bg-[#FFCB05]" style={{ position: "absolute", top: "50%",  transform: "translateY(-50%)" }} />
+          <div className="h-3 w-3 rounded-full border-2 border-[#FFCB05] bg-transparent"
+            style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }} />
+        </div>
+        {/* Simulação do avatar + nome como no perfil */}
+        <div className="absolute bottom-2 left-3 flex items-center gap-2 opacity-60">
+          <div className="h-8 w-8 rounded-lg bg-slate-600" />
+          <div className="space-y-0.5">
+            <div className="h-2 w-16 rounded bg-white/60" />
+            <div className="h-1.5 w-10 rounded bg-[#FFCB05]/60" />
+          </div>
+        </div>
+      </div>
+
+      {/* Sliders */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block space-y-1 text-xs text-slate-400">
+          <div className="flex justify-between">
+            <span>Foco horizontal (X)</span>
+            <span className="text-slate-300 font-semibold">{bannerMeta.focusX}%</span>
+          </div>
+          <input type="range" min="0" max="100" step="1"
+            value={bannerMeta.focusX}
+            onChange={e => setBannerMeta({ ...bannerMeta, focusX: parseInt(e.target.value) })}
+            className="w-full accent-[#FFCB05]" />
+          <p className="text-[10px] text-slate-600">0% = esquerda · 50% = centro · 100% = direita</p>
+        </label>
+        <label className="block space-y-1 text-xs text-slate-400">
+          <div className="flex justify-between">
+            <span>Foco vertical (Y)</span>
+            <span className="text-slate-300 font-semibold">{bannerMeta.focusY}%</span>
+          </div>
+          <input type="range" min="0" max="100" step="1"
+            value={bannerMeta.focusY}
+            onChange={e => setBannerMeta({ ...bannerMeta, focusY: parseInt(e.target.value) })}
+            className="w-full accent-[#FFCB05]" />
+          <p className="text-[10px] text-slate-600">0% = topo · 50% = centro · 100% = base</p>
+        </label>
+      </div>
+      <button type="button" onClick={() => setBannerMeta(DEFAULT_BANNER_META)}
+        className="text-xs text-slate-500 hover:text-slate-300 underline">
+        Resetar para centro (50%, 50%)
+      </button>
+    </div>
+  );
+}
 
 // Preview interativo da moldura sobre um avatar placeholder
 // AVATAR deve ser idêntico ao perfil real (80px) para calibração 1:1
@@ -166,7 +271,8 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   form: FormData; setForm: (f: FormData) => void;
   onSave: () => void; onCancel: () => void; pending: boolean; label: string;
 }) {
-  const isFrame = (form.type as string) === "FRAME";
+  const isFrame  = (form.type as string) === "FRAME";
+  const isBanner = (form.type as string) === "BANNER";
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1 text-xs text-slate-400">
@@ -225,6 +331,14 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
           setFrameMeta={(m) => setForm({ ...form, frameMeta: m })}
         />
       )}
+      {/* Editor de ponto de foco — apenas para banners */}
+      {isBanner && (
+        <BannerMetaEditor
+          imageUrl={form.imageUrl}
+          bannerMeta={form.bannerMeta}
+          setBannerMeta={(m) => setForm({ ...form, bannerMeta: m })}
+        />
+      )}
       <div className="flex gap-2 md:col-span-2 lg:col-span-3">
         <Button type="button" disabled={!form.name || pending} onClick={onSave}
           className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">{label}</Button>
@@ -245,8 +359,10 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
     ...f,
     imageUrl: f.imageUrl || undefined,
     description: f.description || undefined,
-    // Inclui metadata de posicionamento apenas para molduras
-    metadata: (f.type === "FRAME") ? f.frameMeta : undefined,
+    metadata:
+      f.type === "FRAME"  ? f.frameMeta  :
+      f.type === "BANNER" ? f.bannerMeta :
+      undefined,
   });
 
   const handleCreate = () => startTransition(async () => {
