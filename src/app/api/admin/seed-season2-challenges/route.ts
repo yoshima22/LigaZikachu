@@ -115,9 +115,11 @@ export async function GET() {
         badgeId: badgeOf(rodrigoId), playedAt: "2026-05-20",
         status: "REJECTED", notes: "Cristian desafiou Rodrigo — Rodrigo defendeu" },
       // Erick 2x derrotas
-      { challengerId: erickId, challengedId: rodrigoId, tournamentWeekId: wid(5),
-        badgeId: badgeOf(rodrigoId), playedAt: "2026-02-04",
-        status: "REJECTED", notes: "Erick desafiou Rodrigo — Rodrigo defendeu" },
+      // Erick desafiou Nakaima na Semana 3 (1ª derrota)
+      { challengerId: erickId, challengedId: nakaimaId, tournamentWeekId: wid(3),
+        badgeId: badgeOf(nakaimaId), playedAt: "2026-01-12",
+        status: "REJECTED", notes: "Erick desafiou Nakaima — Nakaima defendeu" },
+      // Erick desafiou Moises na Semana 7 (2ª derrota)
       { challengerId: erickId, challengedId: moisesId, tournamentWeekId: wid(7),
         badgeId: badgeOf(moisesId), playedAt: "2026-05-20",
         status: "REJECTED", notes: "Erick desafiou Moises — Moises defendeu" },
