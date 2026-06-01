@@ -128,30 +128,34 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   }
 
   function DeckBadges({ decks, selectedDeckId }: { decks: PlayerDeckSummary[]; selectedDeckId?: string | null }) {
-    if (decks.length === 0) {
-      return <p className="mt-1 text-[10px] text-slate-500">Deck oculto</p>;
+    // Mostra APENAS o deck vinculado a esta partida específica
+    const linkedDeck = selectedDeckId ? decks.find(d => d.id === selectedDeckId) : null;
+
+    // Se tem deck vinculado, mostra só ele
+    if (linkedDeck) {
+      const subtitle = linkedDeck.archetype ? " · " + linkedDeck.archetype : "";
+      return (
+        <div className="mt-2">
+          <details className="rounded-md border border-[#FFCB05]/50 bg-[#FFCB05]/8 px-2 py-1 text-left">
+            <summary className="flex cursor-pointer items-center justify-between gap-2 text-[10px] font-semibold text-[#FFCB05]">
+              <span className="truncate">{linkedDeck.deckName}{subtitle}</span>
+              <CopyDeckButton deckList={linkedDeck.deckList} />
+            </summary>
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
+              {linkedDeck.deckList}
+            </pre>
+          </details>
+        </div>
+      );
     }
 
-    return (
-      <div className="mt-2 space-y-1">
-        {decks.map((deck) => {
-          const subtitle = deck.archetype ? " - " + deck.archetype : "";
-          const selected = selectedDeckId === deck.id;
+    // Se tem decks mas nenhum vinculado a esta partida
+    if (decks.length > 0) {
+      return <p className="mt-1 text-[10px] text-amber-500/80">Deck não selecionado</p>;
+    }
 
-          return (
-            <details key={deck.id} className={`rounded-md border px-2 py-1 text-left ${selected ? "border-[#FFCB05]/70 bg-[#FFCB05]/10" : "border-slate-700/70 bg-slate-950/70"}`}>
-              <summary className="flex cursor-pointer items-center justify-between gap-2 text-[10px] font-semibold text-[#FFCB05]">
-                <span>{selected ? "Usado: " : ""}Deck {deck.deckNumber}: {deck.deckName}{subtitle}</span>
-                <CopyDeckButton deckList={deck.deckList} />
-              </summary>
-              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
-                {deck.deckList}
-              </pre>
-            </details>
-          );
-        })}
-      </div>
-    );
+    // Nenhum deck enviado
+    return <p className="mt-1 text-[10px] text-slate-500">Deck oculto</p>;
   }
 
   async function handleDeckChoice(applyToWeek: boolean) {
@@ -284,10 +288,18 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white"
             >
               <option value="">Escolher deck</option>
-              {match.currentPlayerDecks.map((deck) => (
+              {/* Deduplica por deckName+archetype — mantém apenas um de cada deck único */}
+              {Array.from(
+                new Map(
+                  match.currentPlayerDecks.map(d => [
+                    `${d.deckName}||${d.archetype ?? ""}`,
+                    d
+                  ])
+                ).values()
+              ).map((deck) => (
                 <option key={deck.id} value={deck.id}>
-                  Deck {deck.deckNumber}: {deck.deckName}
-                  {deck.archetype ? ` - ${deck.archetype}` : ""}
+                  {deck.deckName}
+                  {deck.archetype ? ` · ${deck.archetype}` : ""}
                 </option>
               ))}
             </select>
