@@ -85,7 +85,7 @@ export async function GET() {
     // Usa OR para pegar tanto challenges com tournamentId quanto os que foram
     // criados apenas com tournamentWeekId (sem tournamentId), que o delete
     // simples por tournamentId não conseguia remover.
-    const allWeekIds = [...weekIdMap.values()];
+    const allWeekIds = [...weekMap.values()];
     const deleted = await prisma.challenge.deleteMany({
       where: {
         OR: [
