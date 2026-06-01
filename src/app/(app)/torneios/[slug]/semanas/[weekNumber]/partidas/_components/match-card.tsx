@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch } from "../actions";
+import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
 
 interface PlayerDeckSummary {
@@ -139,8 +140,9 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
           return (
             <details key={deck.id} className={`rounded-md border px-2 py-1 text-left ${selected ? "border-[#FFCB05]/70 bg-[#FFCB05]/10" : "border-slate-700/70 bg-slate-950/70"}`}>
-              <summary className="cursor-pointer text-[10px] font-semibold text-[#FFCB05]">
-                {selected ? "Usado: " : ""}Deck {deck.deckNumber}: {deck.deckName}{subtitle}
+              <summary className="flex cursor-pointer items-center justify-between gap-2 text-[10px] font-semibold text-[#FFCB05]">
+                <span>{selected ? "Usado: " : ""}Deck {deck.deckNumber}: {deck.deckName}{subtitle}</span>
+                <CopyDeckButton deckList={deck.deckList} />
               </summary>
               <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
                 {deck.deckList}

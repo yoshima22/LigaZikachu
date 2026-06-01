@@ -6,6 +6,7 @@ import { Globe, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PokemonTypeSelector } from "@/components/ui/pokemon-type-selector";
 import { saveDeck, updateDeck, deleteDeck } from "../actions";
+import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 
 interface Deck { id: string; name: string; archetype: string | null; deckList: string; isPublic: boolean; updatedAt: string; }
 
@@ -123,11 +124,10 @@ export function MyDecksClient({ decks }: { decks: Deck[] }) {
                       {deck.archetype && <p className="text-xs text-slate-500">{deck.archetype}</p>}
                     </button>
                   </div>
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <CopyDeckButton deckList={deck.deckList} />
                     <button type="button" disabled={pending}
-                      onClick={() => {
-                        setEditingId(deck.id);
-                      }}
+                      onClick={() => setEditingId(deck.id)}
                       className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200"><Pencil size={14} /></button>
                     <button type="button" disabled={pending}
                       onClick={() => handleDelete(deck.id, deck.name)}
@@ -136,7 +136,11 @@ export function MyDecksClient({ decks }: { decks: Deck[] }) {
                 </div>
                 {expandedId === deck.id && (
                   <div className="border-t border-border px-4 pb-4">
-                    <pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-300">
+                    <div className="flex items-center justify-between mt-3 mb-1">
+                      <span className="text-[10px] text-slate-500">Lista do deck</span>
+                      <CopyDeckButton deckList={deck.deckList} />
+                    </div>
+                    <pre className="max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-300">
                       {deck.deckList}
                     </pre>
                   </div>

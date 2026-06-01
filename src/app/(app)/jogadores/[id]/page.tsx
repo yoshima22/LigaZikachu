@@ -14,6 +14,7 @@ import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 import { AdminResetPanel } from "./_components/admin-reset-panel";
 import { RarityShimmer } from "@/components/ui/rarity-shimmer";
+import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 
 export default async function PlayerDetailPage({
   params
@@ -421,8 +422,11 @@ export default async function PlayerDetailPage({
                         </span>
                       ))}
                     </div>
-                    <span className="shrink-0 text-xs text-slate-500 group-open:hidden">Ver lista ↓</span>
-                    <span className="shrink-0 text-xs text-slate-500 hidden group-open:inline">Fechar ↑</span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <CopyDeckButton deckList={d.deckList} />
+                      <span className="text-xs text-slate-500 group-open:hidden">Ver ↓</span>
+                      <span className="text-xs text-slate-500 hidden group-open:inline">Fechar ↑</span>
+                    </div>
                   </summary>
                   <div className="border-t border-border">
                     <pre className="max-h-64 overflow-auto px-3 py-3 font-mono text-xs text-slate-300 leading-relaxed">

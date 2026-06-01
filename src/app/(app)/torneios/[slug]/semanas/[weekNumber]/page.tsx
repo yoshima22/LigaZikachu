@@ -13,6 +13,7 @@ import {
 } from "@/lib/decks";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { DeckSubmissionForm } from "./_components/deck-submission-form";
+import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { applyTournamentWeekBonus, setTournamentWeekTeam, updateTournamentWeekSettings } from "../../../actions";
 
 export const dynamic = "force-dynamic";
@@ -610,9 +611,12 @@ export default async function WeekDetailPage({
                       {submission.archetype ? ` - ${submission.archetype}` : ""}
                     </p>
                   </div>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-slate-400">
-                    {submission.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <CopyDeckButton deckList={submission.deckList} />
+                    <span className="rounded-full border border-border px-2 py-0.5 text-xs text-slate-400">
+                      {submission.status}
+                    </span>
+                  </div>
                 </div>
                 <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-300">
                   {submission.deckList}
