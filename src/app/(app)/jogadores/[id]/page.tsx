@@ -248,9 +248,9 @@ export default async function PlayerDetailPage({
                       top:  anchorTop,
                       width: frameSize,
                       height: frameSize,
+                      maxWidth: "none",   // anula o max-width: 100% do Tailwind preflight
+                      maxHeight: "none",  // anula o height: auto do Tailwind preflight
                       transform: "translate(-50%, -50%)",
-                      // DEBUG: outline verde mostra tamanho real do elemento — remover após confirmar
-                      outline: isAdminUser ? "2px solid lime" : undefined,
                     }}
                   />
                 )}
