@@ -124,14 +124,25 @@ export async function computePlayerRanking(seasonId: string): Promise<PlayerRank
 export async function computeTournamentRanking(
   tournamentId: string
 ): Promise<PlayerRankingEntry[]> {
-  const registrations = await prisma.tournamentRegistration.findMany({
-    where: {
-      tournamentId,
-      status: "APPROVED",
-      player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }
-    },
-    include: { player: { select: { id: true, displayName: true } } }
+  // Busca todas as inscrições aprovadas com role do usuário
+  // (filtro JS em vez de Prisma para evitar bugs com nested relation filter)
+  const allRegistrations = await prisma.tournamentRegistration.findMany({
+    where: { tournamentId, status: "APPROVED" },
+    include: {
+      player: {
+        select: {
+          id: true,
+          displayName: true,
+          user: { select: { role: true } }
+        }
+      }
+    }
   });
+
+  // Filtra admins em JavaScript — mais confiável que nested Prisma filter
+  const registrations = allRegistrations.filter(
+    (r) => r.player.user?.role !== "ADMIN" && r.player.user?.role !== "SUPER_ADMIN"
+  );
 
   const registeredPlayerIds = registrations.map((r) => r.playerId);
 
