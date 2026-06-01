@@ -241,7 +241,6 @@ export async function GET() {
     const seedNamesNorm = SEED_NAMES.map(normalize);
 
     const candidatePlayers = await prisma.player.findMany({
-      where: { active: true },
       select: { id: true, displayName: true }
     });
 

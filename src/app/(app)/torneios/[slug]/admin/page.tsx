@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Award, Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle, Megaphone } from "lucide-react";
+import { Award, Trophy, Users, Swords, Calendar, TrendingUp, AlertTriangle, Megaphone, Pencil } from "lucide-react";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { DeleteTournamentButton } from "./_components/delete-tournament-button";
 import { closeWeek } from "../semanas/[weekNumber]/partidas/actions";
@@ -17,7 +17,8 @@ import {
   removePlayerRegistration,
   startTournament,
   updateTournamentSeason,
-  updateTournamentWeekSettings
+  updateTournamentWeekSettings,
+  updateTournamentInfo
 } from "../../actions";
 import { TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
 import {
@@ -145,6 +146,82 @@ export default async function TournamentAdminPage({ params }: Props) {
       <h1 className="text-2xl font-bold text-white font-pixel">
         Painel Admin — {tournament.name}
       </h1>
+
+      {/* Editar nome e info do torneio */}
+      <Card className="border-slate-800 bg-slate-900/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base text-white">
+            <Pencil size={18} className="text-[#FFCB05]" />
+            Editar informações do torneio
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid gap-4 md:grid-cols-2"
+            action={async (formData) => {
+              "use server";
+              await updateTournamentInfo({
+                tournamentId: tournament.id,
+                name:        String(formData.get("name") ?? ""),
+                edition:     String(formData.get("edition") ?? ""),
+                description: String(formData.get("description") ?? ""),
+                startDate:   String(formData.get("startDate") ?? ""),
+                endDate:     String(formData.get("endDate") ?? ""),
+              });
+            }}
+          >
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Nome do torneio *</span>
+              <input
+                name="name"
+                defaultValue={tournament.name}
+                required
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Edição (ex: 2ª Edição)</span>
+              <input
+                name="edition"
+                defaultValue={tournament.edition ?? ""}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Data de início</span>
+              <input
+                type="date"
+                name="startDate"
+                defaultValue={tournament.startDate ? new Date(tournament.startDate).toISOString().slice(0,10) : ""}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Data de encerramento</span>
+              <input
+                type="date"
+                name="endDate"
+                defaultValue={tournament.endDate ? new Date(tournament.endDate).toISOString().slice(0,10) : ""}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400 md:col-span-2">
+              <span>Descrição</span>
+              <textarea
+                name="description"
+                defaultValue={tournament.description ?? ""}
+                rows={3}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <div className="md:col-span-2">
+              <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                Salvar informações
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="border-slate-800 bg-slate-900/50">
         <CardHeader>

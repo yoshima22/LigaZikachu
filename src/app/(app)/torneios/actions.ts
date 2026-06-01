@@ -435,6 +435,47 @@ export async function deleteTournament(
   }
 }
 
+// ── Renomear / editar info básica do torneio ─────────────────────────────────
+
+export async function updateTournamentInfo(raw: {
+  tournamentId: string;
+  name: string;
+  edition?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+}): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const name = raw.name?.trim();
+    if (!name || name.length < 3) return { error: "Nome deve ter ao menos 3 caracteres." };
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: raw.tournamentId },
+      select: { slug: true }
+    });
+    if (!tournament) return { error: "Torneio não encontrado." };
+
+    await prisma.tournament.update({
+      where: { id: raw.tournamentId },
+      data: {
+        name,
+        edition: raw.edition?.trim() || null,
+        description: raw.description?.trim() || null,
+        ...(raw.startDate ? { startDate: new Date(raw.startDate) } : {}),
+        ...(raw.endDate   ? { endDate:   new Date(raw.endDate)   } : {}),
+      }
+    });
+
+    revalidatePath(`/torneios/${tournament.slug}`);
+    revalidatePath(`/torneios/${tournament.slug}/admin`);
+    revalidatePath("/torneios");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function updateTournamentSeason(
   raw: z.infer<typeof updateTournamentSeasonSchema>
 ): Promise<{ error?: string }> {
