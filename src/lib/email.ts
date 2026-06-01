@@ -7,7 +7,7 @@
  *   GMAIL_APP_PASSWORD  = xxxx xxxx xxxx xxxx  (Senha de App do Google)
  */
 
-import nodemailer from "nodemailer";
+import * as nodemailer from "nodemailer";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
