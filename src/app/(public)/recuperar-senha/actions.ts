@@ -2,54 +2,74 @@
 
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth/password";
+import { sendPasswordResetEmail } from "@/lib/email";
 import { z } from "zod";
 import crypto from "crypto";
 
-export async function requestPasswordReset(email: string): Promise<{ token?: string; error?: string }> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
-      select: { id: true, email: true }
-    });
+// ── Solicitar recuperação de senha ────────────────────────────────────────────
 
-    if (!user) return { error: "Nenhuma conta encontrada com este email." };
+export async function requestPasswordReset(
+  _prev: { error?: string; success?: boolean } | undefined,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean }> {
+  const email = String(formData.get("email") ?? "").toLowerCase().trim();
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-
-    // Remove tokens antigos para este email
-    await prisma.verificationToken.deleteMany({ where: { identifier: user.email } });
-
-    await prisma.verificationToken.create({
-      data: { identifier: user.email, token, expires }
-    });
-
-    return { token };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Erro ao gerar token." };
+  if (!email.includes("@")) {
+    return { error: "Informe um e-mail válido." };
   }
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true }
+  });
+
+  // Resposta genérica — não revela se email existe na base
+  if (!user) return { success: true };
+
+  // Invalida tokens anteriores do mesmo usuário
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+  // Token seguro (64 bytes hex = 128 chars)
+  const token = crypto.randomBytes(64).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+  await prisma.passwordResetToken.create({
+    data: { token, userId: user.id, expiresAt }
+  });
+
+  const { error } = await sendPasswordResetEmail(user.email, token);
+  if (error) return { error };
+
+  return { success: true };
 }
+
+// ── Redefinir senha com token ─────────────────────────────────────────────────
 
 const resetSchema = z.object({
   token: z.string().min(1),
-  password: z.string().min(8, "A senha deve ter ao menos 8 caracteres").max(72)
+  password: z.string().min(8, "A senha deve ter ao menos 8 caracteres.").max(72)
 });
 
-export async function resetPassword(raw: { token: string; password: string }): Promise<{ error?: string }> {
+export async function resetPassword(
+  raw: { token: string; password: string }
+): Promise<{ error?: string }> {
   try {
     const { token, password } = resetSchema.parse(raw);
 
-    const record = await prisma.verificationToken.findUnique({ where: { token } });
-    if (!record) return { error: "Token inválido ou já utilizado." };
-    if (record.expires < new Date()) return { error: "Token expirado. Solicite um novo." };
+    const record = await prisma.passwordResetToken.findUnique({
+      where: { token },
+      include: { user: { select: { id: true } } }
+    });
 
-    const user = await prisma.user.findUnique({ where: { email: record.identifier } });
-    if (!user) return { error: "Usuário não encontrado." };
+    if (!record) return { error: "Link inválido ou já utilizado." };
+    if (record.usedAt) return { error: "Este link já foi usado. Solicite um novo." };
+    if (record.expiresAt < new Date()) return { error: "Link expirado (1 hora). Solicite um novo." };
 
     const passwordHash = await hashPassword(password);
+
     await prisma.$transaction([
-      prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
-      prisma.verificationToken.delete({ where: { token } })
+      prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+      prisma.passwordResetToken.update({ where: { token }, data: { usedAt: new Date() } })
     ]);
 
     return {};

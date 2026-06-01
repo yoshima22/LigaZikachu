@@ -4,7 +4,38 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { MatchStatus, ResultSource, Role, TournamentFormat } from "@prisma/client";
+import { MatchStatus, ResultSource, Role, TournamentFormat, type Prisma } from "@prisma/client";
+import { creditCoins } from "@/lib/zikacoins";
+
+const MATCH_WIN_COINS  = 35;
+const MATCH_LOSS_COINS = 25;
+
+/** Credita ZikaCoins ao vencedor e perdedor de uma partida confirmada */
+async function awardMatchCoins(
+  tx: Prisma.TransactionClient,
+  match: { id: string; playerAId: string; playerBId: string | null; winnerPlayerId: string | null; tournamentWeek?: { tournamentId: string } | null }
+) {
+  if (!match.winnerPlayerId || !match.playerBId) return; // bye ou sem resultado
+
+  const loserId = match.winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId;
+
+  await Promise.all([
+    creditCoins(tx, {
+      playerId: match.winnerPlayerId,
+      type: "MATCH_WIN_REWARD",
+      amount: MATCH_WIN_COINS,
+      matchId: match.id,
+      description: `Vitória na partida — +${MATCH_WIN_COINS} ZC`
+    }),
+    creditCoins(tx, {
+      playerId: loserId,
+      type: "MATCH_LOSS_REWARD",
+      amount: MATCH_LOSS_COINS,
+      matchId: match.id,
+      description: `Participação na partida — +${MATCH_LOSS_COINS} ZC`
+    })
+  ]);
+}
 
 const generateMatchupsSchema = z.object({
   tournamentId: z.string().min(1),
@@ -270,6 +301,12 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   });
 
   if (isInPerson) {
+    // Partida presencial já confirmada — credita ZikaCoins imediatamente
+    const matchForCoins = { id: matchId, playerAId: match.playerAId, playerBId: match.playerBId, winnerPlayerId: winnerId };
+    try {
+      await prisma.$transaction(async (tx) => { await awardMatchCoins(tx, matchForCoins); });
+    } catch { /* ignora erros de moedas para não bloquear o resultado */ }
+
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
     revalidatePath("/ranking");
@@ -515,15 +552,19 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
     const points = getMatchPoints(match, match.winnerPlayerId);
     const lossPoints = 0;
 
-    await prisma.match.update({
-      where: { id: matchId },
-      data: {
-        status: "CONFIRMED",
-        confirmedById: user.id,
-        confirmedAt: now,
-        rankingPointsA: match.winnerPlayerId === match.playerAId ? points.rankingPointsA : lossPoints,
-        rankingPointsB: match.winnerPlayerId === match.playerBId ? points.rankingPointsB : lossPoints,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
+        where: { id: matchId },
+        data: {
+          status: "CONFIRMED",
+          confirmedById: user.id,
+          confirmedAt: now,
+          rankingPointsA: match.winnerPlayerId === match.playerAId ? points.rankingPointsA : lossPoints,
+          rankingPointsB: match.winnerPlayerId === match.playerBId ? points.rankingPointsB : lossPoints,
+        },
+      });
+      // Credita ZikaCoins: vencedor +35 ZC, perdedor +25 ZC
+      await awardMatchCoins(tx, match);
     });
   }
 
