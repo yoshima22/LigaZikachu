@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { CheckCircle, Coins, Lock, ShoppingCart } from "lucide-react";
+import { CheckCircle, Coins, Lock, ShoppingCart, ZoomIn, X } from "lucide-react";
 import { purchaseItem } from "../actions";
 
 const rarityColors: Record<string, string> = {
@@ -36,7 +36,17 @@ interface Props {
 
 export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
   const [pending, startTransition] = useTransition();
-  const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [buyingId, setBuyingId]   = useState<string | null>(null);
+  const [lightbox, setLightbox]   = useState<{ src: string; name: string; type: string } | null>(null);
+
+  // Fecha ao pressionar Esc
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  useEffect(() => {
+    if (!lightbox) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeLightbox(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightbox, closeLightbox]);
 
   const handleBuy = (itemId: string, price: number, name: string) => {
     if (!playerId) { toast.error("Faça login com uma conta de jogador."); return; }
@@ -55,6 +65,40 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
   };
 
   return (
+    <>
+    {/* ── Lightbox ─────────────────────────────────────────────────────────── */}
+    {lightbox && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+        onClick={closeLightbox}
+      >
+        <div
+          className="relative max-h-[90vh] max-w-[90vw] rounded-2xl overflow-hidden shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox.src}
+            alt={lightbox.name}
+            className={`block max-h-[85vh] max-w-[88vw] ${
+              lightbox.type === "BANNER" ? "w-full object-cover" : "object-contain"
+            }`}
+            style={{ background: lightbox.type === "FRAME" ? "transparent" : undefined }}
+          />
+          <button
+            onClick={closeLightbox}
+            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+          >
+            <X size={16} />
+          </button>
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-3 pt-6">
+            <p className="text-sm font-semibold text-white">{lightbox.name}</p>
+            <p className="text-[10px] text-slate-400">Clique fora ou pressione Esc para fechar</p>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="space-y-3">
       <h2 className="font-semibold text-slate-200">{title}</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -70,17 +114,29 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
                 owned ? "border-[#7AC74C]/40" : rarityColors[item.rarity]?.split(" ")[0] ?? "border-border"
               }`}
             >
-              {/* Preview image / banner */}
+              {/* Preview image / banner — clicável para ampliar */}
               {item.imageUrl ? (
                 item.type === "BANNER" ? (
-                  <div className="aspect-[3/1] w-full overflow-hidden">
+                  <div
+                    className="group relative aspect-[3/1] w-full overflow-hidden cursor-zoom-in"
+                    onClick={() => setLightbox({ src: item.imageUrl!, name: item.name, type: item.type })}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                    <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                      <ZoomIn size={24} className="text-white drop-shadow" />
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex h-24 items-center justify-center bg-slate-900">
+                  <div
+                    className="group relative flex h-24 items-center justify-center bg-slate-900 cursor-zoom-in"
+                    onClick={() => setLightbox({ src: item.imageUrl!, name: item.name, type: item.type })}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.imageUrl} alt={item.name} className="max-h-20 object-contain" />
+                    <img src={item.imageUrl} alt={item.name} className="max-h-20 object-contain transition-transform group-hover:scale-110" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-t-xl">
+                      <ZoomIn size={20} className="text-white drop-shadow" />
+                    </div>
                   </div>
                 )
               ) : item.type === "TITLE" ? (
@@ -133,5 +189,6 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
         })}
       </div>
     </div>
+    </>
   );
 }
