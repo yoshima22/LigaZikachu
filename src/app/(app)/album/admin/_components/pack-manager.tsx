@@ -71,8 +71,12 @@ function PackForm({ form, setForm, onSave, onCancel, pending, label }: {
         value={form.imageUrl}
         onChange={(url) => setForm({ ...form, imageUrl: url })}
         label="Imagem do pacote"
-        maxMb={6}
-        hint="Pacote: sugerido 400×240px (proporção ~5:3). PNG com fundo ou transparente, até 6MB."
+        maxMb={10}
+        compress
+        maxWidth={800}
+        maxHeight={600}
+        quality={0.9}
+        hint="Qualquer tamanho — será redimensionado para até 800×600px. PNG preserva transparência."
       />
       <label className="flex items-center gap-2 text-xs text-slate-400 self-end pb-2">
         <input type="checkbox" checked={form.rarityBoost} onChange={(e) => setForm({ ...form, rarityBoost: e.target.checked })}
