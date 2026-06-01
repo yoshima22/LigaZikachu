@@ -72,17 +72,13 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                   {session.user.name ?? session.user.email}
                 </p>
               </Link>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/login" });
-                }}
-              >
-                <Button type="submit" variant="ghost" size="sm"
+              {/* Logout — usa rota dedicada para garantir limpeza do cookie */}
+              <Link href="/api/auth/signout-redirect">
+                <Button variant="ghost" size="sm"
                   className="text-slate-400 hover:text-red-400 hover:bg-red-500/10">
                   <LogOut size={14} />
                 </Button>
-              </form>
+              </Link>
             </div>
           </div>
 

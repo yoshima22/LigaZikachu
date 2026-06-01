@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle } from "lucide-react";
+import { POKEMON_TYPE_EMOJIS, POKEMON_TYPE_COLORS } from "@/lib/pokemon-types-data";
 import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../../actions";
 
 interface SavedDeckOption {
@@ -146,20 +147,30 @@ export function MatchDeckSelector({
                     <BookOpen size={10} /> Selecionar dos meus decks
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {savedDecks.map(d => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => loadSavedDeck(d)}
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          deckName === d.name
-                            ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 text-[#FFCB05]"
-                            : "border-border text-slate-400 hover:border-slate-500 hover:text-slate-200"
-                        }`}
-                      >
-                        {d.name}
-                      </button>
-                    ))}
+                    {savedDecks.map(d => {
+                      const types = d.archetype
+                        ? d.archetype.split(/[,/]/).map(t => t.trim().toLowerCase()).filter(Boolean)
+                        : [];
+                      const selected = deckName === d.name;
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => loadSavedDeck(d)}
+                          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                            selected
+                              ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 text-[#FFCB05]"
+                              : "border-border text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                          }`}
+                        >
+                          {types.slice(0, 3).map((t, i) => {
+                            const emoji = (POKEMON_TYPE_EMOJIS as Record<string, string>)[t];
+                            return emoji ? <span key={i}>{emoji}</span> : null;
+                          })}
+                          {d.name}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
