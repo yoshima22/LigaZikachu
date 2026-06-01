@@ -133,12 +133,14 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
     // Se tem deck vinculado, mostra só ele
     if (linkedDeck) {
-      const subtitle = linkedDeck.archetype ? " · " + linkedDeck.archetype : "";
       return (
-        <div className="mt-2">
-          <details className="rounded-md border border-[#FFCB05]/50 bg-[#FFCB05]/8 px-2 py-1 text-left">
-            <summary className="flex cursor-pointer items-center justify-between gap-2 text-[10px] font-semibold text-[#FFCB05]">
-              <span className="truncate">{linkedDeck.deckName}{subtitle}</span>
+        <div className="mt-2 w-full overflow-hidden">
+          <details className="w-full overflow-hidden rounded-md border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-2 py-1 text-left">
+            <summary className="flex min-w-0 cursor-pointer items-center justify-between gap-1.5 text-[10px] font-semibold text-[#FFCB05]">
+              <span className="min-w-0 truncate">
+                {linkedDeck.deckName}
+                {linkedDeck.archetype ? <span className="text-[#FFCB05]/60"> · {linkedDeck.archetype}</span> : null}
+              </span>
               <CopyDeckButton deckList={linkedDeck.deckList} />
             </summary>
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
@@ -234,12 +236,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
       {/* Players */}
       <div className="flex items-center justify-between gap-2">
-        <div className={`flex-1 text-center p-2 rounded-lg ${
+        <div className={`flex-1 min-w-0 text-center p-2 rounded-lg ${
           match.winnerPlayerId === match.playerAId
             ? "bg-green-500/10 border border-green-500/30"
             : "bg-slate-800/50"
         }`}>
-          <p className="font-semibold text-white text-sm">{match.playerA.displayName}</p>
+          <p className="font-semibold text-white text-sm truncate">{match.playerA.displayName}</p>
           <DeckBadges decks={match.playerADecks} selectedDeckId={match.playerADeckSubmissionId} />
           {match.status === "CONFIRMED" && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsA}pt</p>
@@ -248,12 +250,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
         <div className="text-slate-500 font-bold text-lg">VS</div>
 
-        <div className={`flex-1 text-center p-2 rounded-lg ${
+        <div className={`flex-1 min-w-0 text-center p-2 rounded-lg ${
           match.winnerPlayerId === match.playerBId
             ? "bg-green-500/10 border border-green-500/30"
             : "bg-slate-800/50"
         }`}>
-          <p className="font-semibold text-white text-sm">
+          <p className="font-semibold text-white text-sm truncate">
             {match.playerB?.displayName || "Bye"}
           </p>
           {match.playerBId && <DeckBadges decks={match.playerBDecks} selectedDeckId={match.playerBDeckSubmissionId} />}
