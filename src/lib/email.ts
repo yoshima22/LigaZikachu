@@ -87,11 +87,34 @@ export async function sendPasswordResetEmail(
 </body>
 </html>`;
 
+  const text = `
+Liga Zikachu — Redefinição de senha
+
+Olá, Treinador!
+
+Recebemos uma solicitação para redefinir a senha da sua conta na Liga Zikachu.
+
+Para criar uma nova senha, acesse o link abaixo:
+${resetLink}
+
+Por motivos de segurança, este link possui validade de 1 hora e poderá ser utilizado apenas uma vez.
+
+Se você não solicitou esta alteração, ignore este e-mail. Sua senha atual continuará funcionando normalmente.
+
+Nos vemos na próxima batalha!
+Equipe Liga Zikachu
+
+━━━━━━━━━━━━━━━━━━━━━━
+Este e-mail foi enviado automaticamente pela Liga Zikachu.
+Caso tenha recebido por engano, nenhuma ação é necessária.
+`.trim();
+
   try {
     await transporter.sendMail({
       from: `"Liga Zikachu" <${fromName}>`,
       to,
       subject: "Redefinição de senha — Liga Zikachu",
+      text,  // versão texto puro (reduz chance de spam)
       html,
     });
     return {};
