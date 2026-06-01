@@ -4,16 +4,13 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 
-type FormState = {
-  error?: string;
-};
+type FormState = { error?: string };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
-
   return (
     <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? "Entrando..." : "Entrar com email e senha"}
+      {pending ? "Entrando..." : "Entrar"}
     </Button>
   );
 }
@@ -30,16 +27,17 @@ export function SignInForm({
   return (
     <form action={formAction} className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-200" htmlFor="email">
-          Email
+        <label className="text-sm font-medium text-slate-200" htmlFor="identifier">
+          Email ou nick do PTCG Live
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
+          id="identifier"
+          name="identifier"
+          type="text"
           required
+          autoComplete="username"
           className="h-11 w-full rounded-xl border border-border bg-slate-950/60 px-3 text-sm text-white outline-none ring-0 transition focus:border-primary"
-          placeholder="voce@ligazikachu.com"
+          placeholder="voce@email.com ou SeuNickPTCG"
         />
       </div>
       <div className="space-y-2">
@@ -52,11 +50,12 @@ export function SignInForm({
           type="password"
           required
           minLength={8}
+          autoComplete="current-password"
           className="h-11 w-full rounded-xl border border-border bg-slate-950/60 px-3 text-sm text-white outline-none ring-0 transition focus:border-primary"
           placeholder="********"
         />
       </div>
-      {state?.error ? <p className="text-sm text-rose-300">{state.error}</p> : null}
+      {state?.error && <p className="text-sm text-rose-300">{state.error}</p>}
       <SubmitButton />
     </form>
   );

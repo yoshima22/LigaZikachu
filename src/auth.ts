@@ -7,29 +7,37 @@ import authConfig from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 
+// Aceita email OU nick do PTCG Live como identificador
 const credentialsSchema = z.object({
-  email: z.string().email(),
+  identifier: z.string().min(1),
   password: z.string().min(8)
 });
 
 const providers = [
   Credentials({
     credentials: {
-      email: { label: "Email", type: "email" },
-      password: { label: "Senha", type: "password" }
+      identifier: { label: "Email ou nick do PTCG Live", type: "text" },
+      password:   { label: "Senha", type: "password" }
     },
     async authorize(rawCredentials) {
       const parsed = credentialsSchema.safeParse(rawCredentials);
+      if (!parsed.success) return null;
 
-      if (!parsed.success) {
-        return null;
-      }
+      const identifier = parsed.data.identifier.trim();
 
-      const email = parsed.data.email.toLowerCase().trim();
-
-      const user = await prisma.user.findUnique({
-        where: { email }
+      // Tenta encontrar por email primeiro, depois por ptcglNick
+      let user = await prisma.user.findFirst({
+        where: { email: identifier.toLowerCase() }
       });
+
+      if (!user) {
+        // Busca por ptcglNick via join com Player
+        const player = await prisma.player.findFirst({
+          where: { ptcglNick: { equals: identifier, mode: "insensitive" } },
+          include: { user: true }
+        });
+        user = player?.user ?? null;
+      }
 
       if (!user?.passwordHash) {
         return null;

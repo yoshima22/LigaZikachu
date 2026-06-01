@@ -44,6 +44,19 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
 
   const data = updateProfileSchema.parse(input);
 
+  // Verifica unicidade do nick PTCG Live (case-insensitive, excluindo o próprio jogador)
+  if (data.ptcglNick) {
+    const conflicting = await prisma.player.findFirst({
+      where: {
+        ptcglNick: { equals: data.ptcglNick, mode: "insensitive" },
+        id: { not: player.id }
+      }
+    });
+    if (conflicting) {
+      return { error: "Esse nick do PTCG Live já está em uso por outra conta." };
+    }
+  }
+
   await prisma.$transaction([
     prisma.player.update({
       where: { id: player.id },

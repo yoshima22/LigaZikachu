@@ -13,8 +13,8 @@ export async function signInWithCredentials(
 ): Promise<FormState | undefined> {
   try {
     await signIn("credentials", {
-      email: String(formData.get("email") ?? ""),
-      password: String(formData.get("password") ?? ""),
+      identifier: String(formData.get("identifier") ?? ""),
+      password:   String(formData.get("password") ?? ""),
       redirectTo: "/dashboard"
     });
   } catch (error) {

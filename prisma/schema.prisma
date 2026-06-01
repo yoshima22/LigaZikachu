@@ -197,7 +197,7 @@ model Player {
   userId                  String               @unique
   displayName             String
   whatsapp                String?
-  ptcglNick               String?
+  ptcglNick               String?              @unique
   avatarUrl               String?
   active                  Boolean              @default(true)
   notes                   String?

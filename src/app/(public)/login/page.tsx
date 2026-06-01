@@ -10,7 +10,7 @@ export default function LoginPage() {
         <div className="space-y-2">
           <span className="text-sm font-medium uppercase tracking-[0.25em] text-primary">Liga Zikachu</span>
           <CardTitle>Entrar</CardTitle>
-          <CardDescription>Use email e senha. Novos acessos entram como pendentes até aprovação do admin.</CardDescription>
+          <CardDescription>Use seu email ou nick do PTCG Live para entrar. Novos acessos ficam pendentes até aprovação.</CardDescription>
         </div>
 
         <div className="my-6 h-px bg-border" />
