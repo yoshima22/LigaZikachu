@@ -1,14 +1,44 @@
-import { Resend } from "resend";
+/**
+ * Serviço de email da Liga Zikachu.
+ * Usa Gmail via Nodemailer (sem domínio próprio necessário).
+ *
+ * Configurar no Vercel → Environment Variables:
+ *   GMAIL_USER          = ligazikachu.noreply@gmail.com
+ *   GMAIL_APP_PASSWORD  = xxxx xxxx xxxx xxxx  (Senha de App do Google)
+ */
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+import nodemailer from "nodemailer";
 
-// FROM: configure RESEND_FROM no Vercel para usar seu domínio verificado.
-// Padrão usa o domínio de teste do Resend (só envia para o email do dono da conta).
-const FROM = process.env.RESEND_FROM ?? "onboarding@resend.dev";
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
-export async function sendPasswordResetEmail(to: string, token: string): Promise<{ error?: string }> {
+function createTransport() {
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+
+  if (!user || !pass) return null;
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: { user, pass }
+  });
+}
+
+export async function sendPasswordResetEmail(
+  to: string,
+  token: string
+): Promise<{ error?: string }> {
+  const transporter = createTransport();
+
+  if (!transporter) {
+    console.error(
+      "[Email] GMAIL_USER ou GMAIL_APP_PASSWORD não configurados. " +
+      "Adicione em Vercel > Settings > Environment Variables."
+    );
+    return { error: "Serviço de e-mail não configurado. Entre em contato com o admin da Liga." };
+  }
+
   const resetLink = `${APP_URL}/redefinir-senha?token=${token}`;
+  const fromName = process.env.GMAIL_USER ?? "Liga Zikachu";
 
   const html = `
 <!DOCTYPE html>
@@ -16,15 +46,13 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#0f0f1a;font-family:system-ui,sans-serif;color:#f8fafc;">
   <div style="max-width:520px;margin:40px auto;background:#1A1A2E;border-radius:16px;border:1px solid rgba(255,203,5,0.2);overflow:hidden;">
-    <!-- Header -->
     <div style="background:linear-gradient(135deg,#1A1A2E,#2a1a3e);padding:32px 32px 24px;text-align:center;border-bottom:1px solid rgba(255,203,5,0.15);">
       <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;background:linear-gradient(135deg,#FFCB05,#FFD700);border-radius:50%;margin-bottom:12px;">
         <span style="font-size:22px;">⚡</span>
       </div>
-      <h1 style="margin:0;font-size:22px;font-weight:700;color:#FFCB05;letter-spacing:-0.5px;">Liga Zikachu</h1>
+      <h1 style="margin:0;font-size:22px;font-weight:700;color:#FFCB05;">Liga Zikachu</h1>
       <p style="margin:4px 0 0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:2px;">Live Championship</p>
     </div>
-    <!-- Body -->
     <div style="padding:32px;">
       <p style="margin:0 0 16px;font-size:16px;color:#f8fafc;font-weight:600;">Olá, Treinador!</p>
       <p style="margin:0 0 16px;font-size:14px;color:#94a3b8;line-height:1.6;">
@@ -33,9 +61,9 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
       <p style="margin:0 0 24px;font-size:14px;color:#94a3b8;line-height:1.6;">
         Para criar uma nova senha, clique no botão abaixo:
       </p>
-      <!-- CTA Button -->
       <div style="text-align:center;margin:28px 0;">
-        <a href="${resetLink}" style="display:inline-block;background:#FFCB05;color:#1A1A2E;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;letter-spacing:0.2px;">
+        <a href="${resetLink}"
+          style="display:inline-block;background:#FFCB05;color:#1A1A2E;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">
           🔐 Redefinir minha senha
         </a>
       </div>
@@ -45,12 +73,10 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
       <p style="margin:0 0 24px;font-size:12px;color:#64748b;line-height:1.6;">
         Se você não solicitou esta alteração, pode ignorar este e-mail com segurança. Sua senha atual continuará funcionando normalmente.
       </p>
-      <!-- Divider -->
       <div style="border-top:1px solid rgba(255,203,5,0.1);margin:24px 0;"></div>
       <p style="margin:0;font-size:14px;color:#FFCB05;font-weight:600;">Nos vemos na próxima batalha!</p>
       <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Equipe Liga Zikachu</p>
     </div>
-    <!-- Footer -->
     <div style="background:#0f0f1a;padding:20px 32px;border-top:1px solid rgba(255,203,5,0.08);text-align:center;">
       <p style="margin:0 0 4px;font-size:11px;color:#475569;">Este e-mail foi enviado automaticamente pela Liga Zikachu.</p>
       <p style="margin:0 0 4px;font-size:11px;color:#475569;">Caso tenha recebido esta mensagem por engano, nenhuma ação é necessária.</p>
@@ -59,40 +85,26 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
     </div>
   </div>
 </body>
-</html>
-`;
-
-  if (!process.env.RESEND_API_KEY) {
-    console.error("[Email] RESEND_API_KEY não configurada. Adicione em Vercel > Settings > Environment Variables.");
-    return { error: "Serviço de e-mail não configurado. Entre em contato com o admin." };
-  }
+</html>`;
 
   try {
-    const result = await resend.emails.send({
-      from: FROM,
+    await transporter.sendMail({
+      from: `"Liga Zikachu" <${fromName}>`,
       to,
       subject: "Redefinição de senha — Liga Zikachu",
       html,
     });
-
-    if (result.error) {
-      const msg = (result.error as { message?: string }).message ?? JSON.stringify(result.error);
-      console.error("[Email] Resend error:", msg);
-
-      // Mensagens de erro específicas do Resend
-      if (msg.includes("domain") || msg.includes("verify")) {
-        return { error: "Domínio de envio não verificado no Resend. Configure RESEND_FROM com um domínio verificado." };
-      }
-      if (msg.includes("API key") || msg.includes("Unauthorized")) {
-        return { error: "Chave de API do Resend inválida. Verifique RESEND_API_KEY no Vercel." };
-      }
-      return { error: "Não foi possível enviar o e-mail. Tente novamente em alguns minutos." };
-    }
-
     return {};
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[Email] Exception:", msg);
-    return { error: "Erro ao enviar e-mail. Tente novamente." };
+    console.error("[Email] Gmail send error:", msg);
+
+    if (msg.includes("Invalid login") || msg.includes("Username and Password")) {
+      return { error: "Credenciais de email inválidas. Verifique GMAIL_APP_PASSWORD no Vercel." };
+    }
+    if (msg.includes("Less secure")) {
+      return { error: "Use uma Senha de App do Google (não a senha normal da conta Gmail)." };
+    }
+    return { error: "Não foi possível enviar o e-mail. Tente novamente em alguns minutos." };
   }
 }
