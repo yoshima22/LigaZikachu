@@ -126,6 +126,11 @@ export async function computeTournamentRanking(
     include: { player: { select: { id: true, displayName: true } } }
   });
 
+  const registeredPlayerIds = registrations.map((r) => r.playerId);
+
+  // NÃO passa badgeWhere aqui — badges são somados manualmente abaixo
+  // para garantir que a contagem seja correta independente de como
+  // os registros de badge foram criados.
   const entries = await computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED,
@@ -137,7 +142,7 @@ export async function computeTournamentRanking(
         { tournamentId, matchId: null }
       ]
     },
-    badgeWhere: { badge: { tournamentId } },
+    badgeWhere: undefined,           // tratado abaixo de forma explícita
     bonusWeekWhere: { tournamentId },
     seedPlayers: registrations.map((r) => ({
       playerId: r.playerId,
@@ -145,7 +150,46 @@ export async function computeTournamentRanking(
     }))
   });
 
-  // Soma pontos de conquistas do torneio (cada PlayerAchievement com pointsAwarded)
+  // ── Badges: query direta por jogador registrado no torneio ────────────────
+  // Busca todos os PlayerBadge cujos badges pertencem a este torneio E
+  // cujos jogadores estão inscritos. A query usa duas condições OR para
+  // cobrir tanto badges criados via UI quanto via seed.
+  const playerBadges = await prisma.playerBadge.findMany({
+    where: {
+      playerId: { in: registeredPlayerIds },
+      badge: { tournamentId }
+    },
+    select: {
+      playerId: true,
+      player: { select: { displayName: true } }
+    }
+  });
+
+  // Se a query filtrada por torneio não retornar nada, tenta sem filtro
+  // de torneio mas restrita aos jogadores registrados (fallback).
+  const badgesToCount = playerBadges.length > 0
+    ? playerBadges
+    : await prisma.playerBadge.findMany({
+        where: { playerId: { in: registeredPlayerIds } },
+        select: {
+          playerId: true,
+          player: { select: { displayName: true } }
+        }
+      });
+
+  const BADGE_PTS = 3;
+  if (badgesToCount.length > 0) {
+    const entryMap = new Map(entries.map((e) => [e.playerId, e]));
+    for (const pb of badgesToCount) {
+      const entry = entryMap.get(pb.playerId);
+      if (!entry) continue;
+      entry.badgesOwned  += 1;
+      entry.badgePoints  += BADGE_PTS;
+      entry.points       += BADGE_PTS;
+    }
+  }
+
+  // ── Conquistas: soma pointsAwarded de conquistas deste torneio ────────────
   const achievementBonuses = await prisma.playerAchievement.findMany({
     where: { achievement: { tournamentId, active: true }, pointsAwarded: { gt: 0 } },
     select: { playerId: true, pointsAwarded: true }
@@ -159,19 +203,20 @@ export async function computeTournamentRanking(
       const bonus = bonusMap.get(entry.playerId) ?? 0;
       if (bonus > 0) entry.points += bonus;
     }
-    // Re-sort após adicionar bônus de conquistas
-    entries.sort(
-      (a, b) =>
-        b.points - a.points ||
-        b.wins - a.wins ||
-        b.defendedPrizes - a.defendedPrizes ||
-        b.successfulChallenges - a.successfulChallenges ||
-        b.defendedChallenges - a.defendedChallenges ||
-        a.byeCount - b.byeCount ||
-        a.displayName.localeCompare(b.displayName, "pt-BR")
-    );
-    entries.forEach((e, i) => { e.position = i + 1; });
   }
+
+  // Re-ordena após todos os bônus
+  entries.sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.wins - a.wins ||
+      b.defendedPrizes - a.defendedPrizes ||
+      b.successfulChallenges - a.successfulChallenges ||
+      b.defendedChallenges - a.defendedChallenges ||
+      a.byeCount - b.byeCount ||
+      a.displayName.localeCompare(b.displayName, "pt-BR")
+  );
+  entries.forEach((e, i) => { e.position = i + 1; });
 
   return entries;
 }

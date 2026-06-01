@@ -456,9 +456,22 @@ export async function GET() {
       await prisma.tournamentWeek.update({ where: { id: weekId }, data: { bonusRule: bonusRuleJson } });
     };
 
+    // Penalidades de ginásio — aplicadas como bônus negativo na Semana 1
+    // pois os registros de Challenge ainda nao foram criados.
+    // Quando os desafios forem importados, remover estas entradas para evitar
+    // dupla contagem (o sistema ja aplica -2 por derrota em Challenge.REJECTED).
+    const GYM_PENALTY_BONUSES = [
+      { name:"Erick",    points:-4, reason:"Penalidade ginasio (2 derrotas em ginasio x -2pts)" },
+      { name:"Cristian", points:-6, reason:"Penalidade ginasio (3 derrotas em ginasio x -2pts)" },
+    ];
+
     await applyBonusToWeek(4, DUPLAS_BONUSES);
     await applyBonusToWeek(7, EXTRAS_BONUSES);
-    log.push(`✓ Bônus manuais aplicados (Semana 4: duplas +3/+3 | Semana 7: extras finais)`);
+    await applyBonusToWeek(1, GYM_PENALTY_BONUSES);
+    log.push(`✓ Bônus manuais aplicados:`);
+    log.push(`  - S4: duplas Rodrigo+3, Alan+3`);
+    log.push(`  - S7: extras finais (Rodrigo+4, Erick+4, Luiz+6, Moises+4, Nakaima+2, Cristian+2)`);
+    log.push(`  - S1: penalidades ginasio (Erick -4, Cristian -6)`);
     log.push(`\n🎉 Importação da 2ª Edição concluída!`);
     log.push(`📌 Torneio: /torneios/segunda-edicao`);
     log.push(`📌 Conquistas: /conquistas`);
