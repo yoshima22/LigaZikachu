@@ -1513,7 +1513,6 @@ export async function submitDeckForMatch(raw: {
             seasonId,
             tournamentId: week.tournament.id,
             tournamentWeekId: week.id,
-            matchId: raw.matchId,
             playerId: player.id,
             deckNumber,
             deckName: raw.deckName,
