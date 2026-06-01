@@ -188,14 +188,17 @@ export default async function PlayerDetailPage({
             <div className="flex items-end gap-5">
               {/* Avatar com moldura — tamanho maior */}
               {(() => {
-                // Lê metadados da moldura para posicionamento
-                const frameMeta = equippedFrame?.item.metadata as
+                // DEBUG: log metadados no servidor (remover após confirmar funcionamento)
+                const rawMeta = equippedFrame?.item.metadata;
+                console.log("[FrameDebug] raw metadata:", JSON.stringify(rawMeta));
+                const frameMeta = rawMeta as
                   | { frameScale?: number; frameOffsetX?: number; frameOffsetY?: number }
                   | null | undefined;
                 const AVATAR = 80; // px
                 const scale   = frameMeta?.frameScale  ?? 2.0;
                 const offsetX = frameMeta?.frameOffsetX ?? 0;
                 const offsetY = frameMeta?.frameOffsetY ?? 0;
+                console.log("[FrameDebug] applied values:", { scale, offsetX, offsetY, frameSize: AVATAR * scale });
                 const frameSize = AVATAR * scale;
                 // Âncora no centro do avatar com transform translate(-50%,-50%)
                 // Garante crescimento simétrico ao aumentar escala (sem deslocar p/ esquerda)
@@ -237,6 +240,12 @@ export default async function PlayerDetailPage({
                   </div>
                 );
               })()}
+              {/* DEBUG — visível apenas para admin, remover após confirmar */}
+              {isAdminUser && equippedFrame && (
+                <div className="absolute -bottom-6 left-0 text-[9px] text-slate-500 whitespace-nowrap z-50">
+                  meta:{JSON.stringify(equippedFrame.item.metadata ?? "null")}
+                </div>
+              )}
 
               {/* Identidade — texto grande diretamente no gradiente */}
               <div className="min-w-0 pb-1">
