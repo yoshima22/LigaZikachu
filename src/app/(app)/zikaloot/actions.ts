@@ -215,6 +215,35 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
   }
 }
 
+// ── Editar loteria (apenas SCHEDULED) ────────────────────────────────────────
+
+export async function updateZikaLoot(
+  lootId: string,
+  raw: { name: string; description?: string; prize: string; drawAt: string; prizeConfig?: Record<string, unknown> }
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const loot = await prisma.zikaLoot.findUnique({ where: { id: lootId }, select: { status: true } });
+    if (!loot) return { error: "Loteria não encontrada." };
+    if (loot.status !== "SCHEDULED") return { error: "Só é possível editar loterias aguardando sorteio." };
+
+    await prisma.zikaLoot.update({
+      where: { id: lootId },
+      data: {
+        name: raw.name.trim(),
+        description: raw.description?.trim() || null,
+        prize: raw.prize.trim(),
+        drawAt: new Date(raw.drawAt),
+        prizeConfig: raw.prizeConfig ? (raw.prizeConfig as Prisma.InputJsonValue) : undefined,
+      }
+    });
+    revalidatePath("/zikaloot");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ── Cancelar loteria ──────────────────────────────────────────────────────────
 
 export async function deleteZikaLoot(lootId: string): Promise<{ error?: string }> {

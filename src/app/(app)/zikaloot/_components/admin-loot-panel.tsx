@@ -2,14 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createZikaLoot, runDraw, cancelZikaLoot, deleteZikaLoot } from "../actions";
+import { createZikaLoot, runDraw, cancelZikaLoot, deleteZikaLoot, updateZikaLoot } from "../actions";
 import type { PrizeItem } from "@/lib/zikaloot-types";
 
 interface Loot {
-  id: string; name: string; prize: string; status: string;
+  id: string; name: string; prize: string; description?: string | null; status: string;
   drawAt: string; drawnNumber: number | null; winnerName: string | null; picksCount: number;
+  prizeConfig?: unknown;
 }
 
 const PRIZE_LABELS: Record<string, string> = {
@@ -86,6 +87,9 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", prize: "", drawAt: "" });
   const [prizes, setPrizes] = useState<PrizeItem[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", prize: "", drawAt: "" });
+  const [editPrizes, setEditPrizes] = useState<PrizeItem[]>([]);
 
   const handleCreate = () => {
     startTransition(async () => {
@@ -108,6 +112,40 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
         toast.success("Loteria criada!"); setShowCreate(false);
         setForm({ name: "", description: "", prize: "", drawAt: "" }); setPrizes([]);
       } catch { toast.error("Erro ao criar."); }
+    });
+  };
+
+  const openEdit = (l: Loot) => {
+    setEditingId(l.id);
+    const dt = new Date(l.drawAt);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    setEditForm({ name: l.name, description: l.description ?? "", prize: l.prize, drawAt: local });
+    const cfg = l.prizeConfig as { prizes?: PrizeItem[] } | null | undefined;
+    setEditPrizes(cfg?.prizes ?? []);
+  };
+
+  const handleUpdate = () => {
+    if (!editingId) return;
+    startTransition(async () => {
+      try {
+        const prizeConfig = editPrizes.length > 0 ? { prizes: editPrizes } : undefined;
+        const result = await updateZikaLoot(editingId, {
+          name: editForm.name,
+          description: editForm.description || undefined,
+          prize: editForm.prize || (editPrizes.length > 0 ? editPrizes.map((p) => {
+            if (p.type === "COINS") return `${p.amount} ZikaCoins`;
+            if (p.type === "STICKER") return `Figurinha: ${p.cardName}`;
+            if (p.type === "COSMETIC") return p.itemName;
+            if (p.type === "CUSTOM") return p.description;
+            return "Prêmio";
+          }).join(" + ") : "Prêmio"),
+          drawAt: new Date(editForm.drawAt).toISOString(),
+          prizeConfig
+        });
+        if (result.error) { toast.error(result.error); return; }
+        toast.success("Loteria atualizada!"); setEditingId(null);
+      } catch { toast.error("Erro ao atualizar."); }
     });
   };
 
@@ -184,25 +222,60 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
       )}
 
       {loots.filter((l) => l.status === "SCHEDULED").map((l) => (
-        <div key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-slate-950/60 px-4 py-3">
-          <div>
-            <p className="font-medium text-slate-200">{l.name}</p>
-            <p className="text-xs text-slate-500">{l.picksCount} números · Sorteio: {new Date(l.drawAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
+        <div key={l.id} className="rounded-xl border border-border bg-slate-950/60 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div>
+              <p className="font-medium text-slate-200">{l.name}</p>
+              <p className="text-xs text-slate-500">{l.picksCount} números · Sorteio: {new Date(l.drawAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" disabled={pending} onClick={() => openEdit(l)}
+                className="rounded-lg border border-slate-600 px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-60">
+                <Pencil size={13} />
+              </button>
+              <button type="button" disabled={pending} onClick={() => handleDraw(l.id, l.name)}
+                className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60">
+                Sortear agora
+              </button>
+              <button type="button" disabled={pending} onClick={() => handleCancel(l.id, l.name)}
+                className="rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-400 hover:bg-amber-500/10 disabled:opacity-60">
+                Cancelar
+              </button>
+              <button type="button" disabled={pending} onClick={() => handleDelete(l.id, l.name)}
+                className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:opacity-60">
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button type="button" disabled={pending} onClick={() => handleDraw(l.id, l.name)}
-              className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60">
-              Sortear agora
-            </button>
-            <button type="button" disabled={pending} onClick={() => handleCancel(l.id, l.name)}
-              className="rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-400 hover:bg-amber-500/10 disabled:opacity-60">
-              Cancelar
-            </button>
-            <button type="button" disabled={pending} onClick={() => handleDelete(l.id, l.name)}
-              className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 disabled:opacity-60">
-              <Trash2 size={14} />
-            </button>
-          </div>
+          {/* Formulário de edição inline */}
+          {editingId === l.id && (
+            <div className="border-t border-border bg-slate-900/60 grid gap-3 p-4 sm:grid-cols-2">
+              {[
+                { key: "name", label: "Nome" },
+                { key: "prize", label: "Descrição resumida do prêmio" },
+                { key: "description", label: "Descrição extra (opcional)" }
+              ].map(({ key, label }) => (
+                <label key={key} className="space-y-1 text-xs text-slate-400">
+                  <span>{label}</span>
+                  <input value={(editForm as Record<string, string>)[key]}
+                    onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+                </label>
+              ))}
+              <label className="space-y-1 text-xs text-slate-400">
+                <span>Data/hora do sorteio</span>
+                <input type="datetime-local" value={editForm.drawAt}
+                  onChange={(e) => setEditForm({ ...editForm, drawAt: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+              </label>
+              <PrizeList prizes={editPrizes} onChange={setEditPrizes} />
+              <div className="flex gap-2 sm:col-span-2">
+                <Button type="button" disabled={!editForm.name || !editForm.drawAt || pending} onClick={handleUpdate}
+                  className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">Salvar</Button>
+                <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ShopItemType } from "@prisma/client";
 import { Ticket, Trophy } from "lucide-react";
+import type { PrizeConfig } from "@/lib/zikaloot-types";
 import { Card } from "@/components/ui/card";
 import { LootBoard } from "./_components/loot-board";
 import { AdminLootPanel } from "./_components/admin-loot-panel";
@@ -84,7 +85,27 @@ export default async function ZikaLootPage() {
             <div className="mt-2 flex flex-wrap gap-4">
               <div>
                 <p className="text-[10px] text-slate-500">Prêmio</p>
-                <p className="text-sm font-semibold text-[#7AC74C]">{activeLoot.prize}</p>
+                {/* Mostra prêmios estruturados (figurinhas, moedas, etc.) */}
+                {(() => {
+                  const cfg = activeLoot.prizeConfig as PrizeConfig | { prizes?: PrizeConfig["prizes"] } | null | undefined;
+                  const items = (cfg as PrizeConfig)?.prizes ?? [];
+                  if (items.length === 0) {
+                    return <p className="text-sm font-semibold text-[#7AC74C]">{activeLoot.prize}</p>;
+                  }
+                  return (
+                    <div className="flex flex-wrap gap-2 mt-0.5">
+                      {items.map((item, i) => (
+                        <span key={i} className="flex items-center gap-1 rounded-full border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-2 py-0.5 text-xs font-semibold text-[#7AC74C]">
+                          {item.type === "COINS"    && <>🪙 {item.amount} ZikaCoins</>}
+                          {item.type === "STICKER"  && <>🃏 Figurinha: {item.cardName}</>}
+                          {item.type === "TICKET"   && <>🎟️ Ticket ZikaLoot</>}
+                          {item.type === "COSMETIC" && <>🎨 {item.itemName}</>}
+                          {item.type === "CUSTOM"   && <>🎁 {item.description}</>}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 <p className="text-[10px] text-slate-500">Sorteio em</p>
@@ -125,11 +146,13 @@ export default async function ZikaLootPage() {
         id: l.id,
         name: l.name,
         prize: l.prize,
+        description: l.description,
         status: l.status,
         drawAt: l.drawAt.toISOString(),
         drawnNumber: l.drawnNumber,
         winnerName: l.winner?.displayName ?? null,
-        picksCount: l.picks.length
+        picksCount: l.picks.length,
+        prizeConfig: l.prizeConfig
       }))} />}
 
       {/* Histórico */}

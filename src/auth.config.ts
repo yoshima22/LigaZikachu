@@ -9,9 +9,7 @@ const authConfig = {
   },
   providers: [],
   callbacks: {
-    // ── session callback roda no Edge também ──────────────────────────────────
-    // Propaga role e status do JWT para session.user, necessário para que
-    // o middleware authorized() consiga verificar permissões de admin.
+    // Propaga role/status do JWT para session.user no Edge runtime
     session({ session, token }) {
       if (session.user && token) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,15 +24,9 @@ const authConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = Boolean(auth?.user);
 
-      // Lê role tanto de session.user (pós-session callback) quanto do token raw
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const u = auth?.user as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const t = (auth as any)?.token ?? (auth as any);
-      const role: string | undefined =
-        u?.role ??           // session callback propagou
-        t?.role ??           // fallback no token raw
-        undefined;
+      const role: string | undefined = u?.role ?? undefined;
 
       const isAdminRoute = nextUrl.pathname.startsWith("/admin");
       const isProtectedRoute =
@@ -46,12 +38,14 @@ const authConfig = {
         isAdminRoute;
 
       if (isAdminRoute) {
-        // Se logado mas sem role na sessão → redireciona para refresh de sessão
-        // para forçar re-login com token atualizado
-        if (isLoggedIn && !role) {
-          return Response.redirect(new URL("/api/auth/signout-redirect", nextUrl));
+        // Não logado → vai para login
+        if (!isLoggedIn) return false;
+        // Logado sem role admin → vai para dashboard (NÃO faz logout)
+        // Evita desconexões involuntárias quando role não está no JWT ainda
+        if (!role || !adminRoles.has(role)) {
+          return Response.redirect(new URL("/dashboard", nextUrl));
         }
-        return Boolean(role && adminRoles.has(role));
+        return true;
       }
 
       if (isProtectedRoute) return isLoggedIn;
