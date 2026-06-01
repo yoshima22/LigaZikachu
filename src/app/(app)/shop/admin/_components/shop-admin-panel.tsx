@@ -46,8 +46,9 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
 };
 
 // Preview interativo da moldura sobre um avatar placeholder
+// AVATAR deve ser idêntico ao perfil real (80px) para calibração 1:1
 function FramePreview({ imageUrl, frameMeta }: { imageUrl: string; frameMeta: FrameMeta }) {
-  const AVATAR = 96;
+  const AVATAR = 80; // igual ao perfil real em jogadores/[id]/page.tsx
   const { frameScale, frameOffsetX, frameOffsetY } = frameMeta;
   const frameSize = AVATAR * frameScale;
   // Ancora a moldura no CENTRO do avatar usando transform translate(-50%,-50%)
