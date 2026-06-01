@@ -57,6 +57,24 @@ export default async function ZikaLootPage() {
   const myPickMap = new Map(myPicks.map((p) => [p.lootId, p.number]));
   const activeLoot = loots.find((l) => l.status === ZikaLootStatus.SCHEDULED);
 
+  // Busca imagens das figurinhas que são prêmio na loteria ativa
+  const stickerCardImages = new Map<string, { imageUrl: string | null; displayName: string }>();
+  if (activeLoot?.prizeConfig) {
+    const cfg = activeLoot.prizeConfig as { prizes?: Array<{ type: string; cardId?: string }> };
+    const stickerIds = (cfg.prizes ?? [])
+      .filter(p => p.type === "STICKER" && p.cardId)
+      .map(p => p.cardId!);
+    if (stickerIds.length > 0) {
+      const cards = await prisma.pokemonCard.findMany({
+        where: { id: { in: stickerIds } },
+        select: { id: true, imageUrl: true, displayName: true }
+      });
+      for (const c of cards) {
+        stickerCardImages.set(c.id, { imageUrl: c.imageUrl, displayName: c.displayName });
+      }
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -93,16 +111,42 @@ export default async function ZikaLootPage() {
                     return <p className="text-sm font-semibold text-[#7AC74C]">{activeLoot.prize}</p>;
                   }
                   return (
-                    <div className="flex flex-wrap gap-2 mt-0.5">
-                      {items.map((item, i) => (
-                        <span key={i} className="flex items-center gap-1 rounded-full border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-2 py-0.5 text-xs font-semibold text-[#7AC74C]">
-                          {item.type === "COINS"    && <>🪙 {item.amount} ZikaCoins</>}
-                          {item.type === "STICKER"  && <>🃏 Figurinha: {item.cardName}</>}
-                          {item.type === "TICKET"   && <>🎟️ Ticket ZikaLoot</>}
-                          {item.type === "COSMETIC" && <>🎨 {item.itemName}</>}
-                          {item.type === "CUSTOM"   && <>🎁 {item.description}</>}
-                        </span>
-                      ))}
+                    <div className="flex flex-wrap gap-3 mt-1">
+                      {items.map((item, i) => {
+                        if (item.type === "STICKER") {
+                          const card = stickerCardImages.get(item.cardId);
+                          return (
+                            <div key={i} className="flex items-center gap-2 rounded-xl border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-3 py-2">
+                              {card?.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={card.imageUrl}
+                                  alt={card.displayName}
+                                  className="h-16 w-12 rounded-lg object-cover shadow-md"
+                                  style={{ imageRendering: "auto" }}
+                                />
+                              ) : (
+                                <span className="text-2xl">🃏</span>
+                              )}
+                              <div>
+                                <p className="text-[10px] text-[#7AC74C]/70 uppercase tracking-wide">Figurinha</p>
+                                <p className="text-sm font-semibold text-[#7AC74C]">
+                                  {card?.displayName ?? item.cardName}
+                                </p>
+                                <p className="text-[10px] text-slate-500">#{item.cardId}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <span key={i} className="flex items-center gap-1 rounded-full border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-2 py-1 text-xs font-semibold text-[#7AC74C]">
+                            {item.type === "COINS"    && <>🪙 {item.amount} ZikaCoins</>}
+                            {item.type === "TICKET"   && <>🎟️ Ticket ZikaLoot</>}
+                            {item.type === "COSMETIC" && <>🎨 {item.itemName}</>}
+                            {item.type === "CUSTOM"   && <>🎁 {item.description}</>}
+                          </span>
+                        );
+                      })}
                     </div>
                   );
                 })()}
