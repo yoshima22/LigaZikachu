@@ -1376,6 +1376,172 @@ export async function submitTournamentWeekDeck(
   }
 }
 
+// ── Remover própria deck submission (semana ainda OPEN) ──────────────────────
+
+export async function deleteOwnDeckSubmission(
+  submissionId: string
+): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const submission = await prisma.deckSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        tournamentWeek: { select: { status: true, tournamentId: true } },
+        tournament: { select: { slug: true } }
+      }
+    });
+
+    if (!submission) return { error: "Submissão não encontrada." };
+    if (submission.playerId !== player.id) return { error: "Você não pode remover a submissão de outro jogador." };
+
+    const weekStatus = submission.tournamentWeek?.status;
+    const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+
+    if (!isAdmin && weekStatus !== "OPEN") {
+      return { error: "Só é possível remover decks enquanto a semana estiver aberta." };
+    }
+
+    // Remove referência na partida (se vinculada)
+    await prisma.$transaction(async (tx) => {
+      await tx.match.updateMany({
+        where: { playerADeckSubmissionId: submissionId },
+        data: { playerADeckSubmissionId: null }
+      });
+      await tx.match.updateMany({
+        where: { playerBDeckSubmissionId: submissionId },
+        data: { playerBDeckSubmissionId: null }
+      });
+      await tx.deckSubmission.delete({ where: { id: submissionId } });
+    });
+
+    const slug = submission.tournament?.slug;
+    if (slug) {
+      revalidatePath(`/torneios/${slug}`);
+      revalidatePath(`/torneios/${slug}/semanas/${submission.tournamentWeek?.status}`);
+    }
+    revalidatePath("/torneios");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Enviar deck para partida específica ──────────────────────────────────────
+
+export async function submitDeckForMatch(raw: {
+  matchId: string;
+  deckName: string;
+  archetype?: string;
+  deckList: string;
+  savedDeckId?: string;
+}): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const match = await prisma.match.findUnique({
+      where: { id: raw.matchId },
+      include: {
+        tournamentWeek: {
+          include: { tournament: { select: { id: true, slug: true, seasonId: true } } }
+        }
+      }
+    });
+
+    if (!match) return { error: "Partida não encontrada." };
+
+    const week = match.tournamentWeek;
+    if (!week) return { error: "Semana da partida não encontrada." };
+
+    // Verifica se o jogador é participante desta partida
+    const isPlayerA = match.playerAId === player.id;
+    const isPlayerB = match.playerBId === player.id;
+    if (!isPlayerA && !isPlayerB) return { error: "Você não é participante desta partida." };
+
+    if (!canSubmitTournamentWeekDeck({
+      viewerRole: user.role,
+      registrationStatus: "APPROVED",
+      week
+    })) {
+      return { error: "Prazo de envio de deck encerrado ou semana não está aberta." };
+    }
+
+    if (!raw.deckName?.trim() || !raw.deckList?.trim()) {
+      return { error: "Informe o nome e a lista do deck." };
+    }
+
+    // Resolve seasonId (fallback)
+    let seasonId = week.tournament.seasonId;
+    if (!seasonId) {
+      const fallback = await prisma.season.findFirst({ orderBy: [{ status: "asc" }, { startDate: "desc" }], select: { id: true } });
+      seasonId = fallback?.id ?? null;
+    }
+    if (!seasonId) return { error: "Nenhuma temporada cadastrada no sistema." };
+
+    const deadline = week.deckLockAt ?? week.lockAt ?? week.endDate;
+    const now = new Date();
+
+    // Verifica se já existe submission desta partida para este jogador
+    const existingSubmissionId = isPlayerA ? match.playerADeckSubmissionId : match.playerBDeckSubmissionId;
+    const deckNumber = isPlayerA ? 1 : 2;
+
+    await prisma.$transaction(async (tx) => {
+      let submission;
+      if (existingSubmissionId) {
+        // Atualiza a submission existente
+        submission = await tx.deckSubmission.update({
+          where: { id: existingSubmissionId },
+          data: {
+            deckName: raw.deckName,
+            archetype: raw.archetype || null,
+            deckList: raw.deckList,
+            editedAt: now,
+            isLate: now > deadline
+          }
+        });
+      } else {
+        submission = await tx.deckSubmission.create({
+          data: {
+            seasonId,
+            tournamentId: week.tournament.id,
+            tournamentWeekId: week.id,
+            matchId: raw.matchId,
+            playerId: player.id,
+            deckNumber,
+            deckName: raw.deckName,
+            archetype: raw.archetype || null,
+            deckList: raw.deckList,
+            deadlineAt: deadline,
+            status: "SUBMITTED",
+            isLate: now > deadline
+          }
+        });
+        // Vincula na partida
+        await tx.match.update({
+          where: { id: raw.matchId },
+          data: isPlayerA
+            ? { playerADeckSubmissionId: submission.id }
+            : { playerBDeckSubmissionId: submission.id }
+        });
+      }
+    });
+
+    revalidatePath(`/torneios/${week.tournament.slug}`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function selfRegister(
   tournamentId: string
 ): Promise<{ error?: string }> {

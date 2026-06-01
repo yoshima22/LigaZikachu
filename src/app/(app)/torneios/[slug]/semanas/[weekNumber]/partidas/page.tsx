@@ -7,6 +7,8 @@ import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { Button } from "@/components/ui/button";
 import { generateMatchups, closeWeek } from "./actions";
 import { MatchCard } from "./_components/match-card";
+import { MatchDeckSelector } from "./_components/match-deck-selector";
+import { canSubmitTournamentWeekDeck } from "@/lib/decks";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -140,6 +142,22 @@ export default async function PartidasPage({ params }: Props) {
       )
     : [];
 
+  // Saved decks do jogador atual (para o deck selector por partida)
+  const savedDecks = player
+    ? await prisma.savedDeck.findMany({
+        where: { playerId: player.id },
+        select: { id: true, name: true, archetype: true, deckList: true },
+        orderBy: { updatedAt: "desc" }
+      })
+    : [];
+
+  const weekOpen = week.status === "OPEN";
+  const canSendDecks = player && canSubmitTournamentWeekDeck({
+    viewerRole: user?.role ?? "PLAYER",
+    registrationStatus: registration?.status ?? null,
+    week
+  });
+
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
@@ -206,20 +224,73 @@ export default async function PartidasPage({ params }: Props) {
 
       {/* Minhas Partidas */}
       {player && myMatches.length > 0 && (
-        <section className="space-y-3">
+        <section className="space-y-4">
           <h2 className="text-lg font-semibold text-[#FFCB05]">Minhas Partidas</h2>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {myMatches.map((match) => (
-              <MatchCard
-                key={match.id}
-                match={match}
-                currentPlayerId={player.id}
-                isAdmin={isAdmin}
-                tournamentFormat={tournament.format}
-                canReportResult={canReportAnyInPersonMatch}
-              />
-            ))}
+            {myMatches.map((match, idx) => {
+              const globalIdx = matchCards.indexOf(match) + 1;
+              return (
+                <MatchCard
+                  key={match.id}
+                  match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${globalIdx}` }}
+                  currentPlayerId={player.id}
+                  isAdmin={isAdmin}
+                  tournamentFormat={tournament.format}
+                  canReportResult={canReportAnyInPersonMatch}
+                />
+              );
+            })}
           </div>
+
+          {/* Envio de deck por partida */}
+          {(weekOpen || myMatches.some(m =>
+            (m.playerAId === player.id && m.playerADeckSubmissionId) ||
+            (m.playerBId === player.id && m.playerBDeckSubmissionId)
+          )) && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-200">Decks por Partida</h3>
+                {weekOpen && (
+                  <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">
+                    Semana aberta — envio liberado
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                Você pode usar decks diferentes em cada partida. Selecione ou cole a lista abaixo.
+              </p>
+              <div className="space-y-2">
+                {myMatches.map((match, idx) => {
+                  const globalIdx = matchCards.indexOf(match) + 1;
+                  const isPlayerA = match.playerAId === player.id;
+                  const opponent = isPlayerA ? match.playerB : match.playerA;
+                  const submissionId = isPlayerA
+                    ? match.playerADeckSubmissionId
+                    : match.playerBDeckSubmissionId;
+                  const submittedDeck = submissionId
+                    ? (isPlayerA ? match.playerADecks[0] : match.playerBDecks[0])
+                    : null;
+
+                  return (
+                    <MatchDeckSelector
+                      key={match.id}
+                      matchId={match.id}
+                      matchNumber={globalIdx}
+                      opponentName={opponent?.displayName ?? "?"}
+                      weekOpen={weekOpen}
+                      savedDecks={savedDecks}
+                      existingSubmission={submittedDeck ? {
+                        id: submissionId!,
+                        deckName: submittedDeck.deckName,
+                        archetype: submittedDeck.archetype,
+                        deckList: submittedDeck.deckList,
+                      } : null}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -227,20 +298,24 @@ export default async function PartidasPage({ params }: Props) {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-white">
           {isAdmin ? "Todas as Partidas" : "Outras Partidas"}
+          <span className="ml-2 text-sm font-normal text-slate-500">({matchCards.length} total)</span>
         </h2>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {(isAdmin ? matchCards : matchCards.filter((m) =>
             !player || (m.playerAId !== player.id && m.playerBId !== player.id)
-          )).map((match) => (
+          )).map((match, _, arr) => {
+            const num = matchCards.indexOf(match) + 1;
+            return (
             <MatchCard
               key={match.id}
-              match={match}
+              match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${num}` }}
               currentPlayerId={player?.id}
               isAdmin={isAdmin}
               tournamentFormat={tournament.format}
               canReportResult={canReportAnyInPersonMatch}
             />
-          ))}
+          );
+          })}
         </div>
       </section>
     </div>
