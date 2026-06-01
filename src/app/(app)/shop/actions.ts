@@ -16,7 +16,13 @@ const createItemSchema = z.object({
   description: z.string().trim().max(500).optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   rarity: z.nativeEnum(ShopItemRarity),
-  price: z.number().int().min(1).max(999999)
+  price: z.number().int().min(1).max(999999),
+  // metadata para molduras: posicionamento e escala
+  metadata: z.object({
+    frameScale:   z.number().min(0.1).max(6).optional(),
+    frameOffsetX: z.number().min(-200).max(200).optional(),
+    frameOffsetY: z.number().min(-200).max(200).optional(),
+  }).optional().nullable()
 });
 
 export async function createShopItem(
@@ -27,9 +33,10 @@ export async function createShopItem(
     const data = createItemSchema.parse(raw);
     await prisma.shopItem.create({
       data: {
-        ...data,
+        type: data.type, name: data.name, rarity: data.rarity, price: data.price,
         imageUrl: data.imageUrl || null,
         description: data.description || null,
+        metadata: data.metadata ?? undefined,
         createdById: actor.id
       }
     });
@@ -51,7 +58,12 @@ export async function updateShopItem(
     const data = createItemSchema.parse(raw);
     await prisma.shopItem.update({
       where: { id: itemId },
-      data: { ...data, imageUrl: data.imageUrl || null, description: data.description || null }
+      data: {
+        type: data.type, name: data.name, rarity: data.rarity, price: data.price,
+        imageUrl: data.imageUrl || null,
+        description: data.description || null,
+        metadata: data.metadata ?? undefined,
+      }
     });
     revalidatePath("/shop");
     revalidatePath("/shop/admin");

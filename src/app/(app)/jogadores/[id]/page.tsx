@@ -161,85 +161,119 @@ export default async function PlayerDetailPage({
         <ChevronLeft size={16} /> Jogadores
       </Link>
 
-      {/* Header — Banner + card compacto de identidade */}
+      {/* Header — Banner cobre toda a área, identidade sobreposta */}
       <div data-tutorial="profile-avatar" className="overflow-hidden rounded-2xl border border-border bg-slate-950">
-        {/* Banner */}
-        {equippedBanner?.item.imageUrl ? (
-          <div className="relative h-32 w-full overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={equippedBanner.item.imageUrl} alt="Banner" className="h-full w-full object-cover object-center" />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0f0f1a]/80" />
-          </div>
-        ) : (
-          <div className="h-16 w-full bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" />
-        )}
+        {/* Container relativo: banner + identidade sobrepostos */}
+        <div className="relative min-h-[180px]">
+          {/* Banner de fundo */}
+          {equippedBanner?.item.imageUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={equippedBanner.item.imageUrl}
+                alt="Banner"
+                className="absolute inset-0 h-full w-full object-cover object-center"
+              />
+              {/* Gradiente para legibilidade: forte à esquerda/baixo onde fica o texto */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/85 via-[#0f0f1a]/40 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/80 via-transparent to-transparent" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900" />
+          )}
 
-        {/* Card compacto — só envolve o conteúdo, sem expandir */}
-        <div className="px-5 pb-5">
-          <div className="flex items-end gap-4 -mt-8">
-            {/* Avatar com moldura — overflow-visible para moldura "vazar" além do avatar */}
-            <div className="relative shrink-0 overflow-visible">
-              <div className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#0f0f1a] bg-slate-700 shadow-lg">
-                {player.user.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={player.user.image} alt={player.displayName} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <User size={24} className="text-slate-400" />
+          {/* Identidade sobreposta ao banner, posicionada embaixo à esquerda */}
+          <div className="relative z-10 flex h-full items-end p-5 pt-14">
+            <div className="flex items-end gap-5">
+              {/* Avatar com moldura — tamanho maior */}
+              {(() => {
+                // Lê metadados da moldura para posicionamento
+                const frameMeta = equippedFrame?.item.metadata as
+                  | { frameScale?: number; frameOffsetX?: number; frameOffsetY?: number }
+                  | null | undefined;
+                const AVATAR = 80; // px
+                const scale   = frameMeta?.frameScale  ?? 2.0;
+                const offsetX = frameMeta?.frameOffsetX ?? 0;
+                const offsetY = frameMeta?.frameOffsetY ?? 0;
+                const frameSize = AVATAR * scale;
+                const frameLeft = (AVATAR - frameSize) / 2 + offsetX;
+                const frameTop  = (AVATAR - frameSize) / 2 + offsetY;
+                return (
+                  <div className="relative shrink-0 overflow-visible">
+                    <div
+                      className="overflow-hidden rounded-2xl border-2 border-[#0f0f1a]/60 bg-slate-700 shadow-xl"
+                      style={{ width: AVATAR, height: AVATAR }}
+                    >
+                      {player.user.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={player.user.image} alt={player.displayName} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <User size={32} className="text-slate-400" />
+                        </div>
+                      )}
+                    </div>
+                    {equippedFrame?.item.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={equippedFrame.item.imageUrl}
+                        alt="Moldura"
+                        className="pointer-events-none absolute z-10 object-contain"
+                        style={{
+                          left: frameLeft,
+                          top:  frameTop,
+                          width: frameSize,
+                          height: frameSize,
+                        }}
+                      />
+                    )}
+                    {equippedFrame && !equippedFrame.item.imageUrl && (
+                      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[#FFCB05]" />
+                    )}
                   </div>
-                )}
-              </div>
-              {/* Moldura: -inset-8 = +32px por lado para cobrir o avatar e ir além */}
-              {equippedFrame?.item.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={equippedFrame.item.imageUrl}
-                  alt="Moldura"
-                  className="pointer-events-none absolute z-10 object-contain"
-                  style={{ inset: "-32px", width: "calc(100% + 64px)", height: "calc(100% + 64px)" }}
-                />
-              )}
-              {equippedFrame && !equippedFrame.item.imageUrl && (
-                <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-[#FFCB05]" />
-              )}
-            </div>
+                );
+              })()}
 
-            {/* Identidade — card pequeno só com nick, título e @ */}
-            <div className="mb-1 min-w-0">
-              <div className="inline-block rounded-xl border border-border/60 bg-slate-900/80 px-3 py-2 backdrop-blur-sm">
-                <h1 className="text-lg font-bold leading-tight text-white">{player.displayName}</h1>
+              {/* Identidade — texto grande diretamente no gradiente */}
+              <div className="min-w-0 pb-1">
+                <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
+                  {player.displayName}
+                </h1>
                 {equippedTitle && (
-                  <p className="text-[11px] font-semibold text-[#FFCB05]">{equippedTitle.item.name}</p>
+                  <p className="text-sm font-semibold text-[#FFCB05] drop-shadow">
+                    {equippedTitle.item.name}
+                  </p>
                 )}
                 {player.ptcglNick && (
-                  <p className="text-xs text-slate-400">@{player.ptcglNick}</p>
+                  <p className="text-sm text-slate-300/80 drop-shadow">
+                    @{player.ptcglNick}
+                  </p>
                 )}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Badges de status + botão de editar (para o próprio dono) */}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-2">
-              <StatusBadge variant={badge.variant} label={badge.label} />
-              {player.user.role !== "PLAYER" && (
-                <StatusBadge variant="info" label={player.user.role} />
-              )}
-              {activeSeason && (
-                <StatusBadge variant="draft" label={activeSeason.season.name} />
-              )}
-            </div>
-            {/* Botão de configurações — apenas para o próprio jogador */}
-            {isSelf && (
-              <Link
-                href="/perfil"
-                className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-400 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                Configurações
-              </Link>
+        {/* Barra de status + botão de configurações — abaixo do banner */}
+        <div className="border-t border-border/40 px-5 py-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/60">
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge variant={badge.variant} label={badge.label} />
+            {player.user.role !== "PLAYER" && (
+              <StatusBadge variant="info" label={player.user.role} />
+            )}
+            {activeSeason && (
+              <StatusBadge variant="draft" label={activeSeason.season.name} />
             )}
           </div>
+          {isSelf && (
+            <Link
+              href="/perfil"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-400 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              Configurações
+            </Link>
+          )}
         </div>
       </div>
 

@@ -1086,6 +1086,10 @@ model ShopItem {
   rarity      ShopItemRarity  @default(COMMON)
   price       Int
   active      Boolean         @default(true)
+  // Para molduras (FRAME): { frameScale: number, frameOffsetX: number, frameOffsetY: number }
+  // frameScale: tamanho relativo ao avatar (2.0 = moldura 2x maior que avatar)
+  // frameOffsetX/Y: deslocamento em px (negativo = cima/esquerda)
+  metadata    Json?
   createdById String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt

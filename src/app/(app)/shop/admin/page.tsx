@@ -60,7 +60,8 @@ export default async function ShopAdminPage() {
           rarity: i.rarity,
           price: i.price,
           active: i.active,
-          owners: i._count.ownerships
+          owners: i._count.ownerships,
+          metadata: i.metadata ?? undefined
         }))} />
       </Card>
     </div>

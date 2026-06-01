@@ -19,20 +19,144 @@ const rarityLabel: Record<string, string> = {
 interface Item {
   id: string; type: string; name: string; description: string | null;
   imageUrl: string | null; rarity: string; price: number; active: boolean; owners: number;
+  metadata?: unknown;
 }
 
-type FormData = { type: typeof typeOpts[number]; name: string; description: string; imageUrl: string; rarity: typeof rarityOpts[number]; price: number };
-const EMPTY: FormData = { type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100 };
-const itemToForm = (i: Item): FormData => ({
-  type: i.type as typeof typeOpts[number], name: i.name, description: i.description ?? "",
-  imageUrl: i.imageUrl ?? "", rarity: i.rarity as typeof rarityOpts[number], price: i.price
-});
+type FrameMeta = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
+type FormData = {
+  type: typeof typeOpts[number]; name: string; description: string;
+  imageUrl: string; rarity: typeof rarityOpts[number]; price: number;
+  frameMeta: FrameMeta;
+};
+const DEFAULT_FRAME_META: FrameMeta = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
+const EMPTY: FormData = { type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100, frameMeta: DEFAULT_FRAME_META };
+const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
+  const meta = i.metadata && typeof i.metadata === "object" && !Array.isArray(i.metadata)
+    ? (i.metadata as Partial<FrameMeta>)
+    : {};
+  return {
+    type: i.type as typeof typeOpts[number], name: i.name, description: i.description ?? "",
+    imageUrl: i.imageUrl ?? "", rarity: i.rarity as typeof rarityOpts[number], price: i.price,
+    frameMeta: {
+      frameScale:   meta.frameScale   ?? 2.0,
+      frameOffsetX: meta.frameOffsetX ?? 0,
+      frameOffsetY: meta.frameOffsetY ?? 0,
+    }
+  };
+};
+
+// Preview interativo da moldura sobre um avatar placeholder
+function FramePreview({ imageUrl, frameMeta }: { imageUrl: string; frameMeta: FrameMeta }) {
+  const AVATAR = 96;
+  const { frameScale, frameOffsetX, frameOffsetY } = frameMeta;
+  const frameSize = AVATAR * frameScale;
+  const frameLeft = (AVATAR - frameSize) / 2 + frameOffsetX;
+  const frameTop  = (AVATAR - frameSize) / 2 + frameOffsetY;
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-xs text-slate-500">Preview</p>
+      <div
+        className="relative bg-slate-800 rounded-2xl overflow-visible border border-slate-700"
+        style={{ width: AVATAR, height: AVATAR, flexShrink: 0 }}
+      >
+        {/* Avatar placeholder */}
+        <div className="h-full w-full rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+        {/* Moldura sobreposta */}
+        {imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt="Moldura preview"
+            className="pointer-events-none absolute z-10 object-contain"
+            style={{ left: frameLeft, top: frameTop, width: frameSize, height: frameSize }}
+          />
+        )}
+        {/* Grade de referência (centro do avatar) */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
+          <div className="h-px w-full bg-white" />
+        </div>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
+          <div className="w-px h-full bg-white" />
+        </div>
+      </div>
+      <p className="text-[10px] text-slate-600">
+        Escala: {frameScale.toFixed(1)}x · X: {frameOffsetX}px · Y: {frameOffsetY}px
+      </p>
+    </div>
+  );
+}
+
+function FrameMetaEditor({ frameMeta, setFrameMeta, imageUrl }: {
+  frameMeta: FrameMeta;
+  setFrameMeta: (m: FrameMeta) => void;
+  imageUrl: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-4 md:col-span-2 lg:col-span-3">
+      <p className="text-xs font-semibold text-[#FFCB05]">⚙ Posicionamento da Moldura</p>
+      <div className="flex gap-6 flex-wrap items-start">
+        {/* Preview */}
+        <FramePreview imageUrl={imageUrl} frameMeta={frameMeta} />
+        {/* Sliders */}
+        <div className="flex-1 min-w-[220px] space-y-4">
+          <label className="block space-y-1 text-xs text-slate-400">
+            <div className="flex justify-between">
+              <span>Escala (tamanho relativo ao avatar)</span>
+              <span className="text-[#FFCB05] font-semibold">{frameMeta.frameScale.toFixed(2)}×</span>
+            </div>
+            <input type="range" min="0.5" max="4.0" step="0.05"
+              value={frameMeta.frameScale}
+              onChange={e => setFrameMeta({ ...frameMeta, frameScale: parseFloat(e.target.value) })}
+              className="w-full accent-[#FFCB05]" />
+            <p className="text-[10px] text-slate-600">
+              1.0 = mesmo tamanho · 2.0 = padrão (moldura 2× o avatar) · 3.0 = muito maior
+            </p>
+          </label>
+          <label className="block space-y-1 text-xs text-slate-400">
+            <div className="flex justify-between">
+              <span>Deslocamento horizontal (X)</span>
+              <span className="text-slate-300 font-semibold">{frameMeta.frameOffsetX}px</span>
+            </div>
+            <input type="range" min="-80" max="80" step="1"
+              value={frameMeta.frameOffsetX}
+              onChange={e => setFrameMeta({ ...frameMeta, frameOffsetX: parseInt(e.target.value) })}
+              className="w-full accent-[#FFCB05]" />
+            <p className="text-[10px] text-slate-600">Negativo = esquerda · Positivo = direita</p>
+          </label>
+          <label className="block space-y-1 text-xs text-slate-400">
+            <div className="flex justify-between">
+              <span>Deslocamento vertical (Y)</span>
+              <span className="text-slate-300 font-semibold">{frameMeta.frameOffsetY}px</span>
+            </div>
+            <input type="range" min="-80" max="80" step="1"
+              value={frameMeta.frameOffsetY}
+              onChange={e => setFrameMeta({ ...frameMeta, frameOffsetY: parseInt(e.target.value) })}
+              className="w-full accent-[#FFCB05]" />
+            <p className="text-[10px] text-slate-600">Negativo = sobe (ótimo para chapéus) · Positivo = desce</p>
+          </label>
+          <button
+            type="button"
+            onClick={() => setFrameMeta(DEFAULT_FRAME_META)}
+            className="text-xs text-slate-500 hover:text-slate-300 underline"
+          >
+            Resetar para padrão
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   form: FormData; setForm: (f: FormData) => void;
   onSave: () => void; onCancel: () => void; pending: boolean; label: string;
 }) {
-  const isBanner = (form.type as string) === "BANNER";
+  const isFrame = (form.type as string) === "FRAME";
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1 text-xs text-slate-400">
@@ -74,8 +198,8 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
         hint={
           (form.type as string) === "BANNER"
             ? "Banner: 1200×300px (proporção 4:1). Imagens fora dessa proporção serão cortadas."
-            : (form.type as string) === "FRAME"
-            ? "Moldura: PNG 128×128px com fundo transparente. Centro transparente (~72×72px) onde fica o avatar."
+            : isFrame
+            ? "Moldura: PNG com fundo transparente (recomendado 256×256px). Ajuste a posição abaixo."
             : (form.type as string) === "TITLE"
             ? "Título: sem imagem necessária — o nome do item já é exibido como texto."
             : (form.type as string) === "ZIKALOOT_TICKET"
@@ -83,6 +207,14 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
             : "Imagem opcional para o item."
         }
       />
+      {/* Editor de posicionamento — apenas para molduras */}
+      {isFrame && (
+        <FrameMetaEditor
+          imageUrl={form.imageUrl}
+          frameMeta={form.frameMeta}
+          setFrameMeta={(m) => setForm({ ...form, frameMeta: m })}
+        />
+      )}
       <div className="flex gap-2 md:col-span-2 lg:col-span-3">
         <Button type="button" disabled={!form.name || pending} onClick={onSave}
           className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">{label}</Button>
@@ -99,9 +231,17 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<FormData>(EMPTY);
 
+  const buildPayload = (f: FormData) => ({
+    ...f,
+    imageUrl: f.imageUrl || undefined,
+    description: f.description || undefined,
+    // Inclui metadata de posicionamento apenas para molduras
+    metadata: (f.type === "FRAME") ? f.frameMeta : undefined,
+  });
+
   const handleCreate = () => startTransition(async () => {
     try {
-      const result = await createShopItem({ ...createForm, imageUrl: createForm.imageUrl || undefined, description: createForm.description || undefined });
+      const result = await createShopItem(buildPayload(createForm));
       if (result.error) { toast.error(result.error); return; }
       toast.success("Item criado!"); setCreateForm(EMPTY); setShowCreate(false);
     } catch { toast.error("Erro ao criar item."); }
@@ -109,7 +249,7 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
 
   const handleUpdate = (id: string) => startTransition(async () => {
     try {
-      const result = await updateShopItem(id, { ...editForm, imageUrl: editForm.imageUrl || undefined, description: editForm.description || undefined });
+      const result = await updateShopItem(id, buildPayload(editForm));
       if (result.error) { toast.error(result.error); return; }
       toast.success("Item atualizado!"); setEditingId(null);
     } catch { toast.error("Erro ao atualizar item."); }
