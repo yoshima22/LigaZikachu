@@ -300,47 +300,61 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
         )}
       </div>
 
-      {items.length > 0 && (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <div key={item.id}>
-              {editingId === item.id ? (
-                <div className="mt-2">
-                  <ItemForm form={editForm} setForm={setEditForm}
-                    onSave={() => handleUpdate(item.id)} onCancel={() => setEditingId(null)}
-                    pending={pending} label="Salvar" />
-                </div>
-              ) : (
-                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-slate-950/60 px-4 py-3 ${item.active ? "" : "opacity-50"}`}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    {item.imageUrl && !item.imageUrl.startsWith("data:") && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.imageUrl} alt={item.name} className="h-10 w-16 rounded object-cover bg-slate-800" />
-                    )}
-                    <div>
-                      <p className="font-medium text-slate-200">{item.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {typeLabel[item.type]} · {rarityLabel[item.rarity]} · {item.price.toLocaleString("pt-BR")} ZC · {item.owners} donos
-                      </p>
+      {/* Itens agrupados por categoria */}
+      {typeOpts.map((type) => {
+        const groupItems = items.filter((i) => i.type === type);
+        if (groupItems.length === 0) return null;
+        return (
+          <div key={type} className="space-y-2">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500 border-b border-border pb-2">
+              <span className="text-[#FFCB05]">
+                {type === "BANNER" ? "🖼" : type === "FRAME" ? "🔵" : type === "TITLE" ? "🏷" : "🎟"}
+              </span>
+              {typeLabel[type]}
+              <span className="text-slate-600 font-normal normal-case tracking-normal">({groupItems.length})</span>
+            </h3>
+            {groupItems.map((item) => (
+              <div key={item.id}>
+                {editingId === item.id ? (
+                  <div className="mt-2">
+                    <ItemForm form={editForm} setForm={setEditForm}
+                      onSave={() => handleUpdate(item.id)} onCancel={() => setEditingId(null)}
+                      pending={pending} label="Salvar" />
+                  </div>
+                ) : (
+                  <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-slate-950/60 px-4 py-3 ${item.active ? "" : "opacity-50"}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      {item.imageUrl && !item.imageUrl.startsWith("data:") && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.imageUrl} alt={item.name}
+                          className={`rounded object-cover bg-slate-800 ${type === "BANNER" ? "h-8 w-24" : "h-10 w-10"}`} />
+                      )}
+                      <div>
+                        <p className="font-medium text-slate-200">{item.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {rarityLabel[item.rarity]} · {item.price.toLocaleString("pt-BR")} ZC · {item.owners} dono{item.owners !== 1 ? "s" : ""}
+                          {!item.active && <span className="ml-2 text-slate-600">[inativo]</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button type="button" disabled={pending}
+                        onClick={() => { setEditingId(item.id); setEditForm(itemToForm(item)); }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200"><Pencil size={14} /></button>
+                      <button type="button" disabled={pending} onClick={() => handleToggle(item.id, item.active)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200">
+                        {item.active ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button type="button" disabled={pending} onClick={() => handleDelete(item.id, item.name)}
+                        className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10"><Trash2 size={14} /></button>
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button type="button" disabled={pending}
-                      onClick={() => { setEditingId(item.id); setEditForm(itemToForm(item)); }}
-                      className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200"><Pencil size={14} /></button>
-                    <button type="button" disabled={pending} onClick={() => handleToggle(item.id, item.active)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:text-slate-200">
-                      {item.active ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                    <button type="button" disabled={pending} onClick={() => handleDelete(item.id, item.name)}
-                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10"><Trash2 size={14} /></button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

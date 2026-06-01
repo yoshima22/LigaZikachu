@@ -186,7 +186,13 @@ export default async function PlayerDetailPage({
           <div data-tutorial="profile-avatar" className="relative rounded-2xl border border-border bg-slate-950">
 
             {/* ── Banner (overflow-hidden clipa só a imagem) ── */}
-            <div className="relative overflow-hidden rounded-2xl" style={{ minHeight: 180 }}>
+            {/* aspect-ratio: 4/1 preserva a proporção 1200×300 sem cortar */}
+            {/* min-h garante altura mínima quando não há banner ou em telas muito estreitas */}
+            <div className="relative overflow-hidden rounded-2xl"
+              style={{
+                aspectRatio: equippedBanner?.item.imageUrl ? "4 / 1" : undefined,
+                minHeight: 160,
+              }}>
               {equippedBanner?.item.imageUrl ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
