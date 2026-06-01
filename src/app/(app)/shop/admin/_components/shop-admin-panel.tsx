@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { Plus, Eye, EyeOff, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImageUpload } from "@/components/ui/image-upload";
-import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem, getSuggestedPrice, SUGGESTED_PRICES } from "../../actions";
+import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem } from "../../actions";
+import { getSuggestedPrice } from "@/lib/shop-config";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 const rarityOpts = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY"] as const;
