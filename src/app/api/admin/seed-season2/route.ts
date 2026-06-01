@@ -46,6 +46,7 @@ const WEEKS = [
   { num:5, mode:"PADRAO"               as WeekMode, label:"Semana 5 — Padrão",               start:"2026-02-04", end:"2026-02-04" },
   { num:6, mode:"CONSTRUTOR_MISTERIOSO"as WeekMode, label:"Semana 6 — Construtor Misterioso",start:"2026-03-16", end:"2026-03-16" },
   { num:7, mode:"GUERRA_DE_TIMES"      as WeekMode, label:"Semana 7 — Guerra de Times",      start:"2026-05-20", end:"2026-05-20" },
+  { num:8, mode:"BATALHA_FINAL"        as WeekMode, label:"Semana 8 — Batalha Final",          start:"2026-06-03", end:"2026-06-03" },
 ];
 
 // ── Partidas (63 no total) ────────────────────────────────────────────────────
@@ -122,6 +123,19 @@ const MATCHES: Array<{ w:number; pA:string; pB:string; winner:string; prizes:num
   { w:7, pA:"Erick",   pB:"Cristian", winner:"Erick",   prizes:4, date:"2026-05-20" },
   { w:7, pA:"Moises",  pB:"Rodrigo",  winner:"Moises",  prizes:6, date:"2026-05-20" },
   { w:7, pA:"Nakaima", pB:"Alan",     winner:"Nakaima", prizes:4, date:"2026-05-20" },
+  // Semana 8 — Batalha Final (03/06/2026) — 11 partidas agendadas, sem resultado ainda
+  // winner:"" indica partida ainda não jogada (será criada como PENDING_CONFIRMATION)
+  { w:8, pA:"Luiz",    pB:"Alan",     winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Nakaima", pB:"Moises",   winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Erick",   pB:"Rodrigo",  winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Nakaima", pB:"Luiz",     winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Cristian",pB:"Rodrigo",  winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Luiz",    pB:"Moises",   winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Erick",   pB:"Cristian", winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Alan",    pB:"Moises",   winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Nakaima", pB:"Alan",     winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Erick",   pB:"Luiz",     winner:"", prizes:0, date:"2026-06-03" },
+  { w:8, pA:"Moises",  pB:"Nakaima",  winner:"", prizes:0, date:"2026-06-03" },
 ];
 
 export async function GET() {
@@ -164,9 +178,9 @@ export async function GET() {
           edition: "2ª Edição",
           description: "Campeonato histórico registrado retroativamente. 7 semanas, 7 jogadores, formato presencial com insígnias e conquistas.",
           format: "IN_PERSON",
-          status: "FINISHED",
+          status: "IN_PROGRESS",
           startDate: new Date("2025-12-08"),
-          endDate: new Date("2026-05-20"),
+          endDate: new Date("2026-06-03"),
           matchesPerPlayer: 3,
           requiresDeckSubmission: false,
           rankingConfig: { version:"2.0.0", format:"MD1", winPoints:3, lossPoints:0, tiebreakers:["wins","defended_prizes"] },
@@ -300,15 +314,19 @@ export async function GET() {
         weekIdMap.set(w.num, existing.id);
         log.push(`  - Semana ${w.num} já existe`);
       } else {
-        const week = await prisma.tournamentWeek.create({
+        // Semana 8 fica OPEN (acontece em 03/06/2026), demais CLOSED
+      const weekStatus = w.num === 8 ? "OPEN" : "CLOSED";
+      const week = await prisma.tournamentWeek.create({
           data: {
             tournamentId: tournament.id,
             weekNumber: w.num,
             label: w.label,
             mode: w.mode,
-            status: "CLOSED",
+            status: weekStatus,
             startDate: new Date(w.start),
-            endDate: new Date(w.end)
+            endDate: new Date(w.end),
+            // Semana 8 ocorre às 19h BRT
+            lockAt: w.num === 8 ? new Date("2026-06-03T19:00:00-03:00") : undefined
           }
         });
         weekIdMap.set(w.num, week.id);
@@ -325,16 +343,20 @@ export async function GET() {
     for (const m of MATCHES) {
       const playerAId = playerMap.get(m.pA);
       const playerBId = playerMap.get(m.pB);
-      const winnerId  = playerMap.get(m.winner);
       const weekId    = weekIdMap.get(m.w);
+      const isPending = !m.winner; // semana 8 ainda sem resultado
 
-      if (!playerAId || !playerBId || !winnerId || !weekId) {
+      if (!playerAId || !playerBId || !weekId) {
         log.push(`  ⚠ Partida S${m.w} ${m.pA} vs ${m.pB}: jogador ou semana não encontrado`);
         matchesSkipped++;
         continue;
       }
 
-      const loserId = m.winner === m.pA ? playerBId : playerAId;
+      if (!isPending && !playerMap.get(m.winner)) {
+        log.push(`  ⚠ Partida S${m.w} ${m.pA} vs ${m.pB}: vencedor "${m.winner}" não encontrado`);
+        matchesSkipped++;
+        continue;
+      }
 
       // Idempotente: checar se já existe partida entre esses dois nesta semana
       const existing = await prisma.match.findFirst({
@@ -345,31 +367,49 @@ export async function GET() {
         continue;
       }
 
-      const playerAWins = m.winner === m.pA ? 1 : 0;
-      const playerBWins = m.winner === m.pB ? 1 : 0;
+      if (isPending) {
+        // Partida agendada — sem resultado ainda (Semana 8)
+        await prisma.match.create({
+          data: {
+            tournamentWeekId: weekId,
+            playerAId,
+            playerBId,
+            bestOf: 1,
+            status: "PENDING_CONFIRMATION",
+            resultSource: "MANUAL",
+            scheduledAt: new Date(`${m.date}T19:00:00-03:00`),
+            createdById: adminUser.id
+          }
+        });
+      } else {
+        const winnerId = playerMap.get(m.winner)!;
+        const loserId  = m.winner === m.pA ? playerBId : playerAId;
+        const playerAWins = m.winner === m.pA ? 1 : 0;
+        const playerBWins = m.winner === m.pB ? 1 : 0;
 
-      await prisma.match.create({
-        data: {
-          tournamentWeekId: weekId,
-          playerAId,
-          playerBId,
-          winnerPlayerId: winnerId,
-          loserPlayerId: loserId,
-          playerAWins,
-          playerBWins,
-          winnerDefendedPrizes: m.prizes,
-          bestOf: 1,
-          status: "CONFIRMED",
-          resultSource: "MANUAL",
-          playedAt: new Date(m.date),
-          reportedAt: new Date(m.date),
-          confirmedAt: new Date(m.date),
-          reportedById: adminUser.id,
-          confirmedById: adminUser.id,
-          createdById: adminUser.id,
-          notes: m.notes ?? null
-        }
-      });
+        await prisma.match.create({
+          data: {
+            tournamentWeekId: weekId,
+            playerAId,
+            playerBId,
+            winnerPlayerId: winnerId,
+            loserPlayerId: loserId,
+            playerAWins,
+            playerBWins,
+            winnerDefendedPrizes: m.prizes,
+            bestOf: 1,
+            status: "CONFIRMED",
+            resultSource: "MANUAL",
+            playedAt: new Date(m.date),
+            reportedAt: new Date(m.date),
+            confirmedAt: new Date(m.date),
+            reportedById: adminUser.id,
+            confirmedById: adminUser.id,
+            createdById: adminUser.id,
+            notes: m.notes ?? null
+          }
+        });
+      }
       matchesCreated++;
     }
 
@@ -378,7 +418,8 @@ export async function GET() {
     log.push(`📌 Torneio: /torneios/segunda-edicao`);
     log.push(`📌 Conquistas: /conquistas`);
     log.push(`📌 Alan: alan@ligazikachu.com | LigaZikachu123`);
-    log.push(`📌 Total de partidas importadas: ${matchesCreated}/63`);
+    log.push(`📌 Semana 8 (Batalha Final): 03/06/2026 às 19h — status OPEN`);
+    log.push(`📌 Partidas históricas: ${matchesCreated - 11}/63 | Agendadas S8: 11`);
 
     return NextResponse.json({ success: true, log }, { status: 200 });
   } catch (err) {

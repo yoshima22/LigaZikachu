@@ -122,21 +122,14 @@ export async function computeTournamentRanking(
   tournamentId: string
 ): Promise<PlayerRankingEntry[]> {
   const registrations = await prisma.tournamentRegistration.findMany({
-    where: {
-      tournamentId,
-      status: "APPROVED"
-    },
-    include: {
-      player: { select: { id: true, displayName: true } }
-    }
+    where: { tournamentId, status: "APPROVED" },
+    include: { player: { select: { id: true, displayName: true } } }
   });
 
-  return computeRankingFromMatches({
+  const entries = await computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED,
-      tournamentWeek: {
-        tournamentId
-      }
+      tournamentWeek: { tournamentId }
     },
     challengeWhere: {
       OR: [
@@ -144,19 +137,43 @@ export async function computeTournamentRanking(
         { tournamentId, matchId: null }
       ]
     },
-    badgeWhere: {
-      badge: {
-        tournamentId
-      }
-    },
-    bonusWeekWhere: {
-      tournamentId
-    },
-    seedPlayers: registrations.map((registration) => ({
-      playerId: registration.playerId,
-      displayName: registration.player.displayName
+    badgeWhere: { badge: { tournamentId } },
+    bonusWeekWhere: { tournamentId },
+    seedPlayers: registrations.map((r) => ({
+      playerId: r.playerId,
+      displayName: r.player.displayName
     }))
   });
+
+  // Soma pontos de conquistas do torneio (cada PlayerAchievement com pointsAwarded)
+  const achievementBonuses = await prisma.playerAchievement.findMany({
+    where: { achievement: { tournamentId, active: true }, pointsAwarded: { gt: 0 } },
+    select: { playerId: true, pointsAwarded: true }
+  });
+  if (achievementBonuses.length > 0) {
+    const bonusMap = new Map<string, number>();
+    for (const a of achievementBonuses) {
+      bonusMap.set(a.playerId, (bonusMap.get(a.playerId) ?? 0) + (a.pointsAwarded ?? 0));
+    }
+    for (const entry of entries) {
+      const bonus = bonusMap.get(entry.playerId) ?? 0;
+      if (bonus > 0) entry.points += bonus;
+    }
+    // Re-sort após adicionar bônus de conquistas
+    entries.sort(
+      (a, b) =>
+        b.points - a.points ||
+        b.wins - a.wins ||
+        b.defendedPrizes - a.defendedPrizes ||
+        b.successfulChallenges - a.successfulChallenges ||
+        b.defendedChallenges - a.defendedChallenges ||
+        a.byeCount - b.byeCount ||
+        a.displayName.localeCompare(b.displayName, "pt-BR")
+    );
+    entries.forEach((e, i) => { e.position = i + 1; });
+  }
+
+  return entries;
 }
 
 export async function computeWeeklyRanking(
@@ -177,24 +194,43 @@ export async function computeTopOfDayRanking(
   });
 }
 
+/**
+ * Top do Dia do torneio — usa fórmula de média por jogo:
+ *   avgScore = (wins/jogos × winPts) + (prêmios/jogos)
+ *
+ * Isso garante que quem venceu 2/2 com média alta supera quem venceu 2/3
+ * mesmo com mais prêmios totais.
+ */
 export async function computeTournamentWeekTopOfDay(
   tournamentWeekId: string
 ): Promise<PlayerRankingEntry[]> {
-  return computeRankingFromMatches({
-    matchWhere: {
-      tournamentWeekId,
-      status: MatchStatus.CONFIRMED
-    },
-    challengeWhere: {
-      match: {
-        tournamentWeekId
-      }
-    },
-    bonusWeekWhere: {
-      id: tournamentWeekId
-    },
+  const entries = await computeRankingFromMatches({
+    matchWhere: { tournamentWeekId, status: MatchStatus.CONFIRMED },
+    challengeWhere: { match: { tournamentWeekId } },
+    bonusWeekWhere: { id: tournamentWeekId },
     onlyPlayersWithMatches: true
   });
+
+  const WIN_POINTS = 3;
+
+  // Re-ordena pela fórmula de média: (winRate × winPts) + avgPrizes
+  const withAvg = entries.map((e) => ({
+    ...e,
+    avgScore: e.matchesPlayed > 0
+      ? (e.wins / e.matchesPlayed) * WIN_POINTS + e.defendedPrizes / e.matchesPlayed
+      : 0
+  }));
+
+  withAvg.sort(
+    (a, b) =>
+      b.avgScore - a.avgScore ||
+      b.wins - a.wins ||
+      b.defendedPrizes - a.defendedPrizes ||
+      a.matchesPlayed - b.matchesPlayed ||     // menos jogos jogados = critério de desempate positivo
+      a.displayName.localeCompare(b.displayName, "pt-BR")
+  );
+
+  return withAvg.map((e, i) => ({ ...e, position: i + 1 }));
 }
 
 function dayBounds(date: Date) {
