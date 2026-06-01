@@ -248,15 +248,10 @@ export async function computeTournamentRanking(
     }
   }
 
-  // Remove admins do resultado final (garante exclusão mesmo que apareçam via matches ou challenges)
-  const adminPlayerIds = new Set(
-    (await prisma.player.findMany({
-      where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } },
-      select: { id: true }
-    })).map(p => p.id)
-  );
-
-  const finalEntries = entries.filter(e => !adminPlayerIds.has(e.playerId));
+  // Filtra APENAS os jogadores inscritos aprovados (que já excluem admins via query acima).
+  // Isso garante que qualquer entrada criada via matches/challenges de admin seja removida.
+  const allowedPlayerIds = new Set(registrations.map(r => r.playerId));
+  const finalEntries = entries.filter(e => allowedPlayerIds.has(e.playerId));
 
   // Re-ordena após todos os bônus
   finalEntries.sort(
