@@ -447,8 +447,13 @@ export async function GET() {
         .map(b => ({ playerId: playerMap.get(b.name), playerName: b.name, points: b.points, reason: b.reason }))
         .filter(b => b.playerId);
       // Evitar duplicatas pelo reason
-      const merged = [...existingBonuses.filter(e => !newBonuses.some(n => n.playerName === e.playerName && n.reason === e.reason)), ...newBonuses];
-      await prisma.tournamentWeek.update({ where: { id: weekId }, data: { bonusRule: { ...existing, manualBonuses: merged } } });
+      const merged = [
+        ...existingBonuses.filter(e => !newBonuses.some(n => n.playerName === e.playerName && n.reason === e.reason)),
+        ...newBonuses
+      ];
+      // Cast explícito para satisfazer o tipo Prisma InputJsonValue
+      const bonusRuleJson = { ...existing, manualBonuses: merged } as Parameters<typeof prisma.tournamentWeek.update>[0]["data"]["bonusRule"];
+      await prisma.tournamentWeek.update({ where: { id: weekId }, data: { bonusRule: bonusRuleJson } });
     };
 
     await applyBonusToWeek(4, DUPLAS_BONUSES);
