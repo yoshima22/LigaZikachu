@@ -378,7 +378,6 @@ export default async function TorneioDetailPage({
             </div>
           )}
         </div>
-        </div>
       )}
 
       {/* Insígnias do torneio */}
