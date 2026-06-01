@@ -50,42 +50,51 @@ function FramePreview({ imageUrl, frameMeta }: { imageUrl: string; frameMeta: Fr
   const AVATAR = 96;
   const { frameScale, frameOffsetX, frameOffsetY } = frameMeta;
   const frameSize = AVATAR * frameScale;
-  const frameLeft = (AVATAR - frameSize) / 2 + frameOffsetX;
-  const frameTop  = (AVATAR - frameSize) / 2 + frameOffsetY;
+  // Ancora a moldura no CENTRO do avatar usando transform translate(-50%,-50%)
+  // Isso garante crescimento simétrico em todas as direções ao aumentar a escala
+  const anchorLeft = AVATAR / 2 + frameOffsetX;
+  const anchorTop  = AVATAR / 2 + frameOffsetY;
 
   return (
     <div className="flex flex-col items-center gap-2">
       <p className="text-xs text-slate-500">Preview</p>
-      <div
-        className="relative bg-slate-800 rounded-2xl overflow-visible border border-slate-700"
-        style={{ width: AVATAR, height: AVATAR, flexShrink: 0 }}
-      >
-        {/* Avatar placeholder */}
-        <div className="h-full w-full rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
+      {/* Wrapper extra para garantir overflow visível nos 4 lados */}
+      <div className="relative" style={{ width: AVATAR + 80, height: AVATAR + 80 }}>
+        {/* Avatar centralizado no wrapper */}
+        <div
+          className="absolute rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center border border-slate-700 shadow"
+          style={{ left: 40, top: 40, width: AVATAR, height: AVATAR }}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
             <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
           </svg>
+          {/* Grade de referência */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
+            <div className="h-px w-full bg-white" />
+          </div>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
+            <div className="w-px h-full bg-white" />
+          </div>
         </div>
-        {/* Moldura sobreposta */}
+        {/* Moldura ancorada no centro do avatar */}
         {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
             alt="Moldura preview"
             className="pointer-events-none absolute z-10 object-contain"
-            style={{ left: frameLeft, top: frameTop, width: frameSize, height: frameSize }}
+            style={{
+              left: 40 + anchorLeft,
+              top:  40 + anchorTop,
+              width: frameSize,
+              height: frameSize,
+              transform: "translate(-50%, -50%)",
+            }}
           />
         )}
-        {/* Grade de referência (centro do avatar) */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
-          <div className="h-px w-full bg-white" />
-        </div>
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
-          <div className="w-px h-full bg-white" />
-        </div>
       </div>
       <p className="text-[10px] text-slate-600">
-        Escala: {frameScale.toFixed(1)}x · X: {frameOffsetX}px · Y: {frameOffsetY}px
+        Escala: {frameScale.toFixed(2)}× · X: {frameOffsetX}px · Y: {frameOffsetY}px · Tamanho: {Math.round(frameSize)}px
       </p>
     </div>
   );

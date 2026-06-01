@@ -196,8 +196,10 @@ export default async function PlayerDetailPage({
                 const offsetX = frameMeta?.frameOffsetX ?? 0;
                 const offsetY = frameMeta?.frameOffsetY ?? 0;
                 const frameSize = AVATAR * scale;
-                const frameLeft = (AVATAR - frameSize) / 2 + offsetX;
-                const frameTop  = (AVATAR - frameSize) / 2 + offsetY;
+                // Âncora no centro do avatar com transform translate(-50%,-50%)
+                // Garante crescimento simétrico ao aumentar escala (sem deslocar p/ esquerda)
+                const anchorLeft = AVATAR / 2 + offsetX;
+                const anchorTop  = AVATAR / 2 + offsetY;
                 return (
                   <div className="relative shrink-0 overflow-visible">
                     <div
@@ -220,10 +222,11 @@ export default async function PlayerDetailPage({
                         alt="Moldura"
                         className="pointer-events-none absolute z-10 object-contain"
                         style={{
-                          left: frameLeft,
-                          top:  frameTop,
+                          left: anchorLeft,
+                          top:  anchorTop,
                           width: frameSize,
                           height: frameSize,
+                          transform: "translate(-50%, -50%)",
                         }}
                       />
                     )}
