@@ -2,7 +2,9 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM = "Liga Zikachu <noreply@liga-zikachu.app>";
+// FROM: configure RESEND_FROM no Vercel para usar seu domínio verificado.
+// Padrão usa o domínio de teste do Resend (só envia para o email do dono da conta).
+const FROM = process.env.RESEND_FROM ?? "onboarding@resend.dev";
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<{ error?: string }> {
@@ -60,22 +62,37 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
 </html>
 `;
 
+  if (!process.env.RESEND_API_KEY) {
+    console.error("[Email] RESEND_API_KEY não configurada. Adicione em Vercel > Settings > Environment Variables.");
+    return { error: "Serviço de e-mail não configurado. Entre em contato com o admin." };
+  }
+
   try {
-    const { error } = await resend.emails.send({
+    const result = await resend.emails.send({
       from: FROM,
       to,
       subject: "Redefinição de senha — Liga Zikachu",
       html,
     });
 
-    if (error) {
-      console.error("[Email] Resend error:", error);
-      return { error: "Não foi possível enviar o e-mail. Tente novamente." };
+    if (result.error) {
+      const msg = (result.error as { message?: string }).message ?? JSON.stringify(result.error);
+      console.error("[Email] Resend error:", msg);
+
+      // Mensagens de erro específicas do Resend
+      if (msg.includes("domain") || msg.includes("verify")) {
+        return { error: "Domínio de envio não verificado no Resend. Configure RESEND_FROM com um domínio verificado." };
+      }
+      if (msg.includes("API key") || msg.includes("Unauthorized")) {
+        return { error: "Chave de API do Resend inválida. Verifique RESEND_API_KEY no Vercel." };
+      }
+      return { error: "Não foi possível enviar o e-mail. Tente novamente em alguns minutos." };
     }
 
     return {};
   } catch (err) {
-    console.error("[Email] Exception:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Email] Exception:", msg);
     return { error: "Erro ao enviar e-mail. Tente novamente." };
   }
 }
