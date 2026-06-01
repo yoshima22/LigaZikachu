@@ -162,9 +162,10 @@ export default async function PlayerDetailPage({
       </Link>
 
       {/* Header — Banner cobre toda a área, identidade sobreposta */}
-      <div data-tutorial="profile-avatar" className="overflow-hidden rounded-2xl border border-border bg-slate-950">
-        {/* Container relativo: banner + identidade sobrepostos */}
-        <div className="relative min-h-[180px]">
+      {/* overflow-visible: permite que molduras (frames) ultrapassem as bordas do card */}
+      <div data-tutorial="profile-avatar" className="rounded-2xl border border-border bg-slate-950" style={{ overflow: "visible" }}>
+        {/* Container do banner: overflow-hidden apenas aqui para clipar a imagem */}
+        <div className="relative min-h-[180px] overflow-hidden rounded-2xl">
           {/* Banner de fundo */}
           {equippedBanner?.item.imageUrl ? (
             <>
