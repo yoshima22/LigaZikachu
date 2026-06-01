@@ -67,6 +67,50 @@ export async function toggleAchievement(id: string, active: boolean): Promise<{ 
   }
 }
 
+export async function updateAchievement(
+  id: string,
+  raw: z.infer<typeof achievementSchema>
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const data = achievementSchema.parse(raw);
+    await prisma.achievement.update({
+      where: { id },
+      data: {
+        name: data.name,
+        description: data.description || null,
+        iconUrl: data.iconUrl || null,
+        type: data.type,
+        rarity: data.rarity,
+        category: data.category,
+        scope: data.scope,
+        isSecret: data.isSecret,
+        isRepeatable: data.isRepeatable,
+        suggestedPoints: data.suggestedPoints ?? null,
+        seasonId: data.seasonId || null,
+      }
+    });
+    revalidatePath("/conquistas");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function deleteAchievement(id: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    // Remove atribuições antes de deletar
+    await prisma.playerAchievement.deleteMany({ where: { achievementId: id } });
+    await prisma.achievement.delete({ where: { id } });
+    revalidatePath("/conquistas");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Atribuir conquista manualmente ────────────────────────────────────────────
 
 const awardSchema = z.object({
