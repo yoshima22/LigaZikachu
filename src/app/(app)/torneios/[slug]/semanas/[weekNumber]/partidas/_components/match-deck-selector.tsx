@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle } from "lucide-react";
-import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../actions";
+import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../../actions";
 
 interface SavedDeckOption {
   id: string;
