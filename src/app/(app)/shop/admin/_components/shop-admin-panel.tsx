@@ -310,21 +310,16 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
         value={form.imageUrl}
         onChange={(url) => setForm({ ...form, imageUrl: url })}
         label="Imagem"
-        maxMb={12}
-        // Compressão automática: banners são redimensionados para 1200×300, molduras para 512×512 (PNG)
-        maxWidth={isBanner ? 1200 : isFrame ? 512 : 512}
-        maxHeight={isBanner ? 300 : isFrame ? 512 : 512}
-        quality={isBanner ? 0.88 : 0.85}
-        preservePng={isFrame}  // molduras precisam manter transparência
+        maxMb={10}
         hint={
           isBanner
-            ? "Qualquer resolução — redimensionado automaticamente para 1200×300px. Use o editor abaixo para ajustar o foco."
+            ? "Banner: qualquer resolução. Proporção 4:1 (ex: 1200×300px) recomendada. Use o editor abaixo para ajustar o foco."
             : isFrame
-            ? "Qualquer resolução PNG (com fundo transparente) — redimensionado para 512×512px. Ajuste a posição abaixo."
+            ? "Moldura: PNG com fundo transparente recomendado. Use o editor abaixo para ajustar posição e escala."
             : (form.type as string) === "TITLE"
             ? "Título: sem imagem necessária — o nome do item já é exibido como texto."
             : (form.type as string) === "ZIKALOOT_TICKET"
-            ? "Qualquer imagem — redimensionada automaticamente."
+            ? "Ticket: qualquer imagem decorativa."
             : "Imagem opcional para o item."
         }
       />
