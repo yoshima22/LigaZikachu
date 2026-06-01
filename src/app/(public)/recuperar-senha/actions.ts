@@ -24,7 +24,10 @@ export async function requestPasswordReset(
   });
 
   // Resposta genérica — não revela se email existe na base
-  if (!user) return { success: true };
+  if (!user) {
+    console.log(`[PasswordReset] Email "${email}" não encontrado na base.`);
+    return { success: true };
+  }
 
   // Invalida tokens anteriores do mesmo usuário
   await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
@@ -37,8 +40,13 @@ export async function requestPasswordReset(
     data: { token, userId: user.id, expiresAt }
   });
 
+  console.log(`[PasswordReset] Tentando enviar email para: ${user.email}`);
   const { error } = await sendPasswordResetEmail(user.email, token);
-  if (error) return { error };
+  if (error) {
+    console.error(`[PasswordReset] Falha ao enviar: ${error}`);
+    return { error };
+  }
+  console.log(`[PasswordReset] Email enviado com sucesso para: ${user.email}`);
 
   return { success: true };
 }
