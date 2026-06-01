@@ -66,10 +66,17 @@ export default async function TorneioDetailPage({
     })
   );
 
-  // Conquistas do torneio
+  // Conquistas do torneio (com donos)
   const tournamentAchievements = await prisma.achievement.findMany({
     where: { tournamentId: tournament.id, active: true },
-    select: { id: true, name: true, rarity: true, description: true, iconUrl: true, isSecret: true },
+    select: {
+      id: true, name: true, rarity: true, description: true, iconUrl: true, isSecret: true,
+      playerAchievements: {
+        select: { player: { select: { id: true, displayName: true } }, awardedAt: true },
+        orderBy: { awardedAt: "asc" },
+        take: 1
+      }
+    },
     orderBy: [{ rarity: "asc" }, { name: "asc" }]
   }).catch(() => []);
 
@@ -140,9 +147,9 @@ export default async function TorneioDetailPage({
               <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
                 {tournament.format === "IN_PERSON" ? "Presencial" : "Online"}
               </span>
-              {tournament.format === "IN_PERSON" && (
+              {tournament.matchesPerPlayer && (
                 <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2.5 py-0.5 text-xs font-semibold text-[#FFCB05]">
-                  {tournament.matchesPerPlayer ?? 4} partidas por jogador
+                  {Math.max(1, tournament.matchesPerPlayer - 2)}~{tournament.matchesPerPlayer} partidas por jogador/semana
                 </span>
               )}
             </div>
@@ -298,40 +305,79 @@ export default async function TorneioDetailPage({
         </div>
       </div>
 
-      {/* Conquistas disponíveis no torneio */}
+      {/* Conquistas disponíveis no torneio — split Realizadas / Em Aberto */}
       {tournamentAchievements.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h2 className="font-semibold text-slate-200 flex items-center gap-2">
             <Trophy size={16} className="text-[#FFCB05]" />
             Conquistas do Campeonato
+            <span className="text-sm font-normal text-slate-500">
+              ({tournamentAchievements.filter(a => a.playerAchievements.length > 0).length}/{tournamentAchievements.length} realizadas)
+            </span>
           </h2>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {tournamentAchievements.map(a => {
-              const rarityColor = ({
-                COMMON:"border-slate-600 text-slate-400", UNCOMMON:"border-[#7AC74C]/40 text-[#7AC74C]",
-                RARE:"border-[#6390F0]/40 text-[#6390F0]", EPIC:"border-[#735797]/50 text-[#735797]",
-                LEGENDARY:"border-[#FFCB05]/50 text-[#FFCB05]", SECRET:"border-slate-800 text-slate-600"
-              } as Record<string,string>)[a.rarity] ?? "border-border text-slate-400";
-              return (
-                <div key={a.id} className={`rounded-xl border bg-slate-950/60 p-3 ${rarityColor.split(" ")[0]}`}>
-                  <div className="flex items-start gap-2 mb-1">
-                    {a.iconUrl && <img src={a.iconUrl} alt="" className="h-6 w-6 object-contain shrink-0" />}
-                    <div>
-                      <p className={`text-sm font-semibold ${rarityColor.split(" ")[1]}`}>
-                        {a.isSecret ? "???" : a.name}
-                      </p>
-                      {!a.isSecret && a.description && (
-                        <p className="text-[11px] text-slate-400 mt-0.5">{a.description}</p>
-                      )}
+
+          {/* Realizadas */}
+          {tournamentAchievements.some(a => a.playerAchievements.length > 0) && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-emerald-500">✓ Realizadas</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {tournamentAchievements.filter(a => a.playerAchievements.length > 0).map(a => {
+                  const owner = a.playerAchievements[0]?.player;
+                  const rarityColor = ({
+                    COMMON:"border-slate-600 text-slate-400", UNCOMMON:"border-[#7AC74C]/40 text-[#7AC74C]",
+                    RARE:"border-[#6390F0]/40 text-[#6390F0]", EPIC:"border-[#735797]/50 text-[#735797]",
+                    LEGENDARY:"border-[#FFCB05]/50 text-[#FFCB05]", SECRET:"border-slate-800 text-slate-600"
+                  } as Record<string,string>)[a.rarity] ?? "border-border text-slate-400";
+                  return (
+                    <div key={a.id} className={`rounded-xl border bg-slate-950/60 p-3 ${rarityColor.split(" ")[0]}`}>
+                      <div className="flex items-start gap-2 mb-2">
+                        {a.iconUrl && <img src={a.iconUrl} alt="" className="h-5 w-5 object-contain shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-semibold truncate ${rarityColor.split(" ")[1]}`}>{a.name}</p>
+                          {a.description && <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{a.description}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-1 mt-1">
+                        <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${rarityColor}`}>{a.rarity}</span>
+                        {owner && (
+                          <span className="text-[10px] font-semibold text-emerald-400 truncate">🏆 {owner.displayName}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${rarityColor}`}>
-                    {a.rarity}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Em aberto */}
+          {tournamentAchievements.some(a => a.playerAchievements.length === 0 && !a.isSecret) && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">◯ Em Aberto</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {tournamentAchievements.filter(a => a.playerAchievements.length === 0 && !a.isSecret).map(a => {
+                  const rarityColor = ({
+                    COMMON:"border-slate-600 text-slate-400", UNCOMMON:"border-[#7AC74C]/40 text-[#7AC74C]",
+                    RARE:"border-[#6390F0]/40 text-[#6390F0]", EPIC:"border-[#735797]/50 text-[#735797]",
+                    LEGENDARY:"border-[#FFCB05]/50 text-[#FFCB05]", SECRET:"border-slate-800 text-slate-600"
+                  } as Record<string,string>)[a.rarity] ?? "border-border text-slate-400";
+                  return (
+                    <div key={a.id} className={`rounded-xl border bg-slate-950/60 p-3 opacity-70 ${rarityColor.split(" ")[0]}`}>
+                      <div className="flex items-start gap-2 mb-2">
+                        {a.iconUrl && <img src={a.iconUrl} alt="" className="h-5 w-5 object-contain shrink-0 opacity-50" />}
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-semibold truncate ${rarityColor.split(" ")[1]}`}>{a.name}</p>
+                          {a.description && <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{a.description}</p>}
+                        </div>
+                      </div>
+                      <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${rarityColor}`}>{a.rarity}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
         </div>
       )}
 

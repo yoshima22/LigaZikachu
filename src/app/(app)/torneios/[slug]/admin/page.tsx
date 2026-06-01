@@ -18,7 +18,8 @@ import {
   startTournament,
   updateTournamentSeason,
   updateTournamentWeekSettings,
-  updateTournamentInfo
+  updateTournamentInfo,
+  reopenTournament
 } from "../../actions";
 import { TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
 import {
@@ -161,12 +162,14 @@ export default async function TournamentAdminPage({ params }: Props) {
             action={async (formData) => {
               "use server";
               await updateTournamentInfo({
-                tournamentId: tournament.id,
-                name:        String(formData.get("name") ?? ""),
-                edition:     String(formData.get("edition") ?? ""),
-                description: String(formData.get("description") ?? ""),
-                startDate:   String(formData.get("startDate") ?? ""),
-                endDate:     String(formData.get("endDate") ?? ""),
+                tournamentId:       tournament.id,
+                name:               String(formData.get("name") ?? ""),
+                edition:            String(formData.get("edition") ?? ""),
+                description:        String(formData.get("description") ?? ""),
+                startDate:          String(formData.get("startDate") ?? ""),
+                endDate:            String(formData.get("endDate") ?? ""),
+                format:             String(formData.get("format") ?? ""),
+                matchesPerPlayerMax: Number(formData.get("matchesPerPlayerMax") || 4),
               });
             }}
           >
@@ -188,6 +191,17 @@ export default async function TournamentAdminPage({ params }: Props) {
               />
             </label>
             <label className="space-y-1 text-xs text-slate-400">
+              <span>Formato</span>
+              <select
+                name="format"
+                defaultValue={tournament.format}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              >
+                <option value="ONLINE">Online</option>
+                <option value="IN_PERSON">Presencial</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
               <span>Data de início</span>
               <input
                 type="date"
@@ -202,6 +216,22 @@ export default async function TournamentAdminPage({ params }: Props) {
                 type="date"
                 name="endDate"
                 defaultValue={tournament.endDate ? new Date(tournament.endDate).toISOString().slice(0,10) : ""}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Mín. partidas/jogador/semana</span>
+              <input
+                type="number" name="matchesPerPlayerMin" min={1} max={10}
+                defaultValue={Math.max(1, (tournament.matchesPerPlayer ?? 4) - 2)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Máx. partidas/jogador/semana</span>
+              <input
+                type="number" name="matchesPerPlayerMax" min={1} max={10}
+                defaultValue={tournament.matchesPerPlayer ?? 4}
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
               />
             </label>
@@ -346,6 +376,18 @@ export default async function TournamentAdminPage({ params }: Props) {
               >
                 <Button type="submit" variant="outline">
                   Encerrar torneio
+                </Button>
+              </form>
+            )}
+            {tournament.status === "FINISHED" && (
+              <form
+                action={async () => {
+                  "use server";
+                  await reopenTournament(tournament.id);
+                }}
+              >
+                <Button type="submit" variant="outline" className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10">
+                  Reabrir torneio
                 </Button>
               </form>
             )}

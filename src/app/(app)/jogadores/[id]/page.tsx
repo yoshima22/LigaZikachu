@@ -230,23 +230,7 @@ export default async function PlayerDetailPage({
         </div>
       </div>
 
-      {/* Conquistas em Destaque */}
-      {highlightedAchievements.length > 0 && (
-        <Card className="p-6">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">🏆 Conquistas</h2>
-          <div className="flex flex-wrap gap-2">
-            {highlightedAchievements.map((a) => (
-              <div key={a.id} className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2">
-                {a.achievement.iconUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.achievement.iconUrl} alt="" className="h-5 w-5 object-contain" />
-                )}
-                <span className="text-sm font-semibold text-slate-200">{a.achievement.name}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* Conquistas removidas daqui — exibidas abaixo (seção única) */}
 
       {/* Time dos Sonhos */}
       {dreamTeam.length > 0 && (
@@ -492,20 +476,44 @@ export default async function PlayerDetailPage({
             </Card>
           )}
 
-          {/* Conquistas */}
-          {player.playerAchievements.length > 0 && (
+          {/* Conquistas — max 10 destacadas + "E X Outras" */}
+          {(highlightedAchievements.length > 0 || player.playerAchievements.length > 0) && (
             <Card>
               <CardTitle className="mb-4 flex items-center gap-2">
                 <Trophy size={18} className="text-primary" /> Conquistas
               </CardTitle>
               <div className="flex flex-wrap gap-2">
-                {player.playerAchievements.map((pa) => (
-                  <StatusBadge
-                    key={pa.id}
-                    variant="info"
-                    label={pa.achievement.icon ? `${pa.achievement.icon} ${pa.achievement.name}` : pa.achievement.name}
-                  />
+                {/* Até 10 conquistas em destaque */}
+                {highlightedAchievements.slice(0, 10).map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center gap-1.5 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-2.5 py-1"
+                  >
+                    {a.achievement.iconUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.achievement.iconUrl} alt="" className="h-4 w-4 object-contain" />
+                    )}
+                    <span className="text-xs font-semibold text-slate-200">{a.achievement.name}</span>
+                  </div>
                 ))}
+                {/* Tag "E X Outras" — sempre presente se houver conquistas além das exibidas */}
+                {(() => {
+                  const totalAchs = player.playerAchievements.length;
+                  const shown = Math.min(highlightedAchievements.length, 10);
+                  const remaining = totalAchs - shown;
+                  if (remaining <= 0) return null;
+                  return (
+                    <div className="flex items-center rounded-full border border-slate-700 bg-slate-800/50 px-2.5 py-1">
+                      <span className="text-xs text-slate-400">E {remaining} outra{remaining !== 1 ? "s" : ""}</span>
+                    </div>
+                  );
+                })()}
+                {/* Se não tem destaque mas tem conquistas, mostra contagem */}
+                {highlightedAchievements.length === 0 && player.playerAchievements.length > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {player.playerAchievements.length} conquista{player.playerAchievements.length !== 1 ? "s" : ""} — destaque algumas na aba de Conquistas.
+                  </p>
+                )}
               </div>
             </Card>
           )}

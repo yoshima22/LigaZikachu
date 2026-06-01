@@ -444,6 +444,9 @@ export async function updateTournamentInfo(raw: {
   description?: string;
   startDate?: string;
   endDate?: string;
+  format?: string;
+  matchesPerPlayerMin?: number;
+  matchesPerPlayerMax?: number;
 }): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -456,6 +459,11 @@ export async function updateTournamentInfo(raw: {
     });
     if (!tournament) return { error: "Torneio não encontrado." };
 
+    const validFormats = ["ONLINE", "IN_PERSON"];
+    const format = raw.format && validFormats.includes(raw.format)
+      ? (raw.format as TournamentFormat)
+      : undefined;
+
     await prisma.tournament.update({
       where: { id: raw.tournamentId },
       data: {
@@ -464,6 +472,8 @@ export async function updateTournamentInfo(raw: {
         description: raw.description?.trim() || null,
         ...(raw.startDate ? { startDate: new Date(raw.startDate) } : {}),
         ...(raw.endDate   ? { endDate:   new Date(raw.endDate)   } : {}),
+        ...(format        ? { format } : {}),
+        ...(raw.matchesPerPlayerMax ? { matchesPerPlayer: raw.matchesPerPlayerMax } : {}),
       }
     });
 
@@ -744,6 +754,30 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
       return { error: "Torneio iniciado, mas nenhuma partida foi gerada." };
     }
 
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function reopenTournament(tournamentId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
+    const t = await prisma.tournament.findUnique({ where: { id: tournamentId } });
+    if (!t) return { error: "Torneio não encontrado." };
+    if (!canManageTournament(actor, t)) return { error: "Voce nao pode gerenciar este torneio." };
+    if (t.status !== TournamentStatus.FINISHED)
+      return { error: "Apenas torneios encerrados podem ser reabertos." };
+
+    await prisma.tournament.update({
+      where: { id: tournamentId },
+      data: { status: TournamentStatus.IN_PROGRESS }
+    });
+
+    await logAudit(actor.id, "tournament", tournamentId, "tournament.reopened", { status: "FINISHED" }, { status: "IN_PROGRESS" });
+    revalidatePath("/torneios");
+    revalidatePath(`/torneios/${t.slug}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
