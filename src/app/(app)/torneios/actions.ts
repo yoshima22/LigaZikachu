@@ -1274,9 +1274,19 @@ export async function submitTournamentWeekDeck(
     });
     if (!week) return { error: "Dia de campeonato nao encontrado." };
 
-    const seasonId = week.tournament.seasonId;
+    // Usa o seasonId do torneio; se não tiver, busca a temporada mais recente como fallback
+    // Isso permite deck submissions mesmo sem vínculo explícito de temporada.
+    let seasonId = week.tournament.seasonId;
     if (!seasonId) {
-      return { error: "Este campeonato ainda nao esta vinculado a uma temporada." };
+      const fallbackSeason = await prisma.season.findFirst({
+        orderBy: [{ status: "asc" }, { startDate: "desc" }], // ACTIVE primeiro, depois mais recente
+        select: { id: true }
+      });
+      if (fallbackSeason) {
+        seasonId = fallbackSeason.id;
+      } else {
+        return { error: "Nenhuma temporada cadastrada no sistema. Crie uma temporada antes de cadastrar decklists." };
+      }
     }
 
     const registration = await prisma.tournamentRegistration.findUnique({
