@@ -1466,12 +1466,22 @@ export async function submitDeckForMatch(raw: {
     const isPlayerB = match.playerBId === player.id;
     if (!isPlayerA && !isPlayerB) return { error: "Você não é participante desta partida." };
 
+    // Busca status de inscrição real do jogador
+    const registration = await prisma.tournamentRegistration.findUnique({
+      where: { tournamentId_playerId: { tournamentId: week.tournamentId, playerId: player.id } },
+      select: { status: true }
+    });
+
     if (!canSubmitTournamentWeekDeck({
       viewerRole: user.role,
-      registrationStatus: "APPROVED",
+      registrationStatus: registration?.status ?? null,
       week
     })) {
-      return { error: "Prazo de envio de deck encerrado ou semana não está aberta." };
+      return {
+        error: isDeckRegistrationLocked(week)
+          ? "O prazo de envio de deck para esta semana foi encerrado."
+          : "Apenas jogadores inscritos e aprovados podem enviar decks."
+      };
     }
 
     if (!raw.deckName?.trim() || !raw.deckList?.trim()) {

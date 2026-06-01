@@ -551,24 +551,38 @@ export default async function WeekDetailPage({
           <p className="text-sm text-slate-500">
             Voce precisa estar inscrito neste torneio para enviar decklist deste dia.
           </p>
-        ) : canSubmitDeck ? (
-          <div className="space-y-3">
-            {Array.from({ length: deckSlots }, (_, index) => {
-              const deckNumber = index + 1;
-              return (
-                <DeckSubmissionForm
-                  key={deckNumber}
-                  tournamentWeekId={week.id}
-                  deckNumber={deckNumber}
-                  savedDecks={savedDecks}
-                  existingSubmission={
-                    currentPlayerDecks.find((deck) => deck.deckNumber === deckNumber) ?? null
-                  }
-                />
-              );
-            })}
+        ) : canSubmitDeck || currentPlayerDecks.length > 0 ? (
+          /* Deck por partida — redireciona para Ver Partidas onde cada confronto tem seu próprio deck */
+          <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">🃏</span>
+              <div>
+                <p className="text-sm font-semibold text-[#FFCB05]">Envie um deck para cada partida</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Você pode usar decks diferentes em cada confronto. O envio é feito na página de partidas.
+                </p>
+              </div>
+            </div>
+            {/* Mostra decks já enviados nesta semana */}
+            {currentPlayerDecks.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {currentPlayerDecks.map(d => (
+                  <div key={d.id} className="flex items-center gap-1.5 rounded-lg border border-border bg-slate-900/60 px-2.5 py-1">
+                    <span className="text-[10px] text-emerald-400">✓</span>
+                    <span className="text-xs text-slate-300">{d.deckName}</span>
+                    {d.deckNumber > 1 && <span className="text-[10px] text-slate-500">#{d.deckNumber}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <Link
+              href={`/torneios/${tournament.slug}/semanas/${weekNum}/partidas`}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#FFCB05] px-4 py-2 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors"
+            >
+              {currentPlayerDecks.length > 0 ? "Ver e editar decks por partida →" : "Ir para Ver Partidas →"}
+            </Link>
           </div>
-        ) : currentPlayerDecks.length === 0 && !admin ? (
+        ) : week.status !== "OPEN" && !admin ? (
           <p className="text-sm text-slate-500">
             O prazo de envio de decklist ja foi encerrado para este dia.
           </p>

@@ -267,8 +267,11 @@ export default async function PartidasPage({ params }: Props) {
                   const submissionId = isPlayerA
                     ? match.playerADeckSubmissionId
                     : match.playerBDeckSubmissionId;
+
+                  // Busca pelo ID exato da submission, não apenas [0]
+                  const allPlayerDecks = isPlayerA ? match.playerADecks : match.playerBDecks;
                   const submittedDeck = submissionId
-                    ? (isPlayerA ? match.playerADecks[0] : match.playerBDecks[0])
+                    ? (allPlayerDecks.find(d => d.id === submissionId) ?? allPlayerDecks[0] ?? null)
                     : null;
 
                   return (
@@ -276,13 +279,13 @@ export default async function PartidasPage({ params }: Props) {
                       key={match.id}
                       matchId={match.id}
                       matchNumber={globalIdx}
-                      opponentName={opponent?.displayName ?? "?"}
+                      opponentName={opponent?.displayName ?? "Adversário"}
                       weekOpen={weekOpen}
-                      savedDecks={savedDecks}
-                      existingSubmission={submittedDeck ? {
-                        id: submissionId!,
+                      savedDecks={savedDecks ?? []}
+                      existingSubmission={submittedDeck && submissionId ? {
+                        id: submissionId,
                         deckName: submittedDeck.deckName,
-                        archetype: submittedDeck.archetype,
+                        archetype: submittedDeck.archetype ?? null,
                         deckList: submittedDeck.deckList,
                       } : null}
                     />
