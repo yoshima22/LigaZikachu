@@ -29,7 +29,7 @@ const GLINT_CLASS: Record<string, string> = {
 
 interface Props {
   rarity: string;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
 }
 
@@ -37,15 +37,26 @@ export function RarityShimmer({ rarity, children, className }: Props) {
   const gradient = GLINT_GRADIENT[rarity];
   const animClass = GLINT_CLASS[rarity];
 
-  // Apenas RARE, EPIC e LEGENDARY recebem o efeito
+  // Sem brilho para raridades comuns
   if (!gradient || !animClass) {
-    return <div className={className}>{children}</div>;
+    return children ? <div className={className}>{children}</div> : null;
   }
 
+  // Modo overlay puro (sem children) — usado sobre banners como `absolute inset-0`
+  if (!children) {
+    return (
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none ${animClass} ${className ?? ""}`}
+        style={{ background: gradient }}
+      />
+    );
+  }
+
+  // Modo wrapper — envolve o conteúdo com o brilho por cima
   return (
     <div className={`relative overflow-hidden ${className ?? ""}`}>
       {children}
-      {/* Feixo de luz — por cima da imagem, não bloqueia eventos */}
       <div
         aria-hidden="true"
         className={`pointer-events-none absolute inset-0 ${animClass}`}
