@@ -135,27 +135,63 @@ export async function computeTournamentRanking(
 
   const registeredPlayerIds = registrations.map((r) => r.playerId);
 
-  // NÃO passa badgeWhere aqui — badges são somados manualmente abaixo
-  // para garantir que a contagem seja correta independente de como
-  // os registros de badge foram criados.
+  // Challenges e badges são tratados com queries explícitas abaixo
+  // para garantir robustez independente de como os registros foram criados.
   const entries = await computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED,
       tournamentWeek: { tournamentId }
     },
-    challengeWhere: {
-      OR: [
-        { match: { tournamentWeek: { tournamentId } } },
-        { tournamentId, matchId: null }
-      ]
-    },
-    badgeWhere: undefined,           // tratado abaixo de forma explícita
+    challengeWhere: undefined,        // tratado abaixo de forma explícita
+    badgeWhere:     undefined,        // tratado abaixo de forma explícita
     bonusWeekWhere: { tournamentId },
     seedPlayers: registrations.map((r) => ({
       playerId: r.playerId,
       displayName: r.player.displayName
     }))
   });
+
+  // ── Challenges: query direta cobrindo challenges com e sem matchId ─────────
+  const [challengesViaMatch, challengesDirect] = await Promise.all([
+    // Challenges vinculados a partidas do torneio
+    prisma.challenge.findMany({
+      where: { match: { tournamentWeek: { tournamentId } } },
+      select: { challengerId: true, challengedId: true, status: true,
+                challenger: { select: { displayName: true } },
+                challenged: { select: { displayName: true } } }
+    }),
+    // Challenges vinculados diretamente ao torneio (sem matchId)
+    prisma.challenge.findMany({
+      where: { tournamentId, matchId: null },
+      select: { challengerId: true, challengedId: true, status: true,
+                challenger: { select: { displayName: true } },
+                challenged: { select: { displayName: true } } }
+    })
+  ]);
+
+  const allChallenges = [...challengesViaMatch, ...challengesDirect];
+
+  if (allChallenges.length > 0) {
+    const entryMap = new Map(entries.map((e) => [e.playerId, e]));
+    for (const ch of allChallenges) {
+      const challenger = entryMap.get(ch.challengerId);
+      const challenged = entryMap.get(ch.challengedId);
+
+      if (challenger) {
+        challenger.gymChallenges += 1;
+        if (ch.status === "ACCEPTED" || ch.status === "RESOLVED") {
+          challenger.successfulChallenges += 1;
+        }
+        if (ch.status === "REJECTED") {
+          challenger.failedChallenges += 1;
+          challenger.points -= 2;
+        }
+      }
+      if (challenged && ch.status === "REJECTED") {
+        challenged.defendedChallenges += 1;
+      }
+    }
+  }
 
   // ── Badges: query direta por jogador registrado no torneio ────────────────
   // Busca todos os PlayerBadge cujos badges pertencem a este torneio E
