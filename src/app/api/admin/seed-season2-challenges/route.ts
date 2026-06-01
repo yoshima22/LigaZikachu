@@ -83,7 +83,12 @@ export async function GET() {
 
     // ── Desafios confirmados ───────────────────────────────────────────────────
     // status REJECTED = desafiante perdeu (-2pts para o desafiante)
-    // Referência: relatório GPT + planilha (Cristian: 3 derrotas, Erick: 2 derrotas)
+    // status ACCEPTED = desafiante venceu (ganhou a insígnia do defensor)
+    //
+    // Resumo final:
+    //   Cristian: 3 derrotas (S5, S6, S7 vs Rodrigo) = -6pts
+    //   Erick: 2 derrotas (S5 vs Rodrigo, S7 vs Moises) = -4pts
+    //   Rodrigo: 1 vitória (S8 desafiou Erick pela insígnia de Pedra e venceu)
 
     const CHALLENGES: Array<{
       challengerId: string;
@@ -91,19 +96,30 @@ export async function GET() {
       tournamentWeekId: string | null;
       badgeId: string | null;
       playedAt: string;
+      status: "REJECTED" | "ACCEPTED";
+      notes: string;
     }> = [
       // Cristian 3x derrotas
       { challengerId: cristianId, challengedId: rodrigoId, tournamentWeekId: wid(5),
-        badgeId: badgeOf(rodrigoId), playedAt: "2026-02-04" },
+        badgeId: badgeOf(rodrigoId), playedAt: "2026-02-04",
+        status: "REJECTED", notes: "Cristian desafiou Rodrigo — Rodrigo defendeu" },
       { challengerId: cristianId, challengedId: rodrigoId, tournamentWeekId: wid(6),
-        badgeId: badgeOf(rodrigoId), playedAt: "2026-03-16" },
+        badgeId: badgeOf(rodrigoId), playedAt: "2026-03-16",
+        status: "REJECTED", notes: "Cristian desafiou Rodrigo — Rodrigo defendeu" },
       { challengerId: cristianId, challengedId: rodrigoId, tournamentWeekId: wid(7),
-        badgeId: badgeOf(rodrigoId), playedAt: "2026-05-20" },
+        badgeId: badgeOf(rodrigoId), playedAt: "2026-05-20",
+        status: "REJECTED", notes: "Cristian desafiou Rodrigo — Rodrigo defendeu" },
       // Erick 2x derrotas
       { challengerId: erickId, challengedId: rodrigoId, tournamentWeekId: wid(5),
-        badgeId: badgeOf(rodrigoId), playedAt: "2026-02-04" },
+        badgeId: badgeOf(rodrigoId), playedAt: "2026-02-04",
+        status: "REJECTED", notes: "Erick desafiou Rodrigo — Rodrigo defendeu" },
       { challengerId: erickId, challengedId: moisesId, tournamentWeekId: wid(7),
-        badgeId: badgeOf(moisesId), playedAt: "2026-05-20" },
+        badgeId: badgeOf(moisesId), playedAt: "2026-05-20",
+        status: "REJECTED", notes: "Erick desafiou Moises — Moises defendeu" },
+      // Rodrigo 1x vitória (Semana 8 — desafiou Erick pela Insígnia de Pedra)
+      { challengerId: rodrigoId, challengedId: erickId, tournamentWeekId: wid(8),
+        badgeId: badgeOf(erickId), playedAt: "2026-06-03",
+        status: "ACCEPTED", notes: "Rodrigo desafiou Erick (Pedra) — Rodrigo venceu e conquistou a insígnia" },
     ];
 
     let created = 0, skipped = 0;
@@ -122,7 +138,6 @@ export async function GET() {
           tournamentWeekId: ch.tournamentWeekId,
           challengerId: ch.challengerId,
           challengedId: ch.challengedId,
-          status: "REJECTED"
         }
       });
       if (existing) { skipped++; continue; }
@@ -137,13 +152,14 @@ export async function GET() {
           badgeId: ch.badgeId,
           openedById: adminUser.id,
           resolvedById: adminUser.id,
-          status: "REJECTED",
+          status: ch.status,
           openedAt: new Date(ch.playedAt),
           resolvedAt: new Date(ch.playedAt),
-          resolutionNotes: "Importado retroativamente — defensor venceu o desafio"
+          resolutionNotes: ch.notes
         }
       });
       created++;
+      log.push(`  ✓ ${ch.status === "ACCEPTED" ? "⚔️ Vitória" : "🛡️ Derrota"}: ${ch.notes}`);
     }
 
     log.push(`✓ ${created} desafios criados, ${skipped} ignorados`);
@@ -184,10 +200,10 @@ export async function GET() {
     }
 
     log.push(`\n📊 Resultado esperado no ranking:`);
-    log.push(`  Cristian: 3 derrotas em ginásio = -6pts`);
-    log.push(`  Erick: 2 derrotas em ginásio = -4pts`);
-    log.push(`  Rodrigo: defesas bem-sucedidas registradas`);
-    log.push(`  Moises: defesa bem-sucedida registrada`);
+    log.push(`  Cristian: 3 desafios, 3 derrotas = -6pts`);
+    log.push(`  Erick:    2 desafios, 2 derrotas = -4pts`);
+    log.push(`  Rodrigo:  1 desafio, 1 vitória (Pedra S8) | 3+ defesas bem-sucedidas`);
+    log.push(`  Moises:   1 defesa bem-sucedida`);
     log.push(`\n🎉 Desafios importados com sucesso!`);
 
     return NextResponse.json({ success: true, log }, { status: 200 });
