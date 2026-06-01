@@ -324,3 +324,49 @@ export async function resetPlayerTutorials(userId: string): Promise<{ error?: st
   } catch (err) { return { error: String(err) }; }
 }
 
+// ── Salvar deck na lista pessoal (sem duplicatas exatas) ──────────────────────
+
+export async function saveDeckToMyList(raw: {
+  name: string;
+  archetype?: string;
+  deckList: string;
+}): Promise<{ error?: string; alreadyExists?: boolean; id?: string }> {
+  const session = await auth();
+  if (!session?.user) return { error: "Não autenticado." };
+
+  const player = await prisma.player.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true }
+  });
+  if (!player) return { error: "Perfil não encontrado." };
+
+  const deckList = raw.deckList.trim();
+  if (!deckList) return { error: "Lista do deck vazia." };
+
+  // Verifica duplicata exata (mesmo deckList normalizado)
+  const existing = await prisma.savedDeck.findFirst({
+    where: {
+      playerId: player.id,
+      deckList: { equals: deckList }
+    },
+    select: { id: true, name: true }
+  });
+
+  if (existing) {
+    return { alreadyExists: true, id: existing.id };
+  }
+
+  const saved = await prisma.savedDeck.create({
+    data: {
+      playerId: player.id,
+      name: raw.name.trim() || "Deck sem nome",
+      archetype: raw.archetype?.trim() || null,
+      deckList,
+      isPublic: false,
+    }
+  });
+
+  revalidatePath("/perfil/meus-decks");
+  return { id: saved.id };
+}
+

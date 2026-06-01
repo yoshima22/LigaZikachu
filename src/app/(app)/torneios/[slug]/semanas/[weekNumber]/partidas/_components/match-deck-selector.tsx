@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle } from "lucide-react";
-import { POKEMON_TYPE_EMOJIS, POKEMON_TYPE_COLORS } from "@/lib/pokemon-types-data";
+import { POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../../actions";
+import { DeckActionButtons } from "@/components/ui/deck-action-buttons";
 
 interface SavedDeckOption {
   id: string;
@@ -198,7 +199,15 @@ export function MatchDeckSelector({
                   </label>
                 </div>
                 <label className="space-y-1 text-[10px] text-slate-400 block">
-                  <span>Lista do deck *</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <span>Lista do deck *</span>
+                    {/* Botões: copiar + salvar nos meus decks */}
+                    <DeckActionButtons
+                      deckName={deckName}
+                      deckList={deckList}
+                      archetype={archetype}
+                    />
+                  </div>
                   <textarea
                     value={deckList}
                     onChange={e => { setDeckList(e.target.value); setSuccess(false); }}

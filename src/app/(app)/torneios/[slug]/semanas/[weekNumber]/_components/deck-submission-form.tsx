@@ -7,6 +7,7 @@ import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PokemonTypeSelector } from "@/components/ui/pokemon-type-selector";
 import { submitTournamentWeekDeck } from "../../../../actions";
+import { DeckActionButtons } from "@/components/ui/deck-action-buttons";
 
 interface ExistingDeckSubmission {
   deckNumber: number;
@@ -133,7 +134,15 @@ export function DeckSubmissionForm({
       </div>
 
       <label className="mt-3 block space-y-1 text-xs text-slate-400">
-        <span>Lista completa</span>
+        <div className="flex items-center justify-between mb-1">
+          <span>Lista completa</span>
+          {/* Copiar + Salvar nos meus decks */}
+          <DeckActionButtons
+            deckName={deckName}
+            deckList={deckList}
+            archetype={selectedTypes.join(", ")}
+          />
+        </div>
         <textarea
           value={deckList}
           onChange={(event) => setDeckList(event.target.value)}
