@@ -55,8 +55,12 @@ export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRan
       status: MatchStatus.CONFIRMED,
       tournamentWeekId: { not: null }
     },
+    // Inclui desafios vinculados a partidas OU diretamente a torneios (sem matchId)
     challengeWhere: {
-      match: { tournamentWeekId: { not: null } }
+      OR: [
+        { match: { tournamentWeekId: { not: null } } },
+        { tournamentId: { not: null }, matchId: null }
+      ]
     },
     badgeWhere: {},
     bonusWeekWhere: {},
@@ -95,20 +99,18 @@ export async function computeSeasonRanking(seasonId: string): Promise<PlayerRank
       status: MatchStatus.CONFIRMED,
       tournamentWeek: { tournament: { seasonId } }
     },
+    // Inclui desafios vinculados a partidas da temporada OU diretos ao torneio (sem matchId)
     challengeWhere: {
-      match: { tournamentWeek: { tournament: { seasonId } } }
+      OR: [
+        { match: { tournamentWeek: { tournament: { seasonId } } } },
+        { tournament: { seasonId }, matchId: null }
+      ]
     },
     badgeWhere: {
-      badge: {
-        tournament: {
-          seasonId
-        }
-      }
+      badge: { tournament: { seasonId } }
     },
     bonusWeekWhere: {
-      tournament: {
-        seasonId
-      }
+      tournament: { seasonId }
     },
     seedPlayers: [...seedPlayers.values()]
   });
