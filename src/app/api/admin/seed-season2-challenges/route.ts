@@ -81,10 +81,20 @@ export async function GET() {
       return badge?.id ?? null;
     };
 
-    // ── Limpar todos os desafios existentes do torneio antes de recriar ─────────
-    // Garante que rodar o seed múltiplas vezes não cria duplicatas.
-    const deleted = await prisma.challenge.deleteMany({ where: { tournamentId: tournament.id } });
-    log.push(`✓ ${deleted.count} desafios anteriores removidos`);
+    // ── Limpar TODOS os desafios do torneio antes de recriar ─────────────────
+    // Usa OR para pegar tanto challenges com tournamentId quanto os que foram
+    // criados apenas com tournamentWeekId (sem tournamentId), que o delete
+    // simples por tournamentId não conseguia remover.
+    const allWeekIds = [...weekIdMap.values()];
+    const deleted = await prisma.challenge.deleteMany({
+      where: {
+        OR: [
+          { tournamentId: tournament.id },
+          { tournamentWeekId: { in: allWeekIds } }
+        ]
+      }
+    });
+    log.push(`✓ ${deleted.count} desafios removidos (limpa por tournamentId E weekId)`);
 
     // ── Desafios confirmados ───────────────────────────────────────────────────
     // status REJECTED = desafiante perdeu (-2pts para o desafiante)
