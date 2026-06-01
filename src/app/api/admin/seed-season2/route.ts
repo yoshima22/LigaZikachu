@@ -232,19 +232,43 @@ export async function GET() {
 
     log.push(`\n✓ ${achCreated} conquistas criadas, ${achAssigned} atribuídas`);
 
-    // ── 4. Mapear jogadores por displayName ──────────────────────────────────
+    // ── 4. Mapear jogadores por displayName (insensível a acentos) ──────────
 
-    const allPlayers = await prisma.player.findMany({
-      where: { displayName: { in: ["Rodrigo","Erick","Luiz","Moises","Alan","Nakaima","Cristian"] } },
+    // Busca todos os jogadores ativos e faz match por nome normalizado em JS
+    // para evitar problemas com acentos (ex: "Moisés" vs "Moises")
+    const SEED_NAMES = ["Rodrigo","Erick","Luiz","Moises","Alan","Nakaima","Cristian"];
+    const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+    const seedNamesNorm = SEED_NAMES.map(normalize);
+
+    const candidatePlayers = await prisma.player.findMany({
+      where: { active: true },
       select: { id: true, displayName: true }
     });
-    const playerMap = new Map(allPlayers.map(p => [p.displayName, p.id]));
-    log.push(`\n✓ Jogadores encontrados: ${allPlayers.map(p => p.displayName).join(", ")}`);
+
+    // Monta o mapa usando o nome normalizado como chave de lookup
+    // mas registra também pelo nome "seed" (sem acento) para as partidas
+    const playerMap = new Map<string, string>();
+    const foundPlayers: string[] = [];
+    for (const p of candidatePlayers) {
+      const norm = normalize(p.displayName);
+      const seedIdx = seedNamesNorm.indexOf(norm);
+      if (seedIdx !== -1) {
+        playerMap.set(SEED_NAMES[seedIdx], p.id); // chave sem acento, ex: "Moises"
+        playerMap.set(p.displayName, p.id);        // chave original, ex: "Moisés"
+        foundPlayers.push(p.displayName);
+      }
+    }
+    log.push(`\n✓ Jogadores encontrados: ${foundPlayers.join(", ")}`);
 
     // ── 5. Registrar jogadores no torneio ────────────────────────────────────
 
+    // Filtra só os jogadores que foram mapeados (pertencentes à liga)
+    const mappedPlayers = candidatePlayers.filter(p =>
+      seedNamesNorm.includes(normalize(p.displayName))
+    );
+
     let regCreated = 0;
-    for (const player of allPlayers) {
+    for (const player of mappedPlayers) {
       const existing = await prisma.tournamentRegistration.findUnique({
         where: { tournamentId_playerId: { tournamentId: tournament.id, playerId: player.id } }
       });
