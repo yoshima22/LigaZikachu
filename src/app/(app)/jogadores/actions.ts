@@ -316,3 +316,11 @@ export async function resetPlayerBadges(playerId: string): Promise<{ error?: str
   } catch (err) { return { error: String(err) }; }
 }
 
+export async function resetPlayerTutorials(userId: string): Promise<{ error?: string }> {
+  try {
+    await getAdminActor();
+    await prisma.userTutorialProgress.deleteMany({ where: { userId } });
+    return {};
+  } catch (err) { return { error: String(err) }; }
+}
+

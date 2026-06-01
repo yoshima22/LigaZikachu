@@ -63,11 +63,11 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" giftCount={giftCount} />
+            <AppNav admin={admin} variant="desktop" giftCount={giftCount} playerId={player?.id} />
 
             {/* User + logout */}
             <div className="flex items-center gap-3">
-              <Link href="/perfil" className="hidden text-right hover:text-[#FFCB05] sm:block">
+              <Link href={player ? `/jogadores/${player.id}` : "/perfil"} className="hidden text-right hover:text-[#FFCB05] sm:block">
                 <p className="text-xs font-medium text-slate-200 leading-tight">
                   {session.user.name ?? session.user.email}
                 </p>
@@ -87,7 +87,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" giftCount={giftCount} />
+            <AppNav admin={admin} variant="mobile" giftCount={giftCount} playerId={player?.id} />
           </div>
         </header>
 

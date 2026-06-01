@@ -47,15 +47,19 @@ const colecaoLinks = [
   { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false }
 ];
 
-const profileLinks = [
-  { href: "/perfil", label: "Meu Perfil", icon: User, adminOnly: false },
-  { href: "/perfil/meus-decks", label: "Meus Decks", icon: BookOpen, adminOnly: false },
-  { href: "/conquistas", label: "Conquistas", icon: Trophy, adminOnly: false },
-  { href: "/insignias", label: "Insignias", icon: Medal, adminOnly: false },
-  { href: "/caixa-de-presentes", label: "Presentes", icon: Gift, adminOnly: false },
-  { href: "/codigos", label: "Codigos", icon: Package, adminOnly: false },
-  { href: "/jogadores", label: "Jogadores", icon: Users, adminOnly: false }
-];
+// profileLinks é dinâmico — usa playerId para o link do perfil público
+function buildProfileLinks(playerId?: string) {
+  return [
+    { href: playerId ? `/jogadores/${playerId}` : "/perfil", label: "Meu Perfil", icon: User, adminOnly: false },
+    { href: "/perfil", label: "Configurações", icon: User, adminOnly: false },
+    { href: "/perfil/meus-decks", label: "Meus Decks", icon: BookOpen, adminOnly: false },
+    { href: "/conquistas", label: "Conquistas", icon: Trophy, adminOnly: false },
+    { href: "/insignias", label: "Insignias", icon: Medal, adminOnly: false },
+    { href: "/caixa-de-presentes", label: "Presentes", icon: Gift, adminOnly: false },
+    { href: "/codigos", label: "Codigos", icon: Package, adminOnly: false },
+    { href: "/jogadores", label: "Jogadores", icon: Users, adminOnly: false }
+  ];
+}
 
 const adminLinks = [
   { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true }
@@ -69,7 +73,8 @@ type NavLink = {
   tutorialId?: string;
 };
 
-export function AppNav({ admin, variant = "desktop", giftCount = 0 }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number }) {
+export function AppNav({ admin, variant = "desktop", giftCount = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; playerId?: string }) {
+  const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
