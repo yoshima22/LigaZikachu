@@ -249,6 +249,8 @@ export default async function PlayerDetailPage({
                       width: frameSize,
                       height: frameSize,
                       transform: "translate(-50%, -50%)",
+                      // DEBUG: outline verde mostra tamanho real do elemento — remover após confirmar
+                      outline: isAdminUser ? "2px solid lime" : undefined,
                     }}
                   />
                 )}
