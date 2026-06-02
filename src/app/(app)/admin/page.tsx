@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GlobalResetPanel } from "./_components/global-reset-panel";
+import { DeckReminderPanel } from "./_components/deck-reminder-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -205,6 +206,7 @@ export default async function AdminPage() {
         )}
       </Card>
 
+      <DeckReminderPanel />
       <GlobalResetPanel />
     </div>
   );
