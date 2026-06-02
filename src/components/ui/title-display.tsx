@@ -175,11 +175,11 @@ const CHAR_KEYFRAME: Record<string, string> = {
 const DEFAULT_REPEAT: Record<string, number> = {
   COMMON:    0,
   UNCOMMON:  0,
-  RARE:      60,
-  EPIC:      45,
-  LEGENDARY: 35,
-  MYTHIC:    30,
-  RELIC:     25,
+  RARE:      45,
+  EPIC:      30,
+  LEGENDARY: 25,
+  MYTHIC:    20,
+  RELIC:     15,
 };
 
 // ── Badge por tema ────────────────────────────────────────────────────────────
