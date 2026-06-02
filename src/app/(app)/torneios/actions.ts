@@ -814,7 +814,8 @@ export async function updateTournamentWeekDeckLock(
   try {
     const actor = await requireAdmin();
     const data = updateWeekDeckLockSchema.parse(raw);
-    const deckLockAt = parseBRT(data.deckLockAt);
+    const rawDate = data.deckLockAt?.trim();
+    const deckLockAt = rawDate ? new Date(rawDate) : null;
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
@@ -848,27 +849,6 @@ export async function updateTournamentWeekDeckLock(
   }
 }
 
-/** Interpreta string de datetime-local como horário de Brasília (BRT = UTC-3).
- *  O input datetime-local não carrega informação de fuso — sem este fix,
- *  new Date("2026-06-03T19:00") seria tratado como UTC no Vercel. */
-function parseBRT(raw: string | null | undefined): Date | null {
-  try {
-    if (!raw?.trim()) return null;
-    const s = raw.trim();
-    // Se já tem offset (Z, +HH, -HH), usa direto
-    if (/[Zz]$/.test(s) || /[+-]\d{2}:\d{2}$/.test(s)) {
-      const d = new Date(s);
-      return isNaN(d.getTime()) ? null : d;
-    }
-    // "2026-06-03T19:00" ou "2026-06-03T19:00:00" → interpreta como BRT (UTC-3)
-    const normalized = s.replace(/(\d{2}:\d{2})$/, "$1:00");
-    const d = new Date(normalized + "-03:00");
-    return isNaN(d.getTime()) ? null : d;
-  } catch {
-    return null;
-  }
-}
-
 // ─── Inscrições ──────────────────────────────────────────────────────────────
 
 export async function updateTournamentWeekSettings(
@@ -877,7 +857,8 @@ export async function updateTournamentWeekSettings(
   try {
     const actor = await requireAdmin();
     const data = updateTournamentWeekSettingsSchema.parse(raw);
-    const deckLockAt = parseBRT(data.deckLockAt);
+    const rawDate = data.deckLockAt?.trim();
+    const deckLockAt = rawDate ? new Date(rawDate) : null;
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },

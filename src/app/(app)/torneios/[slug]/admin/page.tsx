@@ -123,12 +123,11 @@ export default async function TournamentAdminPage({ params }: Props) {
   );
   const pendingMatches = totalMatches - confirmedMatches - disputedMatches;
 
-  // Converte UTC para BRT (UTC-3) para exibir corretamente no input datetime-local
-  // Usa offset fixo -3h (evita dependência de locale Intl que pode falhar no Vercel)
   const toDateTimeLocal = (value: Date | null | undefined) => {
     if (!value) return "";
-    const brtMs = new Date(value).getTime() - 3 * 60 * 60 * 1000; // UTC - 3h = BRT
-    return new Date(brtMs).toISOString().slice(0, 16); // "2026-06-03T19:00"
+    const date = new Date(value);
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return localDate.toISOString().slice(0, 16);
   };
 
   return (
