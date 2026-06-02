@@ -463,7 +463,7 @@ export async function generateWeekNarrativeSections(weekId: string): Promise<Wee
   });
 
   const raw = response.choices[0]?.message?.content ?? "";
-  return parseSections(raw, ["intro","highlights","challenges","rankings","players","title","closing"]) as WeekNarrativeSections;
+  return parseSections(raw, ["intro","highlights","challenges","rankings","players","title","closing"]) as unknown as WeekNarrativeSections;
 }
 
 export async function generateTournamentNarrativeSections(tournamentId: string): Promise<TournamentNarrativeSections> {
@@ -486,7 +486,7 @@ export async function generateTournamentNarrativeSections(tournamentId: string):
   });
 
   const raw = response.choices[0]?.message?.content ?? "";
-  return parseSections(raw, ["overview","badges","players","title","champion"]) as TournamentNarrativeSections;
+  return parseSections(raw, ["overview","badges","players","title","champion"]) as unknown as TournamentNarrativeSections;
 }
 
 // ── Save helpers (usados pelos auto-triggers) ─────────────────────────────────
