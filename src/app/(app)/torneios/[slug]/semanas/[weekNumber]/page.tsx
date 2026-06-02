@@ -42,15 +42,22 @@ export default async function WeekDetailPage({
     include: {
       deckSubmissions: {
         include: {
-          player: {
-            select: {
-              id: true,
-              displayName: true,
-              ptcglNick: true
-            }
-          }
+          player: { select: { id: true, displayName: true, ptcglNick: true } }
         },
         orderBy: [{ player: { displayName: "asc" } }, { deckNumber: "asc" }]
+      },
+      // Matches necessários para saber contra quem cada deck é usado
+      matches: {
+        where: { isBye: false, playerBId: { not: null } },
+        select: {
+          id: true,
+          playerAId: true,
+          playerBId: true,
+          playerADeckSubmissionId: true,
+          playerBDeckSubmissionId: true,
+          playerA: { select: { id: true, displayName: true } },
+          playerB: { select: { id: true, displayName: true } },
+        }
       }
     }
   });
@@ -73,6 +80,22 @@ export default async function WeekDetailPage({
         select: { status: true }
       })
     : null;
+
+  // ── Mapa submissionId → nomes dos adversários ────────────────────────────────
+  // Permite mostrar "vs Fulano" nos chips e filtrar decks não vinculados a partidas.
+  const submissionOpponents = new Map<string, string[]>();
+  for (const m of week.matches) {
+    if (m.playerADeckSubmissionId && m.playerB) {
+      const list = submissionOpponents.get(m.playerADeckSubmissionId) ?? [];
+      if (!list.includes(m.playerB.displayName)) list.push(m.playerB.displayName);
+      submissionOpponents.set(m.playerADeckSubmissionId, list);
+    }
+    if (m.playerBDeckSubmissionId && m.playerA) {
+      const list = submissionOpponents.get(m.playerBDeckSubmissionId) ?? [];
+      if (!list.includes(m.playerA.displayName)) list.push(m.playerA.displayName);
+      submissionOpponents.set(m.playerBDeckSubmissionId, list);
+    }
+  }
 
   const topDoDiaRanking = await computeTournamentWeekTopOfDay(week.id);
   const deckVisibility = getDeckVisibilityState(week);
@@ -100,17 +123,34 @@ export default async function WeekDetailPage({
     Math.max(Number(bonusRule?.decksToSubmit ?? 1), 1),
     3
   );
-  // Decks do jogador atual — deduplica por conteúdo para não mostrar cópias
+  // Decks do jogador atual — apenas os vinculados a partidas, agrupados por conteúdo
+  // (lida com duplicatas legadas: mesmo deck em múltiplas submissions → um único chip)
+  type DeckChip = {
+    id: string; deckNumber: number; deckName: string;
+    archetype: string | null; deckList: string; opponents: string[];
+  };
   const currentPlayerDecks = (() => {
-    if (!player) return [];
-    const seen = new Set<string>();
-    return week.deckSubmissions.filter((sub) => {
-      if (sub.playerId !== player.id) return false;
+    if (!player) return [] as DeckChip[];
+    const byContent = new Map<string, DeckChip>();
+    for (const sub of week.deckSubmissions) {
+      if (sub.playerId !== player.id) continue;
+      const opponents = submissionOpponents.get(sub.id) ?? [];
+      if (opponents.length === 0) continue; // não vinculado a nenhuma partida
       const key = sub.deckList.trim();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      if (byContent.has(key)) {
+        // Mescla adversários de duplicatas legadas
+        const entry = byContent.get(key)!;
+        for (const opp of opponents) {
+          if (!entry.opponents.includes(opp)) entry.opponents.push(opp);
+        }
+      } else {
+        byContent.set(key, {
+          id: sub.id, deckNumber: sub.deckNumber, deckName: sub.deckName,
+          archetype: sub.archetype, deckList: sub.deckList, opponents,
+        });
+      }
+    }
+    return Array.from(byContent.values());
   })();
 
   const savedDecks = player
@@ -128,12 +168,14 @@ export default async function WeekDetailPage({
       registrationStatus: registration?.status ?? null,
       week
     });
-  // Filtra decks visíveis e deduplica por (playerId + deckList) para evitar
-  // mostrar múltiplas cópias do mesmo deck quando o jogador o usou em partidas diferentes.
+  // Decks visíveis na lista pública:
+  // - Apenas submissions vinculadas a pelo menos uma partida
+  // - Deduplica por (playerId + conteúdo) para evitar cópias legadas
+  // - Agrega adversários para exibir "vs Fulano, Beltrano"
+  type VisibleDeck = typeof week.deckSubmissions[number] & { opponents: string[] };
   const visibleDecks = (() => {
-    if (!user) return [];
-    const seen = new Set<string>();
-    const result: typeof week.deckSubmissions = [];
+    if (!user) return [] as VisibleDeck[];
+    const seen = new Map<string, VisibleDeck>();
     for (const sub of week.deckSubmissions) {
       if (!canViewTournamentWeekDecklist({
         viewerRole: user.role,
@@ -141,13 +183,19 @@ export default async function WeekDetailPage({
         registrationStatus: registration?.status ?? null,
         week
       })) continue;
+      const opponents = submissionOpponents.get(sub.id) ?? [];
+      if (opponents.length === 0) continue; // descarta submissions sem partida vinculada
       const key = `${sub.playerId}::${sub.deckList.trim()}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(sub);
+      if (seen.has(key)) {
+        const entry = seen.get(key)!;
+        for (const opp of opponents) {
+          if (!entry.opponents.includes(opp)) entry.opponents.push(opp);
+        }
+      } else {
+        seen.set(key, { ...sub, opponents });
       }
     }
-    return result;
+    return Array.from(seen.values());
   })();
   const approvedPlayers = admin
     ? await prisma.tournamentRegistration.findMany({
@@ -597,14 +645,18 @@ export default async function WeekDetailPage({
                 </p>
               </div>
             </div>
-            {/* Mostra decks já enviados nesta semana */}
+            {/* Decks já vinculados a partidas desta semana */}
             {currentPlayerDecks.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {currentPlayerDecks.map(d => (
-                  <div key={d.id} className="flex items-center gap-1.5 rounded-lg border border-border bg-slate-900/60 px-2.5 py-1">
+                  <div key={d.id} className="flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-2.5 py-1.5">
                     <span className="text-[10px] text-emerald-400">✓</span>
-                    <span className="text-xs text-slate-300">{d.deckName}</span>
-                    {d.deckNumber > 1 && <span className="text-[10px] text-slate-500">#{d.deckNumber}</span>}
+                    <span className="text-xs font-medium text-slate-200">{d.deckName}</span>
+                    {d.opponents.length > 0 && (
+                      <span className="text-[10px] text-slate-500">
+                        vs {d.opponents.join(", ")}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -637,12 +689,17 @@ export default async function WeekDetailPage({
                   <div>
                     <p className="text-sm font-semibold text-white">
                       {submission.player.displayName}
-                      {submission.deckNumber > 1 ? ` - Deck ${submission.deckNumber}` : ""}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-400 font-medium">
                       {submission.deckName}
-                      {submission.archetype ? ` - ${submission.archetype}` : ""}
+                      {submission.archetype ? ` · ${submission.archetype}` : ""}
                     </p>
+                    {submission.opponents.length > 0 && (
+                      <p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-600">
+                        <Swords size={9} />
+                        vs {submission.opponents.join(", ")}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <CopyDeckButton deckList={submission.deckList} />
