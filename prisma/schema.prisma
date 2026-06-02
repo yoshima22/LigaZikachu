@@ -271,6 +271,8 @@ model Tournament {
   announcement          String?
   challengeConfig       Json?
   betConfig             Json?
+  narrativeText         String?            @db.Text   // análise geral do campeonato pelo Prof. Enguiça
+  narrativeGeneratedAt  DateTime?
   createdById           String
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Award, CalendarDays, ChevronRight, Crown, Megaphone, Settings, Swords, Trophy, Users } from "lucide-react";
 import type { RegistrationStatus } from "@prisma/client";
 import { RegisterButton } from "./_components/register-button";
+import { TournamentNarrativePanel } from "./_components/tournament-narrative-panel";
 import { computeTournamentRanking, computeTournamentWeekTopOfDay } from "@/lib/ranking";
 
 export default async function TorneioDetailPage({
@@ -35,6 +36,11 @@ export default async function TorneioDetailPage({
         orderBy: { registeredAt: "asc" }
       }
     }
+  });
+  // Busca separada para campos de narrativa (evita conflito com o include acima)
+  const tournamentNarrative = await prisma.tournament.findUnique({
+    where: { slug },
+    select: { narrativeText: true, narrativeGeneratedAt: true }
   });
 
   if (!tournament) notFound();
@@ -425,6 +431,16 @@ export default async function TorneioDetailPage({
             })}
           </div>
         </div>
+      )}
+      {/* Análise geral do campeonato — visível para inscritos e admins */}
+      {(admin || myRegistration?.status === "APPROVED") && (
+        <TournamentNarrativePanel
+          tournamentId={tournament.id}
+          slug={slug}
+          existingNarrative={tournamentNarrative?.narrativeText ?? null}
+          generatedAt={tournamentNarrative?.narrativeGeneratedAt ?? null}
+          isAdmin={admin}
+        />
       )}
     </div>
   );
