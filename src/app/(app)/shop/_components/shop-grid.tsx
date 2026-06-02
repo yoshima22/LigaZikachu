@@ -31,6 +31,7 @@ interface Item {
   price: number;
   theme?: string;
   flavorText?: string | null;
+  entranceEffect?: string;
 }
 
 interface Props {
@@ -153,7 +154,7 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
                     rarity={item.rarity as TitleRarity}
                     theme={(item.theme ?? "NEUTRAL") as TitleTheme}
                     flavorText={item.flavorText ?? null}
-                    context="profile"
+                    context="inventory"
                     staggerDelay={itemIndex * 120}
                   />
                 </div>

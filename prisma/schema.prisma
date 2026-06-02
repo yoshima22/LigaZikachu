@@ -1102,6 +1102,20 @@ enum TitleTheme {
   ZIKABET
 }
 
+enum TitleEntranceEffect {
+  NONE
+  LIGHTNING_STRIKE
+  BOSS_ALERT
+  CHAMPION_ARENA
+  COIN_RAIN
+  DIMENSIONAL_RIFT
+  ULTRA_RARE_REVEAL
+  GLITCH_HACK
+  SLOT_MACHINE
+  ELEMENTAL_AURA
+  MIAUVADAO_SEAL
+}
+
 model ShopItem {
   id          String          @id @default(cuid())
   type        ShopItemType
@@ -1115,9 +1129,10 @@ model ShopItem {
   // Para molduras (FRAME): { frameScale: number, frameOffsetX: number, frameOffsetY: number }
   // Para banners (BANNER): { focusX: number, focusY: number }
   metadata    Json?
-  // Para títulos (TITLE): tema visual e frase de sabor
-  theme       TitleTheme      @default(NEUTRAL)
-  flavorText  String?         @db.Text
+  // Para títulos (TITLE): tema visual, frase de sabor e efeito de entrada
+  theme           TitleTheme           @default(NEUTRAL)
+  flavorText      String?              @db.Text
+  entranceEffect  TitleEntranceEffect  @default(NONE)
   createdById String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt

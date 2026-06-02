@@ -16,7 +16,8 @@
  * para que o mesmo título sempre use o mesmo efeito, sem randomness no render.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TitleEntrance } from "./title-entrance";
 
 export type TitleRarity =
   | "COMMON" | "UNCOMMON" | "RARE" | "EPIC"
@@ -36,6 +37,8 @@ interface Props {
   className?: string;
   /** Atrasa o início da animação (ms) — útil p/ stagger em listas */
   staggerDelay?: number;
+  /** Efeito de entrada de tela inteira (apenas context="profile") */
+  entranceEffect?: string;
 }
 
 // ── Hash deterministico do nome → seleciona variante ─────────────────────────
@@ -189,9 +192,12 @@ export function TitleDisplay({
   context = "profile",
   className = "",
   staggerDelay = 0,
+  entranceEffect = "NONE",
 }: Props) {
-  const [animated, setAnimated] = useState(false);
-  const [glowing,  setGlowing]  = useState(false);
+  const [animated,        setAnimated]        = useState(false);
+  const [glowing,         setGlowing]         = useState(false);
+  const [showEntrance,    setShowEntrance]     = useState(false);
+  const entrancePlayed = useRef(false);
 
   const cfg  = RARITY_CFG[rarity] ?? RARITY_CFG.COMMON;
   const vars = RARITY_VARIANTS[rarity] ?? RARITY_VARIANTS.COMMON;
@@ -212,13 +218,31 @@ export function TitleDisplay({
 
   useEffect(() => {
     if (!animate) return;
+    // Dispara efeito de tela inteira apenas no perfil, uma vez
+    if (context === "profile" && entranceEffect && entranceEffect !== "NONE" && !entrancePlayed.current) {
+      entrancePlayed.current = true;
+      setShowEntrance(true);
+    }
     const tStart = setTimeout(() => {
       setAnimated(true);
       const tGlow = setTimeout(() => setGlowing(true), variant.durationMs);
       return () => clearTimeout(tGlow);
     }, staggerDelay);
     return () => clearTimeout(tStart);
-  }, [animate, variant.durationMs, staggerDelay]);
+  }, [animate, variant.durationMs, staggerDelay, context, entranceEffect]);
+
+  // ── Portal de entrada (tela inteira, apenas profile) ─────────────────────
+  const entrancePortal = showEntrance ? (
+    <TitleEntrance
+      name={name}
+      rarity={rarity}
+      theme={theme}
+      effect={entranceEffect}
+      color={cfg.color}
+      glowColor={cfg.glowColor}
+      onComplete={() => setShowEntrance(false)}
+    />
+  ) : null;
 
   // ── Ranking: apenas cor + glow estático ──────────────────────────────────
   if (context === "ranking") {
@@ -301,6 +325,7 @@ export function TitleDisplay({
 
   return (
     <div className={`inline-block leading-none ${className}`}>
+      {entrancePortal}
       <div className="relative inline-flex items-center gap-1.5">
 
         {/* Sparkles */}

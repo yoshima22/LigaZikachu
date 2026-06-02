@@ -78,6 +78,7 @@ export default async function ShopPage() {
                 description: i.description ?? null,
                 theme: i.theme ?? "NEUTRAL",
                 flavorText: i.flavorText ?? null,
+                entranceEffect: i.entranceEffect ?? "NONE",
               }))}
               ownedIds={ownedIds}
               balance={wallet?.balance ?? 0}

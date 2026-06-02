@@ -69,6 +69,145 @@
   to   { opacity: 0.75; transform: translateY(0); }
 }
 
+/* ── Title Entrance — efeitos de tela inteira (portal) ──────────────────────
+   Usados pelo componente <TitleEntrance> via createPortal.
+   Disparam apenas em context="showcase" (perfil, Hall da Fama).
+   Cada efeito tem duração máxima de 2.5s e se auto-destrói.
+*/
+@keyframes entrance-in    { from { opacity: 0; } to { opacity: 1; } }
+@keyframes entrance-out   { from { opacity: 1; } to { opacity: 0; } }
+/* Lightning */
+@keyframes lightning-bolt-draw {
+  from { stroke-dashoffset: 1200; opacity: 1; }
+  to   { stroke-dashoffset: 0;    opacity: 1; }
+}
+@keyframes lightning-flash {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; filter: brightness(6) saturate(0); }
+  30%  { opacity: 1; filter: brightness(2); }
+  100% { opacity: 1; filter: brightness(1); }
+}
+@keyframes lightning-spark {
+  0%   { opacity: 1; transform: translate(0,0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--sx,8px),var(--sy,-16px)) scale(0.2); }
+}
+/* Boss Alert */
+@keyframes boss-bar-in-top    { from { transform: translateY(-110%); } to { transform: translateY(0); } }
+@keyframes boss-bar-in-bottom { from { transform: translateY(110%);  } to { transform: translateY(0); } }
+@keyframes boss-bar-out-top   { from { transform: translateY(0); } to { transform: translateY(-110%); } }
+@keyframes boss-bar-out-bottom{ from { transform: translateY(0); } to { transform: translateY(110%);  } }
+@keyframes boss-title-shake {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  15% { transform: translate(-6px,-2px) rotate(-0.5deg) scale(1.02); }
+  30% { transform: translate( 6px, 2px) rotate( 0.5deg) scale(1.02); }
+  45% { transform: translate(-4px, 0px) scale(1.01); }
+  60% { transform: translate( 4px, 0px) scale(1.01); }
+  75% { transform: translate(-2px, 1px); }
+}
+/* Champion Arena */
+@keyframes spotlight-l {
+  0%   { opacity: 0; transform: rotate(-50deg) translateX(-150%) scaleX(1); }
+  20%  { opacity: 1; }
+  100% { opacity: 0.7; transform: rotate(-50deg) translateX(60%) scaleX(1.2); }
+}
+@keyframes spotlight-r {
+  0%   { opacity: 0; transform: rotate(50deg) translateX(150%) scaleX(1); }
+  20%  { opacity: 1; }
+  100% { opacity: 0.7; transform: rotate(50deg) translateX(-60%) scaleX(1.2); }
+}
+@keyframes confetti-drop {
+  0%   { opacity: 1; transform: translateY(-20px) rotate(0deg) scaleX(1); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(100vh) rotate(var(--cr,360deg)) scaleX(var(--cs,1)); }
+}
+@keyframes arena-title-in {
+  0%   { opacity: 0; transform: scaleX(0.3) translateY(8px); letter-spacing: 0.5em; }
+  60%  { opacity: 1; transform: scaleX(1.03) translateY(0); letter-spacing: 0.08em; }
+  100% { opacity: 1; transform: scaleX(1) translateY(0); letter-spacing: 0.05em; }
+}
+/* Coin Rain */
+@keyframes coin-fall {
+  0%   { opacity: 1; transform: translateY(-60px) rotate(0deg); }
+  75%  { opacity: 1; }
+  88%  { transform: translateY(var(--ch, 90vh)) rotate(340deg) scaleY(0.6); }
+  95%  { transform: translateY(var(--ch, 90vh)) rotate(360deg) scaleY(1.2); }
+  100% { opacity: 0; transform: translateY(calc(var(--ch, 90vh) + 10px)) rotate(370deg) scaleY(1); }
+}
+/* Dimensional Rift */
+@keyframes portal-expand {
+  0%   { transform: scale(0);   opacity: 0.4; filter: blur(12px); }
+  50%  { transform: scale(0.9); opacity: 1;   filter: blur(2px); }
+  100% { transform: scale(1);   opacity: 0.9; filter: blur(0); }
+}
+@keyframes portal-particle {
+  0%   { opacity: 1; transform: translate(0,0) scale(1.2); }
+  100% { opacity: 0; transform: translate(var(--px,20px),var(--py,-30px)) scale(0.3); }
+}
+@keyframes rift-title-emerge {
+  0%   { opacity: 0; transform: scale(0.2) translateY(20px); filter: blur(10px); }
+  70%  { opacity: 1; transform: scale(1.08) translateY(-2px); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+/* Ultra Rare Reveal */
+@keyframes card-flip-in {
+  0%   { transform: perspective(700px) rotateY(180deg) scale(0.8); }
+  50%  { transform: perspective(700px) rotateY(90deg)  scale(1.05); }
+  100% { transform: perspective(700px) rotateY(0deg)   scale(1); }
+}
+@keyframes holo-sweep {
+  0%   { background-position: -200% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@keyframes card-particle {
+  0%   { opacity: 1; transform: translate(0,0) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--cx,30px),var(--cy,-40px)) scale(0.2) rotate(var(--cr,180deg)); }
+}
+/* Glitch Hack */
+@keyframes scanline-sweep {
+  0%   { transform: translateY(-100%); opacity: 0.15; }
+  100% { transform: translateY(200vh);  opacity: 0; }
+}
+@keyframes glitch-color-shift {
+  0%,100% { text-shadow: 2px 0 #0ff, -2px 0 #f0f; }
+  25%      { text-shadow: -2px 0 #0ff, 2px 0 #f0f; }
+  50%      { text-shadow: 2px 2px #0ff, -2px -2px #f0f; }
+  75%      { text-shadow: -2px 2px #0ff, 2px -2px #f0f; }
+}
+/* Slot Machine */
+@keyframes slot-spin {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(calc(-100% + 44px)); }
+}
+@keyframes slot-shake {
+  0%,100% { transform: translateX(0) rotate(0); }
+  20% { transform: translateX(-5px) rotate(-0.5deg); }
+  40% { transform: translateX(5px) rotate(0.5deg); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+/* Elemental Aura */
+@keyframes aura-expand {
+  0%   { transform: scale(0.5); opacity: 0; }
+  40%  { opacity: 0.7; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+@keyframes ember-float {
+  0%   { opacity: 1; transform: translate(0,0) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--ex,0),var(--ey,-80px)) scale(0.3) rotate(var(--er,180deg)); }
+}
+/* Miauvadão Seal */
+@keyframes seal-stamp {
+  0%   { opacity: 0; transform: rotate(-20deg) scale(4) translateY(-30px); }
+  35%  { opacity: 1; transform: rotate(-20deg) scale(0.93) translateY(0); }
+  45%  { transform: rotate(-20deg) scale(1.04); }
+  55%  { transform: rotate(-20deg) scale(0.98); }
+  100% { opacity: 1; transform: rotate(-20deg) scale(1); }
+}
+@keyframes ticket-fly {
+  0%   { opacity: 1; transform: translateX(0) rotate(0); }
+  100% { opacity: 0; transform: translateX(var(--tx,120px)) translateY(var(--ty,-20px)) rotate(var(--tr,30deg)); }
+}
+
 /* Variações extras de entrada */
 
 /* Materialize: letras caem do topo uma a uma (RARE alternativo) */

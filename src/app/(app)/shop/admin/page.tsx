@@ -64,6 +64,7 @@ export default async function ShopAdminPage() {
           metadata: i.metadata ?? undefined,
           theme: i.theme ?? undefined,
           flavorText: i.flavorText ?? null,
+          entranceEffect: i.entranceEffect ?? undefined,
         }))} />
       </Card>
     </div>

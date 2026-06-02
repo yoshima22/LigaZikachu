@@ -11,8 +11,9 @@ import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorder
 import { getSuggestedPrice } from "@/lib/shop-config";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
-const rarityOpts = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
-const themeOpts  = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
+const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
+const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
+const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL"] as const;
 const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET"] as const;
 const typeLabel: Record<string, string> = {
   TITLE: "Título", BANNER: "Banner", FRAME: "Moldura", ZIKALOOT_TICKET: "Ticket ZikaLoot"
@@ -25,11 +26,24 @@ const themeLabel: Record<string, string> = {
   NEUTRAL: "Neutro", ELECTRIC: "⚡ Elétrico", FIRE: "🔥 Fogo",
   WATER: "🌊 Água", GRASS: "🌿 Grama", ZIKABET: "🎰 ZikaBet"
 };
+const effectLabel: Record<string, string> = {
+  NONE:              "Nenhum",
+  LIGHTNING_STRIKE:  "⚡ Relâmpago de Tela",
+  BOSS_ALERT:        "😤 Alerta de Boss",
+  CHAMPION_ARENA:    "🏆 Arena Campeão",
+  COIN_RAIN:         "🪙 Chuva de Moedas",
+  DIMENSIONAL_RIFT:  "🌀 Ruptura Dimensional",
+  ULTRA_RARE_REVEAL: "💎 Carta Ultra Rara",
+  GLITCH_HACK:       "💻 Glitch Hacker",
+  SLOT_MACHINE:      "🎰 Máquina Caça-Níquel",
+  ELEMENTAL_AURA:    "🔥 Aura Elemental",
+  MIAUVADAO_SEAL:    "😸 Miauvadão Aprova",
+};
 
 interface Item {
   id: string; type: string; name: string; description: string | null;
   imageUrl: string | null; rarity: string; price: number; active: boolean; owners: number;
-  metadata?: unknown; theme?: string; flavorText?: string | null;
+  metadata?: unknown; theme?: string; flavorText?: string | null; entranceEffect?: string;
 }
 
 type FrameMeta  = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
@@ -42,6 +56,7 @@ type FormData = {
   bannerMeta: BannerMeta;
   theme: typeof themeOpts[number];
   flavorText: string;
+  entranceEffect: typeof effectOpts[number];
 };
 const DEFAULT_FRAME_META:  FrameMeta  = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
 const DEFAULT_BANNER_META: BannerMeta = { focusX: 50, focusY: 50 };
@@ -52,6 +67,7 @@ const EMPTY: FormData = {
   bannerMeta: DEFAULT_BANNER_META,
   theme: "NEUTRAL",
   flavorText: "",
+  entranceEffect: "NONE",
 };
 
 const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
@@ -72,6 +88,7 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
     },
     theme: (i.theme as typeof themeOpts[number]) ?? "NEUTRAL",
     flavorText: i.flavorText ?? "",
+    entranceEffect: (i.entranceEffect as typeof effectOpts[number]) ?? "NONE",
   };
 };
 
@@ -366,6 +383,16 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
               </select>
             </label>
             <label className="space-y-1 text-xs text-slate-400">
+              <span>Efeito de entrada <span className="text-slate-600">(tela inteira ao abrir o perfil)</span></span>
+              <select
+                value={form.entranceEffect}
+                onChange={e => setForm({ ...form, entranceEffect: e.target.value as typeof effectOpts[number] })}
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+              >
+                {effectOpts.map(e => <option key={e} value={e}>{effectLabel[e]}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
               <span>Frase de sabor <span className="text-slate-600">(aparece abaixo do título no perfil)</span></span>
               <input
                 value={form.flavorText}
@@ -434,6 +461,7 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
       undefined,
     theme: f.type === "TITLE" ? f.theme : undefined,
     flavorText: f.type === "TITLE" && f.flavorText ? f.flavorText : null,
+    entranceEffect: f.type === "TITLE" ? f.entranceEffect : undefined,
   });
 
   const handleCreate = () => startTransition(async () => {

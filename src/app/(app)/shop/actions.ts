@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { ShopItemType, ShopItemRarity, TitleTheme, ZikaCoinTxType } from "@prisma/client";
+import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 
@@ -27,9 +27,10 @@ const createItemSchema = z.object({
     focusX: z.number().min(0).max(100).optional(),
     focusY: z.number().min(0).max(100).optional(),
   }).optional().nullable(),
-  // Título: tema visual e frase de sabor
+  // Título: tema visual, frase de sabor e efeito de entrada
   theme: z.nativeEnum(TitleTheme).optional(),
   flavorText: z.string().trim().max(200).optional().nullable(),
+  entranceEffect: z.nativeEnum(TitleEntranceEffect).optional(),
 });
 
 export async function createShopItem(
@@ -46,6 +47,7 @@ export async function createShopItem(
         metadata: data.metadata ?? undefined,
         theme: data.theme ?? undefined,
         flavorText: data.flavorText ?? null,
+        entranceEffect: data.entranceEffect ?? undefined,
         createdById: actor.id
       }
     });
@@ -74,6 +76,7 @@ export async function updateShopItem(
         metadata: data.metadata ?? undefined,
         theme: data.theme ?? undefined,
         flavorText: data.flavorText ?? null,
+        entranceEffect: data.entranceEffect ?? undefined,
       }
     });
     revalidatePath("/shop");
