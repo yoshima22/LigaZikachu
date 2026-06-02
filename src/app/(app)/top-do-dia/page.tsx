@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeTournamentWeekTopOfDay } from "@/lib/ranking";
+import { TournamentStatus } from "@prisma/client";
 import { CalendarDays, Crown, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
@@ -60,7 +61,7 @@ export default async function TopDoDiaPage() {
           {weeks.map((week, wi) => {
             const top = rankings[wi] ?? [];
             const hasWinner = top.length > 0;
-            const isActive = week.tournament.status === "ACTIVE";
+            const isActive = week.tournament.status === TournamentStatus.ACTIVE;
 
             return (
               <div key={week.id} className="rounded-2xl border border-border bg-slate-950/60 overflow-hidden">
