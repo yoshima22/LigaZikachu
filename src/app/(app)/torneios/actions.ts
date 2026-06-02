@@ -854,8 +854,14 @@ export async function updateTournamentWeekDeckLock(
  *  new Date("2026-06-03T19:00") seria tratado como UTC no Vercel. */
 function parseBRT(raw: string | null | undefined): Date | null {
   if (!raw?.trim()) return null;
-  // "2026-06-03T19:00" → "2026-06-03T19:00:00-03:00"
-  const normalized = raw.trim().replace(/(\d{2}:\d{2})$/, "$1:00");
+  const s = raw.trim();
+  // Se já tem offset (Z, +HH, -HH), usa direto
+  if (/[Zz]$/.test(s) || /[+-]\d{2}:\d{2}$/.test(s)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // "2026-06-03T19:00" ou "2026-06-03T19:00:00" → interpreta como BRT (UTC-3)
+  const normalized = s.replace(/(\d{2}:\d{2})$/, "$1:00");
   const d = new Date(normalized + "-03:00");
   return isNaN(d.getTime()) ? null : d;
 }
