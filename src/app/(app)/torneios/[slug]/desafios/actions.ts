@@ -393,3 +393,24 @@ export async function deleteChallenge(challengeId: string): Promise<{ error?: st
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+// Admin pode deletar qualquer desafio do histórico (inclusive resolvidos)
+export async function adminDeleteChallenge(challengeId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+
+    const challenge = await prisma.challenge.findUnique({
+      where: { id: challengeId },
+      include: { tournament: { select: { slug: true } } }
+    });
+    if (!challenge) return { error: "Desafio não encontrado." };
+
+    await prisma.challenge.delete({ where: { id: challengeId } });
+
+    if (challenge.tournament?.slug)
+      revalidatePath(`/torneios/${challenge.tournament.slug}/desafios`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}

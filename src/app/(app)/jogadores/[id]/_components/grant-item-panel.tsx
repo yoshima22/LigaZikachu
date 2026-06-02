@@ -11,6 +11,7 @@ interface ShopItem {
   name: string;
   type: string;
   rarity: string;
+  active?: boolean;
 }
 
 interface Props {
@@ -122,7 +123,12 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
                 className="flex items-center justify-between gap-3 rounded-xl border border-border bg-slate-900/40 px-3 py-2.5"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-200 truncate">{item.name}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-sm font-medium text-slate-200 truncate">{item.name}</p>
+                    {item.active === false && (
+                      <span className="rounded bg-slate-700/60 px-1 py-0.5 text-[9px] text-slate-500 border border-slate-600/40">inativo</span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-slate-500 mt-0.5">
                     {TYPE_LABEL[item.type] ?? item.type}
                     <span className={`ml-2 font-semibold ${RARITY_COLOR[item.rarity]}`}>

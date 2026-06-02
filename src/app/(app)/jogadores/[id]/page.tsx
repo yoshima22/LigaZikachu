@@ -131,9 +131,9 @@ export default async function PlayerDetailPage({
     }).catch(() => [] as { id: string; name: string; archetype: string | null; deckList: string; updatedAt: Date }[]),
     isAdminUser
       ? prisma.shopItem.findMany({
-          where: { active: true },
-          select: { id: true, name: true, type: true, rarity: true },
-          orderBy: [{ type: "asc" }, { rarity: "asc" }, { name: "asc" }]
+          // Admin vê todos os itens (ativos e desabilitados) para poder conceder
+          select: { id: true, name: true, type: true, rarity: true, active: true },
+          orderBy: [{ type: "asc" }, { active: "desc" }, { rarity: "asc" }, { name: "asc" }]
         })
       : [],
     isAdminUser
@@ -668,7 +668,7 @@ export default async function PlayerDetailPage({
         <div className="space-y-4">
           <GrantItemPanel
             playerId={playerId}
-            shopItems={shopItems as { id: string; name: string; type: string; rarity: string }[]}
+            shopItems={shopItems as { id: string; name: string; type: string; rarity: string; active: boolean }[]}
             ownedItemIds={new Set((ownedInventory as { itemId: string }[]).map((i) => i.itemId))}
           />
           <AdminResetPanel playerId={playerId} userId={player.user.id} />

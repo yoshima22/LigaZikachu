@@ -12,6 +12,7 @@ import {
   resolveChallenge,
   undoResolveChallenge,
   deleteChallenge,
+  adminDeleteChallenge,
   setBadgeProgress
 } from "../actions";
 
@@ -161,6 +162,15 @@ export function ChallengePanel({
       () => deleteChallenge(challengeId),
       () => {},
       "Desafio excluído."
+    );
+  };
+
+  const handleAdminDelete = (challengeId: string) => {
+    if (!confirm("Deletar este desafio do histórico? Esta ação não pode ser desfeita.")) return;
+    run(
+      () => adminDeleteChallenge(challengeId),
+      () => {},
+      "Desafio removido do histórico."
     );
   };
 
@@ -568,6 +578,11 @@ export function ChallengePanel({
                               onClick={() => handleUndo(c.id)}
                               className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-amber-400 hover:bg-amber-500/10">
                               <RotateCcw size={13} /> Desfazer
+                            </button>
+                            <button type="button" disabled={pending}
+                              onClick={() => handleAdminDelete(c.id)}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
+                              <X size={13} /> Deletar histórico
                             </button>
                           </>
                         )}
