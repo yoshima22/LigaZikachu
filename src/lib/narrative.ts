@@ -8,7 +8,7 @@
  * Requer: ANTHROPIC_API_KEY no .env
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { prisma } from "@/lib/prisma";
 import { computeTournamentRanking } from "@/lib/ranking";
 
@@ -207,29 +207,27 @@ export async function buildWeekDataPayload(weekId: string): Promise<string> {
 // ── Chamada ao Claude ─────────────────────────────────────────────────────────
 
 export async function generateNarrativeText(weekId: string): Promise<string> {
-  // Usa chave dedicada para narrativa (novo projeto Google = free tier limpo).
-  // Se não tiver, tenta a chave geral do bot.
-  const apiKey = process.env.GEMINI_NARRATIVE_API_KEY ?? process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error(
-    "Nenhuma chave Gemini configurada. " +
-    "Crie uma chave gratuita em aistudio.google.com → 'Create API key in new project' " +
-    "e adicione como GEMINI_NARRATIVE_API_KEY no Vercel."
+    "GROQ_API_KEY não configurada. " +
+    "Crie uma chave grátis em console.groq.com → API Keys → Create API Key " +
+    "e adicione no Vercel → Environment Variables."
   );
 
-  const genAI   = new GoogleGenerativeAI(apiKey);
-  const model   = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const groq = new Groq({ apiKey });
   const dataPayload = await buildWeekDataPayload(weekId);
 
-  const result = await model.generateContent({
-    systemInstruction: SYSTEM_PROMPT,
-    contents: [{
-      role: "user",
-      parts: [{ text: `Gere o recap narrativo desta semana da Liga Zikachu com base nos dados abaixo.\n\n${dataPayload}` }],
-    }],
-    generationConfig: { maxOutputTokens: 1200, temperature: 0.85 },
+  const response = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 1200,
+    temperature: 0.85,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user",   content: `Gere o recap narrativo desta semana da Liga Zikachu com base nos dados abaixo.\n\n${dataPayload}` },
+    ],
   });
 
-  const text = result.response.text();
+  const text = response.choices[0]?.message?.content;
   if (!text) throw new Error("Resposta vazia da API.");
   return text;
 }
