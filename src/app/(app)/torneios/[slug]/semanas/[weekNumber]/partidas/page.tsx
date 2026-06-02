@@ -71,7 +71,11 @@ export default async function PartidasPage({ params }: Props) {
   const canReportAnyInPersonMatch =
     tournament.format === "IN_PERSON" && (isAdmin || registration?.status === "APPROVED");
 
+  // Monta mapa playerId → decks únicos visíveis.
+  // Deduplica por deckList para que o mesmo deck enviado em múltiplas partidas
+  // apareça uma única vez no seletor (evita lista poluída).
   const visibleDecksByPlayer = new Map<string, Array<{ id: string; deckNumber: number; deckName: string; archetype: string | null; deckList: string }>>();
+  const seenDeckKeys = new Set<string>();
   for (const submission of week.deckSubmissions) {
     if (!user) continue;
 
@@ -82,6 +86,11 @@ export default async function PartidasPage({ params }: Props) {
       week
     });
     if (!canView) continue;
+
+    // Deduplicar por jogador + conteúdo do deck
+    const dedupeKey = `${submission.playerId}::${submission.deckList.trim()}`;
+    if (seenDeckKeys.has(dedupeKey)) continue;
+    seenDeckKeys.add(dedupeKey);
 
     const decks = visibleDecksByPlayer.get(submission.playerId) ?? [];
     decks.push({

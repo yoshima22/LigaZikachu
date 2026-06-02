@@ -100,9 +100,18 @@ export default async function WeekDetailPage({
     Math.max(Number(bonusRule?.decksToSubmit ?? 1), 1),
     3
   );
-  const currentPlayerDecks = player
-    ? week.deckSubmissions.filter((submission) => submission.playerId === player.id)
-    : [];
+  // Decks do jogador atual — deduplica por conteúdo para não mostrar cópias
+  const currentPlayerDecks = (() => {
+    if (!player) return [];
+    const seen = new Set<string>();
+    return week.deckSubmissions.filter((sub) => {
+      if (sub.playerId !== player.id) return false;
+      const key = sub.deckList.trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
 
   const savedDecks = player
     ? await prisma.savedDeck.findMany({
@@ -119,16 +128,27 @@ export default async function WeekDetailPage({
       registrationStatus: registration?.status ?? null,
       week
     });
-  const visibleDecks = user
-    ? week.deckSubmissions.filter((submission) =>
-        canViewTournamentWeekDecklist({
-          viewerRole: user.role,
-          isOwner: submission.playerId === player?.id,
-          registrationStatus: registration?.status ?? null,
-          week
-        })
-      )
-    : [];
+  // Filtra decks visíveis e deduplica por (playerId + deckList) para evitar
+  // mostrar múltiplas cópias do mesmo deck quando o jogador o usou em partidas diferentes.
+  const visibleDecks = (() => {
+    if (!user) return [];
+    const seen = new Set<string>();
+    const result: typeof week.deckSubmissions = [];
+    for (const sub of week.deckSubmissions) {
+      if (!canViewTournamentWeekDecklist({
+        viewerRole: user.role,
+        isOwner: sub.playerId === player?.id,
+        registrationStatus: registration?.status ?? null,
+        week
+      })) continue;
+      const key = `${sub.playerId}::${sub.deckList.trim()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(sub);
+      }
+    }
+    return result;
+  })();
   const approvedPlayers = admin
     ? await prisma.tournamentRegistration.findMany({
         where: { tournamentId: tournament.id, status: "APPROVED" },

@@ -1491,46 +1491,68 @@ export async function submitDeckForMatch(raw: {
     const deadline = week.deckLockAt ?? week.lockAt ?? week.endDate;
     const now = new Date();
 
-    // Verifica se já existe submission desta partida para este jogador
+    // Verifica se já existe submission vinculada a ESTA partida para este jogador
     const existingSubmissionId = isPlayerA ? match.playerADeckSubmissionId : match.playerBDeckSubmissionId;
-    const deckNumber = isPlayerA ? 1 : 2;
 
     await prisma.$transaction(async (tx) => {
-      let submission;
       if (existingSubmissionId) {
-        // Atualiza a submission existente
-        submission = await tx.deckSubmission.update({
+        // Atualiza a submission já vinculada a esta partida
+        await tx.deckSubmission.update({
           where: { id: existingSubmissionId },
           data: {
             deckName: raw.deckName,
             archetype: raw.archetype || null,
             deckList: raw.deckList,
             editedAt: now,
-            isLate: now > deadline
+            isLate: now > (deadline ?? new Date(0))
           }
         });
       } else {
-        submission = await tx.deckSubmission.create({
-          data: {
-            seasonId,
-            tournamentId: week.tournament.id,
+        // Tenta reutilizar uma submission IDÊNTICA já existente nesta semana
+        // (evita duplicatas quando o jogador usa o mesmo deck em múltiplas partidas)
+        const reusable = await tx.deckSubmission.findFirst({
+          where: {
             tournamentWeekId: week.id,
             playerId: player.id,
-            deckNumber,
             deckName: raw.deckName,
-            archetype: raw.archetype || null,
             deckList: raw.deckList,
-            deadlineAt: deadline,
-            status: "SUBMITTED",
-            isLate: now > deadline
-          }
+          },
+          orderBy: { submittedAt: "asc" }
         });
-        // Vincula na partida
+
+        let submissionId: string;
+        if (reusable) {
+          // Reutiliza a submission existente — apenas vincula à nova partida
+          submissionId = reusable.id;
+        } else {
+          // Cria nova submission — usa deckNumber baseado em quantas o jogador já tem na semana
+          const existingCount = await tx.deckSubmission.count({
+            where: { tournamentWeekId: week.id, playerId: player.id }
+          });
+          const submission = await tx.deckSubmission.create({
+            data: {
+              seasonId,
+              tournamentId: week.tournament.id,
+              tournamentWeekId: week.id,
+              playerId: player.id,
+              deckNumber: existingCount + 1,
+              deckName: raw.deckName,
+              archetype: raw.archetype || null,
+              deckList: raw.deckList,
+              deadlineAt: deadline,
+              status: "SUBMITTED",
+              isLate: now > (deadline ?? new Date(0))
+            }
+          });
+          submissionId = submission.id;
+        }
+
+        // Vincula a submission (nova ou reutilizada) à partida
         await tx.match.update({
           where: { id: raw.matchId },
           data: isPlayerA
-            ? { playerADeckSubmissionId: submission.id }
-            : { playerBDeckSubmissionId: submission.id }
+            ? { playerADeckSubmissionId: submissionId }
+            : { playerBDeckSubmissionId: submissionId }
         });
       }
     });
