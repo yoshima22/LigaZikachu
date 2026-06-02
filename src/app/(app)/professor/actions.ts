@@ -1,7 +1,7 @@
 "use server";
 
 import { searchCards, fetchCardsByNames, searchStandardByFunction, searchSimilarEffect, isStandardLegal } from "@/lib/card-service";
-import { buildMetaContext, getMetaSnapshot, getArchetypeDecks } from "@/lib/limitless-service";
+import { buildMetaContext, getMetaSnapshot, getArchetypeResults } from "@/lib/limitless-service";
 import type { TcgCard } from "@/lib/card-service";
 import { resolveCardName, PT_TO_EN } from "@/lib/card-names-ptbr";
 import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
@@ -356,7 +356,7 @@ export interface ArchetypeDecksResult {
 export async function getArchetypeData(archetype: string): Promise<ArchetypeDecksResult> {
   if (!process.env.LIMITLESS_API_KEY) return { decks: [] };
   try {
-    const raw = await getArchetypeDecks(archetype, 3);
+    const raw = await getArchetypeResults(archetype, 3);
     return {
       decks: raw.map(d => ({
         tournament: d.tournament,
