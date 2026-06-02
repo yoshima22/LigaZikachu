@@ -40,9 +40,8 @@ export async function GET(req: NextRequest) {
     // Busca semanas com prazo de deck nas próximas 24 horas
     const weeks = await prisma.tournamentWeek.findMany({
       where: {
-        requiresDeckSubmission: true,
         deckLockAt: { gt: now, lte: in24h },
-        tournament: { status: "IN_PROGRESS" },
+        tournament: { status: "IN_PROGRESS", requiresDeckSubmission: true },
       },
       select: {
         id: true,

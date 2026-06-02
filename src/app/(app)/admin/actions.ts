@@ -18,9 +18,8 @@ export async function triggerDeckReminder(): Promise<
 
     const weeks = await prisma.tournamentWeek.findMany({
       where: {
-        requiresDeckSubmission: true,
         deckLockAt: { gt: now, lte: in24h },
-        tournament: { status: "IN_PROGRESS" },
+        tournament: { status: "IN_PROGRESS", requiresDeckSubmission: true },
       },
       select: {
         id: true,
