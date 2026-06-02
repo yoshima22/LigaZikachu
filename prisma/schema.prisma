@@ -301,7 +301,9 @@ model TournamentWeek {
   endDate      DateTime
   lockAt       DateTime?
   deckLockAt   DateTime?
-  notes        String?
+  notes                String?
+  narrativeText        String?   @db.Text   // gerado via IA ao encerrar a semana
+  narrativeGeneratedAt DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

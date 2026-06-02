@@ -15,6 +15,7 @@ import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { DeckSubmissionForm } from "./_components/deck-submission-form";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { applyTournamentWeekBonus, setTournamentWeekTeam, updateTournamentWeekSettings } from "../../../actions";
+import { NarrativePanel } from "./_components/narrative-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,6 @@ export default async function WeekDetailPage({
         },
         orderBy: [{ player: { displayName: "asc" } }, { deckNumber: "asc" }]
       },
-      // Matches necessários para saber contra quem cada deck é usado
       matches: {
         where: { isBye: false, playerBId: { not: null } },
         select: {
@@ -716,6 +716,17 @@ export default async function WeekDetailPage({
           )}
         </div>
       </div>}
+
+      {/* Recap Narrativo — visível para jogadores inscritos e admins */}
+      {(admin || registration?.status === "APPROVED") && (
+        <NarrativePanel
+          weekId={week.id}
+          weekLabel={week.label ?? `Semana ${weekNum}`}
+          existingNarrative={week.narrativeText ?? null}
+          generatedAt={week.narrativeGeneratedAt ?? null}
+          isAdmin={admin}
+        />
+      )}
 
       <div className="rounded-xl border border-border bg-slate-950/50 p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
