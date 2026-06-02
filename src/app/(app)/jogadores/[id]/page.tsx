@@ -13,6 +13,7 @@ import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 import { AdminResetPanel } from "./_components/admin-reset-panel";
+import { GrantItemPanel } from "./_components/grant-item-panel";
 import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
@@ -72,7 +73,7 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
 
-  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory] = await Promise.all([
     activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -127,7 +128,20 @@ export default async function PlayerDetailPage({
       where: { playerId, isPublic: true },
       select: { id: true, name: true, archetype: true, deckList: true, updatedAt: true },
       orderBy: { updatedAt: "desc" }
-    }).catch(() => [] as { id: string; name: string; archetype: string | null; deckList: string; updatedAt: Date }[])
+    }).catch(() => [] as { id: string; name: string; archetype: string | null; deckList: string; updatedAt: Date }[]),
+    isAdminUser
+      ? prisma.shopItem.findMany({
+          where: { active: true },
+          select: { id: true, name: true, type: true, rarity: true },
+          orderBy: [{ type: "asc" }, { rarity: "asc" }, { name: "asc" }]
+        })
+      : [],
+    isAdminUser
+      ? prisma.playerInventory.findMany({
+          where: { playerId },
+          select: { itemId: true }
+        })
+      : [],
   ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
@@ -650,7 +664,14 @@ export default async function PlayerDetailPage({
       </div>
 
       {isAdminUser && (
-        <AdminResetPanel playerId={playerId} userId={player.user.id} />
+        <div className="space-y-4">
+          <GrantItemPanel
+            playerId={playerId}
+            shopItems={shopItems as { id: string; name: string; type: string; rarity: string }[]}
+            ownedItemIds={new Set((ownedInventory as { itemId: string }[]).map((i) => i.itemId))}
+          />
+          <AdminResetPanel playerId={playerId} userId={player.user.id} />
+        </div>
       )}
     </div>
   );
