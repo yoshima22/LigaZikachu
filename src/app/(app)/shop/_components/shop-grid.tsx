@@ -148,7 +148,7 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
                   </div>
                 )
               ) : item.type === "TITLE" ? (
-                <div className={`flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-slate-900 via-slate-900/80 to-slate-800 px-4 py-5 ${item.flavorText ? "min-h-[90px]" : "h-16"}`}>
+                <div className="flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-900/80 to-slate-800 px-4 py-5 min-h-[72px]">
                   <TitleDisplay
                     name={item.name}
                     rarity={item.rarity as TitleRarity}

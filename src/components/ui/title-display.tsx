@@ -16,7 +16,7 @@
  * para que o mesmo título sempre use o mesmo efeito, sem randomness no render.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { TitleEntrance } from "./title-entrance";
 
 export type TitleRarity =
@@ -39,6 +39,12 @@ interface Props {
   staggerDelay?: number;
   /** Efeito de entrada de tela inteira (apenas context="profile") */
   entranceEffect?: string;
+  /**
+   * Intervalo em segundos para repetir a animação de entrada (0 = não repete).
+   * Raridades mais altas usam um padrão se não especificado.
+   * Só funciona em context="profile" ou "inventory".
+   */
+  repeatEvery?: number;
 }
 
 // ── Hash deterministico do nome → seleciona variante ─────────────────────────
@@ -163,6 +169,19 @@ const CHAR_KEYFRAME: Record<string, string> = {
   fade:  "title-fade-in",
 };
 
+// ── Intervalo de replay padrão por raridade (segundos) ───────────────────────
+// Raridades mais altas repetem com mais frequência para chamar atenção.
+// 0 = nunca repete.
+const DEFAULT_REPEAT: Record<string, number> = {
+  COMMON:    0,
+  UNCOMMON:  0,
+  RARE:      60,
+  EPIC:      45,
+  LEGENDARY: 35,
+  MYTHIC:    30,
+  RELIC:     25,
+};
+
 // ── Badge por tema ────────────────────────────────────────────────────────────
 
 const THEME_BADGE: Record<string, string> = {
@@ -193,43 +212,77 @@ export function TitleDisplay({
   className = "",
   staggerDelay = 0,
   entranceEffect = "NONE",
+  repeatEvery,
 }: Props) {
-  const [animated,        setAnimated]        = useState(false);
-  const [glowing,         setGlowing]         = useState(false);
-  const [showEntrance,    setShowEntrance]     = useState(false);
+  const [animated,     setAnimated]     = useState(false);
+  const [glowing,      setGlowing]      = useState(false);
+  const [showEntrance, setShowEntrance] = useState(false);
+  // replayKey: incrementar força remount do elemento animado → replay da animação
+  const [replayKey,    setReplayKey]    = useState(0);
   const entrancePlayed = useRef(false);
 
   const cfg  = RARITY_CFG[rarity] ?? RARITY_CFG.COMMON;
   const vars = RARITY_VARIANTS[rarity] ?? RARITY_VARIANTS.COMMON;
 
-  // Seleciona variante deterministicamente pelo nome
-  const variant = vars[nameHash(name) % vars.length];
+  const variant     = vars[nameHash(name) % vars.length];
   const isCharByChar = variant.animation === null;
   const charKeyframe = CHAR_KEYFRAME[variant.charMode ?? "slide"];
+  const themeBadge  = THEME_BADGE[theme ?? "NEUTRAL"] ?? "";
+  const animate     = context === "profile" || context === "inventory";
+  const useGradient  = !!cfg.gradient;
 
-  const themeBadge = THEME_BADGE[theme ?? "NEUTRAL"] ?? "";
-  const animate    = context === "profile" || context === "inventory";
-  const useGradient = !!cfg.gradient;
+  // Intervalo de replay: usa prop ou padrão por raridade
+  const repeatMs = ((repeatEvery !== undefined ? repeatEvery : DEFAULT_REPEAT[rarity] ?? 0)) * 1000;
 
   const badge =
     rarity === "MYTHIC" || rarity === "RELIC"
       ? cfg.rarityBadge
       : themeBadge || cfg.rarityBadge;
 
+  // Função que reseta e relança a animação de entrada
+  const triggerReplay = useCallback(() => {
+    setGlowing(false);
+    setAnimated(false);
+    // Pequeno delay para garantir que o React limpe o estado antes de relançar
+    setTimeout(() => {
+      setReplayKey(k => k + 1); // força remount do elemento animado
+      setAnimated(true);
+      setTimeout(() => setGlowing(true), variant.durationMs);
+    }, 80);
+  }, [variant.durationMs]);
+
   useEffect(() => {
     if (!animate) return;
+
     // Dispara efeito de tela inteira apenas no perfil, uma vez
     if (context === "profile" && entranceEffect && entranceEffect !== "NONE" && !entrancePlayed.current) {
       entrancePlayed.current = true;
       setShowEntrance(true);
     }
+
+    // Animação inicial com stagger
     const tStart = setTimeout(() => {
       setAnimated(true);
       const tGlow = setTimeout(() => setGlowing(true), variant.durationMs);
       return () => clearTimeout(tGlow);
     }, staggerDelay);
+
+    // Replay periódico
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (repeatMs > 0) {
+      // Começa o intervalo após a animação inicial terminar
+      const tInterval = setTimeout(() => {
+        interval = setInterval(triggerReplay, repeatMs);
+      }, staggerDelay + variant.durationMs + 500);
+      return () => {
+        clearTimeout(tStart);
+        clearTimeout(tInterval);
+        if (interval) clearInterval(interval);
+      };
+    }
+
     return () => clearTimeout(tStart);
-  }, [animate, variant.durationMs, staggerDelay, context, entranceEffect]);
+  }, [animate, variant.durationMs, staggerDelay, context, entranceEffect, repeatMs, triggerReplay]);
 
   // ── Portal de entrada (tela inteira, apenas profile) ─────────────────────
   const entrancePortal = showEntrance ? (
@@ -329,9 +382,9 @@ export function TitleDisplay({
       {entrancePortal}
       <div className="relative inline-flex items-center gap-1.5">
 
-        {/* Sparkles */}
+        {/* Sparkles — key força remount e replay das partículas */}
         {cfg.sparkles && animated && (
-          <span aria-hidden className="pointer-events-none absolute inset-0 overflow-visible">
+          <span key={`sp-${replayKey}`} aria-hidden className="pointer-events-none absolute inset-0 overflow-visible">
             {SPARKLE_POS.map((s, i) => (
               <span key={i} style={{
                 position: "absolute", left: s.left, top: s.top,
@@ -351,7 +404,8 @@ export function TitleDisplay({
           </span>
         )}
 
-        <span className="font-bold text-sm leading-none tracking-wide">
+        {/* key={replayKey} força remount → replay da animação CSS */}
+        <span key={replayKey} className="font-bold text-sm leading-none tracking-wide">
           {renderText()}
         </span>
 
@@ -362,9 +416,9 @@ export function TitleDisplay({
         )}
       </div>
 
-      {/* Frase de sabor */}
-      {context === "profile" && flavorText && (
-        <p className="mt-1 text-[11px] italic" style={{
+      {/* Frase de sabor — visível em profile e inventory (shop preview) */}
+      {(context === "profile" || context === "inventory") && flavorText && (
+        <p key={`flavor-${replayKey}`} className="mt-1 text-[11px] italic" style={{
           color: cfg.color,
           ...(animated
             ? { animation: "title-flavor-in 0.5s ease forwards", animationDelay: `${variant.durationMs + 200}ms` }
