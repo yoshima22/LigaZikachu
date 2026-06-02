@@ -3,9 +3,11 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { MatchStatus, ResultSource, Role, TournamentFormat, type Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
+import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
 
 const MATCH_WIN_COINS  = 35;
 const MATCH_LOSS_COINS = 25;
@@ -573,6 +575,16 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   revalidatePath("/ranking");
   revalidatePath("/dashboard");
 
+  // Regenera narrativa da semana em background após cada confirmação
+  const weekIdForNarrative = match.tournamentWeekId;
+  if (weekIdForNarrative) {
+    after(async () => {
+      await autoSaveWeekNarrative(weekIdForNarrative).catch(err =>
+        console.error("[AutoNarrative:week]", err)
+      );
+    });
+  }
+
   return { success: true, confirmed: allConfirmed };
 }
 
@@ -705,7 +717,17 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
 
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
+  revalidatePath(`/torneios/${week.tournament.slug}`);
   revalidatePath("/zikabet");
+
+  // Ao encerrar a semana: regenera narrativa da semana + análise geral do torneio
+  const { id: weekId, tournament: { id: tournamentId, slug } } = week;
+  after(async () => {
+    await Promise.all([
+      autoSaveWeekNarrative(weekId).catch(err => console.error("[AutoNarrative:week:close]", err)),
+      autoSaveTournamentNarrative(tournamentId, slug).catch(err => console.error("[AutoNarrative:tournament:close]", err)),
+    ]);
+  });
 
   return { success: true };
 }

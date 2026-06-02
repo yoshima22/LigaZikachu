@@ -440,6 +440,7 @@ export default async function TorneioDetailPage({
           existingNarrative={tournamentNarrative?.narrativeText ?? null}
           generatedAt={tournamentNarrative?.narrativeGeneratedAt ?? null}
           isAdmin={admin}
+          isFinished={tournament.status === "FINISHED"}
         />
       )}
     </div>
