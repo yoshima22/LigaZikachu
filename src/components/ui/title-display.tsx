@@ -240,6 +240,7 @@ export function TitleDisplay({
       effect={entranceEffect}
       color={cfg.color}
       glowColor={cfg.glowColor}
+      flavorText={flavorText}
       onComplete={() => setShowEntrance(false)}
     />
   ) : null;
