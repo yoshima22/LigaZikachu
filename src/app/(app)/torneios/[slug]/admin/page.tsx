@@ -58,7 +58,6 @@ const tournamentStatusLabels: Record<TournamentStatus, string> = {
 };
 
 export default async function TournamentAdminPage({ params }: Props) {
-  try {
   const { slug } = await params;
   const user = await getSessionUser();
   if (!user) return null;
@@ -855,25 +854,4 @@ export default async function TournamentAdminPage({ params }: Props) {
       </section>
     </div>
   );
-  } catch (err) {
-    // Captura o erro real para diagnóstico — remove após identificar o problema
-    const msg = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : "";
-    return (
-      <div className="p-8 space-y-4">
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5">
-          <p className="font-semibold text-red-400 mb-2">⚠️ Erro ao carregar painel admin</p>
-          <p className="text-sm text-red-300 font-mono mb-4">{msg}</p>
-          {stack && (
-            <pre className="text-[10px] text-slate-500 overflow-auto max-h-64 bg-slate-950 p-3 rounded">
-              {stack}
-            </pre>
-          )}
-          <p className="text-xs text-slate-500 mt-3">
-            Copie este erro e envie para o desenvolvedor.
-          </p>
-        </div>
-      </div>
-    );
-  }
 }

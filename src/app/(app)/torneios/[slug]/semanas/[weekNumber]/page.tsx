@@ -23,7 +23,6 @@ export default async function WeekDetailPage({
 }: {
   params: Promise<{ slug: string; weekNumber: string }>;
 }) {
-  try {
   const { slug, weekNumber } = await params;
   const user = await getSessionUser();
   const admin = user ? isAdmin(user.role) : false;
@@ -318,7 +317,9 @@ export default async function WeekDetailPage({
             </p>
           )}
           {week.notes && (
-            <p className="border-t border-border pt-3 text-xs text-slate-500">{week.notes}</p>
+            <p className="border-t border-border pt-3 text-xs text-slate-500 whitespace-pre-line leading-relaxed">
+              {week.notes}
+            </p>
           )}
           {admin && (
             <form
