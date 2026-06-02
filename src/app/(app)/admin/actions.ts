@@ -6,7 +6,7 @@ import { sendDeckReminderEmail } from "@/lib/email";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
-export async function triggerDeckReminder(): Promise<
+export async function triggerDeckReminder(dryRun = false): Promise<
   | { weeksChecked: number; emailsSent: number; errors: number; details: Array<{ email: string; week: string; status: string }> }
   | { error: string }
 > {
@@ -63,6 +63,11 @@ export async function triggerDeckReminder(): Promise<
           if (submittedIds.has(player.id)) continue;
           if (!player.user.email) continue;
 
+          if (dryRun) {
+            details.push({ email: player.user.email, week: weekLabel, status: "simulado" });
+            continue;
+          }
+
           const { error } = await sendDeckReminderEmail({
             to:             player.user.email,
             playerName:     player.displayName,
@@ -84,9 +89,11 @@ export async function triggerDeckReminder(): Promise<
 
     return {
       weeksChecked: weeks.length,
-      emailsSent:   details.filter((d) => d.status === "enviado").length,
-      errors:       details.filter((d) => d.status !== "enviado").length,
+      emailsSent:   dryRun ? 0 : details.filter((d) => d.status === "enviado").length,
+      simulated:    dryRun ? details.length : 0,
+      errors:       details.filter((d) => d.status.startsWith("erro")).length,
       details,
+      dryRun,
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
