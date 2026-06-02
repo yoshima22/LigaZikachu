@@ -8,7 +8,7 @@
  * Requer: ANTHROPIC_API_KEY no .env
  */
 
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { computeTournamentRanking } from "@/lib/ranking";
 
@@ -207,22 +207,23 @@ export async function buildWeekDataPayload(weekId: string): Promise<string> {
 // ── Chamada ao Claude ─────────────────────────────────────────────────────────
 
 export async function generateNarrativeText(weekId: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada. Adicione em Vercel → Environment Variables.");
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY não configurada. Obtenha gratuitamente em aistudio.google.com e adicione em Vercel → Environment Variables.");
 
-  const client = new OpenAI({ apiKey });
+  const genAI   = new GoogleGenerativeAI(apiKey);
+  const model   = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   const dataPayload = await buildWeekDataPayload(weekId);
 
-  const response = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    max_tokens: 1200,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user",   content: `Gere o recap narrativo desta semana da Liga Zikachu com base nos dados abaixo.\n\n${dataPayload}` },
-    ],
+  const result = await model.generateContent({
+    systemInstruction: SYSTEM_PROMPT,
+    contents: [{
+      role: "user",
+      parts: [{ text: `Gere o recap narrativo desta semana da Liga Zikachu com base nos dados abaixo.\n\n${dataPayload}` }],
+    }],
+    generationConfig: { maxOutputTokens: 1200, temperature: 0.85 },
   });
 
-  const text = response.choices[0]?.message?.content;
+  const text = result.response.text();
   if (!text) throw new Error("Resposta vazia da API.");
   return text;
 }
