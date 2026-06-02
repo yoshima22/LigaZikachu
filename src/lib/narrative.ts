@@ -214,7 +214,7 @@ export async function generateNarrativeText(weekId: string): Promise<string> {
   const dataPayload = await buildWeekDataPayload(weekId);
 
   const response = await client.chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-4o-mini",
     max_tokens: 1200,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
