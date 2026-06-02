@@ -1,16 +1,22 @@
 /**
  * Limitless TCG API Service
  * Docs: https://docs.limitlesstcg.com/developer.html
- * Fornece dados reais de torneios competitivos de Pokémon TCG.
- * Configure LIMITLESS_API_KEY nas variáveis de ambiente.
+ *
+ * Base URL: https://play.limitlesstcg.com/api
+ *
+ * A maioria dos endpoints é PÚBLICA — não precisa de chave.
+ * Apenas /games/{id}/decks precisa de chave (dada só a projetos públicos).
+ *
+ * Variável opcional: LIMITLESS_API_KEY (para /games/{id}/decks e rate limit maior)
  */
 
-const BASE = "https://api.limitlesstcg.com";
+const BASE = "https://play.limitlesstcg.com/api";
 
-function headers(): Record<string, string> {
+function buildHeaders(): Record<string, string> {
   const key = process.env.LIMITLESS_API_KEY;
-  if (key) return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
-  return { "Content-Type": "application/json" };
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (key) h["X-Access-Key"] = key;
+  return h;
 }
 
 async function get<T>(path: string, params?: Record<string, string>): Promise<T | null> {
@@ -18,11 +24,11 @@ async function get<T>(path: string, params?: Record<string, string>): Promise<T 
     const url = new URL(`${BASE}${path}`);
     if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
     const res = await fetch(url.toString(), {
-      headers: headers(),
+      headers: buildHeaders(),
       next: { revalidate: 1800 } // cache 30min
     });
     if (!res.ok) {
-      console.warn(`[Limitless] ${res.status} ${path}`);
+      console.warn(`[Limitless] ${res.status} ${url.toString()}`);
       return null;
     }
     return res.json() as Promise<T>;
@@ -39,83 +45,103 @@ export interface LimitlessTournament {
   name: string;
   date: string;
   players: number;
-  country?: string;
-  organizer?: string;
   format?: string;
-}
-
-export interface LimitlessDeck {
-  archetype?: string;
-  name?: string;
-  placement?: number;
-  player?: string;
-  list?: Record<string, number>; // card name → quantity
+  game?: string;
 }
 
 export interface LimitlessStanding {
-  placement: number;
-  name: string;
+  player: string;     // username
+  name: string;       // display name
+  placing: number;
   record: { wins: number; losses: number; ties: number };
-  archetype?: string;
-  deck?: LimitlessDeck;
+  decklist?: unknown; // formato varia por jogo
+  deck?: { id: string; name: string; icons?: string[] };
+  drop?: number;
+}
+
+export interface LimitlessGame {
+  id: string;
+  name: string;
+  formats: Record<string, string>;
+  platforms: Record<string, string>;
+  metagame: boolean;
+}
+
+export interface LimitlessDeckRule {
+  identifier: string;
+  name: string;
+  icons: string[];
+  cards: { count: number; name: string; set?: string; number?: string }[];
+  priority: number;
 }
 
 export interface MetaArchetype {
   name: string;
   count: number;
   topFinishes: number;
-  winRate?: number;
-  sampleList?: string[]; // card names from the archetype
+  icons?: string[];
 }
 
-// ── Endpoints ─────────────────────────────────────────────────────────────────
+// ── Endpoints públicos (sem chave) ────────────────────────────────────────────
+
+/** Lista todos os jogos suportados (inclui PTCG, VGC etc.) */
+export async function getGames(): Promise<LimitlessGame[]> {
+  return (await get<LimitlessGame[]>("/games")) ?? [];
+}
 
 /** Torneios recentes de Pokémon TCG */
-export async function getRecentTournaments(limit = 10): Promise<LimitlessTournament[]> {
-  const data = await get<{ data: LimitlessTournament[] }>("/tcg/tournaments", {
-    game: "PTCG",
-    limit: String(limit),
-    format: "standard"
-  });
-  return data?.data ?? [];
+export async function getRecentTournaments(limit = 10, format?: string): Promise<LimitlessTournament[]> {
+  const params: Record<string, string> = { game: "PTCG", limit: String(limit) };
+  if (format) params.format = format;
+  return (await get<LimitlessTournament[]>("/tournaments", params)) ?? [];
+}
+
+/** Detalhes de um torneio */
+export async function getTournamentDetails(id: string) {
+  return get<Record<string, unknown>>(`/tournaments/${id}/details`);
 }
 
 /** Standings de um torneio específico */
 export async function getTournamentStandings(id: string): Promise<LimitlessStanding[]> {
-  const data = await get<{ data: LimitlessStanding[] }>(`/tcg/tournaments/${id}/standings`);
-  return data?.data ?? [];
+  return (await get<LimitlessStanding[]>(`/tournaments/${id}/standings`)) ?? [];
 }
 
-/** Decklists de um torneio */
-export async function getTournamentDecks(id: string): Promise<LimitlessDeck[]> {
-  const data = await get<{ data: LimitlessDeck[] }>(`/tcg/tournaments/${id}/decks`);
-  return data?.data ?? [];
+/** Pairings (todas as partidas) de um torneio */
+export async function getTournamentPairings(id: string) {
+  return get<unknown[]>(`/tournaments/${id}/pairings`);
 }
 
-// ── Análise de Meta ────────────────────────────────────────────────────────────
+// ── Endpoint que requer chave ──────────────────────────────────────────────────
+
+/** Regras de categorização de decks para um jogo (requer LIMITLESS_API_KEY) */
+export async function getGameDecks(gameId = "PTCG"): Promise<LimitlessDeckRule[]> {
+  if (!process.env.LIMITLESS_API_KEY) return [];
+  return (await get<LimitlessDeckRule[]>(`/games/${gameId}/decks`)) ?? [];
+}
+
+// ── Análise de meta ───────────────────────────────────────────────────────────
 
 /**
- * Busca snapshot do meta atual:
- * - Pega os N torneios mais recentes
- * - Agrega os arquétipos mais usados no top 8/16
- * - Retorna os mais populares com win rates
+ * Snapshot do meta atual:
+ * - Agrega arquétipos dos N torneios mais recentes
+ * - Retorna os mais populares com top finishes
  */
 export async function getMetaSnapshot(tournamentCount = 5): Promise<MetaArchetype[]> {
   const tournaments = await getRecentTournaments(tournamentCount);
   if (tournaments.length === 0) return [];
 
-  const archetypeMap = new Map<string, { count: number; topFinishes: number }>();
+  const archetypeMap = new Map<string, { count: number; topFinishes: number; icons?: string[] }>();
 
   await Promise.allSettled(
     tournaments.slice(0, 3).map(async (t) => {
       const standings = await getTournamentStandings(t.id);
       for (const s of standings) {
-        if (!s.archetype) continue;
-        const arch = s.archetype;
-        const current = archetypeMap.get(arch) ?? { count: 0, topFinishes: 0 };
-        current.count++;
-        if (s.placement <= 8) current.topFinishes++;
-        archetypeMap.set(arch, current);
+        const deckName = s.deck?.name;
+        if (!deckName) continue;
+        const cur = archetypeMap.get(deckName) ?? { count: 0, topFinishes: 0, icons: s.deck?.icons };
+        cur.count++;
+        if (s.placing <= 8) cur.topFinishes++;
+        archetypeMap.set(deckName, cur);
       }
     })
   );
@@ -127,26 +153,31 @@ export async function getMetaSnapshot(tournamentCount = 5): Promise<MetaArchetyp
 }
 
 /**
- * Busca decklists reais de um arquétipo específico em torneios recentes
+ * Decklists reais de um arquétipo em torneios recentes.
+ * Retorna os melhores placings encontrados.
  */
-export async function getArchetypeDecks(
+export async function getArchetypeResults(
   archetypeName: string,
   limit = 3
-): Promise<{ tournament: string; placement: number; deck: LimitlessDeck }[]> {
+): Promise<{ tournament: string; placing: number; player: string; record: string }[]> {
   const tournaments = await getRecentTournaments(5);
-  const results: { tournament: string; placement: number; deck: LimitlessDeck }[] = [];
+  const results: { tournament: string; placing: number; player: string; record: string }[] = [];
 
-  for (const t of tournaments.slice(0, 3)) {
+  for (const t of tournaments.slice(0, 4)) {
     const standings = await getTournamentStandings(t.id);
-    const matching = standings.filter(s =>
-      s.archetype?.toLowerCase().includes(archetypeName.toLowerCase()) ||
-      archetypeName.toLowerCase().includes((s.archetype ?? "").toLowerCase())
-    );
+    const matching = standings.filter(s => {
+      const name = (s.deck?.name ?? "").toLowerCase();
+      const query = archetypeName.toLowerCase();
+      return name.includes(query) || query.includes(name.split(" ")[0]);
+    });
 
     for (const s of matching.slice(0, 2)) {
-      if (s.deck) {
-        results.push({ tournament: t.name, placement: s.placement, deck: s.deck });
-      }
+      results.push({
+        tournament: t.name,
+        placing: s.placing,
+        player: s.name,
+        record: `${s.record.wins}W-${s.record.losses}L-${s.record.ties}T`,
+      });
     }
 
     if (results.length >= limit) break;
@@ -156,45 +187,42 @@ export async function getArchetypeDecks(
 }
 
 /**
- * Contexto de meta para o Professor Enguiça
- * Retorna texto formatado para usar como contexto da IA
+ * Contexto de meta para o Professor Enguiça.
+ * Funciona SEM chave de API — usa endpoints públicos.
+ * Retorna texto pronto para contexto da IA.
  */
 export async function buildMetaContext(query: string): Promise<string> {
-  const key = process.env.LIMITLESS_API_KEY;
-  if (!key) return ""; // sem chave, não adiciona contexto
-
   const lower = query.toLowerCase();
 
   // Pergunta sobre meta geral
-  if (/meta|tier|melhor deck|que está ganhando|top deck|mais forte/.test(lower)) {
+  if (/meta|tier|melhor deck|que (está|ta) ganhando|top deck|mais forte|dominando/.test(lower)) {
     const meta = await getMetaSnapshot(4);
     if (meta.length === 0) return "";
-
-    return `DADOS REAIS DO META (Limitless TCG):\n` +
+    return "DADOS REAIS DO META (Limitless TCG — torneios recentes):\n" +
       meta.slice(0, 6).map((a, i) =>
         `${i + 1}. ${a.name} — ${a.count} aparições, ${a.topFinishes} top 8`
       ).join("\n");
   }
 
-  // Pergunta sobre arquétipo específico
+  // Pergunta sobre arquétipo específico (lista expandida)
   const archetypeKeywords = [
     "charizard", "gardevoir", "dragapult", "raging bolt", "iron hands",
     "miraidon", "lugia", "regidrago", "espathra", "terapagos",
-    "pidgeot", "comfey", "snorlax", "flareon", "gyarados"
+    "pidgeot", "comfey", "snorlax", "flareon", "gyarados",
+    "roaring moon", "iron valiant", "chien-pao", "baxcalibur",
+    "giratina", "lost box", "arceus", "mew", "palkia",
+    "togekiss", "flygon", "bloodmoon ursaluna", "pecharunt",
+    "gouging fire", "walking wake", "raichu", "entei",
   ];
 
   const mentionedArch = archetypeKeywords.find(k => lower.includes(k));
   if (mentionedArch) {
-    const decks = await getArchetypeDecks(mentionedArch, 2);
-    if (decks.length === 0) return "";
-
-    return `DECKLISTS REAIS DE TORNEIO (${mentionedArch.toUpperCase()}):\n` +
-      decks.map(d =>
-        `${d.tournament} — ${d.placement}º lugar${d.deck.list
-          ? `\nCartas principais: ${Object.entries(d.deck.list).slice(0, 8).map(([c, q]) => `${q}x ${c}`).join(", ")}`
-          : ""
-        }`
-      ).join("\n---\n");
+    const results = await getArchetypeResults(mentionedArch, 3);
+    if (results.length === 0) return "";
+    return `RESULTADOS REAIS DE TORNEIO (${mentionedArch.toUpperCase()}):\n` +
+      results.map(r =>
+        `${r.tournament} — ${r.placing}º lugar · ${r.player} · ${r.record}`
+      ).join("\n");
   }
 
   return "";
