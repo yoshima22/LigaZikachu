@@ -75,32 +75,75 @@ export async function sendDeckReminderEmail(params: DeckReminderParams): Promise
         Você possui uma partida agendada nas próximas 24 horas e ainda não enviou seu deck.
       </p>
 
-      <!-- Match info card -->
-      <div style="background:#0f172a;border:1px solid rgba(255,203,5,0.15);border-radius:12px;padding:20px;margin:0 0 24px;">
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:18px;">📅</span>
-            <div>
-              <p style="margin:0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Data / Hora</p>
-              <p style="margin:2px 0 0;font-size:14px;color:#f8fafc;font-weight:600;">${fmt(matchDate)}</p>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:18px;">⚔️</span>
-            <div>
-              <p style="margin:0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Adversário</p>
-              <p style="margin:2px 0 0;font-size:14px;color:#f8fafc;font-weight:600;">${opponentName}</p>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:18px;">🏆</span>
-            <div>
-              <p style="margin:0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Campeonato / Semana</p>
-              <p style="margin:2px 0 0;font-size:14px;color:#f8fafc;font-weight:600;">${tournamentName} — ${weekLabel}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- Match info card — layout via table (compatível com Gmail/Outlook) -->
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+        style="background:#0a0f1e;border:1px solid rgba(255,203,5,0.2);border-radius:12px;margin:0 0 24px;overflow:hidden;">
+        <!-- Cabeçalho do card -->
+        <tr>
+          <td colspan="2"
+            style="background:linear-gradient(90deg,rgba(255,203,5,0.08),rgba(255,203,5,0.04));
+                   padding:12px 20px 10px;
+                   border-bottom:1px solid rgba(255,203,5,0.12);
+                   font-size:10px;color:#FFCB05;font-weight:700;
+                   text-transform:uppercase;letter-spacing:2px;">
+            ⚡ Detalhes da Partida
+          </td>
+        </tr>
+
+        <!-- Data / Hora -->
+        <tr>
+          <td width="44" valign="top"
+            style="padding:16px 0 12px 20px;font-size:22px;line-height:1;">
+            📅
+          </td>
+          <td valign="top"
+            style="padding:16px 16px 12px 10px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">
+              Data &amp; Hora
+            </p>
+            <p style="margin:4px 0 0;font-size:15px;color:#f8fafc;font-weight:700;letter-spacing:0.3px;">
+              ${fmt(matchDate)}
+            </p>
+          </td>
+        </tr>
+
+        <!-- Adversário -->
+        <tr>
+          <td width="44" valign="top"
+            style="padding:14px 0 12px 20px;font-size:22px;line-height:1;">
+            ⚔️
+          </td>
+          <td valign="top"
+            style="padding:14px 16px 12px 10px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">
+              Adversário
+            </p>
+            <p style="margin:4px 0 0;font-size:15px;color:#f8fafc;font-weight:700;">
+              ${opponentName}
+            </p>
+          </td>
+        </tr>
+
+        <!-- Campeonato -->
+        <tr>
+          <td width="44" valign="top"
+            style="padding:14px 0 16px 20px;font-size:22px;line-height:1;">
+            🏆
+          </td>
+          <td valign="top"
+            style="padding:14px 16px 16px 10px;">
+            <p style="margin:0;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">
+              Campeonato
+            </p>
+            <p style="margin:4px 0 0;font-size:15px;color:#f8fafc;font-weight:700;">
+              ${tournamentName}
+            </p>
+            <p style="margin:3px 0 0;font-size:12px;color:#FFCB05;font-weight:600;">
+              ${weekLabel}
+            </p>
+          </td>
+        </tr>
+      </table>
 
       <p style="margin:0 0 24px;font-size:14px;color:#94a3b8;line-height:1.7;">
         Para evitar correria de última hora, envie sua lista assim que possível:
