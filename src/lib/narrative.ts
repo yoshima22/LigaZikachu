@@ -40,18 +40,17 @@ function groqClient(): Groq {
   return new Groq({ apiKey });
 }
 
-function parseSections<T extends Record<string, string>>(
+function parseSections<T extends Record<string, string | undefined>>(
   raw: string,
-  keys: (keyof T)[]
+  keys: string[]
 ): T {
   try {
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
       const parsed = JSON.parse(match[0]);
-      if (keys.every(k => typeof parsed[k as string] === "string")) return parsed as T;
+      if (keys.some(k => typeof parsed[k] === "string")) return parsed as T;
     }
   } catch { /* fallback */ }
-  // Fallback: tudo na primeira seção
   const result = Object.fromEntries(keys.map((k, i) => [k, i === 0 ? raw : ""]));
   return result as T;
 }
@@ -464,7 +463,7 @@ export async function generateWeekNarrativeSections(weekId: string): Promise<Wee
   });
 
   const raw = response.choices[0]?.message?.content ?? "";
-  return parseSections<WeekNarrativeSections>(raw, ["intro","highlights","challenges","rankings","players","title","closing"]);
+  return parseSections(raw, ["intro","highlights","challenges","rankings","players","title","closing"]) as WeekNarrativeSections;
 }
 
 export async function generateTournamentNarrativeSections(tournamentId: string): Promise<TournamentNarrativeSections> {
@@ -487,7 +486,7 @@ export async function generateTournamentNarrativeSections(tournamentId: string):
   });
 
   const raw = response.choices[0]?.message?.content ?? "";
-  return parseSections<TournamentNarrativeSections>(raw, ["overview","badges","players","title","champion"]);
+  return parseSections(raw, ["overview","badges","players","title","champion"]) as TournamentNarrativeSections;
 }
 
 // ── Save helpers (usados pelos auto-triggers) ─────────────────────────────────
