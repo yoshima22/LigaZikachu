@@ -61,7 +61,7 @@ export default async function TopDoDiaPage() {
           {weeks.map((week, wi) => {
             const top = rankings[wi] ?? [];
             const hasWinner = top.length > 0;
-            const isActive = week.tournament.status === TournamentStatus.ACTIVE;
+            const isActive = week.tournament.status === TournamentStatus.IN_PROGRESS;
 
             return (
               <div key={week.id} className="rounded-2xl border border-border bg-slate-950/60 overflow-hidden">
