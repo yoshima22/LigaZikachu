@@ -26,12 +26,26 @@ const TABS: { key: TabKey; label: string; icon: string; onlyFinished?: boolean }
   { key: "champion", label: "Campeão",   icon: "👑", onlyFinished: true },
 ];
 
+const TOURNAMENT_KEYS: (keyof TournamentNarrativeSections)[] = ["overview","badges","players","title","champion"];
+
+function safeStr(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  try { return String(v); } catch { return ""; }
+}
+
 function parseSections(raw: string | null): TournamentNarrativeSections | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.overview === "string") return parsed as TournamentNarrativeSections;
-  } catch {}
+    const cleaned = raw.replace(/^```[a-z]*\n?/gm, "").replace(/```$/gm, "").trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed && typeof parsed === "object" && TOURNAMENT_KEYS.some(k => typeof parsed[k] === "string")) {
+        return Object.fromEntries(TOURNAMENT_KEYS.map(k => [k, safeStr(parsed[k])])) as TournamentNarrativeSections;
+      }
+    }
+  } catch { /* fallback */ }
   return { overview: raw, badges: "", players: "", title: "", champion: "" };
 }
 
@@ -72,7 +86,8 @@ export function TournamentNarrativePanel({ tournamentId, slug, existingNarrative
   };
 
   const visibleTabs = TABS.filter(t => !t.onlyFinished || isFinished || (sections?.champion));
-  const activeText = sections?.[activeTab] ?? "";
+  const activeText = safeStr(sections?.[activeTab]);
+  const isLegacyFormat = sections !== null && sections.overview.length > 100 && !sections.badges && !sections.players;
 
   return (
     <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
@@ -107,6 +122,12 @@ export function TournamentNarrativePanel({ tournamentId, slug, existingNarrative
           )}
         </div>
       </div>
+
+      {!pending && isLegacyFormat && isAdmin && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-400">
+          ⚠ Narrativa no formato antigo — clique em "Regenerar" para criar com abas separadas.
+        </div>
+      )}
 
       {pending && (
         <div className="flex items-center gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-4 py-4">

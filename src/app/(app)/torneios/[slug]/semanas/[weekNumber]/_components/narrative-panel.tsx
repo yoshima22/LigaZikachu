@@ -25,13 +25,28 @@ const TABS: { key: keyof WeekNarrativeSections; label: string; icon: string }[] 
   { key: "closing",    label: "Próxima",    icon: "🔮" },
 ];
 
+const WEEK_KEYS: (keyof WeekNarrativeSections)[] = ["intro","highlights","challenges","rankings","players","title","closing"];
+
+function safeStr(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  try { return String(v); } catch { return ""; }
+}
+
 function parseSections(raw: string | null): WeekNarrativeSections | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.intro === "string") return parsed as WeekNarrativeSections;
-  } catch {}
-  // Texto legado (não JSON): coloca tudo na intro
+    // Remove possíveis blocos markdown ```json ... ```
+    const cleaned = raw.replace(/^```[a-z]*\n?/gm, "").replace(/```$/gm, "").trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed && typeof parsed === "object" && WEEK_KEYS.some(k => typeof parsed[k] === "string")) {
+        return Object.fromEntries(WEEK_KEYS.map(k => [k, safeStr(parsed[k])])) as WeekNarrativeSections;
+      }
+    }
+  } catch { /* fallback */ }
+  // Texto legado (não JSON): mostra na intro, avisa admin para regenerar
   return { intro: raw, highlights: "", challenges: "", rankings: "", players: "", title: "", closing: "" };
 }
 
@@ -67,7 +82,11 @@ export function NarrativePanel({ weekId, weekLabel, existingNarrative, generated
     navigator.clipboard.writeText(full).then(() => toast.success("Copiado!")).catch(() => toast.error("Erro ao copiar."));
   };
 
-  const activeText = sections?.[activeTab] ?? "";
+  const activeText = safeStr(sections?.[activeTab]);
+  // Detecta narrativa no formato antigo (tudo na intro, restante vazio)
+  const isLegacyFormat = sections !== null &&
+    sections.intro.length > 100 &&
+    !sections.highlights && !sections.players;
 
   return (
     <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
@@ -92,6 +111,13 @@ export function NarrativePanel({ weekId, weekLabel, existingNarrative, generated
           )}
         </div>
       </div>
+
+      {/* Aviso de formato antigo */}
+      {!pending && isLegacyFormat && isAdmin && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-400">
+          ⚠ Narrativa no formato antigo — clique em "Regenerar" para criar com abas separadas.
+        </div>
+      )}
 
       {pending && (
         <div className="flex items-center gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-4 py-4 text-sm">
