@@ -681,20 +681,4 @@ export default async function WeekDetailPage({
       </div>
     </div>
   );
-  } catch (err: unknown) {
-    // Erro simplificado — mostra apenas a mensagem sem props complexas
-    let errorMsg = "Erro desconhecido";
-    try { errorMsg = String((err as Error)?.message ?? err); } catch { /* */ }
-    return (
-      <div style={{ padding: "2rem", color: "#f87171", background: "#1a1a2e", minHeight: "100vh" }}>
-        <h1 style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>Erro na página da semana</h1>
-        <pre style={{ background: "#0f0f1a", padding: "1rem", borderRadius: "8px", fontSize: "0.75rem", whiteSpace: "pre-wrap", color: "#94a3b8", maxHeight: "400px", overflow: "auto" }}>
-          {errorMsg}
-        </pre>
-        <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#64748b" }}>
-          Copie esta mensagem e envie para o desenvolvedor.
-        </p>
-      </div>
-    );
-  }
 }
