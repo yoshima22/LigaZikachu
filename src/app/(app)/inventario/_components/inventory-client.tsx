@@ -4,16 +4,21 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { CheckCircle, Circle } from "lucide-react";
 import { equipItem } from "../../shop/actions";
+import { TitleDisplay } from "@/components/ui/title-display";
+import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 
 const rarityColors: Record<string, string> = {
   COMMON:    "border-slate-600/50",
   UNCOMMON:  "border-[#7AC74C]/40",
   RARE:      "border-[#6390F0]/40",
   EPIC:      "border-[#735797]/40",
-  LEGENDARY: "border-[#FFCB05]/40"
+  LEGENDARY: "border-[#FFCB05]/40",
+  MYTHIC:    "border-yellow-400/50",
+  RELIC:     "border-red-500/50",
 };
 const rarityLabel: Record<string, string> = {
-  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Rara", EPIC: "Épica", LEGENDARY: "Lendária"
+  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Raro", EPIC: "Épico",
+  LEGENDARY: "Lendário", MYTHIC: "Mítico", RELIC: "Relíquia",
 };
 
 interface InventoryItem {
@@ -25,6 +30,8 @@ interface InventoryItem {
   rarity: string;
   type: string;
   equipped: boolean;
+  theme?: string;
+  flavorText?: string | null;
 }
 
 interface Props {
@@ -72,8 +79,14 @@ function ItemSection({ title, items }: { title: string; items: InventoryItem[] }
                 </div>
               )
             ) : item.type === "TITLE" ? (
-              <div className="flex h-14 items-center justify-center bg-gradient-to-r from-slate-900 to-slate-800 px-4">
-                <p className="font-pixel text-xs text-[#FFCB05]">{item.name}</p>
+              <div className="flex h-16 items-center justify-center bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 px-4">
+                <TitleDisplay
+                  name={item.name}
+                  rarity={item.rarity as TitleRarity}
+                  theme={(item.theme ?? "NEUTRAL") as TitleTheme}
+                  flavorText={null}
+                  context="inventory"
+                />
               </div>
             ) : null}
 

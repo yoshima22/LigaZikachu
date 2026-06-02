@@ -18,6 +18,57 @@
 .glint-epic      { animation: glint-sweep 6s ease-in-out infinite; }
 .glint-legendary { animation: glint-sweep 5s ease-in-out infinite; }
 
+/* ── Title Display System — animações de entrada por raridade ────────────────
+   Usadas pelo componente <TitleDisplay> em perfil, inventário, ranking e feed.
+   Nunca usar em listas densas (ranking) — lá só cor + glow estático.
+*/
+@keyframes title-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes title-slide-fade {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes title-rise-fade {
+  from { opacity: 0; transform: scale(0.91); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes title-char-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes title-golden-flash {
+  0%   { opacity: 0; filter: brightness(0.15); }
+  18%  { opacity: 1; filter: brightness(3.5) sepia(0.9); }
+  35%  { filter: brightness(1.8) sepia(0.2); }
+  100% { opacity: 1; filter: brightness(1); }
+}
+@keyframes title-lightning {
+  0%   { opacity: 0; filter: brightness(0.05) blur(4px); transform: scale(0.86); }
+  8%   { opacity: 1; filter: brightness(6) saturate(0);  transform: scale(1.12); }
+  18%  { filter: brightness(2.5) saturate(0.4);           transform: scale(1.02); }
+  32%  { filter: brightness(1.6);                         transform: scale(1); }
+  100% { opacity: 1; filter: brightness(1);               transform: scale(1); }
+}
+@keyframes title-shimmer-loop {
+  from { background-position: -200% center; }
+  to   { background-position: 200% center; }
+}
+@keyframes title-glow-breathe {
+  0%, 100% { opacity: 0.85; }
+  50%       { opacity: 1; }
+}
+@keyframes title-sparkle {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  70%  { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-22px) scale(0.2); }
+}
+@keyframes title-flavor-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 0.75; transform: translateY(0); }
+}
+
 :root {
   color-scheme: dark;
 }

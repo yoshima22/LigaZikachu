@@ -37,7 +37,9 @@ export default async function InventarioPage() {
     imageUrl: i.item.imageUrl ?? null,
     rarity: i.item.rarity,
     type: i.item.type,
-    equipped: i.equipped
+    equipped: i.equipped,
+    theme: i.item.theme ?? "NEUTRAL",
+    flavorText: i.item.flavorText ?? null,
   });
 
   return (

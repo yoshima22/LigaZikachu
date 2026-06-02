@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { ShopItemType, ShopItemRarity, ZikaCoinTxType } from "@prisma/client";
+import { ShopItemType, ShopItemRarity, TitleTheme, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 
@@ -26,7 +26,10 @@ const createItemSchema = z.object({
     // Banner
     focusX: z.number().min(0).max(100).optional(),
     focusY: z.number().min(0).max(100).optional(),
-  }).optional().nullable()
+  }).optional().nullable(),
+  // Título: tema visual e frase de sabor
+  theme: z.nativeEnum(TitleTheme).optional(),
+  flavorText: z.string().trim().max(200).optional().nullable(),
 });
 
 export async function createShopItem(
@@ -41,6 +44,8 @@ export async function createShopItem(
         imageUrl: data.imageUrl || null,
         description: data.description || null,
         metadata: data.metadata ?? undefined,
+        theme: data.theme ?? undefined,
+        flavorText: data.flavorText ?? null,
         createdById: actor.id
       }
     });
@@ -67,6 +72,8 @@ export async function updateShopItem(
         imageUrl: data.imageUrl || null,
         description: data.description || null,
         metadata: data.metadata ?? undefined,
+        theme: data.theme ?? undefined,
+        flavorText: data.flavorText ?? null,
       }
     });
     revalidatePath("/shop");

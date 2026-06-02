@@ -1089,6 +1089,17 @@ enum ShopItemRarity {
   RARE
   EPIC
   LEGENDARY
+  MYTHIC
+  RELIC
+}
+
+enum TitleTheme {
+  NEUTRAL
+  ELECTRIC
+  FIRE
+  WATER
+  GRASS
+  ZIKABET
 }
 
 model ShopItem {
@@ -1104,6 +1115,9 @@ model ShopItem {
   // Para molduras (FRAME): { frameScale: number, frameOffsetX: number, frameOffsetY: number }
   // Para banners (BANNER): { focusX: number, focusY: number }
   metadata    Json?
+  // Para títulos (TITLE): tema visual e frase de sabor
+  theme       TitleTheme      @default(NEUTRAL)
+  flavorText  String?         @db.Text
   createdById String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt

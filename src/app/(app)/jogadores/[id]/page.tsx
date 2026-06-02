@@ -14,6 +14,8 @@ import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 import { AdminResetPanel } from "./_components/admin-reset-panel";
 import { RarityShimmer } from "@/components/ui/rarity-shimmer";
+import { TitleDisplay } from "@/components/ui/title-display";
+import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 
 export default async function PlayerDetailPage({
@@ -114,8 +116,8 @@ export default async function PlayerDetailPage({
     }).catch(() => [] as { id: string; card: { nationalId: number; displayName: string; imageUrl: string | null; rarity: string } }[]),
     prisma.playerInventory.findMany({
       where: { playerId, equipped: true },
-      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true, rarity: true } } }
-    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null; metadata: unknown; rarity: string } }[]),
+      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true, rarity: true, theme: true, flavorText: true } } }
+    }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null; metadata: unknown; rarity: string; theme: string; flavorText: string | null } }[]),
     prisma.playerAchievement.findMany({
       where: { playerId, isHighlighted: true },
       include: { achievement: { select: { name: true, rarity: true, iconUrl: true, description: true } } },
@@ -225,9 +227,15 @@ export default async function PlayerDetailPage({
                   {player.displayName}
                 </h1>
                 {equippedTitle && (
-                  <p className="text-sm font-semibold text-[#FFCB05] drop-shadow">
-                    {equippedTitle.item.name}
-                  </p>
+                  <div className="mt-0.5">
+                    <TitleDisplay
+                      name={equippedTitle.item.name}
+                      rarity={equippedTitle.item.rarity as TitleRarity}
+                      theme={(equippedTitle.item.theme ?? "NEUTRAL") as TitleTheme}
+                      flavorText={equippedTitle.item.flavorText}
+                      context="profile"
+                    />
+                  </div>
                 )}
                 {player.ptcglNick && (
                   <p className="text-sm text-slate-300/80 drop-shadow">@{player.ptcglNick}</p>

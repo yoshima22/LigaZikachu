@@ -2,26 +2,34 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { TitleDisplay } from "@/components/ui/title-display";
+import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem } from "../../actions";
 import { getSuggestedPrice } from "@/lib/shop-config";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
-const rarityOpts = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY"] as const;
+const rarityOpts = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
+const themeOpts  = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
 const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET"] as const;
 const typeLabel: Record<string, string> = {
   TITLE: "Título", BANNER: "Banner", FRAME: "Moldura", ZIKALOOT_TICKET: "Ticket ZikaLoot"
 };
 const rarityLabel: Record<string, string> = {
-  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Rara", EPIC: "Épica", LEGENDARY: "Lendária"
+  COMMON: "⚪ Comum", UNCOMMON: "🟢 Incomum", RARE: "🔵 Raro",
+  EPIC: "🟣 Épico", LEGENDARY: "🟠 Lendário", MYTHIC: "🟡 Mítico", RELIC: "💎 Relíquia"
+};
+const themeLabel: Record<string, string> = {
+  NEUTRAL: "Neutro", ELECTRIC: "⚡ Elétrico", FIRE: "🔥 Fogo",
+  WATER: "🌊 Água", GRASS: "🌿 Grama", ZIKABET: "🎰 ZikaBet"
 };
 
 interface Item {
   id: string; type: string; name: string; description: string | null;
   imageUrl: string | null; rarity: string; price: number; active: boolean; owners: number;
-  metadata?: unknown;
+  metadata?: unknown; theme?: string; flavorText?: string | null;
 }
 
 type FrameMeta  = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
@@ -32,6 +40,8 @@ type FormData = {
   imageUrl: string; rarity: typeof rarityOpts[number]; price: number;
   frameMeta: FrameMeta;
   bannerMeta: BannerMeta;
+  theme: typeof themeOpts[number];
+  flavorText: string;
 };
 const DEFAULT_FRAME_META:  FrameMeta  = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
 const DEFAULT_BANNER_META: BannerMeta = { focusX: 50, focusY: 50 };
@@ -40,6 +50,8 @@ const EMPTY: FormData = {
   type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100,
   frameMeta: DEFAULT_FRAME_META,
   bannerMeta: DEFAULT_BANNER_META,
+  theme: "NEUTRAL",
+  flavorText: "",
 };
 
 const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
@@ -58,6 +70,8 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
       focusX: (meta as Partial<BannerMeta>).focusX ?? 50,
       focusY: (meta as Partial<BannerMeta>).focusY ?? 50,
     },
+    theme: (i.theme as typeof themeOpts[number]) ?? "NEUTRAL",
+    flavorText: i.flavorText ?? "",
   };
 };
 
@@ -275,6 +289,7 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
 }) {
   const isFrame  = (form.type as string) === "FRAME";
   const isBanner = (form.type as string) === "BANNER";
+  const isTitle  = (form.type as string) === "TITLE";
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1 text-xs text-slate-400">
@@ -335,6 +350,48 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
             : "Imagem opcional para o item."
         }
       />
+      {/* Tema e frase de sabor — apenas para títulos */}
+      {isTitle && (
+        <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3 md:col-span-2 lg:col-span-3">
+          <p className="text-xs font-semibold text-[#FFCB05]">✨ Configuração do Título</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Tema visual</span>
+              <select
+                value={form.theme}
+                onChange={e => setForm({ ...form, theme: e.target.value as typeof themeOpts[number] })}
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+              >
+                {themeOpts.map(t => <option key={t} value={t}>{themeLabel[t]}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-400">
+              <span>Frase de sabor <span className="text-slate-600">(aparece abaixo do título no perfil)</span></span>
+              <input
+                value={form.flavorText}
+                onChange={e => setForm({ ...form, flavorText: e.target.value })}
+                placeholder='Ex: "Seu nome já faz parte da história."'
+                maxLength={200}
+                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+              />
+            </label>
+          </div>
+          {/* Preview do título */}
+          {form.name && (
+            <div className="flex items-center gap-3 rounded-xl border border-border bg-slate-950/60 p-3">
+              <span className="text-xs text-slate-500 shrink-0">Preview:</span>
+              <TitleDisplay
+                name={form.name}
+                rarity={form.rarity as TitleRarity}
+                theme={form.theme as TitleTheme}
+                flavorText={form.flavorText || null}
+                context="inventory"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Editor de posicionamento — apenas para molduras */}
       {isFrame && (
         <FrameMetaEditor
@@ -375,6 +432,8 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
       f.type === "FRAME"  ? f.frameMeta  :
       f.type === "BANNER" ? f.bannerMeta :
       undefined,
+    theme: f.type === "TITLE" ? f.theme : undefined,
+    flavorText: f.type === "TITLE" && f.flavorText ? f.flavorText : null,
   });
 
   const handleCreate = () => startTransition(async () => {

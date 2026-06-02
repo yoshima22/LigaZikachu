@@ -61,7 +61,9 @@ export default async function ShopAdminPage() {
           price: i.price,
           active: i.active,
           owners: i._count.ownerships,
-          metadata: i.metadata ?? undefined
+          metadata: i.metadata ?? undefined,
+          theme: i.theme ?? undefined,
+          flavorText: i.flavorText ?? null,
         }))} />
       </Card>
     </div>
