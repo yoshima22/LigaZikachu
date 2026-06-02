@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         // Partidas pendentes (não confirmadas, não canceladas, não bye)
         matches: {
           where: {
-            status: { notIn: ["CONFIRMED", "CANCELLED"] },
+            status: { notIn: ["CONFIRMED", "CANCELED"] },
             isBye: false,
             playerBId: { not: null },
           },

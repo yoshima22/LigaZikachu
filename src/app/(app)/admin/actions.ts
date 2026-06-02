@@ -29,7 +29,7 @@ export async function triggerDeckReminder(): Promise<
         tournament: { select: { name: true, slug: true } },
         matches: {
           where: {
-            status: { notIn: ["CONFIRMED", "CANCELLED"] },
+            status: { notIn: ["CONFIRMED", "CANCELED"] },
             isBye: false,
             playerBId: { not: null },
           },
