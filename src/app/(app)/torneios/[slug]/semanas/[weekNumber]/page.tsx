@@ -671,20 +671,19 @@ export default async function WeekDetailPage({
       </div>
     </div>
   );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? (err.stack ?? "") : "";
+  } catch (err: unknown) {
+    // Erro simplificado — mostra apenas a mensagem sem props complexas
+    let errorMsg = "Erro desconhecido";
+    try { errorMsg = String((err as Error)?.message ?? err); } catch { /* */ }
     return (
-      <div className="p-8 space-y-4">
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5">
-          <p className="font-semibold text-red-400 mb-2">⚠️ Erro ao carregar página da semana</p>
-          <p className="text-sm text-red-300 font-mono mb-4">{msg}</p>
-          {stack && (
-            <pre className="text-[10px] text-slate-500 overflow-auto max-h-64 bg-slate-950 p-3 rounded">
-              {stack}
-            </pre>
-          )}
-        </div>
+      <div style={{ padding: "2rem", color: "#f87171", background: "#1a1a2e", minHeight: "100vh" }}>
+        <h1 style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>Erro na página da semana</h1>
+        <pre style={{ background: "#0f0f1a", padding: "1rem", borderRadius: "8px", fontSize: "0.75rem", whiteSpace: "pre-wrap", color: "#94a3b8", maxHeight: "400px", overflow: "auto" }}>
+          {errorMsg}
+        </pre>
+        <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#64748b" }}>
+          Copie esta mensagem e envie para o desenvolvedor.
+        </p>
       </div>
     );
   }
