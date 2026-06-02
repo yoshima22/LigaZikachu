@@ -99,3 +99,91 @@ export async function triggerDeckReminder(dryRun = false): Promise<
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+// ── Envio de teste para um jogador específico ─────────────────────────────────
+
+export async function sendTestDeckReminder(
+  playerId: string
+): Promise<{ ok: boolean; to: string; usedRealMatch: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: {
+        id: true,
+        displayName: true,
+        user: { select: { email: true } },
+      },
+    });
+    if (!player)            return { ok: false, to: "", usedRealMatch: false, error: "Jogador não encontrado." };
+    if (!player.user.email) return { ok: false, to: "", usedRealMatch: false, error: "Este jogador não tem e-mail cadastrado." };
+
+    const now   = new Date();
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    // Tenta encontrar uma partida real pendente do jogador nas próximas 48h
+    const realMatch = await prisma.match.findFirst({
+      where: {
+        OR: [{ playerAId: playerId }, { playerBId: playerId }],
+        status: { notIn: ["CONFIRMED", "CANCELED"] },
+        isBye: false,
+        playerBId: { not: null },
+        tournamentWeekId: { not: null },
+      },
+      include: {
+        playerA:        { select: { id: true, displayName: true } },
+        playerB:        { select: { id: true, displayName: true } },
+        tournamentWeek: {
+          select: {
+            weekNumber: true, label: true, deckLockAt: true,
+            tournament: { select: { name: true, slug: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let emailParams: Parameters<typeof sendDeckReminderEmail>[0];
+    let usedRealMatch = false;
+
+    if (realMatch?.tournamentWeek) {
+      const week     = realMatch.tournamentWeek;
+      const opponent = realMatch.playerAId === playerId ? realMatch.playerB : realMatch.playerA;
+      usedRealMatch  = true;
+      emailParams    = {
+        to:             player.user.email,
+        playerName:     player.displayName,
+        opponentName:   opponent?.displayName ?? "Adversário",
+        matchDate:      realMatch.scheduledAt ?? week.deckLockAt ?? in48h,
+        tournamentName: week.tournament.name,
+        weekLabel:      week.label ?? `Semana ${week.weekNumber}`,
+        deckLink:       `${APP_URL}/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`,
+      };
+    } else {
+      // Sem partida real — usa dados de exemplo para testar o template
+      const anyTournament = await prisma.tournament.findFirst({
+        where: { status: "IN_PROGRESS" },
+        select: { name: true, slug: true },
+      });
+      emailParams = {
+        to:             player.user.email,
+        playerName:     player.displayName,
+        opponentName:   "Adversário de Teste",
+        matchDate:      new Date(now.getTime() + 6 * 60 * 60 * 1000),
+        tournamentName: anyTournament?.name ?? "Liga Zikachu",
+        weekLabel:      "Semana de Teste",
+        deckLink:       anyTournament
+          ? `${APP_URL}/torneios/${anyTournament.slug}`
+          : `${APP_URL}/torneios`,
+      };
+    }
+
+    const { error } = await sendDeckReminderEmail(emailParams);
+    if (error) return { ok: false, to: player.user.email, usedRealMatch, error };
+
+    return { ok: true, to: player.user.email, usedRealMatch };
+  } catch (err) {
+    return { ok: false, to: "", usedRealMatch: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}

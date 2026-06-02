@@ -71,7 +71,8 @@ export default async function AdminPage() {
     availableCodes,
     invalidCodes,
     pendingDecks,
-    recentAuditLogs
+    recentAuditLogs,
+    allPlayers,
   ] = await Promise.all([
     prisma.user.count({ where: { status: UserStatus.PENDING_APPROVAL } }),
     prisma.tournament.count({ where: { status: { in: [TournamentStatus.REGISTRATION_OPEN, TournamentStatus.IN_PROGRESS] } } }),
@@ -85,7 +86,12 @@ export default async function AdminPage() {
       orderBy: { createdAt: "desc" },
       take: 8,
       include: { actor: { select: { name: true, email: true } } }
-    })
+    }),
+    prisma.player.findMany({
+      where: { user: { status: UserStatus.ACTIVE } },
+      select: { id: true, displayName: true, user: { select: { email: true } } },
+      orderBy: { displayName: "asc" },
+    }),
   ]);
 
   return (
@@ -206,7 +212,7 @@ export default async function AdminPage() {
         )}
       </Card>
 
-      <DeckReminderPanel />
+      <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <GlobalResetPanel />
     </div>
   );
