@@ -57,7 +57,8 @@ export default async function ZikaLootPage() {
   const myPickMap = new Map(myPicks.map((p) => [p.lootId, p.number]));
   const activeLoot = loots.find((l) => l.status === ZikaLootStatus.SCHEDULED);
 
-  // Busca imagens das figurinhas que são prêmio na loteria ativa
+  // Busca imagens das figurinhas que são prêmio na loteria ativa.
+  // cardId pode ser o nationalId numérico (ex: "248") ou o id CUID do card.
   const stickerCardImages = new Map<string, { imageUrl: string | null; displayName: string }>();
   if (activeLoot?.prizeConfig) {
     const cfg = activeLoot.prizeConfig as { prizes?: Array<{ type: string; cardId?: string }> };
@@ -65,12 +66,23 @@ export default async function ZikaLootPage() {
       .filter(p => p.type === "STICKER" && p.cardId)
       .map(p => p.cardId!);
     if (stickerIds.length > 0) {
+      // Tenta buscar por nationalId (número do Pokémon) primeiro
+      const numericIds = stickerIds.map(id => parseInt(id.replace(/^0+/, ""))).filter(n => !isNaN(n));
       const cards = await prisma.pokemonCard.findMany({
-        where: { id: { in: stickerIds } },
-        select: { id: true, imageUrl: true, displayName: true }
+        where: {
+          OR: [
+            { id: { in: stickerIds } },                // CUID exato
+            { nationalId: { in: numericIds } },         // Número do Pokémon (248, 0248, etc.)
+          ]
+        },
+        select: { id: true, nationalId: true, imageUrl: true, displayName: true },
+        take: 20
       });
       for (const c of cards) {
+        // Mapeia tanto pelo CUID quanto pelo nationalId string
         stickerCardImages.set(c.id, { imageUrl: c.imageUrl, displayName: c.displayName });
+        stickerCardImages.set(String(c.nationalId), { imageUrl: c.imageUrl, displayName: c.displayName });
+        stickerCardImages.set(String(c.nationalId).padStart(4, "0"), { imageUrl: c.imageUrl, displayName: c.displayName });
       }
     }
   }
