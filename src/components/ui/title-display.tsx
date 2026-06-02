@@ -11,6 +11,9 @@
  *
  * Raridades:  COMMON · UNCOMMON · RARE · EPIC · LEGENDARY · MYTHIC · RELIC
  * Temas:      NEUTRAL · ELECTRIC · FIRE · WATER · GRASS · ZIKABET
+ *
+ * Variação de efeito: determinística pelo nome do título (hash simples)
+ * para que o mesmo título sempre use o mesmo efeito, sem randomness no render.
  */
 
 import { useEffect, useState } from "react";
@@ -33,17 +36,71 @@ interface Props {
   className?: string;
 }
 
-// ── Config por raridade ────────────────────────────────────────────────────────
+// ── Hash deterministico do nome → seleciona variante ─────────────────────────
+// Evita Math.random() e garante que o mesmo título sempre gere o mesmo efeito.
+function nameHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+// ── Variantes de entrada por raridade ────────────────────────────────────────
+// Cada raridade tem um array de variantes; selecionamos via nameHash % length.
+// "charByChar" = usar animação letra-a-letra em vez de entry string.
+
+interface EntryVariant {
+  animation: string | null;  // CSS animation shorthand; null = char-by-char
+  durationMs: number;
+  charMode?: "drop" | "slide" | "fade"; // qual @keyframe usar no char-by-char
+}
+
+const RARITY_VARIANTS: Record<string, EntryVariant[]> = {
+  COMMON: [
+    { animation: "title-fade-in 0.35s ease forwards",       durationMs: 350 },
+    { animation: "title-typewriter 0.5s steps(1) forwards", durationMs: 500 },
+  ],
+  UNCOMMON: [
+    { animation: "title-slide-fade 0.5s ease forwards",     durationMs: 500 },
+    { animation: "title-cascade 0.6s ease forwards",         durationMs: 600 },
+    { animation: "title-drop-in 0.5s ease forwards",         durationMs: 500 },
+  ],
+  RARE: [
+    { animation: "title-rise-fade 0.6s ease forwards",      durationMs: 600 },
+    { animation: "title-flicker 0.8s ease forwards",         durationMs: 800 },
+    { animation: "title-pulse-in 0.7s ease forwards",        durationMs: 700 },
+  ],
+  EPIC: [
+    { animation: null, durationMs: 900,  charMode: "slide" },  // char-by-char slide
+    { animation: null, durationMs: 1000, charMode: "drop" },   // char-by-char drop
+    { animation: "title-glitch 0.9s ease forwards",            durationMs: 900 },
+  ],
+  LEGENDARY: [
+    { animation: "title-golden-flash 1.2s ease forwards",   durationMs: 1200 },
+    { animation: "title-stamp 1.0s cubic-bezier(.36,.07,.19,.97) forwards", durationMs: 1000 },
+    { animation: "title-shockwave 1.1s ease forwards",       durationMs: 1100 },
+  ],
+  MYTHIC: [
+    { animation: "title-lightning 1.5s ease forwards",      durationMs: 1500 },
+    { animation: "title-shockwave 1.3s ease forwards",       durationMs: 1300 },
+    { animation: "title-flicker 0.6s ease forwards",         durationMs: 900 },
+  ],
+  RELIC: [
+    { animation: "title-stamp 1.6s cubic-bezier(.36,.07,.19,.97) forwards", durationMs: 1600 },
+    { animation: "title-golden-flash 1.8s ease forwards",   durationMs: 1800 },
+    { animation: "title-shockwave 1.5s ease forwards",       durationMs: 1500 },
+  ],
+};
+
+// ── Config de cor e glow por raridade ────────────────────────────────────────
 
 interface RarityDef {
   color: string;
-  gradient?: string;     // para gradient text (LEGENDARY+)
+  gradient?: string;
   glowColor: string;
-  entry: string | null;  // CSS animation shorthand, null = char-by-char
-  entryMs: number;       // duração em ms p/ acionar continuous glow
-  charByChar: boolean;
   sparkles: boolean;
-  shimmer: boolean;      // shimmer loop após entrada
+  shimmer: boolean;
   continuousGlow: boolean;
   rarityBadge: string;
   label: string;
@@ -52,73 +109,62 @@ interface RarityDef {
 const RARITY_CFG: Record<string, RarityDef> = {
   COMMON: {
     color: "#e2e8f0", glowColor: "transparent",
-    entry: "title-fade-in 0.3s ease forwards",
-    entryMs: 300,
-    charByChar: false, sparkles: false, shimmer: false, continuousGlow: false,
+    sparkles: false, shimmer: false, continuousGlow: false,
     rarityBadge: "", label: "Comum",
   },
   UNCOMMON: {
     color: "#4ade80", glowColor: "#4ade8066",
-    entry: "title-slide-fade 0.5s ease forwards",
-    entryMs: 500,
-    charByChar: false, sparkles: false, shimmer: false, continuousGlow: false,
+    sparkles: false, shimmer: false, continuousGlow: false,
     rarityBadge: "", label: "Incomum",
   },
   RARE: {
     color: "#60a5fa", glowColor: "#60a5fa88",
-    entry: "title-rise-fade 0.6s ease forwards",
-    entryMs: 600,
-    charByChar: false, sparkles: false, shimmer: false, continuousGlow: true,
+    sparkles: false, shimmer: false, continuousGlow: true,
     rarityBadge: "", label: "Raro",
   },
   EPIC: {
     color: "#c084fc", glowColor: "#c084fc99",
-    entry: null, // usa char-by-char
-    entryMs: 1000,
-    charByChar: true, sparkles: true, shimmer: false, continuousGlow: true,
+    sparkles: true, shimmer: false, continuousGlow: true,
     rarityBadge: "✦", label: "Épico",
   },
   LEGENDARY: {
     color: "#fb923c",
     gradient: "linear-gradient(90deg,#f97316,#fbbf24,#f97316)",
     glowColor: "#fb923caa",
-    entry: "title-golden-flash 1.2s ease forwards",
-    entryMs: 1200,
-    charByChar: false, sparkles: false, shimmer: true, continuousGlow: true,
+    sparkles: false, shimmer: true, continuousGlow: true,
     rarityBadge: "✦", label: "Lendário",
   },
   MYTHIC: {
     color: "#fbbf24",
     gradient: "linear-gradient(90deg,#fbbf24 0%,#ffffff 40%,#fbbf24 80%,#fef08a 100%)",
     glowColor: "#fbbf24cc",
-    entry: "title-lightning 1.5s ease forwards",
-    entryMs: 1500,
-    charByChar: false, sparkles: true, shimmer: true, continuousGlow: true,
+    sparkles: true, shimmer: true, continuousGlow: true,
     rarityBadge: "⚡", label: "Mítico",
   },
   RELIC: {
     color: "#ef4444",
     gradient: "linear-gradient(90deg,#ef4444 0%,#fbbf24 35%,#ffffff 50%,#fbbf24 65%,#ef4444 100%)",
     glowColor: "#fbbf24cc",
-    entry: "title-golden-flash 1.8s ease forwards",
-    entryMs: 1800,
-    charByChar: false, sparkles: true, shimmer: true, continuousGlow: true,
+    sparkles: true, shimmer: true, continuousGlow: true,
     rarityBadge: "👑", label: "Relíquia",
   },
 };
 
-// ── Config por tema ────────────────────────────────────────────────────────────
+// ── Char-by-char keyframes por modo ──────────────────────────────────────────
 
-const THEME_BADGE: Record<string, string> = {
-  NEUTRAL: "",
-  ELECTRIC: "⚡",
-  FIRE: "🔥",
-  WATER: "🌊",
-  GRASS: "🌿",
-  ZIKABET: "🎰",
+const CHAR_KEYFRAME: Record<string, string> = {
+  slide: "title-char-in",
+  drop:  "title-drop-in",
+  fade:  "title-fade-in",
 };
 
-// ── Posições fixas dos sparkles (evita Math.random no render) ─────────────────
+// ── Badge por tema ────────────────────────────────────────────────────────────
+
+const THEME_BADGE: Record<string, string> = {
+  NEUTRAL: "", ELECTRIC: "⚡", FIRE: "🔥", WATER: "🌊", GRASS: "🌿", ZIKABET: "🎰",
+};
+
+// ── Sparkles — posições fixas para evitar random no render ───────────────────
 
 const SPARKLE_POS = [
   { left: "6%",  top: -10, delay: 0.05, size: 3 },
@@ -131,7 +177,7 @@ const SPARKLE_POS = [
   { left: "30%", top: -6,  delay: 0.70, size: 2 },
 ];
 
-// ── Componente ─────────────────────────────────────────────────────────────────
+// ── Componente ────────────────────────────────────────────────────────────────
 
 export function TitleDisplay({
   name,
@@ -144,12 +190,18 @@ export function TitleDisplay({
   const [animated, setAnimated] = useState(false);
   const [glowing,  setGlowing]  = useState(false);
 
-  const cfg       = RARITY_CFG[rarity] ?? RARITY_CFG.COMMON;
+  const cfg  = RARITY_CFG[rarity] ?? RARITY_CFG.COMMON;
+  const vars = RARITY_VARIANTS[rarity] ?? RARITY_VARIANTS.COMMON;
+
+  // Seleciona variante deterministicamente pelo nome
+  const variant = vars[nameHash(name) % vars.length];
+  const isCharByChar = variant.animation === null;
+  const charKeyframe = CHAR_KEYFRAME[variant.charMode ?? "slide"];
+
   const themeBadge = THEME_BADGE[theme ?? "NEUTRAL"] ?? "";
-  const animate   = context === "profile" || context === "inventory";
+  const animate    = context === "profile" || context === "inventory";
   const useGradient = !!cfg.gradient;
 
-  // Badge: tema tem prioridade salvo rarityBadge ser emoji único (MYTHIC ⚡, RELIC 👑)
   const badge =
     rarity === "MYTHIC" || rarity === "RELIC"
       ? cfg.rarityBadge
@@ -158,29 +210,24 @@ export function TitleDisplay({
   useEffect(() => {
     if (!animate) return;
     setAnimated(true);
-    const t = setTimeout(() => setGlowing(true), cfg.entryMs);
+    const t = setTimeout(() => setGlowing(true), variant.durationMs);
     return () => clearTimeout(t);
-  }, [animate, cfg.entryMs]);
+  }, [animate, variant.durationMs]);
 
-  // ── Contexto ranking: cor + glow estático, sem animação ───────────────────
+  // ── Ranking: apenas cor + glow estático ──────────────────────────────────
   if (context === "ranking") {
     return (
-      <span
-        className={`font-semibold ${className}`}
-        style={{
-          color: cfg.color,
-          textShadow: cfg.glowColor !== "transparent"
-            ? `0 0 6px ${cfg.glowColor}`
-            : undefined,
-        }}
-      >
+      <span className={`font-semibold ${className}`} style={{
+        color: cfg.color,
+        textShadow: cfg.glowColor !== "transparent" ? `0 0 6px ${cfg.glowColor}` : undefined,
+      }}>
         {badge && <span className="mr-0.5">{badge}</span>}
         {name}
       </span>
     );
   }
 
-  // ── Contexto feed: cor + badge, zero animação ─────────────────────────────
+  // ── Feed: cor + badge, sem animação ──────────────────────────────────────
   if (context === "feed") {
     return (
       <span className={`font-semibold ${className}`} style={{ color: cfg.color }}>
@@ -190,37 +237,32 @@ export function TitleDisplay({
     );
   }
 
-  // ── Contexto profile / inventory: efeito completo ─────────────────────────
+  // ── Profile / Inventory: efeito completo ─────────────────────────────────
 
-  // Glow contínuo via filter (compatível com gradient text)
   const continuousFilter =
     glowing && cfg.continuousGlow
       ? `drop-shadow(0 0 6px ${cfg.glowColor}) drop-shadow(0 0 14px ${cfg.glowColor})`
       : undefined;
 
-  // Texto char-by-char (EPIC)
+  const shimmerActive = cfg.shimmer && glowing;
+
+  // Renderiza char-by-char
   const renderCharByChar = () =>
     name.split("").map((ch, i) => (
-      <span
-        key={i}
-        style={{
-          display: "inline-block",
-          animation: animated ? "title-char-in 0.28s ease forwards" : undefined,
-          animationDelay: animated ? `${i * 55}ms` : undefined,
-          opacity: animated ? 0 : 1,
-          color: cfg.color,
-          filter: continuousFilter,
-          whiteSpace: ch === " " ? "pre" : undefined,
-        }}
-      >
+      <span key={i} style={{
+        display: "inline-block",
+        animation: animated ? `${charKeyframe} 0.28s ease forwards` : undefined,
+        animationDelay: animated ? `${i * 55}ms` : undefined,
+        opacity: animated ? 0 : 1,
+        color: cfg.color,
+        filter: continuousFilter,
+        whiteSpace: ch === " " ? "pre" : undefined,
+      }}>
         {ch === " " ? " " : ch}
       </span>
     ));
 
-  // Texto normal (todas as outras raridades)
-  const shimmerActive = cfg.shimmer && glowing;
-  // Nota: NÃO setar opacity:0 inline — animation-fill-mode:forwards controla isso via keyframe.
-  // Inline opacity sobrescreveria o estado final da animação em alguns browsers.
+  // Estilo do span de texto principal
   const textStyle: React.CSSProperties = useGradient
     ? {
         backgroundImage: shimmerActive
@@ -233,22 +275,21 @@ export function TitleDisplay({
         color: "transparent",
         animation: shimmerActive
           ? "title-shimmer-loop 3s linear infinite"
-          : animated && cfg.entry
-          ? cfg.entry
+          : animated && variant.animation
+          ? variant.animation
           : undefined,
         filter: continuousFilter,
       }
     : {
         color: cfg.color,
-        animation: animated && cfg.entry ? cfg.entry : undefined,
-        textShadow:
-          glowing && cfg.continuousGlow
-            ? `0 0 8px ${cfg.glowColor}, 0 0 18px ${cfg.glowColor}`
-            : undefined,
+        animation: animated && variant.animation && !isCharByChar ? variant.animation : undefined,
+        textShadow: glowing && cfg.continuousGlow
+          ? `0 0 8px ${cfg.glowColor}, 0 0 18px ${cfg.glowColor}`
+          : undefined,
       };
 
   const renderText = () =>
-    cfg.charByChar && animated
+    isCharByChar && animated
       ? renderCharByChar()
       : <span style={textStyle}>{name}</span>;
 
@@ -256,72 +297,47 @@ export function TitleDisplay({
     <div className={`inline-block leading-none ${className}`}>
       <div className="relative inline-flex items-center gap-1.5">
 
-        {/* Sparkles — EPIC, MYTHIC, RELIC */}
+        {/* Sparkles */}
         {cfg.sparkles && animated && (
           <span aria-hidden className="pointer-events-none absolute inset-0 overflow-visible">
             {SPARKLE_POS.map((s, i) => (
-              <span
-                key={i}
-                style={{
-                  position: "absolute",
-                  left: s.left,
-                  top: s.top,
-                  width: s.size,
-                  height: s.size,
-                  borderRadius: "50%",
-                  background: cfg.color,
-                  boxShadow: `0 0 4px ${cfg.color}`,
-                  animation: "title-sparkle 1.3s ease forwards",
-                  animationDelay: `${s.delay}s`,
-                  opacity: 0,
-                }}
-              />
+              <span key={i} style={{
+                position: "absolute", left: s.left, top: s.top,
+                width: s.size, height: s.size,
+                borderRadius: "50%",
+                background: cfg.color, boxShadow: `0 0 4px ${cfg.color}`,
+                animation: "title-sparkle 1.3s ease forwards",
+                animationDelay: `${s.delay}s`, opacity: 0,
+              }} />
             ))}
           </span>
         )}
 
-        {/* Badge (prefixo) */}
         {badge && (
-          <span
-            className="select-none text-sm leading-none"
-            style={{ filter: continuousFilter }}
-          >
+          <span className="select-none text-sm leading-none" style={{ filter: continuousFilter }}>
             {badge}
           </span>
         )}
 
-        {/* Texto do título */}
         <span className="font-bold text-sm leading-none tracking-wide">
           {renderText()}
         </span>
 
-        {/* Badge (sufixo) — apenas LEGENDARY+ para efeito espelho */}
         {badge && (rarity === "LEGENDARY" || rarity === "MYTHIC" || rarity === "RELIC") && (
-          <span
-            className="select-none text-sm leading-none"
-            style={{ filter: continuousFilter }}
-          >
+          <span className="select-none text-sm leading-none" style={{ filter: continuousFilter }}>
             {badge}
           </span>
         )}
-
       </div>
 
-      {/* Frase de sabor — apenas no perfil */}
+      {/* Frase de sabor */}
       {context === "profile" && flavorText && (
-        <p
-          className="mt-1 text-[11px] italic"
-          style={{
-            color: cfg.color,
-            // sem animation: renderiza estático (SSR), com animation: entra suavemente
-            ...(animated
-              ? {
-                  animation: "title-flavor-in 0.5s ease forwards",
-                  animationDelay: `${cfg.entryMs + 200}ms`,
-                }
-              : { opacity: 0.75 }),
-          }}
-        >
+        <p className="mt-1 text-[11px] italic" style={{
+          color: cfg.color,
+          ...(animated
+            ? { animation: "title-flavor-in 0.5s ease forwards", animationDelay: `${variant.durationMs + 200}ms` }
+            : { opacity: 0.75 }),
+        }}>
           &ldquo;{flavorText}&rdquo;
         </p>
       )}

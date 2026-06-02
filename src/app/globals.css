@@ -69,6 +69,76 @@
   to   { opacity: 0.75; transform: translateY(0); }
 }
 
+/* Variações extras de entrada */
+
+/* Materialize: letras caem do topo uma a uma (RARE alternativo) */
+@keyframes title-drop-in {
+  from { opacity: 0; transform: translateY(-10px) scaleY(1.3); }
+  to   { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+/* Glitch: texto distorce lateralmente antes de estabilizar */
+@keyframes title-glitch {
+  0%   { opacity: 0; clip-path: inset(0 100% 0 0); }
+  20%  { opacity: 1; clip-path: inset(0 0 0 0); transform: translateX(4px) skewX(-4deg); }
+  30%  { transform: translateX(-3px) skewX(3deg); }
+  40%  { transform: translateX(2px) skewX(-2deg); }
+  55%  { transform: translateX(0) skewX(0); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+/* Stamp: aparece grande e encolhe no lugar (LEGENDARY alternativo) */
+@keyframes title-stamp {
+  0%   { opacity: 0; transform: scale(2.2); filter: blur(4px); }
+  40%  { opacity: 1; transform: scale(0.92); filter: blur(0); }
+  60%  { transform: scale(1.05); }
+  80%  { transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* Typewriter: reveal clip-path da esquerda para a direita */
+@keyframes title-typewriter {
+  from { clip-path: inset(0 100% 0 0); opacity: 1; }
+  to   { clip-path: inset(0 0% 0 0);   opacity: 1; }
+}
+/* Pulse-in: começa do centro, expande com glow burst */
+@keyframes title-pulse-in {
+  0%   { opacity: 0; transform: scale(0.6) translateY(2px); filter: brightness(3); }
+  50%  { opacity: 1; transform: scale(1.08); filter: brightness(1.6); }
+  75%  { transform: scale(0.97); filter: brightness(1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* Flicker: tremula como neon acendendo */
+@keyframes title-flicker {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  12%  { opacity: 0.1; }
+  14%  { opacity: 1; }
+  16%  { opacity: 0.2; }
+  18%  { opacity: 1; }
+  22%  { opacity: 0.3; }
+  25%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+/* Shockwave: escala sai de 0 com overshoot elástico */
+@keyframes title-shockwave {
+  0%   { opacity: 0; transform: scale(0) rotate(-2deg); }
+  55%  { opacity: 1; transform: scale(1.15) rotate(1deg); filter: brightness(2); }
+  75%  { transform: scale(0.95) rotate(-0.5deg); filter: brightness(1); }
+  90%  { transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+/* Cascade: fade + ondulação vertical */
+@keyframes title-cascade {
+  0%   { opacity: 0; transform: translateY(14px) scaleX(0.85); }
+  60%  { opacity: 1; transform: translateY(-3px) scaleX(1.02); }
+  80%  { transform: translateY(1px) scaleX(0.99); }
+  100% { opacity: 1; transform: translateY(0) scaleX(1); }
+}
+/* Shimmer-reveal: texto surge via gradiente varrendo da esquerda */
+@keyframes title-shimmer-reveal {
+  0%   { background-position: -300% center; opacity: 0.2; }
+  40%  { opacity: 1; }
+  100% { background-position: 100% center; opacity: 1; }
+}
+
 :root {
   color-scheme: dark;
 }
