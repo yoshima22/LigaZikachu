@@ -42,7 +42,7 @@ function parseSections(raw: string | null): WeekNarrativeSections | null {
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       if (parsed && typeof parsed === "object" && WEEK_KEYS.some(k => typeof parsed[k] === "string")) {
-        return Object.fromEntries(WEEK_KEYS.map(k => [k, safeStr(parsed[k])])) as WeekNarrativeSections;
+        return Object.fromEntries(WEEK_KEYS.map(k => [k, safeStr(parsed[k])])) as unknown as WeekNarrativeSections;
       }
     }
   } catch { /* fallback */ }

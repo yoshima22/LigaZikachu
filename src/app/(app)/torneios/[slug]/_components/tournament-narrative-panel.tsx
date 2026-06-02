@@ -42,7 +42,7 @@ function parseSections(raw: string | null): TournamentNarrativeSections | null {
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       if (parsed && typeof parsed === "object" && TOURNAMENT_KEYS.some(k => typeof parsed[k] === "string")) {
-        return Object.fromEntries(TOURNAMENT_KEYS.map(k => [k, safeStr(parsed[k])])) as TournamentNarrativeSections;
+        return Object.fromEntries(TOURNAMENT_KEYS.map(k => [k, safeStr(parsed[k])])) as unknown as TournamentNarrativeSections;
       }
     }
   } catch { /* fallback */ }
