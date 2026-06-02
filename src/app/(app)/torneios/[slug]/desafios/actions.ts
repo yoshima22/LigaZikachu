@@ -205,6 +205,56 @@ export async function createChallenge(
   }
 }
 
+// ─── Admin: registrar desafio em nome de um jogador ─────────────────────────
+
+const adminCreateChallengeSchema = z.object({
+  tournamentId:    z.string().min(1),
+  challengerId:    z.string().min(1),  // jogador desafiante (explícito)
+  challengedId:    z.string().min(1),
+  type:            z.nativeEnum(ChallengeType),
+  badgeId:         z.string().optional(),
+  tournamentWeekId: z.string().optional(),
+  reason:          z.string().trim().max(500).optional()
+});
+
+export async function adminCreateChallenge(
+  raw: z.infer<typeof adminCreateChallengeSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data  = adminCreateChallengeSchema.parse(raw);
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: data.tournamentId },
+      select: { id: true, name: true, slug: true, seasonId: true }
+    });
+    if (!tournament) return { error: "Torneio não encontrado." };
+    if (data.challengerId === data.challengedId) return { error: "Desafiante e desafiado não podem ser o mesmo jogador." };
+
+    // Admin bypassa verificação de pontos e limites
+    await prisma.challenge.create({
+      data: {
+        type:            data.type,
+        tournamentId:    data.tournamentId,
+        seasonId:        tournament.seasonId ?? undefined,
+        tournamentWeekId: data.tournamentWeekId ?? undefined,
+        badgeId:         data.badgeId ?? undefined,
+        challengerId:    data.challengerId,
+        challengedId:    data.challengedId,
+        openedById:      actor.id,
+        status:          ChallengeStatus.OPEN,
+        reason:          data.reason
+      }
+    });
+
+    revalidatePath(`/torneios/${tournament.slug}/desafios`);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ─── Responder (admin aprovar/rejeitar) ──────────────────────────────────────
 
 export async function respondToChallenge(

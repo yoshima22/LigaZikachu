@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { ChallengeConfig } from "../config";
 import {
   createChallenge,
+  adminCreateChallenge,
   respondToChallenge,
   resolveChallenge,
   undoResolveChallenge,
@@ -84,6 +85,7 @@ export function ChallengePanel({
 
   const [form, setForm] = useState({
     type: config.badgeChallenge ? ChallengeType.BADGE : ChallengeType.FREE,
+    challengerId: "",   // apenas admin preenche (em nome de outro jogador)
     challengedId: "",
     badgeId: "",
     weekId: "",
@@ -111,18 +113,39 @@ export function ChallengePanel({
   };
 
   const handleCreate = () => {
-    run(
-      () => createChallenge({
-        tournamentId,
-        challengedId: form.challengedId,
-        type: form.type,
-        badgeId: form.type === ChallengeType.BADGE && form.badgeId ? form.badgeId : undefined,
-        tournamentWeekId: form.weekId || undefined,
-        reason: form.reason || undefined
-      }),
-      () => { setShowCreate(false); setForm({ ...form, challengedId: "", reason: "", badgeId: "", weekId: "" }); },
-      "Desafio solicitado!"
-    );
+    const reset = () => {
+      setShowCreate(false);
+      setForm({ ...form, challengerId: "", challengedId: "", reason: "", badgeId: "", weekId: "" });
+    };
+    // Admin registrando em nome de outro jogador
+    if (isAdmin && form.challengerId) {
+      run(
+        () => adminCreateChallenge({
+          tournamentId,
+          challengerId:    form.challengerId,
+          challengedId:    form.challengedId,
+          type:            form.type,
+          badgeId:         form.type === ChallengeType.BADGE && form.badgeId ? form.badgeId : undefined,
+          tournamentWeekId: form.weekId || undefined,
+          reason:          form.reason || undefined
+        }),
+        reset,
+        "Desafio registrado pelo admin!"
+      );
+    } else {
+      run(
+        () => createChallenge({
+          tournamentId,
+          challengedId: form.challengedId,
+          type: form.type,
+          badgeId: form.type === ChallengeType.BADGE && form.badgeId ? form.badgeId : undefined,
+          tournamentWeekId: form.weekId || undefined,
+          reason: form.reason || undefined
+        }),
+        reset,
+        "Desafio solicitado!"
+      );
+    }
   };
 
   const handleRespond = (challengeId: string, accept: boolean) => {
@@ -327,6 +350,26 @@ export function ChallengePanel({
                 </div>
               )}
 
+              {/* Admin: campo de desafiante */}
+              {isAdmin && (
+                <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-[#FFCB05]">⚡ Registrar em nome de jogador</p>
+                  <label className="space-y-1 text-xs text-slate-400 block">
+                    <span>Desafiante <span className="text-slate-600">(deixe vazio para registrar como você mesmo)</span></span>
+                    <select
+                      value={form.challengerId}
+                      onChange={(e) => setForm({ ...form, challengerId: e.target.value })}
+                      className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
+                    >
+                      <option value="">— Como admin (sem desafiante específico) —</option>
+                      {approvedPlayers.map((p) => (
+                        <option key={p.id} value={p.id}>{p.displayName}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1 text-xs text-slate-400">
                   <span>Desafiar jogador</span>
@@ -336,9 +379,12 @@ export function ChallengePanel({
                     className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]"
                   >
                     <option value="">Selecione</option>
-                    {approvedPlayers.filter((p) => p.id !== playerId).map((p) => (
-                      <option key={p.id} value={p.id}>{p.displayName}</option>
-                    ))}
+                    {approvedPlayers
+                      .filter((p) => isAdmin ? true : p.id !== playerId)
+                      .filter((p) => p.id !== form.challengerId)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>{p.displayName}</option>
+                      ))}
                   </select>
                 </label>
                 <label className="space-y-1 text-xs text-slate-400">
@@ -405,14 +451,11 @@ export function ChallengePanel({
               <div className="flex gap-2">
                 <Button
                   type="button"
-                  disabled={
-                    !form.challengedId ||
-                    pending
-                  }
+                  disabled={!form.challengedId || pending || (isAdmin && form.challengerId === form.challengedId)}
                   onClick={handleCreate}
                   className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]"
                 >
-                  {pending ? "Enviando…" : "Solicitar Desafio"}
+                  {pending ? "Enviando…" : isAdmin && form.challengerId ? "Registrar Desafio" : "Solicitar Desafio"}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
               </div>
