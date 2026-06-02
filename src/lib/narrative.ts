@@ -8,7 +8,7 @@
  * Requer: ANTHROPIC_API_KEY no .env
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { computeTournamentRanking } from "@/lib/ranking";
 
@@ -158,8 +158,8 @@ export async function buildWeekDataPayload(weekId: string): Promise<string> {
         result = c.match.winnerPlayerId === c.challengerId
           ? "Desafiante venceu → roubou a insígnia"
           : "Defensor venceu → manteve a insígnia";
-      } else if (c.status === "RESOLVED" || c.status === "CANCELLED") {
-        result = c.status;
+      } else if (c.status === "RESOLVED") {
+        result = "Resolvido";
       }
       lines.push(`${c.challenger.displayName} desafiou ${c.challenged.displayName} → ${result}`);
     }
@@ -207,25 +207,22 @@ export async function buildWeekDataPayload(weekId: string): Promise<string> {
 // ── Chamada ao Claude ─────────────────────────────────────────────────────────
 
 export async function generateNarrativeText(weekId: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada. Adicione em Vercel → Environment Variables.");
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada. Adicione em Vercel → Environment Variables.");
 
-  const client = new Anthropic({ apiKey });
+  const client = new OpenAI({ apiKey });
   const dataPayload = await buildWeekDataPayload(weekId);
 
-  const message = await client.messages.create({
-    model: "claude-opus-4-5",
+  const response = await client.chat.completions.create({
+    model: "gpt-4o",
     max_tokens: 1200,
-    system: SYSTEM_PROMPT,
     messages: [
-      {
-        role: "user",
-        content: `Gere o recap narrativo desta semana da Liga Zikachu com base nos dados abaixo.\n\n${dataPayload}`,
-      },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user",   content: `Gere o recap narrativo desta semana da Liga Zikachu com base nos dados abaixo.\n\n${dataPayload}` },
     ],
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") throw new Error("Resposta inesperada da API.");
-  return content.text;
+  const text = response.choices[0]?.message?.content;
+  if (!text) throw new Error("Resposta vazia da API.");
+  return text;
 }

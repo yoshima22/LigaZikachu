@@ -17,6 +17,7 @@ export async function generateWeekNarrative(
     });
     if (!week) return { error: "Semana não encontrada." };
 
+    // Requer OPENAI_API_KEY no Vercel Environment Variables
     const narrative = await generateNarrativeText(weekId);
 
     await prisma.tournamentWeek.update({
