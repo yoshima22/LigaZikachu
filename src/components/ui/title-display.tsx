@@ -34,6 +34,8 @@ interface Props {
   flavorText?: string | null;
   context?: TitleContext;
   className?: string;
+  /** Atrasa o início da animação (ms) — útil p/ stagger em listas */
+  staggerDelay?: number;
 }
 
 // ── Hash deterministico do nome → seleciona variante ─────────────────────────
@@ -186,6 +188,7 @@ export function TitleDisplay({
   flavorText,
   context = "profile",
   className = "",
+  staggerDelay = 0,
 }: Props) {
   const [animated, setAnimated] = useState(false);
   const [glowing,  setGlowing]  = useState(false);
@@ -209,10 +212,13 @@ export function TitleDisplay({
 
   useEffect(() => {
     if (!animate) return;
-    setAnimated(true);
-    const t = setTimeout(() => setGlowing(true), variant.durationMs);
-    return () => clearTimeout(t);
-  }, [animate, variant.durationMs]);
+    const tStart = setTimeout(() => {
+      setAnimated(true);
+      const tGlow = setTimeout(() => setGlowing(true), variant.durationMs);
+      return () => clearTimeout(tGlow);
+    }, staggerDelay);
+    return () => clearTimeout(tStart);
+  }, [animate, variant.durationMs, staggerDelay]);
 
   // ── Ranking: apenas cor + glow estático ──────────────────────────────────
   if (context === "ranking") {

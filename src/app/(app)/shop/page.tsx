@@ -72,7 +72,13 @@ export default async function ShopPage() {
           {titles.length > 0 && (
             <ShopGrid
               title="Títulos de Perfil"
-              items={titles.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+              items={titles.map((i) => ({
+                ...i,
+                imageUrl: i.imageUrl ?? null,
+                description: i.description ?? null,
+                theme: i.theme ?? "NEUTRAL",
+                flavorText: i.flavorText ?? null,
+              }))}
               ownedIds={ownedIds}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}

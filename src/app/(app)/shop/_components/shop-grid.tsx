@@ -4,16 +4,21 @@ import { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { CheckCircle, Coins, Lock, ShoppingCart, ZoomIn, X } from "lucide-react";
 import { purchaseItem } from "../actions";
+import { TitleDisplay } from "@/components/ui/title-display";
+import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 
 const rarityColors: Record<string, string> = {
   COMMON:    "border-slate-600/50 text-slate-400",
   UNCOMMON:  "border-[#7AC74C]/40 text-[#7AC74C]",
   RARE:      "border-[#6390F0]/40 text-[#6390F0]",
   EPIC:      "border-[#735797]/40 text-[#735797]",
-  LEGENDARY: "border-[#FFCB05]/40 text-[#FFCB05]"
+  LEGENDARY: "border-[#FFCB05]/40 text-[#FFCB05]",
+  MYTHIC:    "border-yellow-400/50 text-yellow-400",
+  RELIC:     "border-red-500/50 text-red-400",
 };
 const rarityLabel: Record<string, string> = {
-  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Rara", EPIC: "Épica", LEGENDARY: "Lendária"
+  COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Raro", EPIC: "Épico",
+  LEGENDARY: "Lendário", MYTHIC: "Mítico", RELIC: "Relíquia",
 };
 
 interface Item {
@@ -24,6 +29,8 @@ interface Item {
   imageUrl: string | null;
   rarity: string;
   price: number;
+  theme?: string;
+  flavorText?: string | null;
 }
 
 interface Props {
@@ -102,7 +109,7 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
     <div className="space-y-3">
       <h2 className="font-semibold text-slate-200">{title}</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {items.map((item) => {
+        {items.map((item, itemIndex) => {
           const owned = ownedIds.has(item.id);
           const canAfford = balance >= item.price;
           const isBuying = buyingId === item.id && pending;
@@ -140,8 +147,15 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
                   </div>
                 )
               ) : item.type === "TITLE" ? (
-                <div className="flex h-16 items-center justify-center bg-gradient-to-r from-slate-900 to-slate-800 px-4">
-                  <p className="font-pixel text-xs text-[#FFCB05] text-center">{item.name}</p>
+                <div className={`flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-slate-900 via-slate-900/80 to-slate-800 px-4 py-5 ${item.flavorText ? "min-h-[90px]" : "h-16"}`}>
+                  <TitleDisplay
+                    name={item.name}
+                    rarity={item.rarity as TitleRarity}
+                    theme={(item.theme ?? "NEUTRAL") as TitleTheme}
+                    flavorText={item.flavorText ?? null}
+                    context="profile"
+                    staggerDelay={itemIndex * 120}
+                  />
                 </div>
               ) : (
                 <div className="flex h-24 items-center justify-center bg-slate-900 text-slate-600 text-xs">
