@@ -123,12 +123,12 @@ export default async function TournamentAdminPage({ params }: Props) {
   );
   const pendingMatches = totalMatches - confirmedMatches - disputedMatches;
 
+  // Converte UTC para BRT (UTC-3) para exibir corretamente no input datetime-local
   const toDateTimeLocal = (value: Date | null | undefined) => {
     if (!value) return "";
-
-    const date = new Date(value);
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-    return localDate.toISOString().slice(0, 16);
+    // America/Sao_Paulo é UTC-3 (fora do horário de verão)
+    const brtStr = new Date(value).toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" });
+    return brtStr.replace(" ", "T").slice(0, 16); // "2026-06-03T19:00"
   };
 
   return (

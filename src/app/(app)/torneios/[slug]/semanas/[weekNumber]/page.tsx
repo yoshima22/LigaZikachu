@@ -77,9 +77,11 @@ export default async function WeekDetailPage({
   const topDoDiaRanking = await computeTournamentWeekTopOfDay(week.id);
   const deckVisibility = getDeckVisibilityState(week);
 
+  // Sempre exibe no fuso do Brasil (BRT = UTC-3 / America/Sao_Paulo)
   const fmt = (d: Date | null | undefined) =>
     d
       ? new Date(d).toLocaleDateString("pt-BR", {
+          timeZone: "America/Sao_Paulo",
           weekday: "long",
           day: "2-digit",
           month: "long",

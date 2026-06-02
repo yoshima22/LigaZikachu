@@ -470,8 +470,9 @@ export async function updateTournamentInfo(raw: {
         name,
         edition: raw.edition?.trim() || null,
         description: raw.description?.trim() || null,
-        ...(raw.startDate ? { startDate: new Date(raw.startDate) } : {}),
-        ...(raw.endDate   ? { endDate:   new Date(raw.endDate)   } : {}),
+        // Datas de tipo "date" (sem hora) — usa meia-noite BRT para evitar desvio de dia
+        ...(raw.startDate ? { startDate: parseBRT(raw.startDate + "T00:00") ?? new Date(raw.startDate) } : {}),
+        ...(raw.endDate   ? { endDate:   parseBRT(raw.endDate   + "T23:59") ?? new Date(raw.endDate)   } : {}),
         ...(format        ? { format } : {}),
         ...(raw.matchesPerPlayerMax ? { matchesPerPlayer: raw.matchesPerPlayerMax } : {}),
       }
@@ -814,12 +815,7 @@ export async function updateTournamentWeekDeckLock(
   try {
     const actor = await requireAdmin();
     const data = updateWeekDeckLockSchema.parse(raw);
-    const rawDate = data.deckLockAt?.trim();
-    const deckLockAt = rawDate ? new Date(rawDate) : null;
-
-    if (deckLockAt && Number.isNaN(deckLockAt.getTime())) {
-      return { error: "Data de fechamento de decklist invalida." };
-    }
+    const deckLockAt = parseBRT(data.deckLockAt);
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
@@ -853,6 +849,17 @@ export async function updateTournamentWeekDeckLock(
   }
 }
 
+/** Interpreta string de datetime-local como horário de Brasília (BRT = UTC-3).
+ *  O input datetime-local não carrega informação de fuso — sem este fix,
+ *  new Date("2026-06-03T19:00") seria tratado como UTC no Vercel. */
+function parseBRT(raw: string | null | undefined): Date | null {
+  if (!raw?.trim()) return null;
+  // "2026-06-03T19:00" → "2026-06-03T19:00:00-03:00"
+  const normalized = raw.trim().replace(/(\d{2}:\d{2})$/, "$1:00");
+  const d = new Date(normalized + "-03:00");
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // ─── Inscrições ──────────────────────────────────────────────────────────────
 
 export async function updateTournamentWeekSettings(
@@ -861,12 +868,7 @@ export async function updateTournamentWeekSettings(
   try {
     const actor = await requireAdmin();
     const data = updateTournamentWeekSettingsSchema.parse(raw);
-    const rawDate = data.deckLockAt?.trim();
-    const deckLockAt = rawDate ? new Date(rawDate) : null;
-
-    if (deckLockAt && Number.isNaN(deckLockAt.getTime())) {
-      return { error: "Data de fechamento de decklist invalida." };
-    }
+    const deckLockAt = parseBRT(data.deckLockAt);
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
