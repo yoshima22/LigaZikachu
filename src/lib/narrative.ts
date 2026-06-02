@@ -207,8 +207,14 @@ export async function buildWeekDataPayload(weekId: string): Promise<string> {
 // ── Chamada ao Claude ─────────────────────────────────────────────────────────
 
 export async function generateNarrativeText(weekId: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY não configurada. Obtenha gratuitamente em aistudio.google.com e adicione em Vercel → Environment Variables.");
+  // Usa chave dedicada para narrativa (novo projeto Google = free tier limpo).
+  // Se não tiver, tenta a chave geral do bot.
+  const apiKey = process.env.GEMINI_NARRATIVE_API_KEY ?? process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error(
+    "Nenhuma chave Gemini configurada. " +
+    "Crie uma chave gratuita em aistudio.google.com → 'Create API key in new project' " +
+    "e adicione como GEMINI_NARRATIVE_API_KEY no Vercel."
+  );
 
   const genAI   = new GoogleGenerativeAI(apiKey);
   const model   = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
