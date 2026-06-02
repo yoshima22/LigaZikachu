@@ -721,11 +721,13 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
   revalidatePath("/zikabet");
 
   // Ao encerrar a semana: regenera narrativa da semana + análise geral do torneio
-  const { id: weekId, tournament: { id: tournamentId, slug } } = week;
+  const narrativeWeekId = week.id;
+  const narrativeTournamentId = week.tournament.id;
+  const narrativeSlug = week.tournament.slug;
   after(async () => {
     await Promise.all([
-      autoSaveWeekNarrative(weekId).catch(err => console.error("[AutoNarrative:week:close]", err)),
-      autoSaveTournamentNarrative(tournamentId, slug).catch(err => console.error("[AutoNarrative:tournament:close]", err)),
+      autoSaveWeekNarrative(narrativeWeekId).catch(err => console.error("[AutoNarrative:week:close]", err)),
+      autoSaveTournamentNarrative(narrativeTournamentId, narrativeSlug).catch(err => console.error("[AutoNarrative:tournament:close]", err)),
     ]);
   });
 
