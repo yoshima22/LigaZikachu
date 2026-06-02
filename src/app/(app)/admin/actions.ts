@@ -7,7 +7,7 @@ import { sendDeckReminderEmail } from "@/lib/email";
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
 export async function triggerDeckReminder(dryRun = false): Promise<
-  | { weeksChecked: number; emailsSent: number; errors: number; details: Array<{ email: string; week: string; status: string }> }
+  | { weeksChecked: number; emailsSent: number; simulated: number; errors: number; details: Array<{ email: string; week: string; status: string }>; dryRun: boolean }
   | { error: string }
 > {
   try {
