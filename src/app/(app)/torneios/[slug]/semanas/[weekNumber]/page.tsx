@@ -325,12 +325,21 @@ export default async function WeekDetailPage({
               className="border-t border-border pt-3"
               action={async (formData) => {
                 "use server";
+                // Passa apenas strings simples para evitar problemas de serialização
+                // do objeto week completo no closure do Server Action
+                const weekId: string = week.id;
+                const label: string = week.label ?? "";
+                const mode: string = week.mode;
+                const status: string = week.status;
+                const deckLockAt: string = week.deckLockAt != null
+                  ? new Date(week.deckLockAt).toISOString()
+                  : "";
                 await updateTournamentWeekSettings({
-                  weekId: week.id,
-                  label: week.label ?? "",
-                  mode: week.mode,
-                  status: week.status,
-                  deckLockAt: week.deckLockAt?.toISOString() ?? "",
+                  weekId,
+                  label,
+                  mode: mode as import("@prisma/client").WeekMode,
+                  status: status as import("@prisma/client").WeekStatus,
+                  deckLockAt,
                   notes: String(formData.get("notes") ?? "")
                 });
               }}
