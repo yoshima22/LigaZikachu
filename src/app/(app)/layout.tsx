@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   // Dados do jogador para o nav
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
-    select: { id: true, ptcglNick: true }
+    select: { id: true, ptcglNick: true, avatarUrl: true }
   });
   const [giftCount, wallet] = await Promise.all([
     player
@@ -71,20 +71,34 @@ export default async function AppLayout({ children }: Readonly<{ children: React
             <AppNav admin={admin} variant="desktop" giftCount={giftCount} playerId={player?.id} />
 
             {/* User + logout */}
-            <div className="flex items-center gap-3">
-              <Link href={player ? `/jogadores/${player.id}` : "/perfil"} className="hidden text-right hover:text-[#FFCB05] sm:block">
-                <p className="text-xs font-medium text-slate-200 leading-tight">
-                  {session.user.name ?? session.user.email}
-                </p>
-                <div className="flex items-center justify-end gap-2 mt-0.5">
-                  {player?.ptcglNick && (
-                    <span className="text-[10px] text-slate-500">@{player.ptcglNick}</span>
+            <div className="flex items-center gap-2.5">
+              <Link href={player ? `/jogadores/${player.id}` : "/perfil"} className="hidden items-center gap-2.5 hover:opacity-80 transition-opacity sm:flex">
+                {/* Avatar */}
+                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
+                  {player?.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={player.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
+                      {(session.user.name ?? session.user.email ?? "?")[0].toUpperCase()}
+                    </div>
                   )}
-                  {wallet != null && (
-                    <span className="flex items-center gap-0.5 text-[10px] font-semibold text-[#FFCB05]">
-                      🪙 {wallet.balance.toLocaleString("pt-BR")} ZC
-                    </span>
-                  )}
+                </div>
+                {/* Texto */}
+                <div className="text-right">
+                  <p className="text-xs font-medium text-slate-200 leading-tight">
+                    {session.user.name ?? session.user.email}
+                  </p>
+                  <div className="flex items-center justify-end gap-2 mt-0.5">
+                    {player?.ptcglNick && (
+                      <span className="text-[10px] text-slate-500">@{player.ptcglNick}</span>
+                    )}
+                    {wallet != null && (
+                      <span className="flex items-center gap-0.5 text-[10px] font-semibold text-[#FFCB05]">
+                        🪙 {wallet.balance.toLocaleString("pt-BR")} ZC
+                      </span>
+                    )}
+                  </div>
                 </div>
               </Link>
               {/* Logout — form POST evita prefetch do Next.js (que causava logout automático) */}
