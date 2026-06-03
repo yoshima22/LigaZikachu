@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   EGG_POOLS, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATION_MS, expForLevel, expToNextLevel, EXP_REWARDS,
-  getSpriteUrl, getPokemonName,
+  getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
 import type { MascotMood, MascotPersonality } from "@prisma/client";
 
@@ -193,14 +193,15 @@ export interface InteractionResult {
 export async function interactWithMascot(
   playerId: string,
   mascotId: string,
-  type: InteractionType
+  type: InteractionType,
+  skipCooldown = false
 ): Promise<InteractionResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
 
   const now = new Date();
-  const COOLDOWN_MS = 5 * 60 * 1000; // 5min entre interações repetidas
-  if (mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < COOLDOWN_MS) {
+  const COOLDOWN_MS = 5 * 60 * 1000;
+  if (!skipCooldown && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < COOLDOWN_MS) {
     return { success: false, message: "Espere um pouco antes de interagir novamente.", happinessChange: 0, expGained: 0 };
   }
 
@@ -221,10 +222,9 @@ export async function interactWithMascot(
       break;
 
     case "PET":
-      // Mascote tímido ou bravo pode recusar carinho
       if (mascot.personality === "TIMID" && mascot.happiness < 40) {
         refused = true;
-        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} recuou. Não quer carinho agora.`;
+        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} recuou timidamente. Não quer carinho agora.`;
         break;
       }
       if (mascot.mood === "ANGRY") {
@@ -232,10 +232,16 @@ export async function interactWithMascot(
         message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está bravo. Melhor esperar passar.`;
         break;
       }
-      happinessChange = 3;
+      // Pet dá +8 felicidade (era 3, muito baixo para ser perceptível)
+      happinessChange = 8;
       expGained = EXP_REWARDS.PET;
-      newMood = mascot.mood === "NEUTRAL" ? "HAPPY" : undefined;
-      message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho!`;
+      // Melhora o humor independente do humor atual
+      newMood = mascot.happiness + 8 >= 80 ? "HAPPY" :
+                mascot.mood === "TIRED" ? "NEUTRAL" :
+                mascot.mood === "NEEDY" ? "NEUTRAL" : undefined;
+      message = mascot.personality === "PROUD"
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+8 felicidade)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou muito do carinho! 💛 (+8 felicidade)`;
       break;
 
     case "FEED_FOOD": {
@@ -515,6 +521,141 @@ export async function claimExpedition(
   await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION).catch(() => {});
 
   return { reward, mascotId: expedition.mascotId };
+}
+
+// ── Evento de log ─────────────────────────────────────────────────────────────
+
+async function logEvent(mascotId: string, emoji: string, description: string) {
+  await prisma.mascotEvent.create({ data: { mascotId, emoji, description } }).catch(() => {});
+}
+
+// ── Efeito do resultado da partida do treinador ───────────────────────────────
+
+export async function applyMatchResultToMascot(playerId: string, won: boolean): Promise<void> {
+  const mascot = await prisma.mascot.findFirst({
+    where: { playerId, isEquipped: true }
+  });
+  if (!mascot) return;
+
+  const happinessChange = won ? 8 : -5;
+  const newHappiness = Math.min(100, Math.max(0, mascot.happiness + happinessChange));
+  let newMood: MascotMood = mascot.mood;
+
+  if (won) {
+    newMood = newHappiness >= 85 ? "CONFIDENT" : "HAPPY";
+    await addExp(mascot.id, EXP_REWARDS.MATCH_WIN).catch(() => {});
+    await logEvent(mascot.id, "🏆", `Treinador venceu uma partida! ${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou orgulhoso.`);
+  } else {
+    if (newHappiness < 30) newMood = "NEEDY";
+    else if (newHappiness < 50) newMood = "TIRED";
+    await addExp(mascot.id, EXP_REWARDS.MATCH_PLAYED).catch(() => {});
+    await logEvent(mascot.id, "😔", `Treinador perdeu uma partida. ${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou entristecido.`);
+  }
+
+  await prisma.mascot.update({
+    where: { id: mascot.id },
+    data: { happiness: newHappiness, mood: newMood }
+  });
+}
+
+// ── Sistema de batalha entre mascotes ────────────────────────────────────────
+
+export interface BattleResult {
+  winnerId: string;
+  loserId: string;
+  winnerName: string;
+  loserName: string;
+  winnerMultiplier: number;
+  loserMultiplier: number;
+  summary: string;
+}
+
+function battleScore(m: { statForce: number; statAgility: number; statVitality: number; happiness: number; mood: string }, multiplier: number): number {
+  const base = m.statForce * 0.4 + m.statAgility * 0.3 + m.statVitality * 0.3;
+  const bonus = m.happiness / 10 + (m.mood === "CONFIDENT" ? 10 : m.mood === "ANGRY" ? 5 : 0);
+  return (base + bonus + Math.random() * 15) * multiplier;
+}
+
+export async function battleMascots(mascotAId: string, mascotBId: string): Promise<BattleResult> {
+  const [a, b] = await Promise.all([
+    prisma.mascot.findUnique({ where: { id: mascotAId } }),
+    prisma.mascot.findUnique({ where: { id: mascotBId } }),
+  ]);
+  if (!a || !b) throw new Error("Mascote não encontrado.");
+  if (a.playerId === b.playerId) throw new Error("Pokémon do mesmo treinador não batalham.");
+
+  const elemA = getPokemonElement(a.pokemonId);
+  const elemB = getPokemonElement(b.pokemonId);
+  const multA = getTypeAdvantageMultiplier(elemA, elemB);
+  const multB = getTypeAdvantageMultiplier(elemB, elemA);
+
+  const scoreA = battleScore(a, multA);
+  const scoreB = battleScore(b, multB);
+  const aWins = scoreA >= scoreB;
+
+  const winner = aWins ? a : b;
+  const loser  = aWins ? b : a;
+  const wMult  = aWins ? multA : multB;
+  const lMult  = aWins ? multB : multA;
+
+  const winnerName = winner.nickname ?? getPokemonName(winner.pokemonId);
+  const loserName  = loser.nickname  ?? getPokemonName(loser.pokemonId);
+
+  const typeNote = wMult > 1 ? ` (vantagem de tipo ${getPokemonElement(winner.pokemonId).toUpperCase()})` : "";
+  const summary  = `${winnerName} venceu ${loserName}${typeNote}!`;
+
+  await prisma.$transaction(async (tx) => {
+    // Atualiza contadores
+    await tx.mascot.update({ where: { id: winner.id }, data: { battleWins: { increment: 1 }, happiness: Math.min(100, winner.happiness + 10), mood: "PROUD" as MascotMood } });
+    await tx.mascot.update({ where: { id: loser.id  }, data: { battleLosses: { increment: 1 }, happiness: Math.max(0, loser.happiness - 8) } });
+
+    // Relação entre mascotes
+    await tx.mascotRelation.upsert({
+      where: { mascotAId_mascotBId: { mascotAId: a.id, mascotBId: b.id } },
+      update: aWins ? { wins: { increment: 1 }, type: "RIVAL" } : { losses: { increment: 1 }, type: "RIVAL" },
+      create: { mascotAId: a.id, mascotBId: b.id, type: "RIVAL", wins: aWins ? 1 : 0, losses: aWins ? 0 : 1 },
+    });
+    // Relação inversa (para B poder consultar)
+    await tx.mascotRelation.upsert({
+      where: { mascotAId_mascotBId: { mascotAId: b.id, mascotBId: a.id } },
+      update: aWins ? { losses: { increment: 1 }, type: "RIVAL" } : { wins: { increment: 1 }, type: "RIVAL" },
+      create: { mascotAId: b.id, mascotBId: a.id, type: "RIVAL", wins: aWins ? 0 : 1, losses: aWins ? 1 : 0 },
+    });
+  });
+
+  await Promise.all([
+    logEvent(winner.id, "⚔️", `Venceu batalha contra ${loserName}!${typeNote}`),
+    logEvent(loser.id,  "💀", `Perdeu batalha para ${winnerName}.`),
+  ]);
+
+  return { winnerId: winner.id, loserId: loser.id, winnerName, loserName, winnerMultiplier: wMult, loserMultiplier: lMult, summary };
+}
+
+// Amizade entre mascotes do mesmo treinador
+export async function formFriendship(mascotAId: string, mascotBId: string): Promise<void> {
+  const [a, b] = await Promise.all([
+    prisma.mascot.findUnique({ where: { id: mascotAId } }),
+    prisma.mascot.findUnique({ where: { id: mascotBId } }),
+  ]);
+  if (!a || !b) return;
+
+  await prisma.$transaction([
+    prisma.mascotRelation.upsert({
+      where: { mascotAId_mascotBId: { mascotAId, mascotBId } },
+      update: { type: "FRIEND" },
+      create: { mascotAId, mascotBId, type: "FRIEND" },
+    }),
+    prisma.mascotRelation.upsert({
+      where: { mascotAId_mascotBId: { mascotAId: mascotBId, mascotBId: mascotAId } },
+      update: { type: "FRIEND" },
+      create: { mascotAId: mascotBId, mascotBId: mascotAId, type: "FRIEND" },
+    }),
+  ]);
+
+  await Promise.all([
+    logEvent(mascotAId, "💚", `Fez amizade com ${b.nickname ?? getPokemonName(b.pokemonId)}!`),
+    logEvent(mascotBId, "💚", `Fez amizade com ${a.nickname ?? getPokemonName(a.pokemonId)}!`),
+  ]);
 }
 
 // ── Utilidades para UI ────────────────────────────────────────────────────────

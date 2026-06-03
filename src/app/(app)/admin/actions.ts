@@ -187,3 +187,57 @@ export async function sendTestDeckReminder(
     return { ok: false, to: "", usedRealMatch: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+// ── Envio de item para TODOS os jogadores ─────────────────────────────────────
+export async function sendItemToAllPlayers(
+  itemId: string
+): Promise<{ sent: number; skipped: number; error?: string }> {
+  try {
+    await requireAdmin();
+
+    const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
+    if (!item) return { sent: 0, skipped: 0, error: "Item não encontrado." };
+
+    const players = await prisma.player.findMany({
+      where: { user: { status: "ACTIVE" } },
+      select: { id: true }
+    });
+
+    let sent = 0, skipped = 0;
+
+    for (const player of players) {
+      try {
+        if (["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_EVENT"].includes(item.type)) {
+          const eggTypeMap: Record<string, string> = {
+            EGG_COMMON: "COMMON", EGG_RARE: "RARE",
+            EGG_SPECIAL: "SPECIAL", EGG_EVENT: "EVENT"
+          };
+          await prisma.mascotEgg.create({
+            data: { playerId: player.id, type: eggTypeMap[item.type] as "COMMON", origin: "Presente do Admin" }
+          });
+          sent++;
+        } else if (item.type === "MASCOT_FOOD" || item.type === "MASCOT_SWEET") {
+          const foodType = item.type === "MASCOT_FOOD" ? "FOOD" : "SWEET";
+          await prisma.mascotFoodItem.upsert({
+            where: { playerId_type: { playerId: player.id, type: foodType as "FOOD" } },
+            update: { quantity: { increment: 1 } },
+            create: { playerId: player.id, type: foodType as "FOOD", quantity: 1 }
+          });
+          sent++;
+        } else {
+          // Item de inventário — pula se já possui
+          const existing = await prisma.playerInventory.findUnique({
+            where: { playerId_itemId: { playerId: player.id, itemId } }
+          });
+          if (existing) { skipped++; continue; }
+          await prisma.playerInventory.create({ data: { playerId: player.id, itemId } });
+          sent++;
+        }
+      } catch { skipped++; }
+    }
+
+    return { sent, skipped };
+  } catch (err) {
+    return { sent: 0, skipped: 0, error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}

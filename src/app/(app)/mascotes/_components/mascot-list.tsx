@@ -11,9 +11,12 @@ interface MascotData {
   personality: string; isEquipped: boolean;
   statForce: number; statAgility: number; statCharisma: number;
   statInstinct: number; statVitality: number;
+  battleWins: number; battleLosses: number;
   hatchedAt: Date; lastInteractedAt: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
+  events: { id: string; emoji: string; description: string; createdAt: Date }[];
   hasFood: boolean; hasSweet: boolean;
+  otherMascots?: { id: string; name: string }[];
 }
 
 const PAGE_SIZE = 6;

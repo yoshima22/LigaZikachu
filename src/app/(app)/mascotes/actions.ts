@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
-  skipExpedition, addExp,
+  skipExpedition, addExp, battleMascots, formFriendship,
 } from "@/lib/mascot";
 import type { InteractionType } from "@/lib/mascot";
 
@@ -91,7 +91,9 @@ export async function interactAction(mascotId: string, type: InteractionType): P
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
     await recalculateMood(mascotId);
-    const result = await interactWithMascot(player.id, mascotId, type);
+    // Admin bypassa cooldown
+    const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+    const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);
     revalidate();
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -160,6 +162,26 @@ export async function addExpAdminAction(mascotId: string, amount: number): Promi
     }
     revalidate();
     return { result };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+// Admin: batalha manual entre mascotes
+export async function adminBattleMascotsAction(mascotAId: string, mascotBId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof battleMascots>> }> {
+  try {
+    await requireAdmin();
+    const result = await battleMascots(mascotAId, mascotBId);
+    revalidate();
+    return { result };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+// Admin: formar amizade entre mascotes
+export async function adminFormFriendshipAction(mascotAId: string, mascotBId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await formFriendship(mascotAId, mascotBId);
+    revalidate();
+    return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

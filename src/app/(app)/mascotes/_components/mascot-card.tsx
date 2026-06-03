@@ -14,9 +14,14 @@ import {
   interactAction, equipMascotAction, unequipMascotAction,
   renameMascotAction, startExpeditionAction, claimExpeditionAction,
   skipExpeditionAction, addExpAdminAction,
+  adminBattleMascotsAction, adminFormFriendshipAction,
 } from "../actions";
+import { MascotSpeechBubble } from "./mascot-speech-bubble";
+import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
 
 interface Expedition { id: string; finishAt: Date; status: string }
+
+interface MascotEvent { id: string; emoji: string; description: string; createdAt: Date }
 
 interface MascotData {
   id: string;
@@ -33,12 +38,17 @@ interface MascotData {
   statCharisma: number;
   statInstinct: number;
   statVitality: number;
+  battleWins: number;
+  battleLosses: number;
   hatchedAt: Date;
   lastInteractedAt: Date | null;
   lastFedAt: Date | null;
   expeditions: Expedition[];
+  events: MascotEvent[];
   hasFood: boolean;
   hasSweet: boolean;
+  // Admin: lista de outros mascotes para debug
+  otherMascots?: { id: string; name: string }[];
 }
 
 interface Props { mascot: MascotData; isAdmin?: boolean }
@@ -86,10 +96,10 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
     : 0;
   const onCooldown = cooldownMs > 0;
 
-  // Button availability
+  // Button availability — cooldown applies to all interactions including pet
   const inExpedition = !!expedition && !claimable;
   const canPlay      = !inExpedition && !onCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
-  const canPet       = !inExpedition && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
+  const canPet       = !inExpedition && !onCooldown && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
   const canFeedFood  = !inExpedition && mascot.hasFood  && hungerStatus !== "STUFFED";
   const canFeedSweet = !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
 
@@ -139,7 +149,14 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
       <div className="p-4 space-y-4">
         {/* Sprite + Nome */}
         <div className="flex items-center gap-4">
-          <div className="relative shrink-0 flex h-[72px] w-[72px] items-center justify-center">
+          <div className="group relative shrink-0 flex h-[72px] w-[72px] cursor-help items-center justify-center">
+            {/* Speech bubble on hover */}
+            <MascotSpeechBubble
+              mood={mascot.mood} happiness={mascot.happiness}
+              personality={mascot.personality}
+              lastFedAt={mascot.lastFedAt} lastInteractedAt={mascot.lastInteractedAt}
+              battleWins={mascot.battleWins}
+            />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={spriteUrl}
@@ -169,9 +186,21 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
                 <button onClick={() => setEditingName(true)} className="text-slate-600 hover:text-slate-400"><Edit2 size={11}/></button>
               </div>
             )}
-            <div className="text-[10px] text-slate-500">
-              #{mascot.pokemonId} · {PERSONALITY_LABEL[mascot.personality]} · Nv. {mascot.level}
+            <div className="text-[10px] text-slate-500 flex items-center gap-1">
+              #{mascot.pokemonId} ·{" "}
+              <Tip text={PERSONALITY_DESCRIPTION[mascot.personality] ?? ""}>
+                <span className="underline decoration-dotted cursor-help">
+                  {PERSONALITY_LABEL[mascot.personality]}
+                </span>
+              </Tip>
+              {" "}· Nv. {mascot.level}
             </div>
+            {/* Battle record */}
+            {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (
+              <div className="text-[9px] text-slate-600">
+                ⚔️ {mascot.battleWins}V {mascot.battleLosses}D em batalhas
+              </div>
+            )}
 
             {/* EXP bar */}
             <div className="space-y-0.5 pt-0.5">
@@ -312,6 +341,24 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
           )}
         </div>
 
+        {/* ── Histórico de eventos ── */}
+        {mascot.events.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Histórico</p>
+            <div className="space-y-1 max-h-28 overflow-y-auto">
+              {mascot.events.slice(0, 8).map(ev => (
+                <div key={ev.id} className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                  <span className="shrink-0">{ev.emoji}</span>
+                  <span className="leading-snug">{ev.description}</span>
+                  <span className="ml-auto shrink-0 text-slate-700">
+                    {new Date(ev.createdAt).toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Admin tools ── */}
         {isAdmin && (
           <div className="border-t border-border/40 pt-3 space-y-2">
@@ -335,6 +382,29 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
                 +9999 EXP
               </button>
             </div>
+
+            {/* Admin: batalha/amizade com outro mascote */}
+            {mascot.otherMascots && mascot.otherMascots.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-slate-600">Trigger vs outro mascote:</p>
+                <div className="flex flex-wrap gap-1">
+                  {mascot.otherMascots.map(other => (
+                    <div key={other.id} className="flex gap-1">
+                      <button type="button" disabled={pending}
+                        onClick={() => act(() => adminBattleMascotsAction(mascot.id, other.id), `Batalha vs ${other.name}!`)}
+                        className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20">
+                        ⚔️ {other.name}
+                      </button>
+                      <button type="button" disabled={pending}
+                        onClick={() => act(() => adminFormFriendshipAction(mascot.id, other.id), `Amizade com ${other.name}!`)}
+                        className="rounded border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] text-green-400 hover:bg-green-500/20">
+                        💚
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

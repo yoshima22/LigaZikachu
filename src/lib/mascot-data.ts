@@ -331,3 +331,140 @@ export const POKEMON_PT_NAMES: Record<number, string> = {
 export function getPokemonName(id: number): string {
   return POKEMON_PT_NAMES[id] ?? `Pokémon #${id}`;
 }
+
+// ── Tipos elementais por Pokémon ID ──────────────────────────────────────────
+export const POKEMON_ELEMENT: Record<number, string> = {
+  // Fire
+  4:"fire",5:"fire",6:"fire",37:"fire",38:"fire",58:"fire",59:"fire",77:"fire",78:"fire",
+  126:"fire",136:"fire",155:"fire",156:"fire",157:"fire",228:"fire",229:"fire",240:"fire",
+  // Water
+  7:"water",8:"water",9:"water",54:"water",55:"water",60:"water",61:"water",62:"water",
+  72:"water",73:"water",79:"water",80:"water",86:"water",87:"water",90:"water",91:"water",
+  98:"water",99:"water",116:"water",117:"water",118:"water",119:"water",120:"water",
+  121:"water",129:"water",130:"water",131:"water",134:"water",158:"water",159:"water",
+  160:"water",170:"water",171:"water",183:"water",184:"water",194:"water",195:"water",
+  222:"water",223:"water",224:"water",
+  // Grass
+  1:"grass",2:"grass",3:"grass",43:"grass",44:"grass",45:"grass",69:"grass",70:"grass",
+  71:"grass",102:"grass",103:"grass",114:"grass",152:"grass",153:"grass",154:"grass",
+  187:"grass",188:"grass",189:"grass",191:"grass",192:"grass",
+  // Electric
+  25:"electric",26:"electric",81:"electric",82:"electric",100:"electric",101:"electric",
+  125:"electric",135:"electric",172:"electric",239:"electric",
+  // Psychic
+  63:"psychic",64:"psychic",65:"psychic",96:"psychic",97:"psychic",124:"psychic",
+  137:"psychic",150:"psychic",196:"psychic",203:"psychic",175:"psychic",176:"psychic",
+  // Ghost
+  92:"ghost",93:"ghost",94:"ghost",200:"ghost",
+  // Dragon
+  147:"dragon",148:"dragon",149:"dragon",
+  // Fighting
+  56:"fighting",57:"fighting",66:"fighting",67:"fighting",68:"fighting",
+  106:"fighting",107:"fighting",214:"fighting",236:"fighting",237:"fighting",
+  // Ice
+  87:"ice",91:"ice",124:"ice",131:"ice",220:"ice",221:"ice",238:"ice",
+  // Poison
+  23:"poison",24:"poison",29:"poison",30:"poison",31:"poison",32:"poison",33:"poison",
+  34:"poison",41:"poison",42:"poison",88:"poison",89:"poison",109:"poison",110:"poison",
+  // Ground
+  27:"ground",28:"ground",50:"ground",51:"ground",74:"ground",75:"ground",76:"ground",
+  104:"ground",105:"ground",111:"ground",112:"ground",
+  // Rock
+  138:"rock",139:"rock",140:"rock",141:"rock",142:"rock",
+  // Bug
+  10:"bug",11:"bug",12:"bug",13:"bug",14:"bug",15:"bug",46:"bug",47:"bug",
+  48:"bug",49:"bug",165:"bug",166:"bug",167:"bug",168:"bug",204:"bug",205:"bug",
+  // Normal (default)
+};
+
+export function getPokemonElement(pokemonId: number): string {
+  return POKEMON_ELEMENT[pokemonId] ?? "normal";
+}
+
+// Vantagens de tipo (atacante → defensores fracos)
+export const TYPE_ADVANTAGE: Record<string, string[]> = {
+  fire:     ["grass","ice","bug","steel"],
+  water:    ["fire","ground","rock"],
+  grass:    ["water","ground","rock"],
+  electric: ["water","flying"],
+  psychic:  ["fighting","poison"],
+  ghost:    ["psychic","ghost"],
+  dragon:   ["dragon"],
+  fighting: ["normal","rock","ice","dark","steel"],
+  ground:   ["fire","electric","poison","rock","steel"],
+  rock:     ["fire","flying","bug","ice"],
+  ice:      ["grass","ground","flying","dragon"],
+  poison:   ["grass","fairy"],
+  bug:      ["grass","psychic","dark"],
+  normal:   [],
+};
+
+export function getTypeAdvantageMultiplier(attackerType: string, defenderType: string): number {
+  const strong = TYPE_ADVANTAGE[attackerType] ?? [];
+  return strong.includes(defenderType) ? 1.3 : 1.0;
+}
+
+// ── Explicações das personalidades ────────────────────────────────────────────
+export const PERSONALITY_DESCRIPTION: Record<string, string> = {
+  LOYAL:       "Fiel ao treinador. Cresce mais em Carisma. Manda mais presentes para amigos e defende bem em batalhas.",
+  PROUD:       "Orgulhoso e vaidoso. Entra em modo Confiante com mais facilidade. Pode recusar carinho se não estiver feliz.",
+  MISCHIEVOUS: "Travesso e irreverente. Tem mais chance de criar rivalidades e pode 'roubar' itens de rivais.",
+  LAZY:        "Preguiçoso. Rende menos quando felicidade está baixa. Fica cansado mais rápido em interações.",
+  COMPETITIVE: "Competitivo nato. Cresce mais em Força. Fica mais forte quando o treinador vence partidas.",
+  DRAMATIC:    "Dramático. Reage mais intensamente a vitórias e derrotas do treinador.",
+  PLAYFUL:     "Brincalhão. Brincar dá mais EXP e felicidade. Se entedia rápido sem interação.",
+  ELECTRIC:    "Cheio de energia. Tem bônus em expedições. Fica animado com mais facilidade.",
+  TIMID:       "Tímido. Pode recusar carinho e evitar interações. Mas quando cria amizade, é muito leal.",
+  CHAOTIC:     "Caótico e imprevisível. Reações podem surpreender — positivas ou negativas.",
+};
+
+// ── Balão de diálogo ──────────────────────────────────────────────────────────
+export function generateMascotSpeech(params: {
+  mood: string;
+  happiness: number;
+  personality: string;
+  lastFedAt: Date | null;
+  lastInteractedAt: Date | null;
+  battleWins?: number;
+  battleLosses?: number;
+  recentTrainerWins?: number;
+}): string {
+  const hunger = getHungerStatus(params.lastFedAt);
+  const h = getHappinessStatus(params.happiness);
+  const hoursAlone = params.lastInteractedAt
+    ? (Date.now() - new Date(params.lastInteractedAt).getTime()) / 3_600_000
+    : 999;
+
+  if (hunger === "STARVING") return "Por favor! Estou desmaiando de fome! 🍖";
+  if (params.mood === "ANGRY") return "Tô procurando briga! Me manda pra uma batalha! 😤";
+  if (hunger === "HUNGRY") return "Meu estômago tá roncando... tem comida? 😋";
+  if (params.mood === "CONFIDENT") {
+    if ((params.recentTrainerWins ?? 0) > 0)
+      return `${params.recentTrainerWins} vitórias seguidas! Meu treinador é imbatível! 🏆`;
+    return "Me sinto no topo do mundo! Ninguém me para! 💪";
+  }
+  if (params.mood === "EXCITED") return "Que energia! Bora jogar! ⚡";
+  if (hoursAlone > 48) return "Você sumiu! Estava com tanta saudade! 🥺";
+  if (h === "HAPPY") return "Estou muito feliz hoje! Obrigado por cuidar de mim! 💛";
+  if (params.mood === "TIRED") return "Cansadinho... só mais uns minutinhos... 😴";
+  if (h === "DEPRESSED") return "Estou me sentindo muito para baixo... 😢";
+  if (h === "SAD") return "Preciso de atenção... 🥺";
+  if (params.mood === "NEEDY") return "Oi! Você tá aí? Estava com saudade! 👋";
+  if (hunger === "STUFFED") return "Não consigo mais! Tô empanturrado! 😌";
+  if ((params.battleWins ?? 0) > 3) return `Já venci ${params.battleWins} batalhas! Respeita! ⚔️`;
+
+  const personalityLines: Record<string, string[]> = {
+    COMPETITIVE: ["Quando é a próxima batalha? 😤","Tô pronto pra qualquer desafio! ⚔️"],
+    LAZY:        ["...zzz... me deixa... 😴","Hoje não tô com vontade... 🛋️"],
+    MISCHIEVOUS: ["Vamos aprontar alguma! 😈","Psiu! Tô tramando algo... 🤫"],
+    DRAMATIC:    ["A vida de mascote é uma aventura! 🎭","Cada dia é uma história nova! ✨"],
+    TIMID:       ["*olha timidamente* ...oi... 👀","É... estou aqui... 🌸"],
+    PLAYFUL:     ["Brincaaa! Vamos jogar! 🎮","Faz alguma coisa! Estou entediado! 😅"],
+    LOYAL:       ["Sempre estarei do seu lado! 🤝","Conte comigo, treinador! 💪"],
+    ELECTRIC:    ["Carregado de energia! ⚡","Pronto pra qualquer coisa! 🔋"],
+    PROUD:       ["Sou o melhor mascote! 😎","Ninguém tem mais classe que eu! 👑"],
+    CHAOTIC:     ["...","BOOOM! 💥","Tudo bem? Nada. 🌀"],
+  };
+  const lines = personalityLines[params.personality] ?? ["Tudo tranquilo! 😐"];
+  return lines[Math.floor(Math.random() * lines.length)];
+}

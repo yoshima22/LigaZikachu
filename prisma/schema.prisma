@@ -1286,14 +1286,48 @@ model Mascot {
   statCharisma     Int               @default(10)
   statInstinct     Int               @default(10)
   statVitality     Int               @default(10)
+  // Batalhas
+  battleWins       Int               @default(0)
+  battleLosses     Int               @default(0)
   // Timestamps
   hatchedAt        DateTime          @default(now())
   lastInteractedAt DateTime?
   lastFedAt        DateTime?
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
+  relationsAsA     MascotRelation[]  @relation("MascotRelationA")
+  relationsAsB     MascotRelation[]  @relation("MascotRelationB")
+  events           MascotEvent[]
   @@index([playerId])
   @@map("mascots")
+}
+
+enum MascotRelationType { FRIEND RIVAL }
+
+model MascotRelation {
+  id        String             @id @default(cuid())
+  mascotAId String
+  mascotBId String
+  type      MascotRelationType @default(RIVAL)
+  wins      Int                @default(0)   // vitórias de A sobre B
+  losses    Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  mascotA   Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB   Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
+  @@unique([mascotAId, mascotBId])
+  @@map("mascot_relations")
+}
+
+model MascotEvent {
+  id          String   @id @default(cuid())
+  mascotId    String
+  emoji       String   @default("📝")
+  description String
+  createdAt   DateTime @default(now())
+  mascot      Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  @@index([mascotId, createdAt])
+  @@map("mascot_events")
 }
 
 model MascotExpedition {

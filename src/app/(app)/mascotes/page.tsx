@@ -29,6 +29,10 @@ export default async function MascotesPage() {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
           take: 1
+        },
+        events: {
+          orderBy: { createdAt: "desc" },
+          take: 8
         }
       },
       orderBy: [{ isEquipped: "desc" }, { level: "desc" }]
@@ -58,11 +62,18 @@ export default async function MascotesPage() {
     mood: m.mood, personality: m.personality, isEquipped: m.isEquipped,
     statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma,
     statInstinct: m.statInstinct, statVitality: m.statVitality,
+    battleWins: m.battleWins, battleLosses: m.battleLosses,
     hatchedAt: m.hatchedAt,
     lastInteractedAt: m.lastInteractedAt,
     lastFedAt: m.lastFedAt,
     expeditions: m.expeditions.map(e => ({ id: e.id, finishAt: e.finishAt, status: e.status })),
+    events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
     hasFood, hasSweet,
+    // Admin: lista de outros mascotes para trigger de batalha/amizade
+    otherMascots: admin ? mascots.filter(o => o.id !== m.id && o.playerId !== player.id).map(o => ({
+      id: o.id,
+      name: o.nickname ?? `Pokémon #${o.pokemonId}`,
+    })) : undefined,
   }));
 
   return (

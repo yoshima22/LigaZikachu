@@ -8,6 +8,7 @@ import { z } from "zod";
 import { MatchStatus, ResultSource, Role, TournamentFormat, type Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
+import { applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
 import { rewardEquippedMascot } from "@/lib/mascot";
 
 const MATCH_WIN_COINS  = 35;
@@ -603,15 +604,35 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   revalidatePath("/dashboard");
   revalidatePath("/", "layout");
 
-  // Regenera narrativa da semana em background após cada confirmação
+  // Narrativa + mascote em background
   const weekIdForNarrative = match.tournamentWeekId;
-  if (weekIdForNarrative) {
-    after(async () => {
-      await autoSaveWeekNarrative(weekIdForNarrative).catch(err =>
-        console.error("[AutoNarrative:week]", err)
-      );
-    });
-  }
+  const winnerPlayerId = match.winnerPlayerId;
+  const loserPlayerId  = winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId;
+  after(async () => {
+    if (weekIdForNarrative) {
+      await autoSaveWeekNarrative(weekIdForNarrative).catch(() => {});
+    }
+    // Aplica resultado da partida nos mascotes de cada jogador
+    if (winnerPlayerId) {
+      const [winnerPlayer, loserPlayer] = await Promise.all([
+        prisma.player.findUnique({ where: { id: winnerPlayerId }, select: { id: true } }),
+        loserPlayerId ? prisma.player.findUnique({ where: { id: loserPlayerId }, select: { id: true } }) : null,
+      ]);
+      if (winnerPlayer) await applyMatchResultToMascot(winnerPlayer.id, true).catch(() => {});
+      if (loserPlayer)  await applyMatchResultToMascot(loserPlayer.id, false).catch(() => {});
+
+      // Batalha automática entre mascotes equipados dos dois treinadores
+      if (winnerPlayer && loserPlayer) {
+        const [mascotA, mascotB] = await Promise.all([
+          prisma.mascot.findFirst({ where: { playerId: winnerPlayer.id, isEquipped: true }, select: { id: true } }),
+          prisma.mascot.findFirst({ where: { playerId: loserPlayer.id,  isEquipped: true }, select: { id: true } }),
+        ]);
+        if (mascotA && mascotB) {
+          await battleMascots(mascotA.id, mascotB.id).catch(() => {});
+        }
+      }
+    }
+  });
 
   return { success: true, confirmed: allConfirmed };
 }
