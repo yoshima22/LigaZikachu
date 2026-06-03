@@ -246,17 +246,21 @@ export default async function PlayerDetailPage({
                 <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
                   {player.displayName}
                 </h1>
-                {equippedMascot && "pokemonId" in equippedMascot && (
-                  <div className="mt-1 flex items-center gap-1.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getSpriteUrl(equippedMascot.pokemonId)} alt="" width={28} height={28}
-                      className="object-contain" style={{ imageRendering: "pixelated" }} />
-                    <span className="text-[10px] text-slate-400">
-                      {equippedMascot.nickname ?? getPokemonName(equippedMascot.pokemonId)} Nv.{equippedMascot.level}
-                      {" "}{MOOD_EMOJI[equippedMascot.mood] ?? ""}
-                    </span>
-                  </div>
-                )}
+                {equippedMascot && (() => {
+                  const m = equippedMascot as { pokemonId: number; nickname: string | null; level: number; mood: string } | null;
+                  if (!m || !("pokemonId" in m)) return null;
+                  return (
+                    <div className="mt-1 flex items-center gap-1.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={getSpriteUrl(m.pokemonId)} alt="" width={28} height={28}
+                        className="object-contain" style={{ imageRendering: "pixelated" }} />
+                      <span className="text-[10px] text-slate-400">
+                        {m.nickname ?? getPokemonName(m.pokemonId)} Nv.{m.level}
+                        {" "}{MOOD_EMOJI[m.mood] ?? ""}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {equippedTitle && (
                   <div className="mt-0.5">
                     <TitleDisplay
