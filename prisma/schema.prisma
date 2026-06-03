@@ -243,6 +243,10 @@ model Player {
   zikalootWins            ZikaLoot[]            @relation("ZikaLootWinner")
   zikalootPicks           ZikaLootPick[]
   savedDecks              SavedDeck[]
+  mascots                 Mascot[]
+  mascotEggs              MascotEgg[]
+  mascotIncubator         MascotIncubator?
+  mascotFoods             MascotFoodItem[]
 
   @@map("players")
 }
@@ -1187,6 +1191,126 @@ model Account {
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
+}
+
+// ── Sistema de Mascotes ───────────────────────────────────────────────────────
+
+enum EggType {
+  COMMON
+  RARE
+  SPECIAL
+  EVENT
+}
+
+enum MascotMood {
+  HAPPY
+  EXCITED
+  NEUTRAL
+  TIRED
+  NEEDY
+  COMPETITIVE
+  ANGRY
+  PROUD
+  HUNGRY
+  CONFIDENT
+}
+
+enum MascotPersonality {
+  LOYAL
+  PROUD
+  MISCHIEVOUS
+  LAZY
+  COMPETITIVE
+  DRAMATIC
+  PLAYFUL
+  ELECTRIC
+  TIMID
+  CHAOTIC
+}
+
+enum ExpeditionStatus {
+  ACTIVE
+  COMPLETED
+  CLAIMED
+}
+
+enum FoodType {
+  FOOD
+  SWEET
+}
+
+model MascotEgg {
+  id         String          @id @default(cuid())
+  playerId   String
+  type       EggType         @default(COMMON)
+  obtainedAt DateTime        @default(now())
+  // Se vier de uma conquista/evento, guarda a origem
+  origin     String?
+  player     Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  incubation MascotIncubator?
+  @@index([playerId])
+  @@map("mascot_eggs")
+}
+
+model MascotIncubator {
+  id        String    @id @default(cuid())
+  playerId  String    @unique  // 1 incubadora por jogador
+  eggId     String    @unique
+  startedAt DateTime  @default(now())
+  finishAt  DateTime
+  hatched   Boolean   @default(false)
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  egg       MascotEgg @relation(fields: [eggId], references: [id], onDelete: Cascade)
+  @@map("mascot_incubators")
+}
+
+model Mascot {
+  id               String            @id @default(cuid())
+  playerId         String
+  pokemonId        Int               // ID da PokéAPI
+  nickname         String?
+  level            Int               @default(1)
+  exp              Int               @default(0)
+  happiness        Int               @default(50)  // 0-100
+  mood             MascotMood        @default(NEUTRAL)
+  personality      MascotPersonality
+  isEquipped       Boolean           @default(false)
+  // Stats
+  statForce        Int               @default(10)
+  statAgility      Int               @default(10)
+  statCharisma     Int               @default(10)
+  statInstinct     Int               @default(10)
+  statVitality     Int               @default(10)
+  // Timestamps
+  hatchedAt        DateTime          @default(now())
+  lastInteractedAt DateTime?
+  lastFedAt        DateTime?
+  player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  expeditions      MascotExpedition[]
+  @@index([playerId])
+  @@map("mascots")
+}
+
+model MascotExpedition {
+  id         String          @id @default(cuid())
+  mascotId   String
+  startedAt  DateTime        @default(now())
+  finishAt   DateTime
+  status     ExpeditionStatus @default(ACTIVE)
+  rewardJson Json?
+  mascot     Mascot          @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  @@index([mascotId])
+  @@map("mascot_expeditions")
+}
+
+model MascotFoodItem {
+  id       String   @id @default(cuid())
+  playerId String
+  type     FoodType
+  quantity Int      @default(1)
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@unique([playerId, type])
+  @@map("mascot_food_items")
 }
 
 model Session {

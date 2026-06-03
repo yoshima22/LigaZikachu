@@ -73,7 +73,7 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
 
-  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, equippedMascot] = await Promise.all([
     activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -119,6 +119,11 @@ export default async function PlayerDetailPage({
       where: { playerId, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true, rarity: true, theme: true, flavorText: true, entranceEffect: true } } }
     }).catch(() => [] as { id: string; item: { type: string; name: string; imageUrl: string | null; metadata: unknown; rarity: string; theme: string; flavorText: string | null; entranceEffect: string | null } }[]),
+    // Mascote equipado
+    prisma.mascot.findFirst({
+      where: { playerId, isEquipped: true },
+      select: { id: true, pokemonId: true, nickname: true, level: true, mood: true }
+    }).catch(() => null),
     prisma.playerAchievement.findMany({
       where: { playerId, isHighlighted: true },
       include: { achievement: { select: { name: true, rarity: true, iconUrl: true, description: true } } },
@@ -240,6 +245,20 @@ export default async function PlayerDetailPage({
                 <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
                   {player.displayName}
                 </h1>
+                {equippedMascot && (() => {
+                  const { getSpriteUrl: sprite, getPokemonName: pname, MOOD_EMOJI } = require("@/lib/mascot-data");
+                  return (
+                    <div className="mt-1 flex items-center gap-1.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={sprite(equippedMascot.pokemonId)} alt="" width={28} height={28}
+                        className="object-contain" style={{ imageRendering: "pixelated" }} />
+                      <span className="text-[10px] text-slate-400">
+                        {equippedMascot.nickname ?? pname(equippedMascot.pokemonId)} Nv.{equippedMascot.level}
+                        {" "}{MOOD_EMOJI[equippedMascot.mood] ?? ""}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {equippedTitle && (
                   <div className="mt-0.5">
                     <TitleDisplay

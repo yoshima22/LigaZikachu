@@ -10,6 +10,7 @@ import {
   Coins,
   Crown,
   Gift,
+  Heart,
   LayoutDashboard,
   Medal,
   Package,
@@ -37,14 +38,15 @@ const rankingLinks = [
 ];
 
 const colecaoLinks = [
-  { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
-  { href: "/professor", label: "Prof. Enguiça", icon: Sparkles, adminOnly: false },
-  { href: "/album", label: "Álbum", icon: BookOpen, adminOnly: false },
-  { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
-  { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
-  { href: "/zikaloot", label: "ZikaLoot", icon: Ticket, adminOnly: false },
-  { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },
-  { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false }
+  { href: "/mascotes",  label: "Mascotes",    icon: Heart,        adminOnly: false },
+  { href: "/pokedex",   label: "Pokedex",     icon: Search,       adminOnly: false },
+  { href: "/professor", label: "Prof. Enguiça", icon: Sparkles,   adminOnly: false },
+  { href: "/album",     label: "Álbum",       icon: BookOpen,     adminOnly: false },
+  { href: "/shop",      label: "ZikaShop",    icon: ShoppingBag,  adminOnly: false },
+  { href: "/zikabet",   label: "ZikaBet",     icon: Swords,       adminOnly: false },
+  { href: "/zikaloot",  label: "ZikaLoot",    icon: Ticket,       adminOnly: false },
+  { href: "/carteira",  label: "Carteira",    icon: Coins,        adminOnly: false },
+  { href: "/inventario", label: "Inventário", icon: Package,      adminOnly: false }
 ];
 
 // profileLinks é dinâmico — usa playerId para o link do perfil público
