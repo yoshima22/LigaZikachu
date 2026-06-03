@@ -18,7 +18,8 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
-import { getSpriteUrl, getPokemonName, MOOD_EMOJI } from "@/lib/mascot-data";
+import { MOOD_EMOJI } from "@/lib/mascot-data";
+import { MascotProfileCard } from "./_components/mascot-profile-card";
 
 export default async function PlayerDetailPage({
   params
@@ -145,10 +146,28 @@ export default async function PlayerDetailPage({
       : [],
   ]);
 
-  // Mascote equipado — query separada para tipagem limpa
+  // Mascote equipado — dados completos para o card do perfil
   const equippedMascot = await prisma.mascot.findFirst({
     where: { playerId, isEquipped: true },
-    select: { id: true, pokemonId: true, nickname: true, level: true, mood: true }
+    select: {
+      id: true, pokemonId: true, nickname: true, level: true, exp: true,
+      happiness: true, mood: true, personality: true, isEquipped: true,
+      statForce: true, statAgility: true, statCharisma: true,
+      statInstinct: true, statVitality: true,
+      battleWins: true, battleLosses: true,
+      hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
+      events: { orderBy: { createdAt: "desc" }, take: 15 },
+      relationsAsA: {
+        include: {
+          mascotB: {
+            select: {
+              id: true, pokemonId: true, nickname: true,
+              player: { select: { displayName: true } }
+            }
+          }
+        }
+      }
+    }
   }).catch(() => null);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
@@ -248,15 +267,9 @@ export default async function PlayerDetailPage({
                   {player.displayName}
                 </h1>
                 {equippedMascot && (
-                  <div className="mt-1 flex items-center gap-1.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getSpriteUrl(equippedMascot.pokemonId)} alt="" width={28} height={28}
-                      className="object-contain" style={{ imageRendering: "pixelated" }} />
-                    <span className="text-[10px] text-slate-400">
-                      {equippedMascot.nickname ?? getPokemonName(equippedMascot.pokemonId)} Nv.{equippedMascot.level}
-                      {" "}{MOOD_EMOJI[equippedMascot.mood] ?? ""}
-                    </span>
-                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    {MOOD_EMOJI[equippedMascot.mood] ?? ""} Mascote equipado ↓
+                  </p>
                 )}
                 {equippedTitle && (
                   <div className="mt-0.5">
@@ -681,6 +694,47 @@ export default async function PlayerDetailPage({
           )}
         </div>
       </div>
+
+      {/* Mascote equipado — card completo com histórico de relações */}
+      {equippedMascot && (
+        <MascotProfileCard
+          mascot={{
+            id: equippedMascot.id,
+            pokemonId: equippedMascot.pokemonId,
+            nickname: equippedMascot.nickname,
+            level: equippedMascot.level,
+            exp: equippedMascot.exp,
+            happiness: equippedMascot.happiness,
+            mood: equippedMascot.mood,
+            personality: equippedMascot.personality,
+            isEquipped: equippedMascot.isEquipped,
+            statForce: equippedMascot.statForce,
+            statAgility: equippedMascot.statAgility,
+            statCharisma: equippedMascot.statCharisma,
+            statInstinct: equippedMascot.statInstinct,
+            statVitality: equippedMascot.statVitality,
+            battleWins: equippedMascot.battleWins,
+            battleLosses: equippedMascot.battleLosses,
+            hatchedAt: equippedMascot.hatchedAt,
+            lastInteractedAt: equippedMascot.lastInteractedAt,
+            lastFedAt: equippedMascot.lastFedAt,
+            events: equippedMascot.events,
+            relations: equippedMascot.relationsAsA.map(r => ({
+              id: r.id,
+              type: r.type,
+              wins: r.wins,
+              losses: r.losses,
+              otherMascot: {
+                id: r.mascotB.id,
+                pokemonId: r.mascotB.pokemonId,
+                nickname: r.mascotB.nickname,
+                player: { displayName: r.mascotB.player.displayName },
+              }
+            })),
+          }}
+          isOwner={isSelf}
+        />
+      )}
 
       {isAdminUser && (
         <div className="space-y-4">
