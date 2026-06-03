@@ -362,6 +362,7 @@ export async function purchaseItem(
     revalidatePath("/inventario");
     revalidatePath("/mascotes");
     revalidatePath("/carteira");
+    revalidatePath("/", "layout"); // atualiza ZikaCoins no nav
     revalidatePath("/", "layout");
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)
