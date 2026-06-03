@@ -19,7 +19,7 @@ export default async function ShopPage() {
     select: { id: true }
   });
 
-  const [wallet, items, ownedIds] = await Promise.all([
+  const [wallet, items, inventoryRows, eggCounts, foodItems] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
     prisma.shopItem.findMany({
       where: { active: true },
@@ -28,10 +28,26 @@ export default async function ShopPage() {
     player
       ? prisma.playerInventory.findMany({
           where: { playerId: player.id },
-          select: { itemId: true }
-        }).then((rows) => new Set(rows.map((r) => r.itemId)))
-      : new Set<string>()
+          select: { itemId: true, quantity: true }
+        })
+      : [],
+    player
+      ? prisma.mascotEgg.groupBy({
+          by: ["type"],
+          where: { playerId: player.id },
+          _count: { _all: true }
+        })
+      : [],
+    player
+      ? prisma.mascotFoodItem.findMany({
+          where: { playerId: player.id },
+          select: { type: true, quantity: true }
+        })
+      : []
   ]);
+
+  const ownedIds = new Set(inventoryRows.map((r) => r.itemId));
+  const countByItemId = new Map(inventoryRows.map((r) => [r.itemId, r.quantity]));
 
   const titles   = items.filter((i) => i.type === "TITLE");
   const banners  = items.filter((i) => i.type === "BANNER");
@@ -40,6 +56,16 @@ export default async function ShopPage() {
   const mascotItems = items.filter((i) =>
     ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET"].includes(i.type)
   );
+  const eggCountByType = new Map(eggCounts.map((row) => [row.type, row._count._all]));
+  const foodCountByType = new Map(foodItems.map((row) => [row.type, row.quantity]));
+  for (const item of mascotItems) {
+    if (item.type === "EGG_COMMON") countByItemId.set(item.id, eggCountByType.get("COMMON") ?? 0);
+    if (item.type === "EGG_RARE") countByItemId.set(item.id, eggCountByType.get("RARE") ?? 0);
+    if (item.type === "EGG_SPECIAL") countByItemId.set(item.id, eggCountByType.get("SPECIAL") ?? 0);
+    if (item.type === "MASCOT_FOOD") countByItemId.set(item.id, foodCountByType.get("FOOD") ?? 0);
+    if (item.type === "MASCOT_SWEET") countByItemId.set(item.id, foodCountByType.get("SWEET") ?? 0);
+  }
+  const inventoryCountRecord = Object.fromEntries(countByItemId);
 
   return (
     <div className="space-y-8">
@@ -84,6 +110,7 @@ export default async function ShopPage() {
                 entranceEffect: i.entranceEffect ?? "NONE",
               }))}
               ownedIds={ownedIds}
+              inventoryCounts={inventoryCountRecord}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />
@@ -93,6 +120,7 @@ export default async function ShopPage() {
               title="Banners de Perfil"
               items={banners.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
               ownedIds={ownedIds}
+              inventoryCounts={inventoryCountRecord}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />
@@ -102,6 +130,7 @@ export default async function ShopPage() {
               title="Molduras de Avatar"
               items={frames.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
               ownedIds={ownedIds}
+              inventoryCounts={inventoryCountRecord}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />
@@ -111,6 +140,7 @@ export default async function ShopPage() {
               title="Tickets ZikaLoot"
               items={tickets.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
               ownedIds={new Set()} // tickets não são únicos — sempre pode comprar mais
+              inventoryCounts={inventoryCountRecord}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />
@@ -120,6 +150,7 @@ export default async function ShopPage() {
               title="Mascotes: Ovos e Itens"
               items={mascotItems.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
               ownedIds={new Set()}
+              inventoryCounts={inventoryCountRecord}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />

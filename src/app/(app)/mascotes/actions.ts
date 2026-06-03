@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSessionUser } from "@/lib/auth/permissions";
+import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   startIncubation, hatchEgg, equipMascot,
@@ -32,6 +32,28 @@ export async function hatchEggAction(): Promise<{ error?: string; result?: Await
     const result = await hatchEgg(player.id);
     revalidate();
     return { result };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function skipIncubationAction(): Promise<{ error?: string }> {
+  try {
+    const user = await requireAdmin();
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil nÃ£o encontrado." };
+
+    const incubator = await prisma.mascotIncubator.findUnique({
+      where: { playerId: player.id },
+      select: { id: true }
+    });
+    if (!incubator) return { error: "Nenhum ovo na incubadora." };
+
+    await prisma.mascotIncubator.update({
+      where: { playerId: player.id },
+      data: { finishAt: new Date() }
+    });
+
+    revalidate();
+    return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

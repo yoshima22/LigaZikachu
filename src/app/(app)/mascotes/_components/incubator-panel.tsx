@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { toast } from "sonner";
 import { Clock, Egg } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
-import { putEggInIncubator, hatchEggAction } from "../actions";
+import { putEggInIncubator, hatchEggAction, skipIncubationAction } from "../actions";
 
 interface IncubatorData {
   id: string;
@@ -19,6 +19,7 @@ interface EggItem { id: string; type: string; obtainedAt: Date; origin: string |
 interface Props {
   incubator: IncubatorData | null;
   eggs: EggItem[];
+  canSkipIncubation?: boolean;
   onHatched?: (pokemonId: number, name: string) => void;
 }
 
@@ -52,7 +53,7 @@ function Countdown({ finishAt }: { finishAt: Date }) {
   return <span>{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>;
 }
 
-export function IncubatorPanel({ incubator, eggs, onHatched }: Props) {
+export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched }: Props) {
   const [pending, startTransition] = useTransition();
   const [hatchResult, setHatchResult] = useState<{ pokemonId: number; name: string } | null>(null);
   const isReady = incubator ? new Date() >= new Date(incubator.finishAt) : false;
@@ -73,6 +74,14 @@ export function IncubatorPanel({ incubator, eggs, onHatched }: Props) {
         setHatchResult({ pokemonId: r.result.pokemonId, name: r.result.name });
         onHatched?.(r.result.pokemonId, r.result.name);
       }
+    });
+  };
+
+  const handleSkip = () => {
+    startTransition(async () => {
+      const r = await skipIncubationAction();
+      if (r.error) toast.error(r.error);
+      else toast.success("Tempo de incubação pulado. O ovo já pode chocar!");
     });
   };
 
@@ -118,9 +127,21 @@ export function IncubatorPanel({ incubator, eggs, onHatched }: Props) {
               </button>
             )}
             {!isReady && (
-              <div className="h-2 w-full max-w-[200px] rounded-full bg-slate-800 overflow-hidden">
-                <div className="h-full rounded-full bg-[#FFCB05] transition-all"
-                  style={{ width: `${Math.min(100, ((Date.now() - new Date(incubator.startedAt).getTime()) / (new Date(incubator.finishAt).getTime() - new Date(incubator.startedAt).getTime())) * 100)}%` }} />
+              <div className="flex w-full flex-col items-center gap-3">
+                <div className="h-2 w-full max-w-[200px] rounded-full bg-slate-800 overflow-hidden">
+                  <div className="h-full rounded-full bg-[#FFCB05] transition-all"
+                    style={{ width: `${Math.min(100, ((Date.now() - new Date(incubator.startedAt).getTime()) / (new Date(incubator.finishAt).getTime() - new Date(incubator.startedAt).getTime())) * 100)}%` }} />
+                </div>
+                {canSkipIncubation && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={handleSkip}
+                    className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-1.5 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-50"
+                  >
+                    Admin: pular incubação
+                  </button>
+                )}
               </div>
             )}
           </div>

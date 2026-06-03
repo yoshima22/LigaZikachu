@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { recalculateMood } from "@/lib/mascot";
+import { isAdmin } from "@/lib/auth/permissions";
 import { MascotCard } from "./_components/mascot-card";
 import { IncubatorPanel } from "./_components/incubator-panel";
 import { Egg, Heart, ShoppingBag } from "lucide-react";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function MascotesPage() {
   const session = await auth();
   if (!session?.user) return null;
+  const admin = isAdmin(session.user.role);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -89,6 +91,7 @@ export default async function MascotesPage() {
           hatched: incubator.hatched,
         } : null}
         eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin }))}
+        canSkipIncubation={admin}
       />
 
       {/* Meus Mascotes */}

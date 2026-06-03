@@ -253,8 +253,30 @@ export async function createDefaultMascotShopItems(): Promise<{ error?: string; 
 
 // ── Comprar item ──────────────────────────────────────────────────────────────
 
-export async function purchaseItem(itemId: string): Promise<{ error?: string }> {
+const purchaseItemSchema = z.object({
+  itemId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1).max(99).default(1),
+});
+
+const CONSUMABLE_TYPES: ShopItemType[] = [
+  ShopItemType.ZIKALOOT_TICKET,
+  ShopItemType.EGG_COMMON,
+  ShopItemType.EGG_RARE,
+  ShopItemType.EGG_SPECIAL,
+  ShopItemType.MASCOT_FOOD,
+  ShopItemType.MASCOT_SWEET,
+];
+
+export async function purchaseItem(
+  itemIdOrInput: string | z.infer<typeof purchaseItemSchema>
+): Promise<{ error?: string; purchased?: number }> {
   try {
+    const { itemId, quantity } = purchaseItemSchema.parse(
+      typeof itemIdOrInput === "string"
+        ? { itemId: itemIdOrInput, quantity: 1 }
+        : itemIdOrInput
+    );
+
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
 
@@ -266,12 +288,12 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
     if (!item.active) return { error: "Este item não está disponível." };
 
     // Itens consumíveis (ovos, comida) podem ser comprados várias vezes
-    const CONSUMABLE_TYPES: ShopItemType[] = [
-      ShopItemType.ZIKALOOT_TICKET,
-      ShopItemType.EGG_COMMON, ShopItemType.EGG_RARE, ShopItemType.EGG_SPECIAL,
-      ShopItemType.MASCOT_FOOD, ShopItemType.MASCOT_SWEET,
-    ];
-    if (!CONSUMABLE_TYPES.includes(item.type)) {
+    const isConsumable = CONSUMABLE_TYPES.includes(item.type);
+    if (!isConsumable && quantity > 1) {
+      return { error: "Este item é único e só pode ser comprado uma vez." };
+    }
+
+    if (!isConsumable) {
       const alreadyOwns = await prisma.playerInventory.findUnique({
         where: { playerId_itemId: { playerId: player.id, itemId } }
       });
@@ -279,15 +301,16 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
     }
 
     const wallet = await getOrCreateWallet(player.id);
-    if (wallet.balance < item.price)
-      return { error: `Saldo insuficiente. Você tem ${wallet.balance} ZC, o item custa ${item.price} ZC.` };
+    const totalPrice = item.price * quantity;
+    if (wallet.balance < totalPrice)
+      return { error: `Saldo insuficiente. Você tem ${wallet.balance} ZC, a compra custa ${totalPrice} ZC.` };
 
     await prisma.$transaction(async (tx) => {
       await creditCoins(tx, {
         playerId: player.id,
         type: ZikaCoinTxType.SHOP_PURCHASE,
-        amount: -item.price,
-        description: `Compra: ${item.name}`
+        amount: -totalPrice,
+        description: quantity > 1 ? `Compra: ${item.name} x${quantity}` : `Compra: ${item.name}`
       });
 
       if (item.type === ShopItemType.EGG_COMMON || item.type === ShopItemType.EGG_RARE || item.type === ShopItemType.EGG_SPECIAL) {
@@ -297,22 +320,26 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
           [ShopItemType.EGG_RARE]:    EggType.RARE,
           [ShopItemType.EGG_SPECIAL]: EggType.SPECIAL,
         };
-        await tx.mascotEgg.create({
-          data: { playerId: player.id, type: eggTypeMap[item.type], origin: `Comprado na ZikaShop` }
+        await tx.mascotEgg.createMany({
+          data: Array.from({ length: quantity }, () => ({
+            playerId: player.id,
+            type: eggTypeMap[item.type],
+            origin: "Comprado na ZikaShop"
+          }))
         });
       } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
         // Compra de comida/doce → adiciona ao inventário de comida
         const foodType = item.type === ShopItemType.MASCOT_FOOD ? FoodType.FOOD : FoodType.SWEET;
         await tx.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: player.id, type: foodType } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: player.id, type: foodType, quantity: 1 }
+          update: { quantity: { increment: quantity } },
+          create: { playerId: player.id, type: foodType, quantity }
         });
       } else if (item.type === ShopItemType.ZIKALOOT_TICKET) {
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId: player.id, itemId } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: player.id, itemId, quantity: 1 }
+          update: { quantity: { increment: quantity } },
+          create: { playerId: player.id, itemId, quantity }
         });
       } else {
         await tx.playerInventory.create({ data: { playerId: player.id, itemId } });
@@ -326,10 +353,11 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)
     void onShopPurchase(player.id).catch(() => {});
-    void onCoinsSpent(player.id, item.price).catch(() => {});
+    void onCoinsSpent(player.id, totalPrice).catch(() => {});
 
-    return {};
+    return { purchased: quantity };
   } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }

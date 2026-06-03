@@ -38,14 +38,18 @@ interface Props {
   title: string;
   items: Item[];
   ownedIds: Set<string>;
+  inventoryCounts: Record<string, number>;
   balance: number;
   playerId: string | null;
 }
 
-export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
+const consumableTypes = new Set(["ZIKALOOT_TICKET", "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET"]);
+
+export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, playerId }: Props) {
   const [pending, startTransition] = useTransition();
   const [buyingId, setBuyingId]   = useState<string | null>(null);
   const [lightbox, setLightbox]   = useState<{ src: string; name: string; type: string } | null>(null);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   // Fecha ao pressionar Esc
   const closeLightbox = useCallback(() => setLightbox(null), []);
@@ -56,17 +60,28 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [lightbox, closeLightbox]);
 
-  const handleBuy = (itemId: string, price: number, name: string) => {
+  const getQuantity = (itemId: string) => quantities[itemId] ?? 1;
+
+  const setQuantity = (itemId: string, quantity: number) => {
+    const next = Math.min(99, Math.max(1, Math.floor(quantity || 1)));
+    setQuantities((current) => ({ ...current, [itemId]: next }));
+  };
+
+  const handleBuy = (itemId: string, price: number, name: string, quantity: number) => {
+    const totalPrice = price * quantity;
     if (!playerId) { toast.error("Faça login com uma conta de jogador."); return; }
-    if (balance < price) { toast.error(`Saldo insuficiente. Você tem ${balance} ZC.`); return; }
-    if (!confirm(`Comprar "${name}" por ${price} ZikaCoins?`)) return;
+    if (balance < totalPrice) { toast.error(`Saldo insuficiente. Você tem ${balance} ZC.`); return; }
+    if (!confirm(`Comprar ${quantity}x "${name}" por ${totalPrice} ZikaCoins?`)) return;
 
     setBuyingId(itemId);
     startTransition(async () => {
       try {
-        const result = await purchaseItem(itemId);
+        const result = await purchaseItem({ itemId, quantity });
         if (result.error) { toast.error(result.error); return; }
-        toast.success(`"${name}" adicionado ao seu inventário!`);
+        toast.success(quantity > 1
+          ? `${quantity}x "${name}" adicionados ao seu inventário!`
+          : `"${name}" adicionado ao seu inventário!`
+        );
       } catch { toast.error("Erro ao comprar item."); }
       finally { setBuyingId(null); }
     });
@@ -112,8 +127,12 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((item, itemIndex) => {
           const owned = ownedIds.has(item.id);
-          const canAfford = balance >= item.price;
+          const isConsumable = consumableTypes.has(item.type);
+          const quantity = isConsumable ? getQuantity(item.id) : 1;
+          const totalPrice = item.price * quantity;
+          const canAfford = balance >= totalPrice;
           const isBuying = buyingId === item.id && pending;
+          const ownedCount = inventoryCounts[item.id] ?? 0;
 
           return (
             <div
@@ -174,28 +193,59 @@ export function ShopGrid({ title, items, ownedIds, balance, playerId }: Props) {
                 {item.description && (
                   <p className="text-xs text-slate-400">{item.description}</p>
                 )}
+                {(isConsumable || ownedCount > 0) && (
+                  <div className="inline-flex items-center gap-1 rounded-full border border-border bg-slate-900/70 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                    Inventário: <span className="text-[#FFCB05]">{ownedCount}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-1">
                   <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
-                    <Coins size={14} /> {item.price.toLocaleString("pt-BR")} ZC
+                    <Coins size={14} /> {totalPrice.toLocaleString("pt-BR")} ZC
                   </span>
                   {owned ? (
                     <span className="flex items-center gap-1 rounded-lg bg-[#7AC74C]/10 px-2 py-1 text-xs font-semibold text-[#7AC74C]">
                       <CheckCircle size={12} /> Possuído
                     </span>
                   ) : !canAfford ? (
-                    <span className="flex items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-500">
-                      <Lock size={12} /> Sem saldo
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {isConsumable && (
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={quantity}
+                          onChange={(event) => setQuantity(item.id, Number(event.target.value))}
+                          className="h-7 w-14 rounded-lg border border-border bg-slate-950 px-2 text-center text-xs text-slate-100 outline-none focus:border-[#FFCB05]/60"
+                          aria-label={`Quantidade de ${item.name}`}
+                        />
+                      )}
+                      <span className="flex items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-500">
+                        <Lock size={12} /> Sem saldo
+                      </span>
+                    </div>
                   ) : (
+                    <div className="flex items-center gap-1.5">
+                    {isConsumable && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={quantity}
+                        onChange={(event) => setQuantity(item.id, Number(event.target.value))}
+                        className="h-7 w-14 rounded-lg border border-border bg-slate-950 px-2 text-center text-xs text-slate-100 outline-none focus:border-[#FFCB05]/60"
+                        aria-label={`Quantidade de ${item.name}`}
+                      />
+                    )}
                     <button
                       type="button"
                       disabled={isBuying}
-                      onClick={() => handleBuy(item.id, item.price, item.name)}
+                      onClick={() => handleBuy(item.id, item.price, item.name, quantity)}
                       className="flex items-center gap-1 rounded-lg bg-[#FFCB05] px-3 py-1 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60"
                     >
                       <ShoppingCart size={12} />
                       {isBuying ? "Comprando…" : "Comprar"}
                     </button>
+                    </div>
                   )}
                 </div>
               </div>
