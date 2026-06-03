@@ -5,6 +5,12 @@ export interface PlayerRankingEntry {
   playerId: string;
   displayName: string;
   position: number;
+  equippedMascot?: {
+    pokemonId: number;
+    nickname: string | null;
+    level: number;
+    mood: string;
+  } | null;
   points: number;
   wins: number;
   losses: number;
@@ -29,7 +35,7 @@ interface RankingScope {
   onlyPlayersWithMatches?: boolean;
 }
 
-type RankingStats = Omit<PlayerRankingEntry, "position" | "displayName">;
+type RankingStats = Omit<PlayerRankingEntry, "position" | "displayName" | "equippedMascot">;
 
 interface RankingSeedPlayer {
   playerId: string;
@@ -556,7 +562,7 @@ async function computeRankingFromMatches({
     }
   }
 
-  const entries = [...statsMap.values()]
+  const entries: Array<Omit<PlayerRankingEntry, "position">> = [...statsMap.values()]
     .map((stats) => {
       return {
         displayName: displayNameMap.get(stats.playerId) ?? "Jogador removido",
@@ -564,6 +570,27 @@ async function computeRankingFromMatches({
       };
     })
     .filter((entry) => !onlyPlayersWithMatches || entry.matchesPlayed > 0 || entry.badgesOwned > 0);
+
+  const equippedMascots = entries.length
+    ? await prisma.mascot.findMany({
+        where: {
+          isEquipped: true,
+          playerId: { in: entries.map((entry) => entry.playerId) }
+        },
+        select: {
+          playerId: true,
+          pokemonId: true,
+          nickname: true,
+          level: true,
+          mood: true
+        }
+      })
+    : [];
+
+  const mascotByPlayerId = new Map(equippedMascots.map((mascot) => [mascot.playerId, mascot]));
+  for (const entry of entries) {
+    entry.equippedMascot = mascotByPlayerId.get(entry.playerId) ?? null;
+  }
 
   entries.sort(
     (a, b) =>

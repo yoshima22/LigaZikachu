@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoinTxType } from "@prisma/client";
+import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoinTxType, EggType, FoodType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 
@@ -32,6 +32,62 @@ const createItemSchema = z.object({
   flavorText: z.string().trim().max(200).optional().nullable(),
   entranceEffect: z.nativeEnum(TitleEntranceEffect).optional(),
 });
+
+const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
+  type: ShopItemType;
+  name: string;
+  description: string;
+  imageUrl: string | null;
+  rarity: ShopItemRarity;
+  price: number;
+  sortOrder: number;
+}> = [
+  {
+    type: ShopItemType.EGG_COMMON,
+    name: "Ovo Comum",
+    description: "Um ovo de mascote da Liga. Choca em 10 minutos na incubadora.",
+    imageUrl: "/mascot/egg-common.png",
+    rarity: ShopItemRarity.COMMON,
+    price: 1200,
+    sortOrder: 10,
+  },
+  {
+    type: ShopItemType.EGG_RARE,
+    name: "Ovo Raro",
+    description: "Um ovo com chance maior de mascotes mais procurados.",
+    imageUrl: "/mascot/egg-common.png",
+    rarity: ShopItemRarity.RARE,
+    price: 2800,
+    sortOrder: 20,
+  },
+  {
+    type: ShopItemType.EGG_SPECIAL,
+    name: "Ovo Especial",
+    description: "Um ovo limitado com pool especial de mascotes.",
+    imageUrl: "/mascot/egg-common.png",
+    rarity: ShopItemRarity.EPIC,
+    price: 5000,
+    sortOrder: 30,
+  },
+  {
+    type: ShopItemType.MASCOT_FOOD,
+    name: "Comida de Mascote",
+    description: "Restaura humor e felicidade do seu mascote.",
+    imageUrl: null,
+    rarity: ShopItemRarity.COMMON,
+    price: 120,
+    sortOrder: 40,
+  },
+  {
+    type: ShopItemType.MASCOT_SWEET,
+    name: "Doce de Mascote",
+    description: "Doce especial que aumenta felicidade e EXP do mascote.",
+    imageUrl: null,
+    rarity: ShopItemRarity.RARE,
+    price: 350,
+    sortOrder: 50,
+  },
+];
 
 export async function createShopItem(
   raw: z.infer<typeof createItemSchema>
@@ -164,6 +220,37 @@ export async function toggleShopItem(itemId: string, active: boolean): Promise<{
   }
 }
 
+export async function createDefaultMascotShopItems(): Promise<{ error?: string; created?: number }> {
+  try {
+    const actor = await requireAdmin();
+    let created = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const item of DEFAULT_MASCOT_SHOP_ITEMS) {
+        const existing = await tx.shopItem.findFirst({
+          where: { type: item.type, name: item.name },
+          select: { id: true }
+        });
+        if (existing) continue;
+
+        await tx.shopItem.create({
+          data: {
+            ...item,
+            createdById: actor.id
+          }
+        });
+        created++;
+      }
+    });
+
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    return { created };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ── Comprar item ──────────────────────────────────────────────────────────────
 
 export async function purchaseItem(itemId: string): Promise<{ error?: string }> {
@@ -178,8 +265,13 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
     if (!item) return { error: "Item não encontrado." };
     if (!item.active) return { error: "Este item não está disponível." };
 
-    // Tickets ZikaLoot podem ser comprados várias vezes
-    if (item.type !== ShopItemType.ZIKALOOT_TICKET) {
+    // Itens consumíveis (ovos, comida) podem ser comprados várias vezes
+    const CONSUMABLE_TYPES: ShopItemType[] = [
+      ShopItemType.ZIKALOOT_TICKET,
+      ShopItemType.EGG_COMMON, ShopItemType.EGG_RARE, ShopItemType.EGG_SPECIAL,
+      ShopItemType.MASCOT_FOOD, ShopItemType.MASCOT_SWEET,
+    ];
+    if (!CONSUMABLE_TYPES.includes(item.type)) {
       const alreadyOwns = await prisma.playerInventory.findUnique({
         where: { playerId_itemId: { playerId: player.id, itemId } }
       });
@@ -197,7 +289,26 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
         amount: -item.price,
         description: `Compra: ${item.name}`
       });
-      if (item.type === ShopItemType.ZIKALOOT_TICKET) {
+
+      if (item.type === ShopItemType.EGG_COMMON || item.type === ShopItemType.EGG_RARE || item.type === ShopItemType.EGG_SPECIAL) {
+        // Compra de ovo → cria MascotEgg no inventário
+        const eggTypeMap: Record<string, EggType> = {
+          [ShopItemType.EGG_COMMON]:  EggType.COMMON,
+          [ShopItemType.EGG_RARE]:    EggType.RARE,
+          [ShopItemType.EGG_SPECIAL]: EggType.SPECIAL,
+        };
+        await tx.mascotEgg.create({
+          data: { playerId: player.id, type: eggTypeMap[item.type], origin: `Comprado na ZikaShop` }
+        });
+      } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
+        // Compra de comida/doce → adiciona ao inventário de comida
+        const foodType = item.type === ShopItemType.MASCOT_FOOD ? FoodType.FOOD : FoodType.SWEET;
+        await tx.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: player.id, type: foodType } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: player.id, type: foodType, quantity: 1 }
+        });
+      } else if (item.type === ShopItemType.ZIKALOOT_TICKET) {
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId: player.id, itemId } },
           update: { quantity: { increment: 1 } },
@@ -210,6 +321,7 @@ export async function purchaseItem(itemId: string): Promise<{ error?: string }> 
 
     revalidatePath("/shop");
     revalidatePath("/inventario");
+    revalidatePath("/mascotes");
     revalidatePath("/carteira");
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { MatchStatus, ResultSource, Role, TournamentFormat, type Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
+import { rewardEquippedMascot } from "@/lib/mascot";
 
 const MATCH_WIN_COINS  = 35;
 const MATCH_LOSS_COINS = 25;
@@ -36,6 +37,20 @@ async function awardMatchCoins(
       matchId: match.id,
       description: `Participação na partida — +${MATCH_LOSS_COINS} ZC`
     })
+  ]);
+}
+
+async function rewardMascotsForConfirmedMatch(match: {
+  playerAId: string;
+  playerBId: string | null;
+  winnerPlayerId: string | null;
+}) {
+  if (!match.playerBId || !match.winnerPlayerId) return;
+
+  await Promise.all([
+    rewardEquippedMascot(match.playerAId, "MATCH_PLAYED"),
+    rewardEquippedMascot(match.playerBId, "MATCH_PLAYED"),
+    rewardEquippedMascot(match.winnerPlayerId, "MATCH_WIN"),
   ]);
 }
 
@@ -308,6 +323,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     try {
       await prisma.$transaction(async (tx) => { await awardMatchCoins(tx, matchForCoins); });
     } catch { /* ignora erros de moedas para não bloquear o resultado */ }
+    await rewardMascotsForConfirmedMatch(matchForCoins).catch(() => {});
 
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
@@ -493,6 +509,14 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
     });
   });
 
+  if (isInPerson && match.status !== MatchStatus.CONFIRMED) {
+    await rewardMascotsForConfirmedMatch({
+      playerAId: match.playerAId,
+      playerBId: match.playerBId,
+      winnerPlayerId: winnerId,
+    }).catch(() => {});
+  }
+
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/ranking`);
   revalidatePath("/ranking");
@@ -568,6 +592,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
       // Credita ZikaCoins: vencedor +35 ZC, perdedor +25 ZC
       await awardMatchCoins(tx, match);
     });
+    await rewardMascotsForConfirmedMatch(match).catch(() => {});
   }
 
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
@@ -681,6 +706,14 @@ export async function adminResolveMatch(input: z.infer<typeof adminResolveSchema
       after: { winnerId, winnerDefendedPrizes, notes },
     },
   });
+
+  if (match.status !== MatchStatus.CONFIRMED) {
+    await rewardMascotsForConfirmedMatch({
+      playerAId: match.playerAId,
+      playerBId: match.playerBId,
+      winnerPlayerId: winnerId,
+    }).catch(() => {});
+  }
 
   revalidatePath(`/torneios/${week?.tournament.slug}/semanas/${week?.weekNumber}/partidas`);
 

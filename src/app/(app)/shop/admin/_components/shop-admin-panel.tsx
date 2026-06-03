@@ -7,16 +7,24 @@ import { Button } from "@/components/ui/button";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
-import { createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem } from "../../actions";
+import { createDefaultMascotShopItems, createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem } from "../../actions";
 import { getSuggestedPrice } from "@/lib/shop-config";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
 const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
 const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL"] as const;
-const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET"] as const;
+const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET","EGG_COMMON","EGG_RARE","EGG_SPECIAL","MASCOT_FOOD","MASCOT_SWEET"] as const;
 const typeLabel: Record<string, string> = {
-  TITLE: "Título", BANNER: "Banner", FRAME: "Moldura", ZIKALOOT_TICKET: "Ticket ZikaLoot"
+  TITLE: "Título",
+  BANNER: "Banner",
+  FRAME: "Moldura",
+  ZIKALOOT_TICKET: "Ticket ZikaLoot",
+  EGG_COMMON: "Ovo Comum",
+  EGG_RARE: "Ovo Raro",
+  EGG_SPECIAL: "Ovo Especial",
+  MASCOT_FOOD: "Comida de Mascote",
+  MASCOT_SWEET: "Doce de Mascote"
 };
 const rarityLabel: Record<string, string> = {
   COMMON: "⚪ Comum", UNCOMMON: "🟢 Incomum", RARE: "🔵 Raro",
@@ -307,6 +315,7 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   const isFrame  = (form.type as string) === "FRAME";
   const isBanner = (form.type as string) === "BANNER";
   const isTitle  = (form.type as string) === "TITLE";
+  const isMascotItem = ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","MASCOT_FOOD","MASCOT_SWEET"].includes(form.type);
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1 text-xs text-slate-400">
@@ -364,6 +373,8 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
             ? "Título: sem imagem necessária — o nome do item já é exibido como texto."
             : (form.type as string) === "ZIKALOOT_TICKET"
             ? "Ticket: qualquer imagem decorativa."
+            : isMascotItem
+            ? "Mascote: imagem opcional. Ovos podem usar /mascot/egg-common.png."
             : "Imagem opcional para o item."
         }
       />
@@ -499,15 +510,26 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
     } catch { toast.error("Erro."); }
   });
 
+  const handleCreateDefaults = () => startTransition(async () => {
+    try {
+      const result = await createDefaultMascotShopItems();
+      if (result.error) { toast.error(result.error); return; }
+      toast.success(result.created ? `${result.created} item(ns) de mascote criado(s).` : "Itens padrão de mascote já existiam.");
+    } catch { toast.error("Erro ao criar itens padrão de mascote."); }
+  });
+
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" onClick={() => setShowCreate(!showCreate)}
           className="gap-1 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
           <Plus size={14} /> Novo item
         </Button>
+        <Button type="button" size="sm" variant="outline" disabled={pending} onClick={handleCreateDefaults}>
+          Criar itens padrão de mascote
+        </Button>
         {showCreate && (
-          <div className="mt-4">
+          <div className="basis-full pt-2">
             <ItemForm form={createForm} setForm={setCreateForm}
               onSave={handleCreate} onCancel={() => setShowCreate(false)}
               pending={pending} label="Criar" />
@@ -523,7 +545,7 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
           <div key={type} className="space-y-2">
             <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500 border-b border-border pb-2">
               <span className="text-[#FFCB05]">
-                {type === "BANNER" ? "🖼" : type === "FRAME" ? "🔵" : type === "TITLE" ? "🏷" : "🎟"}
+                {type === "BANNER" ? "🖼" : type === "FRAME" ? "🔵" : type === "TITLE" ? "🏷" : type.startsWith("EGG") ? "🥚" : type.startsWith("MASCOT") ? "🍬" : "🎟"}
               </span>
               {typeLabel[type]}
               <span className="text-slate-600 font-normal normal-case tracking-normal">({groupItems.length})</span>

@@ -1,4 +1,5 @@
 import type { PlayerRankingEntry } from "@/lib/ranking";
+import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 
 interface RankingTableProps {
   ranking: PlayerRankingEntry[];
@@ -31,6 +32,27 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
   const val = (entry: PlayerRankingEntry, key: ColKey): string | number =>
     key === "displayName" ? entry.displayName : entry[key as keyof PlayerRankingEntry] as number;
 
+  const renderPlayer = (entry: PlayerRankingEntry) => {
+    const mascot = entry.equippedMascot;
+    if (!mascot) return entry.displayName;
+
+    const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+
+    return (
+      <div className="flex min-w-0 items-center gap-1.5">
+        <img
+          src={getSpriteUrl(mascot.pokemonId)}
+          alt={mascotName}
+          width={24}
+          height={24}
+          className="h-6 w-6 shrink-0 object-contain [image-rendering:pixelated]"
+          title={`${mascotName} Nv.${mascot.level}`}
+        />
+        <span className="truncate">{entry.displayName}</span>
+      </div>
+    );
+  };
+
   const th = compact
     ? "px-1.5 py-1.5 text-center text-[9px] uppercase tracking-wide text-slate-500 whitespace-nowrap font-semibold"
     : "px-2 py-2 text-center text-[10px] uppercase tracking-wide text-slate-500 whitespace-nowrap font-semibold";
@@ -44,7 +66,7 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
       <table className="w-full table-fixed divide-y divide-border">
         <colgroup>
           <col className="w-8" />       {/* # */}
-          <col className="w-24" />      {/* Jogador */}
+          <col className="w-28" />      {/* Jogador */}
           <col className="w-10" />      {/* Pts */}
           <col className="w-14" />      {/* Insígnias */}
           <col className="w-16" />      {/* Pts Insígnia */}
@@ -78,7 +100,11 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
                   key={c.key}
                   className={`${td} ${c.color} ${c.key === "displayName" ? "text-left pl-3 truncate" : ""}`}
                 >
-                  {c.key === "position" ? `#${entry.position}` : val(entry, c.key)}
+                  {c.key === "displayName"
+                    ? renderPlayer(entry)
+                    : c.key === "position"
+                      ? `#${entry.position}`
+                      : val(entry, c.key)}
                 </td>
               ))}
             </tr>

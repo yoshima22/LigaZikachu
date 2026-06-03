@@ -10,6 +10,7 @@ import {
   getDeckSubmissionDeadline,
   isDeckRegistrationLocked
 } from "@/lib/decks";
+import { rewardEquippedMascot } from "@/lib/mascot";
 
 // ─── Schemas de validação ────────────────────────────────────────────────────
 
@@ -1355,6 +1356,8 @@ export async function submitTournamentWeekDeck(
         tournamentWeekId: week.id
       }
     );
+
+    await rewardEquippedMascot(player.id, "DECK_SUBMITTED").catch(() => {});
 
     revalidatePath("/torneios/" + week.tournament.slug);
     revalidatePath("/torneios/" + week.tournament.slug + "/semanas/" + week.weekNumber);

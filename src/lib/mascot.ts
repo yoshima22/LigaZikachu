@@ -334,6 +334,45 @@ function rollExpeditionReward(mascot: { level: number; statInstinct: number; sta
   return { type: "NOTHING" };
 }
 
+function describeExpeditionReward(reward: ExpeditionReward) {
+  switch (reward.type) {
+    case "EGG":
+      return {
+        title: reward.eggType === "RARE" ? "Ovo Raro encontrado" : "Ovo Comum encontrado",
+        description: "Seu mascote voltou da expedição carregando um ovo.",
+        payload: {
+          rewardKind: "MASCOT_EGG",
+          eggType: reward.eggType,
+          origin: "Expedição de mascote",
+          rewardLabel: reward.eggType === "RARE" ? "Ovo Raro" : "Ovo Comum",
+        }
+      };
+    case "FOOD":
+      return {
+        title: reward.foodType === "SWEET" ? "Doce de Mascote encontrado" : "Comida de Mascote encontrada",
+        description: `Seu mascote trouxe ${reward.quantity} item(ns) da expedição.`,
+        payload: {
+          rewardKind: "MASCOT_FOOD",
+          foodType: reward.foodType,
+          quantity: reward.quantity,
+          rewardLabel: reward.foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote",
+        }
+      };
+    case "COINS":
+      return {
+        title: "ZikaCoins encontradas",
+        description: `Seu mascote trouxe ${reward.amount} ZikaCoins da expedição.`,
+        payload: {
+          rewardKind: "ZIKA_COINS",
+          amount: reward.amount,
+          rewardLabel: `${reward.amount} ZikaCoins`,
+        }
+      };
+    case "NOTHING":
+      return null;
+  }
+}
+
 export async function startExpedition(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
@@ -349,7 +388,7 @@ export async function startExpedition(playerId: string, mascotId: string) {
   });
 }
 
-export async function claimExpedition(
+async function claimExpeditionLegacy(
   playerId: string,
   expeditionId: string
 ): Promise<{ reward: ExpeditionReward; mascotId: string }> {
@@ -386,6 +425,49 @@ export async function claimExpedition(
     // EXP pela expedição
     await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION);
   });
+
+  return { reward, mascotId: expedition.mascotId };
+}
+
+export async function claimExpedition(
+  playerId: string,
+  expeditionId: string
+): Promise<{ reward: ExpeditionReward; mascotId: string }> {
+  const expedition = await prisma.mascotExpedition.findUnique({
+    where: { id: expeditionId },
+    include: { mascot: true }
+  });
+  if (!expedition || expedition.mascot.playerId !== playerId) throw new Error("Expedição não encontrada.");
+  if (expedition.status !== "ACTIVE") throw new Error("Expedição já coletada.");
+  if (new Date() < expedition.finishAt) throw new Error("A expedição ainda não terminou.");
+
+  const reward = rollExpeditionReward(expedition.mascot);
+  const gift = describeExpeditionReward(reward);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.mascotExpedition.update({
+      where: { id: expeditionId },
+      data: { status: "CLAIMED", rewardJson: reward }
+    });
+
+    if (gift) {
+      await tx.playerGift.create({
+        data: {
+          playerId,
+          type: "CUSTOM",
+          title: `Expedição: ${gift.title}`,
+          description: gift.description,
+          payload: {
+            ...gift.payload,
+            mascotId: expedition.mascotId,
+            pokemonId: expedition.mascot.pokemonId,
+          }
+        }
+      });
+    }
+  });
+
+  await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION).catch(() => {});
 
   return { reward, mascotId: expedition.mascotId };
 }

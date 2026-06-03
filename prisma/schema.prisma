@@ -1082,6 +1082,11 @@ enum ShopItemType {
   BANNER
   FRAME
   ZIKALOOT_TICKET
+  EGG_COMMON
+  EGG_RARE
+  EGG_SPECIAL
+  MASCOT_FOOD
+  MASCOT_SWEET
 }
 
 enum ZikaLootStatus {

@@ -37,6 +37,9 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
+  const mascotItems = items.filter((i) =>
+    ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET"].includes(i.type)
+  );
 
   return (
     <div className="space-y-8">
@@ -45,7 +48,7 @@ export default async function ShopPage() {
         <div>
           <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
           <h1 className="font-pixel text-base text-[#FFCB05]">ZikaShop</h1>
-          <p className="mt-1 text-sm text-slate-400">Gaste suas ZikaCoins em títulos, banners e molduras exclusivas.</p>
+          <p className="mt-1 text-sm text-slate-400">Gaste suas ZikaCoins em títulos, banners, molduras, ovos e itens de mascote.</p>
         </div>
         <div className="flex items-center gap-3">
           {wallet && (
@@ -108,6 +111,15 @@ export default async function ShopPage() {
               title="Tickets ZikaLoot"
               items={tickets.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
               ownedIds={new Set()} // tickets não são únicos — sempre pode comprar mais
+              balance={wallet?.balance ?? 0}
+              playerId={player?.id ?? null}
+            />
+          )}
+          {mascotItems.length > 0 && (
+            <ShopGrid
+              title="Mascotes: Ovos e Itens"
+              items={mascotItems.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+              ownedIds={new Set()}
               balance={wallet?.balance ?? 0}
               playerId={player?.id ?? null}
             />
