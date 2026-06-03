@@ -60,7 +60,7 @@ export default async function MascotesPage() {
     }),
     prisma.mascotFoodItem.findMany({ where: { playerId: player.id } }),
     prisma.playerInventory.findMany({
-      where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as string[] } } },
+      where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as unknown as import("@prisma/client").ShopItemType[] } } },
       include: { item: { select: { id: true, name: true, type: true } } }
     }),
   ]);
