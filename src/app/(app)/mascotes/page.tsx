@@ -24,6 +24,16 @@ export default async function MascotesPage() {
 
   const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
 
+  const eggShopImages = await prisma.shopItem.findMany({
+    where: { type: { in: ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_EVENT"] }, imageUrl: { not: null } },
+    select: { type: true, imageUrl: true }
+  });
+  const eggImageByType: Record<string, string> = {};
+  for (const e of eggShopImages) {
+    const key = e.type.replace("EGG_",""); // EGG_RARE → RARE
+    if (e.imageUrl) eggImageByType[key] = e.imageUrl;
+  }
+
   const [mascots, eggs, incubator, foods, buffInventory] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -164,6 +174,7 @@ export default async function MascotesPage() {
         } : null}
         eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin }))}
         canSkipIncubation={admin}
+        eggImages={eggImageByType}
       />
 
       {/* Meus Mascotes com paginação e filtros */}

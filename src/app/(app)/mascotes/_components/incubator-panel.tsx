@@ -21,6 +21,8 @@ interface Props {
   eggs: EggItem[];
   canSkipIncubation?: boolean;
   onHatched?: (pokemonId: number, name: string) => void;
+  /** imageUrl por tipo de ovo vindo do shop (ex: { RARE: "https://...", SPECIAL: "https://..." }) */
+  eggImages?: Record<string, string>;
 }
 
 const EGG_COLORS: Record<string, string> = {
@@ -59,7 +61,10 @@ function Countdown({ finishAt }: { finishAt: Date }) {
   return <span>{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>;
 }
 
-export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched }: Props) {
+export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {} }: Props) {
+  // Resolve a imagem: usa a do shop se disponível, senão usa o arquivo local estático
+  const resolveEggImg = (type: string) =>
+    eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
   const [pending, startTransition] = useTransition();
   const [hatchResult, setHatchResult] = useState<{ pokemonId: number; name: string } | null>(null);
   const isReady = incubator ? new Date() >= new Date(incubator.finishAt) : false;
@@ -115,7 +120,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             <div className="relative">
               <div className={`flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border-2 p-2 ${EGG_COLORS[incubator.eggType]}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={EGG_IMAGE[incubator.eggType] ?? EGG_IMAGE.COMMON} alt={EGG_LABEL[incubator.eggType]} className="h-full w-full object-contain drop-shadow-[0_0_14px_rgba(255,203,5,0.28)]" />
+                <img src={resolveEggImg(incubator.eggType)} alt={EGG_LABEL[incubator.eggType]} className="h-full w-full object-contain drop-shadow-[0_0_14px_rgba(255,203,5,0.28)]" />
               </div>
               {isReady && <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-400 animate-ping" />}
             </div>
@@ -172,7 +177,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <div key={egg.id} className={`flex items-center gap-3 rounded-xl border-2 p-3 ${EGG_COLORS[egg.type]}`}>
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-950/40 p-1">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={EGG_IMAGE[egg.type] ?? EGG_IMAGE.COMMON} alt={EGG_LABEL[egg.type]} className="h-full w-full object-contain" />
+                  <img src={resolveEggImg(egg.type)} alt={EGG_LABEL[egg.type]} className="h-full w-full object-contain" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white">{EGG_LABEL[egg.type]}</p>
