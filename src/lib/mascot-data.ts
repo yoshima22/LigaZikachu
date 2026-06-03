@@ -337,11 +337,11 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   // Fire
   4:"fire",5:"fire",6:"fire",37:"fire",38:"fire",58:"fire",59:"fire",77:"fire",78:"fire",
   126:"fire",136:"fire",155:"fire",156:"fire",157:"fire",228:"fire",229:"fire",240:"fire",
-  // Water
+  // Water (87=Dewgong→ice, 91=Cloyster→ice, 79=Slowpoke→psychic: keep water as primary)
   7:"water",8:"water",9:"water",54:"water",55:"water",60:"water",61:"water",62:"water",
-  72:"water",73:"water",79:"water",80:"water",86:"water",87:"water",90:"water",91:"water",
+  72:"water",73:"water",80:"water",86:"water",
   98:"water",99:"water",116:"water",117:"water",118:"water",119:"water",120:"water",
-  121:"water",129:"water",130:"water",131:"water",134:"water",158:"water",159:"water",
+  121:"water",129:"water",130:"water",134:"water",158:"water",159:"water",
   160:"water",170:"water",171:"water",183:"water",184:"water",194:"water",195:"water",
   222:"water",223:"water",224:"water",
   // Grass
@@ -351,8 +351,9 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   // Electric
   25:"electric",26:"electric",81:"electric",82:"electric",100:"electric",101:"electric",
   125:"electric",135:"electric",172:"electric",239:"electric",
-  // Psychic
-  63:"psychic",64:"psychic",65:"psychic",96:"psychic",97:"psychic",124:"psychic",
+  // Psychic (79=Slowpoke, 80=Slowbro, 124=Jynx)
+  63:"psychic",64:"psychic",65:"psychic",79:"psychic",80:"psychic",
+  96:"psychic",97:"psychic",124:"psychic",
   137:"psychic",150:"psychic",196:"psychic",203:"psychic",175:"psychic",176:"psychic",
   // Ghost
   92:"ghost",93:"ghost",94:"ghost",200:"ghost",
@@ -361,16 +362,16 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   // Fighting
   56:"fighting",57:"fighting",66:"fighting",67:"fighting",68:"fighting",
   106:"fighting",107:"fighting",214:"fighting",236:"fighting",237:"fighting",
-  // Ice
-  87:"ice",91:"ice",124:"ice",131:"ice",220:"ice",221:"ice",238:"ice",
+  // Ice (87=Dewgong, 91=Cloyster, 131=Lapras, 220=Swinub, 221=Piloswine, 238=Smoochum)
+  87:"ice",91:"ice",131:"ice",220:"ice",221:"ice",238:"ice",
   // Poison
   23:"poison",24:"poison",29:"poison",30:"poison",31:"poison",32:"poison",33:"poison",
   34:"poison",41:"poison",42:"poison",88:"poison",89:"poison",109:"poison",110:"poison",
-  // Ground
-  27:"ground",28:"ground",50:"ground",51:"ground",74:"ground",75:"ground",76:"ground",
+  // Ground (74=Geodude→rock primary)
+  27:"ground",28:"ground",50:"ground",51:"ground",75:"ground",76:"ground",
   104:"ground",105:"ground",111:"ground",112:"ground",
-  // Rock
-  138:"rock",139:"rock",140:"rock",141:"rock",142:"rock",
+  // Rock (74=Geodude, 138-142)
+  74:"rock",138:"rock",139:"rock",140:"rock",141:"rock",142:"rock",
   // Bug
   10:"bug",11:"bug",12:"bug",13:"bug",14:"bug",15:"bug",46:"bug",47:"bug",
   48:"bug",49:"bug",165:"bug",166:"bug",167:"bug",168:"bug",204:"bug",205:"bug",
