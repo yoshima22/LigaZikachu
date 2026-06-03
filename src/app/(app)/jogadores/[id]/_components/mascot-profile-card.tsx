@@ -11,7 +11,7 @@ import {
   HUNGER_COLOR, HAPPINESS_COLOR, CHALLENGE_COLOR,
   generateMascotSpeech,
 } from "@/lib/mascot-data";
-import { startExpeditionAction } from "../../mascotes/actions";
+import { startExpeditionAction } from "@/app/(app)/mascotes/actions";
 
 interface MascotEvent { id: string; emoji: string; description: string; createdAt: Date }
 interface MascotRelation {
