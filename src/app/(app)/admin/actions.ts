@@ -207,13 +207,24 @@ export async function sendItemToAllPlayers(
 
     for (const player of players) {
       try {
-        if (["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_EVENT"].includes(item.type)) {
+        if (["EGG_COMMON","EGG_RARE","EGG_SPECIAL"].includes(item.type)) {
           const eggTypeMap: Record<string, string> = {
-            EGG_COMMON: "COMMON", EGG_RARE: "RARE",
-            EGG_SPECIAL: "SPECIAL", EGG_EVENT: "EVENT"
+            EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL"
           };
-          await prisma.mascotEgg.create({
-            data: { playerId: player.id, type: eggTypeMap[item.type] as "COMMON", origin: "Presente do Admin" }
+          // Vai para a Caixa de Presentes do jogador
+          await prisma.playerGift.create({
+            data: {
+              playerId: player.id,
+              type: "CUSTOM",
+              title: item.name,
+              description: `${item.name} enviado pelo admin.`,
+              payload: {
+                rewardKind: "MASCOT_EGG",
+                eggType: eggTypeMap[item.type],
+                origin: "Enviado pelo Admin",
+                rewardLabel: item.name,
+              }
+            }
           });
           sent++;
         } else if (item.type === "MASCOT_FOOD" || item.type === "MASCOT_SWEET") {

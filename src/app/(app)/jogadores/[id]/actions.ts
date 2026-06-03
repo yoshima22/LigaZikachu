@@ -42,9 +42,20 @@ export async function grantItemToPlayer(
     const isBuff = BUFF_TYPES.includes(item.type);
 
     if (eggType) {
-      // Ovo → MascotEgg
-      await prisma.mascotEgg.create({
-        data: { playerId, type: eggType, origin: "Concedido pelo Admin" }
+      // Ovo → Caixa de Presentes (jogador coleta e vai para MascotEgg)
+      await prisma.playerGift.create({
+        data: {
+          playerId,
+          type: "CUSTOM",
+          title: item.name,
+          description: `${item.name} concedido pelo admin.`,
+          payload: {
+            rewardKind: "MASCOT_EGG",
+            eggType: eggType.toString(),
+            origin: "Concedido pelo Admin",
+            rewardLabel: item.name,
+          }
+        }
       });
     } else if (foodType) {
       // Comida/Doce → MascotFoodItem
