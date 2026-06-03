@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import {
-  startIncubation, hatchEgg, equipMascot,
+  startIncubation, hatchEgg, equipMascot, unequipMascot,
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
+  skipExpedition, addExp,
 } from "@/lib/mascot";
 import type { InteractionType } from "@/lib/mascot";
 
@@ -117,6 +118,47 @@ export async function claimExpeditionAction(expeditionId: string): Promise<{ err
     const result = await claimExpedition(player.id, expeditionId);
     revalidate();
     revalidatePath("/caixa-de-presentes");
+    return { result };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function unequipMascotAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado." };
+    await unequipMascot(player.id, mascotId);
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function skipExpeditionAction(expeditionId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await skipExpedition(expeditionId);
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function addExpAdminAction(mascotId: string, amount: number): Promise<{ error?: string; result?: Awaited<ReturnType<typeof addExp>> }> {
+  try {
+    await requireAdmin();
+    // Bypass do check isEquipped — admin pode dar EXP a qualquer mascote
+    const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+    if (!mascot) return { error: "Mascote não encontrado." };
+    // Temporariamente força isEquipped para calcular EXP
+    const originalEquipped = mascot.isEquipped;
+    if (!originalEquipped) {
+      await prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: true } });
+    }
+    const result = await addExp(mascotId, amount);
+    if (!originalEquipped) {
+      await prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: false } });
+    }
+    revalidate();
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }

@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Star, Edit2, Check, X, MapPin } from "lucide-react";
-import { getSpriteUrl, getPokemonName, expToNextLevel, MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL } from "@/lib/mascot-data";
-import { interactAction, equipMascotAction, renameMascotAction, startExpeditionAction, claimExpeditionAction } from "../actions";
+import { getSpriteUrl, getPokemonName, expToNextLevel as expToNext, MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { interactAction, equipMascotAction, unequipMascotAction, renameMascotAction, startExpeditionAction, claimExpeditionAction, skipExpeditionAction, addExpAdminAction } from "../actions";
 
 interface Expedition { id: string; finishAt: Date; status: string }
 
@@ -29,9 +29,9 @@ interface MascotData {
   hasSweet: boolean;
 }
 
-interface Props { mascot: MascotData }
+interface Props { mascot: MascotData; isAdmin?: boolean }
 
-export function MascotCard({ mascot }: Props) {
+export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
@@ -39,7 +39,7 @@ export function MascotCard({ mascot }: Props) {
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const expedition = mascot.expeditions.find(e => e.status === "ACTIVE");
   const claimable  = mascot.expeditions.find(e => e.status === "ACTIVE" && new Date() >= new Date(e.finishAt));
-  const expNeeded  = expToNextLevel(mascot.level);
+  const expNeeded  = expToNext(mascot.level);
   const expPct     = Math.min(100, Math.round((mascot.exp / expNeeded) * 100));
 
   const act = (fn: () => Promise<{ error?: string; result?: unknown }>, successMsg?: string) => {
@@ -198,9 +198,9 @@ export function MascotCard({ mascot }: Props) {
           </button>
         </div>
 
-        {/* Expedição + Equipar */}
+        {/* Expedição + Equipar/Desequipar */}
         <div className="flex gap-2">
-          {!expedition && (
+          {!expedition && mascot.isEquipped && (
             <button type="button" disabled={pending} onClick={() => act(() => startExpeditionAction(mascot.id), "Expedição iniciada! Volte em 1 hora.")}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
               <MapPin size={12}/> Expedição
@@ -212,7 +212,39 @@ export function MascotCard({ mascot }: Props) {
               <Swords size={12}/> Equipar
             </button>
           )}
+          {mascot.isEquipped && (
+            <button type="button" disabled={pending} onClick={() => act(() => unequipMascotAction(mascot.id), "Mascote desequipado.")}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-600/40 bg-slate-800/40 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/40 disabled:opacity-40">
+              Desequipar
+            </button>
+          )}
         </div>
+
+        {/* Admin tools */}
+        {isAdmin && (
+          <div className="border-t border-border/40 pt-3 space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#FFCB05]/60">Admin</p>
+            <div className="flex flex-wrap gap-2">
+              {expedition && (
+                <button type="button" disabled={pending}
+                  onClick={() => act(() => skipExpeditionAction(expedition.id), "Expedição pulada!")}
+                  className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-400 hover:bg-blue-500/20">
+                  ⏩ Pular expedição
+                </button>
+              )}
+              <button type="button" disabled={pending}
+                onClick={() => act(() => addExpAdminAction(mascot.id, Math.max(1, expToNext(mascot.level) - mascot.exp)), `EXP suficiente para upar!`)}
+                className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2.5 py-1 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20">
+                ⬆ Dar EXP p/ upar
+              </button>
+              <button type="button" disabled={pending}
+                onClick={() => act(() => addExpAdminAction(mascot.id, 9999), "9999 EXP adicionada!")}
+                className="rounded-lg border border-slate-600/30 bg-slate-800/40 px-2.5 py-1 text-[11px] text-slate-400 hover:bg-slate-700/40">
+                +9999 EXP
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

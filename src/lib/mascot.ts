@@ -94,6 +94,12 @@ export async function equipMascot(playerId: string, mascotId: string) {
   ]);
 }
 
+export async function unequipMascot(playerId: string, mascotId: string) {
+  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  await prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: false } });
+}
+
 // ── EXP e level up ────────────────────────────────────────────────────────────
 
 export interface LevelUpResult {
@@ -322,16 +328,11 @@ export async function recalculateMood(mascotId: string): Promise<void> {
   }
 
   if (happinessDecay > 0) {
-    const nextDecayAt = new Date(now);
     const newHappiness = Math.max(0, mascot.happiness - happinessDecay);
+    // NÃO reseta lastInteractedAt/lastFedAt — isso causaria cooldown falso e bloquearia interações
     await prisma.mascot.update({
       where: { id: mascotId },
-      data: {
-        happiness: newHappiness,
-        mood: newMood,
-        lastInteractedAt: nextDecayAt,
-        lastFedAt: nextDecayAt,
-      }
+      data: { happiness: newHappiness, mood: newMood }
     });
   } else if (newMood !== mascot.mood) {
     await prisma.mascot.update({
@@ -402,6 +403,7 @@ function describeExpeditionReward(reward: ExpeditionReward) {
 export async function startExpedition(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (!mascot.isEquipped) throw new Error("Apenas o mascote equipado pode sair em expedição.");
 
   const active = await prisma.mascotExpedition.findFirst({
     where: { mascotId, status: "ACTIVE" }
@@ -411,6 +413,14 @@ export async function startExpedition(playerId: string, mascotId: string) {
   const finishAt = new Date(Date.now() + EXPEDITION_DURATION_MS);
   return prisma.mascotExpedition.create({
     data: { mascotId, finishAt }
+  });
+}
+
+/** Admin: encerra expedição imediatamente (skip timer) */
+export async function skipExpedition(expeditionId: string) {
+  await prisma.mascotExpedition.update({
+    where: { id: expeditionId },
+    data: { finishAt: new Date(Date.now() - 1000) } // 1s atrás = pronto
   });
 }
 

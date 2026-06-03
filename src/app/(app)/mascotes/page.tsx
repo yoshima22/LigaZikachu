@@ -116,6 +116,7 @@ export default async function MascotesPage() {
             {mascots.map(mascot => (
               <MascotCard
                 key={mascot.id}
+                isAdmin={admin}
                 mascot={{
                   id: mascot.id,
                   pokemonId: mascot.pokemonId,
