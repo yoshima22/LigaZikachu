@@ -100,7 +100,7 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
   };
 
   return (
-    <div className="rounded-2xl border border-[#FFCB05]/20 bg-slate-950/60 overflow-hidden">
+    <div className="rounded-2xl border border-[#FFCB05]/20 bg-slate-950/60">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#FFCB05]/8 to-transparent border-b border-border/50 px-4 py-2 flex items-center gap-2">
         <span className="text-[10px] uppercase tracking-widest text-[#FFCB05]/60 font-semibold">Mascote</span>
@@ -213,69 +213,82 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
         </div>
 
         {/* Relações — visível para todos */}
-        {(friends.length > 0 || rivals.length > 0) && (
-          <div className="space-y-2">
-            {friends.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold text-green-400 mb-1">💚 Amigos ({friends.length})</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {friends.map(r => (
-                    <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
-                      <span className="text-[10px] text-slate-300">
-                        {r.otherMascot.nickname ?? getPokemonName(r.otherMascot.pokemonId)}
-                        <span className="text-slate-500"> ({r.otherMascot.player.displayName})</span>
-                      </span>
-                    </div>
-                  ))}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Relações</p>
+          {friends.length === 0 && rivals.length === 0 ? (
+            <p className="text-[10px] text-slate-600 italic">
+              Nenhuma relação registrada ainda. Combates com mascotes de outros treinadores criam rivalidades automaticamente após cada partida confirmada.
+            </p>
+          ) : (
+            <>
+              {friends.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-green-400 mb-1">💚 Amigos ({friends.length})</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {friends.map(r => (
+                      <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
+                        <span className="text-[10px] text-slate-300">
+                          {r.otherMascot.nickname ?? getPokemonName(r.otherMascot.pokemonId)}
+                          <span className="text-slate-500"> ({r.otherMascot.player.displayName})</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-            {rivals.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold text-red-400 mb-1">⚔️ Rivais ({rivals.length})</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {rivals.map(r => (
-                    <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
-                      <span className="text-[10px] text-slate-300">
-                        {r.otherMascot.nickname ?? getPokemonName(r.otherMascot.pokemonId)}
-                        <span className="text-slate-500"> ({r.otherMascot.player.displayName})</span>
-                        <span className="text-[9px] text-slate-600 ml-1">{r.wins}V {r.losses}D</span>
-                      </span>
-                    </div>
-                  ))}
+              )}
+              {rivals.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-red-400 mb-1">⚔️ Rivais ({rivals.length})</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {rivals.map(r => (
+                      <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
+                        <span className="text-[10px] text-slate-300">
+                          {r.otherMascot.nickname ?? getPokemonName(r.otherMascot.pokemonId)}
+                          <span className="text-slate-500"> ({r.otherMascot.player.displayName})</span>
+                          <span className="text-[9px] text-slate-600 ml-1">{r.wins}V {r.losses}D</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
 
         {/* Histórico de eventos — visível para todos */}
-        {mascot.events.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Histórico</p>
-            <div className="space-y-1">
-              {eventsToShow.map(ev => (
-                <div key={ev.id} className="flex items-start gap-1.5 text-[10px] text-slate-500">
-                  <span className="shrink-0">{ev.emoji}</span>
-                  <span className="leading-snug flex-1">{ev.description}</span>
-                  <span className="shrink-0 text-slate-700">
-                    {new Date(ev.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {mascot.events.length > 5 && (
-              <button type="button" onClick={() => setShowAllEvents(v => !v)}
-                className="text-[10px] text-slate-600 hover:text-slate-400 underline">
-                {showAllEvents ? "Ver menos" : `Ver todos (${mascot.events.length})`}
-              </button>
-            )}
-          </div>
-        )}
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Histórico</p>
+          {mascot.events.length === 0 ? (
+            <p className="text-[10px] text-slate-600 italic">
+              Nenhum evento registrado ainda. O histórico é criado automaticamente conforme o mascote interage, batalha e participa de expedições.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1">
+                {eventsToShow.map(ev => (
+                  <div key={ev.id} className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                    <span className="shrink-0">{ev.emoji}</span>
+                    <span className="leading-snug flex-1">{ev.description}</span>
+                    <span className="shrink-0 text-slate-700">
+                      {new Date(ev.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {mascot.events.length > 5 && (
+                <button type="button" onClick={() => setShowAllEvents(v => !v)}
+                  className="text-[10px] text-slate-600 hover:text-slate-400 underline">
+                  {showAllEvents ? "Ver menos" : `Ver todos (${mascot.events.length})`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Expedição — só para o dono */}
         {isOwner && (

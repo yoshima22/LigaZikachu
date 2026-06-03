@@ -139,7 +139,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   ];
 
   return (
-    <div className={`rounded-2xl border bg-slate-950/60 overflow-hidden transition-all ${mascot.isEquipped ? "border-[#FFCB05]/50 ring-1 ring-[#FFCB05]/20" : "border-border"}`}>
+    <div className={`rounded-2xl border bg-slate-950/60 transition-all ${mascot.isEquipped ? "border-[#FFCB05]/50 ring-1 ring-[#FFCB05]/20" : "border-border"}`}>
       {mascot.isEquipped && (
         <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider">
           ★ Mascote equipado
