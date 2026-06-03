@@ -354,17 +354,15 @@ export interface ArchetypeDecksResult {
 }
 
 export async function getArchetypeData(archetype: string): Promise<ArchetypeDecksResult> {
-  if (!process.env.LIMITLESS_API_KEY) return { decks: [] };
   try {
+    // Funciona sem chave — getArchetypeResults usa endpoints públicos
     const raw = await getArchetypeResults(archetype, 3);
     return {
       decks: raw.map(d => ({
         tournament: d.tournament,
-        placement: d.placement,
-        deckName: d.deck.archetype ?? d.deck.name,
-        mainCards: d.deck.list
-          ? Object.entries(d.deck.list).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([c, q]) => `${q}x ${c}`)
-          : []
+        placement: d.placing,
+        deckName: archetype,
+        mainCards: [`${d.player} · ${d.record}`]
       }))
     };
   } catch { return { decks: [] }; }
