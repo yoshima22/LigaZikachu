@@ -137,6 +137,15 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
     }
   }
 
+  // Auto-rename: se o nickname era o nome padrão do Pokémon antes da evolução,
+  // atualiza para o nome da nova forma automaticamente
+  let nicknameUpdate: { nickname: null } | Record<string, never> = {};
+  if (evolved && newPokemonId) {
+    const oldDefaultName = getPokemonName(mascot.pokemonId);
+    const wasDefault = !mascot.nickname || mascot.nickname === oldDefaultName;
+    if (wasDefault) nicknameUpdate = { nickname: null }; // null = mostra nome novo do pokemonId
+  }
+
   // Bônus de stat por level up
   const statUpdates = leveled ? {
     statForce:    mascot.statForce    + (mascot.personality === "COMPETITIVE" ? 2 : 1),
@@ -148,7 +157,7 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
 
   await prisma.mascot.update({
     where: { id: mascotId },
-    data: { level, exp, pokemonId, ...statUpdates }
+    data: { level, exp, pokemonId, ...statUpdates, ...nicknameUpdate }
   });
 
   return { leveled, newLevel: level, evolved, newPokemonId };

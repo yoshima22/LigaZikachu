@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { recalculateMood } from "@/lib/mascot";
 import { isAdmin } from "@/lib/auth/permissions";
-import { MascotCard } from "./_components/mascot-card";
+import { MascotList } from "./_components/mascot-list";
 import { IncubatorPanel } from "./_components/incubator-panel";
-import { Egg, Heart, ShoppingBag } from "lucide-react";
+import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -47,10 +47,23 @@ export default async function MascotesPage() {
   // Recalcula humor dos mascotes (fire-and-forget)
   void Promise.all(mascots.map(m => recalculateMood(m.id))).catch(() => {});
 
-  const hasFood  = foods.some(f => f.type === "FOOD"  && f.quantity > 0);
-  const hasSweet = foods.some(f => f.type === "SWEET" && f.quantity > 0);
+  const hasFood    = foods.some(f => f.type === "FOOD"  && f.quantity > 0);
+  const hasSweet   = foods.some(f => f.type === "SWEET" && f.quantity > 0);
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
+
+  const mascotData = mascots.map(m => ({
+    id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+    level: m.level, exp: m.exp, happiness: m.happiness,
+    mood: m.mood, personality: m.personality, isEquipped: m.isEquipped,
+    statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma,
+    statInstinct: m.statInstinct, statVitality: m.statVitality,
+    hatchedAt: m.hatchedAt,
+    lastInteractedAt: m.lastInteractedAt,
+    lastFedAt: m.lastFedAt,
+    expeditions: m.expeditions.map(e => ({ id: e.id, finishAt: e.finishAt, status: e.status })),
+    hasFood, hasSweet,
+  }));
 
   return (
     <div className="space-y-8">
@@ -63,8 +76,7 @@ export default async function MascotesPage() {
             Seus companheiros Pokémon — cuide deles, eles crescem com você.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Inventário de comida */}
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 rounded-xl border border-border bg-slate-900/50 px-3 py-2 text-xs">
             <span>🍖</span>
             <span className="font-semibold text-slate-300">{foodCount}</span>
@@ -81,6 +93,40 @@ export default async function MascotesPage() {
         </div>
       </div>
 
+      {/* Como funciona — explicação para o jogador */}
+      <details className="rounded-2xl border border-border bg-slate-950/50 overflow-hidden group">
+        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-300 hover:text-white select-none">
+          <span className="flex items-center gap-2">📖 Como funciona o sistema de mascotes?</span>
+          <ChevronDown size={14} className="text-slate-500 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border px-5 py-4 grid gap-4 sm:grid-cols-2 text-xs text-slate-400 leading-relaxed">
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">🥚 Ovos & Incubadora</p>
+            <p>Compre ovos na ZikaShop. Coloque um ovo na incubadora e aguarde <strong className="text-slate-300">10 minutos</strong> para chocar. Cada tipo de ovo tem Pokémon diferentes.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">⭐ Nível & Evolução</p>
+            <p>Seu mascote ganha EXP em partidas, vitórias, interações e expedições. Ao atingir o nível certo, ele <strong className="text-slate-300">evolui automaticamente</strong>.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">💛 Cuidados diários</p>
+            <p><strong className="text-slate-300">Brincar</strong> aumenta felicidade e EXP. <strong className="text-slate-300">Carinho</strong> pode ser recusado pelo mascote. <strong className="text-slate-300">Comida</strong> sacia fome. <strong className="text-slate-300">Doces</strong> dão bônus de EXP. Há cooldown de 5 minutos entre interações.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">🗺 Expedições</p>
+            <p>Envie o mascote <strong className="text-slate-300">equipado</strong> em expedições de 1h. Ele pode trazer ovos, comida, doces ou ZikaCoins. Os itens vão para a Caixa de Presentes.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">📊 Status</p>
+            <p>Acompanhe <strong className="text-slate-300">Fome</strong> (alimentar quando com fome), <strong className="text-slate-300">Humor</strong> (afeta interações disponíveis) e <strong className="text-slate-300">Desafio</strong> (indica o estado competitivo). Botões são desabilitados quando a ação não está disponível.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">💪 Stats</p>
+            <p>Cada mascote tem 5 atributos que crescem com o nível. Passe o mouse sobre eles para ver para que servem. A personalidade influencia quais crescem mais rápido.</p>
+          </div>
+        </div>
+      </details>
+
       {/* Incubadora + Ovos */}
       <IncubatorPanel
         incubator={incubator ? {
@@ -94,13 +140,12 @@ export default async function MascotesPage() {
         canSkipIncubation={admin}
       />
 
-      {/* Meus Mascotes */}
+      {/* Meus Mascotes com paginação e filtros */}
       <div className="space-y-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-200">
-          <Heart size={16} className="text-[#FFCB05]" />
-          Meus Mascotes
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-200">🐾 Meus Mascotes</h2>
           <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{mascots.length}</span>
-        </h2>
+        </div>
 
         {mascots.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
@@ -112,38 +157,7 @@ export default async function MascotesPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {mascots.map(mascot => (
-              <MascotCard
-                key={mascot.id}
-                isAdmin={admin}
-                mascot={{
-                  id: mascot.id,
-                  pokemonId: mascot.pokemonId,
-                  nickname: mascot.nickname,
-                  level: mascot.level,
-                  exp: mascot.exp,
-                  happiness: mascot.happiness,
-                  mood: mascot.mood,
-                  personality: mascot.personality,
-                  isEquipped: mascot.isEquipped,
-                  statForce: mascot.statForce,
-                  statAgility: mascot.statAgility,
-                  statCharisma: mascot.statCharisma,
-                  statInstinct: mascot.statInstinct,
-                  statVitality: mascot.statVitality,
-                  hatchedAt: mascot.hatchedAt,
-                  expeditions: mascot.expeditions.map(e => ({
-                    id: e.id,
-                    finishAt: e.finishAt,
-                    status: e.status,
-                  })),
-                  hasFood,
-                  hasSweet,
-                }}
-              />
-            ))}
-          </div>
+          <MascotList mascots={mascotData} isAdmin={admin} />
         )}
       </div>
     </div>

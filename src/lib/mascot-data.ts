@@ -147,10 +147,11 @@ export const EVOLUTION_MAP = new Map<number, Evolution>(
 );
 
 // ── EXP necessária por nível ──────────────────────────────────────────────────
-// Curva suave: menos EXP nos primeiros níveis, cresce gradualmente
+// Curva linear suave: jogável mesmo nos níveis altos.
+// Nível 1→2: 120 EXP | Nível 50→51: 1.100 EXP | Nível 100→101: 2.100 EXP
 export function expForLevel(level: number): number {
   if (level <= 1) return 0;
-  return Math.floor(50 * Math.pow(level - 1, 1.6));
+  return 100 + (level - 1) * 20;
 }
 
 // EXP total acumulada até o nível N
@@ -164,6 +165,59 @@ export function totalExpForLevel(level: number): number {
 export function expToNextLevel(currentLevel: number): number {
   return expForLevel(currentLevel + 1);
 }
+
+// ── Status derivados (calculados a partir dos dados, sem campo extra no BD) ───
+
+export type HungerStatus = "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" | "STUFFED";
+export type HappinessStatus = "DEPRESSED" | "SAD" | "NEUTRAL" | "CONTENT" | "HAPPY";
+export type ChallengeStatus = "ANGRY" | "CALM" | "EAGER" | "CHALLENGER";
+
+export function getHungerStatus(lastFedAt: Date | null): HungerStatus {
+  const hours = lastFedAt ? (Date.now() - new Date(lastFedAt).getTime()) / 3_600_000 : 999;
+  if (hours < 2)  return "STUFFED";
+  if (hours < 6)  return "SATISFIED";
+  if (hours < 12) return "NEUTRAL";
+  if (hours < 24) return "HUNGRY";
+  return "STARVING";
+}
+
+export function getHappinessStatus(happiness: number): HappinessStatus {
+  if (happiness >= 80) return "HAPPY";
+  if (happiness >= 60) return "CONTENT";
+  if (happiness >= 40) return "NEUTRAL";
+  if (happiness >= 20) return "SAD";
+  return "DEPRESSED";
+}
+
+export function getChallengeStatus(mood: string): ChallengeStatus {
+  if (mood === "CONFIDENT" || mood === "COMPETITIVE") return "CHALLENGER";
+  if (mood === "EXCITED" || mood === "PROUD")         return "EAGER";
+  if (mood === "ANGRY")                               return "ANGRY";
+  return "CALM";
+}
+
+export const HUNGER_LABEL: Record<HungerStatus,  string> = {
+  STARVING:  "Faminto",  HUNGRY: "Com fome",   NEUTRAL: "Normal",
+  SATISFIED: "Satisfeito", STUFFED: "Empanturrado",
+};
+export const HAPPINESS_LABEL: Record<HappinessStatus, string> = {
+  DEPRESSED: "Depressivo", SAD: "Triste", NEUTRAL: "Neutro",
+  CONTENT: "Contente", HAPPY: "Feliz",
+};
+export const CHALLENGE_LABEL: Record<ChallengeStatus, string> = {
+  ANGRY: "Irritado", CALM: "Tranquilo", EAGER: "Animado", CHALLENGER: "Desafiante",
+};
+export const HUNGER_COLOR:    Record<HungerStatus,    string> = {
+  STARVING: "text-red-400",    HUNGRY: "text-orange-400", NEUTRAL: "text-slate-400",
+  SATISFIED: "text-green-400", STUFFED: "text-blue-400",
+};
+export const HAPPINESS_COLOR: Record<HappinessStatus, string> = {
+  DEPRESSED: "text-red-400", SAD: "text-orange-400",    NEUTRAL: "text-slate-400",
+  CONTENT:   "text-green-300", HAPPY: "text-[#FFCB05]",
+};
+export const CHALLENGE_COLOR: Record<ChallengeStatus, string> = {
+  ANGRY: "text-red-400", CALM: "text-slate-400", EAGER: "text-blue-400", CHALLENGER: "text-[#FFCB05]",
+};
 
 // ── Personalidades ────────────────────────────────────────────────────────────
 
@@ -237,8 +291,14 @@ export const EXP_REWARDS = {
 
 export function getSpriteUrl(pokemonId: number, animated = false): string {
   if (animated) {
+    // GIF animado — existe para gen 1-5 (IDs 1-649)
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${pokemonId}.gif`;
   }
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+}
+
+// URL do sprite estático (fallback quando GIF não existe)
+export function getStaticSpriteUrl(pokemonId: number): string {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
 
