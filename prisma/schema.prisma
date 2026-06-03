@@ -1302,7 +1302,10 @@ model Mascot {
   @@map("mascots")
 }
 
-enum MascotRelationType { FRIEND RIVAL }
+enum MascotRelationType {
+  FRIEND
+  RIVAL
+}
 
 model MascotRelation {
   id        String             @id @default(cuid())
