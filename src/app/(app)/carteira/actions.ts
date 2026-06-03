@@ -27,6 +27,7 @@ export async function adjustCoins(
     });
 
     revalidatePath("/carteira");
+    revalidatePath("/", "layout");
     revalidatePath("/admin");
     return {};
   } catch (err) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, Coins, Lock, ShoppingCart, ZoomIn, X } from "lucide-react";
 import { purchaseItem } from "../actions";
@@ -46,6 +47,7 @@ interface Props {
 const consumableTypes = new Set(["ZIKALOOT_TICKET", "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET"]);
 
 export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, playerId }: Props) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingId, setBuyingId]   = useState<string | null>(null);
   const [lightbox, setLightbox]   = useState<{ src: string; name: string; type: string } | null>(null);
@@ -82,6 +84,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
           ? `${quantity}x "${name}" adicionados ao seu inventário!`
           : `"${name}" adicionado ao seu inventário!`
         );
+        router.refresh();
       } catch { toast.error("Erro ao comprar item."); }
       finally { setBuyingId(null); }
     });

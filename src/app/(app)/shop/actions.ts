@@ -350,6 +350,7 @@ export async function purchaseItem(
     revalidatePath("/inventario");
     revalidatePath("/mascotes");
     revalidatePath("/carteira");
+    revalidatePath("/", "layout");
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)
     void onShopPurchase(player.id).catch(() => {});

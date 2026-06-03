@@ -329,6 +329,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
     revalidatePath("/ranking");
     revalidatePath("/dashboard");
+    revalidatePath("/", "layout");
     return { success: true, confirmed: true };
   }
 
@@ -521,6 +522,7 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/ranking`);
   revalidatePath("/ranking");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout");
   return { success: true };
 }
 const confirmResultSchema = z.object({
@@ -599,6 +601,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
   revalidatePath("/ranking");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout");
 
   // Regenera narrativa da semana em background após cada confirmação
   const weekIdForNarrative = match.tournamentWeekId;

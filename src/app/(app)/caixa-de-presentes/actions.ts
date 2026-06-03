@@ -102,6 +102,7 @@ function revalidateGiftTargets() {
   revalidatePath("/codigos");
   revalidatePath("/mascotes");
   revalidatePath("/carteira");
+  revalidatePath("/", "layout");
 }
 
 export async function claimGift(input: z.infer<typeof claimGiftSchema>) {

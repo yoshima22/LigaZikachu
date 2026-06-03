@@ -106,6 +106,9 @@ export interface LevelUpResult {
 export async function addExp(mascotId: string, amount: number): Promise<LevelUpResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
+  if (!mascot.isEquipped) {
+    return { leveled: false, newLevel: mascot.level, evolved: false };
+  }
 
   let { level, exp, pokemonId } = mascot;
   exp += amount;
@@ -231,10 +234,9 @@ export async function interactWithMascot(
         where: { playerId_type: { playerId, type: "FOOD" } },
         data: { quantity: { decrement: 1 } }
       });
-      happinessChange = 5;
+      happinessChange = 12;
       expGained = EXP_REWARDS.FEED_FOOD;
-      newMood = mascot.mood === "HUNGRY" ? "NEUTRAL" : undefined;
-      mascot.lastFedAt && (now);
+      newMood = "HAPPY";
       message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} comeu e está satisfeito!`;
       break;
     }
@@ -261,6 +263,8 @@ export async function interactWithMascot(
   if (refused) {
     return { success: false, message, happinessChange: 0, expGained: 0, refused: true };
   }
+
+  if (!mascot.isEquipped) expGained = 0;
 
   // Atualiza felicidade (0-100)
   const newHappiness = Math.min(100, Math.max(0, mascot.happiness + happinessChange));
@@ -292,6 +296,8 @@ export async function recalculateMood(mascotId: string): Promise<void> {
   if (!mascot) return;
 
   const now = Date.now();
+  const decayMultiplier = mascot.isEquipped ? 1 : 0.25;
+  const thresholdMultiplier = mascot.isEquipped ? 1 : 4;
   const hoursSinceInteraction = mascot.lastInteractedAt
     ? (now - mascot.lastInteractedAt.getTime()) / (1000 * 60 * 60)
     : 999;
@@ -302,15 +308,35 @@ export async function recalculateMood(mascotId: string): Promise<void> {
   let happinessDecay = 0;
   let newMood: MascotMood = mascot.mood;
 
-  if (hoursSinceFed > 12) { newMood = "HUNGRY"; happinessDecay += 5; }
-  else if (hoursSinceInteraction > 24) { newMood = "NEEDY"; happinessDecay += 3; }
-  else if (hoursSinceInteraction > 48) { newMood = "TIRED"; happinessDecay += 5; }
+  if (hoursSinceInteraction > 48 * thresholdMultiplier) {
+    newMood = "TIRED";
+    happinessDecay = Math.max(happinessDecay, Math.ceil(5 * decayMultiplier));
+  } else if (hoursSinceInteraction > 24 * thresholdMultiplier) {
+    newMood = "NEEDY";
+    happinessDecay = Math.max(happinessDecay, Math.ceil(2 * decayMultiplier));
+  }
+
+  if (hoursSinceFed > 36 * thresholdMultiplier) {
+    newMood = "HUNGRY";
+    happinessDecay = Math.max(happinessDecay, Math.ceil(4 * decayMultiplier));
+  }
 
   if (happinessDecay > 0) {
+    const nextDecayAt = new Date(now);
     const newHappiness = Math.max(0, mascot.happiness - happinessDecay);
     await prisma.mascot.update({
       where: { id: mascotId },
-      data: { happiness: newHappiness, mood: newMood }
+      data: {
+        happiness: newHappiness,
+        mood: newMood,
+        lastInteractedAt: nextDecayAt,
+        lastFedAt: nextDecayAt,
+      }
+    });
+  } else if (newMood !== mascot.mood) {
+    await prisma.mascot.update({
+      where: { id: mascotId },
+      data: { mood: newMood }
     });
   }
 }
