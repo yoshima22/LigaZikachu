@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GlobalResetPanel } from "./_components/global-reset-panel";
 import { DeckReminderPanel } from "./_components/deck-reminder-panel";
+import { BulkSendPanel } from "./_components/bulk-send-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -93,6 +94,11 @@ export default async function AdminPage() {
       orderBy: { displayName: "asc" },
     }),
   ]);
+
+  const allShopItems = await prisma.shopItem.findMany({
+    orderBy: [{ type: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, type: true, rarity: true, active: true }
+  });
 
   return (
     <div className="space-y-8">
@@ -212,6 +218,7 @@ export default async function AdminPage() {
         )}
       </Card>
 
+      <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <GlobalResetPanel />
     </div>

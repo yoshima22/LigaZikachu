@@ -185,6 +185,70 @@ export async function adminFormFriendshipAction(mascotAId: string, mascotBId: st
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+// Usar buff em um mascote
+export async function useMascotBuffAction(mascotId: string, itemId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const [mascot, inventoryItem] = await Promise.all([
+      prisma.mascot.findUnique({ where: { id: mascotId } }),
+      prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId } }, include: { item: true } }),
+    ]);
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "Você não tem este item." };
+
+    const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"; hours: number; label: string }> = {
+      MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica (2h de EXP dobrado)" },
+      MASCOT_BUFF_STAT:  { type: "STAT_BOOST",  hours: 4, label: "Proteína Zika (+3 em todos stats, 4h)" },
+      MASCOT_BUFF_HAPPY: { type: "HAPPINESS",   hours: 3, label: "Bala de Mel (felicidade máxima, 3h)" },
+      MASCOT_BUFF_LUCK:  { type: "LUCK_BOOST",  hours: 6, label: "Amuleto da Sorte (expedições melhores, 6h)" },
+      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Sagrada (remove humor negativo)" },
+    };
+
+    const config = BUFF_CONFIG[inventoryItem.item.type];
+    if (!config) return { error: "Este item não é um buff." };
+
+    const expiresAt = new Date(Date.now() + config.hours * 3_600_000);
+
+    await prisma.$transaction(async (tx) => {
+      // Remove 1 do inventário
+      await tx.playerInventory.update({
+        where: { playerId_itemId: { playerId: player.id, itemId } },
+        data: { quantity: { decrement: 1 } }
+      });
+
+      if (config.type === "MOOD_RESET") {
+        // Efeito imediato — remove humores negativos
+        await tx.mascot.update({ where: { id: mascotId }, data: { mood: "NEUTRAL", happiness: Math.min(100, mascot.happiness + 20) } });
+      } else if (config.type === "HAPPINESS") {
+        await tx.mascot.update({ where: { id: mascotId }, data: { happiness: 100, mood: "HAPPY" } });
+      } else if (config.type === "STAT_BOOST") {
+        await tx.mascot.update({
+          where: { id: mascotId },
+          data: {
+            statForce: { increment: 3 }, statAgility: { increment: 3 },
+            statCharisma: { increment: 3 }, statInstinct: { increment: 3 }, statVitality: { increment: 3 }
+          }
+        });
+      }
+
+      // Salva buff com expiração (para EXP_BOOST e LUCK_BOOST)
+      if (config.hours > 0) {
+        await tx.mascotBuff.create({ data: { mascotId, type: config.type, expiresAt } });
+      }
+
+      // Log evento
+      await tx.mascotEvent.create({ data: { mascotId, emoji: "✨", description: `Usou ${config.label}!` } });
+    });
+
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
 // Admin: dar ovo a um jogador
 export async function grantEggToPlayer(playerId: string, eggType: string): Promise<{ error?: string }> {
   try {

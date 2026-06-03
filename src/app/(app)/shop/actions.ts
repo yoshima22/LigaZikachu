@@ -327,6 +327,18 @@ export async function purchaseItem(
             origin: "Comprado na ZikaShop"
           }))
         });
+      } else if ([ShopItemType.MASCOT_BUFF_EXP, ShopItemType.MASCOT_BUFF_STAT, ShopItemType.MASCOT_BUFF_HAPPY, ShopItemType.MASCOT_BUFF_LUCK, ShopItemType.MASCOT_BUFF_MOOD].includes(item.type as ShopItemType)) {
+        // Buff vai para inventário de food items como quantidade (jogador escolhe qual mascote usar depois)
+        const buffTypeMap: Record<string, string> = {
+          MASCOT_BUFF_EXP: "FOOD", MASCOT_BUFF_STAT: "FOOD",
+          MASCOT_BUFF_HAPPY: "SWEET", MASCOT_BUFF_LUCK: "SWEET", MASCOT_BUFF_MOOD: "SWEET",
+        };
+        // Armazena como PlayerInventory consumível (quantidade)
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: player.id, itemId } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: player.id, itemId, quantity: 1 }
+        });
       } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
         // Compra de comida/doce → adiciona ao inventário de comida
         const foodType = item.type === ShopItemType.MASCOT_FOOD ? FoodType.FOOD : FoodType.SWEET;

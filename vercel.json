@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/deck-reminder",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/mascot-social",
+      "schedule": "0 18 * * *"
     }
   ]
 }

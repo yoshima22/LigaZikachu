@@ -1087,6 +1087,11 @@ enum ShopItemType {
   EGG_SPECIAL
   MASCOT_FOOD
   MASCOT_SWEET
+  MASCOT_BUFF_EXP
+  MASCOT_BUFF_STAT
+  MASCOT_BUFF_HAPPY
+  MASCOT_BUFF_LUCK
+  MASCOT_BUFF_MOOD
 }
 
 enum ZikaLootStatus {
@@ -1298,6 +1303,7 @@ model Mascot {
   relationsAsA     MascotRelation[]  @relation("MascotRelationA")
   relationsAsB     MascotRelation[]  @relation("MascotRelationB")
   events           MascotEvent[]
+  buffs            MascotBuff[]
   @@index([playerId])
   @@map("mascots")
 }
@@ -1343,6 +1349,25 @@ model MascotExpedition {
   mascot     Mascot          @relation(fields: [mascotId], references: [id], onDelete: Cascade)
   @@index([mascotId])
   @@map("mascot_expeditions")
+}
+
+enum MascotBuffType {
+  EXP_BOOST
+  STAT_BOOST
+  HAPPINESS
+  LUCK_BOOST
+  MOOD_RESET
+}
+
+model MascotBuff {
+  id        String        @id @default(cuid())
+  mascotId  String
+  type      MascotBuffType
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+  mascot    Mascot        @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  @@index([mascotId, expiresAt])
+  @@map("mascot_buffs")
 }
 
 model MascotFoodItem {

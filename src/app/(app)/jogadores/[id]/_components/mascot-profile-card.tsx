@@ -110,15 +110,15 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
       <div className="p-4 space-y-4">
         {/* Sprite + Info principal */}
         <div className="flex items-start gap-4">
-          {/* Sprite com balão */}
+          {/* Sprite com balão — balão aponta PARA BAIXO para evitar clipping */}
           <div className="group relative shrink-0 cursor-help">
-            {/* Speech bubble */}
-            <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-50 -translate-x-1/2 w-max max-w-[160px] opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-[11px] text-slate-200 shadow-xl text-center leading-snug">
-                {speech}
+            {/* Speech bubble (aparece abaixo do sprite) */}
+            <div className="pointer-events-none absolute top-[calc(100%+6px)] left-1/2 z-50 -translate-x-1/2 w-max max-w-[180px] opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex justify-center -mb-px">
+                <div className="border-8 border-transparent border-b-slate-800" />
               </div>
-              <div className="flex justify-center">
-                <div className="border-8 border-transparent border-t-slate-900 -mt-px" />
+              <div className="rounded-xl border border-border bg-slate-800 px-3 py-2 text-[11px] text-slate-200 shadow-xl text-center leading-snug">
+                {speech}
               </div>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -174,19 +174,19 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
           </div>
         </div>
 
-        {/* Status 3-em-1 */}
-        <div className="grid grid-cols-3 gap-1 text-center">
-          <div className="rounded-lg bg-slate-900/60 py-1.5 px-1">
-            <p className="text-[8px] text-slate-600 uppercase tracking-wide mb-0.5">Fome</p>
-            <span className={`text-[10px] font-semibold ${HUNGER_COLOR[hungerStatus]}`}>{HUNGER_LABEL[hungerStatus]}</span>
+        {/* Status 3-em-1 — melhor espaçamento e legibilidade */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl border border-border/50 bg-slate-900/60 py-2.5 px-2">
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Fome</p>
+            <span className={`text-xs font-bold ${HUNGER_COLOR[hungerStatus]}`}>{HUNGER_LABEL[hungerStatus]}</span>
           </div>
-          <div className="rounded-lg bg-slate-900/60 py-1.5 px-1">
-            <p className="text-[8px] text-slate-600 uppercase tracking-wide mb-0.5">Humor</p>
-            <span className={`text-[10px] font-semibold ${HAPPINESS_COLOR[happinessStatus]}`}>{HAPPINESS_LABEL[happinessStatus]}</span>
+          <div className="rounded-xl border border-border/50 bg-slate-900/60 py-2.5 px-2">
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Humor</p>
+            <span className={`text-xs font-bold ${HAPPINESS_COLOR[happinessStatus]}`}>{HAPPINESS_LABEL[happinessStatus]}</span>
           </div>
-          <div className="rounded-lg bg-slate-900/60 py-1.5 px-1">
-            <p className="text-[8px] text-slate-600 uppercase tracking-wide mb-0.5">Desafio</p>
-            <span className={`text-[10px] font-semibold ${CHALLENGE_COLOR[challengeStatus]}`}>{CHALLENGE_LABEL[challengeStatus]}</span>
+          <div className="rounded-xl border border-border/50 bg-slate-900/60 py-2.5 px-2">
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Desafio</p>
+            <span className={`text-xs font-bold ${CHALLENGE_COLOR[challengeStatus]}`}>{CHALLENGE_LABEL[challengeStatus]}</span>
           </div>
         </div>
 
@@ -216,9 +216,10 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
         <div className="space-y-2">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Relações</p>
           {friends.length === 0 && rivals.length === 0 ? (
-            <p className="text-[10px] text-slate-600 italic">
-              Nenhuma relação registrada ainda. Combates com mascotes de outros treinadores criam rivalidades automaticamente após cada partida confirmada.
-            </p>
+            <div className="rounded-xl border border-dashed border-border bg-slate-900/30 px-3 py-3 text-[11px] text-slate-400 leading-relaxed">
+              Nenhuma relação registrada ainda.<br/>
+              <span className="text-slate-500">Combates são gerados automaticamente quando uma partida é confirmada e ambos os treinadores têm mascotes equipados.</span>
+            </div>
           ) : (
             <>
               {friends.length > 0 && (
@@ -264,9 +265,10 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
         <div className="space-y-1">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Histórico</p>
           {mascot.events.length === 0 ? (
-            <p className="text-[10px] text-slate-600 italic">
-              Nenhum evento registrado ainda. O histórico é criado automaticamente conforme o mascote interage, batalha e participa de expedições.
-            </p>
+            <div className="rounded-xl border border-dashed border-border bg-slate-900/30 px-3 py-3 text-[11px] text-slate-400 leading-relaxed">
+              Nenhum evento registrado ainda.<br/>
+              <span className="text-slate-500">O histórico cresce conforme o mascote interage, batalha com rivais e retorna de expedições.</span>
+            </div>
           ) : (
             <>
               <div className="space-y-1">
