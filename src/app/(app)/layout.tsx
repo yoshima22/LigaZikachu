@@ -78,16 +78,14 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                   <p className="text-xs font-medium text-slate-200 leading-tight">
                     {session.user.name ?? session.user.email}
                   </p>
-                  <div className="flex items-center justify-end gap-2 mt-0.5">
-                    {player?.ptcglNick && (
-                      <span className="text-[10px] text-slate-500">@{player.ptcglNick}</span>
-                    )}
-                    {wallet != null && (
-                      <span className="flex items-center gap-0.5 text-[10px] font-semibold text-[#FFCB05]">
-                        🪙 {wallet.balance.toLocaleString("pt-BR")} ZC
-                      </span>
-                    )}
-                  </div>
+                  {wallet != null && (
+                    <span className="flex items-center justify-end gap-0.5 mt-0.5 text-[10px] font-semibold text-[#FFCB05]">
+                      🪙 {wallet.balance.toLocaleString("pt-BR")} ZC
+                    </span>
+                  )}
+                  {player?.ptcglNick && (
+                    <span className="block text-[10px] text-slate-500 leading-tight">@{player.ptcglNick}</span>
+                  )}
                 </div>
                 {/* Avatar à direita */}
                 <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
