@@ -18,6 +18,7 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
+import { getSpriteUrl, getPokemonName, MOOD_EMOJI } from "@/lib/mascot-data";
 
 export default async function PlayerDetailPage({
   params
@@ -245,20 +246,17 @@ export default async function PlayerDetailPage({
                 <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
                   {player.displayName}
                 </h1>
-                {equippedMascot && (() => {
-                  const { getSpriteUrl: sprite, getPokemonName: pname, MOOD_EMOJI } = require("@/lib/mascot-data");
-                  return (
-                    <div className="mt-1 flex items-center gap-1.5">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={sprite(equippedMascot.pokemonId)} alt="" width={28} height={28}
-                        className="object-contain" style={{ imageRendering: "pixelated" }} />
-                      <span className="text-[10px] text-slate-400">
-                        {equippedMascot.nickname ?? pname(equippedMascot.pokemonId)} Nv.{equippedMascot.level}
-                        {" "}{MOOD_EMOJI[equippedMascot.mood] ?? ""}
-                      </span>
-                    </div>
-                  );
-                })()}
+                {equippedMascot && "pokemonId" in equippedMascot && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getSpriteUrl(equippedMascot.pokemonId)} alt="" width={28} height={28}
+                      className="object-contain" style={{ imageRendering: "pixelated" }} />
+                    <span className="text-[10px] text-slate-400">
+                      {equippedMascot.nickname ?? getPokemonName(equippedMascot.pokemonId)} Nv.{equippedMascot.level}
+                      {" "}{MOOD_EMOJI[equippedMascot.mood] ?? ""}
+                    </span>
+                  </div>
+                )}
                 {equippedTitle && (
                   <div className="mt-0.5">
                     <TitleDisplay
