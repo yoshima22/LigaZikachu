@@ -327,7 +327,7 @@ export async function purchaseItem(
             origin: "Comprado na ZikaShop"
           }))
         });
-      } else if ([ShopItemType.MASCOT_BUFF_EXP, ShopItemType.MASCOT_BUFF_STAT, ShopItemType.MASCOT_BUFF_HAPPY, ShopItemType.MASCOT_BUFF_LUCK, ShopItemType.MASCOT_BUFF_MOOD].includes(item.type as ShopItemType)) {
+      } else if ((["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as string[]).includes(item.type)) {
         // Buff vai para inventário de food items como quantidade (jogador escolhe qual mascote usar depois)
         const buffTypeMap: Record<string, string> = {
           MASCOT_BUFF_EXP: "FOOD", MASCOT_BUFF_STAT: "FOOD",
