@@ -32,14 +32,13 @@ const EGG_COLORS: Record<string, string> = {
 const EGG_LABEL: Record<string, string> = {
   COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", EVENT: "Ovo de Evento"
 };
-// Filtros CSS para diferenciar visualmente cada raridade usando a mesma imagem base
-const EGG_FILTER: Record<string, string> = {
-  COMMON:  "none",
-  RARE:    "hue-rotate(200deg) saturate(1.5) brightness(1.1)",
-  SPECIAL: "hue-rotate(270deg) saturate(1.8) brightness(1.05)",
-  EVENT:   "hue-rotate(45deg) saturate(2) brightness(1.2) sepia(0.3)",
+// Imagem específica por raridade (coloque os arquivos em /public/mascot/)
+const EGG_IMAGE: Record<string, string> = {
+  COMMON:  "/mascot/egg-common.png",
+  RARE:    "/mascot/egg-rare.png",
+  SPECIAL: "/mascot/egg-special.png",
+  EVENT:   "/mascot/egg-common.png", // fallback até ter imagem própria
 };
-const EGG_BASE_IMAGE = "/mascot/egg-common.png";
 
 function Countdown({ finishAt }: { finishAt: Date }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, finishAt.getTime() - Date.now()));
@@ -116,7 +115,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             <div className="relative">
               <div className={`flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border-2 p-2 ${EGG_COLORS[incubator.eggType]}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={EGG_BASE_IMAGE} alt={EGG_LABEL[incubator.eggType]} className="h-full w-full object-contain drop-shadow-[0_0_14px_rgba(255,203,5,0.28)]" style={{ filter: EGG_FILTER[incubator.eggType] }} />
+                <img src={EGG_IMAGE[incubator.eggType] ?? EGG_IMAGE.COMMON} alt={EGG_LABEL[incubator.eggType]} className="h-full w-full object-contain drop-shadow-[0_0_14px_rgba(255,203,5,0.28)]" />
               </div>
               {isReady && <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-400 animate-ping" />}
             </div>
@@ -173,7 +172,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <div key={egg.id} className={`flex items-center gap-3 rounded-xl border-2 p-3 ${EGG_COLORS[egg.type]}`}>
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-950/40 p-1">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={EGG_BASE_IMAGE} alt={EGG_LABEL[egg.type]} className="h-full w-full object-contain" style={{ filter: EGG_FILTER[egg.type] }} />
+                  <img src={EGG_IMAGE[egg.type] ?? EGG_IMAGE.COMMON} alt={EGG_LABEL[egg.type]} className="h-full w-full object-contain" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white">{EGG_LABEL[egg.type]}</p>

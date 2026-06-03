@@ -2,6 +2,7 @@ import Link from "next/link";
 import { GlobalResetPanel } from "./_components/global-reset-panel";
 import { DeckReminderPanel } from "./_components/deck-reminder-panel";
 import { BulkSendPanel } from "./_components/bulk-send-panel";
+import { MascotSocialPanel } from "./_components/mascot-social-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -218,6 +219,7 @@ export default async function AdminPage() {
         )}
       </Card>
 
+      <MascotSocialPanel />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <GlobalResetPanel />

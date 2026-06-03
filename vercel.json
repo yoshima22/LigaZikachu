@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/mascot-social",
-      "schedule": "0 18 * * *"
+      "schedule": "*/30 * * * *"
     }
   ]
 }

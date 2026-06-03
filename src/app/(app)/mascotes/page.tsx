@@ -5,6 +5,7 @@ import { recalculateMood } from "@/lib/mascot";
 import { isAdmin } from "@/lib/auth/permissions";
 import { MascotList } from "./_components/mascot-list";
 import { IncubatorPanel } from "./_components/incubator-panel";
+import { BuffPanel } from "./_components/buff-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
@@ -21,7 +22,9 @@ export default async function MascotesPage() {
   });
   if (!player) return notFound();
 
-  const [mascots, eggs, incubator, foods] = await Promise.all([
+  const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
+
+  const [mascots, eggs, incubator, foods, buffInventory] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId: player.id },
       include: {
@@ -46,6 +49,10 @@ export default async function MascotesPage() {
       include: { egg: true }
     }),
     prisma.mascotFoodItem.findMany({ where: { playerId: player.id } }),
+    prisma.playerInventory.findMany({
+      where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as string[] } } },
+      include: { item: { select: { id: true, name: true, type: true } } }
+    }),
   ]);
 
   // Recalcula humor dos mascotes (fire-and-forget)
@@ -137,6 +144,14 @@ export default async function MascotesPage() {
           </div>
         </div>
       </details>
+
+      {/* Itens especiais (buffs) */}
+      {buffInventory.length > 0 && (
+        <BuffPanel
+          buffs={buffInventory.map(b => ({ id: b.item.id, name: b.item.name, type: b.item.type, quantity: b.quantity }))}
+          mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? `Pokémon #${m.pokemonId}`, isEquipped: m.isEquipped }))}
+        />
+      )}
 
       {/* Incubadora + Ovos */}
       <IncubatorPanel

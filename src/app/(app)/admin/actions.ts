@@ -241,3 +241,20 @@ export async function sendItemToAllPlayers(
     return { sent: 0, skipped: 0, error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+// ── Trigger manual: eventos sociais de mascotes ───────────────────────────────
+export async function triggerMascotSocialEvents(): Promise<{ battles: number; friendships: number; pairs: number; error?: string }> {
+  try {
+    await requireAdmin();
+    const secret = process.env.CRON_SECRET ?? "";
+    const baseUrl = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
+    const res = await fetch(`${baseUrl}/api/cron/mascot-social`, {
+      headers: { Authorization: `Bearer ${secret}` }
+    });
+    const data = await res.json() as { battles?: number; friendships?: number; pairs?: number; error?: string };
+    if (!res.ok) return { battles: 0, friendships: 0, pairs: 0, error: data.error ?? "Erro" };
+    return { battles: data.battles ?? 0, friendships: data.friendships ?? 0, pairs: data.pairs ?? 0 };
+  } catch (err) {
+    return { battles: 0, friendships: 0, pairs: 0, error: err instanceof Error ? err.message : "Erro" };
+  }
+}

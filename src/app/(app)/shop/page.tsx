@@ -53,9 +53,18 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
+  const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
   const mascotItems = items.filter((i) =>
-    ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET"].includes(i.type)
+    ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET", ...BUFF_TYPES].includes(i.type)
   );
+  // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
+  const buffInventory = inventoryRows.filter(r => {
+    const item = items.find(i => i.id === r.itemId);
+    return item && BUFF_TYPES.includes(item.type);
+  });
+  for (const row of buffInventory) {
+    countByItemId.set(row.itemId, row.quantity);
+  }
   const eggCountByType = new Map(eggCounts.map((row) => [row.type, row._count._all]));
   const foodCountByType = new Map(foodItems.map((row) => [row.type, row.quantity]));
   for (const item of mascotItems) {

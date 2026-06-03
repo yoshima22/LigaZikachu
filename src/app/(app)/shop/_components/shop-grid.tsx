@@ -181,20 +181,13 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                   />
                 </div>
               ) : (item.type === "EGG_COMMON" || item.type === "EGG_RARE" || item.type === "EGG_SPECIAL" || item.type === "EGG_EVENT") ? (
-                // Preview de ovo com filtro de cor por raridade
-                <div className={`flex h-24 items-center justify-center bg-slate-900 ${
-                  item.type === "EGG_RARE" ? "bg-blue-950/30" :
-                  item.type === "EGG_SPECIAL" ? "bg-purple-950/30" :
-                  item.type === "EGG_EVENT" ? "bg-yellow-950/20" : ""
-                }`}>
+                <div className="flex h-24 items-center justify-center bg-slate-900">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/mascot/egg-common.png" alt={item.name} className="h-16 w-16 object-contain"
-                    style={{ filter:
-                      item.type === "EGG_RARE"    ? "hue-rotate(200deg) saturate(1.5) brightness(1.1)" :
-                      item.type === "EGG_SPECIAL" ? "hue-rotate(270deg) saturate(1.8) brightness(1.05)" :
-                      item.type === "EGG_EVENT"   ? "hue-rotate(45deg) saturate(2) brightness(1.2) sepia(0.3)" :
-                      "none"
-                    }} />
+                  <img
+                    src={item.type === "EGG_RARE" ? "/mascot/egg-rare.png" : item.type === "EGG_SPECIAL" ? "/mascot/egg-special.png" : "/mascot/egg-common.png"}
+                    alt={item.name} className="h-16 w-16 object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).src = "/mascot/egg-common.png"; }}
+                  />
                 </div>
               ) : (["MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as string[]).includes(item.type) ? (
                 <div className="flex h-24 items-center justify-center bg-slate-900 text-4xl">
