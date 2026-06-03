@@ -73,18 +73,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
               <Link href={player ? `/jogadores/${player.id}` : "/perfil"} className="hidden items-center gap-2.5 hover:opacity-80 transition-opacity sm:flex">
-                {/* Avatar */}
-                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
-                  {player?.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={player.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
-                      {(session.user.name ?? session.user.email ?? "?")[0].toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                {/* Texto */}
+                {/* Texto à esquerda */}
                 <div className="text-right">
                   <p className="text-xs font-medium text-slate-200 leading-tight">
                     {session.user.name ?? session.user.email}
@@ -99,6 +88,17 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                       </span>
                     )}
                   </div>
+                </div>
+                {/* Avatar à direita */}
+                <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
+                  {player?.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={player.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
+                      {(session.user.name ?? session.user.email ?? "?")[0].toUpperCase()}
+                    </div>
+                  )}
                 </div>
               </Link>
               {/* Logout — form POST evita prefetch do Next.js (que causava logout automático) */}
