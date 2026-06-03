@@ -37,7 +37,6 @@ export function MascotCard({ mascot }: Props) {
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
 
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
-  const activeExp = mascot.expedition;
   const expedition = mascot.expeditions.find(e => e.status === "ACTIVE");
   const claimable  = mascot.expeditions.find(e => e.status === "ACTIVE" && new Date() >= new Date(e.finishAt));
   const expNeeded  = expToNextLevel(mascot.level);
