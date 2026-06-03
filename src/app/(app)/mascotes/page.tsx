@@ -25,7 +25,7 @@ export default async function MascotesPage() {
   const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
 
   const eggShopImages = await prisma.shopItem.findMany({
-    where: { type: { in: ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_EVENT"] }, imageUrl: { not: null } },
+    where: { type: { in: ["EGG_COMMON","EGG_RARE","EGG_SPECIAL"] }, imageUrl: { not: null } },
     select: { type: true, imageUrl: true }
   });
   const eggImageByType: Record<string, string> = {};
