@@ -337,9 +337,9 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   // Fire
   4:"fire",5:"fire",6:"fire",37:"fire",38:"fire",58:"fire",59:"fire",77:"fire",78:"fire",
   126:"fire",136:"fire",155:"fire",156:"fire",157:"fire",228:"fire",229:"fire",240:"fire",
-  // Water (87=Dewgong→ice, 91=Cloyster→ice, 79=Slowpoke→psychic: keep water as primary)
+  // Water
   7:"water",8:"water",9:"water",54:"water",55:"water",60:"water",61:"water",62:"water",
-  72:"water",73:"water",80:"water",86:"water",
+  72:"water",73:"water",86:"water",
   98:"water",99:"water",116:"water",117:"water",118:"water",119:"water",120:"water",
   121:"water",129:"water",130:"water",134:"water",158:"water",159:"water",
   160:"water",170:"water",171:"water",183:"water",184:"water",194:"water",195:"water",
@@ -349,10 +349,10 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   71:"grass",102:"grass",103:"grass",114:"grass",152:"grass",153:"grass",154:"grass",
   187:"grass",188:"grass",189:"grass",191:"grass",192:"grass",
   // Electric
-  25:"electric",26:"electric",81:"electric",82:"electric",100:"electric",101:"electric",
+  25:"electric",26:"electric",82:"electric",100:"electric",101:"electric",
   125:"electric",135:"electric",172:"electric",239:"electric",
-  // Psychic (79=Slowpoke, 80=Slowbro, 124=Jynx)
-  63:"psychic",64:"psychic",65:"psychic",79:"psychic",80:"psychic",
+  // Psychic (79=Slowpoke, 80=Slowbro, 81=Magnemite→electric, 124=Jynx)
+  63:"psychic",64:"psychic",65:"psychic",79:"psychic",80:"psychic",81:"electric",
   96:"psychic",97:"psychic",124:"psychic",
   137:"psychic",150:"psychic",196:"psychic",203:"psychic",175:"psychic",176:"psychic",
   // Ghost
