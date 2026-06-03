@@ -1383,7 +1383,7 @@ export async function deleteOwnDeckSubmission(
     const submission = await prisma.deckSubmission.findUnique({
       where: { id: submissionId },
       include: {
-        tournamentWeek: { select: { status: true, tournamentId: true } },
+        tournamentWeek: { select: { status: true, tournamentId: true, weekNumber: true } },
         tournament: { select: { slug: true } }
       }
     });
@@ -1412,9 +1412,13 @@ export async function deleteOwnDeckSubmission(
     });
 
     const slug = submission.tournament?.slug;
+    const weekNumber = submission.tournamentWeek?.weekNumber;
     if (slug) {
       revalidatePath(`/torneios/${slug}`);
-      revalidatePath(`/torneios/${slug}/semanas/${submission.tournamentWeek?.status}`);
+      if (weekNumber) {
+        revalidatePath(`/torneios/${slug}/semanas/${weekNumber}`);
+        revalidatePath(`/torneios/${slug}/semanas/${weekNumber}/partidas`);
+      }
     }
     revalidatePath("/torneios");
     return {};
