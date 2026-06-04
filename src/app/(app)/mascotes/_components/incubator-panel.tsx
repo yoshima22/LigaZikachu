@@ -82,16 +82,24 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const [pending, startTransition] = useTransition();
   const [hatchResult, setHatchResult] = useState<{ pokemonId: number; name: string } | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
-  const [pendingEgg, setPendingEgg]   = useState<string | null>(null);
+  // Modal de seleção de geração
+  const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
   const isReady = incubator ? new Date() >= new Date(incubator.finishAt) : false;
 
-  const handlePutEgg = (eggId: string) => {
+  const handlePutEgg = (eggId: string, genOverride?: string) => {
     startTransition(async () => {
-      // Passa a geração selecionada para a action
-      const r = await putEggInIncubator(eggId, selectedGen || undefined);
+      const r = await putEggInIncubator(eggId, genOverride || undefined);
       if (r.error) toast.error(r.error);
       else toast.success("Ovo colocado na incubadora!");
     });
+  };
+
+  // Confirmar seleção de geração no modal
+  const handleConfirmGen = () => {
+    if (!genPickEggId) return;
+    handlePutEgg(genPickEggId, selectedGen || undefined);
+    setGenPickEggId(null);
+    setSelectedGen("");
   };
 
   const handleHatch = () => {
@@ -114,6 +122,33 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   };
 
   return (
+    <>
+    {/* Modal de seleção de geração */}
+    {genPickEggId && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+           onClick={() => { setGenPickEggId(null); setSelectedGen(""); }}>
+        <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl space-y-4"
+             onClick={e => e.stopPropagation()}>
+          <p className="font-semibold text-white">🥚 Escolha a Geração</p>
+          <p className="text-[11px] text-slate-400">Qual geração de Pokémon você quer que saia deste ovo? Cada ovo respeita sua própria raridade.</p>
+          <select value={selectedGen} onChange={e => setSelectedGen(e.target.value)}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+            {GEN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setGenPickEggId(null); setSelectedGen(""); }}
+              className="flex-1 rounded-xl border border-border py-2 text-xs text-slate-400 hover:text-slate-200">
+              Cancelar
+            </button>
+            <button type="button" disabled={pending} onClick={handleConfirmGen}
+              className="flex-1 rounded-xl bg-[#FFCB05] py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60">
+              Incubar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="space-y-6">
       {/* Incubadora */}
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
@@ -190,16 +225,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             <span className="ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{eggs.length}</span>
           </h2>
 
-          {/* Seletor de geração — aplicado ao próximo ovo a incubar */}
-          {!incubator && (
-            <div className="space-y-1.5">
-              <p className="text-[11px] text-slate-500">Escolha a geração antes de incubar:</p>
-              <select value={selectedGen} onChange={e => setSelectedGen(e.target.value)}
-                className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
-                {GEN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-          )}
+          {/* Seletor de geração: abre modal ao clicar em Incubar */}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {eggs.map(egg => (
@@ -212,7 +238,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                   <p className="text-sm font-semibold text-white">{EGG_LABEL[egg.type]}</p>
                   {egg.origin && <p className="text-[10px] text-slate-500">{egg.origin}</p>}
                 </div>
-                <button type="button" disabled={pending || !!incubator} onClick={() => handlePutEgg(egg.id)}
+                <button type="button" disabled={pending || !!incubator} onClick={() => { setSelectedGen(""); setGenPickEggId(egg.id); }}
                   className="shrink-0 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
                   Incubar
                 </button>
@@ -222,5 +248,6 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
         </div>
       )}
     </div>
+    </>
   );
 }

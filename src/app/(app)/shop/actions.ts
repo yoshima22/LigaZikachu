@@ -260,13 +260,15 @@ const purchaseItemSchema = z.object({
 
 const CONSUMABLE_TYPES: ShopItemType[] = [
   ShopItemType.ZIKALOOT_TICKET,
-  ShopItemType.EGG_COMMON,
-  ShopItemType.EGG_RARE,
-  ShopItemType.EGG_SPECIAL,
-  ShopItemType.EGG_GEN1,
-  ShopItemType.EGG_GEN2,
-  ShopItemType.MASCOT_FOOD,
-  ShopItemType.MASCOT_SWEET,
+  ShopItemType.EGG_COMMON, ShopItemType.EGG_RARE, ShopItemType.EGG_SPECIAL,
+  ShopItemType.EGG_GEN1,   ShopItemType.EGG_GEN2, ShopItemType.EGG_GEN3,
+  ShopItemType.EGG_GEN4,   ShopItemType.EGG_GEN5, ShopItemType.EGG_GEN6,
+  ShopItemType.EGG_GEN7,   ShopItemType.EGG_GEN8, ShopItemType.EGG_GEN9,
+  ShopItemType.EGG_GEN6PLUS,
+  ShopItemType.MASCOT_FOOD,  ShopItemType.MASCOT_SWEET,
+  ShopItemType.MASCOT_BUFF_EXP,  ShopItemType.MASCOT_BUFF_STAT,
+  ShopItemType.MASCOT_BUFF_HAPPY, ShopItemType.MASCOT_BUFF_LUCK,
+  ShopItemType.MASCOT_BUFF_MOOD,
 ];
 
 export async function purchaseItem(
@@ -315,14 +317,22 @@ export async function purchaseItem(
         description: quantity > 1 ? `Compra: ${item.name} x${quantity}` : `Compra: ${item.name}`
       });
 
-      if ((["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2"] as string[]).includes(item.type)) {
+      if (item.type.startsWith("EGG_") || item.type === "EGG_COMMON" || item.type === "EGG_RARE" || item.type === "EGG_SPECIAL") {
         // Compra de ovo → cria MascotEgg no inventário
         const eggTypeMap: Record<string, EggType> = {
-          [ShopItemType.EGG_COMMON]:  EggType.COMMON,
-          [ShopItemType.EGG_RARE]:    EggType.RARE,
-          [ShopItemType.EGG_SPECIAL]: EggType.SPECIAL,
-          [ShopItemType.EGG_GEN1]:    EggType.EGG_GEN1,
-          [ShopItemType.EGG_GEN2]:    EggType.EGG_GEN2,
+          [ShopItemType.EGG_COMMON]:   EggType.COMMON,
+          [ShopItemType.EGG_RARE]:     EggType.RARE,
+          [ShopItemType.EGG_SPECIAL]:  EggType.SPECIAL,
+          [ShopItemType.EGG_GEN1]:     EggType.EGG_GEN1,
+          [ShopItemType.EGG_GEN2]:     EggType.EGG_GEN2,
+          [ShopItemType.EGG_GEN3]:     EggType.EGG_GEN3,
+          [ShopItemType.EGG_GEN4]:     EggType.EGG_GEN4,
+          [ShopItemType.EGG_GEN5]:     EggType.EGG_GEN5,
+          [ShopItemType.EGG_GEN6]:     EggType.EGG_GEN6,
+          [ShopItemType.EGG_GEN7]:     EggType.EGG_GEN7,
+          [ShopItemType.EGG_GEN8]:     EggType.EGG_GEN8,
+          [ShopItemType.EGG_GEN9]:     EggType.EGG_GEN9,
+          [ShopItemType.EGG_GEN6PLUS]: EggType.EGG_GEN6PLUS,
         };
         await tx.mascotEgg.createMany({
           data: Array.from({ length: quantity }, () => ({
@@ -340,8 +350,8 @@ export async function purchaseItem(
         // Armazena como PlayerInventory consumível (quantidade)
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId: player.id, itemId } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: player.id, itemId, quantity: 1 }
+          update: { quantity: { increment: quantity } },
+          create: { playerId: player.id, itemId, quantity }
         });
       } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
         // Compra de comida/doce → adiciona ao inventário de comida

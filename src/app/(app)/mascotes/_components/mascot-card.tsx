@@ -16,7 +16,10 @@ import {
   renameMascotAction, startExpeditionAction, claimExpeditionAction,
   skipExpeditionAction, addExpAdminAction,
   adminBattleMascotsAction, adminFormFriendshipAction,
+  adminTriggerSocialEventsAction,
 } from "../actions";
+import { EXPEDITION_DURATIONS } from "@/lib/mascot-data";
+import type { ExpeditionDuration } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
 
@@ -130,6 +133,8 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
   const [imgFailed, setImgFailed] = useState(false);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
+  const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
+  const [showLootPreview, setShowLootPreview] = useState(false);
 
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
@@ -155,13 +160,13 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const happinessStatus = getHappinessStatus(localHappiness);
   const challengeStatus = getChallengeStatus(localMood);
 
-  // Cooldown 5 min — calculado client-side após mount para evitar hydration mismatch
+  // Cooldown 3 min — calculado client-side após mount para evitar hydration mismatch
   const [cooldownMs, setCooldownMs] = useState(0);
   const onCooldown = cooldownMs > 0;
   useEffect(() => {
     if (!mascot.lastInteractedAt) { setCooldownMs(0); return; }
     const check = () => {
-      const ms = Math.max(0, 5 * 60 * 1000 - (Date.now() - new Date(mascot.lastInteractedAt!).getTime()));
+      const ms = Math.max(0, 3 * 60 * 1000 - (Date.now() - new Date(mascot.lastInteractedAt!).getTime()));
       setCooldownMs(ms);
     };
     check();
@@ -243,6 +248,41 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         </div>
       </div>
     )}
+    {/* Loot preview modal */}
+    {showLootPreview && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowLootPreview(false)}>
+        <div className="w-full max-w-sm rounded-2xl border border-blue-500/30 bg-slate-950 p-5 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-white">🎁 Possível Loot em Expedições</p>
+            <button onClick={() => setShowLootPreview(false)} className="text-slate-500 hover:text-slate-300"><X size={14}/></button>
+          </div>
+          <p className="text-[11px] text-slate-500">Baseado em Instinto {mascot.statInstinct} · Nível {mascot.level}</p>
+          <div className="space-y-3">
+            {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, dur]) => {
+              const luck = mascot.statInstinct + Math.floor(mascot.level / 10);
+              const eggChance   = Math.min(35, 5 + luck * 0.3 + dur.rewardBonus * 0.3).toFixed(0);
+              const sweetChance = Math.min(25, 12 + dur.rewardBonus * 0.3).toFixed(0);
+              const coinMin = 50 + dur.rewardBonus * 5;
+              const coinMax = coinMin + 150 + dur.rewardBonus * 10;
+              const eggQuality = key === "6h" ? "🥚 Especial/Raro" : key === "3h" ? "🥚 Raro/Comum" : "🥚 Comum";
+              return (
+                <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-blue-400">{dur.label} · EXP ×{dur.expMultiplier}</p>
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-400">
+                    <span>🥚 Ovo: <strong className="text-slate-200">~{eggChance}%</strong> ({eggQuality.split(" ")[1]})</span>
+                    <span>🍬 Doce: <strong className="text-slate-200">~{sweetChance}%</strong></span>
+                    <span>🍖 Comida: <strong className="text-slate-200">~30%</strong></span>
+                    <span>🪙 Moedas: <strong className="text-slate-200">{coinMin}–{coinMax} ZC</strong></span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-slate-600">Amuleto da Sorte dobra todas as chances de loot.</p>
+        </div>
+      </div>
+    )}
+
     <div className={`rounded-2xl border bg-slate-950/60 transition-all ${mascot.isEquipped ? "border-[#FFCB05]/50 ring-1 ring-[#FFCB05]/20" : "border-border"}`}>
       {mascot.isEquipped && (
         <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider">
@@ -410,7 +450,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
               ⭐ Brincar
             </button>
           </Tip>
-          <Tip text={!canPet ? (mascot.mood === "ANGRY" ? "Está bravo, não quer carinho" : "Pode recusar o carinho agora") : "Carinho sutil. Pode ser recusado."}>
+          <Tip text={!canPet ? (mascot.mood === "ANGRY" ? "Está bravo, não quer carinho" : "Pode recusar o carinho agora") : `Carinho fortalece o vínculo gradualmente. Menos intenso que brincar, mas cresce com o nível. Leal ganha bônus. Pode ser recusado por tímidos e bravos.`}>
             <button type="button" disabled={pending || !canPet} onClick={() => handleInteract("PET")}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               <Heart size={12}/> Carinho
@@ -433,12 +473,31 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         {/* ── Expedição + Equipar/Desequipar ── */}
         <div className="flex gap-2">
           {!expedition && mascot.isEquipped && (
-            <Tip text="Só o mascote equipado pode sair em expedição (1h)">
-              <button type="button" disabled={pending} onClick={() => act(() => startExpeditionAction(mascot.id), "Expedição iniciada!")}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
-                <MapPin size={12}/> Expedição
-              </button>
-            </Tip>
+            <div className="flex-1 space-y-1.5">
+              {/* Seletor de duração */}
+              <select
+                value={expeditionDuration}
+                onChange={e => setExpeditionDuration(e.target.value as ExpeditionDuration)}
+                className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1 text-[11px] text-slate-300 outline-none focus:border-blue-500/60"
+              >
+                {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, v]) => (
+                  <option key={key} value={key}>
+                    🗺 {v.label} — EXP ×{v.expMultiplier}{v.rewardBonus > 0 ? ` · +${v.rewardBonus}% loot` : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-1.5">
+                <button type="button" disabled={pending}
+                  onClick={() => act(() => startExpeditionAction(mascot.id, expeditionDuration), `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada!`)}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-1.5 text-[11px] font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
+                  <MapPin size={12}/> Partir
+                </button>
+                <button type="button" onClick={() => setShowLootPreview(true)}
+                  className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
+                  🎁 Loot?
+                </button>
+              </div>
+            </div>
           )}
           {!mascot.isEquipped && (
             <button type="button" disabled={pending} onClick={() => act(() => equipMascotAction(mascot.id), "Mascote equipado!")}
@@ -476,6 +535,20 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         {isAdmin && (
           <div className="border-t border-border/40 pt-3 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[#FFCB05]/60">⚡ Admin</p>
+            {/* Trigger global de eventos sociais */}
+            <button type="button" disabled={pending}
+              onClick={() => startTransition(async () => {
+                const r = await adminTriggerSocialEventsAction();
+                if (r.error) toast.error(r.error);
+                else {
+                  const s = r.summary!;
+                  toast.success(`Eventos sociais: ${s.battles} batalhas, ${s.friendships} amizades`);
+                  router.refresh();
+                }
+              })}
+              className="w-full rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-purple-400 hover:bg-purple-500/20 disabled:opacity-50">
+              🌐 Disparar Eventos Sociais (todos os mascotes)
+            </button>
             <div className="flex flex-wrap gap-1.5">
               {expedition && (
                 <button type="button" disabled={pending}

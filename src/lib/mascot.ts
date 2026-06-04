@@ -5,9 +5,10 @@
 import { prisma } from "@/lib/prisma";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
-  EXPEDITION_DURATION_MS, expForLevel, expToNextLevel, EXP_REWARDS,
+  EXPEDITION_DURATIONS, expForLevel, expToNextLevel, EXP_REWARDS,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
+import type { ExpeditionDuration } from "@/lib/mascot-data";
 import type { MascotMood, MascotPersonality } from "@prisma/client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -26,11 +27,18 @@ function randomPersonality(): MascotPersonality {
 
 /** Sorteio de pokemonId a partir do tipo de ovo */
 export function rollPokemonFromEgg(eggType: string): number {
-  const pool = EGG_POOLS[eggType] ?? EGG_POOLS.COMMON;
+  // Pool aleatório (COMMON sem gen específica) = todas as 9 gerações
+  const pool = eggType === "COMMON" || eggType === "EVENT"
+    ? (EGG_POOLS.RANDOM.length > 0 ? EGG_POOLS.RANDOM : EGG_POOLS.COMMON)
+    : (EGG_POOLS[eggType] ?? EGG_POOLS.RANDOM);
 
-  // Chance lendária: 1% em ovos SPECIAL/RARE, 0.3% em outros
-  const isHighRarity = ["SPECIAL","RARE","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(eggType);
-  const legendaryChance = eggType === "SPECIAL" ? 0.02 : isHighRarity ? 0.01 : 0.003;
+  // Chance lendária por raridade
+  // SPECIAL: 2% | GEN eggs / RARE: 1% | COMMON (aleatório, todas gens): 1% (bônus por diversidade) | EVENT: 0.3%
+  const legendaryChance =
+    eggType === "SPECIAL" ? 0.02 :
+    eggType === "RARE" || eggType.startsWith("EGG_GEN") ? 0.01 :
+    eggType === "COMMON" ? 0.01 :   // modo aleatório: +1% de bônus
+    0.003;
 
   if (Math.random() < legendaryChance) {
     return randomFrom(LEGENDARY_POOL);
@@ -222,10 +230,13 @@ export async function interactWithMascot(
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
 
   const now = new Date();
-  const COOLDOWN_MS = 5 * 60 * 1000;
+  const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos
   if (!skipCooldown && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < COOLDOWN_MS) {
     return { success: false, message: "Espere um pouco antes de interagir novamente.", happinessChange: 0, expGained: 0 };
   }
+
+  // Bônus por nível — cada 10 níveis aumenta eficácia das interações
+  const lvlBonus = Math.floor(mascot.level / 10);
 
   let happinessChange = 0;
   let expGained = 0;
@@ -234,16 +245,19 @@ export async function interactWithMascot(
   let message = "";
 
   switch (type) {
-    case "PLAY":
-      happinessChange = 8;
-      expGained = EXP_REWARDS.PLAY_WITH;
+    case "PLAY": {
+      // PLAY: +8 base → cresce com nível. Brincalhão tem bônus extra.
+      const playHappy = 8 + lvlBonus * 2 + (mascot.personality === "PLAYFUL" ? 3 : 0);
+      const playExp   = EXP_REWARDS.PLAY_WITH + lvlBonus * 3;
+      happinessChange = playHappy;
+      expGained = playExp;
       newMood = mascot.personality === "LAZY" ? "TIRED" : "HAPPY";
       message = mascot.personality === "LAZY"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito preguiçoso — brincou um pouco mas logo cansou. (+${8} felicidade)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar! (+${8} felicidade, +${EXP_REWARDS.PLAY_WITH} EXP)`;
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é preguiçoso — brincou um pouco mas logo cansou. (+${playHappy} felicidade)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar! (+${playHappy} felicidade, +${playExp} EXP)`;
       break;
-
-    case "PET":
+    }
+    case "PET": {
       if (mascot.personality === "TIMID" && mascot.happiness < 40) {
         refused = true;
         message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
@@ -254,17 +268,20 @@ export async function interactWithMascot(
         message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
         break;
       }
-      // Pet dá +8 felicidade (era 3, muito baixo para ser perceptível)
-      happinessChange = 8;
-      expGained = EXP_REWARDS.PET;
-      // Melhora o humor independente do humor atual
-      newMood = mascot.happiness + 8 >= 80 ? "HAPPY" :
+      // PET é mais gentil que PLAY: menos felicidade base, mas cresce mais com nível
+      // Razão: Carinho fortalece vínculo gradualmente; brincar é mais intenso
+      const petHappy = 5 + lvlBonus + (mascot.personality === "LOYAL" ? 2 : 0);
+      const petExp   = EXP_REWARDS.PET + lvlBonus;
+      happinessChange = petHappy;
+      expGained = petExp;
+      newMood = mascot.happiness + petHappy >= 80 ? "HAPPY" :
                 mascot.mood === "TIRED" ? "NEUTRAL" :
                 mascot.mood === "NEEDY" ? "NEUTRAL" : undefined;
       message = mascot.personality === "PROUD"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+8 felicidade)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou muito do carinho! 💛 (+8 felicidade)`;
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${petExp} EXP)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho! 💛 (+${petHappy} felicidade, +${petExp} EXP)`;
       break;
+    }
 
     case "FEED_FOOD": {
       const food = await prisma.mascotFoodItem.findUnique({
@@ -395,19 +412,40 @@ export type ExpeditionReward =
   | { type: "COINS";     amount: number }
   | { type: "NOTHING" };
 
-async function rollExpeditionReward(mascot: { id: string; level: number; statInstinct: number; statCharisma: number }): Promise<ExpeditionReward> {
+async function rollExpeditionReward(
+  mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
+  durationKey: ExpeditionDuration = "1h"
+): Promise<ExpeditionReward> {
   const luckBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
   });
   const luckMultiplier = luckBuff ? 2 : 1;
+  const dur = EXPEDITION_DURATIONS[durationKey];
+  const rewardBonus = dur.rewardBonus; // 0, 5, 15, 30
 
   const luck = (mascot.statInstinct + Math.floor(mascot.level / 10)) * luckMultiplier;
   const roll = Math.random() * 100;
 
-  if (roll < 5 + luck * 0.3) return { type: "EGG", eggType: luck > 20 ? "RARE" : "COMMON" };
-  if (roll < 20 * luckMultiplier) return { type: "FOOD", foodType: "SWEET", quantity: 1 };
-  if (roll < 40) return { type: "FOOD", foodType: "FOOD",  quantity: randomInt(1, 3) };
-  if (roll < 60) return { type: "COINS", amount: randomInt(50, 200) };
+  // Recompensas melhores em expedições mais longas
+  // 6h: maior chance de ovo e loot maior
+  const eggChance   = 5  + luck * 0.3 + rewardBonus * 0.3;
+  const sweetChance = 12 + rewardBonus * 0.3;
+  const foodChance  = 30 + rewardBonus * 0.2;
+  const coinChance  = 55 + rewardBonus * 0.2;
+
+  const coinBase    = 50  + rewardBonus * 5;
+  const coinRange   = 150 + rewardBonus * 10;
+  const foodQtyMax  = 1   + Math.floor(rewardBonus / 10);
+
+  // Ovo especial só em 3h+
+  let eggType = luck > 20 ? "RARE" : "COMMON";
+  if (durationKey === "3h" && luck > 15) eggType = "RARE";
+  if (durationKey === "6h") eggType = luck > 10 ? "SPECIAL" : "RARE";
+
+  if (roll < eggChance)   return { type: "EGG",   eggType };
+  if (roll < sweetChance * luckMultiplier) return { type: "FOOD", foodType: "SWEET", quantity: 1 };
+  if (roll < foodChance)  return { type: "FOOD",  foodType: "FOOD", quantity: randomInt(1, 1 + foodQtyMax) };
+  if (roll < coinChance)  return { type: "COINS", amount: randomInt(coinBase, coinBase + coinRange) };
   return { type: "NOTHING" };
 }
 
@@ -450,7 +488,7 @@ function describeExpeditionReward(reward: ExpeditionReward) {
   }
 }
 
-export async function startExpedition(playerId: string, mascotId: string) {
+export async function startExpedition(playerId: string, mascotId: string, durationKey: ExpeditionDuration = "1h") {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (!mascot.isEquipped) throw new Error("Apenas o mascote equipado pode sair em expedição.");
@@ -460,9 +498,10 @@ export async function startExpedition(playerId: string, mascotId: string) {
   });
   if (active) throw new Error("Mascote já está em expedição.");
 
-  const finishAt = new Date(Date.now() + EXPEDITION_DURATION_MS);
+  const dur = EXPEDITION_DURATIONS[durationKey];
+  const finishAt = new Date(Date.now() + dur.ms);
   return prisma.mascotExpedition.create({
-    data: { mascotId, finishAt }
+    data: { mascotId, finishAt, rewardJson: { durationKey } } // guarda duration para calcular recompensa
   });
 }
 
@@ -527,7 +566,12 @@ export async function claimExpedition(
   if (expedition.status !== "ACTIVE") throw new Error("Expedição já coletada.");
   if (new Date() < expedition.finishAt) throw new Error("A expedição ainda não terminou.");
 
-  const reward = await rollExpeditionReward(expedition.mascot);
+  // Recupera a duração armazenada no rewardJson durante startExpedition
+  const storedDuration = (expedition.rewardJson as Record<string, unknown> | null)?.durationKey as ExpeditionDuration | undefined;
+  const durationKey: ExpeditionDuration = storedDuration ?? "1h";
+  const dur = EXPEDITION_DURATIONS[durationKey];
+
+  const reward = await rollExpeditionReward(expedition.mascot, durationKey);
   const gift = describeExpeditionReward(reward);
 
   await prisma.$transaction(async (tx) => {
@@ -553,7 +597,11 @@ export async function claimExpedition(
     }
   });
 
-  await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION).catch(() => {});
+  // EXP escalada pela duração + nível do mascote
+  const expBase = EXP_REWARDS.EXPEDITION;
+  const levelMult = 1 + Math.floor(expedition.mascot.level / 20) * 0.25;
+  const expeditionExp = Math.round(expBase * dur.expMultiplier * levelMult);
+  await addExp(expedition.mascotId, expeditionExp).catch(() => {});
 
   // Ally benefits: friends boost the expedition and get notified
   const friends = await prisma.mascotRelation.findMany({
@@ -722,6 +770,124 @@ export async function formFriendship(mascotAId: string, mascotBId: string): Prom
   ]);
 }
 
+// ── Eventos sociais automáticos (batalhas/amizades entre mascotes) ────────────
+
+export interface SocialEventSummary {
+  battles: number;
+  friendships: number;
+  events: string[];
+}
+
+export async function triggerSocialEvents(): Promise<SocialEventSummary> {
+  // Busca todos os mascotes (equipados + banco) de jogadores PLAYER (não admins)
+  const allMascots = await prisma.mascot.findMany({
+    where: { player: { user: { role: "PLAYER" } } },
+    select: {
+      id: true, pokemonId: true, nickname: true, playerId: true,
+      statForce: true, statAgility: true, statVitality: true,
+      statCharisma: true, statInstinct: true,
+      happiness: true, mood: true, level: true,
+    }
+  });
+
+  if (allMascots.length < 2) return { battles: 0, friendships: 0, events: [] };
+
+  const summary: SocialEventSummary = { battles: 0, friendships: 0, events: [] };
+
+  // Sorteia pares de mascotes de jogadores diferentes
+  const shuffled = [...allMascots].sort(() => Math.random() - 0.5);
+  const maxPairs = Math.min(5, Math.floor(allMascots.length / 2));
+
+  const usedIds = new Set<string>();
+
+  for (let i = 0; i < shuffled.length && summary.battles + summary.friendships < maxPairs; i++) {
+    const a = shuffled[i];
+    if (usedIds.has(a.id)) continue;
+
+    // Encontra parceiro de jogador diferente
+    const partner = shuffled.find(b =>
+      b.id !== a.id &&
+      b.playerId !== a.playerId &&
+      !usedIds.has(b.id)
+    );
+    if (!partner) continue;
+
+    usedIds.add(a.id);
+    usedIds.add(partner.id);
+
+    const aName = a.nickname ?? getPokemonName(a.pokemonId);
+    const bName = partner.nickname ?? getPokemonName(partner.pokemonId);
+
+    // 60% chance de batalha, 40% de amizade
+    const isBattle = Math.random() < 0.6;
+
+    if (isBattle) {
+      try {
+        const result = await battleMascots(a.id, partner.id);
+        summary.battles++;
+        summary.events.push(`⚔️ ${result.summary}`);
+      } catch {
+        // ignora erros individuais (ex: mascote do mesmo jogador)
+      }
+    } else {
+      // Amizade entre mascotes de jogadores diferentes
+      try {
+        await prisma.$transaction([
+          prisma.mascotRelation.upsert({
+            where: { mascotAId_mascotBId: { mascotAId: a.id, mascotBId: partner.id } },
+            update: { type: "FRIEND" },
+            create: { mascotAId: a.id, mascotBId: partner.id, type: "FRIEND" },
+          }),
+          prisma.mascotRelation.upsert({
+            where: { mascotAId_mascotBId: { mascotAId: partner.id, mascotBId: a.id } },
+            update: { type: "FRIEND" },
+            create: { mascotAId: partner.id, mascotBId: a.id, type: "FRIEND" },
+          }),
+        ]);
+        await Promise.all([
+          logEvent(a.id,       "💚", `Fez amizade com ${bName} durante evento social!`),
+          logEvent(partner.id, "💚", `Fez amizade com ${aName} durante evento social!`),
+        ]);
+        summary.friendships++;
+        summary.events.push(`💚 ${aName} fez amizade com ${bName}!`);
+      } catch {
+        // ignora
+      }
+    }
+  }
+
+  // Eventos entre rivais: +provocação
+  const rivalPairs = await prisma.mascotRelation.findMany({
+    where: { type: "RIVAL", wins: { gt: 0 } },
+    include: { mascotA: { select: { id: true, pokemonId: true, nickname: true } }, mascotB: { select: { id: true, pokemonId: true, nickname: true } } },
+    take: 3,
+  });
+  for (const rel of rivalPairs) {
+    const aName = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
+    const bName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+    await logEvent(rel.mascotA.id, "😤", `A rivalidade com ${bName} está ficando intensa...`).catch(() => {});
+    await logEvent(rel.mascotB.id, "😤", `${aName} não esqueceu a última derrota...`).catch(() => {});
+  }
+
+  // Eventos entre aliados: +apoio
+  const friendPairs = await prisma.mascotRelation.findMany({
+    where: { type: "FRIEND" },
+    include: { mascotA: { select: { id: true, pokemonId: true, nickname: true } }, mascotB: { select: { id: true, pokemonId: true, nickname: true } } },
+    take: 3,
+  });
+  for (const rel of friendPairs) {
+    const aName = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
+    const bName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+    if (Math.random() < 0.5) {
+      await logEvent(rel.mascotA.id, "💛", `Recebeu apoio de ${bName} hoje!`).catch(() => {});
+    }
+  }
+  void friendPairs; void rivalPairs;
+
+  return summary;
+}
+
 // ── Utilidades para UI ────────────────────────────────────────────────────────
 
 export { getSpriteUrl, getPokemonName, expToNextLevel };
+export type { ExpeditionDuration };

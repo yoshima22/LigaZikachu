@@ -156,6 +156,68 @@ export default async function MascotesPage() {
         </div>
       </details>
 
+      {/* Chances por ovo */}
+      <details className="rounded-2xl border border-border bg-slate-950/50 overflow-hidden group">
+        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-300 hover:text-white select-none">
+          <span className="flex items-center gap-2">🥚 Quais Pokémon saem de cada ovo?</span>
+          <ChevronDown size={14} className="text-slate-500 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border px-5 py-4 space-y-4 text-xs text-slate-400 leading-relaxed">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1 rounded-xl border border-slate-700/40 bg-slate-900/40 p-3">
+              <p className="font-semibold text-slate-200">🥚 Ovo Comum</p>
+              <p>Pool: Gen 1–2 (Pokémon comuns como Caterpie, Rattata, Geodude). Raridade base.</p>
+              <p className="text-[10px] text-slate-500">Lendário: 0,3% · Gera aleatoriamente entre as 9 gerações se tipo = Aleatório</p>
+            </div>
+            <div className="space-y-1 rounded-xl border border-blue-700/30 bg-blue-900/10 p-3">
+              <p className="font-semibold text-blue-300">💙 Ovo Raro</p>
+              <p>Pool: Starters e Pokémon populares Gen 1–2. Maior chance de Pokémon cobiçados.</p>
+              <p className="text-[10px] text-slate-500">Lendário: 1% · Inclui Pikachu, Eevee, Dratini...</p>
+            </div>
+            <div className="space-y-1 rounded-xl border border-purple-700/30 bg-purple-900/10 p-3">
+              <p className="font-semibold text-purple-300">💜 Ovo Especial</p>
+              <p>Pool: Pokémon raros e cobiçados (Magikarp→Gyarados, Lapras, Ditto, Larvitar, Fósseis).</p>
+              <p className="text-[10px] text-slate-500">Lendário: 2% — maior chance do jogo!</p>
+            </div>
+            <div className="space-y-1 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-3">
+              <p className="font-semibold text-[#FFCB05]">⭐ Ovo de Evento</p>
+              <p>Pool configurado por evento: starters, Pikachu, Eevee, Dratini — temático.</p>
+              <p className="text-[10px] text-slate-500">Lendário: 0,3%</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="font-semibold text-slate-200">🌍 Ovos por Geração (Gen 1–9)</p>
+            <p>Cada ovo de geração tem apenas Pokémon dessa geração. Você escolhe a geração ao colocar na incubadora. Lendários: 1%.</p>
+            <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+              {[
+                ["Gen 1 · Kanto","Bulbasaur a Mew"],
+                ["Gen 2 · Johto","Chikorita a Celebi"],
+                ["Gen 3 · Hoenn","Treecko a Deoxys"],
+                ["Gen 4 · Sinnoh","Turtwig a Arceus"],
+                ["Gen 5 · Unova","Snivy a Genesect"],
+                ["Gen 6 · Kalos","Chespin a Volcanion"],
+                ["Gen 7 · Alola","Rowlet a Melmetal"],
+                ["Gen 8 · Galar","Grookey a Calyrex"],
+                ["Gen 9 · Paldea","Sprigatito a Pecharunt"],
+              ].map(([gen, range]) => (
+                <div key={gen} className="rounded-lg border border-border/40 bg-slate-900/50 px-2 py-1.5">
+                  <p className="font-semibold text-slate-300">{gen}</p>
+                  <p className="text-slate-500">{range}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1 rounded-xl border border-slate-700/40 bg-slate-900/40 p-3">
+            <p className="font-semibold text-slate-200">🌀 Geração Aleatória</p>
+            <p>Usa o pool de <strong className="text-slate-300">todas as 9 gerações juntas</strong>. Chance 1% de lendário.</p>
+          </div>
+          <div className="space-y-1 rounded-xl border border-yellow-700/30 bg-yellow-900/10 p-3">
+            <p className="font-semibold text-yellow-300">👑 Pokémon Lendários</p>
+            <p>Pool incluem Articuno, Lugia, Rayquaza, Dialga, Reshiram, Xerneas, Solgaleo, Zacian, Koraidon e muitos mais. Muito raros — aproveite quando aparecerem!</p>
+          </div>
+        </div>
+      </details>
+
       {/* Itens especiais (buffs) */}
       {buffInventory.length > 0 && (
         <BuffPanel

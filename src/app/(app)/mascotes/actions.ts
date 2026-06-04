@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
-  skipExpedition, addExp, battleMascots, formFriendship,
+  skipExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
 } from "@/lib/mascot";
-import type { InteractionType } from "@/lib/mascot";
+import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 
 function revalidate() { revalidatePath("/mascotes"); }
 
@@ -114,13 +114,13 @@ export async function interactAction(mascotId: string, type: InteractionType): P
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function startExpeditionAction(mascotId: string): Promise<{ error?: string }> {
+export async function startExpeditionAction(mascotId: string, duration: ExpeditionDuration = "1h"): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
-    await startExpedition(player.id, mascotId);
+    await startExpedition(player.id, mascotId, duration);
     revalidate();
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -282,12 +282,22 @@ export async function adminClearExpeditionsAction(playerId: string): Promise<{ e
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro.", cleared: 0 }; }
 }
 
+// Admin: disparar eventos sociais entre mascotes
+export async function adminTriggerSocialEventsAction(): Promise<{ error?: string; summary?: { battles: number; friendships: number; events: string[] } }> {
+  try {
+    await requireAdmin();
+    const summary = await triggerSocialEvents();
+    revalidate();
+    return { summary };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
 // Admin: dar ovo a um jogador
 export async function grantEggToPlayer(playerId: string, eggType: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
     if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) return { error: "Sem permissão." };
-    await prisma.mascotEgg.create({ data: { playerId, type: eggType as "COMMON" | "RARE" | "SPECIAL" | "EVENT" | "EGG_GEN1" | "EGG_GEN2", origin: "Admin" } });
+    await prisma.mascotEgg.create({ data: { playerId, type: eggType as import("@prisma/client").EggType, origin: "Admin" } });
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
