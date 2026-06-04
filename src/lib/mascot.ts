@@ -255,7 +255,7 @@ export async function interactWithMascot(
         where: { playerId_type: { playerId, type: "FOOD" } },
         data: { quantity: { decrement: 1 } }
       });
-      happinessChange = 12;
+      happinessChange = 25; // ganho maior para garantir saída do status SAD (threshold 40)
       expGained = EXP_REWARDS.FEED_FOOD;
       newMood = "HAPPY";
       message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} comeu e está satisfeito!`;
@@ -273,7 +273,7 @@ export async function interactWithMascot(
         where: { playerId_type: { playerId, type: "SWEET" } },
         data: { quantity: { decrement: 1 } }
       });
-      happinessChange = 10;
+      happinessChange = 35; // doce dá grande boost de felicidade
       expGained = EXP_REWARDS.FEED_SWEET;
       newMood = "EXCITED";
       message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} amou o doce! Olha aquela energia!`;

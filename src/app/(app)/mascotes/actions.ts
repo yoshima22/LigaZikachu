@@ -90,7 +90,10 @@ export async function interactAction(mascotId: string, type: InteractionType): P
     if (!user) return { error: "Não autenticado." };
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
-    await recalculateMood(mascotId);
+    // Não recalcula mood antes de alimentar — o decay comeria o ganho de felicidade
+    if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
+      await recalculateMood(mascotId);
+    }
     // Admin bypassa cooldown
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);

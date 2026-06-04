@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info } from "lucide-react";
 import {
@@ -74,6 +75,7 @@ function StatusPill({ label, color, size = "normal" }: { label: string; color: s
 }
 
 export function MascotCard({ mascot, isAdmin = false }: Props) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
@@ -107,7 +109,10 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
     startTransition(async () => {
       const r = await fn();
       if (r.error) toast.error(r.error);
-      else if (successMsg) toast.success(successMsg);
+      else {
+        if (successMsg) toast.success(successMsg);
+        router.refresh(); // atualiza contadores de inventário e status no servidor
+      }
     });
   };
 
@@ -124,6 +129,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
       else if (r.result) {
         if (r.result.refused) toast.info(r.result.message);
         else toast.success(r.result.message);
+        router.refresh(); // atualiza inventário e status imediatamente
       }
     });
   };
