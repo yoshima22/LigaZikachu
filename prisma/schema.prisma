@@ -247,6 +247,9 @@ model Player {
   mascotEggs              MascotEgg[]
   mascotIncubator         MascotIncubator?
   mascotFoods             MascotFoodItem[]
+  bazarListings           BazarListing[]
+  bazarProposals          BazarProposal[]
+  bazarFavorites          BazarFavorite[]
 
   @@map("players")
 }
@@ -1318,6 +1321,7 @@ model Mascot {
   hatchedAt        DateTime          @default(now())
   lastInteractedAt DateTime?
   lastFedAt        DateTime?
+  bazarListed      Boolean           @default(false)
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
   relationsAsA     MascotRelation[]  @relation("MascotRelationA")
@@ -1417,4 +1421,136 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+// ── Bazar da Liga ─────────────────────────────────────────────────────────────
+
+enum BazarListingType {
+  SALE
+  TRADE
+  SALE_OR_TRADE
+}
+
+enum BazarListingStatus {
+  ACTIVE
+  RESERVED
+  SOLD
+  EXPIRED
+  CANCELLED
+}
+
+enum BazarItemCategory {
+  MASCOT
+  ITEM
+  COSMETIC
+}
+
+enum BazarProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+// Anúncio do Bazar
+model BazarListing {
+  id           String             @id @default(cuid())
+  playerId     String
+  category     BazarItemCategory
+  listingType  BazarListingType
+  status       BazarListingStatus @default(ACTIVE)
+
+  // O que está sendo vendido/trocado (JSON flexível)
+  // Mascot:   { mascotId, pokemonId, pokemonName, level, nickname, personality, stats }
+  // Item:     { itemType, quantity, displayName }
+  // Cosmetic: { inventoryItemId, itemType, displayName }
+  payload      Json
+
+  priceCoins   Int?     // null = troca somente
+  wantedDesc   String?  // texto livre descrevendo o que quer em troca
+  description  String?
+
+  feeCharged   Int      @default(0)
+  views        Int      @default(0)
+  expiresAt    DateTime
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  player       Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  proposals    BazarProposal[]
+  favorites    BazarFavorite[]
+
+  @@index([category, status, createdAt])
+  @@index([playerId])
+  @@map("bazar_listings")
+}
+
+// Proposta de troca/compra
+model BazarProposal {
+  id          String              @id @default(cuid())
+  listingId   String
+  proposerId  String
+
+  coinsOffer  Int                 @default(0)
+  // JSON: [{type:"ITEM", itemType, quantity, displayName}]
+  itemsOffer  Json?
+  message     String?
+
+  status      BazarProposalStatus @default(PENDING)
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  listing     BazarListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  proposer    Player        @relation(fields: [proposerId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([proposerId])
+  @@map("bazar_proposals")
+}
+
+// Favoritos
+model BazarFavorite {
+  id        String       @id @default(cuid())
+  playerId  String
+  listingId String
+  createdAt DateTime     @default(now())
+
+  player    Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  listing   BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, listingId])
+  @@map("bazar_favorites")
+}
+
+// Histórico de transações (feed público)
+model BazarTransaction {
+  id          String   @id @default(cuid())
+  listingId   String
+  sellerId    String
+  buyerId     String
+  sellerName  String
+  buyerName   String
+  description String   // ex: "Pikachu Nv.5 vendido por 1500 ZC"
+  coinsAmount Int      @default(0)
+  category    BazarItemCategory
+
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("bazar_transactions")
+}
+
+// Configuração do Miauvadão (NPC intermediário — singleton)
+model MiauvadaoConfig {
+  id                String   @id @default("singleton")
+  vaultBalance      Int      @default(0)   // alimentado pelas taxas do bazar
+  listingFee        Int      @default(10)  // taxa em ZC por anúncio
+  // JSON: [{shopItemId?, itemType, name, imageUrl, originalPrice, discountPct, finalPrice, stock, sold}]
+  dailyOffers       Json     @default("[]")
+  offersRefreshedAt DateTime?
+  updatedAt         DateTime @updatedAt
+
+  @@map("miauvadao_config")
 }
