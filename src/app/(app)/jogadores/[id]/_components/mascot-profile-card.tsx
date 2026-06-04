@@ -76,6 +76,8 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
   const hungerStatus    = getHungerStatus(mascot.lastFedAt);
   const happinessStatus = getHappinessStatus(mascot.happiness);
   const challengeStatus = getChallengeStatus(mascot.mood);
+  const relations = Array.isArray(mascot.relations) ? mascot.relations : [];
+  const events = Array.isArray(mascot.events) ? mascot.events : [];
 
   const hasActiveExpedition = false; // would need expedition data — simplify for profile
 
@@ -86,9 +88,9 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
     battleWins: mascot.battleWins,
   });
 
-  const friends = mascot.relations.filter(r => r.type === "FRIEND");
-  const rivals  = mascot.relations.filter(r => r.type === "RIVAL");
-  const eventsToShow = showAllEvents ? mascot.events : mascot.events.slice(0, 5);
+  const friends = relations.filter(r => r.type === "FRIEND");
+  const rivals  = relations.filter(r => r.type === "RIVAL");
+  const eventsToShow = showAllEvents ? events : events.slice(0, 5);
 
   const handleExpedition = () => {
     if (!confirm("Enviar mascote em expedição de 1 hora?")) return;
@@ -264,7 +266,7 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
         {/* Histórico de eventos — visível para todos */}
         <div className="space-y-1">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Histórico</p>
-          {mascot.events.length === 0 ? (
+          {events.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-slate-900/30 px-3 py-3 text-[11px] text-slate-400 leading-relaxed">
               Nenhum evento registrado ainda.<br/>
               <span className="text-slate-500">O histórico cresce conforme o mascote interage, batalha com rivais e retorna de expedições.</span>
@@ -282,10 +284,10 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
                   </div>
                 ))}
               </div>
-              {mascot.events.length > 5 && (
+              {events.length > 5 && (
                 <button type="button" onClick={() => setShowAllEvents(v => !v)}
                   className="text-[10px] text-slate-600 hover:text-slate-400 underline">
-                  {showAllEvents ? "Ver menos" : `Ver todos (${mascot.events.length})`}
+                  {showAllEvents ? "Ver menos" : `Ver todos (${events.length})`}
                 </button>
               )}
             </>

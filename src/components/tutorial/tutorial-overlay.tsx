@@ -64,7 +64,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
     }
   };
 
-  if (!visible) return null;
+  if (!visible || !step) return null;
 
   const PADDING = 8;
   const hasTarget = targetRect && step?.position !== "center";

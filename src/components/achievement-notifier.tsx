@@ -36,7 +36,14 @@ export function AchievementNotifier() {
         const recent = await getRecentUnlockedAchievements();
         if (recent.length === 0) return;
 
-        const seen = new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]") as string[]);
+        let seenValues: string[] = [];
+        try {
+          const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+          seenValues = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+        const seen = new Set(seenValues);
         const newOnes = recent.filter(a => !seen.has(a.id));
         if (newOnes.length === 0) return;
 

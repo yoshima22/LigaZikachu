@@ -109,8 +109,11 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
   const [imgFailed, setImgFailed] = useState(false);
 
+  const events = Array.isArray(mascot.events) ? mascot.events : [];
+  const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
+  const otherMascots = Array.isArray(mascot.otherMascots) ? mascot.otherMascots : [];
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
-  const expedition = mascot.expeditions.find(e => e.status === "ACTIVE");
+  const expedition = expeditions.find(e => e.status === "ACTIVE");
   const claimable  = expedition && new Date() >= new Date(expedition.finishAt);
   const expNeeded  = expToNext(mascot.level);
   const expPct     = Math.min(100, Math.round((mascot.exp / expNeeded) * 100));
@@ -384,11 +387,11 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         </div>
 
         {/* ── Histórico de eventos ── */}
-        {mascot.events.length > 0 && (
+        {events.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Histórico</p>
             <div className="space-y-1 max-h-28 overflow-y-auto">
-              {mascot.events.slice(0, 8).map(ev => (
+              {events.slice(0, 8).map(ev => (
                 <div key={ev.id} className="flex items-start gap-1.5 text-[10px] text-slate-500">
                   <span className="shrink-0">{ev.emoji}</span>
                   <span className="leading-snug">{ev.description}</span>
@@ -426,11 +429,11 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             </div>
 
             {/* Admin: batalha/amizade com outro mascote */}
-            {mascot.otherMascots && mascot.otherMascots.length > 0 && (
+            {otherMascots.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[10px] text-slate-600">Trigger vs outro mascote:</p>
                 <div className="flex flex-wrap gap-1">
-                  {mascot.otherMascots.map(other => (
+                  {otherMascots.map(other => (
                     <div key={other.id} className="flex gap-1">
                       <button type="button" disabled={pending}
                         onClick={() => act(() => adminBattleMascotsAction(mascot.id, other.id), `Batalha vs ${other.name}!`)}
