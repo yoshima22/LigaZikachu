@@ -50,6 +50,12 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumber, hasTic
       {isLoggedIn && !hasTicket && !myNumber && (
         <p className="text-sm text-amber-400">Você precisa de um Ticket ZikaLoot. Compre na ZikaShop ou ganhe via Caixa de Presentes.</p>
       )}
+      {isLoggedIn && myNumber && hasTicket && (
+        <p className="text-xs text-slate-500 bg-slate-900/60 border border-border rounded-lg px-3 py-2">
+          💡 Você já participou deste sorteio com o número <strong className="text-[#FFCB05]">{myNumber}</strong>.
+          Cada jogador pode ter apenas um número por sorteio — seus tickets extras ficam guardados para o próximo.
+        </p>
+      )}
       {isExpired && <p className="text-sm text-red-400">O prazo para escolher números encerrou.</p>}
 
       <div className="grid grid-cols-10 gap-1 sm:grid-cols-20">
