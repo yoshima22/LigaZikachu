@@ -65,8 +65,9 @@ export default async function MascotesPage() {
     }),
   ]);
 
-  // Recalcula humor dos mascotes (fire-and-forget)
-  void Promise.all(mascots.map(m => recalculateMood(m.id))).catch(() => {});
+  // NÃO rodar recalculateMood no carregamento da página — causa race condition
+  // com interações do usuário (sobrescreve ganhos de felicidade).
+  // recalculateMood é chamado apenas dentro de interactAction (exceto para feed).
 
   const hasFood    = foods.some(f => f.type === "FOOD"  && f.quantity > 0);
   const hasSweet   = foods.some(f => f.type === "SWEET" && f.quantity > 0);

@@ -350,11 +350,19 @@ export async function recalculateMood(mascotId: string): Promise<void> {
   }
 
   if (happinessDecay > 0) {
-    const newHappiness = Math.max(0, mascot.happiness - happinessDecay);
-    // NÃO reseta lastInteractedAt/lastFedAt — isso causaria cooldown falso e bloquearia interações
+    // Usa decrement atômico para evitar race condition com interações simultâneas
+    // (lê e sobrescreve em uma única operação do banco, não na memória)
     await prisma.mascot.update({
       where: { id: mascotId },
-      data: { happiness: newHappiness, mood: newMood }
+      data: {
+        happiness: { decrement: happinessDecay },
+        mood: newMood
+      }
+    });
+    // Garante que happiness não fique negativo (Prisma não tem clamp nativo)
+    await prisma.mascot.updateMany({
+      where: { id: mascotId, happiness: { lt: 0 } },
+      data: { happiness: 0 }
     });
   } else if (newMood !== mascot.mood) {
     await prisma.mascot.update({
