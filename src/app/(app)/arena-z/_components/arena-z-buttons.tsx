@@ -8,6 +8,7 @@ import {
   healMascotSusAction,
   retireArenaTeamAction,
   runBotBattleAction,
+  runPvpBattleAction,
 } from "../actions";
 
 function useArenaAction() {
@@ -57,6 +58,23 @@ export function RetireTeamButton({ teamId }: { teamId: string }) {
   );
 }
 
+export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId: string; defenseTeamId: string }) {
+  const { pending, run } = useArenaAction();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        if (!confirm("Resolver combate PvP automatico contra esta equipe?")) return;
+        run(() => runPvpBattleAction(attackTeamId, defenseTeamId), "Combate PvP resolvido.");
+      }}
+      className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:border-red-300 disabled:opacity-50"
+    >
+      Desafiar PvP
+    </button>
+  );
+}
+
 export function SusButton({ mascotId }: { mascotId: string }) {
   const { pending, run } = useArenaAction();
   return (
@@ -84,4 +102,3 @@ export function AdminMascotStateButton({ mascotId, state, label }: { mascotId: s
     </button>
   );
 }
-

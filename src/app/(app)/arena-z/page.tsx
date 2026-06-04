@@ -7,7 +7,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG } from "@/lib/arena-z";
 import { createArenaTeamAction } from "./actions";
-import { AdminMascotStateButton, BotBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { AdminMascotStateButton, BotBattleButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export default async function ArenaZPage() {
   });
   if (!player) redirect("/dashboard");
 
-  const [wallet, mascots, teams, battles] = await Promise.all([
+  const [wallet, mascots, teams, opponentTeams, battles] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -51,8 +51,17 @@ export default async function ArenaZPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    prisma.arenaTeam.findMany({
+      where: { playerId: { not: player.id }, status: "ACTIVE" },
+      include: {
+        player: { select: { displayName: true, ptcglNick: true } },
+        members: { include: { mascot: true }, orderBy: { slot: "asc" } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+    }),
     prisma.arenaBattle.findMany({
-      where: { attackerPlayerId: player.id },
+      where: { OR: [{ attackerPlayerId: player.id }, { defenderPlayerId: player.id }] },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
@@ -66,6 +75,7 @@ export default async function ArenaZPage() {
     (!m.restingUntil || m.restingUntil <= now)
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
+  const activeTeams = teams.filter(team => team.status === "ACTIVE");
 
   return (
     <div className="space-y-6">
@@ -95,9 +105,9 @@ export default async function ArenaZPage() {
           <p className="flex items-center gap-2 text-sm font-bold text-green-300"><Bot size={16} /> Arena Bots</p>
           <p className="mt-1 text-xs text-slate-400">Disponivel neste MVP. Bots sao gerados por faixa de nivel e resolvidos no backend.</p>
         </div>
-        <div className="rounded-2xl border border-slate-700 bg-slate-950/50 p-4 opacity-70">
-          <p className="flex items-center gap-2 text-sm font-bold text-slate-300"><Lock size={16} /> Arena PvP</p>
-          <p className="mt-1 text-xs text-slate-500">Estrutura preparada no banco. Tela e desafios publicos ficam bloqueados ate a proxima fase.</p>
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+          <p className="flex items-center gap-2 text-sm font-bold text-red-200"><Lock size={16} /> Arena PvP admin</p>
+          <p className="mt-1 text-xs text-slate-400">Disponivel apenas para admin testar. Desafios publicos continuam bloqueados para jogadores comuns.</p>
         </div>
       </div>
 
@@ -163,6 +173,47 @@ export default async function ArenaZPage() {
                       <div key={member.id} className="rounded-xl border border-border/60 bg-slate-950/60 p-3">
                         <p className="truncate text-xs font-semibold text-slate-200">{member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)}</p>
                         <p className="text-[10px] text-slate-500">Slot {member.slot} | Nv.{member.mascot.level} | {stateLabel(member.mascot.arenaState, member.mascot.restingUntil)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
+            <h2 className="font-semibold text-slate-200">Arena PvP experimental</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Escolha uma equipe sua ativa para atacar equipes de outros jogadores. O combate e automatico e registra roubo/preservacao do cofre.
+            </p>
+            <div className="mt-4 space-y-4">
+              {activeTeams.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Crie uma equipe ativa antes de testar PvP.</p>
+              ) : opponentTeams.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhuma equipe adversaria ativa disponivel.</p>
+              ) : activeTeams.map(attackTeam => (
+                <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+                  <p className="text-sm font-bold text-red-100">Atacando com: {attackTeam.name}</p>
+                  <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                    {opponentTeams.map(defenseTeam => (
+                      <div key={defenseTeam.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-bold text-slate-100">{defenseTeam.name}</p>
+                            <p className="text-[10px] text-slate-500">
+                              Dono: {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick} | {defenseTeam.members.length} mascote(s)
+                            </p>
+                            <p className="mt-1 text-[10px] text-[#FFCB05]">Cofre alvo: {fmtLoot(defenseTeam)}</p>
+                          </div>
+                          <PvpBattleButton attackTeamId={attackTeam.id} defenseTeamId={defenseTeam.id} />
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {defenseTeam.members.slice(0, 6).map(member => (
+                            <span key={member.id} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-slate-400">
+                              {member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)} Nv.{member.mascot.level}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

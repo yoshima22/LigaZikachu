@@ -9,6 +9,7 @@ import {
   healMascotSus,
   retireArenaTeam,
   runBotBattle,
+  runPvpBattle,
 } from "@/lib/arena-z";
 
 async function getCurrentPlayerId() {
@@ -44,6 +45,19 @@ export async function runBotBattleAction(teamId: string): Promise<{ error?: stri
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao combater bot." };
+  }
+}
+
+export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const playerId = await getCurrentPlayerId();
+    await runPvpBattle(playerId, attackTeamId, defenseTeamId);
+    revalidatePath("/arena-z");
+    revalidatePath("/mascotes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao resolver PvP." };
   }
 }
 
@@ -84,4 +98,3 @@ export async function adminSetMascotStateAction(mascotId: string, state: "FREE" 
     return { error: err instanceof Error ? err.message : "Erro ao alterar estado." };
   }
 }
-
