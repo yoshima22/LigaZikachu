@@ -30,7 +30,8 @@ import { Button } from "@/components/ui/button";
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },
-  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" }
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" },
+  { href: "/arena-z", label: "Arena Z", icon: Swords, adminOnly: true, tutorialId: undefined }
 ];
 
 const rankingLinks = [

@@ -104,6 +104,9 @@ export async function hatchEgg(playerId: string): Promise<{ mascotId: string; po
 export async function equipMascot(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido precisa de Atendimento SUS antes de ser equipado.");
+  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote está em repouso e não pode ser equipado ainda.");
+  if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode ser equipado.");
 
   // Verifica se o mascote atualmente equipado está em expedição
   const equippedInExpedition = await prisma.mascot.findFirst({
@@ -237,6 +240,9 @@ export async function interactWithMascot(
 ): Promise<InteractionResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido não pode receber interações.");
+  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote em repouso não pode receber interações ainda.");
+  if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode receber interações.");
 
   const now = new Date();
   const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos
@@ -521,6 +527,9 @@ export async function startExpedition(playerId: string, mascotId: string, durati
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (!mascot.isEquipped) throw new Error("Apenas o mascote equipado pode sair em expedição.");
+  if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode sair em expedição.");
+  if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido não pode sair em expedição.");
+  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote em repouso não pode sair em expedição.");
 
   const active = await prisma.mascotExpedition.findFirst({
     where: { mascotId, status: "ACTIVE" }

@@ -247,6 +247,9 @@ model Player {
   mascotEggs              MascotEgg[]
   mascotIncubator         MascotIncubator?
   mascotFoods             MascotFoodItem[]
+  arenaTeams              ArenaTeam[]
+  arenaBattlesAsAttacker  ArenaBattle[]        @relation("ArenaBattleAttacker")
+  arenaBattlesAsDefender  ArenaBattle[]        @relation("ArenaBattleDefender")
   bazarListings           BazarListing[]
   bazarProposals          BazarProposal[]
   bazarFavorites          BazarFavorite[]
@@ -1273,6 +1276,35 @@ enum FoodType {
   SWEET
 }
 
+enum MascotArenaState {
+  FREE
+  ARENA
+  INJURED
+  RESTING
+}
+
+enum ArenaTeamStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum ArenaBattleType {
+  BOT
+  PVP
+  OPPORTUNISTIC
+}
+
+enum ArenaBattleResult {
+  ATTACKER_WIN
+  DEFENDER_WIN
+  DRAW
+}
+
+enum ArenaBattleStatus {
+  RESOLVED
+  CANCELLED
+}
+
 model MascotEgg {
   id         String          @id @default(cuid())
   playerId   String
@@ -1323,8 +1355,12 @@ model Mascot {
   lastInteractedAt DateTime?
   lastFedAt        DateTime?
   bazarListed      Boolean           @default(false)
+  arenaState       MascotArenaState  @default(FREE)
+  injuredAt        DateTime?
+  restingUntil     DateTime?
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
+  arenaTeamMembers ArenaTeamMember[]
   relationsAsA     MascotRelation[]  @relation("MascotRelationA")
   relationsAsB     MascotRelation[]  @relation("MascotRelationB")
   events           MascotEvent[]
@@ -1403,6 +1439,77 @@ model MascotFoodItem {
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   @@unique([playerId, type])
   @@map("mascot_food_items")
+}
+
+model ArenaTeam {
+  id             String          @id @default(cuid())
+  playerId       String
+  name           String
+  status         ArenaTeamStatus @default(ACTIVE)
+  vaultCoins     Int             @default(0)
+  vaultExp       Int             @default(0)
+  vaultFood      Int             @default(0)
+  vaultSweet     Int             @default(0)
+  multiplier     Decimal         @default(1) @db.Decimal(5, 2)
+  enteredAt      DateTime        @default(now())
+  lastBattleAt   DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  player         Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  members        ArenaTeamMember[]
+  attacks        ArenaBattle[]   @relation("ArenaBattleAttackTeam")
+  defenses       ArenaBattle[]   @relation("ArenaBattleDefenseTeam")
+
+  @@index([playerId, status])
+  @@map("arena_teams")
+}
+
+model ArenaTeamMember {
+  id        String    @id @default(cuid())
+  teamId    String
+  mascotId  String
+  slot      Int
+  joinedAt  DateTime  @default(now())
+
+  team      ArenaTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mascot    Mascot    @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, slot])
+  @@unique([teamId, mascotId])
+  @@index([mascotId])
+  @@map("arena_team_members")
+}
+
+model ArenaBattle {
+  id               String            @id @default(cuid())
+  type             ArenaBattleType
+  status           ArenaBattleStatus @default(RESOLVED)
+  result           ArenaBattleResult
+  attackerPlayerId String?
+  defenderPlayerId String?
+  attackTeamId     String?
+  defenseTeamId    String?
+  botName          String?
+  levelBandMin     Int?
+  levelBandMax     Int?
+  winnerPlayerId   String?
+  loserPlayerId    String?
+  rounds           Int               @default(0)
+  turnLog          Json
+  lootResult       Json?
+  injuredMascotIds Json?
+  createdAt        DateTime          @default(now())
+
+  attackerPlayer   Player?           @relation("ArenaBattleAttacker", fields: [attackerPlayerId], references: [id], onDelete: SetNull)
+  defenderPlayer   Player?           @relation("ArenaBattleDefender", fields: [defenderPlayerId], references: [id], onDelete: SetNull)
+  attackTeam       ArenaTeam?        @relation("ArenaBattleAttackTeam", fields: [attackTeamId], references: [id], onDelete: SetNull)
+  defenseTeam      ArenaTeam?        @relation("ArenaBattleDefenseTeam", fields: [defenseTeamId], references: [id], onDelete: SetNull)
+
+  @@index([type, createdAt])
+  @@index([attackerPlayerId])
+  @@index([defenderPlayerId])
+  @@map("arena_battles")
 }
 
 model Session {
