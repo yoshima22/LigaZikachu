@@ -563,6 +563,17 @@ export const EXPEDITION_DURATIONS = {
 } as const;
 export type ExpeditionDuration = keyof typeof EXPEDITION_DURATIONS;
 
+// Expedição de treinamento (foco em EXP — sem itens/coins)
+// Multiplicadores de EXP muito maiores que o padrão
+export const TRAINING_EXP_MULT: Record<ExpeditionDuration, number> = {
+  "30min": 4,   // 4× EXP base
+  "1h":    8,   // 8×
+  "3h":    20,  // 20×
+  "6h":    40,  // 40×
+};
+
+export type ExpeditionMode = "STANDARD" | "TRAINING";
+
 // ── Incubadora (em ms) ────────────────────────────────────────────────────────
 
 export const INCUBATION_DURATION_MS = 10 * 60 * 1000; // 10 minutos
@@ -570,15 +581,15 @@ export const INCUBATION_DURATION_MS = 10 * 60 * 1000; // 10 minutos
 // ── EXP ganho por atividade ───────────────────────────────────────────────────
 
 export const EXP_REWARDS = {
-  MATCH_PLAYED:    5,
-  MATCH_WIN:      10,
-  WIN_STREAK:      5,   // bônus por vitória em sequência
-  DECK_SUBMITTED:  3,
-  PLAY_WITH:       8,
-  PET:             3,
-  FEED_FOOD:       5,
-  FEED_SWEET:     12,
-  EXPEDITION:     20,
+  MATCH_PLAYED:    15,  // era 5
+  MATCH_WIN:       35,  // era 10
+  WIN_STREAK:      15,  // era 5 — bônus por vitória em sequência
+  DECK_SUBMITTED:   5,  // era 3
+  PLAY_WITH:       25,  // era 8
+  PET:             10,  // era 3
+  FEED_FOOD:       15,  // era 5
+  FEED_SWEET:      35,  // era 12
+  EXPEDITION:      50,  // era 20 — base para expedições padrão
 };
 
 // ── Sprite URL ────────────────────────────────────────────────────────────────

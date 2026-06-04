@@ -5,10 +5,10 @@
 import { prisma } from "@/lib/prisma";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
-  EXPEDITION_DURATIONS, expForLevel, expToNextLevel, EXP_REWARDS,
+  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expForLevel, expToNextLevel, EXP_REWARDS,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
-import type { ExpeditionDuration } from "@/lib/mascot-data";
+import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { MascotMood, MascotPersonality } from "@prisma/client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -358,7 +358,18 @@ export async function interactWithMascot(
     }
   });
 
-  if (expGained > 0) await addExp(mascotId, expGained).catch(() => {});
+  if (expGained > 0) {
+    // Bônus social: aliados e rivais aumentam EXP por interação
+    const relations = await prisma.mascotRelation.findMany({
+      where: { mascotAId: mascotId },
+      select: { type: true },
+    }).catch(() => [] as { type: string }[]);
+    const hasFriends = relations.some(r => r.type === "FRIEND");
+    const hasRivals  = relations.some(r => r.type === "RIVAL");
+    const socialMult = 1.0 + (hasFriends ? 0.25 : 0) + (hasRivals ? 0.15 : 0);
+    const finalExp = Math.round(expGained * socialMult);
+    await addExp(mascotId, finalExp).catch(() => {});
+  }
 
   return { success: true, message, happinessChange, expGained, newMood: finalMood };
 }
@@ -523,7 +534,12 @@ function describeExpeditionReward(reward: ExpeditionReward) {
   }
 }
 
-export async function startExpedition(playerId: string, mascotId: string, durationKey: ExpeditionDuration = "1h") {
+export async function startExpedition(
+  playerId: string,
+  mascotId: string,
+  durationKey: ExpeditionDuration = "1h",
+  mode: ExpeditionMode = "STANDARD"
+) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (!mascot.isEquipped) throw new Error("Apenas o mascote equipado pode sair em expedição.");
@@ -539,7 +555,7 @@ export async function startExpedition(playerId: string, mascotId: string, durati
   const dur = EXPEDITION_DURATIONS[durationKey];
   const finishAt = new Date(Date.now() + dur.ms);
   return prisma.mascotExpedition.create({
-    data: { mascotId, finishAt, rewardJson: { durationKey } } // guarda duration para calcular recompensa
+    data: { mascotId, finishAt, rewardJson: { durationKey, mode } }
   });
 }
 
@@ -623,9 +639,10 @@ export async function claimExpedition(
   if (expedition.status !== "ACTIVE") throw new Error("Expedição já coletada.");
   if (new Date() < expedition.finishAt) throw new Error("A expedição ainda não terminou.");
 
-  // Recupera a duração armazenada no rewardJson durante startExpedition
-  const storedDuration = (expedition.rewardJson as Record<string, unknown> | null)?.durationKey as ExpeditionDuration | undefined;
-  const durationKey: ExpeditionDuration = storedDuration ?? "1h";
+  // Recupera duração e modo armazenados no rewardJson
+  const stored = (expedition.rewardJson as Record<string, unknown> | null) ?? {};
+  const durationKey: ExpeditionDuration = (stored.durationKey as ExpeditionDuration) ?? "1h";
+  const mode: ExpeditionMode = (stored.mode as ExpeditionMode) ?? "STANDARD";
   const dur = EXPEDITION_DURATIONS[durationKey];
 
   // Busca aliados ANTES de rolar recompensa (influenciam as chances)
@@ -636,14 +653,25 @@ export async function claimExpedition(
   const allyCount = friends.length;
   const expeditorName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
 
-  const reward = await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
-  const gift = describeExpeditionReward(reward);
+  // Modo Treinamento: apenas EXP — sem itens, sem coins
+  const reward = mode === "TRAINING"
+    ? { type: "NOTHING" as const }
+    : await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
+  const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
 
-  // EXP: base × duração × nível × bônus de aliados
+  // EXP: base × duração × nível × bônus social
   const expBase = EXP_REWARDS.EXPEDITION;
   const levelMult = 1 + Math.floor(expedition.mascot.level / 20) * 0.25;
-  const allyExpBonus = 1 + allyCount * 0.1; // cada aliado = +10% EXP (máx +50%)
-  const expeditionExp = Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus);
+  const allyExpBonus = 1 + allyCount * 0.1; // cada aliado = +10% EXP
+  // Social rival bonus via MascotRelation
+  const rivalCount = await prisma.mascotRelation.count({
+    where: { mascotAId: expedition.mascotId, type: "RIVAL" }
+  });
+  const rivalBonus = rivalCount > 0 ? 1.15 : 1.0; // rivais = +15% EXP (competição)
+  const expMult = mode === "TRAINING"
+    ? TRAINING_EXP_MULT[durationKey]   // treinamento: 4×/8×/20×/40×
+    : dur.expMultiplier;               // padrão: 0.5×/1×/2.5×/5×
+  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus);
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
@@ -651,7 +679,16 @@ export async function claimExpedition(
       data: { status: "CLAIMED", rewardJson: reward }
     });
 
-    if (gift) {
+    if (mode === "TRAINING") {
+      // Treinamento: apenas log de evento, sem gift no inventário
+      await tx.mascotEvent.create({
+        data: {
+          mascotId: expedition.mascotId,
+          emoji: "🏋️",
+          description: `Voltou do treinamento de ${dur.label} com +${expeditionExp} EXP!`,
+        }
+      });
+    } else if (gift) {
       const allyNote = allyCount > 0
         ? ` (${allyCount} aliado${allyCount > 1 ? "s" : ""} apoiaram!)`
         : "";

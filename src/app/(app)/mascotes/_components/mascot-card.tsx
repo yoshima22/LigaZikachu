@@ -176,6 +176,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [imgFailed, setImgFailed] = useState(false);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
   const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
+  const [expeditionMode, setExpeditionMode] = useState<"STANDARD" | "TRAINING">("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
 
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
@@ -553,6 +554,24 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         <div className="flex gap-2">
           {!arenaLocked && !expedition && mascot.isEquipped && (
             <div className="flex-1 space-y-1.5">
+              {/* Modo: Padrão ou Treinamento */}
+              <div className="flex gap-1">
+                {(["STANDARD", "TRAINING"] as const).map(m => (
+                  <button key={m} type="button" onClick={() => setExpeditionMode(m)}
+                    className={`flex-1 rounded-lg border py-1 text-[10px] font-semibold transition-colors ${
+                      expeditionMode === m
+                        ? m === "TRAINING" ? "border-purple-500/40 bg-purple-500/10 text-purple-400" : "border-blue-500/40 bg-blue-500/10 text-blue-400"
+                        : "border-border text-slate-500"
+                    }`}>
+                    {m === "TRAINING" ? "🏋️ Treino" : "🗺 Padrão"}
+                  </button>
+                ))}
+              </div>
+              {expeditionMode === "TRAINING" && (
+                <p className="text-[9px] text-purple-400/80 leading-tight">
+                  Só EXP — sem itens/coins. EXP muito maior que o padrão.
+                </p>
+              )}
               {/* Seletor de duração */}
               <select
                 value={expeditionDuration}
@@ -561,20 +580,31 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
               >
                 {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, v]) => (
                   <option key={key} value={key}>
-                    🗺 {v.label} — EXP ×{v.expMultiplier}{v.rewardBonus > 0 ? ` · +${v.rewardBonus}% loot` : ""}
+                    {expeditionMode === "TRAINING"
+                      ? `🏋️ ${v.label}`
+                      : `🗺 ${v.label} — ×${v.expMultiplier} EXP${v.rewardBonus > 0 ? ` · +${v.rewardBonus}% loot` : ""}`}
                   </option>
                 ))}
               </select>
               <div className="flex gap-1.5">
                 <button type="button" disabled={pending}
-                  onClick={() => act(() => startExpeditionAction(mascot.id, expeditionDuration), `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada!`)}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-1.5 text-[11px] font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
-                  <MapPin size={12}/> Partir
+                  onClick={() => act(
+                    () => startExpeditionAction(mascot.id, expeditionDuration, expeditionMode),
+                    `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada!`
+                  )}
+                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border py-1.5 text-[11px] font-medium disabled:opacity-40 ${
+                    expeditionMode === "TRAINING"
+                      ? "border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
+                      : "border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                  }`}>
+                  <MapPin size={12}/> {expeditionMode === "TRAINING" ? "Treinar" : "Partir"}
                 </button>
-                <button type="button" onClick={() => setShowLootPreview(true)}
-                  className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
-                  🎁 Loot?
-                </button>
+                {expeditionMode === "STANDARD" && (
+                  <button type="button" onClick={() => setShowLootPreview(true)}
+                    className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
+                    🎁 Loot?
+                  </button>
+                )}
               </div>
             </div>
           )}

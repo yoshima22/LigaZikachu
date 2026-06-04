@@ -118,13 +118,13 @@ export async function interactAction(mascotId: string, type: InteractionType): P
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function startExpeditionAction(mascotId: string, duration: ExpeditionDuration = "1h"): Promise<{ error?: string }> {
+export async function startExpeditionAction(mascotId: string, duration: ExpeditionDuration = "1h", mode: import("@/lib/mascot-data").ExpeditionMode = "STANDARD"): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
-    await startExpedition(player.id, mascotId, duration);
+    await startExpedition(player.id, mascotId, duration, mode);
     revalidate();
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
