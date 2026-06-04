@@ -507,7 +507,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         vaultFood: { increment: reward.food },
         vaultSweet: { increment: reward.sweet },
         lastBattleAt: new Date(),
-        pendingBotJson: null,       // limpa bot pendente após batalha
+        pendingBotJson: import("@prisma/client").Prisma.JsonNull,
         pendingBotDifficulty: null,
       },
     });
