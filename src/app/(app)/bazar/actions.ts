@@ -1183,8 +1183,42 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
       });
       newBalance = updatedWallet.balance;
     } else {
-      await prisma.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: false } });
-      const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      const message = `${player.displayName} perdeu ${session.betAmount.toLocaleString("pt-BR")} ZC no Jogo do Miauvadão. O cofre agradece.`;
+      const wallet = await prisma.$transaction(async (tx) => {
+        await tx.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: false } });
+        const currentWallet = await tx.zikaCoinWallet.findUniqueOrThrow({
+          where: { playerId: player.id },
+          select: { id: true, balance: true },
+        });
+        await tx.zikaCoinTransaction.create({
+          data: {
+            walletId: currentWallet.id,
+            type: "BET_LOST",
+            amount: 0,
+            balanceBefore: currentWallet.balance,
+            balanceAfter: currentWallet.balance,
+            description: `Derrota no Jogo do Miauvadão: ${session.betAmount.toLocaleString("pt-BR")} ZC foram para o cofre`,
+          },
+        });
+        await tx.miauvadaoConfig.upsert({
+          where: { id: "singleton" },
+          update: {
+            vaultBalance: { increment: session.betAmount },
+            lastNpcMessage: message,
+            lastNpcMessageAt: new Date(),
+          },
+          create: {
+            id: "singleton",
+            vaultBalance: session.betAmount,
+            lastNpcMessage: message,
+            lastNpcMessageAt: new Date(),
+          },
+        });
+        return tx.zikaCoinWallet.findUnique({
+          where: { playerId: player.id },
+          select: { balance: true },
+        });
+      });
       newBalance = wallet?.balance ?? 0;
     }
 
