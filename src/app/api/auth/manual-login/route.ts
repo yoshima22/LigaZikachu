@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { AuthError } from "next-auth";
-import { signIn } from "@/auth";
+import { UserStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { verifyPassword } from "@/lib/auth/password";
+import { createManualSessionToken, MANUAL_SESSION_COOKIE, manualSessionCookieOptions } from "@/lib/manual-session";
 
 export async function POST(request: Request) {
   try {
@@ -12,34 +14,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email ou senha invalidos.", code: "INVALID_INPUT" }, { status: 401 });
     }
 
-    const result = await signIn("credentials", {
-      identifier,
-      password,
-      redirect: false
+    let user = await prisma.user.findFirst({
+      where: { email: identifier.toLowerCase() },
+      select: { id: true, email: true, name: true, image: true, role: true, status: true, passwordHash: true }
     });
 
-    if (typeof result === "string") {
-      const url = new URL(result, "https://liga-zikachu.vercel.app");
-      const error = url.searchParams.get("error");
-      if (error) {
-        console.warn("[ManualLogin] NextAuth returned error URL", { identifier, error });
-        return NextResponse.json({ error: "Email ou senha invalidos.", code: error }, { status: 401 });
-      }
+    if (!user) {
+      const player = await prisma.player.findFirst({
+        where: { ptcglNick: { equals: identifier, mode: "insensitive" } },
+        select: {
+          user: {
+            select: { id: true, email: true, name: true, image: true, role: true, status: true, passwordHash: true }
+          }
+        }
+      });
+      user = player?.user ?? null;
     }
 
-    return NextResponse.json({ success: true });
+    if (!user) {
+      return NextResponse.json({ error: "Usuario nao encontrado.", code: "USER_NOT_FOUND" }, { status: 401 });
+    }
+    if (!user.passwordHash) {
+      return NextResponse.json({ error: "Conta sem senha cadastrada.", code: "MISSING_PASSWORD" }, { status: 401 });
+    }
+    if (user.status === UserStatus.SUSPENDED || user.status === UserStatus.REJECTED) {
+      return NextResponse.json({ error: "Acesso negado. Conta suspensa ou rejeitada.", code: "BLOCKED_STATUS" }, { status: 403 });
+    }
+
+    const valid = await verifyPassword(password, user.passwordHash);
+    if (!valid) {
+      return NextResponse.json({ error: "Senha invalida.", code: "INVALID_PASSWORD" }, { status: 401 });
+    }
+
+    const response = NextResponse.json({ success: true });
+    const secure = new URL(request.url).protocol === "https:";
+    response.cookies.set(
+      MANUAL_SESSION_COOKIE,
+      createManualSessionToken(user),
+      manualSessionCookieOptions(secure)
+    );
+    return response;
   } catch (error) {
-    if (error instanceof AuthError) {
-      console.warn("[ManualLogin] AuthError", { type: error.type, cause: error.cause });
-      const status = error.type === "CredentialsSignin" ? 401 : 500;
-      return NextResponse.json({
-        error: error.type === "CredentialsSignin"
-          ? "Email ou senha invalidos."
-          : "Nao foi possivel concluir o login.",
-        code: error.type
-      }, { status });
-    }
-
     console.error("[ManualLogin] erro inesperado", error);
     return NextResponse.json({ error: "Erro interno no login manual.", code: "INTERNAL_ERROR" }, { status: 500 });
   }

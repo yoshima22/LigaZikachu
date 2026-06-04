@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { computePlayerRanking } from "@/lib/ranking";
+import { getManualSessionUser } from "@/lib/manual-session";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,10 +19,10 @@ import { formatDateBRT } from "@/lib/date-brt";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const session = await auth();
-  if (!session?.user) return null;
+  const session = await auth().catch(() => null);
+  const user = session?.user ?? await getManualSessionUser();
+  if (!user) return null;
 
-  const user = session.user;
   const admin = isAdmin(user.role);
 
   // Todas as temporadas (para seletor)

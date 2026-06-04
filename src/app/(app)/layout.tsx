@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { getManualSessionUser, MANUAL_SESSION_COOKIE } from "@/lib/manual-session";
 import { Button } from "@/components/ui/button";
 import { LogOut, Zap } from "lucide-react";
 import { Toaster } from "sonner";
@@ -13,26 +14,27 @@ import { AchievementNotifier } from "@/components/achievement-notifier";
 import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
+  const session = await auth().catch(() => null);
+  const user = session?.user ?? await getManualSessionUser();
+  if (!user) redirect("/login");
 
-  const admin = isAdmin(session.user.role);
+  const admin = isAdmin(user.role);
 
   // Dados do jogador para o nav
   const player = await prisma.player.findUnique({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
     select: { id: true, ptcglNick: true, avatarUrl: true }
   });
   const [giftCount, wallet] = await Promise.all([
     player
       ? prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch((error) => {
-          console.error("[AppLayout] gift count failed", { userId: session.user.id, playerId: player.id, error });
+          console.error("[AppLayout] gift count failed", { userId: user.id, playerId: player.id, error });
           return 0;
         })
       : 0,
     player
       ? prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch((error) => {
-          console.error("[AppLayout] wallet lookup failed", { userId: session.user.id, playerId: player.id, error });
+          console.error("[AppLayout] wallet lookup failed", { userId: user.id, playerId: player.id, error });
           return null;
         })
       : null,
@@ -82,7 +84,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                 {/* Texto à esquerda */}
                 <div className="text-right">
                   <p className="text-xs font-medium text-slate-200 leading-tight">
-                    {session.user.name ?? session.user.email}
+                    {user.name ?? user.email}
                   </p>
                   {wallet != null && (
                     <span className="flex items-center justify-end gap-0.5 mt-0.5 text-[10px] font-semibold text-[#FFCB05]">
@@ -100,7 +102,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                     <img src={player.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
-                      {(session.user.name ?? session.user.email ?? "?")[0].toUpperCase()}
+                      {(user.name ?? user.email ?? "?")[0].toUpperCase()}
                     </div>
                   )}
                 </div>
@@ -108,6 +110,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               {/* Logout — form POST evita prefetch do Next.js (que causava logout automático) */}
               <form action={async () => {
                 "use server";
+                const { cookies } = await import("next/headers");
+                (await cookies()).delete(MANUAL_SESSION_COOKIE);
                 await signOut({ redirectTo: "/login" });
               }}>
                 <Button type="submit" variant="ghost" size="sm"
