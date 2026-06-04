@@ -1,7 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
-import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
 
 type FormState = {
@@ -12,28 +12,29 @@ export async function signInWithCredentials(
   _previousState: FormState | undefined,
   formData: FormData
 ): Promise<FormState | undefined> {
+  const identifier = String(formData.get("identifier") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
   try {
     await signIn("credentials", {
-      identifier: String(formData.get("identifier") ?? ""),
-      password:   String(formData.get("password") ?? ""),
-      redirectTo: "/dashboard"
+      identifier,
+      password,
+      redirect: false
     });
   } catch (error) {
-    // Erros de redirect são esperados após login bem-sucedido — deixa propagar
-    if (isRedirectError(error)) throw error;
-
     if (error instanceof AuthError) {
       if (error.type === "CredentialsSignin") {
-        return { error: "Email ou senha inválidos. Verifique suas credenciais." };
+        return { error: "Email ou senha invalidos. Verifique suas credenciais." };
       }
       if (error.type === "AccessDenied") {
         return { error: "Acesso negado. Sua conta pode estar suspensa." };
       }
-      return { error: "Não foi possível autenticar. Tente novamente." };
+      return { error: "Nao foi possivel autenticar. Tente novamente." };
     }
 
-    // Qualquer outro erro — loga mas NÃO retorna 500 ao cliente
     console.error("[Login] Erro inesperado:", error);
     return { error: "Erro interno. Tente novamente em alguns instantes." };
   }
+
+  redirect("/dashboard");
 }
