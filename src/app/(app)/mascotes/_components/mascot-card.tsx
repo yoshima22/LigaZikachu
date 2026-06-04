@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info } from "lucide-react";
@@ -64,6 +64,31 @@ function Tip({ text, children }: { text: string; children: React.ReactNode }) {
         <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
       </div>
     </div>
+  );
+}
+
+// Countdown de expedição (tempo restante, atualizado a cada segundo)
+function ExpeditionCountdown({ finishAt }: { finishAt: Date }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, new Date(finishAt).getTime() - Date.now()));
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const r = Math.max(0, new Date(finishAt).getTime() - Date.now());
+      setRemaining(r);
+      if (r === 0) clearInterval(iv);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [finishAt]);
+
+  if (remaining === 0) return <span className="text-green-400 font-semibold">Pronto para coletar! 🎁</span>;
+  const totalMin = Math.floor(remaining / 60000);
+  const hours    = Math.floor(totalMin / 60);
+  const mins     = totalMin % 60;
+  const secs     = Math.floor((remaining % 60000) / 1000);
+  return (
+    <span>
+      {hours > 0 ? `${hours}h ` : ""}{String(mins).padStart(2,"0")}m {String(secs).padStart(2,"0")}s
+    </span>
   );
 }
 
@@ -277,7 +302,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         {expedition && !claimable && (
           <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
             <MapPin size={12} className="shrink-0" />
-            <span>Em expedição — volta em {new Date(expedition.finishAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span>Em expedição — falta <ExpeditionCountdown finishAt={new Date(expedition.finishAt)} /></span>
           </div>
         )}
         {claimable && expedition && (
