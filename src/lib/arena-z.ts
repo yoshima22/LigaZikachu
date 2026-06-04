@@ -11,7 +11,16 @@ export const ARENA_Z_CONFIG = {
   defeatedLootPreservedPct: 0.6,
   defeatedLootStolenPct: 0.3,
   defeatedLootBurnPct: 0.1,
+  botCooldownMinutes: 3,  // cooldown entre batalhas de bot por equipe
 };
+
+// Dificuldades: modificam a faixa de nível do bot
+export const DIFFICULTY_CONFIG = {
+  easy:   { levelOffset: -5, rewardMult: 0.6, injuryChanceMult: 0.4, label: "Fácil",  color: "green", desc: "Bot 5 níveis abaixo. Menos loot, quase sem risco de ferimento." },
+  normal: { levelOffset:  0, rewardMult: 1.0, injuryChanceMult: 1.0, label: "Normal", color: "yellow", desc: "Bot equivalente ao nível médio da equipe." },
+  hard:   { levelOffset: +5, rewardMult: 1.8, injuryChanceMult: 2.5, label: "Difícil", color: "red",   desc: "Bot 5 níveis acima. Loot muito maior, risco alto de ferimento." },
+} as const;
+export type ArenaDifficulty = keyof typeof DIFFICULTY_CONFIG;
 
 const BOT_NAMES = [
   "Nando Faisca", "Beto Raio", "Cida Tempestade", "Tuca do Beco", "Mestre Pingo",
@@ -196,13 +205,17 @@ function getBotRewardRange(levelMax: number) {
   };
 }
 
-function buildBotOpponent(attackers: ArenaMascot[]) {
+function buildBotOpponent(attackers: ArenaMascot[], difficulty: ArenaDifficulty = "normal", seed?: number) {
   const avgLevel = Math.max(1, Math.round(attackers.reduce((sum, m) => sum + m.level, 0) / attackers.length));
-  const band = levelBand(avgLevel);
+  const diff = DIFFICULTY_CONFIG[difficulty];
+  const adjustedLevel = Math.max(1, avgLevel + diff.levelOffset);
+  const band = levelBand(adjustedLevel);
   const botSize = rand(2, Math.min(6, Math.max(2, attackers.length + rand(-1, 1))));
-  const botName = pick(BOT_NAMES);
+  // Seed determinístico: usa seed se fornecido, caso contrário gera aleatório
+  const nameSeed = seed !== undefined ? seed % BOT_NAMES.length : Math.floor(Math.random() * BOT_NAMES.length);
+  const botName = BOT_NAMES[nameSeed];
   const defenders = Array.from({ length: botSize }, (_, index) => makeBotMascot(index + 1, band.min, band.max));
-  return { avgLevel, band, botSize, botName, defenders, rewardRange: getBotRewardRange(band.max) };
+  return { avgLevel, band, botSize, botName, defenders, rewardRange: getBotRewardRange(band.max), difficulty };
 }
 
 function splitDefeatedLoot(loot: ArenaLoot) {
@@ -222,19 +235,37 @@ function splitDefeatedLoot(loot: ArenaLoot) {
   };
 }
 
-export async function getArenaBotPreview(playerId: string, teamId: string) {
+export async function getArenaBotPreview(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
     include: { members: { include: { mascot: true }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId || team.status !== "ACTIVE" || team.members.length === 0) return null;
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
-  const bot = buildBotOpponent(attackers);
+  // Seed baseado no teamId + dificuldade + hora do dia (muda a cada 10min → bot muda mas é estável por período)
+  const hourSlot = Math.floor(Date.now() / (10 * 60 * 1000));
+  const seed = parseInt(teamId.replace(/[^0-9]/g, "").slice(-4) || "0") + hourSlot;
+  const bot = buildBotOpponent(attackers, difficulty, seed);
+  const diff = DIFFICULTY_CONFIG[difficulty];
+  // Último combate da equipe (para mostrar cooldown)
+  const lastBattle = await prisma.arenaBattle.findFirst({
+    where: { attackerTeamId: teamId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  const cooldownMs = lastBattle
+    ? Math.max(0, ARENA_Z_CONFIG.botCooldownMinutes * 60_000 - (Date.now() - lastBattle.createdAt.getTime()))
+    : 0;
   return {
     trainerName: bot.botName,
     levelBandMin: bot.band.min,
     levelBandMax: bot.band.max,
     rewardRange: bot.rewardRange,
+    difficulty,
+    difficultyLabel: diff.label,
+    difficultyColor: diff.color,
+    injuryRisk: difficulty === "easy" ? "Baixo" : difficulty === "normal" ? "Médio" : "Alto",
+    cooldownMs,
     mascots: bot.defenders.map(m => ({
       id: m.id,
       pokemonId: m.pokemonId,
@@ -364,7 +395,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   }
 }
 
-export async function runBotBattle(playerId: string, teamId: string) {
+export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
     include: {
@@ -377,15 +408,43 @@ export async function runBotBattle(playerId: string, teamId: string) {
   if (team.members.length === 0) throw new Error("Equipe vazia.");
   assertTeamReady(team);
 
+  // Cooldown: impede spam de bot battles
+  const lastBattle = await prisma.arenaBattle.findFirst({
+    where: { attackerTeamId: teamId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (lastBattle) {
+    const elapsed = Date.now() - lastBattle.createdAt.getTime();
+    const cooldownMs = ARENA_Z_CONFIG.botCooldownMinutes * 60_000;
+    if (elapsed < cooldownMs) {
+      const remaining = Math.ceil((cooldownMs - elapsed) / 1000);
+      throw new Error(`Aguarde ${remaining}s antes do proximo combate.`);
+    }
+  }
+
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
-  const bot = buildBotOpponent(attackers);
+  const diff = DIFFICULTY_CONFIG[difficulty];
+  const bot = buildBotOpponent(attackers, difficulty);
   const band = bot.band;
   const botName = bot.botName;
   const defenders = bot.defenders;
   const combat = runCombat(attackers, defenders);
   const won = combat.result === "ATTACKER_WIN";
-  const reward = won ? botReward(band.min, band.max) : { coins: 0, exp: 0, food: 0, sweet: 0 };
-  const injuredMascotIds = won ? [] : combat.defeatedMascotIds.length > 0 ? combat.defeatedMascotIds : [pick(attackers).id];
+  // Recompensa escalada pela dificuldade
+  const baseReward = won ? botReward(band.min, band.max) : { coins: 0, exp: 0, food: 0, sweet: 0 };
+  const reward = won ? {
+    coins: Math.round(baseReward.coins * diff.rewardMult),
+    exp:   Math.round(baseReward.exp   * diff.rewardMult),
+    food:  baseReward.food,
+    sweet: baseReward.sweet,
+  } : baseReward;
+  // Risco de ferimento aumenta com dificuldade
+  const rawInjured = !won ? combat.defeatedMascotIds : [];
+  const injuryChance = won ? 0 : 0.25 * diff.injuryChanceMult;
+  const injuredMascotIds = rawInjured.length > 0
+    ? rawInjured
+    : (!won && Math.random() < injuryChance ? [pick(attackers).id] : []);
   const restUntil = new Date(Date.now() + ARENA_Z_CONFIG.restAfterWinMinutes * 60_000);
 
   await prisma.$transaction(async (tx) => {
@@ -442,6 +501,8 @@ export async function runBotBattle(playerId: string, teamId: string) {
     botName,
     reward,
     rounds: combat.rounds,
+    difficulty,
+    difficultyLabel: diff.label,
     injuredMascotIds,
     injuredMascots: team.members
       .filter(member => injuredMascotIds.includes(member.mascotId))

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { X, Timer, Zap, Shield, Skull } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import {
   adminSetMascotStateAction,
@@ -12,6 +12,25 @@ import {
   runBotBattleAction,
   runPvpBattleAction,
 } from "../actions";
+import type { ArenaDifficulty } from "@/lib/arena-z";
+
+// ── Cooldown counter ──────────────────────────────────────────────────────────
+function CooldownBadge({ ms }: { ms: number }) {
+  const [rem, setRem] = useState(ms);
+  useEffect(() => {
+    setRem(ms);
+    if (ms <= 0) return;
+    const iv = setInterval(() => setRem(r => Math.max(0, r - 1000)), 1000);
+    return () => clearInterval(iv);
+  }, [ms]);
+  if (rem <= 0) return null;
+  const s = Math.ceil(rem / 1000);
+  return (
+    <span className="flex items-center gap-1 rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
+      <Timer size={9} /> {s}s
+    </span>
+  );
+}
 
 type BotBattleResult = NonNullable<Awaited<ReturnType<typeof runBotBattleAction>>["result"]>;
 
@@ -38,33 +57,66 @@ function formatLoot(reward: BotBattleResult["reward"]) {
   return parts.join(" / ");
 }
 
-export function BotBattleButton({ teamId }: { teamId: string }) {
+const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; text: string; badge: string }> = {
+  easy:   { border: "border-green-500/40",  bg: "bg-green-500/10",  text: "text-green-300",  badge: "bg-green-500/20 text-green-200" },
+  normal: { border: "border-yellow-500/40", bg: "bg-yellow-500/10", text: "text-yellow-300", badge: "bg-yellow-500/20 text-yellow-200" },
+  hard:   { border: "border-red-500/40",    bg: "bg-red-500/10",    text: "text-red-300",    badge: "bg-red-500/20 text-red-200" },
+};
+const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil", normal: "🟡 Normal", hard: "🔴 Difícil" };
+
+export function BotBattleButton({ teamId, cooldownMs = 0 }: { teamId: string; cooldownMs?: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BotBattleResult | null>(null);
+  const [difficulty, setDifficulty] = useState<ArenaDifficulty>("normal");
+  const [localCooldown, setLocalCooldown] = useState(cooldownMs);
+
+  const styles = DIFFICULTY_STYLES[difficulty];
+  const onCooldown = localCooldown > 0;
+
   return (
     <>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => {
-          startTransition(async () => {
-            const response = await runBotBattleAction(teamId);
-            if (response.error) {
-              toast.error(response.error);
-              return;
-            }
-            if (response.result) {
-              setResult(response.result);
-              toast.success(response.result.won ? "Vitoria na Arena Z!" : "Derrota na Arena Z.");
-            }
-            router.refresh();
-          });
-        }}
-        className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-[#1A1A2E] disabled:opacity-50"
-      >
-        Combater bot
-      </button>
+      {/* Difficulty selector + battle button */}
+      <div className="flex flex-col gap-2 items-end">
+        <div className="flex gap-1">
+          {(["easy", "normal", "hard"] as ArenaDifficulty[]).map(d => (
+            <button key={d} type="button" onClick={() => setDifficulty(d)}
+              className={`rounded-lg px-2 py-1 text-[10px] font-semibold border transition-all ${
+                difficulty === d ? DIFFICULTY_STYLES[d].border + " " + DIFFICULTY_STYLES[d].bg + " " + DIFFICULTY_STYLES[d].text
+                : "border-border text-slate-500 hover:text-slate-300"
+              }`}>
+              {DIFFICULTY_LABELS[d]}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          {onCooldown && <CooldownBadge ms={localCooldown} />}
+          <button
+            type="button"
+            disabled={pending || onCooldown}
+            onClick={() => {
+              startTransition(async () => {
+                const response = await runBotBattleAction(teamId, difficulty);
+                if (response.error) {
+                  toast.error(response.error);
+                  return;
+                }
+                if (response.result) {
+                  setResult(response.result);
+                  setLocalCooldown(3 * 60 * 1000); // 3min cooldown
+                  toast.success(response.result.won ? "Vitoria na Arena Z!" : "Derrota na Arena Z.");
+                }
+                router.refresh();
+              });
+            }}
+            className={`rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-50 transition-all ${
+              onCooldown ? "border border-border bg-slate-900 text-slate-500" : "bg-[#FFCB05] text-[#1A1A2E]"
+            }`}
+          >
+            {pending ? "Combatendo…" : "⚔️ Combater"}
+          </button>
+        </div>
+      </div>
 
       {result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setResult(null)}>
@@ -76,7 +128,17 @@ export function BotBattleButton({ teamId }: { teamId: string }) {
                   {result.won ? "Vitoria contra bot" : "Derrota contra bot"}
                 </h3>
                 <p className="mt-1 text-sm text-slate-400">
-                  Treinador: <span className="font-semibold text-slate-200">{result.botName}</span> | {result.rounds} turno(s)
+                  Treinador: <span className="font-semibold text-slate-200">{result.botName}</span>
+                  {" "}| {result.rounds} turno(s)
+                  {result.difficultyLabel && (
+                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      result.difficulty === "easy" ? "bg-green-500/20 text-green-300" :
+                      result.difficulty === "hard" ? "bg-red-500/20 text-red-300" :
+                      "bg-yellow-500/20 text-yellow-300"
+                    }`}>
+                      {result.difficultyLabel}
+                    </span>
+                  )}
                 </p>
               </div>
               <button type="button" onClick={() => setResult(null)} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">

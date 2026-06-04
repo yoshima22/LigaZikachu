@@ -130,9 +130,10 @@ export default async function ArenaZPage() {
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
   const activeTeams = teams.filter(team => team.status === "ACTIVE");
+  // Preview com dificuldade Normal por padrão (o jogador pode escolher no botão)
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
   for (const team of activeTeams) {
-    botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id));
+    botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
   const rankingMap = new Map<string, ArenaRankingRow>();
   const ensureRow = (id: string, name: string) => {
@@ -276,13 +277,16 @@ export default async function ArenaZPage() {
                               <div>
                                 <p className="flex items-center gap-2 text-xs font-bold text-green-200">
                                   <Bot size={14} />
-                                  Possivel bot: {bot.trainerName}
+                                  Possivel bot (normal): {bot.trainerName}
                                 </p>
                                 <p className="mt-1 text-[10px] text-slate-500">
                                   Faixa Nv.{bot.levelBandMin}-{bot.levelBandMax} | Recompensa estimada: {bot.rewardRange.coinsMin}-{bot.rewardRange.coinsMax} ZC / {bot.rewardRange.expMin}-{bot.rewardRange.expMax} EXP
                                 </p>
+                                <p className="mt-0.5 text-[10px] text-slate-600">
+                                  Escolha a dificuldade antes de combater → Fácil: -5 níveis, menos loot · Difícil: +5 níveis, mais loot
+                                </p>
                               </div>
-                              <BotBattleButton teamId={team.id} />
+                              <BotBattleButton teamId={team.id} cooldownMs={bot.cooldownMs ?? 0} />
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                               {bot.mascots.map(m => (

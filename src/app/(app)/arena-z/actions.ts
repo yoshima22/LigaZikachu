@@ -11,6 +11,7 @@ import {
   runBotBattle,
   runPvpBattle,
 } from "@/lib/arena-z";
+import type { ArenaDifficulty } from "@/lib/arena-z";
 
 async function getCurrentPlayerId() {
   const user = await getSessionUser();
@@ -34,10 +35,10 @@ export async function createArenaTeamAction(formData: FormData): Promise<{ error
   }
 }
 
-export async function runBotBattleAction(teamId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
+export async function runBotBattleAction(teamId: string, difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();
-    const result = await runBotBattle(playerId, teamId);
+    const result = await runBotBattle(playerId, teamId, difficulty);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");
     return { result };
