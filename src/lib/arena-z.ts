@@ -794,6 +794,33 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE") throw new Error("As duas equipes precisam estar ativas.");
   if (attackTeam.members.length === 0 || defenseTeam.members.length === 0) throw new Error("As equipes precisam ter mascotes.");
 
+  // Cooldown PvP: 10 min entre ataques PvP da mesma equipe atacante
+  const lastPvp = await prisma.arenaBattle.findFirst({
+    where: { type: "PVP", attackTeamId: attackTeamId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (lastPvp) {
+    const elapsed = Date.now() - lastPvp.createdAt.getTime();
+    const pvpCooldown = 10 * 60_000;
+    if (elapsed < pvpCooldown) {
+      const rem = Math.ceil((pvpCooldown - elapsed) / 1000);
+      throw new Error(`Aguarde ${rem}s antes do proximo ataque PvP.`);
+    }
+  }
+  // Anti-spam: impede atacar o mesmo time várias vezes seguidas
+  const lastVsSameTeam = await prisma.arenaBattle.findFirst({
+    where: { type: "PVP", attackTeamId, defenseTeamId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (lastVsSameTeam) {
+    const elapsed = Date.now() - lastVsSameTeam.createdAt.getTime();
+    if (elapsed < 30 * 60_000) { // 30 min entre ataques ao mesmo time
+      throw new Error("Aguarde 30 min antes de atacar o mesmo time novamente.");
+    }
+  }
+
   assertTeamReady(attackTeam);
   assertTeamReady(defenseTeam);
 

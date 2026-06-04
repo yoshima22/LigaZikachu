@@ -215,20 +215,71 @@ export function RetireTeamButton({ teamId }: { teamId: string }) {
   );
 }
 
+type PvpResult = Awaited<ReturnType<typeof runPvpBattleAction>>["result"];
+
 export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId: string; defenseTeamId: string }) {
-  const { pending, run } = useArenaAction();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<PvpResult | null>(null);
+
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => {
-        if (!confirm("Resolver combate PvP automatico contra esta equipe?")) return;
-        run(() => runPvpBattleAction(attackTeamId, defenseTeamId), "Combate PvP resolvido.");
-      }}
-      className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:border-red-300 disabled:opacity-50"
-    >
-      Desafiar PvP
-    </button>
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          if (!confirm("Atacar esta equipe? Você pode ganhar ou perder loot do cofre.")) return;
+          startTransition(async () => {
+            const r = await runPvpBattleAction(attackTeamId, defenseTeamId);
+            if (r.error) { toast.error(r.error); return; }
+            if (r.result) {
+              setResult(r.result);
+              const won = r.result.winnerName !== null;
+              toast.success(won ? "Vitória no PvP! 🏆" : "Derrota no PvP.");
+            }
+            router.refresh();
+          });
+        }}
+        className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:border-red-300 disabled:opacity-50"
+      >
+        {pending ? "Combatendo…" : "⚔️ Atacar"}
+      </button>
+
+      {result && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setResult(null)}>
+          <div className="max-w-sm rounded-2xl border border-red-500/30 bg-slate-950 p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-red-400">Arena PvP</p>
+                <h3 className="mt-1 text-lg font-bold text-white">
+                  {result.winnerName ? `🏆 ${result.winnerName} venceu!` : "Empate"}
+                </h3>
+                {result.loserName && (
+                  <p className="text-sm text-slate-400">Perdedor: {result.loserName}</p>
+                )}
+              </div>
+              <button onClick={() => setResult(null)} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
+                <X size={14}/>
+              </button>
+            </div>
+            {(result.stolen.coins > 0 || result.stolen.exp > 0) && (
+              <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
+                <p className="text-xs font-bold text-[#FFCB05]">Loot roubado</p>
+                <p className="text-sm text-slate-200">
+                  {[
+                    result.stolen.coins > 0 ? `${result.stolen.coins} ZC` : null,
+                    result.stolen.exp > 0 ? `${result.stolen.exp} EXP` : null,
+                    result.stolen.food > 0 ? `${result.stolen.food} comida` : null,
+                    result.stolen.sweet > 0 ? `${result.stolen.sweet} doce` : null,
+                  ].filter(Boolean).join(" / ")}
+                </p>
+              </div>
+            )}
+            <button onClick={() => setResult(null)} className="w-full rounded-xl bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -49,14 +49,13 @@ export async function runBotBattleAction(teamId: string, difficulty: ArenaDiffic
   }
 }
 
-export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string): Promise<{ error?: string }> {
+export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runPvpBattle>> }> {
   try {
-    await requireAdmin();
     const playerId = await getCurrentPlayerId();
-    await runPvpBattle(playerId, attackTeamId, defenseTeamId);
+    const result = await runPvpBattle(playerId, attackTeamId, defenseTeamId);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");
-    return {};
+    return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao resolver PvP." };
   }

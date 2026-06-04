@@ -96,8 +96,9 @@ export default async function ArenaZPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    // PvP: qualquer jogador pode ver equipes ativas de outros
     prisma.arenaTeam.findMany({
-      where: admin ? { playerId: { not: player.id }, status: "ACTIVE" } : { id: "__admin_only__" },
+      where: { playerId: { not: player.id }, status: "ACTIVE" },
       include: {
         player: { select: { displayName: true, ptcglNick: true } },
         members: { include: { mascot: true }, orderBy: { slot: "asc" } },
@@ -291,10 +292,11 @@ export default async function ArenaZPage() {
             </div>
           </div>
 
-          {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
-            <h2 className="font-semibold text-slate-200">Arena PvP experimental</h2>
+          {/* PvP — aberto para todos os jogadores */}
+          <div className="rounded-2xl border border-red-500/20 bg-slate-950/60 p-5">
+            <h2 className="font-semibold text-slate-200">⚔️ Arena PvP</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Escolha uma equipe sua ativa para atacar equipes de outros jogadores. O combate e automatico e registra roubo/preservacao do cofre.
+              Ataque equipes de outros jogadores. Vencer rouba 30% do cofre adversário. Perder = mascotes feridos e 40% do cofre perdido. Cooldown: 10 min entre ataques, 30 min contra o mesmo time.
             </p>
             <div className="mt-4 space-y-4">
               {activeTeams.length === 0 ? (
@@ -330,7 +332,7 @@ export default async function ArenaZPage() {
                 </div>
               ))}
             </div>
-          </div>}
+          </div>
 
           <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
             <h2 className="font-semibold text-slate-200">🏆 Ranking Arena Z</h2>
