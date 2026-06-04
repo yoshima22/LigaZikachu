@@ -50,8 +50,8 @@ const colecaoLinks = [
 ];
 
 const mercadoLinks = [
-  { href: "/shop",     label: "ZikaShop",  icon: ShoppingBag, adminOnly: false },
   { href: "/bazar",    label: "Bazar",     icon: Store,       adminOnly: false },
+  { href: "/shop",     label: "ZikaShop",  icon: ShoppingBag, adminOnly: false },
   { href: "/zikabet",  label: "ZikaBet",   icon: Swords,      adminOnly: false },
   { href: "/zikaloot", label: "ZikaLoot",  icon: Ticket,      adminOnly: false },
 ];
