@@ -315,7 +315,7 @@ export async function purchaseItem(
         description: quantity > 1 ? `Compra: ${item.name} x${quantity}` : `Compra: ${item.name}`
       });
 
-      if ([ShopItemType.EGG_COMMON, ShopItemType.EGG_RARE, ShopItemType.EGG_SPECIAL, ShopItemType.EGG_GEN1, ShopItemType.EGG_GEN2].includes(item.type)) {
+      if ((["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2"] as string[]).includes(item.type)) {
         // Compra de ovo → cria MascotEgg no inventário
         const eggTypeMap: Record<string, EggType> = {
           [ShopItemType.EGG_COMMON]:  EggType.COMMON,
