@@ -242,17 +242,29 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Prop
     */
     <div className="relative">
 
-      {/* ── Gato NPC ── fica FORA do container do painel para não ser clipado */}
+      {/* ── Gato NPC ── fora do overflow-hidden, braço sobre o primeiro card */}
       <div
-        className="pointer-events-none absolute left-0 bottom-0 z-20 hidden md:block"
-        style={{ width: 200, height: "100%", minHeight: 260 }}
+        className="pointer-events-none absolute bottom-0 z-20 hidden md:block"
+        style={{
+          /* Começa um pouco à esquerda do painel e vai até dentro do 1º card */
+          left: -12,
+          width: 290,
+          height: "calc(100% + 16px)",
+        }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/miauvadao-cat.png"
           alt="Miauvadão"
-          className="absolute bottom-0 left-0 w-full object-contain object-bottom"
-          style={{ maxHeight: "115%", filter: "drop-shadow(2px 4px 12px rgba(0,0,0,0.8))" }}
+          className="absolute bottom-0 left-0"
+          style={{
+            width: "100%",
+            height: "auto",
+            maxHeight: "120%",
+            objectFit: "contain",
+            objectPosition: "bottom left",
+            filter: "drop-shadow(3px 0 16px rgba(0,0,0,0.9))",
+          }}
           onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       </div>
@@ -265,13 +277,14 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Prop
           boxShadow: `0 0 0 1px ${GOLD_D}`,
         }}
       >
-        {/* Conteúdo deslocado à direita para deixar espaço para o gato */}
-        <div className="md:ml-44 lg:ml-48 px-5 pt-5 pb-6 space-y-5">
+        {/* Conteúdo deslocado à direita — 230px para o gato + braço */}
+        <div className="md:ml-[230px] px-5 pt-5 pb-6 space-y-5">
 
-          {/* Header */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Header — título centralizado, cofre/timer à direita */}
+          <div className="relative flex items-center justify-center">
+            {/* Título centrado */}
             <div
-              className="flex items-center gap-3 rounded-xl px-4 py-2.5"
+              className="flex items-center gap-3 rounded-xl px-5 py-2.5"
               style={{
                 background: "#1e1608",
                 border: `2px solid ${GOLD}`,
@@ -293,7 +306,11 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Prop
               </h2>
             </div>
 
-            <div className="flex flex-col items-end gap-0.5 text-[10px]" style={{ color: GOLD_D }}>
+            {/* Cofre + timer — canto superior direito */}
+            <div
+              className="absolute right-0 flex flex-col items-end gap-0.5 text-[10px]"
+              style={{ color: GOLD_D }}
+            >
               <span>
                 Cofre:{" "}
                 <strong style={{ color: "#FFCB05" }}>
