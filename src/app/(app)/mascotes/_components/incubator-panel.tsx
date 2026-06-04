@@ -142,7 +142,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <div className="flex w-full flex-col items-center gap-3">
                 <div className="h-2 w-full max-w-[200px] rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full bg-[#FFCB05] transition-all"
-                    style={{ width: `${Math.min(100, (1 - remaining / Math.max(1, new Date(incubator.finishAt).getTime() - new Date(incubator.startedAt).getTime())) * 100)}%` }} />
+                    style={{ width: `${typeof window === "undefined" ? 0 : Math.min(100, ((Date.now() - new Date(incubator.startedAt).getTime()) / Math.max(1, new Date(incubator.finishAt).getTime() - new Date(incubator.startedAt).getTime())) * 100)}%` }} />
                 </div>
                 {canSkipIncubation && (
                   <button
