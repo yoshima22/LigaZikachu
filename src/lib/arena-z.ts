@@ -184,6 +184,27 @@ function botReward(levelMin: number, levelMax: number): ArenaLoot {
   };
 }
 
+function getBotRewardRange(levelMax: number) {
+  const tier = Math.ceil(levelMax / 5);
+  return {
+    coinsMin: 5 * tier,
+    coinsMax: 15 * tier,
+    expMin: 5 * tier,
+    expMax: 18 * tier,
+    foodChance: Math.min(45, tier * 5),
+    sweetChance: Math.min(20, tier * 2.5),
+  };
+}
+
+function buildBotOpponent(attackers: ArenaMascot[]) {
+  const avgLevel = Math.max(1, Math.round(attackers.reduce((sum, m) => sum + m.level, 0) / attackers.length));
+  const band = levelBand(avgLevel);
+  const botSize = rand(2, Math.min(6, Math.max(2, attackers.length + rand(-1, 1))));
+  const botName = pick(BOT_NAMES);
+  const defenders = Array.from({ length: botSize }, (_, index) => makeBotMascot(index + 1, band.min, band.max));
+  return { avgLevel, band, botSize, botName, defenders, rewardRange: getBotRewardRange(band.max) };
+}
+
 function splitDefeatedLoot(loot: ArenaLoot) {
   return {
     stolen: {
@@ -198,6 +219,32 @@ function splitDefeatedLoot(loot: ArenaLoot) {
       food: Math.floor(loot.food * ARENA_Z_CONFIG.defeatedLootBurnPct),
       sweet: Math.floor(loot.sweet * ARENA_Z_CONFIG.defeatedLootBurnPct),
     },
+  };
+}
+
+export async function getArenaBotPreview(playerId: string, teamId: string) {
+  const team = await prisma.arenaTeam.findUnique({
+    where: { id: teamId },
+    include: { members: { include: { mascot: true }, orderBy: { slot: "asc" } } },
+  });
+  if (!team || team.playerId !== playerId || team.status !== "ACTIVE" || team.members.length === 0) return null;
+  const attackers = team.members.map(m => toArenaMascot(m.mascot));
+  const bot = buildBotOpponent(attackers);
+  return {
+    trainerName: bot.botName,
+    levelBandMin: bot.band.min,
+    levelBandMax: bot.band.max,
+    rewardRange: bot.rewardRange,
+    mascots: bot.defenders.map(m => ({
+      id: m.id,
+      pokemonId: m.pokemonId,
+      name: m.name,
+      level: m.level,
+      type: getPokemonElement(m.pokemonId),
+      force: m.force,
+      agility: m.agility,
+      vitality: m.vitality,
+    })),
   };
 }
 
@@ -331,11 +378,10 @@ export async function runBotBattle(playerId: string, teamId: string) {
   assertTeamReady(team);
 
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
-  const avgLevel = Math.max(1, Math.round(attackers.reduce((sum, m) => sum + m.level, 0) / attackers.length));
-  const band = levelBand(avgLevel);
-  const botSize = rand(2, Math.min(6, Math.max(2, attackers.length + rand(-1, 1))));
-  const botName = pick(BOT_NAMES);
-  const defenders = Array.from({ length: botSize }, (_, index) => makeBotMascot(index + 1, band.min, band.max));
+  const bot = buildBotOpponent(attackers);
+  const band = bot.band;
+  const botName = bot.botName;
+  const defenders = bot.defenders;
   const combat = runCombat(attackers, defenders);
   const won = combat.result === "ATTACKER_WIN";
   const reward = won ? botReward(band.min, band.max) : { coins: 0, exp: 0, food: 0, sweet: 0 };

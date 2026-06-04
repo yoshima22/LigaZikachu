@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, getArenaBotPreview } from "@/lib/arena-z";
 import { createArenaTeamAction } from "./actions";
 import { AdminMascotStateButton, BotBattleButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 
@@ -49,7 +49,8 @@ function getLootNumber(loot: unknown, key: "coins" | "exp") {
 
 export default async function ArenaZPage() {
   const session = await getAppSession();
-  if (!session?.user || !isAdmin(session.user.role)) redirect("/dashboard");
+  if (!session?.user) redirect("/login");
+  const admin = isAdmin(session.user.role);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -71,7 +72,7 @@ export default async function ArenaZPage() {
       take: 10,
     }),
     prisma.arenaTeam.findMany({
-      where: { playerId: { not: player.id }, status: "ACTIVE" },
+      where: admin ? { playerId: { not: player.id }, status: "ACTIVE" } : { id: "__admin_only__" },
       include: {
         player: { select: { displayName: true, ptcglNick: true } },
         members: { include: { mascot: true }, orderBy: { slot: "asc" } },
@@ -85,7 +86,7 @@ export default async function ArenaZPage() {
       take: 10,
     }),
     prisma.arenaBattle.findMany({
-      where: { status: "RESOLVED" },
+      where: admin ? { status: "RESOLVED" } : { id: "__admin_only__" },
       include: {
         attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
         defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
@@ -104,6 +105,10 @@ export default async function ArenaZPage() {
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
   const activeTeams = teams.filter(team => team.status === "ACTIVE");
+  const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
+  for (const team of activeTeams) {
+    botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id));
+  }
   const rankingMap = new Map<string, ArenaRankingRow>();
   const ensureRow = (id: string, name: string) => {
     const existing = rankingMap.get(id);
@@ -145,14 +150,14 @@ export default async function ArenaZPage() {
           <div>
             <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-red-300">
               <ShieldCheck size={14} />
-              Experimental admin-only
+              {admin ? "Experimental admin" : "Arena Bots"}
             </p>
             <h1 className="mt-2 flex items-center gap-3 font-pixel text-base text-[#FFCB05]">
               <Swords size={20} />
               Arena Z
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Modo automatico de combate entre mascotes. Monte equipes, enfrente bots, acumule loot em cofre e teste ferimentos/repouso antes de liberar para jogadores.
+              Modo automatico de combate entre mascotes. Monte equipes, enfrente bots, acumule loot em cofre e cuide dos mascotes feridos com Atendimento SUS.
             </p>
           </div>
           <div className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2 text-sm font-bold text-[#FFCB05]">
@@ -167,8 +172,8 @@ export default async function ArenaZPage() {
           <p className="mt-1 text-xs text-slate-400">Disponivel neste MVP. Bots sao gerados por faixa de nivel e resolvidos no backend.</p>
         </div>
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-          <p className="flex items-center gap-2 text-sm font-bold text-red-200"><Lock size={16} /> Arena PvP admin</p>
-          <p className="mt-1 text-xs text-slate-400">Disponivel apenas para admin testar. Desafios publicos continuam bloqueados para jogadores comuns.</p>
+          <p className="flex items-center gap-2 text-sm font-bold text-red-200"><Lock size={16} /> Arena PvP</p>
+          <p className="mt-1 text-xs text-slate-400">{admin ? "Disponivel apenas para admin testar por enquanto." : "Em breve: desafios assincronos contra equipes de outros jogadores."}</p>
         </div>
       </div>
 
@@ -220,7 +225,6 @@ export default async function ArenaZPage() {
                       <p className="text-[11px] text-slate-500">{team.status} | {team.members.length} mascote(s) | entrou {team.enteredAt.toLocaleDateString("pt-BR")}</p>
                     </div>
                     <div className="flex gap-2">
-                      {team.status === "ACTIVE" && <BotBattleButton teamId={team.id} />}
                       {team.status === "ACTIVE" && <RetireTeamButton teamId={team.id} />}
                     </div>
                   </div>
@@ -237,12 +241,47 @@ export default async function ArenaZPage() {
                       </div>
                     ))}
                   </div>
+                  {team.status === "ACTIVE" && botPreviews.get(team.id) && (
+                    <div className="mt-4 rounded-2xl border border-green-500/20 bg-green-500/5 p-3">
+                      {(() => {
+                        const bot = botPreviews.get(team.id)!;
+                        return (
+                          <>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="flex items-center gap-2 text-xs font-bold text-green-200">
+                                  <Bot size={14} />
+                                  Possivel bot: {bot.trainerName}
+                                </p>
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  Faixa Nv.{bot.levelBandMin}-{bot.levelBandMax} | Recompensa estimada: {bot.rewardRange.coinsMin}-{bot.rewardRange.coinsMax} ZC / {bot.rewardRange.expMin}-{bot.rewardRange.expMax} EXP
+                                </p>
+                              </div>
+                              <BotBattleButton teamId={team.id} />
+                            </div>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                              {bot.mascots.map(m => (
+                                <div key={m.id} className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-slate-950/50 p-2">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-[11px] font-semibold text-slate-100">{m.name}</span>
+                                    <span className="block text-[10px] text-slate-500">Nv.{m.level} | {m.type} | For {m.force} | Vit {m.vitality}</span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
+          {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
             <h2 className="font-semibold text-slate-200">Arena PvP experimental</h2>
             <p className="mt-1 text-xs text-slate-500">
               Escolha uma equipe sua ativa para atacar equipes de outros jogadores. O combate e automatico e registra roubo/preservacao do cofre.
@@ -281,9 +320,9 @@ export default async function ArenaZPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
-          <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
+          {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
             <h2 className="font-semibold text-slate-200">Ranking experimental da Arena Z</h2>
             <p className="mt-1 text-xs text-slate-500">
               Calculado a partir dos ultimos combates resolvidos. Ainda e uma leitura admin para balanceamento.
@@ -324,9 +363,9 @@ export default async function ArenaZPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </div>}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className={`grid gap-4 ${admin ? "lg:grid-cols-2" : ""}`}>
             <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
               <h2 className="flex items-center gap-2 font-semibold text-slate-200"><HeartPulse size={16} /> Atendimento SUS</h2>
               <p className="mt-1 text-xs text-slate-500">Custo atual: {ARENA_Z_CONFIG.susCost} ZC. Apos cura, repouso minimo de {ARENA_Z_CONFIG.restAfterSusHours}h.</p>
@@ -345,7 +384,7 @@ export default async function ArenaZPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
+            {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
               <h2 className="font-semibold text-slate-200">Controles admin</h2>
               <p className="mt-1 text-xs text-slate-500">Ferramentas de teste para ferimento, repouso e liberar estado.</p>
               <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
@@ -361,7 +400,7 @@ export default async function ArenaZPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
 
           <div className="rounded-2xl border border-border bg-slate-950/60 p-5">

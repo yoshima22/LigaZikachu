@@ -14,7 +14,7 @@ import {
 
 async function getCurrentPlayerId() {
   const user = await getSessionUser();
-  if (!user || !isAdmin(user.role)) throw new Error("Arena Z esta em modo admin-only.");
+  if (!user) throw new Error("Nao autenticado.");
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
   if (!player) throw new Error("Perfil de jogador nao encontrado.");
   return player.id;
@@ -22,7 +22,6 @@ async function getCurrentPlayerId() {
 
 export async function createArenaTeamAction(formData: FormData): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
     const playerId = await getCurrentPlayerId();
     const name = String(formData.get("name") ?? "Equipe Arena Z");
     const mascotIds = formData.getAll("mascotIds").map(String);
@@ -37,7 +36,6 @@ export async function createArenaTeamAction(formData: FormData): Promise<{ error
 
 export async function runBotBattleAction(teamId: string): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
     const playerId = await getCurrentPlayerId();
     await runBotBattle(playerId, teamId);
     revalidatePath("/arena-z");
@@ -63,7 +61,6 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
 
 export async function retireArenaTeamAction(teamId: string): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
     const playerId = await getCurrentPlayerId();
     await retireArenaTeam(playerId, teamId);
     revalidatePath("/arena-z");
@@ -76,7 +73,6 @@ export async function retireArenaTeamAction(teamId: string): Promise<{ error?: s
 
 export async function healMascotSusAction(mascotId: string): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
     const playerId = await getCurrentPlayerId();
     await healMascotSus(playerId, mascotId);
     revalidatePath("/arena-z");
