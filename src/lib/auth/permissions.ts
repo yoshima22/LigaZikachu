@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Role, UserStatus } from "@prisma/client";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 
 export function isAdmin(role: Role) {
   return role === Role.ADMIN || role === Role.SUPER_ADMIN;
@@ -11,7 +11,8 @@ export function isApproved(status: UserStatus) {
 }
 
 export async function getSessionUser() {
-  const session = await auth();
+  // Verifica NextAuth E lz_session (fallback manual)
+  const session = await getAppSession();
   if (!session?.user) return null;
   return session.user;
 }
@@ -24,6 +25,6 @@ export async function requireAdmin() {
 
 export async function requireRole(roles: Role[]) {
   const user = await getSessionUser();
-  if (!user || !roles.includes(user.role)) redirect("/dashboard");
+  if (!user || !roles.includes(user.role as Role)) redirect("/dashboard");
   return user;
 }
