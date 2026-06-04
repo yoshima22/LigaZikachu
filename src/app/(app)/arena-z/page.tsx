@@ -28,6 +28,25 @@ function fmtLoot(team: { vaultCoins: number; vaultExp: number; vaultFood: number
   return parts.join(" | ");
 }
 
+type ArenaRankingRow = {
+  playerId: string;
+  name: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  stolenCoins: number;
+  stolenExp: number;
+};
+
+function getLootNumber(loot: unknown, key: "coins" | "exp") {
+  if (!loot || typeof loot !== "object") return 0;
+  const root = loot as { stolen?: unknown };
+  if (!root.stolen || typeof root.stolen !== "object") return 0;
+  const stolen = root.stolen as Record<string, unknown>;
+  const value = stolen[key];
+  return typeof value === "number" ? value : 0;
+}
+
 export default async function ArenaZPage() {
   const session = await getAppSession();
   if (!session?.user || !isAdmin(session.user.role)) redirect("/dashboard");
@@ -38,7 +57,7 @@ export default async function ArenaZPage() {
   });
   if (!player) redirect("/dashboard");
 
-  const [wallet, mascots, teams, opponentTeams, battles] = await Promise.all([
+  const [wallet, mascots, teams, opponentTeams, battles, rankingBattles] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -65,6 +84,15 @@ export default async function ArenaZPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    prisma.arenaBattle.findMany({
+      where: { status: "RESOLVED" },
+      include: {
+        attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
+        defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 250,
+    }),
   ]);
 
   const now = new Date();
@@ -76,6 +104,39 @@ export default async function ArenaZPage() {
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
   const activeTeams = teams.filter(team => team.status === "ACTIVE");
+  const rankingMap = new Map<string, ArenaRankingRow>();
+  const ensureRow = (id: string, name: string) => {
+    const existing = rankingMap.get(id);
+    if (existing) return existing;
+    const row = { playerId: id, name, wins: 0, losses: 0, draws: 0, stolenCoins: 0, stolenExp: 0 };
+    rankingMap.set(id, row);
+    return row;
+  };
+  for (const battle of rankingBattles) {
+    if (battle.attackerPlayer) ensureRow(battle.attackerPlayer.id, battle.attackerPlayer.displayName ?? battle.attackerPlayer.ptcglNick);
+    if (battle.defenderPlayer) ensureRow(battle.defenderPlayer.id, battle.defenderPlayer.displayName ?? battle.defenderPlayer.ptcglNick);
+    if (battle.result === "DRAW") {
+      if (battle.attackerPlayerId && battle.attackerPlayer) ensureRow(battle.attackerPlayerId, battle.attackerPlayer.displayName ?? battle.attackerPlayer.ptcglNick).draws++;
+      if (battle.defenderPlayerId && battle.defenderPlayer) ensureRow(battle.defenderPlayerId, battle.defenderPlayer.displayName ?? battle.defenderPlayer.ptcglNick).draws++;
+      continue;
+    }
+    if (battle.winnerPlayerId) {
+      const winner = battle.winnerPlayerId === battle.attackerPlayerId ? battle.attackerPlayer : battle.defenderPlayer;
+      if (winner) {
+        const row = ensureRow(winner.id, winner.displayName ?? winner.ptcglNick);
+        row.wins++;
+        row.stolenCoins += getLootNumber(battle.lootResult, "coins");
+        row.stolenExp += getLootNumber(battle.lootResult, "exp");
+      }
+    }
+    if (battle.loserPlayerId) {
+      const loser = battle.loserPlayerId === battle.attackerPlayerId ? battle.attackerPlayer : battle.defenderPlayer;
+      if (loser) ensureRow(loser.id, loser.displayName ?? loser.ptcglNick).losses++;
+    }
+  }
+  const arenaRanking = [...rankingMap.values()]
+    .sort((a, b) => b.wins - a.wins || b.stolenCoins - a.stolenCoins || a.losses - b.losses || a.name.localeCompare(b.name))
+    .slice(0, 12);
 
   return (
     <div className="space-y-6">
@@ -219,6 +280,49 @@ export default async function ArenaZPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
+            <h2 className="font-semibold text-slate-200">Ranking experimental da Arena Z</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Calculado a partir dos ultimos combates resolvidos. Ainda e uma leitura admin para balanceamento.
+            </p>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[620px] text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-border">
+                    <th className="py-2 pr-3">#</th>
+                    <th className="py-2 pr-3">Jogador</th>
+                    <th className="py-2 pr-3 text-right">V</th>
+                    <th className="py-2 pr-3 text-right">D</th>
+                    <th className="py-2 pr-3 text-right">E</th>
+                    <th className="py-2 pr-3 text-right">Aproveitamento</th>
+                    <th className="py-2 pr-3 text-right">Loot roubado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {arenaRanking.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-6 text-center text-slate-500">Nenhum combate registrado ainda.</td>
+                    </tr>
+                  ) : arenaRanking.map((row, index) => {
+                    const total = row.wins + row.losses + row.draws;
+                    const winRate = total > 0 ? Math.round((row.wins / total) * 100) : 0;
+                    return (
+                      <tr key={row.playerId} className="border-b border-border/60 last:border-0">
+                        <td className="py-2 pr-3 font-bold text-[#FFCB05]">{index + 1}</td>
+                        <td className="py-2 pr-3 font-semibold text-slate-200">{row.name}</td>
+                        <td className="py-2 pr-3 text-right text-green-300">{row.wins}</td>
+                        <td className="py-2 pr-3 text-right text-red-300">{row.losses}</td>
+                        <td className="py-2 pr-3 text-right text-slate-400">{row.draws}</td>
+                        <td className="py-2 pr-3 text-right text-slate-300">{winRate}%</td>
+                        <td className="py-2 pr-3 text-right text-[#FFCB05]">{row.stolenCoins} ZC / {row.stolenExp} EXP</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 

@@ -12,6 +12,7 @@ interface MascotData {
   statForce: number; statAgility: number; statCharisma: number;
   statInstinct: number; statVitality: number;
   battleWins: number; battleLosses: number;
+  arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
   hatchedAt: Date; lastInteractedAt: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
   events: { id: string; emoji: string; description: string; createdAt: Date }[];

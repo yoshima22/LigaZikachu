@@ -17,6 +17,7 @@ import {
   skipExpeditionAction, cancelExpeditionAction, addExpAdminAction,
   adminBattleMascotsAction, adminFormFriendshipAction,
   adminTriggerSocialEventsAction,
+  healMascotSusAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS } from "@/lib/mascot-data";
 import type { ExpeditionDuration } from "@/lib/mascot-data";
@@ -44,6 +45,9 @@ interface MascotData {
   statVitality: number;
   battleWins: number;
   battleLosses: number;
+  arenaState: string;
+  injuredAt: Date | null;
+  restingUntil: Date | null;
   hatchedAt: Date;
   lastInteractedAt: Date | null;
   lastFedAt: Date | null;
@@ -105,6 +109,44 @@ function StatusPill({ label, color, size = "normal" }: { label: string; color: s
   );
 }
 
+function arenaStatus(mascot: MascotData) {
+  const restingUntil = mascot.restingUntil ? new Date(mascot.restingUntil) : null;
+  const restingActive = mascot.arenaState === "RESTING" && restingUntil && restingUntil > new Date();
+  if (mascot.arenaState === "INJURED") {
+    return {
+      locked: true,
+      tone: "border-red-500/30 bg-red-500/10 text-red-200",
+      label: "Ferido na Arena Z",
+      detail: mascot.injuredAt ? `Ferido desde ${new Date(mascot.injuredAt).toLocaleString("pt-BR")}` : "Precisa de Atendimento SUS.",
+    };
+  }
+  if (restingActive) {
+    return {
+      locked: true,
+      tone: "border-blue-500/30 bg-blue-500/10 text-blue-200",
+      label: "Em repouso",
+      detail: `Disponivel apos ${restingUntil.toLocaleString("pt-BR")}.`,
+    };
+  }
+  if (mascot.arenaState === "ARENA") {
+    return {
+      locked: true,
+      tone: "border-[#FFCB05]/30 bg-[#FFCB05]/10 text-[#FFCB05]",
+      label: "Na Arena Z",
+      detail: "Retire a equipe da Arena Z para liberar interacoes e expedicoes.",
+    };
+  }
+  if (mascot.arenaState === "RESTING") {
+    return {
+      locked: false,
+      tone: "border-green-500/30 bg-green-500/10 text-green-200",
+      label: "Repouso concluido",
+      detail: "Mascote ja pode voltar para atividades.",
+    };
+  }
+  return null;
+}
+
 interface ExpeditionRewardDisplay {
   emoji: string;
   title: string;
@@ -159,6 +201,8 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const hungerStatus    = getHungerStatus(localLastFed);
   const happinessStatus = getHappinessStatus(localHappiness);
   const challengeStatus = getChallengeStatus(localMood);
+  const arena = arenaStatus(mascot);
+  const arenaLocked = !!arena?.locked;
 
   // Cooldown 3 min — calculado client-side após mount para evitar hydration mismatch
   const [cooldownMs, setCooldownMs] = useState(0);
@@ -176,10 +220,10 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
 
   // Button availability — cooldown applies to all interactions including pet
   const inExpedition = !!expedition && !claimable;
-  const canPlay      = !inExpedition && !onCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
-  const canPet       = !inExpedition && !onCooldown && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
-  const canFeedFood  = !inExpedition && mascot.hasFood  && hungerStatus !== "STUFFED";
-  const canFeedSweet = !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
+  const canPlay      = !arenaLocked && !inExpedition && !onCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
+  const canPet       = !arenaLocked && !inExpedition && !onCooldown && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
+  const canFeedFood  = !arenaLocked && !inExpedition && mascot.hasFood  && hungerStatus !== "STUFFED";
+  const canFeedSweet = !arenaLocked && !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
 
   const act = (fn: () => Promise<{ error?: string; result?: unknown }>, successMsg?: string) => {
     startTransition(async () => {
@@ -346,6 +390,13 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
               </div>
             )}
 
+            {arena && (
+              <div className={`mt-1 rounded-lg border px-2 py-1 text-[10px] ${arena.tone}`}>
+                <p className="font-semibold">{arena.label}</p>
+                <p className="text-[9px] opacity-80">{arena.detail}</p>
+              </div>
+            )}
+
             {/* EXP bar */}
             <div className="space-y-0.5 pt-0.5">
               <div className="flex justify-between text-[9px] text-slate-600">
@@ -448,6 +499,20 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
           </button>
         )}
 
+        {mascot.arenaState === "INJURED" && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              if (!confirm("Usar Atendimento SUS por 10 ZC e colocar este mascote em repouso?")) return;
+              act(() => healMascotSusAction(mascot.id), "Atendimento SUS concluido.");
+            }}
+            className="w-full rounded-xl border border-red-400/40 bg-red-500/10 py-2 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-40"
+          >
+            Atendimento SUS - 10 ZC
+          </button>
+        )}
+
         {/* Cooldown info */}
         {onCooldown && (
           <p className="text-[10px] text-center text-slate-600">
@@ -486,7 +551,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
 
         {/* ── Expedição + Equipar/Desequipar ── */}
         <div className="flex gap-2">
-          {!expedition && mascot.isEquipped && (
+          {!arenaLocked && !expedition && mascot.isEquipped && (
             <div className="flex-1 space-y-1.5">
               {/* Seletor de duração */}
               <select
@@ -514,7 +579,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             </div>
           )}
           {!mascot.isEquipped && (
-            <button type="button" disabled={pending} onClick={() => act(() => equipMascotAction(mascot.id), "Mascote equipado!")}
+            <button type="button" disabled={pending || arenaLocked} onClick={() => act(() => equipMascotAction(mascot.id), "Mascote equipado!")}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 py-2 text-xs font-medium text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
               <Swords size={12}/> Equipar
             </button>

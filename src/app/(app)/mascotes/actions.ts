@@ -8,9 +8,13 @@ import {
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
   skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
 } from "@/lib/mascot";
+import { healMascotSus } from "@/lib/arena-z";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 
-function revalidate() { revalidatePath("/mascotes"); }
+function revalidate() {
+  revalidatePath("/mascotes");
+  revalidatePath("/arena-z");
+}
 
 export async function putEggInIncubator(eggId: string, genOverride?: string): Promise<{ error?: string }> {
   try {
@@ -124,6 +128,20 @@ export async function startExpeditionAction(mascotId: string, duration: Expediti
     revalidate();
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function healMascotSusAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    await healMascotSus(player.id, mascotId);
+    revalidate();
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
+  }
 }
 
 export async function claimExpeditionAction(expeditionId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof claimExpedition>> }> {
