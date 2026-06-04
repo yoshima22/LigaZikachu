@@ -83,7 +83,10 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
 
     const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const firstOffer = offers[0];
-    const expired = !firstOffer || new Date() > new Date(firstOffer.validUntil);
+    // Expirou OU é oferta antiga sem shopItemId (gerada pelo catálogo estático anterior)
+    const expired = !firstOffer
+      || new Date() > new Date(firstOffer.validUntil)
+      || !firstOffer.shopItemId;
 
     if (expired) {
       const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
