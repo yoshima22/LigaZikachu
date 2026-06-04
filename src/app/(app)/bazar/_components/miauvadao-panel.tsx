@@ -7,7 +7,7 @@ import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
 import { buyMiauvadaoOffer } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
 
-// ── Countdown ─────────────────────────────────────────────────────────────────
+// ── Countdown ao vivo ─────────────────────────────────────────────────────────
 
 function RefreshCountdown({ validUntil }: { validUntil: string }) {
   const [remaining, setRemaining] = useState(0);
@@ -22,7 +22,7 @@ function RefreshCountdown({ validUntil }: { validUntil: string }) {
   const h = Math.floor(remaining / 3_600_000);
   const m = Math.floor((remaining % 3_600_000) / 60_000);
   const s = Math.floor((remaining % 60_000) / 1_000);
-  if (remaining === 0) return <span className="text-[#FFCB05]">Atualizando…</span>;
+  if (remaining === 0) return <span style={{ color: "#FFCB05" }}>Atualizando…</span>;
   return (
     <span className="flex items-center gap-1">
       <RefreshCw size={9} className="opacity-60" />
@@ -31,115 +31,166 @@ function RefreshCountdown({ validUntil }: { validUntil: string }) {
   );
 }
 
-// ── Emoji por tipo ────────────────────────────────────────────────────────────
+// ── Ícones por tipo — ovos sempre mostram 🥚 ──────────────────────────────────
 
-const ITEM_EMOJI: Record<string, string> = {
-  EGG_COMMON:"🥚", EGG_RARE:"💙", EGG_SPECIAL:"💜",
-  EGG_GEN1:"1️⃣", EGG_GEN2:"2️⃣", EGG_GEN3:"3️⃣", EGG_GEN4:"4️⃣", EGG_GEN5:"5️⃣",
-  EGG_GEN6:"6️⃣", EGG_GEN7:"7️⃣", EGG_GEN8:"8️⃣", EGG_GEN9:"9️⃣",
-  MASCOT_FOOD:"🍖", MASCOT_SWEET:"🍬",
-  MASCOT_BUFF_EXP:"⚡", MASCOT_BUFF_STAT:"💊",
-  MASCOT_BUFF_HAPPY:"🍯", MASCOT_BUFF_LUCK:"🍀", MASCOT_BUFF_MOOD:"💧",
-  ZIKALOOT_TICKET:"🎟️",
-};
+function ItemIcon({ itemType, imageUrl }: { itemType: string; imageUrl?: string }) {
+  if (imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={imageUrl} alt="" className="max-h-[96px] max-w-full object-contain
+        drop-shadow-[0_2px_12px_rgba(201,168,0,0.35)]" />
+    );
+  }
 
-// ── Card TCG individual ───────────────────────────────────────────────────────
+  // Ovos — todos mostram 🥚, tipo diferenciado apenas pelo label/nome
+  if (itemType.startsWith("EGG_") || ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","COMMON","RARE","SPECIAL","EVENT"].includes(itemType)) {
+    const tint =
+      itemType.includes("RARE")    ? "#6390F0" :
+      itemType.includes("SPECIAL") ? "#a855f7" :
+      itemType.includes("EVENT")   ? "#FFCB05" :
+      "#e2c27a";
+    return (
+      <span className="text-[72px] leading-none select-none" style={{ filter: `drop-shadow(0 2px 12px ${tint}88)` }}>
+        🥚
+      </span>
+    );
+  }
+
+  const ICON: Record<string, string> = {
+    MASCOT_FOOD:"🍖", MASCOT_SWEET:"🍬",
+    MASCOT_BUFF_EXP:"⚡", MASCOT_BUFF_STAT:"💊",
+    MASCOT_BUFF_HAPPY:"🍯", MASCOT_BUFF_LUCK:"🍀", MASCOT_BUFF_MOOD:"💧",
+    ZIKALOOT_TICKET:"🎟️",
+  };
+  const emoji = ICON[itemType] ?? "📦";
+  return <span className="text-[72px] leading-none select-none drop-shadow-[0_2px_12px_rgba(255,203,5,0.3)]">{emoji}</span>;
+}
+
+// ── Card TCG ──────────────────────────────────────────────────────────────────
+
+const GOLD   = "#c9a800";
+const GOLD_D = "#5a4700";
+const CARD_BG = "linear-gradient(180deg,#1c1507 0%,#0d0b08 100%)";
 
 function MiauvadaoCard({
   offer, idx, onBuy, pending, buying, balance,
 }: {
   offer: MiauvadaoOffer;
   idx: number;
-  onBuy: (idx: number) => void;
+  onBuy: (i: number) => void;
   pending: boolean;
   buying: boolean;
   balance: number;
 }) {
-  const soldOut  = offer.sold >= offer.stock;
-  const expired  = new Date() > new Date(offer.validUntil);
-  const canBuy   = !soldOut && !expired && balance >= offer.finalPrice;
-  const emoji    = ITEM_EMOJI[offer.itemType] ?? "📦";
-  const unavailable = soldOut || expired;
+  const soldOut = offer.sold >= offer.stock;
+  const expired = new Date() > new Date(offer.validUntil);
+  const canBuy  = !soldOut && !expired && balance >= offer.finalPrice;
+  const dimmed  = soldOut || expired;
 
   return (
-    <div className={`relative flex flex-col transition-opacity ${unavailable ? "opacity-50 grayscale" : ""}`}>
+    <div className={`relative flex flex-col select-none transition-opacity ${dimmed ? "opacity-50 grayscale" : ""}`}>
 
-      {/* ── Outer gold frame ─────────────────────────────────────────── */}
+      {/* ── Frame principal ─── */}
       <div
-        className="relative flex flex-col rounded-2xl overflow-visible"
+        className="relative flex flex-col"
         style={{
-          background: "linear-gradient(180deg, #1c1507 0%, #0d0b08 100%)",
-          boxShadow: "0 0 0 3px #c9a800, 0 0 0 5px #5a4700, inset 0 0 0 2px #5a4700",
-          borderRadius: "14px",
+          background: CARD_BG,
+          borderRadius: 14,
+          /* Borda dupla: 3px gold + 1px escura dentro */
+          boxShadow: `0 0 0 3px ${GOLD}, 0 0 0 5px ${GOLD_D}, inset 0 0 0 2px ${GOLD_D}80`,
+          overflow: "hidden",
         }}
       >
-        {/* Top ears / tabs */}
-        <div className="absolute -top-[7px] left-5">
-          <div style={{ width: 14, height: 8, background: "#c9a800", borderRadius: "3px 3px 0 0",
-            boxShadow: "0 0 0 2px #5a4700" }} />
-        </div>
-        <div className="absolute -top-[7px] right-5">
-          <div style={{ width: 14, height: 8, background: "#c9a800", borderRadius: "3px 3px 0 0",
-            boxShadow: "0 0 0 2px #5a4700" }} />
-        </div>
+        {/* Orelhinhas (tabs no topo) */}
+        {[8, undefined].map((left, i) => (
+          <div key={i} className="absolute -top-[6px]" style={{ [i === 0 ? "left" : "right"]: 12 }}>
+            <div style={{
+              width: 16, height: 8,
+              background: GOLD,
+              borderRadius: "3px 3px 0 0",
+              boxShadow: `0 0 0 2px ${GOLD_D}`,
+            }} />
+          </div>
+        ))}
 
-        {/* Corner lightning bolts */}
-        <span className="absolute top-2 left-2 text-[#c9a800] text-[11px] leading-none select-none">⚡</span>
-        <span className="absolute top-2 right-2 text-[#c9a800] text-[11px] leading-none select-none">⚡</span>
+        {/* ── Área do item (conteúdo) ── */}
+        <div className="relative flex flex-col items-center justify-center"
+          style={{ minHeight: 180, padding: "28px 20px 20px" }}>
 
-        {/* Item area */}
-        <div className="relative flex flex-col items-center justify-center py-8 px-4 min-h-[160px]">
-          {/* Discount badge */}
-          <div className="absolute top-2 right-3 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-lg z-10">
+          {/* ⚡ cantos — DENTRO da área de conteúdo, não sobrepondo preço */}
+          <span className="absolute top-2 left-2 text-[11px] leading-none" style={{ color: GOLD }}>⚡</span>
+          <span className="absolute top-2 right-2 text-[11px] leading-none" style={{ color: GOLD }}>⚡</span>
+          <span className="absolute bottom-2 left-2 text-[11px] leading-none" style={{ color: GOLD }}>⚡</span>
+          <span className="absolute bottom-2 right-2 text-[11px] leading-none" style={{ color: GOLD }}>⚡</span>
+
+          {/* Badge desconto */}
+          <div className="absolute top-2 right-8 z-10 rounded-full bg-red-600 px-2 py-0.5
+            text-[10px] font-black text-white shadow-lg leading-none">
             -{offer.discountPct}%
           </div>
 
-          {offer.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={offer.imageUrl} alt={offer.name}
-              className="max-h-[100px] max-w-full object-contain drop-shadow-[0_2px_8px_rgba(201,168,0,0.3)]" />
-          ) : (
-            <span className="text-6xl drop-shadow-[0_2px_8px_rgba(201,168,0,0.3)]">{emoji}</span>
-          )}
+          {/* Ícone do item */}
+          <ItemIcon itemType={offer.itemType} imageUrl={offer.imageUrl} />
         </div>
 
-        {/* ── ITEM EM PROMOÇÃO banner ──────────────────────────────── */}
-        <div
-          style={{
-            background: "#2a1a03",
-            borderTop: "2px solid #c9a800",
-            borderBottom: "2px solid #c9a800",
-          }}
-          className="px-2 py-2 text-center"
-        >
-          <p className="text-[11px] font-black text-[#c9a800] uppercase tracking-[0.12em] leading-tight truncate">
-            {unavailable ? (soldOut ? "ESGOTADO" : "EXPIRADO") : offer.name}
+        {/* ── "ITEM EM PROMOÇÃO" banner ── */}
+        <div style={{
+          background: "#2a1a03",
+          borderTop: `2px solid ${GOLD}`,
+          borderBottom: `2px solid ${GOLD}`,
+          padding: "7px 8px",
+          textAlign: "center",
+        }}>
+          <p style={{
+            fontSize: 11,
+            fontWeight: 900,
+            color: GOLD,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            lineHeight: 1.2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}>
+            {dimmed ? (soldOut ? "ESGOTADO" : "EXPIRADO") : offer.name}
           </p>
-          <p className="text-[9px] text-[#8b6c00] mt-0.5">{offer.sold}/{offer.stock} vendidos</p>
+          <p style={{ fontSize: 9, color: GOLD_D, marginTop: 2 }}>
+            {offer.sold}/{offer.stock} vendidos
+          </p>
         </div>
 
-        {/* Bottom corner lightning */}
-        <span className="absolute bottom-[52px] left-2 text-[#c9a800] text-[11px] leading-none select-none">⚡</span>
-        <span className="absolute bottom-[52px] right-2 text-[#c9a800] text-[11px] leading-none select-none">⚡</span>
-
-        {/* ── Price + buy area ─────────────────────────────────────── */}
-        <div className="px-3 pt-2 pb-3 space-y-2" style={{ background: "#0d0b08", borderRadius: "0 0 11px 11px" }}>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[#5a4700] line-through">{offer.originalPrice.toLocaleString("pt-BR")} ZC</span>
-            <span className="font-black text-[#FFCB05] text-sm">{offer.finalPrice.toLocaleString("pt-BR")} ZC</span>
+        {/* ── Área de preço + botão (SEM ícones absolutos sobrepostos) ── */}
+        <div style={{ background: "#0d0b08", borderRadius: "0 0 11px 11px", padding: "8px 12px 10px" }}
+          className="space-y-2">
+          {/* Preço: original riscado → final */}
+          <div className="flex items-center justify-between">
+            <span style={{ fontSize: 11, color: "#5a4700", textDecoration: "line-through" }}>
+              {offer.originalPrice.toLocaleString("pt-BR")} ZC
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 900, color: "#FFCB05",
+              textShadow: "0 0 8px rgba(255,203,5,0.4)" }}>
+              {offer.finalPrice.toLocaleString("pt-BR")} ZC
+            </span>
           </div>
+
+          {/* Botão comprar */}
           <button
             type="button"
             disabled={pending || !canBuy}
             onClick={() => onBuy(idx)}
-            className={`w-full flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-bold transition-all disabled:cursor-not-allowed ${
-              canBuy
-                ? "bg-[#FFCB05] text-[#1a1209] hover:bg-[#FFD700] hover:shadow-[0_0_8px_rgba(255,203,5,0.5)]"
-                : "bg-[#2a1f04] text-[#5a4700]"
-            }`}
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 font-bold
+              transition-all disabled:cursor-not-allowed"
+            style={{
+              fontSize: 12,
+              background: canBuy ? GOLD : "#2a1a03",
+              color: canBuy ? "#1a1209" : GOLD_D,
+              boxShadow: canBuy ? "0 0 0 1px #5a4700" : "none",
+            }}
           >
-            {soldOut ? "Esgotado" : expired ? <><Clock size={10}/> Expirado</> :
-             buying && pending ? "Comprando…" : <><ShoppingCart size={10}/> Comprar</>}
+            {soldOut   ? "Esgotado"  :
+             expired   ? <><Clock size={10} /> Expirado</> :
+             buying && pending ? "Comprando…" :
+             <><ShoppingCart size={11} /> Comprar</>}
           </button>
         </div>
       </div>
@@ -147,7 +198,7 @@ function MiauvadaoCard({
   );
 }
 
-// ── Panel principal ───────────────────────────────────────────────────────────
+// ── Panel ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   offers: MiauvadaoOffer[];
@@ -157,7 +208,7 @@ interface Props {
   offersRefreshedAt?: string | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, offersRefreshedAt: _ }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -166,96 +217,83 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, offers
     const offer = offers[idx];
     if (!offer) return;
     if (!playerId) { toast.error("Faça login para comprar."); return; }
-    if (!confirm(`Comprar "${offer.name}" por ${offer.finalPrice} ZC?`)) return;
+    if (!confirm(`Comprar "${offer.name}" por ${offer.finalPrice.toLocaleString("pt-BR")} ZC?`)) return;
     setBuyingIdx(idx);
     startTransition(async () => {
       const r = await buyMiauvadaoOffer(idx);
       if (r.error) toast.error(r.error);
-      else { toast.success(`"${offer.name}" adicionado ao inventário!`); router.refresh(); }
+      else { toast.success(`"${offer.name}" adicionado ao inventário! 🎉`); router.refresh(); }
       setBuyingIdx(null);
     });
   };
 
   return (
-    /* Wrapper com fundo escuro dourado */
     <div
       className="relative overflow-hidden rounded-2xl"
       style={{
-        background: "linear-gradient(135deg, #1a1105 0%, #0e0c06 50%, #1a1105 100%)",
-        boxShadow: "0 0 0 1px #5a4700",
+        background: "linear-gradient(135deg,#1a1105 0%,#0e0c06 60%,#1a1105 100%)",
+        boxShadow: `0 0 0 1px ${GOLD_D}`,
       }}
     >
-      {/* ── Gato NPC (posicionado à esquerda, sobressai do container) ── */}
-      <div
-        className="pointer-events-none absolute -left-2 -bottom-2 z-10 hidden md:block"
-        style={{ width: 180, height: "calc(100% + 16px)" }}
-      >
+      {/* Gato NPC à esquerda (usa /miauvadao-cat.png se existir) */}
+      <div className="pointer-events-none absolute -left-2 bottom-0 z-10 hidden md:block"
+        style={{ width: 190, height: "calc(100% + 8px)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/miauvadao-cat.png"
-          alt="Miauvadão"
-          className="h-full w-full object-contain object-bottom select-none"
-          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
+        <img src="/miauvadao-cat.png" alt="" className="h-full w-full object-contain object-bottom"
+          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
       </div>
 
-      {/* ── Conteúdo principal (deslocado à direita para o gato) ──────── */}
-      <div className="md:ml-40 lg:ml-44 px-4 pt-4 pb-5 space-y-4">
+      {/* Conteúdo (recuado para o gato em desktop) */}
+      <div className="md:ml-44 lg:ml-48 px-5 pt-5 pb-6 space-y-5">
 
-        {/* ── Banner título ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Banner ornamentado */}
           <div
-            className="flex items-center gap-3 rounded-xl px-4 py-2"
+            className="flex items-center gap-3 rounded-xl px-4 py-2.5"
             style={{
               background: "#1e1608",
-              border: "2px solid #c9a800",
-              boxShadow: "0 0 0 1px #5a4700, inset 0 0 12px rgba(201,168,0,0.08)",
+              border: `2px solid ${GOLD}`,
+              boxShadow: `0 0 0 1px ${GOLD_D}, 0 0 16px rgba(201,168,0,0.15)`,
             }}
           >
-            {/* Avatar do Miauvadão */}
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
-              style={{ background: "#2a1a03", border: "2px solid #c9a800" }}
-            >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl"
+              style={{ background: "#2a1a03", border: `2px solid ${GOLD}` }}>
               🐱
             </div>
-            <div>
-              <h2
-                className="font-pixel text-sm flex items-center gap-1.5"
-                style={{ color: "#FFCB05", textShadow: "0 0 8px rgba(255,203,5,0.4)" }}
-              >
-                Ofertas do Miauvadão
-                <Zap size={12} className="fill-[#FFCB05] text-[#FFCB05]" />
-              </h2>
-            </div>
+            <h2 className="font-pixel text-base flex items-center gap-1.5"
+              style={{ color: "#FFCB05", textShadow: "0 0 10px rgba(255,203,5,0.5)" }}>
+              Ofertas do Miauvadão
+              <Zap size={13} className="fill-[#FFCB05] text-[#FFCB05]" />
+            </h2>
           </div>
 
-          {/* Cofre + countdown */}
-          <div className="flex items-center gap-3 text-[10px]" style={{ color: "#8b6c00" }}>
+          {/* Info: cofre + timer */}
+          <div className="flex flex-col items-end gap-0.5 text-[10px]" style={{ color: GOLD_D }}>
             <span>
               Cofre:{" "}
-              <span style={{ color: "#FFCB05" }} className="font-semibold">
+              <strong style={{ color: "#FFCB05" }}>
                 {vaultBalance.toLocaleString("pt-BR")} ZC
-              </span>
+              </strong>
             </span>
             {offers[0]?.validUntil && (
-              <span className="flex items-center gap-1" style={{ color: "#8b6c00" }}>
+              <span style={{ color: GOLD_D }}>
                 <RefreshCountdown validUntil={offers[0].validUntil} />
               </span>
             )}
           </div>
         </div>
 
-        {/* ── 3 cards ───────────────────────────────────────────────── */}
+        {/* ── 3 Cards ── */}
         {offers.length === 0 ? (
-          <div className="py-10 text-center space-y-2">
+          <div className="py-12 text-center space-y-2">
             <p className="text-3xl">😿</p>
-            <p className="text-sm" style={{ color: "#5a4700" }}>
-              O Miauvadão ainda não definiu as ofertas de hoje.
+            <p className="text-sm" style={{ color: GOLD_D }}>
+              O Miauvadão ainda não abriu as ofertas de hoje.
             </p>
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-3 pt-2">
+          <div className="grid gap-5 sm:grid-cols-3 pt-1">
             {offers.map((offer, idx) => (
               <MiauvadaoCard
                 key={idx}
@@ -270,8 +308,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, offers
           </div>
         )}
 
-        {/* Rodapé */}
-        <p className="text-center text-[10px]" style={{ color: "#4a3800" }}>
+        <p className="text-center text-[10px]" style={{ color: "#3a2c00" }}>
           As taxas do Bazar alimentam o cofre do Miauvadão e financiam os descontos.
         </p>
       </div>
