@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getPokemonName } from "@/lib/mascot-data";
+import { creditCoins } from "@/lib/zikacoins";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -1113,11 +1114,23 @@ export async function startShellGameSession(betAmount: number): Promise<{
 
     const ballPos = Math.floor(Math.random() * 3);
     const expiresAt = new Date(Date.now() + 5 * 60_000);
-    const [session, updatedWallet] = await prisma.$transaction([
-      prisma.shellGameSession.create({ data: { playerId: player.id, betAmount, ballPos, expiresAt } }),
-      prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: betAmount } } }),
-    ]);
-    return { sessionId: session.id, newBalance: updatedWallet.balance };
+    const result = await prisma.$transaction(async (tx) => {
+      const session = await tx.shellGameSession.create({
+        data: { playerId: player.id, betAmount, ballPos, expiresAt },
+      });
+      await creditCoins(tx, {
+        playerId: player.id,
+        type: "BET_PLACED",
+        amount: -betAmount,
+        description: `Aposta no Jogo do Miauvadão (${betAmount.toLocaleString("pt-BR")} ZC)`,
+      });
+      const updatedWallet = await tx.zikaCoinWallet.findUniqueOrThrow({
+        where: { playerId: player.id },
+        select: { balance: true },
+      });
+      return { session, updatedWallet };
+    });
+    return { sessionId: result.session.id, newBalance: result.updatedWallet.balance };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -1150,15 +1163,24 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
       prize = session.betAmount + vaultBonus; // ex: aposta 100 → recebe 120, cofre perde 20
       const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
       const message = template.replace("{player}", player.displayName).replace("{amount}", prize.toLocaleString("pt-BR"));
-      const [updatedWallet] = await prisma.$transaction([
-        prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { increment: prize } } }),
-        prisma.miauvadaoConfig.upsert({
+      const updatedWallet = await prisma.$transaction(async (tx) => {
+        await creditCoins(tx, {
+          playerId: player.id,
+          type: "BET_WON",
+          amount: prize,
+          description: `Vitória no Jogo do Miauvadão: recebeu ${prize.toLocaleString("pt-BR")} ZC`,
+        });
+        await tx.miauvadaoConfig.upsert({
           where: { id: "singleton" },
           update: { vaultBalance: { decrement: vaultBonus }, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
           create: { id: "singleton", lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
-        }),
-        prisma.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: true } }),
-      ]);
+        });
+        await tx.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: true } });
+        return tx.zikaCoinWallet.findUniqueOrThrow({
+          where: { playerId: player.id },
+          select: { balance: true },
+        });
+      });
       newBalance = updatedWallet.balance;
     } else {
       await prisma.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: false } });
