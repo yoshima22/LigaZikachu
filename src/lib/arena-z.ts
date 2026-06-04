@@ -23,12 +23,19 @@ export const DIFFICULTY_CONFIG = {
 export type ArenaDifficulty = keyof typeof DIFFICULTY_CONFIG;
 
 const BOT_NAMES = [
-  "Nando Faisca", "Beto Raio", "Cida Tempestade", "Tuca do Beco", "Mestre Pingo",
-  "Nina das Folhas", "Raul Pedreira", "Leo Brasa", "Jana Sombria", "Gui do Choque",
-  "Mira Mare", "Dani Esporo", "Ruan Cascalho", "Toni Vento", "Carla Prisma",
-  "Zeca do Trovao", "Bruna Fagulha", "Caio Raiz", "Vini Nevoeiro", "Lari Cristal",
-  "Dudu Ferrugem", "Fe Labareda", "Igor Relampago", "Manu Aurora", "Biel Espinho",
-  "Rita Eclipse", "Pedro Turbina", "Kika Granito", "Samuca Poeira", "Taina Estrela",
+  "Nando Faísca",   "Beto Raio",      "Cida Tempestade", "Tuca do Beco",   "Mestre Pingo",
+  "Nina das Folhas","Raul Pedreira",  "Léo Brasa",       "Jana Sombria",   "Gui do Choque",
+  "Mira Maré",      "Dani Esporo",    "Ruan Cascalho",   "Toni Vento",     "Carla Prisma",
+  "Zeca do Trovão", "Bruna Fagulha",  "Caio Raiz",       "Vini Nevoeiro",  "Lari Cristal",
+  "Dudu Ferrugem",  "Fê Labareda",    "Igor Relâmpago",  "Manu Aurora",    "Biel Espinho",
+  "Rita Eclipse",   "Pedro Turbina",  "Kika Granito",    "Samuca Poeira",  "Tainá Estrela",
+  // Expansão
+  "Kael Vorto",     "Luma Sílica",    "Drex Cinzeiro",   "Naia Brûma",     "Ciro Safira",
+  "Zel Paradoxo",   "Mika Trovisco",  "Reva Estrela",    "Cadu Nublado",   "Tess Éter",
+  "Vox Sombral",    "Ixo do Pico",    "Nere Madrugada",  "Flick Relâmpago","Soru Granito",
+  "Bira Lava",      "Dita Escuridão", "Yam Cascata",     "Pico Ribeirão",  "Selu Ventania",
+  "Orki Farol",     "Cata Neblina",   "Finn Corrente",   "Zago Cinzeiro",  "Wara Espelho",
+  "Niko Parafuso",  "Leva Brilhante", "Skua Temporal",   "Brun Rocha",     "Queia Chama",
 ];
 
 type ArenaMascot = {
@@ -183,13 +190,23 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
   return { result, log, rounds: turn - 1, defeatedMascotIds: defeated.filter(m => m.ownerId).map(m => m.id) };
 }
 
-function botReward(levelMin: number, levelMax: number): ArenaLoot {
+export type ArenaLootFull = ArenaLoot & { egg?: "COMMON" | "RARE" | "SPECIAL" };
+
+function botReward(levelMin: number, levelMax: number): ArenaLootFull {
   const tier = Math.ceil(levelMax / 5);
+  const eggRoll = Math.random();
+  // Tier 4+ (level 20+): chance de ovo comum / raro
+  const eggChance = tier >= 8 ? 0.12 : tier >= 6 ? 0.08 : tier >= 4 ? 0.05 : 0;
+  const rareEggChance = tier >= 10 ? 0.04 : tier >= 8 ? 0.02 : 0;
+  let egg: "COMMON" | "RARE" | "SPECIAL" | undefined;
+  if (eggRoll < rareEggChance) egg = "RARE";
+  else if (eggRoll < eggChance) egg = "COMMON";
   return {
     coins: rand(5 * tier, 15 * tier),
-    exp: rand(5 * tier, 18 * tier),
-    food: Math.random() < Math.min(0.45, tier * 0.05) ? 1 : 0,
+    exp:   rand(5 * tier, 18 * tier),
+    food:  Math.random() < Math.min(0.45, tier * 0.05) ? 1 : 0,
     sweet: Math.random() < Math.min(0.2, tier * 0.025) ? 1 : 0,
+    egg,
   };
 }
 
@@ -424,20 +441,37 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   }
 
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
-  const diff = DIFFICULTY_CONFIG[difficulty];
-  const bot = buildBotOpponent(attackers, difficulty);
-  const band = bot.band;
-  const botName = bot.botName;
-  const defenders = bot.defenders;
+
+  // Bot determinístico: usa pendingBotJson se disponível
+  const useDifficulty = (team.pendingBotDifficulty as ArenaDifficulty | null) ?? difficulty;
+  const diff = DIFFICULTY_CONFIG[useDifficulty];
+  let band: { min: number; max: number };
+  let botName: string;
+  let defenders: ArenaMascot[];
+
+  if (team.pendingBotJson) {
+    // Usa o bot que o jogador viu no preview
+    const locked = team.pendingBotJson as { botName: string; band: { min: number; max: number }; defenders: ArenaMascot[] };
+    band = locked.band;
+    botName = locked.botName;
+    defenders = locked.defenders;
+  } else {
+    const bot = buildBotOpponent(attackers, useDifficulty);
+    band = bot.band;
+    botName = bot.botName;
+    defenders = bot.defenders;
+  }
+
   const combat = runCombat(attackers, defenders);
   const won = combat.result === "ATTACKER_WIN";
   // Recompensa escalada pela dificuldade
-  const baseReward = won ? botReward(band.min, band.max) : { coins: 0, exp: 0, food: 0, sweet: 0 };
-  const reward = won ? {
+  const baseReward = won ? botReward(band.min, band.max) : { coins: 0, exp: 0, food: 0, sweet: 0, egg: undefined };
+  const reward: ArenaLootFull = won ? {
     coins: Math.round(baseReward.coins * diff.rewardMult),
     exp:   Math.round(baseReward.exp   * diff.rewardMult),
     food:  baseReward.food,
     sweet: baseReward.sweet,
+    egg:   baseReward.egg,
   } : baseReward;
   // Risco de ferimento aumenta com dificuldade
   const rawInjured = !won ? combat.defeatedMascotIds : [];
@@ -473,8 +507,16 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         vaultFood: { increment: reward.food },
         vaultSweet: { increment: reward.sweet },
         lastBattleAt: new Date(),
+        pendingBotJson: null,       // limpa bot pendente após batalha
+        pendingBotDifficulty: null,
       },
     });
+    // Entrega ovo diretamente ao inventário (não vai pro cofre)
+    if (reward.egg && won) {
+      await tx.mascotEgg.create({
+        data: { playerId, type: reward.egg, origin: `Arena Z bot ${botName}` }
+      });
+    }
     for (const member of team.members) {
       const injured = injuredMascotIds.includes(member.mascotId);
       await tx.mascot.update({
@@ -525,6 +567,191 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         advantageApplied: turn.advantageApplied,
       })),
   };
+}
+
+// ── Bot determinístico: salva o bot antes da batalha ─────────────────────────
+
+export async function lockBotForTeam(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
+  const team = await prisma.arenaTeam.findUnique({
+    where: { id: teamId },
+    include: { members: { include: { mascot: true }, orderBy: { slot: "asc" } } },
+  });
+  if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
+  if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
+
+  const attackers = team.members.map(m => toArenaMascot(m.mascot));
+  const hourSlot = Math.floor(Date.now() / (10 * 60 * 1000));
+  const seed = parseInt(teamId.replace(/[^0-9]/g, "").slice(-4) || "0") + hourSlot;
+  const bot = buildBotOpponent(attackers, difficulty, seed);
+
+  const botJson = {
+    botName: bot.botName,
+    band: bot.band,
+    defenders: bot.defenders,
+  };
+  await prisma.arenaTeam.update({
+    where: { id: teamId },
+    data: {
+      pendingBotJson: botJson as unknown as import("@prisma/client").Prisma.InputJsonValue,
+      pendingBotDifficulty: difficulty,
+    },
+  });
+  return {
+    trainerName: bot.botName,
+    levelBandMin: bot.band.min,
+    levelBandMax: bot.band.max,
+    difficulty,
+    difficultyLabel: DIFFICULTY_CONFIG[difficulty].label,
+    mascots: bot.defenders.map(m => ({
+      id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level,
+      type: getPokemonElement(m.pokemonId), force: m.force, agility: m.agility, vitality: m.vitality,
+    })),
+  };
+}
+
+// ── Ranking público ───────────────────────────────────────────────────────────
+
+export async function getArenaRanking(limit = 20) {
+  const battles = await prisma.arenaBattle.findMany({
+    where: { status: "RESOLVED", type: { in: ["BOT", "PVP"] } },
+    include: {
+      attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
+      defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+  });
+
+  type Row = { playerId: string; name: string; wins: number; losses: number; draws: number; stolenCoins: number; stolenExp: number };
+  const map = new Map<string, Row>();
+  const ensure = (id: string, name: string) => {
+    if (!map.has(id)) map.set(id, { playerId: id, name, wins: 0, losses: 0, draws: 0, stolenCoins: 0, stolenExp: 0 });
+    return map.get(id)!;
+  };
+  for (const b of battles) {
+    const aName = b.attackerPlayer?.displayName ?? b.attackerPlayer?.ptcglNick ?? "?";
+    const dName = b.defenderPlayer?.displayName ?? b.defenderPlayer?.ptcglNick ?? b.botName ?? "Bot";
+    if (b.attackerPlayerId) ensure(b.attackerPlayerId, aName);
+    if (b.defenderPlayerId) ensure(b.defenderPlayerId, dName);
+    if (b.result === "DRAW") {
+      if (b.attackerPlayerId) ensure(b.attackerPlayerId, aName).draws++;
+      if (b.defenderPlayerId) ensure(b.defenderPlayerId, dName).draws++;
+      continue;
+    }
+    if (b.winnerPlayerId) {
+      const wName = b.winnerPlayerId === b.attackerPlayerId ? aName : dName;
+      const row = ensure(b.winnerPlayerId, wName);
+      row.wins++;
+      const loot = b.lootResult as Record<string, unknown> | null;
+      if (loot?.coins && typeof loot.coins === "number") row.stolenCoins += loot.coins;
+      if (loot?.exp   && typeof loot.exp   === "number") row.stolenExp   += loot.exp;
+    }
+    if (b.loserPlayerId) {
+      const lName = b.loserPlayerId === b.attackerPlayerId ? aName : dName;
+      ensure(b.loserPlayerId, lName).losses++;
+    }
+  }
+  return [...map.values()]
+    .sort((a, b) => b.wins - a.wins || b.stolenCoins - a.stolenCoins || a.losses - b.losses)
+    .slice(0, limit);
+}
+
+// ── Ataque oportunista de rival ───────────────────────────────────────────────
+
+export async function runOpportunisticAttack(attackerPlayerId: string, targetMascotId: string) {
+  // Verifica se mascote alvo está ferido e se atacante é rival
+  const targetMascot = await prisma.mascot.findUnique({
+    where: { id: targetMascotId },
+    include: {
+      player: { select: { id: true, displayName: true } },
+      relationsAsA: { where: { mascotBId: { not: undefined } } },
+      relationsAsB: { where: { type: "RIVAL" } },
+    }
+  });
+  if (!targetMascot) throw new Error("Mascote nao encontrado.");
+  if (targetMascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
+
+  const attackerPlayer = await prisma.player.findUnique({
+    where: { id: attackerPlayerId },
+    include: { mascots: { where: { arenaState: "FREE" }, take: 1 } }
+  });
+  if (!attackerPlayer) throw new Error("Atacante nao encontrado.");
+  if (attackerPlayer.mascots.length === 0) throw new Error("Voce nao tem mascotes livres para atacar.");
+
+  // Verifica se já atacou este mascote neste período de ferimento
+  const recentOpportunistic = await prisma.arenaBattle.findFirst({
+    where: {
+      type: "OPPORTUNISTIC",
+      attackerPlayerId,
+      defenderPlayerId: targetMascot.playerId,
+      createdAt: { gte: targetMascot.injuredAt ?? new Date(0) }
+    }
+  });
+  if (recentOpportunistic) throw new Error("Voce ja atacou este mascote neste periodo de ferimento.");
+
+  // Pequeno roubo: 5-15 EXP + chance de 1 petisco
+  const stolenExp   = rand(5, 15);
+  const stolenFood  = Math.random() < 0.3 ? 1 : 0;
+  const extraRestMs = rand(15, 45) * 60 * 1000; // 15-45 min a mais de repouso
+
+  const attackerMascotName = attackerPlayer.mascots[0]
+    ? (attackerPlayer.mascots[0].nickname ?? getPokemonName(attackerPlayer.mascots[0].pokemonId))
+    : "mascote";
+
+  await prisma.$transaction(async (tx) => {
+    // Registra a batalha oportunista
+    await tx.arenaBattle.create({
+      data: {
+        type: "OPPORTUNISTIC",
+        result: "ATTACKER_WIN",
+        attackerPlayerId,
+        defenderPlayerId: targetMascot.playerId,
+        rounds: 1,
+        turnLog: [{ turn: 1, actorName: `${attackerPlayer.displayName} (oportunista)`, damage: stolenExp, action: "ATTACK" }] as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        lootResult: { stolen: { exp: stolenExp, food: stolenFood } } as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        winnerPlayerId: attackerPlayerId,
+        loserPlayerId: targetMascot.playerId,
+      }
+    });
+    // Aplica EXP extra ao atacante
+    if (stolenExp > 0 && attackerPlayer.mascots[0]) {
+      await tx.mascot.update({
+        where: { id: attackerPlayer.mascots[0].id },
+        data: { exp: { increment: stolenExp } }
+      });
+    }
+    // Aumenta tempo de repouso do alvo
+    const currentRest = targetMascot.restingUntil ?? new Date();
+    const newRest = new Date(Math.max(currentRest.getTime(), Date.now()) + extraRestMs);
+    await tx.mascot.update({
+      where: { id: targetMascotId },
+      data: { restingUntil: newRest }
+    });
+    // Log de evento no mascote ferido
+    await tx.mascotEvent.create({
+      data: {
+        mascotId: targetMascotId,
+        emoji: "😈",
+        description: `${attackerPlayer.displayName} aproveitou o ferimento e roubou ${stolenExp} EXP${stolenFood > 0 ? " e 1 petisco" : ""}. Repouso aumentado em ${Math.floor(extraRestMs / 60000)} min.`
+      }
+    });
+  });
+
+  return { stolenExp, stolenFood, extraRestMinutes: Math.floor(extraRestMs / 60000), attackerMascotName };
+}
+
+// ── Formata turno de combate para exibição legível ────────────────────────────
+
+export function formatTurnLog(log: ArenaTurnLog[]): string[] {
+  return log.map(turn => {
+    if (turn.action === "DEFEND") {
+      return `Turno ${turn.turn}: ${turn.actorName} adotou postura defensiva.`;
+    }
+    const owner = turn.actorOwnerId ? "" : " (bot)";
+    const targetOwner = turn.targetOwnerId ? "" : " (bot)";
+    const advantage = turn.advantageApplied ? " com vantagem de tipo!" : "";
+    return `Turno ${turn.turn}: ${turn.actorName}${owner} atacou ${turn.targetName}${targetOwner} causando ${turn.damage} de dano${advantage}`;
+  });
 }
 
 export async function runPvpBattle(playerId: string, attackTeamId: string, defenseTeamId: string) {

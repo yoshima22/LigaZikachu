@@ -5,9 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, getArenaBotPreview } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog } from "@/lib/arena-z";
 import { createArenaTeamAction } from "./actions";
-import { AdminMascotStateButton, BotBattleButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { AdminMascotStateButton, BotBattleButton, LockBotButton, OpportunisticAttackButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +83,7 @@ export default async function ArenaZPage() {
   });
   if (!player) redirect("/dashboard");
 
-  const [wallet, mascots, teams, opponentTeams, battles, rankingBattles] = await Promise.all([
+  const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, injuredRivals] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -110,14 +110,16 @@ export default async function ArenaZPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
-    prisma.arenaBattle.findMany({
-      where: admin ? { status: "RESOLVED" } : { id: "__admin_only__" },
-      include: {
-        attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
-        defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
+    getArenaRanking(20),
+    // Mascotes de rivais que estão feridos (para ataque oportunista)
+    prisma.mascot.findMany({
+      where: {
+        arenaState: "INJURED",
+        playerId: { not: player.id },
+        relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } },
       },
-      orderBy: { createdAt: "desc" },
-      take: 250,
+      include: { player: { select: { displayName: true } } },
+      take: 10,
     }),
   ]);
 
@@ -135,39 +137,7 @@ export default async function ArenaZPage() {
   for (const team of activeTeams) {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
-  const rankingMap = new Map<string, ArenaRankingRow>();
-  const ensureRow = (id: string, name: string) => {
-    const existing = rankingMap.get(id);
-    if (existing) return existing;
-    const row = { playerId: id, name, wins: 0, losses: 0, draws: 0, stolenCoins: 0, stolenExp: 0 };
-    rankingMap.set(id, row);
-    return row;
-  };
-  for (const battle of rankingBattles) {
-    if (battle.attackerPlayer) ensureRow(battle.attackerPlayer.id, battle.attackerPlayer.displayName ?? battle.attackerPlayer.ptcglNick);
-    if (battle.defenderPlayer) ensureRow(battle.defenderPlayer.id, battle.defenderPlayer.displayName ?? battle.defenderPlayer.ptcglNick);
-    if (battle.result === "DRAW") {
-      if (battle.attackerPlayerId && battle.attackerPlayer) ensureRow(battle.attackerPlayerId, battle.attackerPlayer.displayName ?? battle.attackerPlayer.ptcglNick).draws++;
-      if (battle.defenderPlayerId && battle.defenderPlayer) ensureRow(battle.defenderPlayerId, battle.defenderPlayer.displayName ?? battle.defenderPlayer.ptcglNick).draws++;
-      continue;
-    }
-    if (battle.winnerPlayerId) {
-      const winner = battle.winnerPlayerId === battle.attackerPlayerId ? battle.attackerPlayer : battle.defenderPlayer;
-      if (winner) {
-        const row = ensureRow(winner.id, winner.displayName ?? winner.ptcglNick);
-        row.wins++;
-        row.stolenCoins += getLootNumber(battle.lootResult, "coins");
-        row.stolenExp += getLootNumber(battle.lootResult, "exp");
-      }
-    }
-    if (battle.loserPlayerId) {
-      const loser = battle.loserPlayerId === battle.attackerPlayerId ? battle.attackerPlayer : battle.defenderPlayer;
-      if (loser) ensureRow(loser.id, loser.displayName ?? loser.ptcglNick).losses++;
-    }
-  }
-  const arenaRanking = [...rankingMap.values()]
-    .sort((a, b) => b.wins - a.wins || b.stolenCoins - a.stolenCoins || a.losses - b.losses || a.name.localeCompare(b.name))
-    .slice(0, 12);
+  const arenaRanking = arenaRankingData;
 
   return (
     <div className="space-y-6">
@@ -255,9 +225,20 @@ export default async function ArenaZPage() {
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3 text-xs text-[#FFCB05]">
-                    <Coins size={13} className="mr-1 inline" />
-                    Cofre: {fmtLoot(team)}
-                    <p className="mt-1 text-[10px] text-slate-500">Derrota futura: 60% preservado, 30% roubavel, 10% risco do sistema.</p>
+                    <p className="font-semibold"><Coins size={13} className="mr-1 inline" />Cofre: {fmtLoot(team)}</p>
+                    {(team.vaultCoins > 0 || team.vaultExp > 0) && (
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
+                        <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-2">
+                          <p className="font-semibold text-green-300">✅ Se retirar agora</p>
+                          <p className="text-slate-300">{team.vaultCoins} ZC · {team.vaultExp} EXP{team.vaultFood > 0 ? ` · ${team.vaultFood} comida` : ""}{team.vaultSweet > 0 ? ` · ${team.vaultSweet} doce` : ""}</p>
+                        </div>
+                        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2">
+                          <p className="font-semibold text-red-300">⚠️ Se derrotado</p>
+                          <p className="text-slate-300">Perde ~{Math.floor(team.vaultCoins * 0.4)} ZC · {Math.floor(team.vaultExp * 0.4)} EXP</p>
+                          <p className="text-slate-500">30% roubado · 10% perdido</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {team.members.map(member => (
@@ -351,10 +332,10 @@ export default async function ArenaZPage() {
             </div>
           </div>}
 
-          {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
-            <h2 className="font-semibold text-slate-200">Ranking experimental da Arena Z</h2>
+          <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
+            <h2 className="font-semibold text-slate-200">🏆 Ranking Arena Z</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Calculado a partir dos ultimos combates resolvidos. Ainda e uma leitura admin para balanceamento.
+              Calculado a partir dos combates PvE e PvP resolvidos.
             </p>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[620px] text-left text-xs">
@@ -392,7 +373,7 @@ export default async function ArenaZPage() {
                 </tbody>
               </table>
             </div>
-          </div>}
+          </div>
 
           <div className={`grid gap-4 ${admin ? "lg:grid-cols-2" : ""}`}>
             <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
@@ -432,6 +413,25 @@ export default async function ArenaZPage() {
             </div>}
           </div>
 
+          {/* Ataques oportunistas */}
+          {injuredRivals.length > 0 && (
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+              <h2 className="flex items-center gap-2 font-semibold text-red-200">😈 Rivais Feridos</h2>
+              <p className="mt-1 text-xs text-slate-500">Seus rivais estão feridos. Aproveite para um ataque oportunista.</p>
+              <div className="mt-4 space-y-2">
+                {injuredRivals.map(m => (
+                  <div key={m.id} className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-slate-950/50 p-3">
+                    <span>
+                      <span className="block text-xs font-semibold text-slate-200">{m.nickname ?? getPokemonName(m.pokemonId)} (Nv.{m.level})</span>
+                      <span className="text-[10px] text-slate-500">de {m.player.displayName} — Ferido</span>
+                    </span>
+                    <OpportunisticAttackButton mascotId={m.id} mascotName={m.nickname ?? getPokemonName(m.pokemonId)} ownerName={m.player.displayName} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
             <h2 className="flex items-center gap-2 font-semibold text-slate-200"><History size={16} /> Historico recente</h2>
             <div className="mt-4 space-y-3">
@@ -459,10 +459,8 @@ export default async function ArenaZPage() {
                       )}
                     </div>
                     <div className="mt-3 space-y-1 text-xs text-slate-400">
-                      {log.slice(0, 12).map(turn => (
-                        <p key={turn.turn}>
-                          Turno {turn.turn}: {turn.actorName} {turn.action === "DEFEND" ? "defendeu" : `atacou ${turn.targetName} causando ${turn.damage} dano`}{turn.advantageApplied ? " (vantagem)" : ""}.
-                        </p>
+                      {formatTurnLog(log).slice(0, 12).map((line, i) => (
+                        <p key={i}>{line}</p>
                       ))}
                       {log.length > 12 && <p className="text-slate-600">...mais {log.length - 12} turno(s)</p>}
                     </div>

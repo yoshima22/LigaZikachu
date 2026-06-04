@@ -8,8 +8,10 @@ import { getSpriteUrl } from "@/lib/mascot-data";
 import {
   adminSetMascotStateAction,
   healMascotSusAction,
+  lockBotAction,
   retireArenaTeamAction,
   runBotBattleAction,
+  runOpportunisticAttackAction,
   runPvpBattleAction,
 } from "../actions";
 import type { ArenaDifficulty } from "@/lib/arena-z";
@@ -255,5 +257,68 @@ export function AdminMascotStateButton({ mascotId, state, label }: { mascotId: s
     >
       {label}
     </button>
+  );
+}
+
+// ── Travar bot antes da batalha (determinístico) ──────────────────────────────
+
+export function LockBotButton({ teamId, difficulty }: { teamId: string; difficulty: ArenaDifficulty }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        startTransition(async () => {
+          const r = await lockBotAction(teamId, difficulty);
+          if (r.error) toast.error(r.error);
+          else { toast.success("Adversário travado! Clique em Combater para confirmar."); router.refresh(); }
+        });
+      }}
+      className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-300 hover:bg-blue-500/20 disabled:opacity-50"
+    >
+      {pending ? "Gerando…" : "🔒 Travar bot"}
+    </button>
+  );
+}
+
+// ── Ataque oportunista contra rival ferido ────────────────────────────────────
+
+export function OpportunisticAttackButton({ mascotId, mascotName, ownerName }: { mascotId: string; mascotName: string; ownerName: string }) {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ stolenExp: number; stolenFood: number; extraRestMinutes: number } | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          if (!confirm(`Atacar ${mascotName} de ${ownerName} enquanto está ferido? Você vai roubar EXP e aumentar o tempo de repouso.`)) return;
+          startTransition(async () => {
+            const r = await runOpportunisticAttackAction(mascotId);
+            if (r.error) { toast.error(r.error); return; }
+            if (r.result) {
+              setResult(r.result);
+              toast.success(`Ataque oportunista bem-sucedido! +${r.result.stolenExp} EXP roubados.`);
+            }
+          });
+        }}
+        className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+      >
+        😈 Atacar enquanto ferido
+      </button>
+      {result && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setResult(null)}>
+          <div className="max-w-sm rounded-2xl border border-red-500/30 bg-slate-950 p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-bold text-red-200">😈 Ataque Oportunista!</p>
+            <p className="text-xs text-slate-300">Você roubou <strong className="text-[#FFCB05]">{result.stolenExp} EXP</strong>{result.stolenFood > 0 ? " e 1 petisco" : ""}.</p>
+            <p className="text-xs text-slate-400">Repouso de {mascotName} aumentado em {result.extraRestMinutes} min.</p>
+            <button type="button" onClick={() => setResult(null)} className="w-full rounded-lg bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

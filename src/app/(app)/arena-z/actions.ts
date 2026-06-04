@@ -7,8 +7,10 @@ import {
   adminSetMascotArenaState,
   createArenaTeam,
   healMascotSus,
+  lockBotForTeam,
   retireArenaTeam,
   runBotBattle,
+  runOpportunisticAttack,
   runPvpBattle,
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
@@ -81,6 +83,29 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
+  }
+}
+
+export async function lockBotAction(teamId: string, difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; result?: Awaited<ReturnType<typeof lockBotForTeam>> }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    const result = await lockBotForTeam(playerId, teamId, difficulty);
+    revalidatePath("/arena-z");
+    return { result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao gerar adversario." };
+  }
+}
+
+export async function runOpportunisticAttackAction(targetMascotId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runOpportunisticAttack>> }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    const result = await runOpportunisticAttack(playerId, targetMascotId);
+    revalidatePath("/arena-z");
+    revalidatePath("/mascotes");
+    return { result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao atacar." };
   }
 }
 
