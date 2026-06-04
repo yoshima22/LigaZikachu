@@ -183,16 +183,25 @@ async function main() {
   if (!newEmail) throw new Error("Informe --new-email para aplicar o reparo.");
   if (password.length < 8) throw new Error("Informe --password com pelo menos 8 caracteres.");
 
+  const oldUserId = player.user.id;
   const existingTarget = await prisma.user.findUnique({ where: { email: targetEmail.toLowerCase() } });
-  if (existingTarget) {
+  if (existingTarget && existingTarget.id !== oldUserId) {
     throw new Error(`Ja existe um usuario com o email ${targetEmail}. Escolha outro email.`);
   }
 
   const passwordHash = await hash(password, 10);
-  const oldUserId = player.user.id;
   const archivedOldEmail = `archived-${Date.now()}-${player.user.email}`.slice(0, 190);
 
   const result = await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: oldUserId },
+      data: {
+        email: archivedOldEmail.toLowerCase(),
+        status: UserStatus.SUSPENDED,
+        passwordHash: null
+      }
+    });
+
     const newUser = await tx.user.create({
       data: {
         name: player.user.name ?? player.displayName,
@@ -209,15 +218,6 @@ async function main() {
     await tx.player.update({
       where: { id: player.id },
       data: { userId: newUser.id }
-    });
-
-    await tx.user.update({
-      where: { id: oldUserId },
-      data: {
-        email: archivedOldEmail.toLowerCase(),
-        status: UserStatus.SUSPENDED,
-        passwordHash: null
-      }
     });
 
     await tx.userTutorialProgress.createMany({
