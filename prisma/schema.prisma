@@ -1085,6 +1085,8 @@ enum ShopItemType {
   EGG_COMMON
   EGG_RARE
   EGG_SPECIAL
+  EGG_GEN1
+  EGG_GEN2
   MASCOT_FOOD
   MASCOT_SWEET
   MASCOT_BUFF_EXP
@@ -1210,6 +1212,8 @@ enum EggType {
   RARE
   SPECIAL
   EVENT
+  EGG_GEN1
+  EGG_GEN2
 }
 
 enum MascotMood {

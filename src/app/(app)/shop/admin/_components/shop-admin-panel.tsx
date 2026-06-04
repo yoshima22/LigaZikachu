@@ -14,7 +14,7 @@ import { ChevronUp, ChevronDown } from "lucide-react";
 const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
 const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
 const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL"] as const;
-const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET","EGG_COMMON","EGG_RARE","EGG_SPECIAL","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as const;
+const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET","EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as const;
 const typeLabel: Record<string, string> = {
   TITLE: "Título", BANNER: "Banner",
   FRAME: "Moldura",
@@ -22,6 +22,8 @@ const typeLabel: Record<string, string> = {
   EGG_COMMON: "Ovo Comum",
   EGG_RARE: "Ovo Raro",
   EGG_SPECIAL: "Ovo Especial",
+  EGG_GEN1: "Ovo Gen 1 (Kanto)",
+  EGG_GEN2: "Ovo Gen 2 (Johto)",
   MASCOT_FOOD: "Comida de Mascote",
   MASCOT_SWEET: "Doce de Mascote",
   MASCOT_BUFF_EXP:   "⚡ Vitamina Elétrica (Buff EXP)",
@@ -319,7 +321,7 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   const isFrame  = (form.type as string) === "FRAME";
   const isBanner = (form.type as string) === "BANNER";
   const isTitle  = (form.type as string) === "TITLE";
-  const isMascotItem = ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"].includes(form.type);
+  const isMascotItem = ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"].includes(form.type);
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1 text-xs text-slate-400">

@@ -204,7 +204,8 @@ export async function sendItemToAllPlayers(
     });
 
     const EGG_MAP: Record<string, string> = {
-      EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL"
+      EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL",
+      EGG_GEN1: "EGG_GEN1", EGG_GEN2: "EGG_GEN2"
     };
     const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
 
@@ -317,5 +318,47 @@ export async function adminReactivateUser(userId: string): Promise<{ error?: str
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Limpeza de eventos de mascotes de admins ──────────────────────────────────
+
+export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error?: string }> {
+  try {
+    await requireAdmin();
+
+    const adminRoles = ["ADMIN", "SUPER_ADMIN"];
+
+    // Find all mascot IDs belonging to admin users
+    const adminMascots = await prisma.mascot.findMany({
+      where: {
+        player: {
+          user: { role: { in: adminRoles } }
+        }
+      },
+      select: { id: true }
+    });
+
+    const adminMascotIds = adminMascots.map(m => m.id);
+    if (adminMascotIds.length === 0) return { deleted: 0 };
+
+    // Delete MascotEvent records for admin mascots
+    const deletedEvents = await prisma.mascotEvent.deleteMany({
+      where: { mascotId: { in: adminMascotIds } }
+    });
+
+    // Delete MascotRelation records where either mascot belongs to an admin
+    const deletedRelations = await prisma.mascotRelation.deleteMany({
+      where: {
+        OR: [
+          { mascotAId: { in: adminMascotIds } },
+          { mascotBId: { in: adminMascotIds } },
+        ]
+      }
+    });
+
+    return { deleted: deletedEvents.count + deletedRelations.count };
+  } catch (err) {
+    return { deleted: 0, error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }

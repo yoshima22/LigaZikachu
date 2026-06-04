@@ -40,6 +40,27 @@ export const EGG_POOLS: Record<string, number[]> = {
 
   // Ovo de Evento — pool temático (configurado caso a caso; padrão = starters)
   EVENT: [1, 4, 7, 152, 155, 158, 25, 133, 147],
+
+  // Ovos por geração (apenas formas iniciais presentes em COMMON ou RARE)
+  EGG_GEN1: [
+    // COMMON gen 1
+    10, 13, 16, 19, 21, 23, 27, 29, 32, 35, 39, 41, 43, 46, 48, 50,
+    52, 54, 56, 60, 69, 72, 74, 77, 79, 81, 84, 86, 88, 90, 96, 98,
+    100, 102, 104, 109, 111, 116, 118, 120,
+    // RARE gen 1
+    1, 4, 7, 25, 37, 58, 63, 66,
+    92, 95, 106, 107, 108, 113, 123, 124, 125, 126, 127, 128,
+  ],
+
+  EGG_GEN2: [
+    // COMMON gen 2
+    161, 163, 165, 167, 170, 183, 187, 191, 194, 204, 209, 218, 220,
+    223, 228, 231, 234, 235,
+    // RARE gen 2
+    152, 155, 158,
+    172, 173, 174, 175, 179, 190, 193, 196, 197, 198, 200, 203,
+    207, 215, 216, 225, 227,
+  ],
 };
 
 // ── Evoluções por nível ───────────────────────────────────────────────────────
@@ -302,30 +323,56 @@ export function getStaticSpriteUrl(pokemonId: number): string {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
 
-// ── Nomes PT-BR dos Pokémon mais comuns (fallback: usar nome da PokéAPI) ──────
+// ── Nomes PT-BR dos Pokémon Gen 1-2 (IDs 1-251) ──────────────────────────────
 
 export const POKEMON_PT_NAMES: Record<number, string> = {
-  1:"Bulbasaur",4:"Charmander",7:"Squirtle",10:"Caterpie",13:"Weedle",
-  16:"Pidgey",19:"Rattata",21:"Spearow",23:"Ekans",25:"Pikachu",
-  27:"Sandshrew",29:"Nidoran♀",32:"Nidoran♂",35:"Clefairy",37:"Vulpix",
-  39:"Jigglypuff",41:"Zubat",43:"Oddish",46:"Paras",48:"Venonat",
-  50:"Diglett",52:"Meowth",54:"Psyduck",56:"Mankey",58:"Growlithe",
-  60:"Poliwag",63:"Abra",66:"Machop",69:"Bellsprout",72:"Tentacool",
-  74:"Geodude",77:"Ponyta",79:"Slowpoke",81:"Magnemite",84:"Doduo",
-  86:"Seel",88:"Grimer",90:"Shellder",92:"Gastly",96:"Drowzee",
-  98:"Krabby",100:"Voltorb",102:"Exeggcute",104:"Cubone",106:"Hitmonlee",
-  107:"Hitmonchan",108:"Lickitung",109:"Koffing",111:"Rhyhorn",113:"Chansey",
-  116:"Horsea",118:"Goldeen",120:"Staryu",123:"Scyther",124:"Jynx",
-  125:"Electabuzz",126:"Magmar",127:"Pinsir",128:"Tauros",129:"Magikarp",
-  131:"Lapras",132:"Ditto",133:"Eevee",138:"Omanyte",140:"Kabuto",
-  143:"Snorlax",147:"Dratini",
-  152:"Chikorita",155:"Cyndaquil",158:"Totodile",161:"Sentret",163:"Hoothoot",
-  165:"Ledyba",167:"Spinarak",170:"Chinchou",172:"Pichu",173:"Cleffa",
-  174:"Igglybuff",175:"Togepi",183:"Marill",187:"Hoppip",191:"Sunkern",
-  194:"Wooper",204:"Pineco",209:"Snubbull",213:"Shuckle",214:"Heracross",
-  216:"Teddiursa",218:"Slugma",220:"Swinub",222:"Corsola",223:"Remoraid",
-  225:"Delibird",228:"Houndour",231:"Phanpy",234:"Stantler",235:"Smeargle",
-  238:"Smoochum",239:"Elekid",240:"Magby",241:"Miltank",246:"Larvitar",
+  // Gen 1
+  1:"Bulbasaur",2:"Ivysaur",3:"Venusaur",4:"Charmander",5:"Charmeleon",6:"Charizard",
+  7:"Squirtle",8:"Wartortle",9:"Blastoise",10:"Caterpie",11:"Metapod",12:"Butterfree",
+  13:"Weedle",14:"Kakuna",15:"Beedrill",16:"Pidgey",17:"Pidgeotto",18:"Pidgeot",
+  19:"Rattata",20:"Raticate",21:"Spearow",22:"Fearow",23:"Ekans",24:"Arbok",
+  25:"Pikachu",26:"Raichu",27:"Sandshrew",28:"Sandslash",29:"Nidoran♀",30:"Nidorina",
+  31:"Nidoqueen",32:"Nidoran♂",33:"Nidorino",34:"Nidoking",35:"Clefairy",36:"Clefable",
+  37:"Vulpix",38:"Ninetales",39:"Jigglypuff",40:"Wigglytuff",41:"Zubat",42:"Golbat",
+  43:"Oddish",44:"Gloom",45:"Vileplume",46:"Paras",47:"Parasect",48:"Venonat",
+  49:"Venomoth",50:"Diglett",51:"Dugtrio",52:"Meowth",53:"Persian",54:"Psyduck",
+  55:"Golduck",56:"Mankey",57:"Primeape",58:"Growlithe",59:"Arcanine",60:"Poliwag",
+  61:"Poliwhirl",62:"Poliwrath",63:"Abra",64:"Kadabra",65:"Alakazam",66:"Machop",
+  67:"Machoke",68:"Machamp",69:"Bellsprout",70:"Weepinbell",71:"Victreebel",
+  72:"Tentacool",73:"Tentacruel",74:"Geodude",75:"Graveler",76:"Golem",
+  77:"Ponyta",78:"Rapidash",79:"Slowpoke",80:"Slowbro",81:"Magnemite",82:"Magneton",
+  83:"Farfetch'd",84:"Doduo",85:"Dodrio",86:"Seel",87:"Dewgong",88:"Grimer",89:"Muk",
+  90:"Shellder",91:"Cloyster",92:"Gastly",93:"Haunter",94:"Gengar",95:"Onix",
+  96:"Drowzee",97:"Hypno",98:"Krabby",99:"Kingler",100:"Voltorb",101:"Electrode",
+  102:"Exeggcute",103:"Exeggutor",104:"Cubone",105:"Marowak",106:"Hitmonlee",
+  107:"Hitmonchan",108:"Lickitung",109:"Koffing",110:"Weezing",111:"Rhyhorn",
+  112:"Rhydon",113:"Chansey",114:"Tangela",115:"Kangaskhan",116:"Horsea",117:"Seadra",
+  118:"Goldeen",119:"Seaking",120:"Staryu",121:"Starmie",122:"Mr. Mime",123:"Scyther",
+  124:"Jynx",125:"Electabuzz",126:"Magmar",127:"Pinsir",128:"Tauros",129:"Magikarp",
+  130:"Gyarados",131:"Lapras",132:"Ditto",133:"Eevee",134:"Vaporeon",135:"Jolteon",
+  136:"Flareon",137:"Porygon",138:"Omanyte",139:"Omastar",140:"Kabuto",141:"Kabutops",
+  142:"Aerodactyl",143:"Snorlax",144:"Articuno",145:"Zapdos",146:"Moltres",
+  147:"Dratini",148:"Dragonair",149:"Dragonite",150:"Mewtwo",151:"Mew",
+  // Gen 2
+  152:"Chikorita",153:"Bayleef",154:"Meganium",155:"Cyndaquil",156:"Quilava",
+  157:"Typhlosion",158:"Totodile",159:"Croconaw",160:"Feraligatr",161:"Sentret",
+  162:"Furret",163:"Hoothoot",164:"Noctowl",165:"Ledyba",166:"Ledian",167:"Spinarak",
+  168:"Ariados",169:"Crobat",170:"Chinchou",171:"Lanturn",172:"Pichu",173:"Cleffa",
+  174:"Igglybuff",175:"Togepi",176:"Togetic",177:"Natu",178:"Xatu",179:"Mareep",
+  180:"Flaaffy",181:"Ampharos",182:"Bellossom",183:"Marill",184:"Azumarill",
+  185:"Sudowoodo",186:"Politoed",187:"Hoppip",188:"Skiploom",189:"Jumpluff",
+  190:"Aipom",191:"Sunkern",192:"Sunflora",193:"Yanma",194:"Wooper",195:"Quagsire",
+  196:"Espeon",197:"Umbreon",198:"Murkrow",199:"Slowking",200:"Misdreavus",
+  201:"Unown",202:"Wobbuffet",203:"Girafarig",204:"Pineco",205:"Forretress",
+  206:"Dunsparce",207:"Gligar",208:"Steelix",209:"Snubbull",210:"Granbull",
+  211:"Qwilfish",212:"Scizor",213:"Shuckle",214:"Heracross",215:"Sneasel",
+  216:"Teddiursa",217:"Ursaring",218:"Slugma",219:"Magcargo",220:"Swinub",
+  221:"Piloswine",222:"Corsola",223:"Remoraid",224:"Octillery",225:"Delibird",
+  226:"Mantine",227:"Skarmory",228:"Houndour",229:"Houndoom",230:"Kingdra",
+  231:"Phanpy",232:"Donphan",233:"Porygon2",234:"Stantler",235:"Smeargle",
+  236:"Tyrogue",237:"Hitmontop",238:"Smoochum",239:"Elekid",240:"Magby",
+  241:"Miltank",242:"Blissey",243:"Raikou",244:"Entei",245:"Suicune",
+  246:"Larvitar",247:"Pupitar",248:"Tyranitar",249:"Lugia",250:"Ho-Oh",251:"Celebi",
 };
 
 export function getPokemonName(id: number): string {
