@@ -145,9 +145,9 @@ export interface LevelUpResult {
 export async function addExp(mascotId: string, amount: number): Promise<LevelUpResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
-  if (!mascot.isEquipped) {
-    return { leveled: false, newLevel: mascot.level, evolved: false };
-  }
+  // EXP agora é dado a qualquer mascote (equipado ou no banco)
+  // Mascotes no banco recebem 50% do EXP (interações presenciais são menos intensas)
+  if (!mascot.isEquipped) amount = Math.max(1, Math.floor(amount * 0.5));
 
   // Check for active EXP_BOOST buff
   const expBoostBuff = await prisma.mascotBuff.findFirst({
@@ -333,8 +333,7 @@ export async function interactWithMascot(
     return { success: false, message, happinessChange: 0, expGained: 0, refused: true };
   }
 
-  if (!mascot.isEquipped) expGained = 0;
-
+  // EXP sempre aplicado — addExp já reduz 50% para mascotes no banco
   // Atualiza felicidade (0-100)
   const newHappiness = Math.min(100, Math.max(0, mascot.happiness + happinessChange));
 
@@ -423,54 +422,75 @@ export type ExpeditionReward =
 
 async function rollExpeditionReward(
   mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
-  durationKey: ExpeditionDuration = "1h"
+  durationKey: ExpeditionDuration = "1h",
+  allyCount = 0
 ): Promise<ExpeditionReward> {
   const luckBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
   });
-  const luckMultiplier = luckBuff ? 2 : 1;
+  const hasLuckBuff = !!luckBuff;
+  const luckMultiplier = hasLuckBuff ? 2 : 1;
   const dur = EXPEDITION_DURATIONS[durationKey];
   const rewardBonus = dur.rewardBonus; // 0, 5, 15, 30
 
-  const luck = (mascot.statInstinct + Math.floor(mascot.level / 10)) * luckMultiplier;
-  const roll = Math.random() * 100;
+  // Luck escala melhor com nível (a cada 5 níveis)
+  const luck = (mascot.statInstinct + Math.floor(mascot.level / 5)) * luckMultiplier;
+  // Bônus de nível para mascotes baixos — garante que sempre valha a pena
+  const levelFloor = Math.min(30, mascot.level * 2); // Nv1=2, Nv5=10, Nv15=30
+  // Bônus de aliados — cada amigo melhora as chances
+  const allyBonus = Math.min(20, allyCount * 4);
 
-  // Recompensas melhores em expedições mais longas
-  // 6h: maior chance de ovo e loot maior
-  const eggChance   = 5  + luck * 0.3 + rewardBonus * 0.3;
-  const sweetChance = 12 + rewardBonus * 0.3;
-  const foodChance  = 30 + rewardBonus * 0.2;
-  const coinChance  = 55 + rewardBonus * 0.2;
+  // ── Chance de NOTHING: máx 5%, zero com buff de sorte ou 3+ aliados ─────────
+  const nothingChance = hasLuckBuff || allyCount >= 3 ? 0 : Math.max(0, 5 - allyCount * 1.5);
+  if (Math.random() * 100 < nothingChance) return { type: "NOTHING" };
 
-  const coinBase    = 50  + rewardBonus * 5;
-  const coinRange   = 150 + rewardBonus * 10;
-  const foodQtyMax  = 1   + Math.floor(rewardBonus / 10);
+  // ── Distribuição ponderada dos tipos de recompensa ───────────────────────────
+  // Pesos somam ~100; mais luck/duração = maior chance de ovo e sweet
+  const eggWeight   = 8  + Math.min(22, luck * 0.6) + rewardBonus * 0.6 + allyBonus;
+  const sweetWeight = 15 + rewardBonus * 0.4 + (hasLuckBuff ? 10 : 0);
+  const foodWeight  = 35 + levelFloor * 0.5 + rewardBonus * 0.2;
+  const coinWeight  = 42 + levelFloor * 0.5;
+  const total       = eggWeight + sweetWeight + foodWeight + coinWeight;
+  const roll        = Math.random() * total;
 
-  // Ovo especial só em 3h+
-  let eggType = luck > 20 ? "RARE" : "COMMON";
-  if (durationKey === "3h" && luck > 15) eggType = "RARE";
-  if (durationKey === "6h") eggType = luck > 10 ? "SPECIAL" : "RARE";
+  // Ovo: qualidade cresce com duração e nível
+  let eggType = "COMMON";
+  if (durationKey === "6h")                            eggType = luck > 10 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h" && luck > 12)          eggType = "RARE";
+  else if ((durationKey === "1h" || durationKey === "30min") && luck > 20) eggType = "RARE";
 
-  if (roll < eggChance)   return { type: "EGG",   eggType };
-  if (roll < sweetChance * luckMultiplier) return { type: "FOOD", foodType: "SWEET", quantity: 1 };
-  if (roll < foodChance)  return { type: "FOOD",  foodType: "FOOD", quantity: randomInt(1, 1 + foodQtyMax) };
-  if (roll < coinChance)  return { type: "COINS", amount: randomInt(coinBase, coinBase + coinRange) };
-  return { type: "NOTHING" };
+  // Quantidade de comida melhora com duração
+  const foodQtyMax = 1 + Math.floor(rewardBonus / 8);
+
+  // Valor de moedas escala com duração e nível
+  const coinMin = Math.max(50, 50 + rewardBonus * 6 + mascot.level * 2);
+  const coinMax = coinMin + 100 + rewardBonus * 12 + mascot.level * 3;
+
+  const cumEgg   = eggWeight;
+  const cumSweet = cumEgg + sweetWeight;
+  const cumFood  = cumSweet + foodWeight;
+
+  if (roll < cumEgg)   return { type: "EGG",   eggType };
+  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: 1 };
+  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(1, 1 + foodQtyMax) };
+  return { type: "COINS", amount: randomInt(coinMin, coinMax) };
 }
 
 function describeExpeditionReward(reward: ExpeditionReward) {
   switch (reward.type) {
-    case "EGG":
+    case "EGG": {
+      const eggLabel = reward.eggType === "SPECIAL" ? "Especial" : reward.eggType === "RARE" ? "Raro" : "Comum";
       return {
-        title: reward.eggType === "RARE" ? "Ovo Raro encontrado" : "Ovo Comum encontrado",
+        title: `Ovo ${eggLabel} encontrado!`,
         description: "Seu mascote voltou da expedição carregando um ovo.",
         payload: {
           rewardKind: "MASCOT_EGG",
           eggType: reward.eggType,
           origin: "Expedição de mascote",
-          rewardLabel: reward.eggType === "RARE" ? "Ovo Raro" : "Ovo Comum",
+          rewardLabel: `Ovo ${eggLabel}`,
         }
       };
+    }
     case "FOOD":
       return {
         title: reward.foodType === "SWEET" ? "Doce de Mascote encontrado" : "Comida de Mascote encontrada",
@@ -599,8 +619,22 @@ export async function claimExpedition(
   const durationKey: ExpeditionDuration = storedDuration ?? "1h";
   const dur = EXPEDITION_DURATIONS[durationKey];
 
-  const reward = await rollExpeditionReward(expedition.mascot, durationKey);
+  // Busca aliados ANTES de rolar recompensa (influenciam as chances)
+  const friends = await prisma.mascotRelation.findMany({
+    where: { mascotAId: expedition.mascotId, type: "FRIEND" },
+    include: { mascotB: { select: { id: true, statCharisma: true, nickname: true, pokemonId: true, playerId: true } } }
+  });
+  const allyCount = friends.length;
+  const expeditorName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
+
+  const reward = await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
   const gift = describeExpeditionReward(reward);
+
+  // EXP: base × duração × nível × bônus de aliados
+  const expBase = EXP_REWARDS.EXPEDITION;
+  const levelMult = 1 + Math.floor(expedition.mascot.level / 20) * 0.25;
+  const allyExpBonus = 1 + allyCount * 0.1; // cada aliado = +10% EXP (máx +50%)
+  const expeditionExp = Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus);
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
@@ -609,12 +643,15 @@ export async function claimExpedition(
     });
 
     if (gift) {
+      const allyNote = allyCount > 0
+        ? ` (${allyCount} aliado${allyCount > 1 ? "s" : ""} apoiaram!)`
+        : "";
       await tx.playerGift.create({
         data: {
           playerId,
           type: "CUSTOM",
           title: `Expedição: ${gift.title}`,
-          description: gift.description,
+          description: gift.description + allyNote,
           payload: {
             ...gift.payload,
             mascotId: expedition.mascotId,
@@ -623,24 +660,62 @@ export async function claimExpedition(
         }
       });
     }
+
+    // ── Bônus e presentes dos aliados ──────────────────────────────────────
+    for (const rel of friends) {
+      const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+      const allyPlayerId = rel.mascotB.playerId;
+
+      // EXP para o mascote aliado também (participação remota)
+      await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3)).catch(() => {});
+
+      // Presente para o dono do aliado: moedas ou comida dependendo do carisma
+      const charisma = rel.mascotB.statCharisma;
+      if (charisma >= 15) {
+        // Alto carisma: envia comida ou doce como presente
+        const foodType = Math.random() < 0.4 ? "SWEET" : "FOOD";
+        await tx.playerGift.create({
+          data: {
+            playerId: allyPlayerId,
+            type: "CUSTOM",
+            title: `Presente de ${expeditorName}`,
+            description: `${expeditorName} voltou da expedição e trouxe algo para ${friendName}! 🤝`,
+            payload: {
+              rewardKind: "MASCOT_FOOD",
+              foodType,
+              quantity: 1,
+              rewardLabel: foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote",
+            }
+          }
+        });
+      } else {
+        // Carisma normal: envia moedas
+        const bonusCoins = randomInt(30, 80);
+        await tx.playerGift.create({
+          data: {
+            playerId: allyPlayerId,
+            type: "CUSTOM",
+            title: `Presente de ${expeditorName}`,
+            description: `${expeditorName} voltou da expedição e enviou ${bonusCoins} ZC para o dono de ${friendName}! 🤝`,
+            payload: {
+              rewardKind: "ZIKA_COINS",
+              amount: bonusCoins,
+              rewardLabel: `${bonusCoins} ZikaCoins`,
+            }
+          }
+        });
+      }
+
+      // Log de evento nos dois mascotes
+      await logEvent(rel.mascotB.id, "🤝", `Apoiou ${expeditorName} em expedição de ${dur.label} e ganhou recompensa!`).catch(() => {});
+      await logEvent(expedition.mascotId, "💚", `${friendName} apoiou e turbinou a expedição! (+${Math.round(allyExpBonus * 100 - 100)}% EXP)`).catch(() => {});
+    }
   });
 
-  // EXP escalada pela duração + nível do mascote
-  const expBase = EXP_REWARDS.EXPEDITION;
-  const levelMult = 1 + Math.floor(expedition.mascot.level / 20) * 0.25;
-  const expeditionExp = Math.round(expBase * dur.expMultiplier * levelMult);
   await addExp(expedition.mascotId, expeditionExp).catch(() => {});
 
-  // Ally benefits: friends boost the expedition and get notified
-  const friends = await prisma.mascotRelation.findMany({
-    where: { mascotAId: expedition.mascotId, type: "FRIEND" },
-    include: { mascotB: { select: { id: true, statCharisma: true, nickname: true, pokemonId: true, playerId: true } } }
-  });
-  for (const rel of friends) {
-    const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
-    await logEvent(rel.mascotB.id, "🤝", `Ajudou ${expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId)} em sua expedição!`).catch(() => {});
-    await logEvent(expedition.mascotId, "💚", `${friendName} apoiou a expedição!`).catch(() => {});
-  }
+  // Roda eventos sociais automaticamente ao coletar expedição (fire-and-forget)
+  triggerSocialEvents().catch(() => {});
 
   return { reward, mascotId: expedition.mascotId };
 }

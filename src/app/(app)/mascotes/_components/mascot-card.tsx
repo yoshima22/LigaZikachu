@@ -457,7 +457,8 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
 
         {/* ── Ações ── */}
         <div className="grid grid-cols-2 gap-1.5">
-          <Tip text={!canPlay ? (mascot.mood === "TIRED" ? "Está cansado demais" : mascot.mood === "ANGRY" ? "Está bravo" : "Aguarde o cooldown") : "Brincar aumenta felicidade e dá EXP"}>
+          <Tip text={!canPlay ? (mascot.mood === "TIRED" ? "Está cansado demais" : mascot.mood === "ANGRY" ? "Está bravo" : "Aguarde o cooldown") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP" : "Brincar aumenta felicidade e dá 50% de EXP (mascote no banco)"}>
+
             <button type="button" disabled={pending || !canPlay} onClick={() => handleInteract("PLAY")}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               ⭐ Brincar
