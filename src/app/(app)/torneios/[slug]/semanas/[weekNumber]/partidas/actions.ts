@@ -5,7 +5,7 @@ import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
-import { MatchStatus, ResultSource, Role, TournamentFormat, type Prisma } from "@prisma/client";
+import { MatchStatus, ResultSource, Role, TournamentFormat, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
 import { applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
