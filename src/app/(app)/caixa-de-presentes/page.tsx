@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Gift, PackageOpen, Ticket } from "lucide-react";
 import { GiftStatus, GiftType } from "@prisma/client";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -53,7 +53,7 @@ function getBoosterPayload(payload: unknown): BoosterPayload {
 }
 
 export default async function GiftBoxPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) redirect("/login");
 
   const player = await prisma.player.findUnique({

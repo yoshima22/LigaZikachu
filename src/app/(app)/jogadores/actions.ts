@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { hashPassword } from "@/lib/auth/password";
@@ -18,7 +18,7 @@ const editSchema = z.object({
 });
 
 async function getAdminActor() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) throw new Error("Nao autenticado");
   if (!isAdmin(session.user.role)) throw new Error("Sem permissao");
   return session.user;
@@ -331,7 +331,7 @@ export async function saveDeckToMyList(raw: {
   archetype?: string;
   deckList: string;
 }): Promise<{ error?: string; alreadyExists?: boolean; id?: string }> {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado." };
 
   const player = await prisma.player.findUnique({

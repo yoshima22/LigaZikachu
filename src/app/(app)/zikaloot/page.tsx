@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ShopItemType } from "@prisma/client";
@@ -19,7 +19,7 @@ const statusLabel: Record<ZikaLootStatus, string> = {
 };
 
 export default async function ZikaLootPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);

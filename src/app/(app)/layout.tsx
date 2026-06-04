@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth, signOut } from "@/auth";
+import { signOut } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getManualSessionUser, MANUAL_SESSION_COOKIE } from "@/lib/manual-session";
@@ -14,7 +15,7 @@ import { AchievementNotifier } from "@/components/achievement-notifier";
 import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
-  const session = await auth().catch(() => null);
+  const session = await getAppSession().catch(() => null);
   const user = session?.user ?? await getManualSessionUser();
   if (!user) redirect("/login");
 

@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { parseBetConfig } from "@/lib/zikabet";
@@ -13,7 +13,7 @@ import { OddsForm } from "./_components/odds-form";
 export const dynamic = "force-dynamic";
 
 export default async function ZikaBetPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);

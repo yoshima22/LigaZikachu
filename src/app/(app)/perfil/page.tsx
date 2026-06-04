@@ -2,7 +2,7 @@ import Link from "next/link";
 import { MatchStatus } from "@prisma/client";
 import { BookOpen, CheckCircle2, ExternalLink, Swords, Trophy } from "lucide-react";
 import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { computeGlobalRanking } from "@/lib/ranking";
 import { isDeckRegistrationLocked } from "@/lib/decks";
@@ -63,7 +63,7 @@ async function MeusDecksPreview({ playerId }: { playerId: string }) {
 }
 
 export default async function PerfilPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
   const adminUser = isAdmin(session.user.role);
 

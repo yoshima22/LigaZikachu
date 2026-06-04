@@ -5,7 +5,7 @@ import { StatusBadge, type BadgeVariant } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import {
   BoosterCodeStatus,
   DistributionStatus,
@@ -79,7 +79,7 @@ interface CodesPageProps {
 }
 
 export default async function CodesPage({ searchParams }: CodesPageProps) {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);

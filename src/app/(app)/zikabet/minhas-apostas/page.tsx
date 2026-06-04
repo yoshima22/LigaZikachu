@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Swords } from "lucide-react";
 import Link from "next/link";
@@ -21,7 +21,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default async function MinhasApostasPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const player = await prisma.player.findUnique({

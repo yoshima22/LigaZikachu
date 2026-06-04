@@ -1,5 +1,5 @@
 import { Award } from "lucide-react";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { BadgeAdminPanel } from "./_components/badge-admin-panel";
 
 export default async function InsigniasPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);

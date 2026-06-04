@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -24,7 +24,7 @@ const txTypeLabels: Record<string, string> = {
 };
 
 export default async function CarteiraPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);

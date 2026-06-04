@@ -1,12 +1,12 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 
 export async function getTutorialStatus(pageId: string): Promise<{ completed: boolean; isAdmin: boolean }> {
   try {
-    const session = await auth();
+    const session = await getAppSession();
     if (!session?.user) return { completed: true, isAdmin: false };
     if (isAdmin(session.user.role)) return { completed: true, isAdmin: true };
 
@@ -22,7 +22,7 @@ export async function getTutorialStatus(pageId: string): Promise<{ completed: bo
 
 export async function completeTutorial(pageId: string): Promise<void> {
   try {
-    const session = await auth();
+    const session = await getAppSession();
     if (!session?.user || isAdmin(session.user.role)) return;
 
     await prisma.userTutorialProgress.upsert({
@@ -37,7 +37,7 @@ export async function completeTutorial(pageId: string): Promise<void> {
 
 export async function resetTutorial(pageId: string): Promise<void> {
   try {
-    const session = await auth();
+    const session = await getAppSession();
     if (!session?.user) return;
 
     await prisma.userTutorialProgress.deleteMany({

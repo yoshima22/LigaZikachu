@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { recalculateMood } from "@/lib/mascot";
@@ -12,7 +12,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function MascotesPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
   const admin = isAdmin(session.user.role);
 

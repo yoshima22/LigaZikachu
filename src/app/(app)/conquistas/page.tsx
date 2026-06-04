@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import Link from "next/link";
 import { Award, Lock, Plus, Star, Trophy, Zap, Filter } from "lucide-react";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
@@ -37,7 +37,7 @@ export default async function ConquistasPage({
 }: {
   searchParams?: Promise<{ scope?: string }>;
 }) {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const sp = searchParams ? await searchParams : {};

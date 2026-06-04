@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { computePlayerRanking } from "@/lib/ranking";
@@ -26,7 +26,7 @@ export default async function PlayerDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const [{ id: playerId }, session] = await Promise.all([params, auth()]);
+  const [{ id: playerId }, session] = await Promise.all([params, getAppSession()]);
   if (!session?.user) return null;
 
   const player = await prisma.player.findUnique({

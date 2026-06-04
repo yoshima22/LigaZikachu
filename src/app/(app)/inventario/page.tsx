@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Package } from "lucide-react";
 import { InventoryClient } from "./_components/inventory-client";
@@ -6,7 +6,7 @@ import { InventoryClient } from "./_components/inventory-client";
 export const dynamic = "force-dynamic";
 
 export default async function InventarioPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const player = await prisma.player.findUnique({

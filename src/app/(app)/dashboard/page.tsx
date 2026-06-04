@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { computePlayerRanking } from "@/lib/ranking";
@@ -19,7 +19,7 @@ import { formatDateBRT } from "@/lib/date-brt";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const session = await auth().catch(() => null);
+  const session = await getAppSession().catch(() => null);
   const user = session?.user ?? await getManualSessionUser();
   if (!user) return null;
 

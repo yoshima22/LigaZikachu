@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import { MyDecksClient } from "./_components/my-decks-client";
 export const dynamic = "force-dynamic";
 
 export default async function MeusDecksPage() {
-  const session = await auth();
+  const session = await getAppSession();
   if (!session?.user) return null;
 
   const player = await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } });
