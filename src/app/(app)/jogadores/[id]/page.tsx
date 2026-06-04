@@ -157,6 +157,7 @@ export default async function PlayerDetailPage({
       battleWins: true, battleLosses: true,
       hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
       events: { orderBy: { createdAt: "desc" }, take: 15 },
+      expeditions: { where: { status: "ACTIVE" }, take: 1, select: { finishAt: true } },
       relationsAsA: {
         include: {
           mascotB: {
@@ -266,11 +267,7 @@ export default async function PlayerDetailPage({
                 <h1 className="text-2xl font-bold leading-tight text-white drop-shadow-lg">
                   {player.displayName}
                 </h1>
-                {equippedMascot && (
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    {MOOD_EMOJI[equippedMascot.mood] ?? ""} Mascote equipado ↓
-                  </p>
-                )}
+{/* mascote aparece no card abaixo */}
                 {equippedTitle && (
                   <div className="mt-0.5">
                     <TitleDisplay
@@ -719,6 +716,7 @@ export default async function PlayerDetailPage({
             lastInteractedAt: equippedMascot.lastInteractedAt,
             lastFedAt: equippedMascot.lastFedAt,
             events: equippedMascot.events,
+            activeExpedition: equippedMascot.expeditions[0] ?? null,
             relations: equippedMascot.relationsAsA.map(r => ({
               id: r.id,
               type: r.type,

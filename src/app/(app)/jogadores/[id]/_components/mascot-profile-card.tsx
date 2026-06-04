@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import { MapPin } from "lucide-react";
 import {
@@ -44,6 +44,7 @@ interface MascotProfileData {
   lastFedAt: Date | null;
   events: MascotEvent[];
   relations: MascotRelation[];
+  activeExpedition?: { finishAt: Date } | null;
 }
 
 interface Props {
@@ -79,7 +80,18 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
   const relations = Array.isArray(mascot.relations) ? mascot.relations : [];
   const events = Array.isArray(mascot.events) ? mascot.events : [];
 
-  const hasActiveExpedition = false; // would need expedition data — simplify for profile
+  const expedition = mascot.activeExpedition;
+  const [expRemaining, setExpRemaining] = useState(0);
+  useEffect(() => {
+    if (!expedition) return;
+    const update = () => setExpRemaining(Math.max(0, new Date(expedition.finishAt).getTime() - Date.now()));
+    update();
+    const iv = setInterval(update, 1000);
+    return () => clearInterval(iv);
+  }, [expedition]);
+  const expReady = expedition && expRemaining === 0;
+  const expMinutes = Math.floor(expRemaining / 60000);
+  const expSecs = Math.floor((expRemaining % 60000) / 1000);
 
   const speech = generateMascotSpeech({
     mood: mascot.mood, happiness: mascot.happiness,
@@ -296,11 +308,17 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
 
         {/* Expedição — só para o dono */}
         {isOwner && (
-          <button type="button" disabled={pending} onClick={handleExpedition}
-            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
-            <MapPin size={12} /> Enviar em expedição (1h)
-          </button>
-        )}
+          {expedition && !expReady && (
+            <div className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/5 py-2 text-xs text-blue-400">
+              <MapPin size={12} /> Em expedição — falta {expMinutes > 0 ? `${expMinutes}m ` : ""}{String(expSecs).padStart(2,"0")}s
+            </div>
+          )}
+          {!expedition && (
+            <button type="button" disabled={pending} onClick={handleExpedition}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
+              <MapPin size={12} /> Enviar em expedição (1h)
+            </button>
+          )}
       </div>
     </div>
   );

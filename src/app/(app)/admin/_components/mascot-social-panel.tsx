@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Swords, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { triggerMascotSocialEvents, clearPlayerExpeditions } from "../actions";
+import { triggerMascotSocialEvents, clearPlayerExpeditions, cleanAdminMascotEvents } from "../actions";
 
 interface Props { players: { id: string; displayName: string }[] }
 
@@ -13,6 +13,7 @@ export function MascotSocialPanel({ players }: Props) {
   const [result, setResult] = useState<{ battles: number; friendships: number; pairs: number } | null>(null);
   const [clearTarget, setClearTarget] = useState("");
   const [clearResult, setClearResult] = useState<number | null>(null);
+  const [cleanResult, setCleanResult] = useState<number | null>(null);
 
   const handle = () => {
     startTransition(async () => {
@@ -20,6 +21,16 @@ export function MascotSocialPanel({ players }: Props) {
       if (r.error) { toast.error(r.error); return; }
       setResult(r);
       toast.success(`${r.battles} batalhas + ${r.friendships} amizades geradas!`);
+    });
+  };
+
+  const handleCleanAdminEvents = () => {
+    if (!confirm("Limpar todos os eventos/relações de mascotes de admin? Isso remove batalhas, amizades e histórico de contas admin.")) return;
+    startTransition(async () => {
+      const r = await cleanAdminMascotEvents();
+      if (r.error) { toast.error(r.error); return; }
+      setCleanResult(r.deleted);
+      toast.success(`${r.deleted} registro(s) de admin removidos!`);
     });
   };
 
@@ -60,6 +71,19 @@ export function MascotSocialPanel({ players }: Props) {
             <div><p className="text-slate-500">Batalhas</p><p className="font-bold text-red-400 text-base">{result.battles}</p></div>
             <div><p className="text-slate-500">Amizades</p><p className="font-bold text-green-400 text-base">{result.friendships}</p></div>
           </div>
+        )}
+      </div>
+
+      {/* Limpar eventos de admin */}
+      <div className="space-y-2 border-t border-border/40 pt-4">
+        <p className="text-xs font-semibold text-slate-400">Limpar Eventos de Admin</p>
+        <p className="text-xs text-slate-500">Remove batalhas, rivalidades e histórico gerados por mascotes de contas admin.</p>
+        <Button type="button" disabled={pending} onClick={handleCleanAdminEvents}
+          className="gap-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 h-8 text-xs">
+          🧹 Limpar eventos de admin
+        </Button>
+        {cleanResult !== null && (
+          <p className="text-xs text-green-400">{cleanResult} registro(s) removidos.</p>
         )}
       </div>
 
