@@ -132,20 +132,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         data: { userId: user.id!, displayName }
       });
 
-      // Saldo inicial de 200 ZC para toda nova conta
-      const INITIAL_BALANCE = 200;
-      const wallet = await prisma.zikaCoinWallet.create({
-        data: { playerId: player.id, balance: INITIAL_BALANCE, totalEarned: INITIAL_BALANCE }
-      });
-      await prisma.zikaCoinTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: "ADMIN_ADJUSTMENT",
-          amount: INITIAL_BALANCE,
-          balanceBefore: 0,
-          balanceAfter: INITIAL_BALANCE,
-          description: "Saldo inicial de boas-vindas à Liga Zikachu"
-        }
+      // ── Starter pack para nova conta ──────────────────────────────────────
+      const INITIAL_BALANCE = 500;
+
+      await prisma.$transaction(async (tx) => {
+        // 1. Carteira com 500 ZC
+        const wallet = await tx.zikaCoinWallet.create({
+          data: { playerId: player.id, balance: INITIAL_BALANCE, totalEarned: INITIAL_BALANCE }
+        });
+        await tx.zikaCoinTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: "ADMIN_ADJUSTMENT",
+            amount: INITIAL_BALANCE,
+            balanceBefore: 0,
+            balanceAfter: INITIAL_BALANCE,
+            description: "Saldo inicial de boas-vindas à Liga Zikachu 🎉"
+          }
+        });
+
+        // 2. 3 Ovos Raros + 1 Ovo Comum
+        await tx.mascotEgg.createMany({
+          data: [
+            { playerId: player.id, type: "RARE",   origin: "Presente de boas-vindas" },
+            { playerId: player.id, type: "RARE",   origin: "Presente de boas-vindas" },
+            { playerId: player.id, type: "RARE",   origin: "Presente de boas-vindas" },
+            { playerId: player.id, type: "COMMON", origin: "Presente de boas-vindas" },
+          ]
+        });
+
+        // 3. 5 Comidas + 3 Doces
+        await tx.mascotFoodItem.createMany({
+          data: [
+            { playerId: player.id, type: "FOOD",  quantity: 5 },
+            { playerId: player.id, type: "SWEET", quantity: 3 },
+          ]
+        });
       });
     }
   }
