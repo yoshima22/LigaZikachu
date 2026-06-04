@@ -97,6 +97,13 @@ export async function equipMascot(playerId: string, mascotId: string) {
 export async function unequipMascot(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+
+  // Verifica se há expedição ativa
+  const activeExpedition = await prisma.mascotExpedition.findFirst({
+    where: { mascotId, status: "ACTIVE" }
+  });
+  if (activeExpedition) throw new Error("Não é possível desequipar um mascote em expedição. Aguarde o retorno.");
+
   await prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: false } });
 }
 

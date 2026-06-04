@@ -219,7 +219,7 @@ export default async function AdminPage() {
         )}
       </Card>
 
-      <MascotSocialPanel />
+      <MascotSocialPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <GlobalResetPanel />

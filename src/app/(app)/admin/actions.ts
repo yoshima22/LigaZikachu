@@ -271,3 +271,17 @@ export async function triggerMascotSocialEvents(): Promise<{ battles: number; fr
     return { battles: 0, friendships: 0, pairs: 0, error: err instanceof Error ? err.message : "Erro" };
   }
 }
+
+// ── Limpar expedições bugadas de um jogador ────────────────────────────────────
+export async function clearPlayerExpeditions(playerId: string): Promise<{ cleared: number; error?: string }> {
+  try {
+    await requireAdmin();
+    const result = await prisma.mascotExpedition.updateMany({
+      where: { mascot: { playerId }, status: "ACTIVE" },
+      data: { status: "CLAIMED", rewardJson: { type: "NOTHING" } }
+    });
+    return { cleared: result.count };
+  } catch (err) {
+    return { cleared: 0, error: err instanceof Error ? err.message : "Erro" };
+  }
+}

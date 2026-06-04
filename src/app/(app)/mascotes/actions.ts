@@ -252,6 +252,19 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+// Admin: limpa todas as expedições ativas de um jogador (para corrigir bugs)
+export async function adminClearExpeditionsAction(playerId: string): Promise<{ error?: string; cleared: number }> {
+  try {
+    await requireAdmin();
+    const result = await prisma.mascotExpedition.updateMany({
+      where: { mascot: { playerId }, status: "ACTIVE" },
+      data: { status: "CLAIMED", rewardJson: { type: "NOTHING" } }
+    });
+    revalidate();
+    return { cleared: result.count };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro.", cleared: 0 }; }
+}
+
 // Admin: dar ovo a um jogador
 export async function grantEggToPlayer(playerId: string, eggType: string): Promise<{ error?: string }> {
   try {
