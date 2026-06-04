@@ -44,7 +44,14 @@ interface Props {
   playerId: string | null;
 }
 
-const consumableTypes = new Set(["ZIKALOOT_TICKET", "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "EGG_GEN1", "EGG_GEN2", "MASCOT_FOOD", "MASCOT_SWEET"]);
+const consumableTypes = new Set([
+  "ZIKALOOT_TICKET",
+  "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "EGG_EVENT",
+  "EGG_GEN1", "EGG_GEN2", "EGG_GEN3", "EGG_GEN4", "EGG_GEN5",
+  "EGG_GEN6", "EGG_GEN7", "EGG_GEN8", "EGG_GEN9", "EGG_GEN6PLUS",
+  "MASCOT_FOOD", "MASCOT_SWEET",
+  "MASCOT_BUFF_EXP", "MASCOT_BUFF_STAT", "MASCOT_BUFF_HAPPY", "MASCOT_BUFF_LUCK", "MASCOT_BUFF_MOOD",
+]);
 
 export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, playerId }: Props) {
   const router = useRouter();
@@ -180,11 +187,11 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     staggerDelay={itemIndex * 120}
                   />
                 </div>
-              ) : (["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_EVENT","EGG_GEN1","EGG_GEN2"] as string[]).includes(item.type) ? (
+              ) : item.type.startsWith("EGG_") ? (
                 <div className="flex h-24 items-center justify-center bg-slate-900">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={item.type === "EGG_RARE" ? "/mascot/egg-rare.png" : item.type === "EGG_SPECIAL" ? "/mascot/egg-special.png" : "/mascot/egg-common.png"}
+                    src={item.imageUrl ?? (item.type === "EGG_RARE" ? "/mascot/egg-rare.png" : item.type === "EGG_SPECIAL" ? "/mascot/egg-special.png" : "/mascot/egg-common.png")}
                     alt={item.name} className="h-16 w-16 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).src = "/mascot/egg-common.png"; }}
                   />
