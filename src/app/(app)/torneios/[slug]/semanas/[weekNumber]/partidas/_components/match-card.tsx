@@ -136,12 +136,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
       return (
         <div className="mt-2 w-full overflow-hidden">
           <details className="w-full overflow-hidden rounded-md border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-2 py-1 text-left">
-            <summary className="flex min-w-0 cursor-pointer items-center justify-between gap-1.5 text-[10px] font-semibold text-[#FFCB05]">
-              <span className="min-w-0 truncate">
+            <summary className="flex min-w-0 cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-[#FFCB05]">
+              <span className="min-w-0 flex-1 truncate">
                 {linkedDeck.deckName}
                 {linkedDeck.archetype ? <span className="text-[#FFCB05]/60"> · {linkedDeck.archetype}</span> : null}
               </span>
-              <CopyDeckButton deckList={linkedDeck.deckList} />
+              <span className="shrink-0"><CopyDeckButton deckList={linkedDeck.deckList} /></span>
             </summary>
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
               {linkedDeck.deckList}
