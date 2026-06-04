@@ -16,7 +16,7 @@ export default async function AlbumPage({
 }: {
   searchParams: Promise<{ gen?: string; page?: string; owned?: string }>;
 }) {
-  const [session, sp] = await Promise.all([auth(), searchParams]);
+  const [session, sp] = await Promise.all([getAppSession(), searchParams]);
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);
