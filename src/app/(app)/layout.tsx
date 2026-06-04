@@ -111,7 +111,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               <form action={async () => {
                 "use server";
                 const { cookies } = await import("next/headers");
-                (await cookies()).delete(MANUAL_SESSION_COOKIE);
+                const cookieStore = await cookies();
+                const manualToken = cookieStore.get(MANUAL_SESSION_COOKIE)?.value;
+                if (manualToken) {
+                  await prisma.session.deleteMany({ where: { sessionToken: manualToken } }).catch(() => {});
+                }
+                cookieStore.delete(MANUAL_SESSION_COOKIE);
                 await signOut({ redirectTo: "/login" });
               }}>
                 <Button type="submit" variant="ghost" size="sm"

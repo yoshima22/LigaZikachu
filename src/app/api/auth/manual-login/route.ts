@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
-import { createManualSessionToken, MANUAL_SESSION_COOKIE, manualSessionCookieOptions } from "@/lib/manual-session";
+import {
+  MANUAL_SESSION_COOKIE,
+  MANUAL_SESSION_MAX_AGE_SECONDS,
+  manualSessionCookieOptions
+} from "@/lib/manual-session";
 
 export async function POST(request: Request) {
   try {
@@ -46,11 +50,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Senha invalida.", code: "INVALID_PASSWORD" }, { status: 401 });
     }
 
+    const expires = new Date(Date.now() + MANUAL_SESSION_MAX_AGE_SECONDS * 1000);
+    const sessionToken = crypto.randomUUID();
+    await prisma.session.create({
+      data: {
+        sessionToken,
+        userId: user.id,
+        expires
+      }
+    });
+
     const response = NextResponse.json({ success: true });
     const secure = new URL(request.url).protocol === "https:";
     response.cookies.set(
       MANUAL_SESSION_COOKIE,
-      createManualSessionToken(user),
+      sessionToken,
       manualSessionCookieOptions(secure)
     );
     return response;
