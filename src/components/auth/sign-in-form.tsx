@@ -1,37 +1,53 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { useFormStatus } from "react-dom";
+import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 type FormState = { error?: string; success?: boolean };
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? "Entrando..." : "Entrar"}
-    </Button>
-  );
-}
-
 export function SignInForm({
-  action,
   defaultState
 }: {
-  action: (state: FormState | undefined, formData: FormData) => Promise<FormState | undefined>;
+  action?: (state: FormState | undefined, formData: FormData) => Promise<FormState | undefined>;
   defaultState?: FormState;
 }) {
-  const [state, formAction] = useActionState(action, defaultState);
+  const [state, setState] = useState<FormState | undefined>(defaultState);
+  const [pending, setPending] = useState(false);
 
-  useEffect(() => {
-    if (state?.success) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setState(undefined);
+
+    const formData = new FormData(event.currentTarget);
+    const identifier = String(formData.get("identifier") ?? "");
+    const password = String(formData.get("password") ?? "");
+
+    try {
+      const response = await fetch("/api/auth/manual-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password })
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload.success) {
+        setState({ error: typeof payload.error === "string" ? payload.error : "Nao foi possivel autenticar." });
+        return;
+      }
+
+      setState({ success: true });
       window.location.assign("/dashboard");
+    } catch (error) {
+      console.error("[LoginForm] manual login failed", error);
+      setState({ error: "Erro interno. Tente novamente em alguns instantes." });
+    } finally {
+      setPending(false);
     }
-  }, [state?.success]);
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-200" htmlFor="identifier">
           Email ou nick do PTCG Live
@@ -63,7 +79,9 @@ export function SignInForm({
       </div>
       {state?.error && <p className="text-sm text-rose-300">{state.error}</p>}
       {state?.success && <p className="text-sm text-emerald-300">Login realizado. Abrindo dashboard...</p>}
-      <SubmitButton />
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? "Entrando..." : "Entrar"}
+      </Button>
     </form>
   );
 }

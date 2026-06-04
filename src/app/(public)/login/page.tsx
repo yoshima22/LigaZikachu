@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { signInWithCredentials } from "./actions";
 
 export default function LoginPage() {
   return (
@@ -15,7 +14,7 @@ export default function LoginPage() {
 
         <div className="my-6 h-px bg-border" />
 
-        <SignInForm action={signInWithCredentials} />
+        <SignInForm />
 
         <div className="mt-6 flex items-center justify-between text-sm text-slate-300">
           <Link href="/recuperar-senha" className="hover:text-white">
