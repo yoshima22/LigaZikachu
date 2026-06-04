@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
-  skipExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
+  skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
 } from "@/lib/mascot";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 
@@ -146,6 +146,18 @@ export async function unequipMascotAction(mascotId: string): Promise<{ error?: s
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
     await unequipMascot(player.id, mascotId);
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function cancelExpeditionAction(expeditionId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado." };
+    await cancelExpedition(player.id, expeditionId);
     revalidate();
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }

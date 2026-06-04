@@ -105,6 +105,15 @@ export async function equipMascot(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
 
+  // Verifica se o mascote atualmente equipado está em expedição
+  const equippedInExpedition = await prisma.mascot.findFirst({
+    where: { playerId, isEquipped: true, id: { not: mascotId } },
+    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
+  });
+  if (equippedInExpedition?.expeditions?.length) {
+    throw new Error("Seu mascote atual está em expedição. Aguarde o retorno ou cancele a expedição antes de trocar.");
+  }
+
   await prisma.$transaction([
     prisma.mascot.updateMany({ where: { playerId }, data: { isEquipped: false } }),
     prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: true } }),
@@ -503,6 +512,25 @@ export async function startExpedition(playerId: string, mascotId: string, durati
   return prisma.mascotExpedition.create({
     data: { mascotId, finishAt, rewardJson: { durationKey } } // guarda duration para calcular recompensa
   });
+}
+
+/** Jogador cancela expedição — sem recompensa, mascote volta imediatamente */
+export async function cancelExpedition(playerId: string, expeditionId: string): Promise<void> {
+  const expedition = await prisma.mascotExpedition.findUnique({
+    where: { id: expeditionId },
+    include: { mascot: { select: { playerId: true, pokemonId: true, nickname: true, id: true } } }
+  });
+  if (!expedition) throw new Error("Expedição não encontrada.");
+  if (expedition.mascot.playerId !== playerId) throw new Error("Sem permissão.");
+  if (expedition.status !== "ACTIVE") throw new Error("Expedição já concluída.");
+
+  await prisma.mascotExpedition.update({
+    where: { id: expeditionId },
+    data: { status: "CLAIMED", rewardJson: { type: "NOTHING", cancelled: true } }
+  });
+
+  const name = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
+  await logEvent(expedition.mascot.id, "🏃", `${name} voltou da expedição antes do fim.`).catch(() => {});
 }
 
 /** Admin: encerra expedição imediatamente (skip timer) */

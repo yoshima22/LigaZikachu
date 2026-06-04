@@ -139,11 +139,11 @@ export default async function MascotesPage() {
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-200">💛 Cuidados diários</p>
-            <p><strong className="text-slate-300">Brincar</strong> aumenta felicidade e EXP. <strong className="text-slate-300">Carinho</strong> pode ser recusado pelo mascote. <strong className="text-slate-300">Comida</strong> sacia fome. <strong className="text-slate-300">Doces</strong> dão bônus de EXP. Há cooldown de 5 minutos entre interações.</p>
+            <p><strong className="text-slate-300">Brincar</strong> aumenta felicidade e EXP (mais intenso, escala com nível). <strong className="text-slate-300">Carinho</strong> fortalece o vínculo gradualmente (pode ser recusado). <strong className="text-slate-300">Comida</strong> sacia fome. <strong className="text-slate-300">Doces</strong> dão grande bônus de EXP. Cooldown de <strong className="text-slate-300">3 minutos</strong> entre interações.</p>
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-200">🗺 Expedições</p>
-            <p>Envie o mascote <strong className="text-slate-300">equipado</strong> em expedições de 1h. Ele pode trazer ovos, comida, doces ou ZikaCoins. Os itens vão para a Caixa de Presentes.</p>
+            <p>Envie o mascote <strong className="text-slate-300">equipado</strong> em expedições de <strong className="text-slate-300">30min, 1h, 3h ou 6h</strong>. Quanto mais longa, mais EXP e loot melhor (6h pode trazer Ovo Especial). Os itens vão para a Caixa de Presentes.</p>
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-200">📊 Status</p>
@@ -166,13 +166,13 @@ export default async function MascotesPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1 rounded-xl border border-slate-700/40 bg-slate-900/40 p-3">
               <p className="font-semibold text-slate-200">🥚 Ovo Comum</p>
-              <p>Pool: Gen 1–2 (Pokémon comuns como Caterpie, Rattata, Geodude). Raridade base.</p>
-              <p className="text-[10px] text-slate-500">Lendário: 0,3% · Gera aleatoriamente entre as 9 gerações se tipo = Aleatório</p>
+              <p>Pool: <strong className="text-slate-300">Todas as 9 gerações</strong> (modo aleatório — Caterpie, Sprigatito, Grookey...). Variedade máxima.</p>
+              <p className="text-[10px] text-slate-500">Lendário: 1% · Um Pokémon aleatório de qualquer geração</p>
             </div>
             <div className="space-y-1 rounded-xl border border-blue-700/30 bg-blue-900/10 p-3">
               <p className="font-semibold text-blue-300">💙 Ovo Raro</p>
-              <p>Pool: Starters e Pokémon populares Gen 1–2. Maior chance de Pokémon cobiçados.</p>
-              <p className="text-[10px] text-slate-500">Lendário: 1% · Inclui Pikachu, Eevee, Dratini...</p>
+              <p>Pool: Starters e Pokémon populares de Gen 1–2 (Pikachu, Eevee, Dratini, Riolu, Growlithe...).</p>
+              <p className="text-[10px] text-slate-500">Lendário: 1% · Foco em Pokémon cobiçados das gens clássicas</p>
             </div>
             <div className="space-y-1 rounded-xl border border-purple-700/30 bg-purple-900/10 p-3">
               <p className="font-semibold text-purple-300">💜 Ovo Especial</p>

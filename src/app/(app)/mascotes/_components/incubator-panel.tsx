@@ -63,7 +63,7 @@ function Countdown({ finishAt }: { finishAt: Date }) {
 }
 
 const GEN_OPTIONS = [
-  { value: "",          label: "🎲 Geração aleatória (Gen 1 e 2)" },
+  { value: "",          label: "🎲 Todas as gerações (aleatório)" },
   { value: "EGG_GEN1", label: "1️⃣ Gen 1 — Kanto · Bulbasaur a Mew" },
   { value: "EGG_GEN2", label: "2️⃣ Gen 2 — Johto · Chikorita a Celebi" },
   { value: "EGG_GEN3", label: "3️⃣ Gen 3 — Hoenn · Treecko a Jirachi" },
