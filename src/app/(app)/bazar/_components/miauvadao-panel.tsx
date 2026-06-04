@@ -392,8 +392,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
               </p>
             </div>
           ) : (
-            {/* Layer 2: cards ficam na frente do gato (z-15 > z-8) */}
-            <div className="grid gap-5 sm:grid-cols-3 pt-1 relative" style={{ zIndex: 15 }}>
+            <div className="grid gap-5 sm:grid-cols-3 pt-1 relative" style={{ zIndex: 15 }}>{/* Layer 2: z-15 > gato z-8 */}
               {offers.map((offer, idx) => (
                 <MiauvadaoCard
                   key={idx}
