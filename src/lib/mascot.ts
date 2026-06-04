@@ -4,7 +4,7 @@
 
 import { prisma } from "@/lib/prisma";
 import {
-  EGG_POOLS, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
+  EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATION_MS, expForLevel, expToNextLevel, EXP_REWARDS,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
