@@ -6,6 +6,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Coins, Swords, TrendingUp } from "lucide-react";
 import { ZikaBetCard } from "./_components/zikabet-card";
+import { SettleBetsButton } from "./_components/settle-bets-button";
 import { BetConfigForm } from "./_components/bet-config-form";
 import { OddsForm } from "./_components/odds-form";
 
@@ -53,6 +54,22 @@ export default async function ZikaBetPage() {
       }
     }
   });
+
+  // Admin: semanas com apostas pendentes para liquidação (via matches)
+  const weeksWithPendingBets = admin ? await prisma.tournamentWeek.findMany({
+    where: {
+      tournament: { status: { in: ["IN_PROGRESS", "REGISTRATION_OPEN"] } },
+      matches: { some: { bets: { some: { status: { in: ["OPEN", "CLOSED"] } } } } }
+    },
+    select: {
+      id: true, label: true, weekNumber: true,
+      matches: {
+        select: { _count: { select: { bets: { where: { status: { in: ["OPEN", "CLOSED"] } } } } } }
+      }
+    },
+    orderBy: { weekNumber: "desc" },
+    take: 10
+  }) : [];
 
   // My bets summary
   const myOpenBets = player
@@ -110,6 +127,18 @@ export default async function ZikaBetPage() {
           </div>
         )}
       </div>
+
+      {/* Admin: liquidar apostas */}
+      {admin && weeksWithPendingBets.length > 0 && (
+        <SettleBetsButton
+          weeks={weeksWithPendingBets.map(w => ({
+            id: w.id,
+            label: w.label,
+            weekNumber: w.weekNumber,
+            pendingBets: w.matches.reduce((sum, m) => sum + m._count.bets, 0),
+          }))}
+        />
+      )}
 
       {/* Admin: config global */}
       {admin && (

@@ -376,3 +376,41 @@ export async function cancelBet(betId: string): Promise<{ error?: string }> {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+// ── Admin: liquidar apostas de uma semana manualmente ─────────────────────────
+
+export async function adminSettleWeekBets(
+  weekId: string
+): Promise<{ settled: number; refunded: number; error?: string }> {
+  try {
+    const admin = await requireAdmin();
+    const week = await prisma.tournamentWeek.findUnique({
+      where: { id: weekId },
+      include: { tournament: true }
+    });
+    if (!week) return { settled: 0, refunded: 0, error: "Semana não encontrada." };
+
+    // Conta apostas pendentes antes de liquidar
+    const pending = await prisma.zikaBet.count({
+      where: {
+        match: { tournamentWeekId: weekId },
+        status: { in: [ZikaBetStatus.OPEN, ZikaBetStatus.CLOSED] }
+      }
+    });
+
+    await settleDayBets(weekId, admin.id);
+
+    // Conta resultado após liquidação
+    const won      = await prisma.zikaBet.count({ where: { match: { tournamentWeekId: weekId }, status: ZikaBetStatus.WON } });
+    const refunded = await prisma.zikaBet.count({ where: { match: { tournamentWeekId: weekId }, status: ZikaBetStatus.REFUNDED } });
+
+    revalidatePath("/zikabet");
+    revalidatePath(`/torneios/${week.tournament.slug}`);
+    revalidatePath("/carteira");
+    revalidatePath("/", "layout");
+
+    return { settled: pending, refunded };
+  } catch (err) {
+    return { settled: 0, refunded: 0, error: err instanceof Error ? err.message : "Erro desconhecido." };
+  }
+}
