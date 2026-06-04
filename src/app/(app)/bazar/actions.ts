@@ -1076,12 +1076,12 @@ const SHELL_WIN_BONUS_PCT = 0.20;
 const SHELL_COOLDOWN_MS = 5 * 60_000;
 
 const MIAUVADAO_RAGE: string[] = [
-  "IMPOSSÍVEL! {player} roubou {amount} ZC do meu cofre! 😾",
-  "{player} me trapaceou e levou {amount} ZC! Tô boladão! 🤬",
-  "Como?! {player} acertou e saiu com {amount} ZC! Não é justo! 😤",
-  "{player} limpou parte do cofre! {amount} ZC voaram! Voltaaaa! 🙀",
-  "Minha sorte acabou... {player} levou {amount} ZC. Me arruinou! 😿",
-  "{player} ganhou {amount} ZC! Meu cofre tá chorando igual eu! 😭",
+  "IMPOSSÍVEL! {player} ganhou {prize} ZC e tirou {bonus} ZC do meu cofre! 😾",
+  "{player} acertou e me custou {bonus} ZC de bônus! Prêmio total: {prize} ZC. 🤬",
+  "Como?! {player} venceu {prize} ZC, mas do meu cofre saíram só {bonus} ZC... ainda dói! 😤",
+  "{player} pegou {prize} ZC no total. Meu cofre perdeu {bonus} ZC! Voltaaaa! 🙀",
+  "Minha sorte acabou... {player} ganhou {prize} ZC e eu banquei {bonus} ZC. 😿",
+  "{player} ganhou {prize} ZC! Meu cofre chora pelos {bonus} ZC de bônus. 😭",
 ];
 
 export async function startShellGameSession(betAmount: number): Promise<{
@@ -1162,7 +1162,10 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
       const vaultBonus = Math.floor(session.betAmount * SHELL_WIN_BONUS_PCT);
       prize = session.betAmount + vaultBonus; // ex: aposta 100 → recebe 120, cofre perde 20
       const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
-      const message = template.replace("{player}", player.displayName).replace("{amount}", prize.toLocaleString("pt-BR"));
+      const message = template
+        .replace("{player}", player.displayName)
+        .replace("{prize}", prize.toLocaleString("pt-BR"))
+        .replace("{bonus}", vaultBonus.toLocaleString("pt-BR"));
       const updatedWallet = await prisma.$transaction(async (tx) => {
         await creditCoins(tx, {
           playerId: player.id,
