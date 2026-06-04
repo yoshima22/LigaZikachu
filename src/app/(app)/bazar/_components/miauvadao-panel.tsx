@@ -154,7 +154,14 @@ function MiauvadaoCard({
           }}>
             {dimmed ? (soldOut ? "ESGOTADO" : "EXPIRADO") : offer.name}
           </p>
-          <p style={{ fontSize: 9, color: GOLD_D, marginTop: 2 }}>
+          {offer.description && !dimmed && (
+            <p style={{ fontSize: 9, color: "#8b6c00", marginTop: 2, lineHeight: 1.3,
+              overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical" as const }}>
+              {offer.description}
+            </p>
+          )}
+          <p style={{ fontSize: 9, color: GOLD_D, marginTop: 3 }}>
             {offer.sold}/{offer.stock} vendidos
           </p>
         </div>

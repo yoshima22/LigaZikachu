@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
 
 const ITEM_TYPES = [
@@ -186,10 +186,28 @@ export default function MiauvadaoAdminPage() {
             </div>
           ))}
         </div>
-        <button type="button" disabled={pending} onClick={handleSaveOffers}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
-          <Save size={14}/> Publicar ofertas do dia
-        </button>
+        <div className="flex gap-3">
+          <button type="button" disabled={pending} onClick={handleSaveOffers}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
+            <Save size={14}/> Publicar ofertas manuais
+          </button>
+          <button type="button" disabled={pending}
+            onClick={() => startTransition(async () => {
+              // Expira as ofertas atuais para forçar regeneração automática do shop
+              const r = await adminSetMiauvadaoOffers(
+                (offers as MiauvadaoOffer[]).map(o => ({ ...o, validUntil: new Date(0).toISOString() } as MiauvadaoOffer))
+              );
+              if (r.error) { toast.error(r.error); return; }
+              // Agora chama o auto-refresh que vai puxar do shop
+              await autoRefreshMiauvadaoIfNeeded();
+              toast.success("Ofertas geradas automaticamente do Shop!");
+              router.refresh();
+            })}
+            title="Gera ofertas automaticamente a partir dos itens do shop"
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-3 text-sm font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-50">
+            🔄 Gerar do Shop
+          </button>
+        </div>
       </div>
     </div>
   );
