@@ -9,20 +9,21 @@ const authConfig = {
   },
   providers: [],
   callbacks: {
-    // Propaga role/status do JWT para session.user no Edge runtime
     session({ session, token }) {
       if (session.user && token) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const u = session.user as any;
-        u.id     = token.sub ?? "";
-        u.role   = (token.role as string)   ?? "PLAYER";
+        u.id = token.sub ?? "";
+        u.role = (token.role as string) ?? "PLAYER";
         u.status = (token.status as string) ?? "PENDING_APPROVAL";
       }
       return session;
     },
 
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request }) {
+      const { nextUrl } = request;
       const isLoggedIn = Boolean(auth?.user);
+      const hasManualSession = Boolean(request.cookies.get("lz_session")?.value);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const u = auth?.user as any;
@@ -38,17 +39,15 @@ const authConfig = {
         isAdminRoute;
 
       if (isAdminRoute) {
-        // Não logado → vai para login
-        if (!isLoggedIn) return false;
-        // Logado sem role admin → vai para dashboard (NÃO faz logout)
-        // Evita desconexões involuntárias quando role não está no JWT ainda
+        if (!isLoggedIn && !hasManualSession) return false;
+        if (hasManualSession && !isLoggedIn) return true;
         if (!role || !adminRoles.has(role)) {
           return Response.redirect(new URL("/dashboard", nextUrl));
         }
         return true;
       }
 
-      if (isProtectedRoute) return isLoggedIn;
+      if (isProtectedRoute) return isLoggedIn || hasManualSession;
 
       return true;
     }
