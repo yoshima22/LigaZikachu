@@ -233,7 +233,7 @@ export async function sendItemToAllPlayers(
               type: "CUSTOM",
               title: item.name,
               description: `${item.name} enviado pelo admin para todos os jogadores.`,
-              payload: giftPayload!
+              payload: giftPayload as import("@prisma/client").Prisma.InputJsonValue
             }
           });
           sent++;
