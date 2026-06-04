@@ -34,13 +34,13 @@ export async function createArenaTeamAction(formData: FormData): Promise<{ error
   }
 }
 
-export async function runBotBattleAction(teamId: string): Promise<{ error?: string }> {
+export async function runBotBattleAction(teamId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();
-    await runBotBattle(playerId, teamId);
+    const result = await runBotBattle(playerId, teamId);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");
-    return {};
+    return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao combater bot." };
   }

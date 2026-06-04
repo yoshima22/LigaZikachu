@@ -436,7 +436,34 @@ export async function runBotBattle(playerId: string, teamId: string) {
     }
   });
 
-  return { won, botName, reward, rounds: combat.rounds };
+  return {
+    won,
+    result: combat.result,
+    botName,
+    reward,
+    rounds: combat.rounds,
+    injuredMascotIds,
+    injuredMascots: team.members
+      .filter(member => injuredMascotIds.includes(member.mascotId))
+      .map(member => member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)),
+    botMascots: defenders.map(m => ({
+      pokemonId: m.pokemonId,
+      name: m.name,
+      level: m.level,
+      type: getPokemonElement(m.pokemonId),
+    })),
+    highlights: combat.log
+      .filter(turn => turn.action === "ATTACK")
+      .sort((a, b) => b.damage - a.damage)
+      .slice(0, 3)
+      .map(turn => ({
+        turn: turn.turn,
+        actorName: turn.actorName,
+        targetName: turn.targetName,
+        damage: turn.damage,
+        advantageApplied: turn.advantageApplied,
+      })),
+  };
 }
 
 export async function runPvpBattle(playerId: string, attackTeamId: string, defenseTeamId: string) {

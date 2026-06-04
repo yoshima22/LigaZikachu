@@ -47,6 +47,31 @@ function getLootNumber(loot: unknown, key: "coins" | "exp") {
   return typeof value === "number" ? value : 0;
 }
 
+function readBattleLoot(loot: unknown) {
+  if (!loot || typeof loot !== "object") return null;
+  const data = loot as Record<string, unknown>;
+  if (typeof data.coins === "number" || typeof data.exp === "number") {
+    return {
+      label: "Loot",
+      coins: typeof data.coins === "number" ? data.coins : 0,
+      exp: typeof data.exp === "number" ? data.exp : 0,
+      food: typeof data.food === "number" ? data.food : 0,
+      sweet: typeof data.sweet === "number" ? data.sweet : 0,
+    };
+  }
+  if (data.stolen && typeof data.stolen === "object") {
+    const stolen = data.stolen as Record<string, unknown>;
+    return {
+      label: "Roubado",
+      coins: typeof stolen.coins === "number" ? stolen.coins : 0,
+      exp: typeof stolen.exp === "number" ? stolen.exp : 0,
+      food: typeof stolen.food === "number" ? stolen.food : 0,
+      sweet: typeof stolen.sweet === "number" ? stolen.sweet : 0,
+    };
+  }
+  return null;
+}
+
 export default async function ArenaZPage() {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
@@ -410,11 +435,25 @@ export default async function ArenaZPage() {
                 <p className="text-sm text-slate-500">Nenhum combate registrado.</p>
               ) : battles.map(battle => {
                 const log = Array.isArray(battle.turnLog) ? battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; advantageApplied?: boolean; action: string }> : [];
+                const loot = readBattleLoot(battle.lootResult);
+                const injuredCount = Array.isArray(battle.injuredMascotIds) ? battle.injuredMascotIds.length : 0;
                 return (
                   <details key={battle.id} className="rounded-xl border border-border bg-slate-900/40 p-3">
                     <summary className="cursor-pointer text-sm font-semibold text-slate-200">
                       {battle.createdAt.toLocaleString("pt-BR")} | {battle.botName ?? "PvP"} | {battle.result}
                     </summary>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                      {loot && (
+                        <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[#FFCB05]">
+                          {loot.label}: {loot.coins} ZC / {loot.exp} EXP{loot.food > 0 ? ` / ${loot.food} comida` : ""}{loot.sweet > 0 ? ` / ${loot.sweet} doce` : ""}
+                        </span>
+                      )}
+                      {injuredCount > 0 && (
+                        <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200">
+                          {injuredCount} ferido(s)
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-3 space-y-1 text-xs text-slate-400">
                       {log.slice(0, 12).map(turn => (
                         <p key={turn.turn}>
