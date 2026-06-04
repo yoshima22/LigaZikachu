@@ -13,6 +13,12 @@ import {
 
 // ── Tipos explícitos para evitar inferência unknown do Prisma ─────────────────
 
+interface ProposalOfferedItem {
+  type: string;
+  quantity: number;
+  displayName: string;
+}
+
 interface ProposalItem {
   id: string;
   coinsOffer: number;
@@ -20,6 +26,7 @@ interface ProposalItem {
   status: string;
   createdAt: Date;
   proposer: { id: string; displayName: string; avatarUrl: string | null };
+  itemsOffer?: ProposalOfferedItem[] | null;
 }
 
 interface ListingDetail {
@@ -93,6 +100,9 @@ export default function BazarListingPage(): React.JSX.Element {
           status: String(p.status),
           createdAt: p.createdAt,
           proposer: p.proposer,
+          itemsOffer: Array.isArray(p.itemsOffer)
+            ? (p.itemsOffer as ProposalOfferedItem[])
+            : null,
         })),
         _count: { favorites: raw._count.favorites },
       });
@@ -360,9 +370,9 @@ export default function BazarListingPage(): React.JSX.Element {
                       <Coins size={12}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC
                     </p>
                   )}
-                  {(p as ProposalItem & { itemsOffer?: unknown }).itemsOffer && Array.isArray((p as ProposalItem & { itemsOffer?: unknown }).itemsOffer) && ((p as ProposalItem & { itemsOffer?: Array<{displayName: string; quantity: number}> }).itemsOffer!).length > 0 && (
+                  {p.itemsOffer && p.itemsOffer.length > 0 && (
                     <p className="text-xs text-slate-400">
-                      + {((p as ProposalItem & { itemsOffer?: Array<{displayName: string; quantity: number}> }).itemsOffer!).map(i => `${i.quantity}x ${i.displayName}`).join(", ")}
+                      + {p.itemsOffer.map(i => `${i.quantity}x ${i.displayName}`).join(", ")}
                     </p>
                   )}
                   {p.message && (
