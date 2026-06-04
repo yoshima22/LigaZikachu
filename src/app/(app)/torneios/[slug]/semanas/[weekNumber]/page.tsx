@@ -16,6 +16,7 @@ import { DeckSubmissionForm } from "./_components/deck-submission-form";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { applyTournamentWeekBonus, setTournamentWeekTeam, updateTournamentWeekSettings } from "../../../actions";
 import { NarrativePanel } from "./_components/narrative-panel";
+import { BulkConfirmButton } from "./_components/bulk-confirm-button";
 
 export const dynamic = "force-dynamic";
 
@@ -739,12 +740,21 @@ export default async function WeekDetailPage({
               Previa calculada somente com partidas validadas desta semana/dia.
             </p>
           </div>
-          <Link
-            href={`/torneios/${slug}/semanas/${weekNum}/partidas`}
-            className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/5"
-          >
-            Validar resultados
-          </Link>
+          <div className="flex items-center gap-2">
+            {admin && (
+              <BulkConfirmButton
+                tournamentId={tournament.id}
+                weekNumber={weekNum}
+                slug={slug}
+              />
+            )}
+            <Link
+              href={`/torneios/${slug}/semanas/${weekNum}/partidas`}
+              className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/5"
+            >
+              Ver partidas
+            </Link>
+          </div>
         </div>
 
         {topDoDiaRanking.length === 0 ? (

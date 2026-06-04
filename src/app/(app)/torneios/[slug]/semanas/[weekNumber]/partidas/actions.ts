@@ -790,3 +790,107 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
 
   return { success: true };
 }
+
+// ── Admin: confirmar todos os resultados reportados da semana ─────────────────
+
+export async function confirmAllWeekResults(
+  tournamentId: string,
+  weekNumber: number
+): Promise<{ confirmed: number; skipped: number; error?: string }> {
+  try {
+    const admin = await requireAdmin();
+
+    const week = await prisma.tournamentWeek.findUnique({
+      where: { tournamentId_weekNumber: { tournamentId, weekNumber } },
+      include: { tournament: true }
+    });
+    if (!week) return { confirmed: 0, skipped: 0, error: "Semana não encontrada." };
+
+    // Busca partidas com resultado reportado mas ainda pendentes de confirmação
+    const pending = await prisma.match.findMany({
+      where: {
+        tournamentWeekId: week.id,
+        status: "PENDING_CONFIRMATION",
+        winnerPlayerId: { not: null },
+        playerBId:      { not: null },
+      },
+      include: { tournamentWeek: { include: { tournament: true } } }
+    });
+
+    let confirmed = 0;
+    let skipped   = 0;
+
+    for (const match of pending) {
+      try {
+        if (!match.winnerPlayerId || !match.playerBId) { skipped++; continue; }
+
+        const multiplier = match.tournamentWeek ? Number(match.tournamentWeek.multiplier) : 1;
+        const winPoints  = 3 * multiplier;
+        const loserId    = match.winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId;
+
+        await prisma.$transaction(async (tx) => {
+          await tx.match.update({
+            where: { id: match.id },
+            data: {
+              status:          "CONFIRMED",
+              confirmedById:   admin.id,
+              confirmedAt:     new Date(),
+              rankingPointsA:  match.winnerPlayerId === match.playerAId ? winPoints : 0,
+              rankingPointsB:  match.winnerPlayerId === match.playerBId ? winPoints : 0,
+              resultSource:    "ADMIN_ADJUSTMENT",
+            }
+          });
+
+          // ZikaCoins: vencedor +50, perdedor +35
+          await creditCoins(tx, {
+            playerId:    match.winnerPlayerId!,
+            type:        ZikaCoinTxType.MATCH_WIN_REWARD,
+            amount:      MATCH_WIN_COINS,
+            matchId:     match.id,
+            description: `Vitória validada — +${MATCH_WIN_COINS} ZC`
+          });
+          await creditCoins(tx, {
+            playerId:    loserId,
+            type:        ZikaCoinTxType.MATCH_LOSS_REWARD,
+            amount:      MATCH_LOSS_COINS,
+            matchId:     match.id,
+            description: `Participação validada — +${MATCH_LOSS_COINS} ZC`
+          });
+
+          await tx.auditLog.create({
+            data: {
+              actorUserId: admin.id,
+              entityType:  "match",
+              entityId:    match.id,
+              action:      "match.admin_bulk_confirmed",
+              after:       { winnerPlayerId: match.winnerPlayerId, weekNumber },
+            }
+          });
+        });
+
+        // Efeito no mascote (fire-and-forget)
+        after(async () => {
+          const [winner, loser] = await Promise.all([
+            prisma.player.findUnique({ where: { id: match.winnerPlayerId! }, select: { id: true } }),
+            prisma.player.findUnique({ where: { id: loserId },               select: { id: true } }),
+          ]);
+          if (winner) { const { applyMatchResultToMascot } = await import("@/lib/mascot"); await applyMatchResultToMascot(winner.id, true).catch(() => {}); }
+          if (loser)  { const { applyMatchResultToMascot } = await import("@/lib/mascot"); await applyMatchResultToMascot(loser.id, false).catch(() => {}); }
+        });
+
+        confirmed++;
+      } catch { skipped++; }
+    }
+
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
+    revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
+    revalidatePath("/ranking");
+    revalidatePath("/dashboard");
+    revalidatePath("/", "layout");
+
+    return { confirmed, skipped };
+  } catch (err) {
+    return { confirmed: 0, skipped: 0, error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
