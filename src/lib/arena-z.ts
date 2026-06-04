@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getPokemonElement, getPokemonName, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
-import type { ArenaBattleResult, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { ArenaBattleResult } from "@prisma/client";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -507,7 +508,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         vaultFood: { increment: reward.food },
         vaultSweet: { increment: reward.sweet },
         lastBattleAt: new Date(),
-        pendingBotJson: import("@prisma/client").Prisma.JsonNull,
+        pendingBotJson: Prisma.JsonNull,
         pendingBotDifficulty: null,
       },
     });
