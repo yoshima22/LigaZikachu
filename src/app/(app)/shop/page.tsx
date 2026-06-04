@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
+import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -108,65 +109,43 @@ export default async function ShopPage() {
           <p className="text-sm text-slate-500">Nenhum item disponível na loja ainda.</p>
         </div>
       ) : (
-        <>
-          {titles.length > 0 && (
-            <ShopGrid
-              title="Títulos de Perfil"
-              items={titles.map((i) => ({
-                ...i,
-                imageUrl: i.imageUrl ?? null,
-                description: i.description ?? null,
-                theme: i.theme ?? "NEUTRAL",
-                flavorText: i.flavorText ?? null,
-                entranceEffect: i.entranceEffect ?? "NONE",
-              }))}
-              ownedIds={ownedIds}
-              inventoryCounts={inventoryCountRecord}
-              balance={wallet?.balance ?? 0}
-              playerId={player?.id ?? null}
-            />
-          )}
-          {banners.length > 0 && (
-            <ShopGrid
-              title="Banners de Perfil"
-              items={banners.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-              ownedIds={ownedIds}
-              inventoryCounts={inventoryCountRecord}
-              balance={wallet?.balance ?? 0}
-              playerId={player?.id ?? null}
-            />
-          )}
-          {frames.length > 0 && (
-            <ShopGrid
-              title="Molduras de Avatar"
-              items={frames.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-              ownedIds={ownedIds}
-              inventoryCounts={inventoryCountRecord}
-              balance={wallet?.balance ?? 0}
-              playerId={player?.id ?? null}
-            />
-          )}
-          {tickets.length > 0 && (
-            <ShopGrid
-              title="Tickets ZikaLoot"
-              items={tickets.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-              ownedIds={new Set()} // tickets não são únicos — sempre pode comprar mais
-              inventoryCounts={inventoryCountRecord}
-              balance={wallet?.balance ?? 0}
-              playerId={player?.id ?? null}
-            />
-          )}
-          {mascotItems.length > 0 && (
-            <ShopGrid
-              title="Mascotes: Ovos e Itens"
-              items={mascotItems.map((i) => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-              ownedIds={new Set()}
-              inventoryCounts={inventoryCountRecord}
-              balance={wallet?.balance ?? 0}
-              playerId={player?.id ?? null}
-            />
-          )}
-        </>
+        <ShopTabs tabs={[
+          { id: "cosmeticos", label: "Cosméticos",     icon: TAB_ICONS.titles,  count: titles.length + banners.length + frames.length },
+          { id: "mascotes",   label: "Mascotes & Ovos", icon: TAB_ICONS.mascots, count: mascotItems.length },
+          { id: "tickets",    label: "Tickets",         icon: TAB_ICONS.tickets, count: tickets.length },
+        ]}>
+          {(activeTab) => (<>
+            {activeTab === "cosmeticos" && (<div className="space-y-8">
+              {titles.length > 0 && (
+                <ShopGrid title="Títulos de Perfil"
+                  items={titles.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null, theme: i.theme ?? "NEUTRAL", flavorText: i.flavorText ?? null, entranceEffect: i.entranceEffect ?? "NONE" }))}
+                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+              )}
+              {banners.length > 0 && (
+                <ShopGrid title="Banners de Perfil"
+                  items={banners.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+              )}
+              {frames.length > 0 && (
+                <ShopGrid title="Molduras de Avatar"
+                  items={frames.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+              )}
+            </div>)}
+
+            {activeTab === "mascotes" && mascotItems.length > 0 && (
+              <ShopGrid title="Ovos, Comida e Buffs de Mascote"
+                items={mascotItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+            )}
+
+            {activeTab === "tickets" && tickets.length > 0 && (
+              <ShopGrid title="Tickets ZikaLoot"
+                items={tickets.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+            )}
+          </>)}
+        </ShopTabs>
       )}
     </div>
   );

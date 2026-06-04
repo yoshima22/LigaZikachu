@@ -62,17 +62,30 @@ function Countdown({ finishAt }: { finishAt: Date }) {
   return <span>{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>;
 }
 
+const GEN_OPTIONS = [
+  { value: "",            label: "🎲 Geração aleatória (padrão)" },
+  { value: "EGG_GEN1",   label: "1️⃣ Gen 1 — Kanto (Bulbasaur a Mew)" },
+  { value: "EGG_GEN2",   label: "2️⃣ Gen 2 — Johto (Chikorita a Celebi)" },
+  { value: "EGG_GEN3",   label: "3️⃣ Gen 3 — Hoenn (Treecko a Deoxys)" },
+  { value: "EGG_GEN4",   label: "4️⃣ Gen 4 — Sinnoh (Turtwig a Arceus)" },
+  { value: "EGG_GEN5",   label: "5️⃣ Gen 5 — Unova (Snivy a Genesect)" },
+  { value: "EGG_GEN6PLUS", label: "6️⃣+ Kalos / Alola / Galar / Paldea" },
+];
+
 export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {} }: Props) {
   // Resolve a imagem: usa a do shop se disponível, senão usa o arquivo local estático
   const resolveEggImg = (type: string) =>
     eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
   const [pending, startTransition] = useTransition();
   const [hatchResult, setHatchResult] = useState<{ pokemonId: number; name: string } | null>(null);
+  const [selectedGen, setSelectedGen] = useState<string>("");
+  const [pendingEgg, setPendingEgg]   = useState<string | null>(null);
   const isReady = incubator ? new Date() >= new Date(incubator.finishAt) : false;
 
   const handlePutEgg = (eggId: string) => {
     startTransition(async () => {
-      const r = await putEggInIncubator(eggId);
+      // Passa a geração selecionada para a action
+      const r = await putEggInIncubator(eggId, selectedGen || undefined);
       if (r.error) toast.error(r.error);
       else toast.success("Ovo colocado na incubadora!");
     });
@@ -168,11 +181,23 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
 
       {/* Inventário de ovos */}
       {eggs.length > 0 && (
-        <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-200">
+        <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
+          <h2 className="flex items-center gap-2 font-semibold text-slate-200">
             🗂️ Meus Ovos
             <span className="ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{eggs.length}</span>
           </h2>
+
+          {/* Seletor de geração — aplicado ao próximo ovo a incubar */}
+          {!incubator && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-slate-500">Escolha a geração antes de incubar:</p>
+              <select value={selectedGen} onChange={e => setSelectedGen(e.target.value)}
+                className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+                {GEN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {eggs.map(egg => (
               <div key={egg.id} className={`flex items-center gap-3 rounded-xl border-2 p-3 ${EGG_COLORS[egg.type]}`}>

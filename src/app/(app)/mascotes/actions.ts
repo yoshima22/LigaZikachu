@@ -12,12 +12,24 @@ import type { InteractionType } from "@/lib/mascot";
 
 function revalidate() { revalidatePath("/mascotes"); }
 
-export async function putEggInIncubator(eggId: string): Promise<{ error?: string }> {
+export async function putEggInIncubator(eggId: string, genOverride?: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
+
+    // Se jogador escolheu uma geração específica, atualiza o tipo do ovo antes de incubar
+    if (genOverride) {
+      const validGens = ["EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6PLUS"];
+      if (validGens.includes(genOverride)) {
+        await prisma.mascotEgg.update({
+          where: { id: eggId },
+          data: { type: genOverride as import("@prisma/client").EggType }
+        });
+      }
+    }
+
     await startIncubation(player.id, eggId);
     revalidate();
     return {};

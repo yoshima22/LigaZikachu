@@ -33,6 +33,7 @@ const mainLinks = [
 
 const rankingLinks = [
   { href: "/ranking", label: "Ranking Geral", icon: BarChart3, adminOnly: false },
+  { href: "/mascotes/ranking", label: "Ranking Mascotes", icon: Trophy, adminOnly: false },
   { href: "/top-do-dia", label: "Top do Dia", icon: Crown, adminOnly: false },
   { href: "/temporadas", label: "Temporadas", icon: Calendar, adminOnly: false }
 ];
