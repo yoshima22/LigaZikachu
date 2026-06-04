@@ -46,6 +46,7 @@ interface MascotData {
   battleWins: number;
   battleLosses: number;
   arenaState: string;
+  bazarListed: boolean;
   injuredAt: Date | null;
   restingUntil: Date | null;
   hatchedAt: Date;
@@ -332,6 +333,32 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
       {mascot.isEquipped && (
         <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider">
           ★ Mascote equipado
+        </div>
+      )}
+
+      {/* Status badges — shows if mascot is busy in another system */}
+      {(mascot.bazarListed || mascot.arenaState !== "FREE") && (
+        <div className="flex flex-wrap gap-1.5 border-b border-border/40 px-4 py-2 bg-slate-900/30">
+          {mascot.bazarListed && (
+            <span className="flex items-center gap-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[9px] font-semibold text-[#FFCB05]">
+              🛒 No Bazar
+            </span>
+          )}
+          {mascot.arenaState === "ARENA" && (
+            <span className="flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[9px] font-semibold text-red-300">
+              ⚔️ Na Arena Z
+            </span>
+          )}
+          {mascot.arenaState === "INJURED" && (
+            <span className="flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[9px] font-semibold text-orange-300">
+              🤕 Ferido
+            </span>
+          )}
+          {mascot.arenaState === "RESTING" && (
+            <span className="flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[9px] font-semibold text-blue-300">
+              💤 Em Repouso
+            </span>
+          )}
         </div>
       )}
 

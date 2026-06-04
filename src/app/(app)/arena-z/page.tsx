@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Swords, Bot, Lock, Coins, HeartPulse, History } from "lucide-react";
+import { ShieldCheck, Swords, Bot, Coins, HeartPulse, History, ChevronDown } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -8,6 +8,7 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog } from "@/lib/arena-z";
 import { createArenaTeamAction } from "./actions";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, LockBotButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { ArenaTutorial } from "./_components/arena-tutorial";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +143,7 @@ export default async function ArenaZPage() {
 
   return (
     <div className="space-y-6">
+      <ArenaTutorial />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -169,10 +171,44 @@ export default async function ArenaZPage() {
           <p className="mt-1 text-xs text-slate-400">Disponivel neste MVP. Bots sao gerados por faixa de nivel e resolvidos no backend.</p>
         </div>
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-          <p className="flex items-center gap-2 text-sm font-bold text-red-200"><Lock size={16} /> Arena PvP</p>
-          <p className="mt-1 text-xs text-slate-400">{admin ? "Disponivel apenas para admin testar por enquanto." : "Em breve: desafios assincronos contra equipes de outros jogadores."}</p>
+          <p className="flex items-center gap-2 text-sm font-bold text-red-200"><Swords size={16} /> Arena PvP</p>
+          <p className="mt-1 text-xs text-slate-400">Desafie equipes de outros jogadores. Vencer rouba 30% do cofre adversário. Cooldown de 10 min entre ataques.</p>
         </div>
       </div>
+
+      {/* ── FAQ Arena Z ── */}
+      <details className="rounded-2xl border border-border overflow-hidden group">
+        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-300 hover:text-white select-none">
+          <span className="flex items-center gap-2">📖 Como funciona a Arena Z?</span>
+          <ChevronDown size={14} className="text-slate-500 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border px-5 py-4 grid gap-4 sm:grid-cols-2 text-xs text-slate-400 leading-relaxed">
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">⚙️ Criar Equipe</p>
+            <p>Selecione de 1 a 6 mascotes <strong className="text-slate-300">livres</strong> (não feridos, em repouso, expedição ou Bazar). A equipe entra na Arena automaticamente. Mascotes na Arena não podem sair para expedição.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">🤖 Arena Bots (PvE)</p>
+            <p>Escolha a dificuldade (<strong className="text-slate-300">Fácil/Normal/Difícil</strong>) e o tempo da batalha. Bots são gerados automaticamente por faixa de nível. Vencer adiciona loot ao cofre da equipe. Cooldown: 3 min entre batalhas.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">⚔️ Arena PvP</p>
+            <p>Ataque equipes ativas de outros jogadores. Vencer rouba <strong className="text-slate-300">30% do cofre</strong> adversário. Perder: mascotes ficam feridos e 40% do cofre é perdido. Cooldown: 10 min entre ataques, 30 min contra o mesmo time.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">💰 Cofre da Arena</p>
+            <p>Cada vitória acumula ZC, EXP, comida e itens no cofre da equipe. Use <strong className="text-slate-300">Retirar e coletar</strong> para receber tudo. Se derrotado, perde parte do cofre.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">🤕 Ferimentos e SUS</p>
+            <p>Mascotes derrotados ficam <strong className="text-red-400">Feridos</strong>. Pague {ARENA_Z_CONFIG.susCost} ZC no <strong className="text-slate-300">Atendimento SUS</strong> para curar. Após cura, repouso mínimo de {ARENA_Z_CONFIG.restAfterSusHours}h antes de voltar à Arena.</p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-slate-200">😈 Ataques Oportunistas</p>
+            <p>Se um rival seu estiver ferido, pode atacá-lo para roubar EXP e aumentar o repouso. Limitado a 1 ataque por período de ferimento. Aparece na seção &ldquo;Rivais Feridos&rdquo; quando disponível.</p>
+          </div>
+        </div>
+      </details>
 
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <section className="rounded-2xl border border-border bg-slate-950/60 p-5">

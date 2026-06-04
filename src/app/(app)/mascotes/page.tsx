@@ -48,7 +48,7 @@ export default async function MascotesPage() {
           take: 8
         }
       },
-      orderBy: [{ isEquipped: "desc" }, { level: "desc" }]
+      orderBy: [{ isEquipped: "desc" }, { level: "desc" }, { id: "asc" }]
     }),
     prisma.mascotEgg.findMany({
       where: { playerId: player.id, incubation: null },
@@ -82,6 +82,7 @@ export default async function MascotesPage() {
     statInstinct: m.statInstinct, statVitality: m.statVitality,
     battleWins: m.battleWins, battleLosses: m.battleLosses,
     arenaState: m.arenaState,
+    bazarListed: m.bazarListed,
     injuredAt: m.injuredAt,
     restingUntil: m.restingUntil,
     hatchedAt: m.hatchedAt,
