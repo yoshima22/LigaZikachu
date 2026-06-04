@@ -69,7 +69,7 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
       update: {},
     });
 
-    const offers = (config.dailyOffers as MiauvadaoOffer[]) ?? [];
+    const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const firstOffer = offers[0];
     const expired = !firstOffer || new Date() > new Date(firstOffer.validUntil);
 
@@ -616,7 +616,7 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
     if (!player) return { error: "Perfil não encontrado." };
 
     const config = await getMiauvadaoConfig();
-    const offers = config.dailyOffers as MiauvadaoOffer[];
+    const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
     const offer = offers[offerIndex];
 
     if (!offer) return { error: "Oferta não encontrada." };

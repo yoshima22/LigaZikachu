@@ -47,7 +47,7 @@ export default function MiauvadaoAdminPage() {
     getMiauvadaoConfig().then(c => {
       setFee(String(c.listingFee));
       setVaultBalance(c.vaultBalance);
-      const existing = (c.dailyOffers as MiauvadaoOffer[]) ?? [];
+      const existing = (c.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
       if (existing.length > 0) {
         setOffers([
           existing[0] ?? emptyOffer(),
