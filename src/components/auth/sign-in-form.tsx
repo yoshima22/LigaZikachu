@@ -32,7 +32,9 @@ export function SignInForm({
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok || !payload.success) {
-        setState({ error: typeof payload.error === "string" ? payload.error : "Nao foi possivel autenticar." });
+        const baseError = typeof payload.error === "string" ? payload.error : "Nao foi possivel autenticar.";
+        const code = typeof payload.code === "string" ? ` (${payload.code})` : ` (HTTP ${response.status})`;
+        setState({ error: `${baseError}${code}` });
         return;
       }
 
