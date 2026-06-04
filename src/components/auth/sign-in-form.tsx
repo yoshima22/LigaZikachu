@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 
-type FormState = { error?: string };
+type FormState = { error?: string; success?: boolean };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -23,6 +23,12 @@ export function SignInForm({
   defaultState?: FormState;
 }) {
   const [state, formAction] = useActionState(action, defaultState);
+
+  useEffect(() => {
+    if (state?.success) {
+      window.location.assign("/dashboard");
+    }
+  }, [state?.success]);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -56,6 +62,7 @@ export function SignInForm({
         />
       </div>
       {state?.error && <p className="text-sm text-rose-300">{state.error}</p>}
+      {state?.success && <p className="text-sm text-emerald-300">Login realizado. Abrindo dashboard...</p>}
       <SubmitButton />
     </form>
   );

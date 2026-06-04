@@ -1,11 +1,11 @@
 "use server";
 
 import { AuthError } from "next-auth";
-import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
 
 type FormState = {
   error?: string;
+  success?: boolean;
 };
 
 export async function signInWithCredentials(
@@ -49,5 +49,5 @@ export async function signInWithCredentials(
     return { error: "Erro interno. Tente novamente em alguns instantes." };
   }
 
-  redirect("/dashboard");
+  return { success: true };
 }
