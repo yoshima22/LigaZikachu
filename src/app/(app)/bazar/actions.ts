@@ -77,7 +77,7 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
       const newOffers = rollMiauvadaoOffers(config.vaultBalance);
       await prisma.miauvadaoConfig.update({
         where: { id: "singleton" },
-        data: { dailyOffers: newOffers, offersRefreshedAt: new Date() },
+        data: { dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue, offersRefreshedAt: new Date() },
       });
     }
   } catch {
@@ -640,7 +640,7 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
       updatedOffers[offerIndex] = { ...offer, sold: offer.sold + 1 };
       await tx.miauvadaoConfig.update({
         where: { id: "singleton" },
-        data: { dailyOffers: updatedOffers },
+        data: { dailyOffers: updatedOffers as unknown as import("@prisma/client").Prisma.InputJsonValue },
       });
 
       // Entregar item (mesmo esquema da shop)
@@ -703,7 +703,7 @@ export async function adminSetMiauvadaoOffers(offers: MiauvadaoOffer[]): Promise
     const offersWithExpiry = offers.map(o => ({ ...o, validUntil, sold: 0 }));
     await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
-      data: { dailyOffers: offersWithExpiry, offersRefreshedAt: new Date() },
+      data: { dailyOffers: offersWithExpiry as unknown as import("@prisma/client").Prisma.InputJsonValue, offersRefreshedAt: new Date() },
     });
     revalidatePath("/bazar");
     return {};
