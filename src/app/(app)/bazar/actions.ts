@@ -767,9 +767,9 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
       prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: REFRESH_COST } } }),
     ]);
 
-    // Roll new offers with extra +5% discount (premium refresh)
+    // Roll new offers with extra +10 flat discount points (premium refresh)
     const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-    const newOffers = await rollMiauvadaoOffers(config?.vaultBalance ?? 0, 5);
+    const newOffers = await rollMiauvadaoOffers(config?.vaultBalance ?? 0, 10);
 
     const msg = `O ${player.displayName} investiu ${REFRESH_COST} ZC e atualizou as ofertas! 🛍️`;
     await prisma.miauvadaoConfig.update({
@@ -885,7 +885,8 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
 
 const SHELL_MIN_BET = 50;
 const SHELL_MAX_BET = 2000;
-const SHELL_VAULT_PCT = 0.20;
+// Prêmio = aposta + 20% da aposta; o bonus (20%) é debitado do cofre
+const SHELL_WIN_BONUS_PCT = 0.20;
 const SHELL_COOLDOWN_MS = 5 * 60_000;
 
 const MIAUVADAO_RAGE: string[] = [
@@ -959,9 +960,9 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
     let newBalance = 0;
 
     if (won) {
-      const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-      const vaultBonus = Math.floor((config?.vaultBalance ?? 0) * SHELL_VAULT_PCT);
-      prize = session.betAmount + vaultBonus;
+      // Prêmio correto: aposta + 20% da aposta. O bonus (20%) é o que sai do cofre.
+      const vaultBonus = Math.floor(session.betAmount * SHELL_WIN_BONUS_PCT);
+      prize = session.betAmount + vaultBonus; // ex: aposta 100 → recebe 120, cofre perde 20
       const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
       const message = template.replace("{player}", player.displayName).replace("{amount}", prize.toLocaleString("pt-BR"));
       const [updatedWallet] = await prisma.$transaction([

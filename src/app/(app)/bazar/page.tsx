@@ -125,17 +125,17 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>📊 Como os descontos são calculados</p>
-            <p>Desconto base = faixa da raridade do item (COMMON: 15–35%, EPIC: 8–20%, LEGENDARY: 5–15%). Bônus do cofre: +1% por cada 500 ZC no cofre (máx +20%). Refresh por jogador: +5% extra em todos os itens.</p>
+            <p>Desconto base = faixa da raridade (COMMON: 15–35%, EPIC: 8–20%, LEGENDARY: 5–15%). Bônus do cofre: <strong style={{ color: "#FFCB05" }}>+1 ponto percentual</strong> por cada 500 ZC no cofre (máx +20 p.p.). Refresh pago: <strong style={{ color: "#FFCB05" }}>+10 pontos percentuais extras</strong> em todos os itens novos.</p>
           </div>
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Atualizar Ofertas (80 ZC)</p>
-            <p>Qualquer jogador pode pagar 80 ZC para atualizar as 3 ofertas do dia imediatamente. Os 80 ZC vão ao cofre, gerando descontos ainda melhores. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
+            <p>Qualquer jogador pode pagar 80 ZC para atualizar os 3 itens do dia imediatamente. Os 80 ZC vão ao cofre e os novos itens ganham <strong style={{ color: "#FFCB05" }}>+10 pontos de desconto extras</strong> além do normal. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
           </div>
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
-            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e ganhe sua aposta + <strong style={{ color: "#FFCB05" }}>20% do cofre</strong>. Perca e a aposta vai ao cofre. Cooldown de 5 min entre partidas.</p>
+            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 20% da aposta</strong> (ex: 100 ZC apostados → recebe 120 ZC). O bônus de 20% sai do cofre. Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
           </div>
 
           <div className="space-y-1">
