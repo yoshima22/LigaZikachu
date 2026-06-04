@@ -17,7 +17,7 @@ export default async function PlayersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const [session, { q = "", status: statusFilter = "" }] = await Promise.all([
-    auth(),
+    getAppSession(),
     searchParams
   ]);
 
