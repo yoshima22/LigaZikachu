@@ -266,7 +266,7 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
   const diff = DIFFICULTY_CONFIG[difficulty];
   // Último combate da equipe (para mostrar cooldown)
   const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackerTeamId: teamId },
+    where: { attackTeamId: teamId },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
@@ -427,7 +427,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
 
   // Cooldown: impede spam de bot battles
   const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackerTeamId: teamId },
+    where: { attackTeamId: teamId },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
