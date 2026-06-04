@@ -68,6 +68,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const [proposalCoins, setProposalCoins] = useState("");
   const [proposalMsg, setProposalMsg] = useState("");
   const [favorited, setFavorited] = useState(false);
+  const [offeredItems, setOfferedItems] = useState<Array<{type: string; quantity: number; displayName: string}>>([]);
 
   const reloadListing = useCallback(() => {
     getListing(id).then(raw => {
@@ -119,11 +120,12 @@ export default function BazarListingPage(): React.JSX.Element {
   const handlePropose = () => {
     const coins = parseInt(proposalCoins) || 0;
     startTransition(async () => {
-      const r = await createProposal(id, coins, proposalMsg || undefined);
+      const r = await createProposal(id, coins, proposalMsg || undefined, offeredItems.length > 0 ? offeredItems : undefined);
       if (r.error) { toast.error(r.error); return; }
       toast.success("Proposta enviada!");
       setProposalCoins("");
       setProposalMsg("");
+      setOfferedItems([]);
       reloadListing();
     });
   };
@@ -313,6 +315,8 @@ export default function BazarListingPage(): React.JSX.Element {
                     rows={2}
                     className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 resize-none outline-none focus:border-blue-500/60 placeholder:text-slate-600"
                   />
+                  {/* Items to offer */}
+                  <OfferItemsPicker onItemsChange={setOfferedItems} />
                   <button
                     type="button"
                     disabled={pending}
@@ -356,6 +360,11 @@ export default function BazarListingPage(): React.JSX.Element {
                       <Coins size={12}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC
                     </p>
                   )}
+                  {(p as ProposalItem & { itemsOffer?: unknown }).itemsOffer && Array.isArray((p as ProposalItem & { itemsOffer?: unknown }).itemsOffer) && ((p as ProposalItem & { itemsOffer?: Array<{displayName: string; quantity: number}> }).itemsOffer!).length > 0 && (
+                    <p className="text-xs text-slate-400">
+                      + {((p as ProposalItem & { itemsOffer?: Array<{displayName: string; quantity: number}> }).itemsOffer!).map(i => `${i.quantity}x ${i.displayName}`).join(", ")}
+                    </p>
+                  )}
                   {p.message && (
                     <p className="text-xs text-slate-400 italic">&quot;{p.message}&quot;</p>
                   )}
@@ -394,6 +403,116 @@ export default function BazarListingPage(): React.JSX.Element {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── OfferItemsPicker ──────────────────────────────────────────────────────────
+
+function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: Array<{type: string; quantity: number; displayName: string}>) => void }) {
+  const [inventory, setInventory] = useState<{eggs: Array<{type: string; count: number}>; foods: Array<{type: string; quantity: number}>} | null>(null);
+  const [selected, setSelected] = useState<Array<{type: string; quantity: number; displayName: string}>>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const loadInventory = async () => {
+    if (loaded) return;
+    setLoaded(true);
+    const res = await fetch("/api/bazar/inventory");
+    if (res.ok) {
+      const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}> };
+      const eggGroups: Record<string, number> = {};
+      for (const egg of (data.eggs ?? [])) {
+        eggGroups[egg.type] = (eggGroups[egg.type] ?? 0) + 1;
+      }
+      setInventory({
+        eggs: Object.entries(eggGroups).map(([type, count]) => ({ type, count })),
+        foods: data.foods ?? [],
+      });
+    }
+  };
+
+  const toggle = (type: string, displayName: string) => {
+    setSelected(prev => {
+      const exists = prev.find(i => i.type === type);
+      let next;
+      if (exists) {
+        next = prev.filter(i => i.type !== type);
+      } else {
+        next = [...prev, { type, quantity: 1, displayName }];
+      }
+      onItemsChange(next);
+      return next;
+    });
+  };
+
+  const updateQty = (type: string, qty: number) => {
+    setSelected(prev => {
+      const next = prev.map(i => i.type === type ? { ...i, quantity: Math.max(1, qty) } : i);
+      onItemsChange(next);
+      return next;
+    });
+  };
+
+  const EGG_LABELS: Record<string, string> = {
+    COMMON:"Ovo Comum",RARE:"Ovo Raro",SPECIAL:"Ovo Especial",EVENT:"Ovo de Evento",
+    EGG_GEN1:"Ovo Gen 1",EGG_GEN2:"Ovo Gen 2",EGG_GEN3:"Ovo Gen 3",EGG_GEN4:"Ovo Gen 4",
+    EGG_GEN5:"Ovo Gen 5",EGG_GEN6:"Ovo Gen 6",EGG_GEN7:"Ovo Gen 7",EGG_GEN8:"Ovo Gen 8",EGG_GEN9:"Ovo Gen 9",
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs text-slate-400">Também ofereço (opcional):</label>
+        {!loaded && (
+          <button type="button" onClick={loadInventory}
+            className="text-[10px] underline" style={{ color: "#5a4700" }}>
+            Ver meu inventário
+          </button>
+        )}
+      </div>
+      {inventory && (
+        <div className="rounded-xl border border-border/40 bg-slate-900/50 p-2 space-y-1.5 max-h-40 overflow-y-auto">
+          {inventory.eggs.map(egg => {
+            const sel = selected.find(i => i.type === egg.type);
+            const label = EGG_LABELS[egg.type] ?? egg.type;
+            return (
+              <div key={egg.type} className="flex items-center gap-2">
+                <button type="button" onClick={() => toggle(egg.type, label)}
+                  className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                  🥚 {label} ({egg.count} disponíveis)
+                </button>
+                {sel && (
+                  <input type="number" min={1} max={egg.count} value={sel.quantity}
+                    onChange={e => updateQty(egg.type, parseInt(e.target.value)||1)}
+                    className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
+                )}
+              </div>
+            );
+          })}
+          {inventory.foods.filter(f => f.quantity > 0).map(food => {
+            const label = food.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote";
+            const sel = selected.find(i => i.type === food.type);
+            return (
+              <div key={food.type} className="flex items-center gap-2">
+                <button type="button" onClick={() => toggle(food.type, label)}
+                  className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                  {food.type === "FOOD" ? "🍖" : "🍬"} {label} ({food.quantity} disponíveis)
+                </button>
+                {sel && (
+                  <input type="number" min={1} max={food.quantity} value={sel.quantity}
+                    onChange={e => updateQty(food.type, parseInt(e.target.value)||1)}
+                    className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {selected.length > 0 && (
+        <p className="text-[10px] text-slate-500">
+          Oferecendo: {selected.map(i => `${i.quantity}x ${i.displayName}`).join(", ")}
+        </p>
+      )}
     </div>
   );
 }

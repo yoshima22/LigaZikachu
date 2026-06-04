@@ -449,7 +449,8 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
 export async function createProposal(
   listingId: string,
   coinsOffer: number,
-  message?: string
+  message?: string,
+  itemsOffer?: Array<{type: string; quantity: number; displayName: string}>
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -475,7 +476,15 @@ export async function createProposal(
     if (existing) return { error: "Você já tem uma proposta pendente neste anúncio. Cancele antes de enviar outra." };
 
     await prisma.bazarProposal.create({
-      data: { listingId, proposerId: player.id, coinsOffer, message },
+      data: {
+        listingId,
+        proposerId: player.id,
+        coinsOffer,
+        message,
+        itemsOffer: itemsOffer && itemsOffer.length > 0
+          ? itemsOffer as unknown as import("@prisma/client").Prisma.InputJsonValue
+          : undefined,
+      },
     });
 
     revalidateBazar();
@@ -541,6 +550,52 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
           update: { balance: { increment: proposal.coinsOffer } },
           create: { playerId: player.id, balance: proposal.coinsOffer, totalEarned: proposal.coinsOffer },
         });
+      }
+
+      // Transfer items from proposer to seller (if any)
+      const itemsOffer = proposal.itemsOffer as Array<{type: string; quantity: number; displayName: string}> | null;
+      if (itemsOffer && itemsOffer.length > 0) {
+        for (const item of itemsOffer) {
+          if (item.type === "FOOD" || item.type === "SWEET") {
+            const food = await tx.mascotFoodItem.findUnique({
+              where: { playerId_type: { playerId: proposal.proposerId, type: item.type as "FOOD" | "SWEET" } }
+            });
+            if (!food || food.quantity < item.quantity) throw new Error(`Proposer doesn't have enough ${item.type}`);
+            await tx.mascotFoodItem.update({
+              where: { playerId_type: { playerId: proposal.proposerId, type: item.type as "FOOD" | "SWEET" } },
+              data: { quantity: { decrement: item.quantity } }
+            });
+            await tx.mascotFoodItem.upsert({
+              where: { playerId_type: { playerId: player.id, type: item.type as "FOOD" | "SWEET" } },
+              update: { quantity: { increment: item.quantity } },
+              create: { playerId: player.id, type: item.type as "FOOD" | "SWEET", quantity: item.quantity }
+            });
+          } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(item.type)) {
+            const eggs = await tx.mascotEgg.findMany({
+              where: { playerId: proposal.proposerId, type: item.type as never, incubation: null },
+              take: item.quantity,
+            });
+            if (eggs.length < item.quantity) throw new Error(`Proposer doesn't have enough eggs`);
+            await tx.mascotEgg.updateMany({
+              where: { id: { in: eggs.map(e => e.id) } },
+              data: { playerId: player.id, origin: "Proposta de Bazar" }
+            });
+          } else {
+            const inv = await tx.playerInventory.findFirst({
+              where: { playerId: proposal.proposerId, item: { type: item.type as never }, quantity: { gte: item.quantity } }
+            });
+            if (!inv) throw new Error(`Proposer doesn't have enough of ${item.type}`);
+            await tx.playerInventory.update({
+              where: { id: inv.id },
+              data: { quantity: { decrement: item.quantity } }
+            });
+            await tx.playerInventory.upsert({
+              where: { playerId_itemId: { playerId: player.id, itemId: inv.itemId } },
+              update: { quantity: { increment: item.quantity } },
+              create: { playerId: player.id, itemId: inv.itemId, quantity: item.quantity }
+            });
+          }
+        }
       }
 
       // Transferir item para o proponente

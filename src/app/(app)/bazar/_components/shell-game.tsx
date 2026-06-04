@@ -343,7 +343,24 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
             </p>
           </div>
         </div>
-        <div style={{ color: GOLD, fontSize: 18 }}>{expanded ? "▲" : "▼"}</div>
+        <div className="flex items-center gap-2">
+          {/* Debug toggle — admin only */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setDebugMode(d => !d); }}
+              className="mr-3 rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all"
+              style={{
+                background: debugMode ? "#3d0a0a" : "#1a1a03",
+                border: debugMode ? "1px solid #ef4444" : "1px solid #5a4700",
+                color: debugMode ? "#ef4444" : "#5a4700",
+              }}
+            >
+              {debugMode ? "⚡ DEBUG ON" : "⚡ Debug"}
+            </button>
+          )}
+          <div style={{ color: GOLD, fontSize: 18 }}>{expanded ? "▲" : "▼"}</div>
+        </div>
       </button>
 
       {/* Collapsible content */}

@@ -261,67 +261,72 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
 
   return (
     /*
-      Wrapper externo SEM overflow-hidden para o gato não ser cortado.
-      O gato fica posicionado absolutamente aqui, sobrepondo o painel.
+      Wrapper único com overflow-hidden — o gato é posicionado dentro
+      e clipped naturalmente nas bordas do painel.
     */
-    <div className="relative">
-
-      {/* ── Gato NPC ── fora do overflow-hidden, braço sobre o primeiro card */}
-      <div
-        className="pointer-events-none absolute bottom-0 z-20 hidden md:block"
+    <div
+      className="relative overflow-hidden rounded-2xl"
+      style={{
+        background: "linear-gradient(135deg,#1a1105 0%,#0e0c06 60%,#1a1105 100%)",
+        boxShadow: `0 0 0 1px ${GOLD_D}`,
+      }}
+    >
+      {/* ── Gato NPC ── dentro do overflow-hidden, clipped naturalmente */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/miauvadao-cat.png"
+        alt="Miauvadão"
+        className="pointer-events-none absolute bottom-0 left-0 hidden md:block"
         style={{
-          /* Começa um pouco à esquerda do painel e vai até dentro do 1º card */
-          left: -12,
-          width: 290,
-          height: "calc(100% + 16px)",
+          width: 215,
+          height: "auto",
+          maxHeight: "110%",
+          objectFit: "contain",
+          objectPosition: "bottom left",
+          filter: "drop-shadow(3px 0 16px rgba(0,0,0,0.9))",
+          zIndex: 5,
         }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/miauvadao-cat.png"
-          alt="Miauvadão"
-          className="absolute bottom-0 left-0"
-          style={{
-            width: "100%",
-            height: "auto",
-            maxHeight: "120%",
-            objectFit: "contain",
-            objectPosition: "bottom left",
-            filter: "drop-shadow(3px 0 16px rgba(0,0,0,0.9))",
-          }}
-          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      </div>
+        onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+      />
 
-      {/* Speech bubble above cat — visible on md+ */}
+      {/* Speech bubble — estilo igual ao mascote, à direita do gato */}
       {lastNpcMessage && (
         <div className="hidden md:block absolute z-30 pointer-events-none"
-          style={{ left: 200, top: 12, maxWidth: 280 }}>
-          <div className="relative rounded-xl px-3 py-2 text-[11px] leading-snug font-semibold animate-[fadeIn_0.3s_ease]"
-            style={{ background: "#2a1a03", border: "1.5px solid #c9a800", color: "#FFCB05",
-                     boxShadow: "0 0 12px rgba(201,168,0,0.25)" }}>
-            {/* Arrow pointing left toward cat */}
-            <div className="absolute top-3" style={{ left: -9, width: 0, height: 0,
-              borderTop: "7px solid transparent", borderBottom: "7px solid transparent",
-              borderRight: "9px solid #c9a800" }} />
-            <div className="absolute top-3" style={{ left: -7, width: 0, height: 0,
-              borderTop: "7px solid transparent", borderBottom: "7px solid transparent",
-              borderRight: "9px solid #2a1a03" }} />
+          style={{ left: 195, top: 18, maxWidth: 270 }}>
+          {/* Tail pointing left toward cat */}
+          <div style={{
+            position: "absolute", left: -8, top: 14,
+            width: 0, height: 0,
+            borderTop: "6px solid transparent",
+            borderBottom: "6px solid transparent",
+            borderRight: "8px solid #e2d9c8",
+          }} />
+          <div
+            className="relative rounded-2xl px-3 py-2 text-[11px] leading-snug"
+            style={{
+              background: "#f5f0e8",
+              border: "1.5px solid #e2d9c8",
+              color: "#2a1a03",
+              fontWeight: 600,
+              boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+              maxWidth: 270,
+            }}
+          >
             {lastNpcMessage}
           </div>
         </div>
       )}
 
-      {/* ── Painel com overflow-hidden para bordas arredondadas ── */}
-      <div
-        className="overflow-hidden rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg,#1a1105 0%,#0e0c06 60%,#1a1105 100%)",
-          boxShadow: `0 0 0 1px ${GOLD_D}`,
-        }}
-      >
-        {/* Conteúdo deslocado à direita — 230px para o gato + braço */}
-        <div className="md:ml-[230px] px-5 pt-5 pb-6 space-y-5">
+      {/* Conteúdo deslocado à direita — 215px para o gato */}
+      <div className="md:pl-[215px] px-5 pt-5 pb-6 space-y-5">
+
+        {/* Mobile speech bubble fallback */}
+        {lastNpcMessage && (
+          <div className="md:hidden rounded-xl px-3 py-2 text-[11px]"
+            style={{ background: "#f5f0e8", color: "#2a1a03", fontWeight: 600, border: "1.5px solid #e2d9c8" }}>
+            🐱 {lastNpcMessage}
+          </div>
+        )}
 
           {/* Header — título centralizado, cofre/timer à direita */}
           <div className="relative flex items-center justify-center">
@@ -375,7 +380,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
               </p>
             </div>
           ) : (
-            <div className="grid gap-5 sm:grid-cols-3 pt-1">
+            <div className="grid gap-5 sm:grid-cols-3 pt-1 relative" style={{ zIndex: 10 }}>
               {offers.map((offer, idx) => (
                 <MiauvadaoCard
                   key={idx}
@@ -396,7 +401,6 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
             </p>
             <RefreshShopButton playerId={playerId} />
           </div>
-        </div>
       </div>
     </div>
   );
