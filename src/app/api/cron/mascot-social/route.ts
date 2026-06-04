@@ -1,7 +1,10 @@
 /**
  * Cron de eventos sociais dos mascotes.
- * Roda diariamente — cria batalhas e amizades aleatórias entre mascotes de treinadores diferentes.
- * Agendado em vercel.json: "0 18 * * *" (15h BRT)
+ * Agendado em vercel.json: "0 18 * * *" (uma vez por dia às 15h BRT).
+ * Limite do plano Hobby: 1 execução por dia.
+ *
+ * REGRA: admins nunca interagem com mascotes de jogadores reais.
+ * Só parea jogadores com role = PLAYER.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -29,9 +32,12 @@ function shuffle<T>(arr: T[]): T[] {
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Busca todos os mascotes equipados de jogadores distintos
+  // Busca APENAS mascotes de jogadores com role PLAYER (nunca admin)
   const equipped = await prisma.mascot.findMany({
-    where: { isEquipped: true },
+    where: {
+      isEquipped: true,
+      player: { user: { role: "PLAYER" } }
+    },
     select: { id: true, playerId: true, pokemonId: true, nickname: true }
   });
 
