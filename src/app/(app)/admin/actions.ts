@@ -203,40 +203,41 @@ export async function sendItemToAllPlayers(
       select: { id: true }
     });
 
+    const EGG_MAP: Record<string, string> = {
+      EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL"
+    };
+    const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
+
+    // Monta o payload do gift baseado no tipo do item
+    function buildGiftPayload(type: string): Record<string, unknown> | null {
+      if (EGG_MAP[type]) return { rewardKind: "MASCOT_EGG", eggType: EGG_MAP[type], origin: "Enviado pelo Admin", rewardLabel: item.name };
+      if (type === "MASCOT_FOOD")  return { rewardKind: "MASCOT_FOOD", foodType: "FOOD",  quantity: 1, rewardLabel: item.name };
+      if (type === "MASCOT_SWEET") return { rewardKind: "MASCOT_FOOD", foodType: "SWEET", quantity: 1, rewardLabel: item.name };
+      if (BUFF_TYPES.includes(type)) return { rewardKind: "MASCOT_BUFF", buffType: type, rewardLabel: item.name };
+      return null; // cosmético — vai direto pro inventário
+    }
+
+    const giftPayload = buildGiftPayload(item.type);
+    const isConsumable = !!giftPayload;
+
     let sent = 0, skipped = 0;
 
     for (const player of players) {
       try {
-        if (["EGG_COMMON","EGG_RARE","EGG_SPECIAL"].includes(item.type)) {
-          const eggTypeMap: Record<string, string> = {
-            EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL"
-          };
-          // Vai para a Caixa de Presentes do jogador
+        if (isConsumable) {
+          // Consumíveis → Caixa de Presentes
           await prisma.playerGift.create({
             data: {
               playerId: player.id,
               type: "CUSTOM",
               title: item.name,
-              description: `${item.name} enviado pelo admin.`,
-              payload: {
-                rewardKind: "MASCOT_EGG",
-                eggType: eggTypeMap[item.type],
-                origin: "Enviado pelo Admin",
-                rewardLabel: item.name,
-              }
+              description: `${item.name} enviado pelo admin para todos os jogadores.`,
+              payload: giftPayload!
             }
           });
           sent++;
-        } else if (item.type === "MASCOT_FOOD" || item.type === "MASCOT_SWEET") {
-          const foodType = item.type === "MASCOT_FOOD" ? "FOOD" : "SWEET";
-          await prisma.mascotFoodItem.upsert({
-            where: { playerId_type: { playerId: player.id, type: foodType as "FOOD" } },
-            update: { quantity: { increment: 1 } },
-            create: { playerId: player.id, type: foodType as "FOOD", quantity: 1 }
-          });
-          sent++;
         } else {
-          // Item de inventário — pula se já possui
+          // Cosméticos → PlayerInventory (pula se já possui)
           const existing = await prisma.playerInventory.findUnique({
             where: { playerId_itemId: { playerId: player.id, itemId } }
           });

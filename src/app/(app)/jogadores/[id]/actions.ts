@@ -58,18 +58,26 @@ export async function grantItemToPlayer(
         }
       });
     } else if (foodType) {
-      // Comida/Doce → MascotFoodItem
-      await prisma.mascotFoodItem.upsert({
-        where: { playerId_type: { playerId, type: foodType } },
-        update: { quantity: { increment: 1 } },
-        create: { playerId, type: foodType, quantity: 1 }
+      // Comida/Doce → Caixa de Presentes
+      await prisma.playerGift.create({
+        data: {
+          playerId,
+          type: "CUSTOM",
+          title: item.name,
+          description: `${item.name} concedido pelo admin.`,
+          payload: { rewardKind: "MASCOT_FOOD", foodType: foodType.toString(), quantity: 1, rewardLabel: item.name }
+        }
       });
     } else if (isBuff) {
-      // Buff → PlayerInventory com quantidade
-      await prisma.playerInventory.upsert({
-        where: { playerId_itemId: { playerId, itemId } },
-        update: { quantity: { increment: 1 } },
-        create: { playerId, itemId, quantity: 1, equipped: false }
+      // Buff → Caixa de Presentes
+      await prisma.playerGift.create({
+        data: {
+          playerId,
+          type: "CUSTOM",
+          title: item.name,
+          description: `${item.name} concedido pelo admin.`,
+          payload: { rewardKind: "MASCOT_BUFF", buffType: item.type, rewardLabel: item.name }
+        }
       });
     } else {
       // Item cosmético → PlayerInventory (título, banner, moldura, ticket)

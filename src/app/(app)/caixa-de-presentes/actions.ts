@@ -81,6 +81,24 @@ async function applyGiftReward(
     return;
   }
 
+  if (rewardKind === "MASCOT_BUFF") {
+    const buffType = typeof payload.buffType === "string" ? payload.buffType : null;
+    if (buffType) {
+      const shopItem = await tx.shopItem.findFirst({
+        where: { type: buffType as import("@prisma/client").ShopItemType },
+        select: { id: true }
+      });
+      if (shopItem) {
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId, itemId: shopItem.id, quantity: 1, equipped: false }
+        });
+      }
+    }
+    return;
+  }
+
   if (rewardKind === "ZIKA_COINS") {
     const amount = typeof payload.amount === "number" && payload.amount > 0
       ? Math.floor(payload.amount)
