@@ -161,6 +161,9 @@ export default async function DashboardPage() {
   const myRegistrations = await prisma.tournamentRegistration.findMany({
     where: { playerId: player.id, status: "APPROVED", tournament: { status: { in: ["IN_PROGRESS", "REGISTRATION_OPEN"] } } },
     select: { tournamentId: true, tournament: { select: { id: true, name: true, slug: true, status: true } } }
+  }).catch((error) => {
+    console.error("[Dashboard] registrations lookup failed", { userId: user.id, playerId: player.id, error });
+    return [] as Array<{ tournamentId: string; tournament: { id: string; name: string; slug: string; status: string } }>;
   });
   const activeTournamentIds = myRegistrations.map(r => r.tournamentId);
 
@@ -178,6 +181,9 @@ export default async function DashboardPage() {
           playerB: { select: { id: true, displayName: true } },
           tournamentWeek: { select: { weekNumber: true, label: true, tournament: { select: { slug: true, name: true } } } }
         }
+      }).catch((error) => {
+        console.error("[Dashboard] upcoming matches lookup failed", { userId: user.id, playerId: player.id, activeTournamentIds, error });
+        return [];
       })
     : [];
 
@@ -200,6 +206,9 @@ export default async function DashboardPage() {
   const openWeeks = await prisma.tournamentWeek.findMany({
     where: { tournamentId: { in: activeTournamentIds }, status: "OPEN" },
     select: { id: true, weekNumber: true, tournament: { select: { slug: true, name: true } } }
+  }).catch((error) => {
+    console.error("[Dashboard] open weeks lookup failed", { userId: user.id, playerId: player.id, activeTournamentIds, error });
+    return [] as Array<{ id: string; weekNumber: number; tournament: { slug: string; name: string } }>;
   });
 
   const matchesNeedingDeck: Array<{
@@ -218,6 +227,9 @@ export default async function DashboardPage() {
         playerA: { select: { id: true, displayName: true } },
         playerB: { select: { id: true, displayName: true } }
       }
+    }).catch((error) => {
+      console.error("[Dashboard] week matches lookup failed", { userId: user.id, playerId: player.id, weekId: w.id, error });
+      return [];
     });
     for (const m of weekMatches) {
       const isA = m.playerAId === player.id;
@@ -248,15 +260,26 @@ export default async function DashboardPage() {
           tournament: { select: { name: true, slug: true } },
           tournamentWeek: { select: { weekNumber: true, label: true } }
         }
+      }).catch((error) => {
+        console.error("[Dashboard] sent decks lookup failed", { userId: user.id, playerId: player.id, error });
+        return [];
       })
     : [];
 
   // ── RANKING (temporada ativa ou primeiro torneio) ─────────────────────────
-  const ranking = seasonId ? await computePlayerRanking(seasonId) : [];
+  const ranking = seasonId
+    ? await computePlayerRanking(seasonId).catch((error) => {
+        console.error("[Dashboard] ranking compute failed", { userId: user.id, playerId: player.id, seasonId, error });
+        return [] as Awaited<ReturnType<typeof computePlayerRanking>>;
+      })
+    : [];
   const myEntry = ranking.find(r => r.playerId === player.id);
 
   const codesCount = seasonId
-    ? await prisma.codeDistribution.count({ where: { playerId: player.id, seasonId, status: { not: "REVOKED" } } })
+    ? await prisma.codeDistribution.count({ where: { playerId: player.id, seasonId, status: { not: "REVOKED" } } }).catch((error) => {
+        console.error("[Dashboard] code distribution count failed", { userId: user.id, playerId: player.id, seasonId, error });
+        return 0;
+      })
     : 0;
 
   const seasonLabel = activeSeason?.name ?? (allSeasons[0]?.name ?? "—");

@@ -25,10 +25,16 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   });
   const [giftCount, wallet] = await Promise.all([
     player
-      ? prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } })
+      ? prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch((error) => {
+          console.error("[AppLayout] gift count failed", { userId: session.user.id, playerId: player.id, error });
+          return 0;
+        })
       : 0,
     player
-      ? prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } })
+      ? prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch((error) => {
+          console.error("[AppLayout] wallet lookup failed", { userId: session.user.id, playerId: player.id, error });
+          return null;
+        })
       : null,
   ]);
 
