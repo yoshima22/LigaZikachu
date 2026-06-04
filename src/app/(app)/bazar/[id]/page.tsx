@@ -101,7 +101,7 @@ export default function BazarListingPage(): React.JSX.Element {
           createdAt: p.createdAt,
           proposer: p.proposer,
           itemsOffer: Array.isArray(p.itemsOffer)
-            ? (p.itemsOffer as ProposalOfferedItem[])
+            ? (p.itemsOffer as unknown as ProposalOfferedItem[])
             : null,
         })),
         _count: { favorites: raw._count.favorites },
