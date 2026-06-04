@@ -23,7 +23,8 @@ import {
   Ticket,
   Trophy,
   User,
-  Users
+  Users,
+  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -44,12 +45,15 @@ const colecaoLinks = [
   { href: "/pokedex",   label: "Pokedex",     icon: Search,       adminOnly: false },
   { href: "/professor", label: "Prof. Enguiça", icon: Sparkles,   adminOnly: false },
   { href: "/album",     label: "Álbum",       icon: BookOpen,     adminOnly: false },
-  { href: "/shop",      label: "ZikaShop",    icon: ShoppingBag,  adminOnly: false },
-  { href: "/bazar",     label: "Bazar",       icon: Store,        adminOnly: false },
-  { href: "/zikabet",   label: "ZikaBet",     icon: Swords,       adminOnly: false },
-  { href: "/zikaloot",  label: "ZikaLoot",    icon: Ticket,       adminOnly: false },
   { href: "/carteira",  label: "Carteira",    icon: Coins,        adminOnly: false },
   { href: "/inventario", label: "Inventário", icon: Package,      adminOnly: false }
+];
+
+const mercadoLinks = [
+  { href: "/shop",     label: "ZikaShop",  icon: ShoppingBag, adminOnly: false },
+  { href: "/bazar",    label: "Bazar",     icon: Store,       adminOnly: false },
+  { href: "/zikabet",  label: "ZikaBet",   icon: Swords,      adminOnly: false },
+  { href: "/zikaloot", label: "ZikaLoot",  icon: Ticket,      adminOnly: false },
 ];
 
 // profileLinks é dinâmico — usa playerId para o link do perfil público
@@ -122,6 +126,15 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, playerId }: 
           setOpenMenu={setOpenMenu}
         />
         <NavDropdown
+          id="mercado"
+          label="Mercado"
+          icon={ShoppingCart}
+          links={mercadoLinks}
+          admin={admin}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+        />
+        <NavDropdown
           id="colecao"
           label="Coleção"
           icon={ShoppingBag}
@@ -180,6 +193,15 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, playerId }: 
             label="Ranking"
             icon={BarChart3}
             links={rankingLinks}
+            admin={admin}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+          />
+          <MobileNavGroup
+            id="mobile-mercado"
+            label="Mercado"
+            icon={ShoppingCart}
+            links={mercadoLinks}
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}

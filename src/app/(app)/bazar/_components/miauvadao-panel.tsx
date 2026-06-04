@@ -297,15 +297,15 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
 
       {/*
         ── Balão de diálogo ──
-        Posicionado à direita do rosto do gato.
-        O rosto fica aproximadamente a 18-22% da altura da imagem,
-        o que com a imagem em top:8 resulta em ~y:70-90px.
-        Cauda do balão aponta para a ESQUERDA (→ gato).
-        z-index: 30 → na frente de tudo.
+        Posicionado acima da linha dos cards (top negativo do cat area),
+        sem invadir o primeiro slot.
+        Fica entre o gato e o início do conteúdo (até left:262).
+        Cauda aponta para a ESQUERDA → rosto do gato.
+        z-index: 30.
       */}
       {lastNpcMessage && (
         <div className="hidden md:block absolute pointer-events-none"
-          style={{ left: 308, top: 60, maxWidth: 260, zIndex: 30 }}>
+          style={{ left: 178, top: 8, maxWidth: 220, zIndex: 30 }}>
           {/* Cauda apontando para a esquerda → rosto do gato */}
           <div style={{
             position: "absolute", left: -8, top: 12,
@@ -315,7 +315,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
             borderRight: "8px solid #e2d9c8",
           }} />
           <div
-            className="rounded-2xl px-3 py-2 text-[11px] leading-snug"
+            className="max-h-[72px] overflow-hidden rounded-2xl px-3 py-2 text-[10px] leading-snug"
             style={{
               background: "#f5f0e8",
               border: "1.5px solid #e2d9c8",

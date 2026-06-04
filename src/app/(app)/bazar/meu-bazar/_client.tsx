@@ -31,6 +31,7 @@ interface MyListing {
   createdAt: Date;
   proposals: Array<{
     id: string; proposerName: string; coinsOffer: number;
+    itemsOffer: Array<{ type: string; quantity: number; displayName: string; mascotId?: string }> | null;
     message: string | null; status: string; createdAt: Date;
   }>;
 }
@@ -41,6 +42,7 @@ interface SentProposal {
   sellerName: string;
   listingPayload: Record<string, unknown>;
   coinsOffer: number;
+  itemsOffer: Array<{ type: string; quantity: number; displayName: string; mascotId?: string }> | null;
   message: string | null;
   status: string;
   createdAt: Date;
@@ -57,6 +59,11 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
       return (payload.nickname as string) ?? getPokemonName(payload.pokemonId as number);
     }
     return payload.displayName as string ?? "Item";
+  };
+
+  const proposalItemsText = (items: Array<{ type: string; quantity: number; displayName: string; mascotId?: string }> | null) => {
+    if (!items?.length) return null;
+    return items.map(i => i.mascotId ? i.displayName : `${i.quantity}x ${i.displayName}`).join(", ");
   };
 
   return (
@@ -134,6 +141,9 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                           {p.coinsOffer > 0 && (
                             <p className="text-[11px] text-[#FFCB05] flex items-center gap-0.5"><Coins size={9}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC</p>
                           )}
+                          {proposalItemsText(p.itemsOffer) && (
+                            <p className="text-[10px] text-slate-400 truncate">+ {proposalItemsText(p.itemsOffer)}</p>
+                          )}
                           {p.message && <p className="text-[10px] text-slate-500 italic truncate">"{p.message}"</p>}
                         </div>
                         <div className="flex gap-1.5 shrink-0">
@@ -183,6 +193,9 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                       <p className="text-[10px] text-slate-500">Para: {p.sellerName}</p>
                       {p.coinsOffer > 0 && (
                         <p className="text-[11px] text-[#FFCB05] flex items-center gap-0.5 mt-0.5"><Coins size={9}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC</p>
+                      )}
+                      {proposalItemsText(p.itemsOffer) && (
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">+ {proposalItemsText(p.itemsOffer)}</p>
                       )}
                       {p.message && <p className="text-[10px] text-slate-500 italic truncate mt-0.5">"{p.message}"</p>}
                     </div>

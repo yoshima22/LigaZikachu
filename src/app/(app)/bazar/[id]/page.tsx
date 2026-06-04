@@ -17,6 +17,7 @@ interface ProposalOfferedItem {
   type: string;
   quantity: number;
   displayName: string;
+  mascotId?: string; // para ofertas de mascote
 }
 
 interface ProposalItem {
@@ -75,7 +76,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const [proposalCoins, setProposalCoins] = useState("");
   const [proposalMsg, setProposalMsg] = useState("");
   const [favorited, setFavorited] = useState(false);
-  const [offeredItems, setOfferedItems] = useState<Array<{type: string; quantity: number; displayName: string}>>([]);
+  const [offeredItems, setOfferedItems] = useState<ProposalOfferedItem[]>([]);
 
   const reloadListing = useCallback(() => {
     getListing(id).then(raw => {
@@ -372,7 +373,7 @@ export default function BazarListingPage(): React.JSX.Element {
                   )}
                   {p.itemsOffer && p.itemsOffer.length > 0 && (
                     <p className="text-xs text-slate-400">
-                      + {p.itemsOffer.map(i => `${i.quantity}x ${i.displayName}`).join(", ")}
+                      + {p.itemsOffer.map(i => i.mascotId ? i.displayName : `${i.quantity}x ${i.displayName}`).join(", ")}
                     </p>
                   )}
                   {p.message && (
@@ -417,11 +418,17 @@ export default function BazarListingPage(): React.JSX.Element {
   );
 }
 
-// ── OfferItemsPicker ──────────────────────────────────────────────────────────
+// ── OfferItemsPicker (itens + mascotes) ──────────────────────────────────────
 
-function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: Array<{type: string; quantity: number; displayName: string}>) => void }) {
-  const [inventory, setInventory] = useState<{eggs: Array<{type: string; count: number}>; foods: Array<{type: string; quantity: number}>} | null>(null);
-  const [selected, setSelected] = useState<Array<{type: string; quantity: number; displayName: string}>>([]);
+interface InventoryData {
+  eggs: Array<{type: string; count: number}>;
+  foods: Array<{type: string; quantity: number}>;
+  mascots: Array<{id: string; pokemonId: number; nickname: string | null; level: number; bazarListed: boolean; isEquipped: boolean}>;
+}
+
+function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOfferedItem[]) => void }) {
+  const [inventory, setInventory] = useState<InventoryData | null>(null);
+  const [selected, setSelected] = useState<ProposalOfferedItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   const loadInventory = async () => {
@@ -429,7 +436,7 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: Array<{typ
     setLoaded(true);
     const res = await fetch("/api/bazar/inventory");
     if (res.ok) {
-      const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}> };
+      const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"] };
       const eggGroups: Record<string, number> = {};
       for (const egg of (data.eggs ?? [])) {
         eggGroups[egg.type] = (eggGroups[egg.type] ?? 0) + 1;
@@ -437,19 +444,15 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: Array<{typ
       setInventory({
         eggs: Object.entries(eggGroups).map(([type, count]) => ({ type, count })),
         foods: data.foods ?? [],
+        mascots: (data.mascots ?? []).filter(m => !m.bazarListed && !m.isEquipped),
       });
     }
   };
 
-  const toggle = (type: string, displayName: string) => {
+  const toggleItem = (key: string, item: ProposalOfferedItem) => {
     setSelected(prev => {
-      const exists = prev.find(i => i.type === type);
-      let next;
-      if (exists) {
-        next = prev.filter(i => i.type !== type);
-      } else {
-        next = [...prev, { type, quantity: 1, displayName }];
-      }
+      const exists = prev.find(i => (i.mascotId ?? i.type) === key);
+      const next = exists ? prev.filter(i => (i.mascotId ?? i.type) !== key) : [...prev, item];
       onItemsChange(next);
       return next;
     });
@@ -457,7 +460,7 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: Array<{typ
 
   const updateQty = (type: string, qty: number) => {
     setSelected(prev => {
-      const next = prev.map(i => i.type === type ? { ...i, quantity: Math.max(1, qty) } : i);
+      const next = prev.map(i => i.type === type && !i.mascotId ? { ...i, quantity: Math.max(1, qty) } : i);
       onItemsChange(next);
       return next;
     });
@@ -469,58 +472,102 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: Array<{typ
     EGG_GEN5:"Ovo Gen 5",EGG_GEN6:"Ovo Gen 6",EGG_GEN7:"Ovo Gen 7",EGG_GEN8:"Ovo Gen 8",EGG_GEN9:"Ovo Gen 9",
   };
 
+  const selectedKeys = new Set(selected.map(i => i.mascotId ?? i.type));
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="text-xs text-slate-400">Também ofereço (opcional):</label>
         {!loaded && (
-          <button type="button" onClick={loadInventory}
-            className="text-[10px] underline" style={{ color: "#5a4700" }}>
+          <button type="button" onClick={loadInventory} className="text-[10px] underline" style={{ color: "#5a4700" }}>
             Ver meu inventário
           </button>
         )}
       </div>
+
       {inventory && (
-        <div className="rounded-xl border border-border/40 bg-slate-900/50 p-2 space-y-1.5 max-h-40 overflow-y-auto">
-          {inventory.eggs.map(egg => {
-            const sel = selected.find(i => i.type === egg.type);
-            const label = EGG_LABELS[egg.type] ?? egg.type;
-            return (
-              <div key={egg.type} className="flex items-center gap-2">
-                <button type="button" onClick={() => toggle(egg.type, label)}
-                  className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
-                  🥚 {label} ({egg.count} disponíveis)
-                </button>
-                {sel && (
-                  <input type="number" min={1} max={egg.count} value={sel.quantity}
-                    onChange={e => updateQty(egg.type, parseInt(e.target.value)||1)}
-                    className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
-                )}
-              </div>
-            );
-          })}
-          {inventory.foods.filter(f => f.quantity > 0).map(food => {
-            const label = food.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote";
-            const sel = selected.find(i => i.type === food.type);
-            return (
-              <div key={food.type} className="flex items-center gap-2">
-                <button type="button" onClick={() => toggle(food.type, label)}
-                  className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
-                  {food.type === "FOOD" ? "🍖" : "🍬"} {label} ({food.quantity} disponíveis)
-                </button>
-                {sel && (
-                  <input type="number" min={1} max={food.quantity} value={sel.quantity}
-                    onChange={e => updateQty(food.type, parseInt(e.target.value)||1)}
-                    className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
-                )}
-              </div>
-            );
-          })}
+        <div className="rounded-xl border border-border/40 bg-slate-900/50 p-2 space-y-3 max-h-52 overflow-y-auto">
+
+          {/* Mascotes disponíveis */}
+          {inventory.mascots.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🐾 Mascotes</p>
+              {inventory.mascots.map(m => {
+                const name = m.nickname ?? `Pokémon #${m.pokemonId}`;
+                const label = `${name} Nv.${m.level}`;
+                const sel = selectedKeys.has(m.id);
+                return (
+                  <button key={m.id} type="button"
+                    onClick={() => toggleItem(m.id, { type: "MASCOT_OFFER", quantity: 1, displayName: label, mascotId: m.id })}
+                    className={`w-full text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                    <span className="text-xs">🐾</span>
+                    {label}
+                    {sel && <span className="ml-auto text-[9px]">✓ selecionado</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Ovos */}
+          {inventory.eggs.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🥚 Ovos</p>
+              {inventory.eggs.map(egg => {
+                const sel = selected.find(i => i.type === egg.type && !i.mascotId);
+                const label = EGG_LABELS[egg.type] ?? egg.type;
+                return (
+                  <div key={egg.type} className="flex items-center gap-2">
+                    <button type="button"
+                      onClick={() => toggleItem(egg.type, { type: egg.type, quantity: 1, displayName: label })}
+                      className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                      🥚 {label} ({egg.count})
+                    </button>
+                    {sel && (
+                      <input type="number" min={1} max={egg.count} value={sel.quantity}
+                        onChange={e => updateQty(egg.type, parseInt(e.target.value)||1)}
+                        className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Comida/Doces */}
+          {inventory.foods.filter(f => f.quantity > 0).length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🍖 Comida</p>
+              {inventory.foods.filter(f => f.quantity > 0).map(food => {
+                const label = food.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote";
+                const sel = selected.find(i => i.type === food.type && !i.mascotId);
+                return (
+                  <div key={food.type} className="flex items-center gap-2">
+                    <button type="button"
+                      onClick={() => toggleItem(food.type, { type: food.type, quantity: 1, displayName: label })}
+                      className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                      {food.type === "FOOD" ? "🍖" : "🍬"} {label} ({food.quantity})
+                    </button>
+                    {sel && (
+                      <input type="number" min={1} max={food.quantity} value={sel.quantity}
+                        onChange={e => updateQty(food.type, parseInt(e.target.value)||1)}
+                        className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {inventory.mascots.length === 0 && inventory.eggs.length === 0 && inventory.foods.filter(f => f.quantity > 0).length === 0 && (
+            <p className="text-center text-[11px] text-slate-600 py-2">Nenhum item disponível para oferecer.</p>
+          )}
         </div>
       )}
+
       {selected.length > 0 && (
         <p className="text-[10px] text-slate-500">
-          Oferecendo: {selected.map(i => `${i.quantity}x ${i.displayName}`).join(", ")}
+          Oferecendo: {selected.map(i => i.displayName).join(", ")}
         </p>
       )}
     </div>

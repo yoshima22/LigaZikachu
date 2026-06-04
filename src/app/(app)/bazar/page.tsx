@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { Plus, Store, ChevronDown } from "lucide-react";
+import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-react";
 import { isAdmin } from "@/lib/auth/permissions";
 import { MiauvadaoPanel } from "./_components/miauvadao-panel";
 import { ShellGame } from "./_components/shell-game";
@@ -75,35 +75,40 @@ export default async function BazarPage({
                 className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors">
                 <Plus size={13}/> Anunciar
               </Link>
+              {admin && (
+                <Link href="/bazar/admin"
+                  className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-colors">
+                  ⚙️ Admin
+                </Link>
+              )}
             </>
           )}
         </div>
       </div>
 
-      {/* Miauvadão */}
-      <MiauvadaoPanel
-        offers={dailyOffers as never}
-        vaultBalance={miauvadao.vaultBalance}
-        balance={wallet?.balance ?? 0}
-        playerId={playerId}
-        lastNpcMessage={miauvadao.lastNpcMessage ?? miauvadao.lastWinnerMessage ?? null}
-      />
+      {admin && (
+        <div className="rounded-2xl border border-red-500/25 bg-red-500/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm font-bold text-red-300">
+                <ShieldCheck size={15} />
+                Controles admin do Bazar
+              </p>
+              <p className="text-xs text-slate-500">
+                Ajuste ZC do cofre, publique ofertas manuais ou gere novas ofertas do Miauvadão. O modo debug do copos aparece no Jogo do Miauvadão para contas admin.
+              </p>
+            </div>
+            <Link href="/bazar/admin"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700]">
+              <Coins size={13} />
+              Gerenciar cofre e ofertas
+              <RefreshCw size={13} />
+            </Link>
+          </div>
+        </div>
+      )}
 
-      {/* Shell Game */}
-      <ShellGame
-        balance={wallet?.balance ?? 0}
-        playerId={playerId}
-        vaultBalance={miauvadao.vaultBalance}
-        lastWinnerMessage={miauvadao.lastWinnerMessage ?? null}
-        isAdmin={admin}
-      />
-
-      {/* Filters */}
-      <Suspense fallback={null}>
-        <BazarFiltersClient />
-      </Suspense>
-
-      {/* FAQ accordion */}
+      {/* FAQ accordion — acima das ofertas */}
       <details className="rounded-2xl border overflow-hidden group" style={{ borderColor: "#5a4700", background: "#0e0c06" }}>
         <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold select-none"
           style={{ color: "#c9a800" }}>
@@ -144,6 +149,29 @@ export default async function BazarPage({
           </div>
         </div>
       </details>
+
+      {/* Miauvadão */}
+      <MiauvadaoPanel
+        offers={dailyOffers as never}
+        vaultBalance={miauvadao.vaultBalance}
+        balance={wallet?.balance ?? 0}
+        playerId={playerId}
+        lastNpcMessage={miauvadao.lastNpcMessage ?? miauvadao.lastWinnerMessage ?? null}
+      />
+
+      {/* Shell Game */}
+      <ShellGame
+        balance={wallet?.balance ?? 0}
+        playerId={playerId}
+        vaultBalance={miauvadao.vaultBalance}
+        lastWinnerMessage={miauvadao.lastWinnerMessage ?? null}
+        isAdmin={admin}
+      />
+
+      {/* Filters */}
+      <Suspense fallback={null}>
+        <BazarFiltersClient />
+      </Suspense>
 
       {/* Listings + Feed */}
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, adminAdjustVault } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
 
 const ITEM_TYPES = [
@@ -216,13 +216,8 @@ export default function MiauvadaoAdminPage() {
           </button>
           <button type="button" disabled={pending}
             onClick={() => startTransition(async () => {
-              // Expira as ofertas atuais para forçar regeneração automática do shop
-              const r = await adminSetMiauvadaoOffers(
-                (offers as MiauvadaoOffer[]).map(o => ({ ...o, validUntil: new Date(0).toISOString() } as MiauvadaoOffer))
-              );
+              const r = await adminRefreshMiauvadaoShopNow();
               if (r.error) { toast.error(r.error); return; }
-              // Agora chama o auto-refresh que vai puxar do shop
-              await autoRefreshMiauvadaoIfNeeded();
               toast.success("Ofertas geradas automaticamente do Shop!");
               router.refresh();
             })}

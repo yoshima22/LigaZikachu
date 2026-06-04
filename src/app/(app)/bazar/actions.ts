@@ -11,6 +11,23 @@ function revalidateBazar() {
   revalidatePath("/bazar/meu-bazar");
 }
 
+type ProposalOfferItem = {
+  type: string;
+  quantity: number;
+  displayName: string;
+  mascotId?: string;
+};
+
+const EGG_OFFER_TYPES = [
+  "COMMON","RARE","SPECIAL","EVENT",
+  "EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5",
+  "EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9",
+];
+
+function isEggOfferType(type: string) {
+  return EGG_OFFER_TYPES.includes(type);
+}
+
 // Tipos de shop que o Miauvadão pode oferecer (excluindo cosméticos únicos)
 const MIAUVADAO_ELIGIBLE_TYPES = [
   "EGG_COMMON","EGG_RARE","EGG_SPECIAL",
@@ -351,7 +368,14 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
     await prisma.$transaction(async (tx) => {
       await tx.bazarListing.update({ where: { id: listingId }, data: { status: "CANCELLED" } });
       await _returnEscrow(tx, listing, player.id);
-      // Rejeitar proposals pendentes
+      // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
+      const pendingProposals = await tx.bazarProposal.findMany({
+        where: { listingId, status: "PENDING" },
+        select: { proposerId: true, itemsOffer: true },
+      });
+      for (const proposal of pendingProposals) {
+        await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+      }
       await tx.bazarProposal.updateMany({
         where: { listingId, status: "PENDING" },
         data: { status: "REJECTED" },
@@ -411,7 +435,14 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
       // Transferir item para o comprador
       await _transferItem(tx, listing, player.id);
 
-      // Rejeitar proposals pendentes
+      // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
+      const pendingProposals = await tx.bazarProposal.findMany({
+        where: { listingId, status: "PENDING" },
+        select: { proposerId: true, itemsOffer: true },
+      });
+      for (const proposal of pendingProposals) {
+        await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+      }
       await tx.bazarProposal.updateMany({
         where: { listingId, status: "PENDING" },
         data: { status: "REJECTED" },
@@ -450,7 +481,7 @@ export async function createProposal(
   listingId: string,
   coinsOffer: number,
   message?: string,
-  itemsOffer?: Array<{type: string; quantity: number; displayName: string}>
+  itemsOffer?: ProposalOfferItem[]
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -475,16 +506,25 @@ export async function createProposal(
     });
     if (existing) return { error: "Você já tem uma proposta pendente neste anúncio. Cancele antes de enviar outra." };
 
-    await prisma.bazarProposal.create({
-      data: {
-        listingId,
-        proposerId: player.id,
-        coinsOffer,
-        message,
-        itemsOffer: itemsOffer && itemsOffer.length > 0
-          ? itemsOffer as unknown as import("@prisma/client").Prisma.InputJsonValue
-          : undefined,
-      },
+    const cleanItems = itemsOffer?.map(item => ({
+      ...item,
+      quantity: item.mascotId ? 1 : Math.max(1, Number(item.quantity) || 1),
+    })) ?? [];
+
+    await prisma.$transaction(async (tx) => {
+      await _reserveProposalOffers(tx, player.id, cleanItems);
+
+      await tx.bazarProposal.create({
+        data: {
+          listingId,
+          proposerId: player.id,
+          coinsOffer,
+          message,
+          itemsOffer: cleanItems.length > 0
+            ? cleanItems as unknown as import("@prisma/client").Prisma.InputJsonValue
+            : undefined,
+        },
+      });
     });
 
     revalidateBazar();
@@ -533,7 +573,14 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       // Aceitar proposta
       await tx.bazarProposal.update({ where: { id: proposalId }, data: { status: "ACCEPTED" } });
 
-      // Rejeitar outras proposals
+      // Rejeitar outras proposals e liberar mascotes que estavam reservados nelas.
+      const rejectedProposals = await tx.bazarProposal.findMany({
+        where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
+        select: { proposerId: true, itemsOffer: true },
+      });
+      for (const rejected of rejectedProposals) {
+        await _releaseProposalOffers(tx, rejected.itemsOffer as ProposalOfferItem[] | null, rejected.proposerId);
+      }
       await tx.bazarProposal.updateMany({
         where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
         data: { status: "REJECTED" },
@@ -553,10 +600,19 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       }
 
       // Transfer items from proposer to seller (if any)
-      const itemsOffer = proposal.itemsOffer as Array<{type: string; quantity: number; displayName: string}> | null;
+      const itemsOffer = proposal.itemsOffer as ProposalOfferItem[] | null;
       if (itemsOffer && itemsOffer.length > 0) {
         for (const item of itemsOffer) {
-          if (item.type === "FOOD" || item.type === "SWEET") {
+          if (item.mascotId) {
+            const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId } });
+            if (!mascot || mascot.playerId !== proposal.proposerId) {
+              throw new Error("Mascote da proposta não está mais disponível.");
+            }
+            await tx.mascot.update({
+              where: { id: item.mascotId },
+              data: { playerId: player.id, bazarListed: false, isEquipped: false },
+            });
+          } else if (item.type === "FOOD" || item.type === "SWEET") {
             const food = await tx.mascotFoodItem.findUnique({
               where: { playerId_type: { playerId: proposal.proposerId, type: item.type as "FOOD" | "SWEET" } }
             });
@@ -570,7 +626,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
               update: { quantity: { increment: item.quantity } },
               create: { playerId: player.id, type: item.type as "FOOD" | "SWEET", quantity: item.quantity }
             });
-          } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(item.type)) {
+          } else if (isEggOfferType(item.type)) {
             const eggs = await tx.mascotEgg.findMany({
               where: { playerId: proposal.proposerId, type: item.type as never, incubation: null },
               take: item.quantity,
@@ -647,7 +703,10 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     if (proposal.status !== "PENDING") return { error: "Proposta não está pendente." };
 
     const newStatus = proposal.listing.playerId === player.id ? "REJECTED" : "CANCELLED";
-    await prisma.bazarProposal.update({ where: { id: proposalId }, data: { status: newStatus } });
+    await prisma.$transaction(async (tx) => {
+      await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+      await tx.bazarProposal.update({ where: { id: proposalId }, data: { status: newStatus } });
+    });
 
     revalidateBazar();
     return {};
@@ -854,9 +913,80 @@ export async function adminAdjustVault(amount: number): Promise<{ error?: string
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const config = await getMiauvadaoConfig();
+    const newOffers = await rollMiauvadaoOffers(config.vaultBalance, 10);
+    if (newOffers.length === 0) {
+      return { error: "Nenhum item elegível ativo encontrado na ZikaShop." };
+    }
+
+    await prisma.miauvadaoConfig.update({
+      where: { id: "singleton" },
+      data: {
+        dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        offersRefreshedAt: new Date(),
+        lastNpcMessage: "Admin atualizou as ofertas do Miauvadão manualmente. 🛍️",
+        lastNpcMessageAt: new Date(),
+      },
+    });
+
+    revalidatePath("/bazar");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
+  }
+}
+
 // ── Utilitários internos ──────────────────────────────────────────────────────
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+async function _reserveProposalOffers(tx: TxClient, playerId: string, items: ProposalOfferItem[]) {
+  for (const item of items) {
+    if (!item.mascotId) continue;
+
+    const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId } });
+    if (!mascot || mascot.playerId !== playerId) {
+      throw new Error("Mascote da proposta não encontrado.");
+    }
+    if (mascot.bazarListed) {
+      throw new Error(`${item.displayName} já está reservado em outra oferta do Bazar.`);
+    }
+    if (mascot.isEquipped) {
+      throw new Error(`Desequipe ${item.displayName} antes de oferecê-lo no Bazar.`);
+    }
+
+    const activeExpedition = await tx.mascotExpedition.findFirst({
+      where: { mascotId: item.mascotId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (activeExpedition) {
+      throw new Error(`${item.displayName} está em expedição e não pode ser oferecido agora.`);
+    }
+
+    await tx.mascot.update({
+      where: { id: item.mascotId },
+      data: { bazarListed: true },
+    });
+  }
+}
+
+async function _releaseProposalOffers(tx: TxClient, items: ProposalOfferItem[] | null, ownerId: string) {
+  if (!items) return;
+
+  const mascotIds = items
+    .map(item => item.mascotId)
+    .filter((id): id is string => Boolean(id));
+
+  if (mascotIds.length === 0) return;
+
+  await tx.mascot.updateMany({
+    where: { id: { in: mascotIds }, playerId: ownerId },
+    data: { bazarListed: false },
+  });
+}
 
 async function _transferItem(tx: TxClient, listing: { id: string; category: string; payload: unknown }, toBuyerId: string) {
   const payload = listing.payload as Record<string, unknown>;

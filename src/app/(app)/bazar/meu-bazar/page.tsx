@@ -69,6 +69,9 @@ export default async function MeuBazarPage() {
             id: p.id,
             proposerName: p.proposer.displayName,
             coinsOffer: p.coinsOffer,
+            itemsOffer: Array.isArray(p.itemsOffer)
+              ? p.itemsOffer as Array<{ type: string; quantity: number; displayName: string; mascotId?: string }>
+              : null,
             message: p.message,
             status: p.status,
             createdAt: p.createdAt,
@@ -80,6 +83,9 @@ export default async function MeuBazarPage() {
           sellerName: p.listing.player.displayName,
           listingPayload: p.listing.payload as Record<string, unknown>,
           coinsOffer: p.coinsOffer,
+          itemsOffer: Array.isArray(p.itemsOffer)
+            ? p.itemsOffer as Array<{ type: string; quantity: number; displayName: string; mascotId?: string }>
+            : null,
           message: p.message,
           status: p.status,
           createdAt: p.createdAt,
