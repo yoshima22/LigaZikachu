@@ -121,12 +121,13 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const challengeStatus = getChallengeStatus(mascot.mood);
 
   // Cooldown 5 min — calculado client-side após mount para evitar hydration mismatch
-  const [onCooldown, setOnCooldown] = useState(false);
+  const [cooldownMs, setCooldownMs] = useState(0);
+  const onCooldown = cooldownMs > 0;
   useEffect(() => {
-    if (!mascot.lastInteractedAt) { setOnCooldown(false); return; }
+    if (!mascot.lastInteractedAt) { setCooldownMs(0); return; }
     const check = () => {
       const ms = Math.max(0, 5 * 60 * 1000 - (Date.now() - new Date(mascot.lastInteractedAt!).getTime()));
-      setOnCooldown(ms > 0);
+      setCooldownMs(ms);
     };
     check();
     const iv = setInterval(check, 5000);
