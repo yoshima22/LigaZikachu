@@ -270,7 +270,7 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
   try {
     const user = await getSessionUser();
     if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) return { error: "Sem permissão." };
-    await prisma.mascotEgg.create({ data: { playerId, type: eggType as "COMMON" | "RARE" | "SPECIAL" | "EVENT", origin: "Admin" } });
+    await prisma.mascotEgg.create({ data: { playerId, type: eggType as "COMMON" | "RARE" | "SPECIAL" | "EVENT" | "EGG_GEN1" | "EGG_GEN2", origin: "Admin" } });
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }

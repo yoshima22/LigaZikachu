@@ -44,7 +44,7 @@ interface Props {
   playerId: string | null;
 }
 
-const consumableTypes = new Set(["ZIKALOOT_TICKET", "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET"]);
+const consumableTypes = new Set(["ZIKALOOT_TICKET", "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "EGG_GEN1", "EGG_GEN2", "MASCOT_FOOD", "MASCOT_SWEET"]);
 
 export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, playerId }: Props) {
   const router = useRouter();
@@ -180,7 +180,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     staggerDelay={itemIndex * 120}
                   />
                 </div>
-              ) : (item.type === "EGG_COMMON" || item.type === "EGG_RARE" || item.type === "EGG_SPECIAL" || item.type === "EGG_EVENT") ? (
+              ) : (["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_EVENT","EGG_GEN1","EGG_GEN2"] as string[]).includes(item.type) ? (
                 <div className="flex h-24 items-center justify-center bg-slate-900">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img

@@ -102,12 +102,34 @@ function StatusPill({ label, color, size = "normal" }: { label: string; color: s
   );
 }
 
+interface ExpeditionRewardDisplay {
+  emoji: string;
+  title: string;
+  description: string;
+}
+
+function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number }): ExpeditionRewardDisplay {
+  if (reward.type === "EGG") {
+    const label = reward.eggType === "RARE" ? "Raro" : reward.eggType === "SPECIAL" ? "Especial" : "Comum";
+    return { emoji: "🥚", title: `Ovo ${label} encontrado!`, description: "Seu mascote voltou com um ovo misterioso." };
+  }
+  if (reward.type === "FOOD") {
+    if (reward.foodType === "SWEET") return { emoji: "🍬", title: "Doce encontrado!", description: `${reward.quantity ?? 1}x Doce de Mascote` };
+    return { emoji: "🍖", title: "Comida encontrada!", description: `${reward.quantity ?? 1}x Comida de Mascote` };
+  }
+  if (reward.type === "COINS") {
+    return { emoji: "🪙", title: `${reward.amount} ZikaCoins encontrados!`, description: "Adicionados à sua carteira." };
+  }
+  return { emoji: "😔", title: "Voltou de mãos vazias...", description: "Desta vez não encontrou nada." };
+}
+
 export function MascotCard({ mascot, isAdmin = false }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
   const [imgFailed, setImgFailed] = useState(false);
+  const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
 
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
@@ -115,8 +137,8 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const expedition = expeditions.find(e => e.status === "ACTIVE");
   const claimable  = expedition && new Date() >= new Date(expedition.finishAt);
-  const expNeeded  = expToNext(mascot.level);
-  const expPct     = Math.min(100, Math.round((mascot.exp / expNeeded) * 100));
+  const expNeeded  = Math.max(1, expToNext(mascot.level));
+  const expPct     = Math.min(100, Math.max(0, Math.round((mascot.exp / expNeeded) * 100)));
 
   // Derived status
   const hungerStatus    = getHungerStatus(mascot.lastFedAt);
@@ -184,6 +206,24 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   ];
 
   return (
+    <>
+    {/* Expedition reward modal */}
+    {expeditionReward && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setExpeditionReward(null)}>
+        <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="text-6xl">{expeditionReward.emoji}</div>
+          <div className="space-y-1">
+            <p className="text-lg font-bold text-white">{expeditionReward.title}</p>
+            <p className="text-sm text-slate-400">{expeditionReward.description}</p>
+          </div>
+          <button
+            onClick={() => setExpeditionReward(null)}
+            className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors">
+            Fechar
+          </button>
+        </div>
+      </div>
+    )}
     <div className={`rounded-2xl border bg-slate-950/60 transition-all ${mascot.isEquipped ? "border-[#FFCB05]/50 ring-1 ring-[#FFCB05]/20" : "border-border"}`}>
       {mascot.isEquipped && (
         <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider">
@@ -321,7 +361,16 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         )}
         {claimable && expedition && (
           <button type="button" disabled={pending}
-            onClick={() => act(() => claimExpeditionAction(expedition.id), "🎁 Presente coletado!")}
+            onClick={() => {
+              startTransition(async () => {
+                const r = await claimExpeditionAction(expedition.id);
+                if (r.error) { toast.error(r.error); return; }
+                if (r.result?.reward) {
+                  setExpeditionReward(rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number }));
+                }
+                router.refresh();
+              });
+            }}
             className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 animate-pulse">
             🎁 Coletar presente da expedição!
           </button>
@@ -454,5 +503,6 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         )}
       </div>
     </div>
+    </>
   );
 }

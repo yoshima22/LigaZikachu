@@ -10,6 +10,8 @@ const EGG_TYPE_MAP: Record<string, EggType> = {
   EGG_RARE:    EggType.RARE,
   EGG_SPECIAL: EggType.SPECIAL,
   EGG_EVENT:   EggType.EVENT,
+  EGG_GEN1:    EggType.EGG_GEN1,
+  EGG_GEN2:    EggType.EGG_GEN2,
 };
 
 const FOOD_TYPE_MAP: Record<string, FoodType> = {

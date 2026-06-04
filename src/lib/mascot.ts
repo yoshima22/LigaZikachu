@@ -123,6 +123,12 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
     return { leveled: false, newLevel: mascot.level, evolved: false };
   }
 
+  // Check for active EXP_BOOST buff
+  const expBoostBuff = await prisma.mascotBuff.findFirst({
+    where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } }
+  });
+  if (expBoostBuff) amount = Math.floor(amount * 2);
+
   let { level, exp, pokemonId } = mascot;
   exp += amount;
   let leveled = false;
@@ -224,19 +230,19 @@ export async function interactWithMascot(
       expGained = EXP_REWARDS.PLAY_WITH;
       newMood = mascot.personality === "LAZY" ? "TIRED" : "HAPPY";
       message = mascot.personality === "LAZY"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} brincou, mas parece que cansou rápido.`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar!`;
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito preguiçoso — brincou um pouco mas logo cansou. (+${8} felicidade)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar! (+${8} felicidade, +${EXP_REWARDS.PLAY_WITH} EXP)`;
       break;
 
     case "PET":
       if (mascot.personality === "TIMID" && mascot.happiness < 40) {
         refused = true;
-        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} recuou timidamente. Não quer carinho agora.`;
+        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
         break;
       }
       if (mascot.mood === "ANGRY") {
         refused = true;
-        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está bravo. Melhor esperar passar.`;
+        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
         break;
       }
       // Pet dá +8 felicidade (era 3, muito baixo para ser perceptível)
@@ -380,12 +386,17 @@ export type ExpeditionReward =
   | { type: "COINS";     amount: number }
   | { type: "NOTHING" };
 
-function rollExpeditionReward(mascot: { level: number; statInstinct: number; statCharisma: number }): ExpeditionReward {
-  const luck = mascot.statInstinct + Math.floor(mascot.level / 10);
+async function rollExpeditionReward(mascot: { id: string; level: number; statInstinct: number; statCharisma: number }): Promise<ExpeditionReward> {
+  const luckBuff = await prisma.mascotBuff.findFirst({
+    where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
+  });
+  const luckMultiplier = luckBuff ? 2 : 1;
+
+  const luck = (mascot.statInstinct + Math.floor(mascot.level / 10)) * luckMultiplier;
   const roll = Math.random() * 100;
 
   if (roll < 5 + luck * 0.3) return { type: "EGG", eggType: luck > 20 ? "RARE" : "COMMON" };
-  if (roll < 20) return { type: "FOOD", foodType: "SWEET", quantity: 1 };
+  if (roll < 20 * luckMultiplier) return { type: "FOOD", foodType: "SWEET", quantity: 1 };
   if (roll < 40) return { type: "FOOD", foodType: "FOOD",  quantity: randomInt(1, 3) };
   if (roll < 60) return { type: "COINS", amount: randomInt(50, 200) };
   return { type: "NOTHING" };
@@ -466,7 +477,7 @@ async function claimExpeditionLegacy(
   if (expedition.status !== "ACTIVE") throw new Error("Expedição já coletada.");
   if (new Date() < expedition.finishAt) throw new Error("A expedição ainda não terminou.");
 
-  const reward = rollExpeditionReward(expedition.mascot);
+  const reward = await rollExpeditionReward(expedition.mascot);
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({ where: { id: expeditionId }, data: { status: "CLAIMED", rewardJson: reward } });
@@ -507,7 +518,7 @@ export async function claimExpedition(
   if (expedition.status !== "ACTIVE") throw new Error("Expedição já coletada.");
   if (new Date() < expedition.finishAt) throw new Error("A expedição ainda não terminou.");
 
-  const reward = rollExpeditionReward(expedition.mascot);
+  const reward = await rollExpeditionReward(expedition.mascot);
   const gift = describeExpeditionReward(reward);
 
   await prisma.$transaction(async (tx) => {
@@ -534,6 +545,17 @@ export async function claimExpedition(
   });
 
   await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION).catch(() => {});
+
+  // Ally benefits: friends boost the expedition and get notified
+  const friends = await prisma.mascotRelation.findMany({
+    where: { mascotAId: expedition.mascotId, type: "FRIEND" },
+    include: { mascotB: { select: { id: true, statCharisma: true, nickname: true, pokemonId: true, playerId: true } } }
+  });
+  for (const rel of friends) {
+    const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+    await logEvent(rel.mascotB.id, "🤝", `Ajudou ${expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId)} em sua expedição!`).catch(() => {});
+    await logEvent(expedition.mascotId, "💚", `${friendName} apoiou a expedição!`).catch(() => {});
+  }
 
   return { reward, mascotId: expedition.mascotId };
 }
@@ -599,6 +621,16 @@ export async function battleMascots(mascotAId: string, mascotBId: string): Promi
   if (!a || !b) throw new Error("Mascote não encontrado.");
   if (a.playerId === b.playerId) throw new Error("Pokémon do mesmo treinador não batalham.");
 
+  // Skip if either mascot belongs to an admin
+  const adminRoles = ["ADMIN", "SUPER_ADMIN"];
+  const [playerA, playerB] = await Promise.all([
+    prisma.player.findUnique({ where: { id: a.playerId }, select: { user: { select: { role: true } } } }),
+    prisma.player.findUnique({ where: { id: b.playerId }, select: { user: { select: { role: true } } } }),
+  ]);
+  if (adminRoles.includes(playerA?.user.role ?? "") || adminRoles.includes(playerB?.user.role ?? "")) {
+    throw new Error("Batalhas envolvendo mascotes de admins não são registradas.");
+  }
+
   const elemA = getPokemonElement(a.pokemonId);
   const elemB = getPokemonElement(b.pokemonId);
   const multA = getTypeAdvantageMultiplier(elemA, elemB);
@@ -653,6 +685,14 @@ export async function formFriendship(mascotAId: string, mascotBId: string): Prom
     prisma.mascot.findUnique({ where: { id: mascotBId } }),
   ]);
   if (!a || !b) return;
+
+  // Skip if either mascot belongs to an admin
+  const adminRoles = ["ADMIN", "SUPER_ADMIN"];
+  const [playerA, playerB] = await Promise.all([
+    prisma.player.findUnique({ where: { id: a.playerId }, select: { user: { select: { role: true } } } }),
+    prisma.player.findUnique({ where: { id: b.playerId }, select: { user: { select: { role: true } } } }),
+  ]);
+  if (adminRoles.includes(playerA?.user.role ?? "") || adminRoles.includes(playerB?.user.role ?? "")) return;
 
   await prisma.$transaction([
     prisma.mascotRelation.upsert({

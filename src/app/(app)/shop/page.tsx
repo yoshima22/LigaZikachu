@@ -55,7 +55,7 @@ export default async function ShopPage() {
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
   const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
   const mascotItems = items.filter((i) =>
-    ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "MASCOT_FOOD", "MASCOT_SWEET", ...BUFF_TYPES].includes(i.type)
+    ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "EGG_GEN1", "EGG_GEN2", "MASCOT_FOOD", "MASCOT_SWEET", ...BUFF_TYPES].includes(i.type)
   );
   // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
   const buffInventory = inventoryRows.filter(r => {
@@ -71,6 +71,8 @@ export default async function ShopPage() {
     if (item.type === "EGG_COMMON") countByItemId.set(item.id, eggCountByType.get("COMMON") ?? 0);
     if (item.type === "EGG_RARE") countByItemId.set(item.id, eggCountByType.get("RARE") ?? 0);
     if (item.type === "EGG_SPECIAL") countByItemId.set(item.id, eggCountByType.get("SPECIAL") ?? 0);
+    if (item.type === "EGG_GEN1") countByItemId.set(item.id, eggCountByType.get("EGG_GEN1") ?? 0);
+    if (item.type === "EGG_GEN2") countByItemId.set(item.id, eggCountByType.get("EGG_GEN2") ?? 0);
     if (item.type === "MASCOT_FOOD") countByItemId.set(item.id, foodCountByType.get("FOOD") ?? 0);
     if (item.type === "MASCOT_SWEET") countByItemId.set(item.id, foodCountByType.get("SWEET") ?? 0);
   }

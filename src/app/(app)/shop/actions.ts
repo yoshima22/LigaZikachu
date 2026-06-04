@@ -263,6 +263,8 @@ const CONSUMABLE_TYPES: ShopItemType[] = [
   ShopItemType.EGG_COMMON,
   ShopItemType.EGG_RARE,
   ShopItemType.EGG_SPECIAL,
+  ShopItemType.EGG_GEN1,
+  ShopItemType.EGG_GEN2,
   ShopItemType.MASCOT_FOOD,
   ShopItemType.MASCOT_SWEET,
 ];
@@ -313,12 +315,14 @@ export async function purchaseItem(
         description: quantity > 1 ? `Compra: ${item.name} x${quantity}` : `Compra: ${item.name}`
       });
 
-      if (item.type === ShopItemType.EGG_COMMON || item.type === ShopItemType.EGG_RARE || item.type === ShopItemType.EGG_SPECIAL) {
+      if ([ShopItemType.EGG_COMMON, ShopItemType.EGG_RARE, ShopItemType.EGG_SPECIAL, ShopItemType.EGG_GEN1, ShopItemType.EGG_GEN2].includes(item.type)) {
         // Compra de ovo → cria MascotEgg no inventário
         const eggTypeMap: Record<string, EggType> = {
           [ShopItemType.EGG_COMMON]:  EggType.COMMON,
           [ShopItemType.EGG_RARE]:    EggType.RARE,
           [ShopItemType.EGG_SPECIAL]: EggType.SPECIAL,
+          [ShopItemType.EGG_GEN1]:    EggType.EGG_GEN1,
+          [ShopItemType.EGG_GEN2]:    EggType.EGG_GEN2,
         };
         await tx.mascotEgg.createMany({
           data: Array.from({ length: quantity }, () => ({
