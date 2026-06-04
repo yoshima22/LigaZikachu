@@ -327,7 +327,7 @@ export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error
   try {
     await requireAdmin();
 
-    const adminRoles = ["ADMIN", "SUPER_ADMIN"];
+    const adminRoles = ["ADMIN", "SUPER_ADMIN"] as import("@prisma/client").Role[];
 
     // Find all mascot IDs belonging to admin users
     const adminMascots = await prisma.mascot.findMany({
