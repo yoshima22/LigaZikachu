@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { Plus, Store } from "lucide-react";
 import { MiauvadaoPanel } from "./_components/miauvadao-panel";
+import { ShellGame } from "./_components/shell-game";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
@@ -84,6 +85,14 @@ export default async function BazarPage({
         balance={wallet?.balance ?? 0}
         playerId={playerId}
         offersRefreshedAt={miauvadao.offersRefreshedAt?.toISOString() ?? null}
+      />
+
+      {/* Shell Game */}
+      <ShellGame
+        balance={wallet?.balance ?? 0}
+        playerId={playerId}
+        vaultBalance={miauvadao.vaultBalance}
+        lastWinnerMessage={miauvadao.lastWinnerMessage ?? null}
       />
 
       {/* Filters */}

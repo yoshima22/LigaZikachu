@@ -250,6 +250,7 @@ model Player {
   bazarListings           BazarListing[]
   bazarProposals          BazarProposal[]
   bazarFavorites          BazarFavorite[]
+  shellGameSessions       ShellGameSession[]
 
   @@map("players")
 }
@@ -1545,12 +1546,31 @@ model BazarTransaction {
 // Configuração do Miauvadão (NPC intermediário — singleton)
 model MiauvadaoConfig {
   id                String   @id @default("singleton")
-  vaultBalance      Int      @default(0)   // alimentado pelas taxas do bazar
-  listingFee        Int      @default(10)  // taxa em ZC por anúncio
-  // JSON: [{shopItemId?, itemType, name, imageUrl, originalPrice, discountPct, finalPrice, stock, sold}]
+  vaultBalance      Int      @default(0)
+  listingFee        Int      @default(10)
   dailyOffers       Json     @default("[]")
   offersRefreshedAt DateTime?
+  // Shell Game — última mensagem do NPC
+  lastWinnerMessage String?
+  lastWinnerAt      DateTime?
   updatedAt         DateTime @updatedAt
 
   @@map("miauvadao_config")
+}
+
+// Sessão de Shell Game — guarda posição da bolinha no servidor (anti-cheat)
+model ShellGameSession {
+  id         String   @id @default(cuid())
+  playerId   String
+  betAmount  Int
+  ballPos    Int      // 0 | 1 | 2  — segredo até o palpite
+  resolved   Boolean  @default(false)
+  won        Boolean?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId])
+  @@map("shell_game_sessions")
 }

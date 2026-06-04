@@ -824,3 +824,108 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
     }
   }
 }
+
+// ── Shell Game ────────────────────────────────────────────────────────────────
+
+const SHELL_MIN_BET = 50;
+const SHELL_MAX_BET = 2000;
+const SHELL_VAULT_PCT = 0.20;
+const SHELL_COOLDOWN_MS = 5 * 60_000;
+
+const MIAUVADAO_RAGE: string[] = [
+  "IMPOSSÍVEL! {player} roubou {amount} ZC do meu cofre! 😾",
+  "{player} me trapaceou e levou {amount} ZC! Tô boladão! 🤬",
+  "Como?! {player} acertou e saiu com {amount} ZC! Não é justo! 😤",
+  "{player} limpou parte do cofre! {amount} ZC voaram! Voltaaaa! 🙀",
+  "Minha sorte acabou... {player} levou {amount} ZC. Me arruinou! 😿",
+  "{player} ganhou {amount} ZC! Meu cofre tá chorando igual eu! 😭",
+];
+
+export async function startShellGameSession(betAmount: number): Promise<{
+  error?: string; sessionId?: string; newBalance?: number; lastCooldownMs?: number;
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil não encontrado." };
+    if (betAmount < SHELL_MIN_BET) return { error: `Aposta mínima: ${SHELL_MIN_BET} ZC.` };
+    if (betAmount > SHELL_MAX_BET) return { error: `Aposta máxima: ${SHELL_MAX_BET} ZC.` };
+
+    const lastSession = await prisma.shellGameSession.findFirst({
+      where: { playerId: player.id }, orderBy: { createdAt: "desc" },
+    });
+    if (lastSession) {
+      const elapsed = Date.now() - lastSession.createdAt.getTime();
+      if (elapsed < SHELL_COOLDOWN_MS) return { lastCooldownMs: SHELL_COOLDOWN_MS - elapsed };
+    }
+
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    if (!wallet || wallet.balance < betAmount) return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC).` };
+
+    const ballPos = Math.floor(Math.random() * 3);
+    const expiresAt = new Date(Date.now() + 5 * 60_000);
+    const [session, updatedWallet] = await prisma.$transaction([
+      prisma.shellGameSession.create({ data: { playerId: player.id, betAmount, ballPos, expiresAt } }),
+      prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: betAmount } } }),
+    ]);
+    return { sessionId: session.id, newBalance: updatedWallet.balance };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function resolveShellGame(sessionId: string, guessedPos: number): Promise<{
+  error?: string; won?: boolean; actualPos?: number; prize?: number; newBalance?: number;
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const session = await prisma.shellGameSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.playerId !== player.id) return { error: "Sessão inválida." };
+    if (session.resolved) return { error: "Sessão já resolvida." };
+    if (new Date() > session.expiresAt) return { error: "Sessão expirada — jogue de novo." };
+
+    const won = session.ballPos === guessedPos;
+    let prize = 0;
+    let newBalance = 0;
+
+    if (won) {
+      const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+      const vaultBonus = Math.floor((config?.vaultBalance ?? 0) * SHELL_VAULT_PCT);
+      prize = session.betAmount + vaultBonus;
+      const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
+      const message = template.replace("{player}", player.displayName).replace("{amount}", prize.toLocaleString("pt-BR"));
+      const [updatedWallet] = await prisma.$transaction([
+        prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { increment: prize } } }),
+        prisma.miauvadaoConfig.upsert({
+          where: { id: "singleton" },
+          update: { vaultBalance: { decrement: vaultBonus }, lastWinnerMessage: message, lastWinnerAt: new Date() },
+          create: { id: "singleton", lastWinnerMessage: message, lastWinnerAt: new Date() },
+        }),
+        prisma.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: true } }),
+      ]);
+      newBalance = updatedWallet.balance;
+    } else {
+      await prisma.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: false } });
+      const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      newBalance = wallet?.balance ?? 0;
+    }
+
+    revalidatePath("/bazar");
+    return { won, actualPos: session.ballPos, prize, newBalance };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { cooldownMs: 0 };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { cooldownMs: 0 };
+    const last = await prisma.shellGameSession.findFirst({ where: { playerId: player.id }, orderBy: { createdAt: "desc" } });
+    if (!last) return { cooldownMs: 0 };
+    return { cooldownMs: Math.max(0, SHELL_COOLDOWN_MS - (Date.now() - last.createdAt.getTime())) };
+  } catch { return { cooldownMs: 0 }; }
+}
