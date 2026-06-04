@@ -63,13 +63,16 @@ function Countdown({ finishAt }: { finishAt: Date }) {
 }
 
 const GEN_OPTIONS = [
-  { value: "",            label: "🎲 Geração aleatória (padrão)" },
-  { value: "EGG_GEN1",   label: "1️⃣ Gen 1 — Kanto (Bulbasaur a Mew)" },
-  { value: "EGG_GEN2",   label: "2️⃣ Gen 2 — Johto (Chikorita a Celebi)" },
-  { value: "EGG_GEN3",   label: "3️⃣ Gen 3 — Hoenn (Treecko a Deoxys)" },
-  { value: "EGG_GEN4",   label: "4️⃣ Gen 4 — Sinnoh (Turtwig a Arceus)" },
-  { value: "EGG_GEN5",   label: "5️⃣ Gen 5 — Unova (Snivy a Genesect)" },
-  { value: "EGG_GEN6PLUS", label: "6️⃣+ Kalos / Alola / Galar / Paldea" },
+  { value: "",          label: "🎲 Geração aleatória (Gen 1 e 2)" },
+  { value: "EGG_GEN1", label: "1️⃣ Gen 1 — Kanto · Bulbasaur a Mew" },
+  { value: "EGG_GEN2", label: "2️⃣ Gen 2 — Johto · Chikorita a Celebi" },
+  { value: "EGG_GEN3", label: "3️⃣ Gen 3 — Hoenn · Treecko a Jirachi" },
+  { value: "EGG_GEN4", label: "4️⃣ Gen 4 — Sinnoh · Turtwig a Arceus" },
+  { value: "EGG_GEN5", label: "5️⃣ Gen 5 — Unova · Snivy a Genesect" },
+  { value: "EGG_GEN6", label: "6️⃣ Gen 6 — Kalos · Chespin a Diancie" },
+  { value: "EGG_GEN7", label: "7️⃣ Gen 7 — Alola · Rowlet a Zeraora" },
+  { value: "EGG_GEN8", label: "8️⃣ Gen 8 — Galar · Grookey a Calyrex" },
+  { value: "EGG_GEN9", label: "9️⃣ Gen 9 — Paldea · Sprigatito a Pecharunt" },
 ];
 
 export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {} }: Props) {

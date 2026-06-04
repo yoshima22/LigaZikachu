@@ -216,11 +216,16 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "Você não tem este item." };
 
     const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"; hours: number; label: string }> = {
-      MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica (2h de EXP dobrado)" },
-      MASCOT_BUFF_STAT:  { type: "STAT_BOOST",  hours: 4, label: "Proteína Zika (+3 em todos stats, 4h)" },
-      MASCOT_BUFF_HAPPY: { type: "HAPPINESS",   hours: 3, label: "Bala de Mel (felicidade máxima, 3h)" },
-      MASCOT_BUFF_LUCK:  { type: "LUCK_BOOST",  hours: 6, label: "Amuleto da Sorte (expedições melhores, 6h)" },
-      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Sagrada (remove humor negativo)" },
+      // ⚡ Vitamina Elétrica: EXP dobrado por 2h (verificado em addExp via MascotBuff)
+      MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica — EXP dobrado por 2h" },
+      // 💊 Proteína Zika: +3 PERMANENTE em todos os 5 atributos (sem expiração)
+      MASCOT_BUFF_STAT:  { type: "STAT_BOOST",  hours: 0, label: "Proteína Zika — +3 permanente em todos os atributos" },
+      // 🍯 Bala de Mel: felicidade vai para 100 imediatamente + humor HAPPY
+      MASCOT_BUFF_HAPPY: { type: "HAPPINESS",   hours: 0, label: "Bala de Mel — felicidade máxima instantânea" },
+      // 🍀 Amuleto da Sorte: chance dobrada de loot raro em expedições por 6h
+      MASCOT_BUFF_LUCK:  { type: "LUCK_BOOST",  hours: 6, label: "Amuleto da Sorte — loot raro dobrado por 6h" },
+      // 💧 Água Sagrada: remove humor negativo (Bravo/Cansado/Carente) imediatamente
+      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Sagrada — remove humor negativo" },
     };
 
     const config = BUFF_CONFIG[inventoryItem.item.type];

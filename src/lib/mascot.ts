@@ -27,6 +27,15 @@ function randomPersonality(): MascotPersonality {
 /** Sorteio de pokemonId a partir do tipo de ovo */
 export function rollPokemonFromEgg(eggType: string): number {
   const pool = EGG_POOLS[eggType] ?? EGG_POOLS.COMMON;
+
+  // Chance lendária: 1% em ovos SPECIAL/RARE, 0.3% em outros
+  const isHighRarity = ["SPECIAL","RARE","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(eggType);
+  const legendaryChance = eggType === "SPECIAL" ? 0.02 : isHighRarity ? 0.01 : 0.003;
+
+  if (Math.random() < legendaryChance) {
+    return randomFrom(LEGENDARY_POOL);
+  }
+
   return randomFrom(pool);
 }
 

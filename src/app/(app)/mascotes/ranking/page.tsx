@@ -12,7 +12,7 @@ interface PageProps {
 
 async function getRanking(tab: RankTab) {
   if (tab === "friends") {
-    const mascots = await prisma.mascot.findMany({
+    const mascots = await prisma.mascot.findMany({ where: { player: { user: { role: "PLAYER" } } },
       include: {
         player: { select: { displayName: true } },
         relationsAsA: { where: { type: "FRIEND" }, select: { id: true } },
@@ -37,7 +37,7 @@ async function getRanking(tab: RankTab) {
     battles:   { battleWins: "desc" },
   };
 
-  const mascots = await prisma.mascot.findMany({
+  const mascots = await prisma.mascot.findMany({ where: { player: { user: { role: "PLAYER" } } },
     include: { player: { select: { displayName: true } } },
     orderBy: orderByMap[tab as Exclude<RankTab, "friends">],
     take: 50,

@@ -88,7 +88,37 @@ export const EGG_POOLS: Record<string, number[]> = {
     627, 629, 631, 632, 633, 636, 638, 639, 640, 641, 642, 645,
   ],
 
-  // Gen 6+ (Kalos, Alola, Galar, Paldea) — seleção popular
+  // Gen 6 (Kalos)
+  EGG_GEN6: [
+    650, 653, 656,  // Starters Kalos
+    661, 664, 667, 669, 672, 674, 676, 677, 679, 682, 684, 686,
+    688, 690, 692, 694, 696, 698, 701, 703, 704, 707, 708, 710, 712,
+  ],
+
+  // Gen 7 (Alola)
+  EGG_GEN7: [
+    722, 725, 728,  // Starters Alola
+    731, 734, 736, 739, 742, 744, 746, 747, 749, 751, 753, 755, 757,
+    759, 761, 767, 769, 777, 781, 782,
+  ],
+
+  // Gen 8 (Galar)
+  EGG_GEN8: [
+    810, 813, 816,  // Starters Galar
+    819, 821, 824, 827, 829, 831, 833, 835, 837, 840, 843, 845, 846,
+    848, 850, 852, 854, 856, 861, 868, 870, 871, 872, 874, 875, 877,
+    878, 885,
+  ],
+
+  // Gen 9 (Paldea)
+  EGG_GEN9: [
+    906, 909, 912,  // Starters Paldea
+    915, 917, 919, 921, 924, 926, 928, 931, 932, 935, 938, 940,
+    942, 944, 946, 948, 950, 952, 954, 956, 958, 961, 963, 965,
+    967, 968, 969, 971, 973, 977, 978, 996,
+  ],
+
+  // Gen 6+ legacy alias (mantido para compatibilidade)
   EGG_GEN6PLUS: [
     650, 653, 656,       // Starters Kalos
     661, 664, 667, 669, 672, 674, 676, 677, 679, 681, 682, 684, 686,
@@ -561,3 +591,26 @@ export function generateMascotSpeech(params: {
   const idx = (params.mood.length + params.personality.length + params.happiness) % lines.length;
   return lines[idx];
 }
+
+
+// ── Pool de lendários (todos os gens) — aparece com raridade muito baixa ──────
+export const LEGENDARY_POOL: number[] = [
+  // Gen 1
+  144, 145, 146, 150, 151,           // Articuno, Zapdos, Moltres, Mewtwo, Mew
+  // Gen 2
+  243, 244, 245, 249, 250, 251,      // Raikou, Entei, Suicune, Lugia, Ho-Oh, Celebi
+  // Gen 3
+  377, 378, 379, 380, 381, 382, 383, 384, 385, 386,
+  // Gen 4
+  480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493,
+  // Gen 5
+  638, 639, 640, 641, 642, 643, 644, 645, 646, 647, 648, 649,
+  // Gen 6
+  716, 717, 718, 719, 720, 721,
+  // Gen 7
+  785, 786, 787, 788, 789, 790, 791, 792, 800, 801, 802, 807, 808, 809,
+  // Gen 8
+  888, 889, 890, 891, 892, 893, 894, 895, 896, 897, 898,
+  // Gen 9
+  1001, 1002, 1003, 1004, 1007, 1008,
+];
