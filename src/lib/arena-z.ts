@@ -367,6 +367,68 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
   });
 }
 
+/** Remove equipe completamente (admin ou dono). Libera mascotes e apaga o registro. */
+export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin = false) {
+  const team = await prisma.arenaTeam.findUnique({
+    where: { id: teamId },
+    include: { members: true, player: { include: { user: { select: { role: true } } } } },
+  });
+  if (!team) throw new Error("Equipe nao encontrada.");
+  const ownerIsAdmin = ["ADMIN","SUPER_ADMIN"].includes(team.player.user.role);
+  if (!isAdmin && team.playerId !== playerId) throw new Error("Sem permissao.");
+  // Jogador comum so pode remover equipes proprias nao ativas
+  if (!isAdmin && !ownerIsAdmin && team.status === "ACTIVE") {
+    throw new Error("Use 'Retirar e coletar' para equipes ativas antes de remover.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Libera todos os mascotes
+    await tx.mascot.updateMany({
+      where: { id: { in: team.members.map(m => m.mascotId) } },
+      data: { arenaState: "FREE", restingUntil: null }
+    });
+    // Remove a equipe (cascade apaga members via FK)
+    await tx.arenaTeam.delete({ where: { id: teamId } });
+  });
+}
+
+/** Admin: remove TODOS os registros de arena (batalhas, times) de contas admin. */
+export async function purgeAdminArenaData(): Promise<{ teams: number; battles: number }> {
+  const adminPlayers = await prisma.player.findMany({
+    where: { user: { role: { in: ["ADMIN","SUPER_ADMIN"] } } },
+    select: { id: true },
+  });
+  const adminIds = adminPlayers.map(p => p.id);
+  if (adminIds.length === 0) return { teams: 0, battles: 0 };
+
+  // Remove batalhas envolvendo admins
+  const deletedBattles = await prisma.arenaBattle.deleteMany({
+    where: {
+      OR: [
+        { attackerPlayerId: { in: adminIds } },
+        { defenderPlayerId: { in: adminIds } },
+      ],
+    },
+  });
+
+  // Remove equipes de admins (libera mascotes antes via transação)
+  const adminTeams = await prisma.arenaTeam.findMany({
+    where: { playerId: { in: adminIds } },
+    include: { members: true },
+  });
+  let teamsRemoved = 0;
+  for (const team of adminTeams) {
+    await prisma.mascot.updateMany({
+      where: { id: { in: team.members.map(m => m.mascotId) } },
+      data: { arenaState: "FREE", restingUntil: null }
+    });
+    await prisma.arenaTeam.delete({ where: { id: team.id } });
+    teamsRemoved++;
+  }
+
+  return { teams: teamsRemoved, battles: deletedBattles.count };
+}
+
 export async function retireArenaTeam(playerId: string, teamId: string) {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
@@ -424,6 +486,33 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
   if (team.members.length === 0) throw new Error("Equipe vazia.");
+
+  // Admin: força debug mode automaticamente (sem cooldown, sem efeito no ranking/loot)
+  const ownerUser = await prisma.player.findUnique({ where: { id: playerId }, include: { user: { select: { role: true } } } });
+  const isAdminPlayer = ["ADMIN","SUPER_ADMIN"].includes(ownerUser?.user.role ?? "");
+  if (isAdminPlayer) {
+    // Debug mode automático para admin: roda combate sem persistir resultado real
+    const attackers = team.members.map(m => toArenaMascot(m.mascot));
+    const bot = buildBotOpponent(attackers, difficulty);
+    const combat = runCombat(attackers, bot.defenders);
+    const won = combat.result === "ATTACKER_WIN";
+    const diff = DIFFICULTY_CONFIG[difficulty];
+    const fakeReward: ArenaLootFull = won ? {
+      coins: Math.round(rand(5, 30) * diff.rewardMult),
+      exp: Math.round(rand(10, 50) * diff.rewardMult),
+      food: 0, sweet: 0,
+    } : { coins: 0, exp: 0, food: 0, sweet: 0 };
+    return {
+      won, result: combat.result, botName: bot.botName,
+      reward: fakeReward, rounds: combat.rounds,
+      difficulty, difficultyLabel: diff.label,
+      injuredMascotIds: [], injuredMascots: [],
+      botMascots: bot.defenders.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, type: getPokemonElement(m.pokemonId) })),
+      highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
+      debugMode: true,
+    };
+  }
+
   assertTeamReady(team);
 
   // Cooldown: impede spam de bot battles
@@ -613,8 +702,23 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
 // ── Ranking público ───────────────────────────────────────────────────────────
 
 export async function getArenaRanking(limit = 20) {
+  // Busca IDs de admins para excluir do ranking
+  const adminUsers = await prisma.user.findMany({
+    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+    select: { player: { select: { id: true } } },
+  });
+  const adminPlayerIds = new Set(
+    adminUsers.map(u => u.player?.id).filter(Boolean) as string[]
+  );
+
   const battles = await prisma.arenaBattle.findMany({
-    where: { status: "RESOLVED", type: { in: ["BOT", "PVP"] } },
+    where: {
+      status: "RESOLVED",
+      type: { in: ["BOT", "PVP"] },
+      // Exclui batalhas onde atacante ou defensor é admin
+      attackerPlayerId: { notIn: [...adminPlayerIds] },
+      NOT: { defenderPlayerId: { in: [...adminPlayerIds] } },
+    },
     include: {
       attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
       defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
@@ -791,6 +895,14 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (!attackTeam || attackTeam.playerId !== playerId) throw new Error("Equipe atacante nao encontrada.");
   if (!defenseTeam) throw new Error("Equipe defensora nao encontrada.");
   if (defenseTeam.playerId === playerId) throw new Error("PvP precisa desafiar uma equipe de outro jogador.");
+
+  // Bloqueia admins de participar de PvP real (para não contaminar rankings/loot)
+  const [attackUser, defenseUser] = await Promise.all([
+    prisma.player.findUnique({ where: { id: attackTeam.playerId }, include: { user: { select: { role: true } } } }),
+    prisma.player.findUnique({ where: { id: defenseTeam.playerId }, include: { user: { select: { role: true } } } }),
+  ]);
+  const isAdminBattle = ["ADMIN","SUPER_ADMIN"].includes(attackUser?.user.role ?? "") || ["ADMIN","SUPER_ADMIN"].includes(defenseUser?.user.role ?? "");
+  if (isAdminBattle) throw new Error("Contas admin nao participam de PvP real. Use o modo debug para testes.");
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE") throw new Error("As duas equipes precisam estar ativas.");
   if (attackTeam.members.length === 0 || defenseTeam.members.length === 0) throw new Error("As equipes precisam ter mascotes.");
 

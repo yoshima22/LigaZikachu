@@ -7,7 +7,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog } from "@/lib/arena-z";
 import { createArenaTeamAction } from "./actions";
-import { AdminMascotStateButton, BotBattleButton, LockBotButton, OpportunisticAttackButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, LockBotButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -221,8 +221,9 @@ export default async function ArenaZPage() {
                       <p className="font-bold text-slate-100">{team.name}</p>
                       <p className="text-[11px] text-slate-500">{team.status} | {team.members.length} mascote(s) | entrou {team.enteredAt.toLocaleDateString("pt-BR")}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       {team.status === "ACTIVE" && <RetireTeamButton teamId={team.id} />}
+                      <DeleteTeamButton teamId={team.id} isAdmin={admin} />
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3 text-xs text-[#FFCB05]">
@@ -399,6 +400,9 @@ export default async function ArenaZPage() {
             {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
               <h2 className="font-semibold text-slate-200">Controles admin</h2>
               <p className="mt-1 text-xs text-slate-500">Ferramentas de teste para ferimento, repouso e liberar estado.</p>
+              <div className="mt-3">
+                <PurgeAdminArenaButton />
+              </div>
               <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
                 {mascots.slice(0, 20).map(m => (
                   <div key={m.id} className="rounded-xl border border-border/60 bg-slate-900/40 p-3">

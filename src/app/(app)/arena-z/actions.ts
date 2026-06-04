@@ -6,8 +6,10 @@ import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
   adminSetMascotArenaState,
   createArenaTeam,
+  deleteArenaTeam,
   healMascotSus,
   lockBotForTeam,
+  purgeAdminArenaData,
   retireArenaTeam,
   runBotBattle,
   runOpportunisticAttack,
@@ -82,6 +84,33 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
+  }
+}
+
+export async function deleteArenaTeamAction(teamId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+    await deleteArenaTeam(player.id, teamId, isAdminUser);
+    revalidatePath("/arena-z");
+    revalidatePath("/mascotes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao remover equipe." };
+  }
+}
+
+export async function purgeAdminArenaDataAction(): Promise<{ error?: string; teams?: number; battles?: number }> {
+  try {
+    await requireAdmin();
+    const result = await purgeAdminArenaData();
+    revalidatePath("/arena-z");
+    return result;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro na limpeza." };
   }
 }
 
