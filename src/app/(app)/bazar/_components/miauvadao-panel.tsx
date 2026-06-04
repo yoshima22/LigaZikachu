@@ -1,11 +1,35 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Zap, ShoppingCart, Clock } from "lucide-react";
+import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
 import { buyMiauvadaoOffer } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
+
+function RefreshCountdown({ validUntil }: { validUntil: string }) {
+  const [remaining, setRemaining] = useState(0);
+
+  useEffect(() => {
+    const target = new Date(validUntil).getTime();
+    const update = () => setRemaining(Math.max(0, target - Date.now()));
+    update();
+    const iv = setInterval(update, 1000);
+    return () => clearInterval(iv);
+  }, [validUntil]);
+
+  const h = Math.floor(remaining / 3_600_000);
+  const m = Math.floor((remaining % 3_600_000) / 60_000);
+  const s = Math.floor((remaining % 60_000) / 1_000);
+
+  if (remaining === 0) return <span className="text-[#FFCB05]">Atualizando…</span>;
+  return (
+    <span className="flex items-center gap-1">
+      <RefreshCw size={9} className="opacity-60"/>
+      {String(h).padStart(2,"0")}:{String(m).padStart(2,"0")}:{String(s).padStart(2,"0")}
+    </span>
+  );
+}
 
 const ITEM_EMOJI: Record<string, string> = {
   EGG_COMMON: "🥚", EGG_RARE: "💙", EGG_SPECIAL: "💜",
@@ -23,9 +47,10 @@ interface Props {
   vaultBalance: number;
   balance: number;
   playerId: string | null;
+  offersRefreshedAt?: string | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, offersRefreshedAt }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -53,9 +78,13 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Prop
           <h2 className="font-pixel text-sm text-[#FFCB05] flex items-center gap-1.5">
             Ofertas do Miauvadão <Zap size={13} className="fill-[#FFCB05] text-[#FFCB05]" />
           </h2>
-          <p className="text-[10px] text-slate-500">
-            Cofre: <span className="text-[#FFCB05] font-semibold">{vaultBalance.toLocaleString("pt-BR")} ZC</span>
-            {" · "}Atualiza diariamente
+          <p className="text-[10px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+            <span>Cofre: <span className="text-[#FFCB05] font-semibold">{vaultBalance.toLocaleString("pt-BR")} ZC</span></span>
+            <span>·</span>
+            {offers[0]?.validUntil
+              ? <RefreshCountdown validUntil={offers[0].validUntil} />
+              : <span>Atualiza diariamente</span>
+            }
           </p>
         </div>
       </div>

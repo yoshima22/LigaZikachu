@@ -11,6 +11,80 @@ function revalidateBazar() {
   revalidatePath("/bazar/meu-bazar");
 }
 
+// ── Catálogo de itens que o Miauvadão pode oferecer automaticamente ───────────
+const MIAUVADAO_CATALOG = [
+  { itemType: "EGG_COMMON",      name: "Ovo Comum",          basePrice: 1200,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_RARE",        name: "Ovo Raro",           basePrice: 2800,  discountRange: [15, 35] as [number,number] },
+  { itemType: "EGG_SPECIAL",     name: "Ovo Especial",       basePrice: 5000,  discountRange: [10, 25] as [number,number] },
+  { itemType: "EGG_GEN1",        name: "Ovo Gen 1",          basePrice: 1800,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN2",        name: "Ovo Gen 2",          basePrice: 1800,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN3",        name: "Ovo Gen 3",          basePrice: 2000,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN4",        name: "Ovo Gen 4",          basePrice: 2000,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN5",        name: "Ovo Gen 5",          basePrice: 2000,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN6",        name: "Ovo Gen 6",          basePrice: 2200,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN7",        name: "Ovo Gen 7",          basePrice: 2200,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN8",        name: "Ovo Gen 8",          basePrice: 2200,  discountRange: [15, 30] as [number,number] },
+  { itemType: "EGG_GEN9",        name: "Ovo Gen 9",          basePrice: 2200,  discountRange: [15, 30] as [number,number] },
+  { itemType: "MASCOT_FOOD",     name: "Comida de Mascote",  basePrice: 120,   discountRange: [20, 40] as [number,number] },
+  { itemType: "MASCOT_SWEET",    name: "Doce de Mascote",    basePrice: 350,   discountRange: [20, 40] as [number,number] },
+  { itemType: "MASCOT_BUFF_EXP", name: "Vitamina Elétrica",  basePrice: 500,   discountRange: [10, 25] as [number,number] },
+  { itemType: "MASCOT_BUFF_STAT",name: "Proteína Zika",      basePrice: 800,   discountRange: [10, 25] as [number,number] },
+  { itemType: "MASCOT_BUFF_HAPPY",name:"Bala de Mel",        basePrice: 400,   discountRange: [15, 30] as [number,number] },
+  { itemType: "MASCOT_BUFF_LUCK",name: "Amuleto da Sorte",   basePrice: 600,   discountRange: [10, 25] as [number,number] },
+  { itemType: "MASCOT_BUFF_MOOD",name: "Água Sagrada",       basePrice: 350,   discountRange: [15, 35] as [number,number] },
+];
+
+function rollMiauvadaoOffers(vaultBalance: number): MiauvadaoOffer[] {
+  // Quanto maior o cofre, maiores os descontos (até 50% extras com cofre cheio)
+  const vaultBonus = Math.min(20, Math.floor(vaultBalance / 500)); // +1% por 500 ZC, máx +20%
+
+  // Escolhe 3 itens aleatórios sem repetição
+  const shuffled = [...MIAUVADAO_CATALOG].sort(() => Math.random() - 0.5);
+  const chosen = shuffled.slice(0, 3);
+  const validUntil = new Date(Date.now() + 24 * 3600_000).toISOString();
+
+  return chosen.map(item => {
+    const [minDisc, maxDisc] = item.discountRange;
+    const discountPct = minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus;
+    const finalPrice = Math.max(1, Math.round(item.basePrice * (1 - discountPct / 100)));
+    return {
+      itemType:      item.itemType,
+      name:          item.name,
+      originalPrice: item.basePrice,
+      discountPct,
+      finalPrice,
+      stock:         5,
+      sold:          0,
+      validUntil,
+    };
+  });
+}
+
+/** Checa se as ofertas expiraram e gera novas automaticamente */
+export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
+  try {
+    const config = await prisma.miauvadaoConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton" },
+      update: {},
+    });
+
+    const offers = (config.dailyOffers as MiauvadaoOffer[]) ?? [];
+    const firstOffer = offers[0];
+    const expired = !firstOffer || new Date() > new Date(firstOffer.validUntil);
+
+    if (expired) {
+      const newOffers = rollMiauvadaoOffers(config.vaultBalance);
+      await prisma.miauvadaoConfig.update({
+        where: { id: "singleton" },
+        data: { dailyOffers: newOffers, offersRefreshedAt: new Date() },
+      });
+    }
+  } catch {
+    // silencioso — não bloqueia o render da página
+  }
+}
+
 // ── Buscar listagens ──────────────────────────────────────────────────────────
 
 export async function getListings(filters?: {

@@ -8,22 +8,27 @@ import { MiauvadaoPanel } from "./_components/miauvadao-panel";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
-import { getListings, getRecentTransactions, getMiauvadaoConfig } from "./actions";
+import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export default async function BazarPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: Record<string, string>;
+  searchParams: Promise<Record<string, string>>;
 }) {
+  const searchParams = await searchParamsPromise;
+
   const session = await getAppSession();
   const playerId = session?.user
     ? (await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } }))?.id ?? null
     : null;
 
   const wallet = playerId ? await getOrCreateWallet(playerId) : null;
+
+  // Auto-rotate Miauvadão offers if expired / first time
+  await autoRefreshMiauvadaoIfNeeded();
 
   const [listings, transactions, miauvadao] = await Promise.all([
     getListings({
@@ -78,6 +83,7 @@ export default async function BazarPage({
         vaultBalance={miauvadao.vaultBalance}
         balance={wallet?.balance ?? 0}
         playerId={playerId}
+        offersRefreshedAt={miauvadao.offersRefreshedAt?.toISOString() ?? null}
       />
 
       {/* Filters */}
