@@ -308,17 +308,20 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
 
         {/* Expedição — só para o dono */}
         {isOwner && (
-          {expedition && !expReady && (
-            <div className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/5 py-2 text-xs text-blue-400">
-              <MapPin size={12} /> Em expedição — falta {expMinutes > 0 ? `${expMinutes}m ` : ""}{String(expSecs).padStart(2,"0")}s
-            </div>
-          )}
-          {!expedition && (
-            <button type="button" disabled={pending} onClick={handleExpedition}
-              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
-              <MapPin size={12} /> Enviar em expedição (1h)
-            </button>
-          )}
+          <>
+            {expedition && !expReady && (
+              <div className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/5 py-2 text-xs text-blue-400">
+                <MapPin size={12} /> Em expedição — falta {expMinutes > 0 ? `${expMinutes}m ` : ""}{String(expSecs).padStart(2,"0")}s
+              </div>
+            )}
+            {!expedition && (
+              <button type="button" disabled={pending} onClick={handleExpedition}
+                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
+                <MapPin size={12} /> Enviar em expedição (1h)
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

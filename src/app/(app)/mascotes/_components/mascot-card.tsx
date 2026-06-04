@@ -131,6 +131,16 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [imgFailed, setImgFailed] = useState(false);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
 
+  // Estado otimista — reflete mudanças localmente antes do re-render do servidor
+  const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
+  const [localMood, setLocalMood]           = useState(mascot.mood);
+  const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
+
+  // Sincroniza com novas props quando servidor atualiza
+  useEffect(() => { setLocalHappiness(mascot.happiness); }, [mascot.happiness]);
+  useEffect(() => { setLocalMood(mascot.mood); },          [mascot.mood]);
+  useEffect(() => { setLocalLastFed(mascot.lastFedAt); },  [mascot.lastFedAt]);
+
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
   const otherMascots = Array.isArray(mascot.otherMascots) ? mascot.otherMascots : [];
@@ -140,10 +150,10 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const expNeeded  = Math.max(1, expToNext(mascot.level));
   const expPct     = Math.min(100, Math.max(0, Math.round((mascot.exp / expNeeded) * 100)));
 
-  // Derived status
-  const hungerStatus    = getHungerStatus(mascot.lastFedAt);
-  const happinessStatus = getHappinessStatus(mascot.happiness);
-  const challengeStatus = getChallengeStatus(mascot.mood);
+  // Derived status — usa estado local otimista
+  const hungerStatus    = getHungerStatus(localLastFed);
+  const happinessStatus = getHappinessStatus(localHappiness);
+  const challengeStatus = getChallengeStatus(localMood);
 
   // Cooldown 5 min — calculado client-side após mount para evitar hydration mismatch
   const [cooldownMs, setCooldownMs] = useState(0);
@@ -186,11 +196,20 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const handleInteract = (type: "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET") => {
     startTransition(async () => {
       const r = await interactAction(mascot.id, type);
-      if (r.error) toast.error(r.error);
-      else if (r.result) {
-        if (r.result.refused) toast.info(r.result.message);
-        else toast.success(r.result.message);
-        router.refresh(); // atualiza inventário e status imediatamente
+      if (r.error) { toast.error(r.error); return; }
+      if (r.result) {
+        if (r.result.refused) {
+          toast.info(r.result.message);
+          return;
+        }
+        toast.success(r.result.message);
+        // Atualização otimista imediata — não espera re-render do servidor
+        const happChange = r.result.happinessChange ?? 0;
+        setLocalHappiness(h => Math.min(100, Math.max(0, h + happChange)));
+        if (r.result.newMood) setLocalMood(r.result.newMood as string);
+        if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
+        // Re-render server para atualizar inventário e EXP
+        router.refresh();
       }
     });
   };
