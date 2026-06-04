@@ -742,15 +742,28 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
 
 // ── Formata turno de combate para exibição legível ────────────────────────────
 
-export function formatTurnLog(log: ArenaTurnLog[]): string[] {
+type PartialTurnLog = {
+  turn: number;
+  actorName: string;
+  targetName?: string;
+  damage?: number;
+  advantageApplied?: boolean;
+  action: string;
+  actorOwnerId?: string | null;
+  targetOwnerId?: string | null;
+};
+
+export function formatTurnLog(log: PartialTurnLog[]): string[] {
   return log.map(turn => {
     if (turn.action === "DEFEND") {
       return `Turno ${turn.turn}: ${turn.actorName} adotou postura defensiva.`;
     }
-    const owner = turn.actorOwnerId ? "" : " (bot)";
-    const targetOwner = turn.targetOwnerId ? "" : " (bot)";
+    const isBot = turn.actorOwnerId === null || turn.actorOwnerId === undefined;
+    const targetIsBot = turn.targetOwnerId === null || turn.targetOwnerId === undefined;
+    const actorTag = isBot ? " (bot)" : "";
+    const targetTag = targetIsBot ? " (bot)" : "";
     const advantage = turn.advantageApplied ? " com vantagem de tipo!" : "";
-    return `Turno ${turn.turn}: ${turn.actorName}${owner} atacou ${turn.targetName}${targetOwner} causando ${turn.damage} de dano${advantage}`;
+    return `Turno ${turn.turn}: ${turn.actorName}${actorTag} atacou ${turn.targetName ?? "alvo"}${targetTag} causando ${turn.damage ?? 0} de dano${advantage}`;
   });
 }
 
