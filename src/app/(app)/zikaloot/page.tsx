@@ -54,7 +54,13 @@ export default async function ZikaLootPage() {
       : 0
   ]);
 
-  const myPickMap = new Map(myPicks.map((p) => [p.lootId, p.number]));
+  // Agrupa múltiplos números por lootId
+  const myPickMap = new Map<string, number[]>();
+  for (const p of myPicks) {
+    const arr = myPickMap.get(p.lootId) ?? [];
+    arr.push(p.number);
+    myPickMap.set(p.lootId, arr);
+  }
   const activeLoot = loots.find((l) => l.status === ZikaLootStatus.SCHEDULED);
 
   // Busca imagens das figurinhas que são prêmio na loteria ativa.
@@ -174,9 +180,9 @@ export default async function ZikaLootPage() {
                 <p className="text-sm text-slate-300">{activeLoot.picks.length}/200</p>
               </div>
             </div>
-            {myPickMap.has(activeLoot.id) && (
+            {(myPickMap.get(activeLoot.id)??[]).length > 0 && (
               <p className="mt-2 text-xs text-[#FFCB05]">
-                ✓ Seu número: <strong>{myPickMap.get(activeLoot.id)}</strong>
+                ✓ {(myPickMap.get(activeLoot.id)?.length ?? 0) > 1 ? "Seus números" : "Seu número"}: <strong>{(myPickMap.get(activeLoot.id) ?? []).join(", ")}</strong>
               </p>
             )}
           </div>
@@ -189,7 +195,7 @@ export default async function ZikaLootPage() {
           lootId={activeLoot.id}
           picks={activeLoot.picks.map((p) => ({ number: p.number, playerName: p.player.displayName }))}
           blockedNumbers={activeLoot.drawnNumbers}
-          myNumber={myPickMap.get(activeLoot.id) ?? null}
+          myNumbers={myPickMap.get(activeLoot.id) ?? []}
           hasTicket={ticketCount > 0}
           isLoggedIn={!!player}
           drawAt={activeLoot.drawAt.toISOString()}

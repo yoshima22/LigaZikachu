@@ -66,11 +66,15 @@ export async function pickLootNumber(
     });
     if (!ticket || ticket.quantity < 1) return { error: "Você não possui um Ticket ZikaLoot. Compre um na ZikaShop ou ganhe pela Caixa de Presentes." };
 
-    // Verificar se já escolheu
-    const existing = await prisma.zikaLootPick.findUnique({
-      where: { lootId_playerId: { lootId, playerId: player.id } }
+    // Verificar quantos números o jogador já escolheu nesta loteria
+    const existingPicks = await prisma.zikaLootPick.findMany({
+      where: { lootId, playerId: player.id },
+      select: { number: true }
     });
-    if (existing) return { error: `Você já escolheu o número ${existing.number} nesta loteria.` };
+    // Não permite escolher o mesmo número duas vezes
+    if (existingPicks.some(p => p.number === number)) {
+      return { error: `Você já escolheu o número ${number} nesta loteria.` };
+    }
 
     // Verificar se número já foi pego
     const taken = await prisma.zikaLootPick.findUnique({

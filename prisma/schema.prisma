@@ -964,7 +964,7 @@ model ZikaLootPick {
   loot     ZikaLoot @relation(fields: [lootId], references: [id], onDelete: Cascade)
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   @@unique([lootId, number])
-  @@unique([lootId, playerId])
+  @@index([lootId, playerId])
   @@map("zika_loot_picks")
 }
 
