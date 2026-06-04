@@ -69,9 +69,12 @@ function Tip({ text, children }: { text: string; children: React.ReactNode }) {
 
 // Countdown de expedição (tempo restante, atualizado a cada segundo)
 function ExpeditionCountdown({ finishAt }: { finishAt: Date }) {
-  const [remaining, setRemaining] = useState(() => Math.max(0, new Date(finishAt).getTime() - Date.now()));
+  // Inicializa com 0 para evitar hydration mismatch (server vs client Date.now())
+  const [remaining, setRemaining] = useState(0);
 
   useEffect(() => {
+    // Atualiza imediatamente após montar (evita hydration mismatch)
+    setRemaining(Math.max(0, new Date(finishAt).getTime() - Date.now()));
     const iv = setInterval(() => {
       const r = Math.max(0, new Date(finishAt).getTime() - Date.now());
       setRemaining(r);

@@ -285,3 +285,37 @@ export async function clearPlayerExpeditions(playerId: string): Promise<{ cleare
     return { cleared: 0, error: err instanceof Error ? err.message : "Erro" };
   }
 }
+
+// ── Reset de senha de usuário (admin) ─────────────────────────────────────────
+export async function adminResetUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    if (newPassword.length < 8) return { error: "Senha deve ter ao menos 8 caracteres." };
+
+    const { hashPassword } = await import("@/lib/auth/password");
+    const passwordHash = await hashPassword(newPassword);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, status: "ACTIVE" } // reativa conta junto se necessário
+    });
+
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Reativar conta de usuário bloqueado (admin) ───────────────────────────────
+export async function adminReactivateUser(userId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
