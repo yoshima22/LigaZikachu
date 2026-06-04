@@ -271,45 +271,57 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
         boxShadow: `0 0 0 1px ${GOLD_D}`,
       }}
     >
-      {/* ── Gato NPC ── dentro do overflow-hidden, clipped naturalmente */}
+      {/*
+        ── Layer 1: Gato ──
+        Ancoramos pelo TOPO (top:8px) para que o rosto fique na parte
+        superior e alinhado ao balão de diálogo.
+        Os pés/caixas ficam abaixo do painel e são cortados pelo overflow:hidden.
+        z-index: 8 → atrás dos cards (z-15) mas à frente do fundo (z-0).
+      */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/miauvadao-cat.png"
         alt="Miauvadão"
-        className="pointer-events-none absolute bottom-0 left-0 hidden md:block"
+        className="pointer-events-none absolute left-0 hidden md:block"
         style={{
-          width: 215,
+          top: 8,
+          width: 300,
           height: "auto",
-          maxHeight: "110%",
           objectFit: "contain",
-          objectPosition: "bottom left",
-          filter: "drop-shadow(3px 0 16px rgba(0,0,0,0.9))",
-          zIndex: 5,
+          objectPosition: "top left",
+          filter: "drop-shadow(4px 0 20px rgba(0,0,0,0.95))",
+          zIndex: 8,
         }}
         onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
       />
 
-      {/* Speech bubble — estilo igual ao mascote, à direita do gato */}
+      {/*
+        ── Balão de diálogo ──
+        Posicionado à direita do rosto do gato.
+        O rosto fica aproximadamente a 18-22% da altura da imagem,
+        o que com a imagem em top:8 resulta em ~y:70-90px.
+        Cauda do balão aponta para a ESQUERDA (→ gato).
+        z-index: 30 → na frente de tudo.
+      */}
       {lastNpcMessage && (
-        <div className="hidden md:block absolute z-30 pointer-events-none"
-          style={{ left: 195, top: 18, maxWidth: 270 }}>
-          {/* Tail pointing left toward cat */}
+        <div className="hidden md:block absolute pointer-events-none"
+          style={{ left: 308, top: 60, maxWidth: 260, zIndex: 30 }}>
+          {/* Cauda apontando para a esquerda → rosto do gato */}
           <div style={{
-            position: "absolute", left: -8, top: 14,
+            position: "absolute", left: -8, top: 12,
             width: 0, height: 0,
             borderTop: "6px solid transparent",
             borderBottom: "6px solid transparent",
             borderRight: "8px solid #e2d9c8",
           }} />
           <div
-            className="relative rounded-2xl px-3 py-2 text-[11px] leading-snug"
+            className="rounded-2xl px-3 py-2 text-[11px] leading-snug"
             style={{
               background: "#f5f0e8",
               border: "1.5px solid #e2d9c8",
               color: "#2a1a03",
               fontWeight: 600,
-              boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
-              maxWidth: 270,
+              boxShadow: "0 2px 16px rgba(0,0,0,0.6)",
             }}
           >
             {lastNpcMessage}
@@ -317,8 +329,8 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
         </div>
       )}
 
-      {/* Conteúdo deslocado à direita — 215px para o gato */}
-      <div className="md:pl-[215px] px-5 pt-5 pb-6 space-y-5">
+      {/* Conteúdo — padding-left reserva espaço para o gato (300px) */}
+      <div className="md:pl-[265px] px-5 pt-5 pb-6 space-y-5">
 
         {/* Mobile speech bubble fallback */}
         {lastNpcMessage && (
@@ -380,7 +392,8 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
               </p>
             </div>
           ) : (
-            <div className="grid gap-5 sm:grid-cols-3 pt-1 relative" style={{ zIndex: 10 }}>
+            {/* Layer 2: cards ficam na frente do gato (z-15 > z-8) */}
+            <div className="grid gap-5 sm:grid-cols-3 pt-1 relative" style={{ zIndex: 15 }}>
               {offers.map((offer, idx) => (
                 <MiauvadaoCard
                   key={idx}
