@@ -467,5 +467,7 @@ export function generateMascotSpeech(params: {
     CHAOTIC:     ["...","BOOOM! 💥","Tudo bem? Nada. 🌀"],
   };
   const lines = personalityLines[params.personality] ?? ["Tudo tranquilo! 😐"];
-  return lines[Math.floor(Math.random() * lines.length)];
+  // Usa hash determinístico do mood+personality para evitar hydration mismatch
+  const idx = (params.mood.length + params.personality.length + params.happiness) % lines.length;
+  return lines[idx];
 }

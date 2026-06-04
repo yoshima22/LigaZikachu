@@ -43,9 +43,10 @@ const EGG_IMAGE: Record<string, string> = {
 };
 
 function Countdown({ finishAt }: { finishAt: Date }) {
-  const [remaining, setRemaining] = useState(() => Math.max(0, finishAt.getTime() - Date.now()));
+  const [remaining, setRemaining] = useState(0); // inicia 0 — atualiza no useEffect para evitar hydration mismatch
 
   useEffect(() => {
+    setRemaining(Math.max(0, finishAt.getTime() - Date.now())); // define valor real após mount
     const interval = setInterval(() => {
       const r = Math.max(0, finishAt.getTime() - Date.now());
       setRemaining(r);
@@ -141,7 +142,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <div className="flex w-full flex-col items-center gap-3">
                 <div className="h-2 w-full max-w-[200px] rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full bg-[#FFCB05] transition-all"
-                    style={{ width: `${Math.min(100, ((Date.now() - new Date(incubator.startedAt).getTime()) / (new Date(incubator.finishAt).getTime() - new Date(incubator.startedAt).getTime())) * 100)}%` }} />
+                    style={{ width: `${Math.min(100, (1 - remaining / Math.max(1, new Date(incubator.finishAt).getTime() - new Date(incubator.startedAt).getTime())) * 100)}%` }} />
                 </div>
                 {canSkipIncubation && (
                   <button

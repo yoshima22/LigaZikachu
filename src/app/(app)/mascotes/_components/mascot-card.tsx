@@ -120,11 +120,18 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const happinessStatus = getHappinessStatus(mascot.happiness);
   const challengeStatus = getChallengeStatus(mascot.mood);
 
-  // Cooldown 5 min
-  const cooldownMs = mascot.lastInteractedAt
-    ? Math.max(0, 5 * 60 * 1000 - (Date.now() - new Date(mascot.lastInteractedAt).getTime()))
-    : 0;
-  const onCooldown = cooldownMs > 0;
+  // Cooldown 5 min — calculado client-side após mount para evitar hydration mismatch
+  const [onCooldown, setOnCooldown] = useState(false);
+  useEffect(() => {
+    if (!mascot.lastInteractedAt) { setOnCooldown(false); return; }
+    const check = () => {
+      const ms = Math.max(0, 5 * 60 * 1000 - (Date.now() - new Date(mascot.lastInteractedAt!).getTime()));
+      setOnCooldown(ms > 0);
+    };
+    check();
+    const iv = setInterval(check, 5000);
+    return () => clearInterval(iv);
+  }, [mascot.lastInteractedAt]);
 
   // Button availability — cooldown applies to all interactions including pet
   const inExpedition = !!expedition && !claimable;
