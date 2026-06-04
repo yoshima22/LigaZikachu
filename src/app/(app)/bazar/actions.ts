@@ -295,7 +295,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           playerId: player.id,
           category: input.category,
           listingType: input.listingType,
-          payload,
+          payload: payload as unknown as import("@prisma/client").Prisma.InputJsonValue,
           priceCoins: input.listingType !== "TRADE" ? input.priceCoins : null,
           wantedDesc: input.wantedDesc,
           description: input.description,
