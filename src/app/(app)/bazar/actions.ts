@@ -34,7 +34,7 @@ const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
 };
 
 /** Sorteia 3 itens do shop ativo e aplica descontos */
-async function rollMiauvadaoOffers(vaultBalance: number): Promise<MiauvadaoOffer[]> {
+async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promise<MiauvadaoOffer[]> {
   // Busca itens elegíveis do shop
   const shopItems = await prisma.shopItem.findMany({
     where: { active: true, type: { in: MIAUVADAO_ELIGIBLE_TYPES as never[] } },
@@ -54,7 +54,7 @@ async function rollMiauvadaoOffers(vaultBalance: number): Promise<MiauvadaoOffer
 
   return chosen.map(item => {
     const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
-    const discountPct = Math.min(60, minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus);
+    const discountPct = Math.min(75, minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus + extraBonus);
     const finalPrice  = Math.max(1, Math.round(item.price * (1 - discountPct / 100)));
     return {
       shopItemId:    item.id,
@@ -648,6 +648,8 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
       return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis, oferta custa ${offer.finalPrice} ZC).` };
     }
 
+    const coinsToVault = Math.floor(offer.finalPrice * 0.10);
+
     await prisma.$transaction(async (tx) => {
       // Cobrar player
       await tx.zikaCoinWallet.update({
@@ -655,12 +657,17 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         data: { balance: { decrement: offer.finalPrice } },
       });
 
-      // Atualizar sold na oferta
+      // Atualizar sold na oferta + adicionar 10% ao cofre + mensagem NPC
       const updatedOffers = [...offers];
       updatedOffers[offerIndex] = { ...offer, sold: offer.sold + 1 };
       await tx.miauvadaoConfig.update({
         where: { id: "singleton" },
-        data: { dailyOffers: updatedOffers as unknown as import("@prisma/client").Prisma.InputJsonValue },
+        data: {
+          dailyOffers: updatedOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+          vaultBalance: { increment: coinsToVault },
+          lastNpcMessage: `${player.displayName} comprou ${offer.name} e deixou +${coinsToVault} ZC nos fundos! 💰`,
+          lastNpcMessageAt: new Date(),
+        },
       });
 
       // Entregar item (mesmo esquema da shop)
@@ -741,6 +748,55 @@ export async function adminUpdateListingFee(fee: number): Promise<{ error?: stri
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
   }
+}
+
+export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBalance?: number }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const REFRESH_COST = 80;
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    if (!wallet || wallet.balance < REFRESH_COST) return { error: `Saldo insuficiente (precisa de ${REFRESH_COST} ZC).` };
+
+    // Deduct cost, add to vault
+    const [updatedWallet] = await prisma.$transaction([
+      prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: REFRESH_COST } } }),
+      prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: REFRESH_COST } } }),
+    ]);
+
+    // Roll new offers with extra +5% discount (premium refresh)
+    const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+    const newOffers = await rollMiauvadaoOffers(config?.vaultBalance ?? 0, 5);
+
+    const msg = `O ${player.displayName} investiu ${REFRESH_COST} ZC e atualizou as ofertas! 🛍️`;
+    await prisma.miauvadaoConfig.update({
+      where: { id: "singleton" },
+      data: {
+        dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        lastNpcMessage: msg,
+        lastNpcMessageAt: new Date(),
+        // NOTE: offersRefreshedAt NOT updated — timer stays the same
+      }
+    });
+
+    revalidatePath("/bazar");
+    return { newBalance: updatedWallet.balance };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function adminAdjustVault(amount: number): Promise<{ error?: string; newBalance?: number }> {
+  try {
+    await requireAdmin();
+    const config = await prisma.miauvadaoConfig.update({
+      where: { id: "singleton" },
+      data: { vaultBalance: { increment: amount } }
+    });
+    revalidatePath("/bazar");
+    return { newBalance: config.vaultBalance };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
 // ── Utilitários internos ──────────────────────────────────────────────────────
@@ -842,13 +898,19 @@ const MIAUVADAO_RAGE: string[] = [
 ];
 
 export async function startShellGameSession(betAmount: number): Promise<{
-  error?: string; sessionId?: string; newBalance?: number; lastCooldownMs?: number;
+  error?: string; sessionId?: string; newBalance?: number; lastCooldownMs?: number; debugMode?: boolean;
 }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
+    const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const player = await prisma.player.findUnique({ where: { userId: user.id } });
     if (!player) return { error: "Perfil não encontrado." };
+
+    if (isAdmin) {
+      return { sessionId: "debug-" + Math.random(), newBalance: 9999, debugMode: true };
+    }
+
     if (betAmount < SHELL_MIN_BET) return { error: `Aposta mínima: ${SHELL_MIN_BET} ZC.` };
     if (betAmount > SHELL_MAX_BET) return { error: `Aposta máxima: ${SHELL_MAX_BET} ZC.` };
 
@@ -874,13 +936,18 @@ export async function startShellGameSession(betAmount: number): Promise<{
 }
 
 export async function resolveShellGame(sessionId: string, guessedPos: number): Promise<{
-  error?: string; won?: boolean; actualPos?: number; prize?: number; newBalance?: number;
+  error?: string; won?: boolean; actualPos?: number; prize?: number; newBalance?: number; debugMode?: boolean;
 }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
+    const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const player = await prisma.player.findUnique({ where: { userId: user.id } });
     if (!player) return { error: "Perfil não encontrado." };
+
+    if (isAdmin && sessionId.startsWith("debug-")) {
+      return { won: Math.random() > 0.5, actualPos: Math.floor(Math.random() * 3), prize: 0, newBalance: 9999, debugMode: true };
+    }
 
     const session = await prisma.shellGameSession.findUnique({ where: { id: sessionId } });
     if (!session || session.playerId !== player.id) return { error: "Sessão inválida." };
@@ -901,8 +968,8 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
         prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { increment: prize } } }),
         prisma.miauvadaoConfig.upsert({
           where: { id: "singleton" },
-          update: { vaultBalance: { decrement: vaultBonus }, lastWinnerMessage: message, lastWinnerAt: new Date() },
-          create: { id: "singleton", lastWinnerMessage: message, lastWinnerAt: new Date() },
+          update: { vaultBalance: { decrement: vaultBonus }, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
+          create: { id: "singleton", lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
         }),
         prisma.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: true } }),
       ]);

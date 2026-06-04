@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, adminAdjustVault } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
 
 const ITEM_TYPES = [
@@ -42,6 +42,7 @@ export default function MiauvadaoAdminPage() {
   const [offers, setOffers] = useState<Partial<MiauvadaoOffer>[]>([emptyOffer(), emptyOffer(), emptyOffer()]);
   const [fee, setFee] = useState("10");
   const [vaultBalance, setVaultBalance] = useState(0);
+  const [vaultAdjust, setVaultAdjust] = useState("");
 
   useEffect(() => {
     getMiauvadaoConfig().then(c => {
@@ -129,6 +130,28 @@ export default function MiauvadaoAdminPage() {
           <button type="button" disabled={pending} onClick={handleSaveFee}
             className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
             <Save size={12}/> Salvar taxa
+          </button>
+        </div>
+      </div>
+
+      {/* Vault management */}
+      <div className="rounded-2xl border border-border bg-slate-950/60 p-5 space-y-4">
+        <h2 className="font-semibold text-slate-200">💰 Gerenciar Cofre do Miauvadão</h2>
+        <p className="text-xs text-slate-500">Saldo atual: <strong className="text-[#FFCB05]">{vaultBalance.toLocaleString("pt-BR")} ZC</strong></p>
+        <div className="flex gap-3 flex-wrap">
+          <input type="number" placeholder="Valor a adicionar (+) ou remover (-)"
+            value={vaultAdjust} onChange={e => setVaultAdjust(e.target.value)}
+            className="flex-1 rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+          <button type="button" disabled={pending}
+            onClick={() => startTransition(async () => {
+              const amount = parseInt(vaultAdjust);
+              if (!amount) return;
+              const r = await adminAdjustVault(amount);
+              if (r.error) toast.error(r.error);
+              else { toast.success(`Cofre ajustado: ${r.newBalance?.toLocaleString("pt-BR")} ZC`); setVaultAdjust(""); router.refresh(); }
+            })}
+            className="flex items-center gap-2 rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
+            <Save size={14}/> Ajustar cofre
           </button>
         </div>
       </div>

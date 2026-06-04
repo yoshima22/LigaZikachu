@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
-import { buyMiauvadaoOffer } from "../actions";
+import { buyMiauvadaoOffer, refreshMiauvadaoShopNow } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -74,6 +74,30 @@ function EggImg({ src }: { src: string }) {
         drop-shadow-[0_2px_14px_rgba(201,168,0,0.45)]"
       onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
     />
+  );
+}
+
+// ── RefreshShopButton ─────────────────────────────────────────────────────────
+
+function RefreshShopButton({ playerId }: { playerId: string | null }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  if (!playerId) return null;
+  return (
+    <button type="button" disabled={pending}
+      onClick={() => {
+        if (!confirm("Pagar 80 ZC para atualizar as ofertas agora com descontos melhores?")) return;
+        startTransition(async () => {
+          const r = await refreshMiauvadaoShopNow();
+          if (r.error) { toast.error(r.error); return; }
+          toast.success("Ofertas atualizadas! Descontos melhorados. 🛍️");
+          router.refresh();
+        });
+      }}
+      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all disabled:opacity-50"
+      style={{ background: "#2a1a03", border: "1px solid #c9a800", color: "#c9a800" }}>
+      🔄 Atualizar ofertas (80 ZC)
+    </button>
   );
 }
 
@@ -213,10 +237,10 @@ interface Props {
   vaultBalance: number;
   balance: number;
   playerId: string | null;
-  offersRefreshedAt?: string | null;
+  lastNpcMessage?: string | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -268,6 +292,25 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Prop
           onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       </div>
+
+      {/* Speech bubble above cat — visible on md+ */}
+      {lastNpcMessage && (
+        <div className="hidden md:block absolute z-30 pointer-events-none"
+          style={{ left: 200, top: 12, maxWidth: 280 }}>
+          <div className="relative rounded-xl px-3 py-2 text-[11px] leading-snug font-semibold animate-[fadeIn_0.3s_ease]"
+            style={{ background: "#2a1a03", border: "1.5px solid #c9a800", color: "#FFCB05",
+                     boxShadow: "0 0 12px rgba(201,168,0,0.25)" }}>
+            {/* Arrow pointing left toward cat */}
+            <div className="absolute top-3" style={{ left: -9, width: 0, height: 0,
+              borderTop: "7px solid transparent", borderBottom: "7px solid transparent",
+              borderRight: "9px solid #c9a800" }} />
+            <div className="absolute top-3" style={{ left: -7, width: 0, height: 0,
+              borderTop: "7px solid transparent", borderBottom: "7px solid transparent",
+              borderRight: "9px solid #2a1a03" }} />
+            {lastNpcMessage}
+          </div>
+        </div>
+      )}
 
       {/* ── Painel com overflow-hidden para bordas arredondadas ── */}
       <div
@@ -347,9 +390,12 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId }: Prop
             </div>
           )}
 
-          <p className="text-center text-[10px]" style={{ color: "#3a2c00" }}>
-            As taxas do Bazar alimentam o cofre do Miauvadão e financiam os descontos.
-          </p>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[10px]" style={{ color: "#3a2c00" }}>
+              As taxas do Bazar alimentam o cofre do Miauvadão e financiam os descontos.
+            </p>
+            <RefreshShopButton playerId={playerId} />
+          </div>
         </div>
       </div>
     </div>

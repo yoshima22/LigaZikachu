@@ -163,10 +163,16 @@ interface Props {
   playerId: string | null;
   vaultBalance: number;
   lastWinnerMessage: string | null;
+  isAdmin?: boolean;
 }
 
-export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }: Props) {
+export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, isAdmin }: Props) {
   const router = useRouter();
+
+  // Minimizable
+  const [expanded, setExpanded] = useState(false);
+  // Debug mode (admin)
+  const [debugMode, setDebugMode] = useState(false);
 
   // Jogo
   const [phase, setPhase]     = useState<Phase>("idle");
@@ -248,7 +254,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }
 
   const handleStart = async () => {
     if (!playerId) { toast.error("Faça login para jogar."); return; }
-    if (cooldownMs > 0) return;
+    if (cooldownMs > 0 && !isAdmin) return;
 
     setPhase("dealing");
     setResult(null);
@@ -261,6 +267,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }
     if (r.lastCooldownMs) { setCooldownMs(r.lastCooldownMs); setPhase("idle"); return; }
     if (!r.sessionId) { setPhase("idle"); return; }
 
+    if (r.debugMode) setDebugMode(true);
     if (r.newBalance !== undefined) setLocalBalance(r.newBalance);
 
     // A bolinha sempre começa no copo do MEIO visualmente
@@ -283,6 +290,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }
     const r = await resolveShellGame(sessionId, cupIdx);
     if (r.error) { toast.error(r.error); setPhase("idle"); return; }
 
+    if (r.debugMode) setDebugMode(true);
     if (r.newBalance !== undefined) setLocalBalance(r.newBalance);
 
     // Levanta o copo correto se errou
@@ -321,36 +329,28 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }
       background: "linear-gradient(135deg,#1a1105 0%,#0e0c06 60%,#1a1105 100%)",
       boxShadow: `0 0 0 1px ${GOLD_D}`,
     }}>
-      {/* ── Balão de diálogo do Miauvadão ── */}
-      {lastWinnerMessage && (
-        <div className="border-b px-5 py-3 flex items-center gap-3"
-          style={{ borderColor: GOLD_D, background: "#1e1608" }}>
-          <span className="text-2xl shrink-0">🐱</span>
-          <div className="relative rounded-xl px-4 py-2.5 text-xs"
-            style={{
-              background: "#2a1a03",
-              border: `1.5px solid ${GOLD}`,
-              color: "#FFCB05",
-              boxShadow: `0 0 12px rgba(201,168,0,0.2)`,
-            }}>
-            {/* Pontinha do balão */}
-            <div className="absolute left-[-10px] top-3 w-0 h-0"
-              style={{ borderTop: "6px solid transparent", borderBottom: "6px solid transparent", borderRight: `10px solid ${GOLD}` }} />
-            <div className="absolute left-[-8px] top-3 w-0 h-0"
-              style={{ borderTop: "6px solid transparent", borderBottom: "6px solid transparent", borderRight: "10px solid #2a1a03" }} />
-            <p className="font-semibold">{lastWinnerMessage}</p>
+      {/* Always visible header — click to toggle */}
+      <button type="button" onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+        style={{ background: expanded ? "#1e1608" : "#140f03", borderBottom: expanded ? `1px solid ${GOLD_D}` : "none" }}>
+        <div className="flex items-center gap-3">
+          <span className="text-xl">🎩</span>
+          <div>
+            <p className="font-pixel text-sm" style={{ color: "#FFCB05" }}>Jogo do Miauvadão</p>
+            <p className="text-[10px]" style={{ color: GOLD_D }}>
+              {expanded ? "Clique para fechar" : "Clique para jogar e testar sua sorte!"}
+            </p>
           </div>
         </div>
-      )}
+        <div style={{ color: GOLD, fontSize: 18 }}>{expanded ? "▲" : "▼"}</div>
+      </button>
 
+      {/* Collapsible content */}
+      {expanded && (
       <div className="px-5 pt-4 pb-6 space-y-4">
         {/* ── Header ── */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h3 className="font-pixel text-sm flex items-center gap-2"
-              style={{ color: "#FFCB05" }}>
-              🎩 Jogo do Miauvadão
-            </h3>
             <p className="text-[11px] mt-0.5" style={{ color: GOLD_D }}>
               Encontre a bolinha e ganhe <strong style={{ color: "#FFCB05" }}>{totalPrize.toLocaleString("pt-BR")} ZC</strong>
               <span style={{ color: GOLD_D }}> (aposta + 20% do cofre)</span>
@@ -361,6 +361,12 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }
             <span>Prêmio do cofre: <strong style={{ color: "#FFCB05" }}>+{vaultPrize.toLocaleString("pt-BR")} ZC</strong></span>
           </div>
         </div>
+
+        {debugMode && (
+          <div className="text-center text-[10px] font-bold" style={{ color: "#ef4444" }}>
+            ⚡ MODO DEBUG — sem efeito nos fundos
+          </div>
+        )}
 
         {/* ── Arena do jogo ── */}
         <div className="flex flex-col items-center gap-5">
@@ -523,6 +529,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage }
           <p>🏆 <strong style={{ color: GOLD }}>Prêmio:</strong> Sua aposta + 20% do cofre do Miauvadão. Cooldown de 5 min entre jogadas.</p>
         </div>
       </div>
+      )}
     </div>
   );
 }

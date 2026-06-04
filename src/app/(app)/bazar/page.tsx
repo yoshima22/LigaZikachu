@@ -3,7 +3,8 @@ import Link from "next/link";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { Plus, Store } from "lucide-react";
+import { Plus, Store, ChevronDown } from "lucide-react";
+import { isAdmin } from "@/lib/auth/permissions";
 import { MiauvadaoPanel } from "./_components/miauvadao-panel";
 import { ShellGame } from "./_components/shell-game";
 import { BazarListingCard } from "./_components/bazar-listing-card";
@@ -22,6 +23,7 @@ export default async function BazarPage({
   const searchParams = await searchParamsPromise;
 
   const session = await getAppSession();
+  const admin = session?.user ? isAdmin(session.user.role) : false;
   const playerId = session?.user
     ? (await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } }))?.id ?? null
     : null;
@@ -84,7 +86,7 @@ export default async function BazarPage({
         vaultBalance={miauvadao.vaultBalance}
         balance={wallet?.balance ?? 0}
         playerId={playerId}
-        offersRefreshedAt={miauvadao.offersRefreshedAt?.toISOString() ?? null}
+        lastNpcMessage={miauvadao.lastNpcMessage ?? miauvadao.lastWinnerMessage ?? null}
       />
 
       {/* Shell Game */}
@@ -93,12 +95,55 @@ export default async function BazarPage({
         playerId={playerId}
         vaultBalance={miauvadao.vaultBalance}
         lastWinnerMessage={miauvadao.lastWinnerMessage ?? null}
+        isAdmin={admin}
       />
 
       {/* Filters */}
       <Suspense fallback={null}>
         <BazarFiltersClient />
       </Suspense>
+
+      {/* FAQ accordion */}
+      <details className="rounded-2xl border overflow-hidden group" style={{ borderColor: "#5a4700", background: "#0e0c06" }}>
+        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold select-none"
+          style={{ color: "#c9a800" }}>
+          <span className="flex items-center gap-2">📖 Como funciona o Bazar e o Miauvadão?</span>
+          <ChevronDown size={14} className="transition-transform group-open:rotate-180" style={{ color: "#5a4700" }} />
+        </summary>
+        <div className="border-t px-5 py-4 grid gap-4 sm:grid-cols-2 text-xs leading-relaxed"
+          style={{ borderColor: "#5a4700", color: "#8b6c00" }}>
+
+          <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>🏪 Como anunciar no Bazar</p>
+            <p>Clique em <strong style={{ color: "#c9a800" }}>Anunciar</strong> e escolha mascotes ou itens do seu inventário. Defina preço de venda, troca ou ambos. Itens ficam bloqueados enquanto anunciados. Taxa: <strong style={{ color: "#FFCB05" }}>10 ZC por anúncio</strong> (vai ao cofre do Miauvadão).</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>💰 Cofre do Miauvadão</p>
+            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>10% de cada compra</strong> nas ofertas, <strong style={{ color: "#FFCB05" }}>apostas perdidas</strong> no jogo e <strong style={{ color: "#FFCB05" }}>investimentos de jogadores (80 ZC)</strong>. Quanto mais cheio, melhores os descontos e prêmios.</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>📊 Como os descontos são calculados</p>
+            <p>Desconto base = faixa da raridade do item (COMMON: 15–35%, EPIC: 8–20%, LEGENDARY: 5–15%). Bônus do cofre: +1% por cada 500 ZC no cofre (máx +20%). Refresh por jogador: +5% extra em todos os itens.</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Atualizar Ofertas (80 ZC)</p>
+            <p>Qualquer jogador pode pagar 80 ZC para atualizar as 3 ofertas do dia imediatamente. Os 80 ZC vão ao cofre, gerando descontos ainda melhores. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
+            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e ganhe sua aposta + <strong style={{ color: "#FFCB05" }}>20% do cofre</strong>. Perca e a aposta vai ao cofre. Cooldown de 5 min entre partidas.</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Ciclo econômico</p>
+            <p>Taxas → cofre → melhores descontos → mais compras → mais no cofre → prêmios maiores no jogo. O cofre é um <strong style={{ color: "#FFCB05" }}>sink econômico saudável</strong> que retira ZC da circulação e distribui em benefícios para todos.</p>
+          </div>
+        </div>
+      </details>
 
       {/* Listings + Feed */}
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">

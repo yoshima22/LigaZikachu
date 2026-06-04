@@ -1553,6 +1553,8 @@ model MiauvadaoConfig {
   // Shell Game — última mensagem do NPC
   lastWinnerMessage String?
   lastWinnerAt      DateTime?
+  lastNpcMessage    String?
+  lastNpcMessageAt  DateTime?
   updatedAt         DateTime @updatedAt
 
   @@map("miauvadao_config")
