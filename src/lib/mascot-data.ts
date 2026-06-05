@@ -1187,3 +1187,55 @@ export const LEGENDARY_POOL: number[] = [
   // Gen 9
   1001, 1002, 1003, 1004, 1007, 1008,
 ];
+
+const EXTRA_LEGENDARY_AND_MYTHICAL_IDS = [
+  // Gen 7 Ultra Beasts / Poipole line
+  793, 794, 795, 796, 797, 798, 799, 803, 804, 805, 806,
+  // Gen 9 DLC legendary/mythical/paradox legends
+  1009, 1010, 1014, 1015, 1016, 1017, 1020, 1021, 1022, 1023, 1024, 1025,
+];
+
+for (const pokemonId of EXTRA_LEGENDARY_AND_MYTHICAL_IDS) {
+  if (!LEGENDARY_POOL.includes(pokemonId)) LEGENDARY_POOL.push(pokemonId);
+}
+
+const uniquePokemonIds = (ids: number[]) => Array.from(new Set(ids)).filter((id) => id >= 1 && id <= 1025);
+
+const ALL_STANDARD_POKEMON_IDS = uniquePokemonIds(
+  Array.from({ length: 1025 }, (_, index) => index + 1)
+).filter((pokemonId) => !LEGENDARY_POOL.includes(pokemonId));
+
+const ALL_STARTER_IDS = [
+  1, 4, 7, 152, 155, 158, 252, 255, 258, 387, 390, 393, 495, 498, 501,
+  650, 653, 656, 722, 725, 728, 810, 813, 816, 906, 909, 912,
+];
+
+const RARE_FAN_FAVORITES = [
+  25, 37, 58, 63, 66, 92, 95, 123, 124, 125, 126, 127, 128, 129, 131,
+  132, 133, 147, 172, 175, 179, 196, 197, 200, 207, 215, 216, 227, 246,
+  280, 302, 303, 304, 311, 312, 315, 333, 349, 359, 361, 371, 374, 403,
+  408, 410, 425, 427, 433, 443, 446, 447, 448, 459, 479, 517, 529, 531,
+  551, 570, 587, 595, 607, 610, 613, 624, 633, 636, 661, 667, 674, 677,
+  679, 696, 698, 700, 701, 702, 704, 708, 714, 744, 747, 757, 759, 769,
+  778, 782, 810, 813, 816, 821, 827, 835, 840, 848, 854, 856, 859, 868,
+  872, 877, 878, 885, 921, 924, 926, 928, 935, 938, 942, 944, 957, 963,
+  971, 974, 996, 999, 1011, 1012,
+];
+
+const SPECIAL_COVETED_IDS = [
+  129, 131, 132, 133, 137, 138, 140, 143, 147, 215, 227, 233, 236, 241,
+  246, 280, 302, 303, 349, 352, 359, 371, 374, 408, 410, 425, 442, 443,
+  446, 447, 448, 479, 531, 570, 587, 610, 621, 624, 633, 636, 674, 679,
+  696, 698, 700, 701, 704, 707, 714, 744, 746, 747, 757, 769, 778, 782,
+  808, 840, 848, 854, 856, 859, 870, 871, 872, 874, 875, 877, 878, 885,
+  // Paradox / especiais de Paldea que nao entram no pool comum.
+  984, 985, 986, 987, 988, 989, 990, 991, 992, 993, 994, 995, 1005, 1006,
+  935, 942, 963, 967, 971, 974, 977, 996, 999, 1011, 1012,
+];
+
+EGG_POOLS.COMMON = ALL_STANDARD_POKEMON_IDS;
+EGG_POOLS.RANDOM = ALL_STANDARD_POKEMON_IDS;
+EGG_POOLS.RARE = uniquePokemonIds([...ALL_STARTER_IDS, ...RARE_FAN_FAVORITES])
+  .filter((pokemonId) => !LEGENDARY_POOL.includes(pokemonId));
+EGG_POOLS.SPECIAL = uniquePokemonIds([...SPECIAL_COVETED_IDS, ...RARE_FAN_FAVORITES])
+  .filter((pokemonId) => !LEGENDARY_POOL.includes(pokemonId));

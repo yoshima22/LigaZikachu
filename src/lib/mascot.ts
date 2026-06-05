@@ -9,7 +9,7 @@ import {
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
-import type { MascotMood, MascotPersonality } from "@prisma/client";
+import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,11 +32,12 @@ export function rollPokemonFromEgg(eggType: string): number {
     ? (EGG_POOLS.RANDOM.length > 0 ? EGG_POOLS.RANDOM : EGG_POOLS.COMMON)
     : (EGG_POOLS[eggType] ?? EGG_POOLS.RANDOM);
 
-  // Chance lendária por raridade
-  // SPECIAL: 2% | GEN eggs / RARE: 1% | COMMON (aleatório, todas gens): 1% (bônus por diversidade) | EVENT: 0.3%
+  // Chance lendaria por raridade. SPECIAL e RARE custam mais e devem parecer especiais.
+  // SPECIAL: 6% | RARE: 3% | GEN eggs: 1% | COMMON: 1% | EVENT: 0.3%
   const legendaryChance =
-    eggType === "SPECIAL" ? 0.02 :
-    eggType === "RARE" || eggType.startsWith("EGG_GEN") ? 0.01 :
+    eggType === "SPECIAL" ? 0.06 :
+    eggType === "RARE" ? 0.03 :
+    eggType.startsWith("EGG_GEN") ? 0.01 :
     eggType === "COMMON" ? 0.01 :   // modo aleatório: +1% de bônus
     0.003;
 
@@ -605,7 +606,7 @@ async function claimExpeditionLegacy(
 
     // Aplica recompensa
     if (reward.type === "EGG") {
-      await tx.mascotEgg.create({ data: { playerId, type: reward.eggType as "COMMON" | "RARE", origin: "Expedição" } });
+      await tx.mascotEgg.create({ data: { playerId, type: reward.eggType as EggType, origin: "Expedição" } });
     } else if (reward.type === "FOOD") {
       await tx.mascotFoodItem.upsert({
         where: { playerId_type: { playerId, type: reward.foodType } },
