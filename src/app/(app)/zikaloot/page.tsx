@@ -193,7 +193,7 @@ export default async function ZikaLootPage() {
       {activeLoot && (
         <LootBoard
           lootId={activeLoot.id}
-          picks={activeLoot.picks.map((p) => ({ number: p.number, playerName: p.player.displayName }))}
+          picks={activeLoot.picks.map((p) => ({ number: p.number, playerName: p.player.displayName, playerId: p.playerId }))}
           blockedNumbers={activeLoot.drawnNumbers}
           myNumbers={myPickMap.get(activeLoot.id) ?? []}
           hasTicket={ticketCount > 0}

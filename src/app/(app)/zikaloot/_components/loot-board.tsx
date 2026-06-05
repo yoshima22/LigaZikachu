@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Ticket, X } from "lucide-react";
 import { pickLootNumber } from "../actions";
 
 interface Props {
   lootId: string;
-  picks: { number: number; playerName: string }[];
+  picks: { number: number; playerName: string; playerId?: string }[];
   blockedNumbers?: number[];
   myNumbers: number[];
   hasTicket: boolean;
@@ -21,7 +22,7 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
   const [selected, setSelected] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const takenMap   = new Map(picks.map((p) => [p.number, p.playerName]));
+  const takenMap   = new Map(picks.map((p) => [p.number, { name: p.playerName, playerId: p.playerId }]));
   const blockedSet = new Set(blockedNumbers);
   const mySet      = new Set(myNumbers);
   const isExpired  = new Date() >= new Date(drawAt);
@@ -113,22 +114,51 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
 
       <div className="grid grid-cols-10 gap-1 sm:grid-cols-20">
         {Array.from({ length: 200 }, (_, i) => i + 1).map((n) => {
-          const taken    = takenMap.get(n);
+          const takenInfo = takenMap.get(n);
+          const taken    = takenInfo?.name;
+          const takenPlayerId = takenInfo?.playerId;
           const isBlocked = blockedSet.has(n);
           const isMe     = mySet.has(n);
           const disabled = isMe || (!!taken && !isMe) || isBlocked || isExpired || !canPickMore || pending;
+
+          const cellClass = `flex flex-col items-center justify-center rounded transition-all min-h-[32px] py-0.5 px-0.5 ${
+            isMe ? "bg-[#FFCB05] text-[#1A1A2E] cursor-default"
+            : isBlocked ? "bg-red-900/30 text-red-700 cursor-not-allowed"
+            : taken ? "bg-slate-800 text-slate-400 cursor-not-allowed"
+            : canPickMore ? "bg-slate-900 text-slate-400 hover:bg-[#FFCB05]/20 hover:text-[#FFCB05] cursor-pointer"
+            : "bg-slate-900 text-slate-600 cursor-not-allowed"
+          }`;
+
+          const numberEl = (
+            <>
+              <span className={`text-[10px] font-bold leading-none ${isBlocked ? "line-through" : ""}`}>{n}</span>
+              {taken && !isMe && (
+                <span className="text-[7px] leading-none mt-0.5 truncate w-full text-center opacity-70 max-w-[40px]">
+                  {taken.split(" ")[0]}
+                </span>
+              )}
+            </>
+          );
+
+          // Números tomados por outros: link clicável para o perfil
+          if (taken && !isMe && takenPlayerId) {
+            return (
+              <Link key={n} href={`/jogadores/${takenPlayerId}`}
+                title={`Número de ${taken}`}
+                className={cellClass}>
+                {numberEl}
+              </Link>
+            );
+          }
+
           return (
             <button key={n} type="button"
-              title={isBlocked ? "Sorteado anteriormente" : isMe ? "Meu número" : taken ? taken : `Escolher ${n}`}
+              title={isBlocked ? "Sorteado anteriormente" : isMe ? "Meu número" : `Escolher ${n}`}
               disabled={disabled}
               onClick={() => !disabled && handleSelectNumber(n)}
-              className={`aspect-square rounded text-[10px] font-semibold transition-all ${
-                isMe ? "bg-[#FFCB05] text-[#1A1A2E] cursor-default"
-                : isBlocked ? "bg-red-900/30 text-red-700 cursor-not-allowed line-through"
-                : taken ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                : canPickMore ? "bg-slate-900 text-slate-400 hover:bg-[#FFCB05]/20 hover:text-[#FFCB05] cursor-pointer"
-                : "bg-slate-900 text-slate-600 cursor-not-allowed"
-              }`}>{n}</button>
+              className={cellClass}>
+              {numberEl}
+            </button>
           );
         })}
       </div>

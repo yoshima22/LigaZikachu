@@ -82,6 +82,26 @@ function PrizeList({ prizes, onChange }: { prizes: PrizeItem[]; onChange: (p: Pr
   );
 }
 
+// Converte datetime-local (sem timezone) para ISO UTC tratando como horário de Brasília (UTC-3)
+function localBRToUTC(localStr: string): string {
+  if (!localStr) return "";
+  // Adiciona o offset -03:00 explicitamente para que o Date saiba que é horário de Brasília
+  return new Date(`${localStr}:00-03:00`).toISOString();
+}
+
+// Converte um Date UTC para o formato datetime-local no horário de Brasília
+function utcToLocalBR(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(date);
+  const p: Record<string, string> = {};
+  parts.forEach(({ type, value }) => { p[type] = value; });
+  const h = p.hour === "24" ? "00" : p.hour;
+  return `${p.year}-${p.month}-${p.day}T${h}:${p.minute}`;
+}
+
 export function AdminLootPanel({ loots }: { loots: Loot[] }) {
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
@@ -105,7 +125,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
             if (p.type === "CUSTOM") return p.description;
             return "Prêmio";
           }).join(" + ") : "Prêmio"),
-          drawAt: new Date(form.drawAt).toISOString(),
+          drawAt: localBRToUTC(form.drawAt),
           prizeConfig
         });
         if (result.error) { toast.error(result.error); return; }
@@ -117,9 +137,8 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
 
   const openEdit = (l: Loot) => {
     setEditingId(l.id);
-    const dt = new Date(l.drawAt);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    // Converte o UTC do banco para horário de Brasília para o datetime-local
+    const local = utcToLocalBR(new Date(l.drawAt));
     setEditForm({ name: l.name, description: l.description ?? "", prize: l.prize, drawAt: local });
     const cfg = l.prizeConfig as { prizes?: PrizeItem[] } | null | undefined;
     setEditPrizes(cfg?.prizes ?? []);
@@ -140,7 +159,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
             if (p.type === "CUSTOM") return p.description;
             return "Prêmio";
           }).join(" + ") : "Prêmio"),
-          drawAt: new Date(editForm.drawAt).toISOString(),
+          drawAt: localBRToUTC(editForm.drawAt),
           prizeConfig
         });
         if (result.error) { toast.error(result.error); return; }
@@ -226,7 +245,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div>
               <p className="font-medium text-slate-200">{l.name}</p>
-              <p className="text-xs text-slate-500">{l.picksCount} números · Sorteio: {new Date(l.drawAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
+              <p className="text-xs text-slate-500">{l.picksCount} números · Sorteio: {new Date(l.drawAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}</p>
             </div>
             <div className="flex gap-2">
               <button type="button" disabled={pending} onClick={() => openEdit(l)}
