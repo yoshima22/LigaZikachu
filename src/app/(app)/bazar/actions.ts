@@ -1262,6 +1262,40 @@ export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
   } catch { return { cooldownMs: 0 }; }
 }
 
+// ── Auto-cleanup silencioso (chamado no page load do bazar) ──────────────────
+
+export async function autoCleanupStaleBazarListings(): Promise<void> {
+  try {
+    const activeListings = await prisma.bazarListing.findMany({
+      where: { status: "ACTIVE", category: "ITEM" },
+      select: { id: true, payload: true },
+      take: 50,
+    });
+    const staleIds: string[] = [];
+    for (const listing of activeListings) {
+      const payload = listing.payload as Record<string, unknown>;
+      const itemType = payload.itemType as string | undefined;
+      const eggTypes = ["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"];
+      if (eggTypes.includes(itemType ?? "")) {
+        const eggIds = payload.escrowed_egg_ids as string[] | undefined;
+        if (eggIds && eggIds.length > 0) {
+          const existing = await prisma.mascotEgg.count({
+            where: { id: { in: eggIds }, origin: { startsWith: "bazar:" } },
+          });
+          if (existing === 0) staleIds.push(listing.id);
+        }
+      }
+    }
+    if (staleIds.length > 0) {
+      await prisma.$transaction([
+        prisma.bazarListing.updateMany({ where: { id: { in: staleIds } }, data: { status: "CANCELLED" } }),
+        prisma.bazarProposal.updateMany({ where: { listingId: { in: staleIds }, status: "PENDING" }, data: { status: "REJECTED" } }),
+      ]);
+      revalidateBazar();
+    }
+  } catch { /* silencioso — nunca bloqueia o bazar */ }
+}
+
 // ── Admin: limpar listagens com itens inexistentes ────────────────────────────
 
 export async function adminCleanupStaleBazarListings(): Promise<{ error?: string; cancelled: number; details: string[] }> {

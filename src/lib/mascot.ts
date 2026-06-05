@@ -1189,6 +1189,8 @@ const SOCIAL_TEXTS = {
     "{a} dividiu parte do que encontrou com {b}. Companheirismo de verdade.",
     "{a} deixou uma surpresa no cantinho de {b}. Quando {b} viu, ficou animado.",
     "{a} não trouxe muito — mas o gesto valeu mais que o presente.",
+    "{a} achou algo especial e pensou logo em {b}.",
+    "{a} entregou um envelope para {b}. Dentro havia uma surpresa.",
   ],
   ally_snack: [
     "{a} dividiu um lanche com {b}. O clima melhorou na hora.",
@@ -1576,7 +1578,33 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
     } else if (eventRoll < 0.88) {
       // 🎁 Presente de Amigo — pequena recompensa para B
       const giftRoll = Math.random();
-      if (giftRoll < 0.60) {
+      // Ticket ZikaLoot: Super Amigos têm 8% de chance, amigos comuns têm 3%
+      const ticketChance = isBestFriend ? 0.08 : 0.03;
+      if (giftRoll < ticketChance) {
+        // 🎟️ Ticket ZikaLoot — presente especial de amizade
+        const ticketItem = await prisma.shopItem.findFirst({
+          where: { type: "ZIKALOOT_TICKET", active: true },
+          select: { id: true },
+        }).catch(() => null);
+        if (ticketItem) {
+          await prisma.playerInventory.upsert({
+            where: { playerId_itemId: { playerId: rel.mascotB.playerId, itemId: ticketItem.id } },
+            update: { quantity: { increment: 1 } },
+            create: { playerId: rel.mascotB.playerId, itemId: ticketItem.id, quantity: 1 },
+          }).catch(() => {});
+          allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + " (🎟️ Ticket ZikaLoot!)";
+          summary.events.push(`🎟️ ${aName} deu um Ticket ZikaLoot para ${bName}!`);
+        } else {
+          // Fallback: doce se o ticket não existir no shop
+          await prisma.mascotFoodItem.upsert({
+            where: { playerId_type: { playerId: rel.mascotB.playerId, type: "SWEET" } },
+            update: { quantity: { increment: 1 } },
+            create: { playerId: rel.mascotB.playerId, type: "SWEET", quantity: 1 }
+          }).catch(() => {});
+          allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + " (doce!)";
+          summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
+        }
+      } else if (giftRoll < ticketChance + 0.57) {
         // ZikaCoins (3-10)
         const coins = randomInt(3, 10);
         await prisma.zikaCoinWallet.updateMany({
@@ -1584,7 +1612,8 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
           data: { balance: { increment: coins } }
         }).catch(() => {});
         allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + ` (+${coins} ZC)`;
-      } else if (giftRoll < 0.90) {
+        summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
+      } else if (giftRoll < ticketChance + 0.87) {
         // 1 petisco (FOOD)
         await prisma.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: rel.mascotB.playerId, type: "FOOD" } },
@@ -1592,16 +1621,17 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
           create: { playerId: rel.mascotB.playerId, type: "FOOD", quantity: 1 }
         }).catch(() => {});
         allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName);
+        summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
       } else {
-        // Doce (pequena chance)
+        // Doce
         await prisma.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: rel.mascotB.playerId, type: "SWEET" } },
           update: { quantity: { increment: 1 } },
           create: { playerId: rel.mascotB.playerId, type: "SWEET", quantity: 1 }
         }).catch(() => {});
         allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + " (doce!)";
+        summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
       }
-      summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
 
     } else if (isBestFriend) {
       allyEvent = pickText(SOCIAL_TEXTS.best_friend_general, aName, bName);

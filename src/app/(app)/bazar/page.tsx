@@ -10,7 +10,7 @@ import { ShellGame } from "./_components/shell-game";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
-import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded } from "./actions";
+import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +30,11 @@ export default async function BazarPage({
 
   const wallet = playerId ? await getOrCreateWallet(playerId) : null;
 
-  // Auto-rotate Miauvadão offers if expired / first time
-  await autoRefreshMiauvadaoIfNeeded();
+  // Auto-rotate Miauvadão offers + cleanup stale bazar listings (fire both in parallel)
+  await Promise.all([
+    autoRefreshMiauvadaoIfNeeded(),
+    autoCleanupStaleBazarListings(),
+  ]);
 
   const [listings, transactions, miauvadao] = await Promise.all([
     getListings({
