@@ -1,20 +1,23 @@
 import { PokemonRarity } from "@prisma/client";
 
 // Probabilidades por tipo de pacote
+// BÁSICO: figurinhas comuns, lendários muito raros
 export const RARITY_WEIGHTS_BASIC: Record<PokemonRarity, number> = {
   COMMON:    60,
   UNCOMMON:  25,
   RARE:      12,
   EPIC:       2.5,
-  LEGENDARY:  0.5
+  LEGENDARY:  0.5,   // 0.5% por slot
 };
 
+// DELUXE (rarityBoost): mais raro, MAS lendários ainda devem ser especiais
+// Legenda estava em 5% — muito alto. Ajustado para 1.2%
 export const RARITY_WEIGHTS_BOOST: Record<PokemonRarity, number> = {
-  COMMON:    30,
-  UNCOMMON:  30,
-  RARE:      22,
-  EPIC:      13,
-  LEGENDARY:  5
+  COMMON:    28,
+  UNCOMMON:  34,
+  RARE:      26,
+  EPIC:      10.8,
+  LEGENDARY:  1.2,   // era 5% — reduzido para ~1.2% por slot
 };
 
 // Conversão de ZikaCoins por duplicata
@@ -35,6 +38,23 @@ export function pickRarity(rarityBoost: boolean): PokemonRarity {
     if (roll <= 0) return rarity as PokemonRarity;
   }
   return PokemonRarity.COMMON;
+}
+
+/**
+ * Seleciona uma carta de um pool evitando repetições já no pacote.
+ * Tenta até 3 vezes pegar uma não-repetida; se não conseguir, aceita repetição.
+ */
+export function pickCardFromPool<T extends { id: string }>(
+  pool: T[],
+  alreadyDrawn: Set<string>,
+  maxAttempts = 3
+): T {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const card = pool[Math.floor(Math.random() * pool.length)];
+    if (card && !alreadyDrawn.has(card.id)) return card;
+  }
+  // Fallback: retorna qualquer carta (pool pode ser pequeno)
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // Heurística de raridade com base no total de base stats

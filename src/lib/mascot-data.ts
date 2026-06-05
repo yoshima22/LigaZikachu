@@ -611,6 +611,57 @@ export function getStaticSpriteUrl(pokemonId: number): string {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
 
+// Sprites shiny (variante cromática)
+export function getShinySprite(pokemonId: number, animated = false): string {
+  if (animated && pokemonId <= 649) {
+    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${pokemonId}.gif`;
+  }
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${pokemonId}.png`;
+}
+
+// ── Stat ranges por tipo de ovo ───────────────────────────────────────────────
+// Ovos mais raros/altos dão stats base melhores
+export const EGG_STAT_RANGES: Record<string, [number, number]> = {
+  COMMON:       [8, 14],
+  EVENT:        [8, 14],
+  EGG_GEN1:     [9, 15],
+  EGG_GEN2:     [9, 15],
+  EGG_GEN3:     [10, 16],
+  EGG_GEN4:     [10, 16],
+  EGG_GEN5:     [10, 16],
+  EGG_GEN6:     [11, 17],
+  EGG_GEN7:     [11, 17],
+  EGG_GEN8:     [11, 17],
+  EGG_GEN9:     [11, 17],
+  EGG_GEN6PLUS: [10, 16],
+  RARE:         [10, 16],
+  SPECIAL:      [12, 18],
+};
+
+// Chance de nascer shiny (brilhante) por tipo de ovo
+export const EGG_SHINY_CHANCE: Record<string, number> = {
+  COMMON:       1 / 500,   // 0.2%
+  EVENT:        1 / 300,   // 0.33%
+  EGG_GEN1:     1 / 450,
+  EGG_GEN2:     1 / 450,
+  EGG_GEN3:     1 / 400,
+  EGG_GEN4:     1 / 400,
+  EGG_GEN5:     1 / 400,
+  EGG_GEN6:     1 / 350,
+  EGG_GEN7:     1 / 350,
+  EGG_GEN8:     1 / 350,
+  EGG_GEN9:     1 / 350,
+  EGG_GEN6PLUS: 1 / 400,
+  RARE:         1 / 300,   // 0.33%
+  SPECIAL:      1 / 200,   // 0.5%
+};
+
+// Stats buffados = acima do range normal (para comparação no log)
+export function isStatBuffed(eggType: string, stat: number): boolean {
+  const range = EGG_STAT_RANGES[eggType] ?? EGG_STAT_RANGES.COMMON;
+  return stat > range[1]; // acima do máximo normal
+}
+
 // ── Nomes PT-BR dos Pokémon Gen 1-2 (IDs 1-251) ──────────────────────────────
 
 export const POKEMON_PT_NAMES: Record<number, string> = {

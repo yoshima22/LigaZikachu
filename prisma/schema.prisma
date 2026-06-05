@@ -1360,7 +1360,8 @@ model Mascot {
   bazarListed          Boolean           @default(false)
   socialCooldownUntil  DateTime?         // rival travou interações temporariamente
   susRestBonusMinutes  Int               @default(0)
-  evolutionLocked      Boolean           @default(false) // jogador pode travar evolução permanentemente
+  evolutionLocked      Boolean           @default(false)
+  isShiny              Boolean           @default(false) // variante shiny — sprite diferente e marcador visual
   arenaState           MascotArenaState  @default(FREE)
   injuredAt            DateTime?
   restingUntil         DateTime?

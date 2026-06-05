@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expForLevel, expToNextLevel, EXP_REWARDS,
+  EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -76,17 +77,27 @@ export async function hatchEgg(playerId: string): Promise<{ mascotId: string; po
   const personality = randomPersonality();
 
   const mascot = await prisma.$transaction(async (tx) => {
-    // Cria o mascote
+    // Stat range baseado no tipo do ovo (ovos mais raros = stats melhores)
+    const eggTypeKey = incubator.egg.type as string;
+    const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? [8, 14];
+    const isStatBuffed = statMin > 8; // ovos acima de COMMON/EVENT
+
+    // Chance de shiny (brilhante)
+    const shinyChance = EGG_SHINY_CHANCE[eggTypeKey] ?? (1 / 500);
+    const isShiny = Math.random() < shinyChance;
+
+    // Cria o mascote com stats escalados por raridade do ovo
     const m = await tx.mascot.create({
       data: {
         playerId,
         pokemonId,
         personality,
-        statForce:    randomInt(8, 14),
-        statAgility:  randomInt(8, 14),
-        statCharisma: randomInt(8, 14),
-        statInstinct: randomInt(8, 14),
-        statVitality: randomInt(8, 14),
+        isShiny,
+        statForce:    randomInt(statMin, statMax),
+        statAgility:  randomInt(statMin, statMax),
+        statCharisma: randomInt(statMin, statMax),
+        statInstinct: randomInt(statMin, statMax),
+        statVitality: randomInt(statMin, statMax),
       }
     });
     // Marca incubadora como chocada
@@ -94,10 +105,34 @@ export async function hatchEgg(playerId: string): Promise<{ mascotId: string; po
     // Remove ovo do inventário e incubadora
     await tx.mascotIncubator.delete({ where: { playerId } });
     await tx.mascotEgg.delete({ where: { id: incubator.eggId } });
-    return m;
+
+    // Log de nascimento com marcadores especiais
+    const hatchNotes: string[] = [];
+    if (isShiny) hatchNotes.push("✨ É SHINY!");
+    if (isStatBuffed) hatchNotes.push(`⬆️ Stats elevados (${statMin}–${statMax}) pelo ovo de alta raridade!`);
+    if (hatchNotes.length > 0) {
+      await tx.mascotEvent.create({
+        data: {
+          mascotId: m.id,
+          emoji: isShiny ? "✨" : "⬆️",
+          description: hatchNotes.join(" "),
+        }
+      }).catch(() => null);
+    }
+
+    return { m, isShiny, isStatBuffed };
   });
 
-  return { mascotId: mascot.id, pokemonId, name: getPokemonName(pokemonId), isNew: true };
+  const isShiny = (mascot as { isShiny?: boolean }).isShiny ?? false;
+  const isStatBuffed = (mascot as { isStatBuffed?: boolean }).isStatBuffed ?? false;
+  return {
+    mascotId: (mascot as { m: { id: string } }).m.id,
+    pokemonId,
+    name: getPokemonName(pokemonId),
+    isNew: true,
+    isShiny,
+    isStatBuffed,
+  };
 }
 
 // ── Equipar mascote ───────────────────────────────────────────────────────────

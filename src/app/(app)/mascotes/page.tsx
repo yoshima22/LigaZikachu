@@ -109,6 +109,7 @@ export default async function MascotesPage() {
     lastFedAt: m.lastFedAt,
     socialCooldownUntil: m.socialCooldownUntil,
     evolutionLocked: m.evolutionLocked,
+    isShiny: m.isShiny,
     expeditions: m.expeditions.map(e => ({
       id: e.id, finishAt: e.finishAt, status: e.status,
       mode: (e.rewardJson as Record<string,unknown> | null)?.mode as string | undefined ?? "STANDARD",

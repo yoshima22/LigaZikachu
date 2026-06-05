@@ -21,7 +21,7 @@ import {
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, getShinySprite } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
@@ -62,6 +62,7 @@ interface MascotData {
   lastFedAt: Date | null;
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
+  isShiny: boolean;
   relations?: MascotRelation[];
   expeditions: Expedition[];
   events: MascotEvent[];
@@ -288,7 +289,9 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
     });
   };
 
-  const spriteUrl = imgFailed ? getStaticSpriteUrl(mascot.pokemonId) : getSpriteUrl(mascot.pokemonId, true);
+  const spriteUrl = imgFailed
+    ? (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId))
+    : (mascot.isShiny ? getShinySprite(mascot.pokemonId, true) : getSpriteUrl(mascot.pokemonId, true));
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
@@ -354,8 +357,14 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
 
     <div className={`rounded-2xl border bg-slate-950/60 transition-all ${mascot.isEquipped ? "border-[#FFCB05]/50 ring-1 ring-[#FFCB05]/20" : "border-border"}`}>
       {mascot.isEquipped && (
-        <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider">
+        <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider flex items-center justify-center gap-2">
           ★ Mascote equipado
+          {mascot.isShiny && <span className="text-purple-300">✨ Shiny</span>}
+        </div>
+      )}
+      {!mascot.isEquipped && mascot.isShiny && (
+        <div className="bg-purple-500/10 border-b border-purple-500/20 px-3 py-1 text-center text-[10px] font-semibold text-purple-300 uppercase tracking-wider">
+          ✨ Shiny
         </div>
       )}
 

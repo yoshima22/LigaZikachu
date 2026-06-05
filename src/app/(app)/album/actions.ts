@@ -7,7 +7,7 @@ import { ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onStickerPackOpened, onGiftSent } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
-import { pickRarity, DUPLICATE_COINS, GENERATION_RANGES } from "@/lib/sticker-pack";
+import { pickRarity, pickCardFromPool, DUPLICATE_COINS, GENERATION_RANGES } from "@/lib/sticker-pack";
 
 export type PackOpenResult = {
   cards: {
@@ -68,11 +68,13 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
     const ownedMap = new Map(owned.map((o) => [o.cardId, o.quantity]));
 
     const drawn: typeof allCards[number][] = [];
+    const drawnIds = new Set<string>();
     for (let i = 0; i < pack.cardCount; i++) {
       const rarity = pickRarity(pack.rarityBoost);
       const pool = byRarity.get(rarity) ?? byRarity.get("COMMON") ?? allCards;
-      const card = pool[Math.floor(Math.random() * pool.length)];
-      if (card) drawn.push(card);
+      // Anti-repetição: evita a mesma figurinha duas vezes no mesmo pacote
+      const card = pickCardFromPool(pool, drawnIds);
+      if (card) { drawn.push(card); drawnIds.add(card.id); }
     }
 
     let totalCoinsEarned = 0;
