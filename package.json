@@ -13,7 +13,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:validate": "prisma validate",
-    "mascots:repair-stats": "tsx scripts/repair-mascot-level-stats.ts"
+    "mascots:repair-stats": "tsx scripts/repair-mascot-level-stats.ts",
+    "mascots:restore-backup": "tsx scripts/restore-mascot-backup.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
