@@ -746,8 +746,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       burnedLoot: null,
       stolenByBotLoot: null,
       injuredMascotIds: [], injuredMascots: [],
-      playerMascots: attackers.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level })),
-      botMascots: bot.defenders.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, type: getPokemonElement(m.pokemonId) })),
+      playerMascots: attackers.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp })),
+      botMascots: bot.defenders.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp, type: getPokemonElement(m.pokemonId) })),
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
       battleAnimation: combat.log
         .filter(t => t.action === "ATTACK")
@@ -954,11 +954,13 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
+      maxHp: m.hp,
     })),
     botMascots: defenders.map(m => ({
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
+      maxHp: m.hp,
       type: getPokemonElement(m.pokemonId),
     })),
     highlights: combat.log

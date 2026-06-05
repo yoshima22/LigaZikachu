@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -50,150 +50,233 @@ type AnimTurn = {
   isPlayerAttacker: boolean;
 };
 
+type MascotInfo = { pokemonId: number; name: string; level: number; maxHp: number };
+
 // ── Animação de combate ───────────────────────────────────────────────────────
+function HpBar({ current, max, isPlayer }: { current: number; max: number; isPlayer: boolean }) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, (current / max) * 100)) : 0;
+  const color = pct > 50 ? "bg-green-400" : pct > 20 ? "bg-yellow-400" : "bg-red-500";
+  return (
+    <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all duration-500 ${color}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+function MascotPanel({
+  mascot,
+  currentHp,
+  isActive,
+  isAttacking,
+  isHit,
+  isPlayer,
+}: {
+  mascot: MascotInfo;
+  currentHp: number;
+  isActive: boolean;
+  isAttacking: boolean;
+  isHit: boolean;
+  isPlayer: boolean;
+}) {
+  const dead = currentHp <= 0;
+  return (
+    <div className={`flex flex-col items-center gap-1 flex-1 transition-all duration-200 ${dead ? "opacity-30 grayscale" : isActive ? "scale-110" : "scale-90 opacity-70"}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        key={`${mascot.name}-hit-${isHit}`}
+        src={getSpriteUrl(mascot.pokemonId, true)}
+        alt=""
+        className="h-20 w-20 object-contain"
+        style={{
+          imageRendering: "pixelated",
+          animation: isHit ? "mascotShake 0.35s ease-in-out" : isAttacking ? "mascotLunge 0.3s ease-in-out" : "none",
+          filter: isHit ? "brightness(2) saturate(0)" : "none",
+          transition: "filter 0.1s",
+        }}
+      />
+      <span className={`text-[9px] font-semibold truncate max-w-[72px] text-center ${isPlayer ? "text-blue-300" : "text-red-300"}`}>
+        {mascot.name}
+      </span>
+      <div className="w-full px-1">
+        <HpBar current={currentHp} max={mascot.maxHp} isPlayer={isPlayer} />
+        <span className="text-[8px] text-slate-500">{Math.max(0, currentHp)}/{mascot.maxHp}</span>
+      </div>
+    </div>
+  );
+}
+
 function BattleAnimationModal({
   turns,
+  playerMascots,
+  botMascots,
   playerTeamName,
   botName,
   onFinish,
 }: {
   turns: AnimTurn[];
+  playerMascots: MascotInfo[];
+  botMascots: MascotInfo[];
   playerTeamName: string;
   botName: string;
   onFinish: () => void;
 }) {
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [showDamage, setShowDamage] = useState(false);
-  const [flash, setFlash] = useState(false);
+  const [phase, setPhase] = useState<"wait" | "attack" | "hit">("wait");
 
-  const advance = useCallback(() => {
-    setCurrentIdx(i => i + 1);
-  }, []);
+  // HP tracking keyed by mascot name
+  const [hpMap, setHpMap] = useState<Record<string, number>>(() => {
+    const m: Record<string, number> = {};
+    for (const p of playerMascots) m[p.name] = p.maxHp;
+    for (const b of botMascots) m[b.name] = b.maxHp;
+    return m;
+  });
+
+  // Keep onFinish in a ref so it never enters useEffect deps
+  const onFinishRef = useRef(onFinish);
+  useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
     if (currentIdx >= turns.length) {
-      const t = setTimeout(onFinish, 600);
+      const t = setTimeout(() => onFinishRef.current(), 700);
       return () => clearTimeout(t);
     }
-    setShowDamage(false);
-    setFlash(false);
-    const t1 = setTimeout(() => { setShowDamage(true); setFlash(true); }, 450);
-    const t2 = setTimeout(() => setFlash(false), 750);
-    const t3 = setTimeout(advance, 1500);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [currentIdx, turns.length, onFinish, advance]);
 
-  const turn = turns[currentIdx];
-  const progress = turns.length > 0 ? Math.min(100, Math.round((currentIdx / turns.length) * 100)) : 100;
+    const turn = turns[currentIdx];
+    setPhase("wait");
+
+    // t1: attacker lunges
+    const t1 = setTimeout(() => setPhase("attack"), 300);
+    // t2: hit flash + damage
+    const t2 = setTimeout(() => {
+      setPhase("hit");
+      setHpMap(prev => ({
+        ...prev,
+        [turn.defenderName]: Math.max(0, (prev[turn.defenderName] ?? 0) - turn.damage),
+      }));
+    }, 600);
+    // t3: back to idle
+    const t3 = setTimeout(() => setPhase("wait"), 950);
+    // t4: advance
+    const t4 = setTimeout(() => setCurrentIdx(i => i + 1), 1600);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, [currentIdx, turns.length]); // intentionally omit onFinish — use ref
+
+  const turn = turns[currentIdx] ?? null;
+  const progress = turns.length > 0 ? Math.round((currentIdx / turns.length) * 100) : 100;
+  const showDamage = phase === "hit";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <p className="text-[11px] uppercase tracking-widest text-[#FFCB05] font-semibold">⚔️ Combate em andamento…</p>
-          <button
-            type="button"
-            onClick={onFinish}
-            className="rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white transition-colors"
-          >
-            Pular →
-          </button>
-        </div>
+    <>
+      {/* Shake + lunge keyframes injected once */}
+      <style>{`
+        @keyframes mascotShake {
+          0%,100%{transform:translateX(0)}
+          15%{transform:translateX(-7px)}
+          35%{transform:translateX(7px)}
+          55%{transform:translateX(-5px)}
+          75%{transform:translateX(5px)}
+        }
+        @keyframes mascotLunge {
+          0%,100%{transform:translateX(0)}
+          50%{transform:translateX(${turn?.isPlayerAttacker ? "8px" : "-8px"})}
+        }
+      `}</style>
 
-        {/* Progress bar */}
-        <div className="mx-4 h-1 rounded-full bg-slate-800 mb-4">
-          <div
-            className="h-1 rounded-full bg-[#FFCB05] transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <p className="text-[11px] uppercase tracking-widest text-[#FFCB05] font-semibold">⚔️ Combate em andamento…</p>
+            <button type="button" onClick={() => onFinishRef.current()}
+              className="rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white">
+              Pular →
+            </button>
+          </div>
 
-        {/* Battle scene */}
-        <div className="px-4 pb-5">
-          {turn ? (
-            <>
-              {/* Sprites row */}
-              <div className="flex items-end justify-between gap-2 mb-3">
-                {/* Attacker side */}
-                <div className={`flex flex-col items-center gap-1 flex-1 transition-all duration-300 ${!turn.isPlayerAttacker ? "opacity-60 scale-90" : "scale-100"}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getSpriteUrl(turn.isPlayerAttacker ? turn.attackerPokemonId : turn.defenderPokemonId, true)}
-                    alt=""
-                    className={`h-20 w-20 object-contain transition-transform duration-200 ${turn.isPlayerAttacker ? "translate-x-2" : ""}`}
-                    style={{ imageRendering: "pixelated" }}
-                  />
-                  <span className="text-[9px] text-blue-300 font-semibold truncate max-w-[80px] text-center">
-                    {turn.isPlayerAttacker ? turn.attackerName : turn.defenderName}
-                  </span>
-                  <span className="text-[8px] text-slate-500">{playerTeamName}</span>
-                </div>
+          {/* Progress bar */}
+          <div className="mx-4 h-1 rounded-full bg-slate-800 mb-3">
+            <div className="h-1 rounded-full bg-[#FFCB05] transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
 
-                {/* Center: VS / damage */}
-                <div className="flex flex-col items-center gap-1 min-w-[70px]">
-                  <span className="text-[9px] text-slate-600">Turno {turn.turn}</span>
-                  <div className="h-10 flex items-center justify-center">
-                    {showDamage ? (
-                      <div className="text-center">
-                        <div className={`text-2xl font-black transition-all duration-200 ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
-                          style={{ textShadow: flash ? "0 0 12px currentColor" : "none" }}>
-                          -{turn.damage}
-                        </div>
-                        {turn.advantageApplied && (
-                          <div className="text-[8px] text-yellow-400 font-bold">SUPER EFICAZ!</div>
-                        )}
-                      </div>
-                    ) : (
-                      <ChevronRight size={20} className="text-slate-600" />
-                    )}
+          {/* Sprites */}
+          <div className="flex items-end justify-between gap-2 px-4">
+            {/* Player side */}
+            {playerMascots.map(m => (
+              <MascotPanel
+                key={m.name}
+                mascot={m}
+                currentHp={hpMap[m.name] ?? m.maxHp}
+                isActive={turn?.isPlayerAttacker ? turn.attackerName === m.name : turn?.defenderName === m.name}
+                isAttacking={phase === "attack" && turn?.isPlayerAttacker === true && turn.attackerName === m.name}
+                isHit={phase === "hit" && turn?.isPlayerAttacker === false && turn.defenderName === m.name}
+                isPlayer
+              />
+            ))}
+
+            {/* Damage bubble */}
+            <div className="flex flex-col items-center gap-1 min-w-[56px]">
+              <span className="text-[9px] text-slate-600">{turn ? `T.${turn.turn}` : ""}</span>
+              <div className="h-10 flex items-center justify-center">
+                {showDamage && turn ? (
+                  <div className="text-center">
+                    <div className={`text-xl font-black ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
+                      style={{ textShadow: "0 0 10px currentColor" }}>
+                      -{turn.damage}
+                    </div>
+                    {turn.advantageApplied && <div className="text-[8px] text-yellow-400 font-bold">SUPER EF.!</div>}
                   </div>
-                </div>
-
-                {/* Defender side */}
-                <div className={`flex flex-col items-center gap-1 flex-1 transition-all duration-300 ${turn.isPlayerAttacker ? "opacity-60 scale-90" : "scale-100"}`}
-                  style={{ opacity: showDamage && turn.isPlayerAttacker ? 0.4 : undefined }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getSpriteUrl(!turn.isPlayerAttacker ? turn.attackerPokemonId : turn.defenderPokemonId, true)}
-                    alt=""
-                    className={`h-20 w-20 object-contain transition-all duration-300 ${showDamage && turn.isPlayerAttacker ? "-translate-x-1" : ""}`}
-                    style={{ imageRendering: "pixelated" }}
-                  />
-                  <span className="text-[9px] text-red-300 font-semibold truncate max-w-[80px] text-center">
-                    {!turn.isPlayerAttacker ? turn.attackerName : turn.defenderName}
-                  </span>
-                  <span className="text-[8px] text-slate-500">{botName}</span>
-                </div>
+                ) : (
+                  <ChevronRight size={16} className="text-slate-700" />
+                )}
               </div>
-
-              {/* Action text */}
-              <div className="rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center">
-                <p className="text-[11px] text-slate-300">
-                  {turn.isPlayerAttacker
-                    ? <><span className="text-blue-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-red-300 font-semibold">{turn.defenderName}</span></>
-                    : <><span className="text-red-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-blue-300 font-semibold">{turn.defenderName}</span></>
-                  }
-                  {showDamage && <span className={` — ${turn.advantageApplied ? "text-yellow-300" : "text-slate-400"}`}> {turn.damage} dano{turn.advantageApplied ? " ⚡" : ""}</span>}
-                </p>
-              </div>
-
-              {/* Turn dots */}
-              <div className="flex justify-center gap-1 mt-3">
-                {turns.slice(0, Math.min(turns.length, 12)).map((_, i) => (
-                  <div key={i} className={`rounded-full transition-all ${i === currentIdx ? "w-3 h-2 bg-[#FFCB05]" : i < currentIdx ? "w-2 h-2 bg-slate-600" : "w-2 h-2 bg-slate-800"}`} />
-                ))}
-                {turns.length > 12 && <span className="text-[9px] text-slate-600 ml-1">+{turns.length - 12}</span>}
-              </div>
-            </>
-          ) : (
-            <div className="py-8 text-center">
-              <p className="text-sm text-slate-400">Calculando resultado…</p>
             </div>
-          )}
+
+            {/* Bot side */}
+            {botMascots.map(m => (
+              <MascotPanel
+                key={m.name}
+                mascot={m}
+                currentHp={hpMap[m.name] ?? m.maxHp}
+                isActive={turn?.isPlayerAttacker ? turn.defenderName === m.name : turn?.attackerName === m.name}
+                isAttacking={phase === "attack" && turn?.isPlayerAttacker === false && turn.attackerName === m.name}
+                isHit={phase === "hit" && turn?.isPlayerAttacker === true && turn.defenderName === m.name}
+                isPlayer={false}
+              />
+            ))}
+          </div>
+
+          {/* Action text */}
+          <div className="mx-4 mt-3 rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center">
+            {turn ? (
+              <p className="text-[11px] text-slate-300">
+                {turn.isPlayerAttacker
+                  ? <><span className="text-blue-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-red-300 font-semibold">{turn.defenderName}</span></>
+                  : <><span className="text-red-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-blue-300 font-semibold">{turn.defenderName}</span></>}
+                {showDamage && (
+                  <span className={turn.advantageApplied ? " text-yellow-300" : " text-slate-400"}>
+                    {" "}— {turn.damage} dano{turn.advantageApplied ? " ⚡" : ""}
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-500">Calculando resultado…</p>
+            )}
+          </div>
+
+          {/* Turn dots */}
+          <div className="flex justify-center gap-1 px-4 py-3">
+            {turns.slice(0, Math.min(turns.length, 14)).map((_, i) => (
+              <div key={i} className={`rounded-full transition-all ${i === currentIdx ? "w-3 h-2 bg-[#FFCB05]" : i < currentIdx ? "w-2 h-2 bg-slate-600" : "w-2 h-2 bg-slate-800"}`} />
+            ))}
+            {turns.length > 14 && <span className="text-[9px] text-slate-600 ml-1">+{turns.length - 14}</span>}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -298,6 +381,8 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownMs = 
       {result && showAnimation && (
         <BattleAnimationModal
           turns={(result.battleAnimation ?? []) as AnimTurn[]}
+          playerMascots={(result.playerMascots ?? []) as MascotInfo[]}
+          botMascots={result.botMascots as MascotInfo[]}
           playerTeamName={teamName}
           botName={result.botName}
           onFinish={() => setShowAnimation(false)}
