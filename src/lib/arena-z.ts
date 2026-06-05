@@ -265,23 +265,38 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
   return { result, log, rounds: turn - 1, defeatedMascotIds: defeated.filter(m => m.ownerId).map(m => m.id) };
 }
 
-export type ArenaLootFull = ArenaLoot & { egg?: "COMMON" | "RARE" | "SPECIAL" };
+export type ArenaLootFull = ArenaLoot & {
+  egg?: "COMMON" | "RARE" | "SPECIAL";
+  buffItem?: string; // tipo do ShopItem (ex: "MASCOT_BUFF_STAT")
+};
 
-function botReward(levelMin: number, levelMax: number): ArenaLootFull {
+const BUFF_ITEM_POOL = [
+  "MASCOT_BUFF_EXP", "MASCOT_BUFF_STAT", "MASCOT_BUFF_HAPPY",
+  "MASCOT_BUFF_LUCK", "MASCOT_BUFF_MOOD",
+];
+
+function botReward(levelMin: number, levelMax: number, difficulty: ArenaDifficulty = "normal"): ArenaLootFull {
   const tier = Math.ceil(levelMax / 5);
   const eggRoll = Math.random();
-  // Tier 4+ (level 20+): chance de ovo comum / raro
   const eggChance = tier >= 8 ? 0.12 : tier >= 6 ? 0.08 : tier >= 4 ? 0.05 : 0;
   const rareEggChance = tier >= 10 ? 0.04 : tier >= 8 ? 0.02 : 0;
   let egg: "COMMON" | "RARE" | "SPECIAL" | undefined;
   if (eggRoll < rareEggChance) egg = "RARE";
   else if (eggRoll < eggChance) egg = "COMMON";
+
+  // Chance de item buff no dificil — entra no cofre e pode ser roubado em PvP
+  let buffItem: string | undefined;
+  if (difficulty === "hard" && Math.random() < 0.20) { // 20% de chance no Difícil
+    buffItem = BUFF_ITEM_POOL[Math.floor(Math.random() * BUFF_ITEM_POOL.length)];
+  }
+
   return {
     coins: rand(5 * tier, 15 * tier),
     exp:   rand(5 * tier, 18 * tier),
     food:  Math.random() < Math.min(0.45, tier * 0.05) ? 1 : 0,
     sweet: Math.random() < Math.min(0.2, tier * 0.025) ? 1 : 0,
     egg,
+    buffItem,
   };
 }
 
@@ -384,7 +399,8 @@ async function creditArenaLoot(
   tx: Prisma.TransactionClient,
   playerId: string,
   loot: ArenaLoot,
-  description: string
+  description: string,
+  mascotIds?: string[] // se fornecido, distribui EXP entre esses mascotes
 ) {
   if (loot.coins > 0) {
     await creditCoins(tx, {
@@ -407,6 +423,16 @@ async function creditArenaLoot(
       update: { quantity: { increment: loot.sweet } },
       create: { playerId, type: "SWEET", quantity: loot.sweet },
     });
+  }
+  // Distribui EXP do cofre para os mascotes (level-up tratado após a transação)
+  if (loot.exp > 0 && mascotIds && mascotIds.length > 0) {
+    const expEach = Math.max(1, Math.floor(loot.exp / mascotIds.length));
+    for (const mascotId of mascotIds) {
+      await tx.mascot.update({
+        where: { id: mascotId },
+        data: { exp: { increment: expEach } },
+      }).catch(() => null);
+    }
   }
 }
 
@@ -777,7 +803,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   const combat = runCombat(attackers, defenders);
   const won = combat.result === "ATTACKER_WIN";
   // Recompensa escalada pela dificuldade
-  const baseReward = won ? botReward(band.min, band.max) : { coins: 0, exp: 0, food: 0, sweet: 0, egg: undefined };
+  const baseReward = won ? botReward(band.min, band.max, useDifficulty) : { coins: 0, exp: 0, food: 0, sweet: 0, egg: undefined, buffItem: undefined };
   const reward: ArenaLootFull = won ? {
     coins: Math.round(baseReward.coins * diff.rewardMult),
     exp:   Math.round(baseReward.exp   * diff.rewardMult),
@@ -822,7 +848,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       },
     });
     if (teamDefeated && defeatPreserved) {
-      await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`);
+      const allMascotIds = team.members.map(m => m.mascotId);
+      await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`, allMascotIds);
       await tx.arenaTeam.update({
         where: { id: team.id },
         data: {
@@ -855,6 +882,28 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       await tx.mascotEgg.create({
         data: { playerId, type: reward.egg, origin: `Arena Z bot ${botName}` }
       });
+    }
+    // Item buff (Difícil) — vai pro cofre da equipe para poder ser roubado em PvP
+    // Guardado como nota no vault via evento; entrega direta ao inventário na retirada
+    if (reward.buffItem && won) {
+      const shopItem = await tx.shopItem.findFirst({
+        where: { type: reward.buffItem as never, active: true },
+        select: { id: true },
+      });
+      if (shopItem) {
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId, itemId: shopItem.id, quantity: 1 },
+        });
+        await tx.mascotEvent.create({
+          data: {
+            mascotId: team.members[0]?.mascotId ?? "",
+            emoji: "🎁",
+            description: `Arena Z Difícil: item especial (${reward.buffItem}) adicionado ao inventário!`,
+          }
+        }).catch(() => null);
+      }
     }
     if (injuredMascotIds.length > 0) {
       await tx.arenaTeamMember.deleteMany({
@@ -1263,7 +1312,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
     if (loserTeam && preserved) {
       if (loserTeamDefeated) {
-        await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP");
+        const loserMascotIds = loserTeam.members.map(m => m.mascotId);
+        await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP", loserMascotIds);
       }
       await tx.arenaTeam.update({
         where: { id: loserTeam.id },

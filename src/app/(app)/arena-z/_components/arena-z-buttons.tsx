@@ -115,9 +115,11 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
                 if (response.result) {
                   setResult(response.result);
                   setLocalCooldown(cooldownAfterMs);
-                  toast.success(response.result.won ? "Vitoria na Arena Z!" : "Derrota na Arena Z.");
+                  // NÃO chama router.refresh() aqui — o refresh é feito ao fechar o modal
+                  // para garantir que o jogador consiga ler o resultado
+                } else {
+                  router.refresh(); // só atualiza se não há modal para mostrar
                 }
-                router.refresh();
               });
             }}
             className={`rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-50 transition-all ${
@@ -152,7 +154,7 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
                   )}
                 </p>
               </div>
-              <button type="button" onClick={() => setResult(null)} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
+              <button type="button" onClick={() => { setResult(null); router.refresh(); }} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
                 <X size={14} />
               </button>
             </div>
@@ -209,6 +211,21 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
                 </div>
               </div>
             )}
+
+            {(result as { buffItem?: string }).buffItem && result.won && (
+              <div className="mt-3 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3">
+                <p className="text-xs font-bold text-purple-300">🎁 Item especial (Difícil)</p>
+                <p className="mt-1 text-sm text-purple-100">Um item buff foi adicionado ao seu inventário!</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => { setResult(null); router.refresh(); }}
+              className="mt-4 w-full rounded-xl border border-border py-2.5 text-sm font-semibold text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+            >
+              Fechar
+            </button>
           </div>
         </div>
       )}
