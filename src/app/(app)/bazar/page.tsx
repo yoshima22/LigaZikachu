@@ -125,7 +125,7 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>💰 Cofre do Miauvadão</p>
-            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>10% de cada compra</strong> nas ofertas, <strong style={{ color: "#FFCB05" }}>apostas perdidas</strong> no jogo e <strong style={{ color: "#FFCB05" }}>investimentos de jogadores (80 ZC)</strong>. Quanto mais cheio, melhores os descontos e prêmios.</p>
+            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>10% de cada compra</strong> nas ofertas, <strong style={{ color: "#FFCB05" }}>apostas perdidas</strong> no jogo e <strong style={{ color: "#FFCB05" }}>investimentos de jogadores (60 ZC)</strong>. Quanto mais cheio, melhores os descontos e prêmios.</p>
           </div>
 
           <div className="space-y-1">
@@ -135,12 +135,12 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Atualizar Ofertas (80 ZC)</p>
-            <p>Qualquer jogador pode pagar 80 ZC para atualizar os 3 itens do dia imediatamente. Os 80 ZC vão ao cofre e os novos itens ganham <strong style={{ color: "#FFCB05" }}>+10 pontos de desconto extras</strong> além do normal. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
+            <p>Qualquer jogador pode pagar 60 ZC para atualizar os 3 itens do dia imediatamente. Os 60 ZC vão ao cofre e os novos itens ganham <strong style={{ color: "#FFCB05" }}>+10 pontos de desconto extras</strong> além do normal. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
           </div>
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
-            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 20% da aposta</strong> (ex: 100 ZC apostados → recebe 120 ZC). O bônus de 20% sai do cofre. Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
+            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 40% da aposta (ex: 100 ZC apostados → recebe 140 ZC)). O bônus de 40% sai do cofre. Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
           </div>
 
           <div className="space-y-1">

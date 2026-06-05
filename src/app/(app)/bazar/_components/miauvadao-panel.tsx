@@ -86,7 +86,7 @@ function RefreshShopButton({ playerId }: { playerId: string | null }) {
   return (
     <button type="button" disabled={pending}
       onClick={() => {
-        if (!confirm("Pagar 80 ZC para atualizar as ofertas agora com descontos melhores?")) return;
+        if (!confirm("Pagar 60 ZC para atualizar as ofertas agora com descontos melhores?")) return;
         startTransition(async () => {
           const r = await refreshMiauvadaoShopNow();
           if (r.error) { toast.error(r.error); return; }
@@ -96,7 +96,7 @@ function RefreshShopButton({ playerId }: { playerId: string | null }) {
       }}
       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all disabled:opacity-50"
       style={{ background: "#2a1a03", border: "1px solid #c9a800", color: "#c9a800" }}>
-      🔄 Atualizar ofertas (80 ZC)
+      🔄 Atualizar ofertas (60 ZC)
     </button>
   );
 }

@@ -2,6 +2,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { recalculateMood } from "@/lib/mascot";
+import { getPokemonName } from "@/lib/mascot-data";
 import { isAdmin } from "@/lib/auth/permissions";
 import { MascotList } from "./_components/mascot-list";
 import { IncubatorPanel } from "./_components/incubator-panel";
@@ -95,7 +96,7 @@ export default async function MascotesPage() {
     // Admin: lista de outros mascotes para trigger de batalha/amizade
     otherMascots: admin ? mascots.filter(o => o.id !== m.id && o.playerId !== player.id).map(o => ({
       id: o.id,
-      name: o.nickname ?? `Pokémon #${o.pokemonId}`,
+      name: o.nickname ?? getPokemonName(o.pokemonId),
     })) : undefined,
   }));
 
@@ -227,7 +228,7 @@ export default async function MascotesPage() {
       {buffInventory.length > 0 && (
         <BuffPanel
           buffs={buffInventory.map(b => ({ id: b.item.id, name: b.item.name, type: b.item.type, quantity: b.quantity, description: b.item.description ?? undefined, imageUrl: b.item.imageUrl ?? undefined }))}
-          mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? `Pokémon #${m.pokemonId}`, isEquipped: m.isEquipped }))}
+          mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? getPokemonName(m.pokemonId), isEquipped: m.isEquipped }))}
         />
       )}
 

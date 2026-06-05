@@ -872,9 +872,14 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
     const player = await prisma.player.findUnique({ where: { userId: user.id } });
     if (!player) return { error: "Perfil não encontrado." };
 
-    const REFRESH_COST = 80;
+    const REFRESH_COST = 60;
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
     if (!wallet || wallet.balance < REFRESH_COST) return { error: `Saldo insuficiente (precisa de ${REFRESH_COST} ZC).` };
+
+    // Lê o vault ANTES de incrementar — desconto extra é calculado sobre preço base,
+    // não acumula com incrementos de refreshes anteriores
+    const configBefore = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+    const vaultBeforeRefresh = configBefore?.vaultBalance ?? 0;
 
     // Deduct cost, add to vault
     const [updatedWallet] = await prisma.$transaction([
@@ -882,11 +887,11 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
       prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: REFRESH_COST } } }),
     ]);
 
-    // Roll new offers with extra +10 flat discount points (premium refresh)
-    const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-    const newOffers = await rollMiauvadaoOffers(config?.vaultBalance ?? 0, 10);
+    // Roll com vault PRÉ-refresh + bonus fixo de +10pp sobre preço BASE
+    // Não usa o vaultBalance incrementado para evitar escalonamento de desconto
+    const newOffers = await rollMiauvadaoOffers(vaultBeforeRefresh, 10);
 
-    const msg = `O ${player.displayName} investiu ${REFRESH_COST} ZC e atualizou as ofertas! 🛍️`;
+    const msg = `O ${player.displayName} investiu 60 ZC e atualizou as ofertas com descontos melhores! 🛍️`;
     await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
       data: {
@@ -1072,7 +1077,7 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
 const SHELL_MIN_BET = 50;
 const SHELL_MAX_BET = 2000;
 // Prêmio = aposta + 20% da aposta; o bonus (20%) é debitado do cofre
-const SHELL_WIN_BONUS_PCT = 0.20;
+const SHELL_WIN_BONUS_PCT = 0.40; // jogador ganha aposta + 40% da aposta
 const SHELL_COOLDOWN_MS = 5 * 60_000;
 
 const MIAUVADAO_RAGE: string[] = [
