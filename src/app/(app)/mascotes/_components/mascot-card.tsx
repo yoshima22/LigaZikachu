@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info } from "lucide-react";
+import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star } from "lucide-react";
 import {
   getSpriteUrl, getStaticSpriteUrl, getPokemonName, expToNextLevel as expToNext,
   MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL,
@@ -18,6 +18,7 @@ import {
   adminBattleMascotsAction, adminFormFriendshipAction,
   adminTriggerSocialEventsAction,
   healMascotSusAction,
+  toggleFavoriteMascotAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -38,6 +39,7 @@ interface MascotData {
   mood: string;
   personality: string;
   isEquipped: boolean;
+  isFavorite: boolean;
   statForce: number;
   statAgility: number;
   statCharisma: number;
@@ -244,6 +246,17 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
     setEditingName(false);
   };
 
+  const handleFavorite = () => {
+    startTransition(async () => {
+      const r = await toggleFavoriteMascotAction(mascot.id);
+      if (r.error) toast.error(r.error);
+      else {
+        toast.success(mascot.isFavorite ? "Removido dos favoritos." : "Mascote favoritado!");
+        router.refresh();
+      }
+    });
+  };
+
   const handleInteract = (type: "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET") => {
     startTransition(async () => {
       const r = await interactAction(mascot.id, type);
@@ -399,6 +412,15 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             ) : (
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-white truncate">{name}</span>
+                <button
+                  type="button"
+                  onClick={handleFavorite}
+                  disabled={pending}
+                  className={`shrink-0 transition-colors ${mascot.isFavorite ? "text-[#FFCB05]" : "text-slate-600 hover:text-[#FFCB05]"}`}
+                  title={mascot.isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                >
+                  <Star size={12} fill={mascot.isFavorite ? "currentColor" : "none"} />
+                </button>
                 <button onClick={() => setEditingName(true)} className="text-slate-600 hover:text-slate-400"><Edit2 size={11}/></button>
               </div>
             )}

@@ -48,7 +48,7 @@ export default async function MascotesPage() {
           take: 8
         }
       },
-      orderBy: [{ isEquipped: "desc" }, { level: "desc" }, { id: "asc" }]
+      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }]
     }),
     prisma.mascotEgg.findMany({
       where: { playerId: player.id, incubation: null },
@@ -77,7 +77,7 @@ export default async function MascotesPage() {
   const mascotData = mascots.map(m => ({
     id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
     level: m.level, exp: m.exp, happiness: m.happiness,
-    mood: m.mood, personality: m.personality, isEquipped: m.isEquipped,
+    mood: m.mood, personality: m.personality, isEquipped: m.isEquipped, isFavorite: m.isFavorite,
     statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma,
     statInstinct: m.statInstinct, statVitality: m.statVitality,
     battleWins: m.battleWins, battleLosses: m.battleLosses,

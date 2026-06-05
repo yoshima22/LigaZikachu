@@ -100,6 +100,35 @@ export async function renameMascotAction(mascotId: string, nickname: string): Pr
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil nao encontrado." };
+
+    const mascot = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: { id: true, playerId: true, isFavorite: true },
+    });
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote nao encontrado." };
+
+    if (!mascot.isFavorite) {
+      const favoriteCount = await prisma.mascot.count({ where: { playerId: player.id, isFavorite: true } });
+      if (favoriteCount >= 6) return { error: "Voce ja tem 6 mascotes favoritos. Remova um favorito antes." };
+    }
+
+    await prisma.mascot.update({
+      where: { id: mascotId },
+      data: { isFavorite: !mascot.isFavorite },
+    });
+    revalidate();
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao favoritar." };
+  }
+}
+
 export async function interactAction(mascotId: string, type: InteractionType): Promise<{ error?: string; result?: Awaited<ReturnType<typeof interactWithMascot>> }> {
   try {
     const user = await getSessionUser();

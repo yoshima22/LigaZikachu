@@ -18,7 +18,7 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
-import { MOOD_EMOJI } from "@/lib/mascot-data";
+import { MOOD_EMOJI, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { MascotProfileCard } from "./_components/mascot-profile-card";
 
 export default async function PlayerDetailPage({
@@ -147,29 +147,40 @@ export default async function PlayerDetailPage({
   ]);
 
   // Mascote equipado — dados completos para o card do perfil
-  const equippedMascot = await prisma.mascot.findFirst({
-    where: { playerId, isEquipped: true },
-    select: {
-      id: true, pokemonId: true, nickname: true, level: true, exp: true,
-      happiness: true, mood: true, personality: true, isEquipped: true,
-      statForce: true, statAgility: true, statCharisma: true,
-      statInstinct: true, statVitality: true,
-      battleWins: true, battleLosses: true,
-      hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
-      events: { orderBy: { createdAt: "desc" }, take: 15 },
-      expeditions: { where: { status: "ACTIVE" }, take: 1, select: { finishAt: true } },
-      relationsAsA: {
-        include: {
-          mascotB: {
-            select: {
-              id: true, pokemonId: true, nickname: true,
-              player: { select: { displayName: true } }
+  const [equippedMascot, publicMascots] = await Promise.all([
+    prisma.mascot.findFirst({
+      where: { playerId, isEquipped: true },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, exp: true,
+        happiness: true, mood: true, personality: true, isEquipped: true,
+        statForce: true, statAgility: true, statCharisma: true,
+        statInstinct: true, statVitality: true,
+        battleWins: true, battleLosses: true,
+        hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
+        events: { orderBy: { createdAt: "desc" }, take: 15 },
+        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { finishAt: true } },
+        relationsAsA: {
+          include: {
+            mascotB: {
+              select: {
+                id: true, pokemonId: true, nickname: true,
+                player: { select: { displayName: true } }
+              }
             }
           }
         }
       }
-    }
-  }).catch(() => null);
+    }).catch(() => null),
+    prisma.mascot.findMany({
+      where: { playerId },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true,
+        mood: true, isEquipped: true, isFavorite: true,
+      },
+      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
+      take: 24,
+    }).catch(() => [] as Array<{ id: string; pokemonId: number; nickname: string | null; level: number; mood: string; isEquipped: boolean; isFavorite: boolean }>),
+  ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
   const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
@@ -693,6 +704,34 @@ export default async function PlayerDetailPage({
       </div>
 
       {/* Mascote equipado — card completo com histórico de relações */}
+      {publicMascots.length > 0 && (
+        <Card>
+          <CardTitle className="mb-3 flex items-center gap-2">
+            <Swords size={18} className="text-primary" /> Mascotes
+          </CardTitle>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {publicMascots.map((mascot) => (
+              <div key={mascot.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-950/50 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={getSpriteUrl(mascot.pokemonId, true)}
+                  alt=""
+                  className="h-11 w-11 object-contain"
+                  style={{ imageRendering: "pixelated" }}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-semibold text-slate-100">
+                    {mascot.nickname ?? getPokemonName(mascot.pokemonId)}
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Nv.{mascot.level} {MOOD_EMOJI[mascot.mood] ?? ""}{mascot.isFavorite ? " | Favorito" : mascot.isEquipped ? " | Equipado" : ""}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       {equippedMascot && (
         <MascotProfileCard
           mascot={{

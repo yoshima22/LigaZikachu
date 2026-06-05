@@ -1343,6 +1343,7 @@ model Mascot {
   mood             MascotMood        @default(NEUTRAL)
   personality      MascotPersonality
   isEquipped       Boolean           @default(false)
+  isFavorite       Boolean           @default(false)
   // Stats
   statForce        Int               @default(10)
   statAgility      Int               @default(10)
