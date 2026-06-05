@@ -88,6 +88,7 @@ export default async function MascotesPage() {
     hatchedAt: m.hatchedAt,
     lastInteractedAt: m.lastInteractedAt,
     lastFedAt: m.lastFedAt,
+    socialCooldownUntil: m.socialCooldownUntil,
     expeditions: m.expeditions.map(e => ({ id: e.id, finishAt: e.finishAt, status: e.status })),
     events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
     hasFood, hasSweet,

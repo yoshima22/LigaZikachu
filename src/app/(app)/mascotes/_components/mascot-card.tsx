@@ -54,6 +54,7 @@ interface MascotData {
   hatchedAt: Date;
   lastInteractedAt: Date | null;
   lastFedAt: Date | null;
+  socialCooldownUntil: Date | null;
   expeditions: Expedition[];
   events: MascotEvent[];
   hasFood: boolean;
@@ -349,8 +350,8 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         </div>
       )}
 
-      {/* Status badges — shows if mascot is busy in another system */}
-      {(mascot.bazarListed || mascot.arenaState !== "FREE") && (
+      {/* Status badges */}
+      {(mascot.bazarListed || mascot.arenaState !== "FREE" || (mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date())) && (
         <div className="flex flex-wrap gap-1.5 border-b border-border/40 px-4 py-2 bg-slate-900/30">
           {mascot.bazarListed && (
             <span className="flex items-center gap-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[9px] font-semibold text-[#FFCB05]">
@@ -370,6 +371,11 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
           {mascot.arenaState === "RESTING" && (
             <span className="flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[9px] font-semibold text-blue-300">
               💤 Em Repouso
+            </span>
+          )}
+          {mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date() && (
+            <span className="flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[9px] font-semibold text-purple-300">
+              😵 Atordoado por rival
             </span>
           )}
         </div>

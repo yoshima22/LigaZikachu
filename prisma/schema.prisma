@@ -1357,10 +1357,11 @@ model Mascot {
   hatchedAt        DateTime          @default(now())
   lastInteractedAt DateTime?
   lastFedAt        DateTime?
-  bazarListed      Boolean           @default(false)
-  arenaState       MascotArenaState  @default(FREE)
-  injuredAt        DateTime?
-  restingUntil     DateTime?
+  bazarListed          Boolean           @default(false)
+  socialCooldownUntil  DateTime?         // rival travou interações temporariamente
+  arenaState           MascotArenaState  @default(FREE)
+  injuredAt            DateTime?
+  restingUntil         DateTime?
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
   arenaTeamMembers ArenaTeamMember[]
@@ -1378,12 +1379,13 @@ enum MascotRelationType {
 }
 
 model MascotRelation {
-  id        String             @id @default(cuid())
-  mascotAId String
-  mascotBId String
-  type      MascotRelationType @default(RIVAL)
-  wins      Int                @default(0)   // vitórias de A sobre B
-  losses    Int                @default(0)
+  id               String             @id @default(cuid())
+  mascotAId        String
+  mascotBId        String
+  type             MascotRelationType @default(RIVAL)
+  wins             Int                @default(0)
+  losses           Int                @default(0)
+  interactionCount Int                @default(1)  // sobe com eventos; determina tier
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   mascotA   Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)

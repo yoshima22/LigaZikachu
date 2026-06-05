@@ -13,6 +13,7 @@ interface MascotData {
   statInstinct: number; statVitality: number;
   battleWins: number; battleLosses: number;
   bazarListed: boolean;
+  socialCooldownUntil: Date | null;
   arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
   hatchedAt: Date; lastInteractedAt: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
