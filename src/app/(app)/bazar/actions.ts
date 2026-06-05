@@ -1261,3 +1261,72 @@ export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
     return { cooldownMs: Math.max(0, SHELL_COOLDOWN_MS - (Date.now() - last.createdAt.getTime())) };
   } catch { return { cooldownMs: 0 }; }
 }
+
+// ── Admin: limpar listagens com itens inexistentes ────────────────────────────
+
+export async function adminCleanupStaleBazarListings(): Promise<{ error?: string; cancelled: number; details: string[] }> {
+  try {
+    await requireAdmin();
+
+    const activeListings = await prisma.bazarListing.findMany({
+      where: { status: "ACTIVE", category: "ITEM" },
+      select: { id: true, playerId: true, payload: true },
+    });
+
+    const cancelled: string[] = [];
+
+    for (const listing of activeListings) {
+      const payload = listing.payload as Record<string, unknown>;
+      const itemType = payload.itemType as string | undefined;
+      const qty = (payload.quantity as number) ?? 1;
+      let itemExists = true;
+      let reason = "";
+
+      if (itemType === "FOOD" || itemType === "SWEET") {
+        const food = await prisma.mascotFoodItem.findUnique({
+          where: { playerId_type: { playerId: listing.playerId, type: itemType as "FOOD" | "SWEET" } },
+        });
+        // Food is debited on listing - if the item doesn't exist OR was over-consumed
+        itemExists = !!food && food.quantity >= 0; // just check table exists
+        if (!food) { itemExists = false; reason = "Comida não encontrada no inventário"; }
+      } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(itemType ?? "")) {
+        const eggIds = payload.escrowed_egg_ids as string[] | undefined;
+        if (eggIds && eggIds.length > 0) {
+          const existingEggs = await prisma.mascotEgg.count({
+            where: { id: { in: eggIds }, origin: { startsWith: "bazar:" } },
+          });
+          if (existingEggs < qty) {
+            itemExists = false;
+            reason = `Ovo(s) em escrow não encontrado(s) — provavelmente já foram usados (${existingEggs}/${qty} restantes)`;
+          }
+        }
+      } else if (payload.shopItemId) {
+        const shopItemId = payload.shopItemId as string;
+        const inv = await prisma.playerInventory.findUnique({
+          where: { playerId_itemId: { playerId: listing.playerId, itemId: shopItemId } },
+        });
+        // Items are debited on listing. If inv row missing entirely something went wrong.
+        if (!inv) { itemExists = false; reason = "Item não encontrado no inventário do vendedor"; }
+      }
+
+      if (!itemExists) {
+        await prisma.$transaction(async (tx) => {
+          await tx.bazarListing.update({
+            where: { id: listing.id },
+            data: { status: "CANCELLED" },
+          });
+          await tx.bazarProposal.updateMany({
+            where: { listingId: listing.id, status: "PENDING" },
+            data: { status: "REJECTED" },
+          });
+        });
+        cancelled.push(`${listing.id} — ${itemType ?? "?"} — ${reason}`);
+      }
+    }
+
+    revalidateBazar();
+    return { cancelled: cancelled.length, details: cancelled };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro.", cancelled: 0, details: [] };
+  }
+}

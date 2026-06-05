@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
 
 const ITEM_TYPES = [
@@ -136,6 +136,25 @@ export default function MiauvadaoAdminPage() {
 
       {/* Vault management */}
       <div className="rounded-2xl border border-border bg-slate-950/60 p-5 space-y-4">
+        {/* Limpeza de anúncios com itens inexistentes */}
+        <div className="rounded-2xl border border-red-500/20 bg-slate-950/60 p-5 space-y-3 mb-4">
+          <h2 className="font-semibold text-slate-200">🧹 Limpar Anúncios Inválidos</h2>
+          <p className="text-xs text-slate-500">
+            Remove anúncios ACTIVE onde o item em escrow já foi usado/consumido (como o caso do ovo do Cristian).
+          </p>
+          <button type="button" disabled={pending}
+            onClick={() => startTransition(async () => {
+              const r = await adminCleanupStaleBazarListings();
+              if (r.error) { toast.error(r.error); return; }
+              toast.success(`Limpeza concluída: ${r.cancelled} anúncio(s) cancelado(s).`);
+              if (r.details.length > 0) console.log("Anúncios cancelados:", r.details);
+              router.refresh();
+            })}
+            className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-400 hover:bg-red-500/20 disabled:opacity-50">
+            <Trash2 size={14}/> Limpar anúncios com itens inválidos
+          </button>
+        </div>
+
         <h2 className="font-semibold text-slate-200">💰 Gerenciar Cofre do Miauvadão</h2>
         <p className="text-xs text-slate-500">Saldo atual: <strong className="text-[#FFCB05]">{vaultBalance.toLocaleString("pt-BR")} ZC</strong></p>
         <div className="flex gap-3 flex-wrap">

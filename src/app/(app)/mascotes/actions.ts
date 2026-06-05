@@ -23,6 +23,13 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return { error: "Perfil não encontrado." };
 
+    // Bloqueia ovos que estão em escrow no Bazar
+    const egg = await prisma.mascotEgg.findUnique({ where: { id: eggId }, select: { origin: true, playerId: true } });
+    if (!egg || egg.playerId !== player.id) return { error: "Ovo não encontrado." };
+    if (egg.origin?.startsWith("bazar:")) {
+      return { error: "Este ovo está anunciado no Bazar. Cancele o anúncio antes de usá-lo." };
+    }
+
     // Se jogador escolheu uma geração específica, atualiza o tipo do ovo antes de incubar
     if (genOverride) {
       const validGens = ["EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS"];
