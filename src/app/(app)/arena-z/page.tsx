@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, LockBotButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { CreateTeamForm } from "./_components/create-team-form";
@@ -17,6 +17,13 @@ function stateLabel(state: string, restingUntil?: Date | null) {
   if (state === "RESTING") return restingUntil && restingUntil > new Date() ? `Repouso ate ${restingUntil.toLocaleString("pt-BR")}` : "Repouso concluido";
   if (state === "ARENA") return "Na Arena";
   return "Livre";
+}
+
+function teamStatusLabel(status: string) {
+  if (status === "ACTIVE") return "Ativa";
+  if (status === "DEFEATED") return "Derrotada";
+  if (status === "RETIRED") return "Retirada";
+  return status;
 }
 
 function fmtLoot(team: { vaultCoins: number; vaultExp: number; vaultFood: number; vaultSweet: number }) {
@@ -83,6 +90,8 @@ export default async function ArenaZPage() {
     select: { id: true, displayName: true },
   });
   if (!player) redirect("/dashboard");
+
+  await syncDefeatedArenaTeams(player.id);
 
   const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, injuredRivals] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
@@ -237,13 +246,21 @@ export default async function ArenaZPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-bold text-slate-100">{team.name}</p>
-                      <p className="text-[11px] text-slate-500">{team.status} | {team.members.length} mascote(s) | entrou {team.enteredAt.toLocaleDateString("pt-BR")}</p>
+                      <p className="text-[11px] text-slate-500">{teamStatusLabel(team.status)} | {team.members.length} mascote(s) | entrou {team.enteredAt.toLocaleDateString("pt-BR")}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      {team.status === "ACTIVE" && <RetireTeamButton teamId={team.id} />}
+                      {(team.status === "ACTIVE" || team.status === "DEFEATED") && <RetireTeamButton teamId={team.id} defeated={team.status === "DEFEATED"} />}
                       <DeleteTeamButton teamId={team.id} isAdmin={admin} />
                     </div>
                   </div>
+                  {team.status === "DEFEATED" && (
+                    <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-100">
+                      <p className="font-bold">Equipe derrotada</p>
+                      <p className="mt-1 text-red-100/80">
+                        Esta equipe saiu da Arena porque sofreu K.O./ferimento em combate. Cure os mascotes feridos com Atendimento SUS e colete o cofre restante para encerrar o ciclo.
+                      </p>
+                    </div>
+                  )}
                   {(() => {
                     const mult = getTeamTimeMultiplier(team.enteredAt);
                     const hoursActive = (Date.now() - new Date(team.enteredAt).getTime()) / 3_600_000;

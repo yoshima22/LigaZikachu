@@ -165,6 +165,15 @@ export function BotBattleButton({ teamId, cooldownMs = 0 }: { teamId: string; co
               </div>
             )}
 
+            {result.teamDefeated && (
+              <div className="mt-3 rounded-xl border border-red-400/40 bg-red-500/10 p-3">
+                <p className="text-xs font-bold text-red-100">Equipe encerrada</p>
+                <p className="mt-1 text-sm text-red-100/80">
+                  Sua equipe foi derrotada e saiu da Arena. O cofre restante fica disponivel para coleta; cure os mascotes feridos antes de montar uma nova equipe.
+                </p>
+              </div>
+            )}
+
             <div className="mt-4">
               <p className="text-xs font-bold text-slate-300">Equipe do bot</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -200,19 +209,19 @@ export function BotBattleButton({ teamId, cooldownMs = 0 }: { teamId: string; co
   );
 }
 
-export function RetireTeamButton({ teamId }: { teamId: string }) {
+export function RetireTeamButton({ teamId, defeated = false }: { teamId: string; defeated?: boolean }) {
   const { pending, run } = useArenaAction();
   return (
     <button
       type="button"
       disabled={pending}
       onClick={() => {
-        if (!confirm("Retirar equipe da Arena e coletar o cofre agora?")) return;
-        run(() => retireArenaTeamAction(teamId), "Equipe retirada e cofre coletado.");
+        if (!confirm(defeated ? "Coletar o cofre restante desta equipe derrotada?" : "Retirar equipe da Arena e coletar o cofre agora?")) return;
+        run(() => retireArenaTeamAction(teamId), defeated ? "Cofre restante coletado." : "Equipe retirada e cofre coletado.");
       }}
       className="rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300 disabled:opacity-50"
     >
-      Retirar e coletar
+      {defeated ? "Coletar cofre restante" : "Retirar e coletar"}
     </button>
   );
 }

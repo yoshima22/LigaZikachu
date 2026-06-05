@@ -476,7 +476,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
     include: { members: true },
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
-  if (team.status !== "ACTIVE") throw new Error("Equipe ja retirada.");
+  if (!["ACTIVE", "DEFEATED"].includes(team.status)) throw new Error("Equipe ja retirada.");
 
   // Multiplicador por tempo na Arena
   const mult = getTeamTimeMultiplier(team.enteredAt);
@@ -515,7 +515,10 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
       });
     }
     for (const member of team.members) {
-      await tx.mascot.update({ where: { id: member.mascotId }, data: { arenaState: "FREE" } });
+      await tx.mascot.updateMany({
+        where: { id: member.mascotId, arenaState: { not: "INJURED" } },
+        data: { arenaState: "FREE", restingUntil: null },
+      });
     }
     await tx.arenaTeam.update({
       where: { id: team.id },
@@ -528,6 +531,43 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   }
 
   return { ...vaultFinal, hadPenalty: hadRecentBattle };
+}
+
+export async function syncDefeatedArenaTeams(playerId: string) {
+  const teams = await prisma.arenaTeam.findMany({
+    where: {
+      playerId,
+      status: "ACTIVE",
+      members: { some: { mascot: { arenaState: "INJURED" } } },
+    },
+    include: { members: { include: { mascot: true } } },
+  });
+  if (teams.length === 0) return { updated: 0 };
+
+  const restUntil = new Date(Date.now() + ARENA_Z_CONFIG.restAfterWinMinutes * 60_000);
+  await prisma.$transaction(async (tx) => {
+    for (const team of teams) {
+      await tx.arenaTeam.update({
+        where: { id: team.id },
+        data: {
+          status: "DEFEATED",
+          pendingBotJson: Prisma.JsonNull,
+          pendingBotDifficulty: null,
+        },
+      });
+      const survivors = team.members
+        .filter(member => member.mascot.arenaState !== "INJURED")
+        .map(member => member.mascotId);
+      if (survivors.length > 0) {
+        await tx.mascot.updateMany({
+          where: { id: { in: survivors }, arenaState: "ARENA" },
+          data: { arenaState: "RESTING", restingUntil: restUntil },
+        });
+      }
+    }
+  });
+
+  return { updated: teams.length };
 }
 
 export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
@@ -561,6 +601,10 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       won, result: combat.result, botName: bot.botName,
       reward: fakeReward, rounds: combat.rounds,
       difficulty, difficultyLabel: diff.label,
+      teamDefeated: false,
+      preservedLoot: null,
+      burnedLoot: null,
+      stolenByBotLoot: null,
       injuredMascotIds: [], injuredMascots: [],
       botMascots: bot.defenders.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, type: getPokemonElement(m.pokemonId) })),
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
@@ -625,6 +669,15 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     ? rawInjured
     : (!won && Math.random() < injuryChance ? [pick(attackers).id] : []);
   const restUntil = new Date(Date.now() + ARENA_Z_CONFIG.restAfterWinMinutes * 60_000);
+  const teamDefeated = !won && injuredMascotIds.length > 0;
+  const currentVault: ArenaLoot = {
+    coins: team.vaultCoins,
+    exp: team.vaultExp,
+    food: team.vaultFood,
+    sweet: team.vaultSweet,
+  };
+  const defeatSplit = teamDefeated ? splitDefeatedLoot(currentVault) : null;
+  const defeatPreserved = defeatSplit ? remainingLoot(currentVault, defeatSplit.stolen, defeatSplit.burned) : null;
 
   await prisma.$transaction(async (tx) => {
     await tx.arenaBattle.create({
@@ -640,22 +693,40 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         loserPlayerId: won ? null : playerId,
         rounds: combat.rounds,
         turnLog: combat.log as unknown as Prisma.InputJsonValue,
-        lootResult: reward as unknown as Prisma.InputJsonValue,
+        lootResult: (teamDefeated
+          ? { reward, preserved: defeatPreserved, burned: defeatSplit?.burned, stolenByBot: defeatSplit?.stolen, teamDefeated: true }
+          : reward) as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
       },
     });
-    await tx.arenaTeam.update({
-      where: { id: team.id },
-      data: {
-        vaultCoins: { increment: reward.coins },
-        vaultExp: { increment: reward.exp },
-        vaultFood: { increment: reward.food },
-        vaultSweet: { increment: reward.sweet },
-        lastBattleAt: new Date(),
-        pendingBotJson: Prisma.JsonNull,
-        pendingBotDifficulty: null,
-      },
-    });
+    if (teamDefeated && defeatPreserved) {
+      await tx.arenaTeam.update({
+        where: { id: team.id },
+        data: {
+          status: "DEFEATED",
+          vaultCoins: defeatPreserved.coins,
+          vaultExp: defeatPreserved.exp,
+          vaultFood: defeatPreserved.food,
+          vaultSweet: defeatPreserved.sweet,
+          lastBattleAt: new Date(),
+          pendingBotJson: Prisma.JsonNull,
+          pendingBotDifficulty: null,
+        },
+      });
+    } else {
+      await tx.arenaTeam.update({
+        where: { id: team.id },
+        data: {
+          vaultCoins: { increment: reward.coins },
+          vaultExp: { increment: reward.exp },
+          vaultFood: { increment: reward.food },
+          vaultSweet: { increment: reward.sweet },
+          lastBattleAt: new Date(),
+          pendingBotJson: Prisma.JsonNull,
+          pendingBotDifficulty: null,
+        },
+      });
+    }
     // Entrega ovo diretamente ao inventário (não vai pro cofre)
     if (reward.egg && won) {
       await tx.mascotEgg.create({
@@ -668,7 +739,9 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         where: { id: member.mascotId },
         data: injured
           ? { arenaState: "INJURED", injuredAt: new Date(), isEquipped: false, battleLosses: { increment: 1 } }
-          : { restingUntil: restUntil, battleWins: won ? { increment: 1 } : undefined },
+          : teamDefeated
+            ? { arenaState: "RESTING", restingUntil: restUntil, battleWins: won ? { increment: 1 } : undefined }
+            : { restingUntil: restUntil, battleWins: won ? { increment: 1 } : undefined },
       });
       await tx.mascotEvent.create({
         data: {
@@ -690,6 +763,10 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     rounds: combat.rounds,
     difficulty,
     difficultyLabel: diff.label,
+    teamDefeated,
+    preservedLoot: defeatPreserved,
+    burnedLoot: defeatSplit?.burned ?? null,
+    stolenByBotLoot: defeatSplit?.stolen ?? null,
     injuredMascotIds,
     injuredMascots: team.members
       .filter(member => injuredMascotIds.includes(member.mascotId))
@@ -1011,6 +1088,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (loserTeam && injuredMascotIds.length === 0) {
     injuredMascotIds.push(pick(loserTeam.members).mascotId);
   }
+  const loserTeamDefeated = !!loserTeam && injuredMascotIds.length > 0;
 
   await prisma.$transaction(async (tx) => {
     await tx.arenaBattle.create({
@@ -1051,6 +1129,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       await tx.arenaTeam.update({
         where: { id: loserTeam.id },
         data: {
+          status: loserTeamDefeated ? "DEFEATED" : loserTeam.status,
           vaultCoins: preserved.coins,
           vaultExp: preserved.exp,
           vaultFood: preserved.food,
@@ -1071,11 +1150,14 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     for (const member of allMembers) {
       const injured = injuredMascotIds.includes(member.mascotId);
       const won = winnerTeam?.id === member.teamId;
+      const defeatedTeamMember = loserTeamDefeated && loserTeam?.id === member.teamId;
       await tx.mascot.update({
         where: { id: member.mascotId },
         data: injured
           ? { arenaState: "INJURED", injuredAt: new Date(), restingUntil: null, isEquipped: false, battleLosses: { increment: 1 } }
-          : { restingUntil: restUntil, battleWins: won ? { increment: 1 } : undefined },
+          : defeatedTeamMember
+            ? { arenaState: "RESTING", restingUntil: restUntil, battleWins: won ? { increment: 1 } : undefined }
+            : { restingUntil: restUntil, battleWins: won ? { increment: 1 } : undefined },
       });
       await tx.mascotEvent.create({
         data: {
@@ -1094,6 +1176,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     winnerName: winnerTeam?.player.displayName ?? null,
     loserName: loserTeam?.player.displayName ?? null,
     stolen: lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
+    loserTeamDefeated,
   };
 }
 

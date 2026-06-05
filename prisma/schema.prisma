@@ -1286,6 +1286,7 @@ enum MascotArenaState {
 
 enum ArenaTeamStatus {
   ACTIVE
+  DEFEATED
   RETIRED
 }
 
