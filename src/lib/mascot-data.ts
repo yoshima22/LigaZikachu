@@ -291,15 +291,21 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 420, to: 421, level: 25 },
   { from: 425, to: 426, level: 28 },
   { from: 427, to: 428, level: 32 },
+  { from: 433, to: 358, level: 20 }, // Chingling -> Chimecho
   { from: 431, to: 432, level: 38 },
   { from: 434, to: 435, level: 34 },
   { from: 436, to: 437, level: 33 },
+  { from: 438, to: 185, level: 20 }, // Bonsly -> Sudowoodo
+  { from: 439, to: 122, level: 20 }, // Mime Jr. -> Mr. Mime
+  { from: 440, to: 113, level: 20 }, // Happiny -> Chansey
   { from: 443, to: 444, level: 24 }, { from: 444, to: 445, level: 48 },
+  { from: 446, to: 143, level: 25 }, // Munchlax -> Snorlax
   { from: 447, to: 448, level: 20 },
   { from: 449, to: 450, level: 34 },
   { from: 451, to: 452, level: 40 },
   { from: 453, to: 454, level: 37 },
   { from: 456, to: 457, level: 31 },
+  { from: 458, to: 226, level: 20 }, // Mantyke -> Mantine
   { from: 459, to: 460, level: 40 },
   // Gen 5
   { from: 495, to: 496, level: 17 }, { from: 496, to: 497, level: 36 },

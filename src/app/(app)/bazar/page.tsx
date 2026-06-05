@@ -10,6 +10,7 @@ import { ShellGame } from "./_components/shell-game";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
+import { BazarLiveRefresh } from "./_components/bazar-live-refresh";
 import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 
@@ -51,6 +52,7 @@ export default async function BazarPage({
 
   return (
     <div className="space-y-6">
+      <BazarLiveRefresh />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div>
