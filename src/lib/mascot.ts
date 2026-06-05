@@ -196,7 +196,7 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
 
   let { level, exp, pokemonId } = mascot;
   exp += amount;
-  let leveled = false;
+  let levelsGained = 0;
   let evolved = false;
   let newPokemonId: number | undefined;
 
@@ -204,7 +204,7 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
   while (exp >= expToNextLevel(level)) {
     exp -= expToNextLevel(level);
     level++;
-    leveled = true;
+    levelsGained++;
 
     // Verifica evolução (respeitando evolutionLocked)
     const evo = EVOLUTION_MAP.get(pokemonId);
@@ -217,6 +217,7 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
 
   // Auto-rename: se o nickname era o nome padrão do Pokémon antes da evolução,
   // atualiza para o nome da nova forma automaticamente
+  const leveled = levelsGained > 0;
   let nicknameUpdate: { nickname: null } | Record<string, never> = {};
   if (evolved && newPokemonId) {
     const oldDefaultName = getPokemonName(mascot.pokemonId);
@@ -226,11 +227,11 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
 
   // Bônus de stat por level up
   const statUpdates = leveled ? {
-    statForce:    mascot.statForce    + (mascot.personality === "COMPETITIVE" ? 2 : 1),
-    statAgility:  mascot.statAgility  + 1,
-    statCharisma: mascot.statCharisma + (mascot.personality === "LOYAL" ? 2 : 1),
-    statInstinct: mascot.statInstinct + 1,
-    statVitality: mascot.statVitality + (mascot.personality === "DRAMATIC" ? 0 : 1),
+    statForce:    mascot.statForce    + levelsGained * (mascot.personality === "COMPETITIVE" ? 2 : 1),
+    statAgility:  mascot.statAgility  + levelsGained,
+    statCharisma: mascot.statCharisma + levelsGained * (mascot.personality === "LOYAL" ? 2 : 1),
+    statInstinct: mascot.statInstinct + levelsGained,
+    statVitality: mascot.statVitality + levelsGained * (mascot.personality === "DRAMATIC" ? 0 : 1),
   } : {};
 
   await prisma.mascot.update({

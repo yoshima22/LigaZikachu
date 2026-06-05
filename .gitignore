@@ -7,6 +7,7 @@ dist
 .env*
 !.env.example
 coverage
+backups
 *.log
 prisma/dev.db
 android-webview/.gradle
