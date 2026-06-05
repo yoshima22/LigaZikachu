@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 
@@ -452,10 +453,18 @@ export default async function ArenaZPage() {
                             <p className="text-[10px] text-slate-500">
                               Dono: {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick} | {defenseTeam.members.length} mascote(s)
                             </p>
-                            <p className="mt-1 text-[10px] text-[#FFCB05]">Cofre alvo: {fmtLoot(defenseTeam)}</p>
                           </div>
                           <PvpBattleButton attackTeamId={attackTeam.id} defenseTeamId={defenseTeam.id} />
                         </div>
+                        {/* Cofre ao vivo — atualiza a cada 30s sem recarregar a página */}
+                        <PvpVaultLive
+                          teamId={defenseTeam.id}
+                          initialCoins={defenseTeam.vaultCoins}
+                          initialExp={defenseTeam.vaultExp}
+                          initialFood={defenseTeam.vaultFood}
+                          initialSweet={defenseTeam.vaultSweet}
+                          initialMultiplier={parseFloat(getTeamTimeMultiplier(defenseTeam.enteredAt).toFixed(1))}
+                        />
                         <div className="mt-2 flex flex-wrap gap-1">
                           {defenseTeam.members.slice(0, 6).map(member => (
                             <span key={member.id} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-slate-400">
