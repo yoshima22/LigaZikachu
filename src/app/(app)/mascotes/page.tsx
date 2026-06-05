@@ -61,7 +61,7 @@ export default async function MascotesPage() {
     prisma.mascotFoodItem.findMany({ where: { playerId: player.id } }),
     prisma.playerInventory.findMany({
       where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as unknown as import("@prisma/client").ShopItemType[] } } },
-      include: { item: { select: { id: true, name: true, type: true } } }
+      include: { item: { select: { id: true, name: true, type: true, description: true, imageUrl: true } } }
     }),
   ]);
 
@@ -226,7 +226,7 @@ export default async function MascotesPage() {
       {/* Itens especiais (buffs) */}
       {buffInventory.length > 0 && (
         <BuffPanel
-          buffs={buffInventory.map(b => ({ id: b.item.id, name: b.item.name, type: b.item.type, quantity: b.quantity }))}
+          buffs={buffInventory.map(b => ({ id: b.item.id, name: b.item.name, type: b.item.type, quantity: b.quantity, description: b.item.description ?? undefined, imageUrl: b.item.imageUrl ?? undefined }))}
           mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? `Pokémon #${m.pokemonId}`, isEquipped: m.isEquipped }))}
         />
       )}

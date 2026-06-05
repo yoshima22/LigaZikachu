@@ -420,23 +420,32 @@ export default function BazarListingPage(): React.JSX.Element {
 
 // ── OfferItemsPicker (itens + mascotes) ──────────────────────────────────────
 
+interface InventoryShopItem {
+  inventoryId: string; shopItemId: string; type: string;
+  name: string; description: string | null; imageUrl: string | null;
+  rarity: string; shopPrice: number; quantity: number; equipped: boolean;
+}
 interface InventoryData {
   eggs: Array<{type: string; count: number}>;
   foods: Array<{type: string; quantity: number}>;
-  mascots: Array<{id: string; pokemonId: number; nickname: string | null; level: number; bazarListed: boolean; isEquipped: boolean}>;
+  mascots: Array<{id: string; pokemonId: number; nickname: string | null; level: number; bazarListed: boolean; isEquipped: boolean; arenaState: string}>;
+  inventoryItems: InventoryShopItem[];
 }
 
 function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOfferedItem[]) => void }) {
   const [inventory, setInventory] = useState<InventoryData | null>(null);
+  const ITEM_EMOJI_MAP: Record<string,string> = {"MASCOT_BUFF_EXP":"⚡","MASCOT_BUFF_STAT":"💊","MASCOT_BUFF_HAPPY":"🍯","MASCOT_BUFF_LUCK":"🍀","MASCOT_BUFF_MOOD":"💧","ZIKALOOT_TICKET":"🎟️"};
   const [selected, setSelected] = useState<ProposalOfferedItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  const TRADEABLE = new Set(["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD","ZIKALOOT_TICKET"]);
 
   const loadInventory = async () => {
     if (loaded) return;
     setLoaded(true);
     const res = await fetch("/api/bazar/inventory");
     if (res.ok) {
-      const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"] };
+      const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"]; inventoryItems?: InventoryShopItem[] };
       const eggGroups: Record<string, number> = {};
       for (const egg of (data.eggs ?? [])) {
         eggGroups[egg.type] = (eggGroups[egg.type] ?? 0) + 1;
@@ -444,7 +453,8 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
       setInventory({
         eggs: Object.entries(eggGroups).map(([type, count]) => ({ type, count })),
         foods: data.foods ?? [],
-        mascots: (data.mascots ?? []).filter(m => !m.bazarListed && !m.isEquipped),
+        mascots: (data.mascots ?? []).filter(m => !m.bazarListed && !m.isEquipped && m.arenaState === "FREE"),
+        inventoryItems: (data.inventoryItems ?? []).filter(i => TRADEABLE.has(i.type)),
       });
     }
   };
@@ -559,7 +569,40 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
             </div>
           )}
 
-          {inventory.mascots.length === 0 && inventory.eggs.length === 0 && inventory.foods.filter(f => f.quantity > 0).length === 0 && (
+          {/* Itens do inventário com dados do shop (buffs, tickets) */}
+          {inventory.inventoryItems && inventory.inventoryItems.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">✨ Itens Especiais</p>
+              {inventory.inventoryItems.map(item => {
+                const key = item.shopItemId;
+                const sel = selectedKeys.has(key);
+                const emoji = ITEM_EMOJI_MAP[item.type] ?? "📦";
+                return (
+                  <div key={key} className="flex items-center gap-2">
+                    <button type="button"
+                      onClick={() => toggleItem(key, { type: item.type, quantity: 1, displayName: item.name })}
+                      className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.imageUrl} alt="" className="h-5 w-5 object-contain shrink-0" />
+                      ) : (
+                        <span>{emoji}</span>
+                      )}
+                      <span className="truncate">{item.name}</span>
+                      <span className="ml-auto text-[9px] text-slate-500 shrink-0">×{item.quantity}</span>
+                    </button>
+                    {sel && (
+                      <input type="number" min={1} max={item.quantity} value={selected.find(i => i.type === item.type)?.quantity ?? 1}
+                        onChange={e => updateQty(item.type, parseInt(e.target.value)||1)}
+                        className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {inventory.mascots.length === 0 && inventory.eggs.length === 0 && inventory.foods.filter(f => f.quantity > 0).length === 0 && (!inventory.inventoryItems || inventory.inventoryItems.length === 0) && (
             <p className="text-center text-[11px] text-slate-600 py-2">Nenhum item disponível para oferecer.</p>
           )}
         </div>

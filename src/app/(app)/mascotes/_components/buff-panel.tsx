@@ -5,15 +5,19 @@ import { toast } from "sonner";
 import { Zap } from "lucide-react";
 import { useMascotBuffAction } from "../actions";
 
-interface BuffItem { id: string; name: string; type: string; quantity: number }
+interface BuffItem {
+  id: string; name: string; type: string; quantity: number;
+  description?: string; imageUrl?: string;
+}
 interface MascotOption { id: string; name: string; isEquipped: boolean }
 
-const BUFF_INFO: Record<string, { emoji: string; desc: string }> = {
-  MASCOT_BUFF_EXP:   { emoji: "⚡", desc: "EXP dobrado por 2h" },
-  MASCOT_BUFF_STAT:  { emoji: "💊", desc: "+3 em todos stats por 4h" },
-  MASCOT_BUFF_HAPPY: { emoji: "🍯", desc: "Felicidade → 100 por 3h" },
-  MASCOT_BUFF_LUCK:  { emoji: "🍀", desc: "Expedições com mais recompensas por 6h" },
-  MASCOT_BUFF_MOOD:  { emoji: "💧", desc: "Remove humor negativo imediatamente" },
+// Emoji por tipo de buff — descrição sempre vem do ShopItem.description (banco)
+const BUFF_EMOJI: Record<string, string> = {
+  MASCOT_BUFF_EXP:   "⚡",
+  MASCOT_BUFF_STAT:  "💊",
+  MASCOT_BUFF_HAPPY: "🍯",
+  MASCOT_BUFF_LUCK:  "🍀",
+  MASCOT_BUFF_MOOD:  "💧",
 };
 
 interface Props {
@@ -52,7 +56,7 @@ export function BuffPanel({ buffs, mascots }: Props) {
       {/* Lista de buffs disponíveis */}
       <div className="grid gap-2 sm:grid-cols-2">
         {buffs.map(buff => {
-          const info = BUFF_INFO[buff.type];
+          const emoji = BUFF_EMOJI[buff.type] ?? "✨";
           return (
             <button key={buff.id} type="button"
               onClick={() => setSelectedBuff(buff.id)}
@@ -61,10 +65,17 @@ export function BuffPanel({ buffs, mascots }: Props) {
                   ? "border-[#FFCB05]/50 bg-[#FFCB05]/10"
                   : "border-border bg-slate-900/40 hover:border-slate-600"
               }`}>
-              <span className="text-2xl shrink-0">{info?.emoji ?? "✨"}</span>
+              {buff.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={buff.imageUrl} alt="" className="h-8 w-8 object-contain shrink-0" />
+              ) : (
+                <span className="text-2xl shrink-0">{emoji}</span>
+              )}
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-white truncate">{buff.name}</p>
-                <p className="text-[10px] text-slate-500">{info?.desc}</p>
+                {buff.description && (
+                  <p className="text-[10px] text-slate-500 line-clamp-2">{buff.description}</p>
+                )}
                 <p className="text-[10px] text-[#FFCB05] mt-0.5">×{buff.quantity} disponível</p>
               </div>
             </button>
