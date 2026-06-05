@@ -5,6 +5,7 @@ import path from "node:path";
 const prisma = new PrismaClient();
 
 const dryRun = process.argv.includes("--dry-run");
+const LEVEL_STAT_GAIN_MULTIPLIER = Number(process.env.MASCOT_LEVEL_STAT_GAIN_MULTIPLIER ?? 0.55);
 
 type MascotForRepair = {
   id: string;
@@ -143,7 +144,8 @@ async function additiveDistributionWeights(mascot: MascotForRepair): Promise<Rec
 }
 
 async function expectedAdditiveStats(mascot: MascotForRepair): Promise<Record<StatKey, number>> {
-  const pointsToAdd = totalPoints(levelGains(mascot));
+  const rawPoints = totalPoints(levelGains(mascot));
+  const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER)) : 0;
   const bonus = distributePoints(pointsToAdd, await additiveDistributionWeights(mascot), 0);
 
   return {
@@ -222,6 +224,7 @@ async function main(): Promise<void> {
         createdAt: new Date().toISOString(),
         dryRun,
         strategy: "additive-current-stats-weighted",
+        levelStatGainMultiplier: LEVEL_STAT_GAIN_MULTIPLIER,
         totalMascots: mascots.length,
         mascots,
       },

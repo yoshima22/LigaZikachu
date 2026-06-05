@@ -181,6 +181,76 @@ export interface LevelUpResult {
   newPokemonId?: number;
 }
 
+type MascotStatKey = "statForce" | "statAgility" | "statCharisma" | "statInstinct" | "statVitality";
+
+const LEVEL_STAT_GAIN_MULTIPLIER = 0.55;
+
+function distributeStatPoints(total: number, weights: Record<MascotStatKey, number>): Record<MascotStatKey, number> {
+  const keys = Object.keys(weights) as MascotStatKey[];
+  const weightTotal = keys.reduce((sum, key) => sum + Math.max(1, weights[key]), 0);
+  const exact = keys.map((key) => {
+    const value = (Math.max(1, weights[key]) / weightTotal) * total;
+    return { key, floor: Math.floor(value), remainder: value - Math.floor(value) };
+  });
+  const distributed = Object.fromEntries(keys.map((key) => [key, 0])) as Record<MascotStatKey, number>;
+
+  exact.forEach(({ key, floor }) => {
+    distributed[key] += floor;
+  });
+
+  let leftover = total - keys.reduce((sum, key) => sum + distributed[key], 0);
+  exact
+    .sort((a, b) => b.remainder - a.remainder)
+    .forEach(({ key }) => {
+      if (leftover <= 0) return;
+      distributed[key]++;
+      leftover--;
+    });
+
+  return distributed;
+}
+
+function levelStatBonuses(
+  mascot: {
+    pokemonId: number;
+    level: number;
+    personality: MascotPersonality;
+    statForce: number;
+    statAgility: number;
+    statCharisma: number;
+    statInstinct: number;
+    statVitality: number;
+  },
+  levelsGained: number,
+): Record<MascotStatKey, number> {
+  const rawPoints =
+    levelsGained * (mascot.personality === "COMPETITIVE" ? 2 : 1) +
+    levelsGained +
+    levelsGained * (mascot.personality === "LOYAL" ? 2 : 1) +
+    levelsGained +
+    levelsGained * (mascot.personality === "DRAMATIC" ? 0 : 1);
+  const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER)) : 0;
+
+  const weights: Record<MascotStatKey, number> = {
+    statForce: mascot.statForce * 3,
+    statAgility: mascot.statAgility * 3,
+    statCharisma: mascot.statCharisma * 3,
+    statInstinct: mascot.statInstinct * 3,
+    statVitality: mascot.statVitality * 3,
+  };
+
+  if (mascot.personality === "COMPETITIVE") weights.statForce *= 1.15;
+  if (mascot.personality === "LOYAL") weights.statCharisma *= 1.15;
+  if (mascot.personality === "DRAMATIC") weights.statVitality *= 0.85;
+
+  (Object.keys(weights) as MascotStatKey[]).forEach((key, index) => {
+    const wobble = 0.92 + (((mascot.pokemonId * (index + 3) + mascot.level * 11) % 17) / 100);
+    weights[key] *= wobble;
+  });
+
+  return distributeStatPoints(pointsToAdd, weights);
+}
+
 export async function addExp(mascotId: string, amount: number): Promise<LevelUpResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
@@ -226,13 +296,14 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
   }
 
   // Bônus de stat por level up
-  const statUpdates = leveled ? {
-    statForce:    mascot.statForce    + levelsGained * (mascot.personality === "COMPETITIVE" ? 2 : 1),
-    statAgility:  mascot.statAgility  + levelsGained,
-    statCharisma: mascot.statCharisma + levelsGained * (mascot.personality === "LOYAL" ? 2 : 1),
-    statInstinct: mascot.statInstinct + levelsGained,
-    statVitality: mascot.statVitality + levelsGained * (mascot.personality === "DRAMATIC" ? 0 : 1),
-  } : {};
+  const statUpdates = leveled
+    ? Object.fromEntries(
+        Object.entries(levelStatBonuses(mascot, levelsGained)).map(([key, value]) => [
+          key,
+          mascot[key as MascotStatKey] + value,
+        ]),
+      )
+    : {};
 
   await prisma.mascot.update({
     where: { id: mascotId },
