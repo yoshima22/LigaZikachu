@@ -21,7 +21,7 @@ import {
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, getShinySprite } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
@@ -166,7 +166,16 @@ interface ExpeditionRewardDisplay {
   description: string;
 }
 
-function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number }): ExpeditionRewardDisplay {
+function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }): ExpeditionRewardDisplay {
+  if (reward.type === "TRAINING") {
+    const exp = reward.exp ?? 0;
+    const dur = reward.durationLabel ?? "";
+    return {
+      emoji: "🏋️",
+      title: `Treinamento de ${dur} concluído!`,
+      description: `+${exp.toLocaleString("pt-BR")} EXP recebido. Nenhum item — isso é esperado no modo Treinamento.`,
+    };
+  }
   if (reward.type === "EGG") {
     const label = reward.eggType === "RARE" ? "Raro" : reward.eggType === "SPECIAL" ? "Especial" : "Comum";
     return { emoji: "🥚", title: `Ovo ${label} encontrado!`, description: "Seu mascote voltou com um ovo misterioso." };
@@ -708,6 +717,50 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             </button>
           )}
         </div>
+
+        {/* ── Cadeia de evolução ── */}
+        {(() => {
+          const chain: { to: number; level: number; name: string }[] = [];
+          let cur = mascot.pokemonId;
+          while (true) {
+            const evo = EVOLUTION_MAP.get(cur);
+            if (!evo) break;
+            chain.push({ to: evo.to, level: evo.level, name: getEvoName(evo.to) });
+            cur = evo.to;
+          }
+          if (chain.length === 0) return null;
+          const nextEvo = chain[0];
+          const canEvolveNow = !mascot.evolutionLocked && mascot.level >= nextEvo.level;
+          return (
+            <div className="rounded-xl border border-border/40 bg-slate-900/30 px-3 py-2 space-y-1.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Evoluções</p>
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                <span className="text-slate-400">{name}</span>
+                {chain.map((evo, i) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    <span className="text-slate-600">→</span>
+                    <span className={`font-semibold ${
+                      i === 0 && canEvolveNow ? "text-[#FFCB05]" :
+                      i === 0 ? "text-slate-300" : "text-slate-500"
+                    }`}>
+                      {evo.name}
+                    </span>
+                    <span className={`text-[9px] rounded-full px-1.5 py-0.5 ${
+                      i === 0 && canEvolveNow
+                        ? "bg-[#FFCB05]/20 text-[#FFCB05] font-bold"
+                        : "bg-slate-800 text-slate-600"
+                    }`}>
+                      Nv.{evo.level}
+                    </span>
+                  </span>
+                ))}
+              </div>
+              {mascot.evolutionLocked && (
+                <p className="text-[9px] text-red-400">🔒 Evolução travada</p>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Travar evolução ── */}
         <div className="flex items-center justify-between rounded-xl border border-border/40 bg-slate-900/30 px-3 py-2">

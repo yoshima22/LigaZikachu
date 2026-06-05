@@ -476,6 +476,7 @@ export type ExpeditionReward =
   | { type: "EGG";       eggType: string }
   | { type: "FOOD";      foodType: "FOOD" | "SWEET"; quantity: number }
   | { type: "COINS";     amount: number }
+  | { type: "TRAINING";  exp: number; durationLabel: string }  // retorna só EXP, nunca itens
   | { type: "NOTHING" };
 
 async function rollExpeditionReward(
@@ -750,29 +751,31 @@ export async function claimExpedition(
   const allyCount = friends.length;
   const expeditorName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
 
-  // Modo Treinamento: apenas EXP — sem itens, sem coins
-  const reward = mode === "TRAINING"
-    ? { type: "NOTHING" as const }
+  // Recompensa: TRAINING retorna só EXP (calculado depois), ITEMS foca itens, STANDARD tudo
+  const baseReward = mode === "TRAINING"
+    ? null  // preenchido após calcular EXP
     : mode === "ITEMS"
       ? await rollItemExpeditionReward(expedition.mascot, durationKey, allyCount)
       : await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
-  const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
 
   // EXP: base × duração × nível × bônus social
   const expBase = EXP_REWARDS.EXPEDITION;
   const levelMult = 1 + Math.floor(expedition.mascot.level / 20) * 0.25;
-  const allyExpBonus = 1 + allyCount * 0.1; // cada aliado = +10% EXP
-  // Social rival bonus via MascotRelation
+  const allyExpBonus = 1 + allyCount * 0.1;
   const rivalCount = await prisma.mascotRelation.count({
     where: { mascotAId: expedition.mascotId, type: "RIVAL" }
   });
-  const rivalBonus = rivalCount > 0 ? 1.15 : 1.0; // rivais = +15% EXP (competição)
+  const rivalBonus = rivalCount > 0 ? 1.15 : 1.0;
   const expMult = mode === "TRAINING"
     ? TRAINING_EXP_MULT[durationKey]
-    : mode === "ITEMS"
-      ? 0
-      : dur.expMultiplier;
+    : mode === "ITEMS" ? 0 : dur.expMultiplier;
   const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus);
+
+  // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
+  const reward: ExpeditionReward = mode === "TRAINING"
+    ? { type: "TRAINING", exp: expeditionExp, durationLabel: dur.label }
+    : (baseReward ?? { type: "NOTHING" as const });
+  const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
@@ -781,12 +784,15 @@ export async function claimExpedition(
     });
 
     if (mode === "TRAINING") {
-      // Treinamento: apenas log de evento, sem gift no inventário
+      const bonuses: string[] = [];
+      if (allyCount > 0) bonuses.push(`${allyCount} aliado${allyCount > 1 ? "s" : ""} apoiou`);
+      if (rivalBonus > 1) bonuses.push("motivação de rivalidade");
+      const note = bonuses.length > 0 ? ` (${bonuses.join(", ")})` : "";
       await tx.mascotEvent.create({
         data: {
           mascotId: expedition.mascotId,
           emoji: "🏋️",
-          description: `Voltou do treinamento de ${dur.label} com +${expeditionExp} EXP!`,
+          description: `Treinamento de ${dur.label} concluído! +${expeditionExp} EXP${note}`,
         }
       });
     } else if (gift) {
