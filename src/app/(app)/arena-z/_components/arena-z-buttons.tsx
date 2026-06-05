@@ -100,6 +100,13 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
             disabled={pending || onCooldown}
             onClick={() => {
               startTransition(async () => {
+                // 1. Trava o bot (garante que o preview = batalha real)
+                const lockResult = await lockBotAction(teamId, difficulty);
+                if (lockResult.error) {
+                  toast.error(lockResult.error);
+                  return;
+                }
+                // 2. Combate com o bot travado
                 const response = await runBotBattleAction(teamId, difficulty);
                 if (response.error) {
                   toast.error(response.error);
