@@ -741,7 +741,11 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
           <div className="space-y-1.5">
             <button type="button" onClick={() => setShowRelations(r => !r)}
               className="w-full flex items-center justify-between text-[10px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-300 transition-colors">
-              <span>💚 Amigos & 😤 Rivais ({mascot.relations.length})</span>
+              <span>
+                💚 Amigos ({mascot.relations.filter(r => r.type === "FRIEND").length})
+                {" & "}
+                😤 Rivais ({mascot.relations.filter(r => r.type === "RIVAL").length})
+              </span>
               <span>{showRelations ? "▲" : "▼"}</span>
             </button>
             {showRelations && (
