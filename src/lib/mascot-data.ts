@@ -139,12 +139,7 @@ export const EGG_POOLS: Record<string, number[]> = {
   ],
 };
 
-// Preenche pool aleatório com todos os gens (sem lendários)
-EGG_POOLS.RANDOM = [
-  ...EGG_POOLS.EGG_GEN1, ...EGG_POOLS.EGG_GEN2,
-  ...EGG_POOLS.EGG_GEN3, ...EGG_POOLS.EGG_GEN4, ...EGG_POOLS.EGG_GEN5,
-  ...EGG_POOLS.EGG_GEN6, ...EGG_POOLS.EGG_GEN7, ...EGG_POOLS.EGG_GEN8, ...EGG_POOLS.EGG_GEN9,
-];
+// Pool RANDOM é preenchido após a filtragem de evoluídos (mais abaixo, após EVOLUTION_MAP)
 
 // ── Evoluções por nível ───────────────────────────────────────────────────────
 // Formato: { de: pokemonId, para: pokemonId, nivel: number }
@@ -431,6 +426,26 @@ export const EVOLUTIONS: Evolution[] = [
 export const EVOLUTION_MAP = new Map<number, Evolution>(
   EVOLUTIONS.map(e => [e.from, e])
 );
+
+// IDs de formas evoluídas — aplicado nos pools no final do arquivo
+export const EVOLVED_IDS = new Set(EVOLUTIONS.map(e => e.to));
+
+// ── Evoluções por pedra — simplificadas como nível ───────────────────────────
+// No jogo original usam pedras (Fire Stone, Water Stone, etc.) mas aqui são
+// mapeadas para um nível específico para simplificar o sistema.
+// Exemplos notáveis:
+//   Growlithe (58) → Arcanine (59): Fire Stone → tratado como Nv.36
+//   Vulpix (37) → Ninetales (38): Fire Stone → tratado como Nv.36
+//   Eevee (133) → Vaporeon (134): Water Stone → tratado como Nv.30
+//     (as outras 7 evoluções do Eevee ainda não estão mapeadas)
+//
+// ── Eevee: evolução atual ────────────────────────────────────────────────────
+// Neste sistema, Eevee evolui para Vaporeon no Nv.30 (simplificação).
+// As outras evoluções (Jolteon 135, Flareon 136, Espeon 196, Umbreon 197,
+// Leafeon 470, Glaceon 471, Sylveon 700) não estão mapeadas —
+// por isso Espeon e Umbreon eram obtidos DIRETAMENTE dos pools (bug).
+// Correção: foram removidos dos pools pelo filtro acima.
+// Futuramente podem ser adicionados via sistema de pedras/itens.
 
 // ── EXP necessária por nível ──────────────────────────────────────────────────
 // Curva linear suave: jogável mesmo nos níveis altos.
@@ -1288,9 +1303,23 @@ const SPECIAL_COVETED_IDS = [
   935, 942, 963, 967, 971, 974, 977, 996, 999, 1011, 1012,
 ];
 
-EGG_POOLS.COMMON = ALL_STANDARD_POKEMON_IDS;
-EGG_POOLS.RANDOM = ALL_STANDARD_POKEMON_IDS;
+// Aplicar filtro de evoluídos nos pools finais
+// EVOLVED_IDS já definido acima após EVOLUTION_MAP
+EGG_POOLS.COMMON = ALL_STANDARD_POKEMON_IDS.filter(id => !EVOLVED_IDS.has(id));
+EGG_POOLS.RANDOM = ALL_STANDARD_POKEMON_IDS.filter(id => !EVOLVED_IDS.has(id));
 EGG_POOLS.RARE = uniquePokemonIds([...ALL_STARTER_IDS, ...RARE_FAN_FAVORITES])
-  .filter((pokemonId) => !LEGENDARY_POOL.includes(pokemonId));
+  .filter(id => !LEGENDARY_POOL.includes(id) && !EVOLVED_IDS.has(id));
 EGG_POOLS.SPECIAL = uniquePokemonIds([...SPECIAL_COVETED_IDS, ...RARE_FAN_FAVORITES])
-  .filter((pokemonId) => !LEGENDARY_POOL.includes(pokemonId));
+  .filter(id => !LEGENDARY_POOL.includes(id) && !EVOLVED_IDS.has(id));
+
+// Reaplica filtro nos pools de geração (EGG_GEN1-9) e reconstrói RANDOM
+for (const key of Object.keys(EGG_POOLS)) {
+  if (key !== "RANDOM" && key !== "COMMON") {
+    EGG_POOLS[key] = EGG_POOLS[key].filter((id: number) => !EVOLVED_IDS.has(id));
+  }
+}
+EGG_POOLS.RANDOM = [
+  ...EGG_POOLS.EGG_GEN1, ...EGG_POOLS.EGG_GEN2,
+  ...EGG_POOLS.EGG_GEN3, ...EGG_POOLS.EGG_GEN4, ...EGG_POOLS.EGG_GEN5,
+  ...EGG_POOLS.EGG_GEN6, ...EGG_POOLS.EGG_GEN7, ...EGG_POOLS.EGG_GEN8, ...EGG_POOLS.EGG_GEN9,
+];
