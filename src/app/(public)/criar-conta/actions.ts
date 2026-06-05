@@ -44,18 +44,61 @@ export async function registerWithCredentials(
 
   const passwordHash = await hashPassword(password);
 
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-      player: {
-        create: {
-          displayName: name,
-          ptcglNick
+  // Cria usuário + jogador + kit de boas-vindas em uma única transação
+  await prisma.$transaction(async (tx) => {
+    const newUser = await tx.user.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        player: {
+          create: {
+            displayName: name,
+            ptcglNick
+          }
         }
+      },
+      include: { player: { select: { id: true } } }
+    });
+
+    const playerId = newUser.player?.id;
+    if (!playerId) return;
+
+    // ── Kit de boas-vindas ────────────────────────────────────────────────
+    const INITIAL_ZC = 200;
+
+    // Carteira com ZikaCoins iniciais
+    const wallet = await tx.zikaCoinWallet.create({
+      data: { playerId, balance: INITIAL_ZC, totalEarned: INITIAL_ZC }
+    });
+    await tx.zikaCoinTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: "ADMIN_ADJUSTMENT",
+        amount: INITIAL_ZC,
+        balanceBefore: 0,
+        balanceAfter: INITIAL_ZC,
+        description: "Boas-vindas à Liga Zikachu! 🎉"
       }
-    }
+    });
+
+    // Ovos: 3 raros + 1 comum
+    await tx.mascotEgg.createMany({
+      data: [
+        { playerId, type: "RARE",   origin: "Kit de boas-vindas" },
+        { playerId, type: "RARE",   origin: "Kit de boas-vindas" },
+        { playerId, type: "RARE",   origin: "Kit de boas-vindas" },
+        { playerId, type: "COMMON", origin: "Kit de boas-vindas" },
+      ]
+    });
+
+    // Comida e doces de mascote
+    await tx.mascotFoodItem.createMany({
+      data: [
+        { playerId, type: "FOOD",  quantity: 5 },
+        { playerId, type: "SWEET", quantity: 3 },
+      ]
+    });
   });
 
   try {
