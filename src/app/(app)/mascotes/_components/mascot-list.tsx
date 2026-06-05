@@ -14,7 +14,9 @@ interface MascotData {
   battleWins: number; battleLosses: number;
   bazarListed: boolean;
   socialCooldownUntil: Date | null;
+  evolutionLocked: boolean;
   arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
+  relations?: Array<{ type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }>;
   hatchedAt: Date; lastInteractedAt: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
   events: { id: string; emoji: string; description: string; createdAt: Date }[];

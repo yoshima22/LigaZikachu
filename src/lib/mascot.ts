@@ -171,9 +171,9 @@ export async function addExp(mascotId: string, amount: number): Promise<LevelUpR
     level++;
     leveled = true;
 
-    // Verifica evolução
+    // Verifica evolução (respeitando evolutionLocked)
     const evo = EVOLUTION_MAP.get(pokemonId);
-    if (evo && level >= evo.level) {
+    if (evo && level >= evo.level && !mascot.evolutionLocked) {
       pokemonId = evo.to;
       evolved = true;
       newPokemonId = pokemonId;

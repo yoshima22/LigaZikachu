@@ -360,3 +360,18 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
+
+// Travar evolução permanentemente
+export async function toggleEvolutionLockAction(mascotId: string, lock: boolean): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado." };
+    const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    await prisma.mascot.update({ where: { id: mascotId }, data: { evolutionLocked: lock } });
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}

@@ -19,13 +19,19 @@ import {
   adminTriggerSocialEventsAction,
   healMascotSusAction,
   toggleFavoriteMascotAction,
+  toggleEvolutionLockAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
 
-interface Expedition { id: string; finishAt: Date; status: string }
+interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
+interface MascotRelation {
+  type: string;
+  interactionCount: number;
+  mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string };
+}
 
 interface MascotEvent { id: string; emoji: string; description: string; createdAt: Date }
 
@@ -55,6 +61,8 @@ interface MascotData {
   lastInteractedAt: Date | null;
   lastFedAt: Date | null;
   socialCooldownUntil: Date | null;
+  evolutionLocked: boolean;
+  relations?: MascotRelation[];
   expeditions: Expedition[];
   events: MascotEvent[];
   hasFood: boolean;
@@ -182,6 +190,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
   const [expeditionMode, setExpeditionMode] = useState<ExpeditionMode>("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
+  const [showRelations, setShowRelations] = useState(false);
 
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
@@ -523,7 +532,14 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
               <MapPin size={12} className="shrink-0" />
-              <span>Em expedição — falta <ExpeditionCountdown finishAt={new Date(expedition.finishAt)} /></span>
+              <span>
+                {(() => {
+                  const mode = expedition.mode;
+                  const modeLabel = mode === "TRAINING" ? "🏋️ Treinamento" : mode === "ITEMS" ? "📦 Itens" : "🗺 Padrão";
+                  return <><strong className="text-blue-300">{modeLabel}</strong> — falta </>;
+                })()}
+                <ExpeditionCountdown finishAt={new Date(expedition.finishAt)} />
+              </span>
             </div>
             <button
               type="button"
@@ -683,6 +699,68 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             </button>
           )}
         </div>
+
+        {/* ── Travar evolução ── */}
+        <div className="flex items-center justify-between rounded-xl border border-border/40 bg-slate-900/30 px-3 py-2">
+          <Tip text={mascot.evolutionLocked
+            ? "Evolução bloqueada permanentemente. Não pode ser desfeito pelo jogador."
+            : "Marque para impedir que este mascote evolua. Atenção: esta ação não pode ser desfeita."}>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={mascot.evolutionLocked}
+                disabled={pending || mascot.evolutionLocked}
+                onChange={() => {
+                  if (mascot.evolutionLocked) return;
+                  if (!confirm(`Travar evolução de ${name}? Esta ação NÃO pode ser desfeita.`)) return;
+                  act(() => toggleEvolutionLockAction(mascot.id, true), "Evolução travada permanentemente.");
+                }}
+                className="h-3.5 w-3.5 accent-red-500"
+              />
+              <span className={`text-[11px] font-semibold ${mascot.evolutionLocked ? "text-red-400" : "text-slate-400"}`}>
+                {mascot.evolutionLocked ? "🔒 Evolução bloqueada" : "Travar evolução"}
+              </span>
+            </label>
+          </Tip>
+          {!mascot.evolutionLocked && (
+            <span className="text-[9px] text-slate-600">⚠️ irreversível</span>
+          )}
+        </div>
+
+        {/* ── Amigos e Rivais ── */}
+        {mascot.relations && mascot.relations.length > 0 && (
+          <div className="space-y-1.5">
+            <button type="button" onClick={() => setShowRelations(r => !r)}
+              className="w-full flex items-center justify-between text-[10px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-300 transition-colors">
+              <span>💚 Amigos & 😤 Rivais ({mascot.relations.length})</span>
+              <span>{showRelations ? "▲" : "▼"}</span>
+            </button>
+            {showRelations && (
+              <div className="rounded-xl border border-border/40 bg-slate-900/30 p-2 space-y-1.5 max-h-48 overflow-y-auto">
+                {mascot.relations.map(rel => {
+                  const isFriend = rel.type === "FRIEND";
+                  const tier = isFriend
+                    ? (rel.interactionCount >= 5 ? "💛 Super Amigo" : "💚 Amigo")
+                    : (rel.interactionCount >= 3 ? "🔥 Rival Direto" : "😤 Rival");
+                  const name_ = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+                  return (
+                    <div key={rel.mascotB.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 border text-[10px] ${
+                      isFriend ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"
+                    }`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={getSpriteUrl(rel.mascotB.pokemonId)} alt="" className="h-7 w-7 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-slate-200 truncate">{name_}</p>
+                        <p className="text-slate-500 truncate">de {rel.mascotB.ownerName}</p>
+                      </div>
+                      <span className={`shrink-0 text-[9px] font-semibold ${isFriend ? "text-green-300" : "text-red-300"}`}>{tier}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Histórico de eventos ── */}
         {events.length > 0 && (

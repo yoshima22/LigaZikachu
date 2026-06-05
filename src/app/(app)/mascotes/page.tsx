@@ -23,6 +23,12 @@ export default async function MascotesPage() {
   });
   if (!player) return notFound();
 
+  // Limpa automaticamente repouso expirado para não mostrar badge "Repouso concluído" preso
+  await prisma.mascot.updateMany({
+    where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lte: new Date() } },
+    data: { arenaState: "FREE", restingUntil: null },
+  }).catch(() => null);
+
   const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
 
   const eggShopImages = await prisma.shopItem.findMany({
@@ -42,11 +48,23 @@ export default async function MascotesPage() {
         expeditions: {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
-          take: 1
+          take: 1,
+          select: { id: true, finishAt: true, status: true, rewardJson: true }
         },
         events: {
           orderBy: { createdAt: "desc" },
           take: 8
+        },
+        relationsAsA: {
+          include: {
+            mascotB: {
+              select: {
+                id: true, pokemonId: true, nickname: true,
+                player: { select: { id: true, displayName: true } }
+              }
+            }
+          },
+          take: 20
         }
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }]
@@ -90,7 +108,22 @@ export default async function MascotesPage() {
     lastInteractedAt: m.lastInteractedAt,
     lastFedAt: m.lastFedAt,
     socialCooldownUntil: m.socialCooldownUntil,
-    expeditions: m.expeditions.map(e => ({ id: e.id, finishAt: e.finishAt, status: e.status })),
+    evolutionLocked: m.evolutionLocked,
+    expeditions: m.expeditions.map(e => ({
+      id: e.id, finishAt: e.finishAt, status: e.status,
+      mode: (e.rewardJson as Record<string,unknown> | null)?.mode as string | undefined ?? "STANDARD",
+    })),
+    relations: (m.relationsAsA ?? []).map(r => ({
+      type: r.type,
+      interactionCount: r.interactionCount,
+      mascotB: {
+        id: r.mascotB.id,
+        pokemonId: r.mascotB.pokemonId,
+        nickname: r.mascotB.nickname,
+        ownerName: r.mascotB.player.displayName,
+        ownerId: r.mascotB.player.id,
+      }
+    })),
     events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
     hasFood, hasSweet,
     // Admin: lista de outros mascotes para trigger de batalha/amizade
