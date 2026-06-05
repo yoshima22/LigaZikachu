@@ -379,7 +379,7 @@ function assertTeamReady(team: {
   for (const member of team.members) {
     const name = member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId);
     if (member.mascot.arenaState === "INJURED") throw new Error(`${name} esta ferido e precisa de Atendimento SUS.`);
-    if (member.mascot.restingUntil && member.mascot.restingUntil > now) throw new Error(`${name} esta em repouso ate ${member.mascot.restingUntil.toLocaleString("pt-BR")}.`);
+    if (member.mascot.restingUntil && member.mascot.restingUntil > now) throw new Error(`${name} esta em repouso ate ${member.mascot.restingUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.`);
   }
 }
 
@@ -1295,7 +1295,7 @@ export async function healMascotSus(playerId: string, mascotId: string) {
       data: {
         mascotId: mascot.id,
         emoji: "🏥",
-        description: `Recebeu Atendimento SUS e entrou em repouso ate ${restingUntil.toLocaleString("pt-BR")}.${bonusNote}`,
+        description: `Recebeu Atendimento SUS e entrou em repouso ate ${restingUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.${bonusNote}`,
       },
     });
   });

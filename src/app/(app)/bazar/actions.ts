@@ -207,6 +207,8 @@ export interface CreateListingInput {
   mascotId?: string;
   // Item
   itemType?: string;
+  shopItemId?: string;   // ID do ShopItem (para PlayerInventory — escrow preciso)
+  imageUrl?: string;     // Imagem real do shop
   quantity?: number;
   displayName?: string;
 }
@@ -308,16 +310,29 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           // Guardar IDs dos ovos no payload para devolução
           payload = { ...payload, escrowed_egg_ids: toRemove };
         } else {
-          // Item de PlayerInventory (buffs, cosmetics)
-          const inv = await tx.playerInventory.findFirst({
-            where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } },
-            include: { item: true },
-          });
+          // Item de PlayerInventory (buffs, tickets, cosméticos)
+          // Usa shopItemId para localizar o item exato (escrow preciso)
+          const inv = input.shopItemId
+            ? await tx.playerInventory.findUnique({
+                where: { playerId_itemId: { playerId: player.id, itemId: input.shopItemId } },
+                include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } },
+              })
+            : await tx.playerInventory.findFirst({
+                where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } },
+                include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } },
+              });
           if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          // Desconta do inventário imediatamente (escrow — não pode usar durante o anúncio)
           await tx.playerInventory.update({
             where: { id: inv.id },
             data: { quantity: { decrement: qty } },
           });
+          // Armazena shopItemId e imageUrl no payload para devolução/transferência correta
+          payload = {
+            ...payload,
+            shopItemId: inv.itemId,
+            imageUrl: inv.item.imageUrl ?? input.imageUrl ?? null,
+          };
         }
 
         payload = {

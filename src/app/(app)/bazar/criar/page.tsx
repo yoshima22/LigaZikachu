@@ -68,7 +68,7 @@ function CreateListingForm() {
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState<7 | 14 | 30>(7);
   const [selectedMascotId, setSelectedMascotId] = useState("");
-  const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string } | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string } | null>(null);
   const [itemQuantity, setItemQuantity] = useState(1);
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -94,6 +94,8 @@ function CreateListingForm() {
         durationDays: duration,
         mascotId: category === "MASCOT" ? selectedMascotId : undefined,
         itemType: category === "ITEM" ? selectedItem?.type : undefined,
+        shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
+        imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
         quantity: category === "ITEM" ? itemQuantity : undefined,
         displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
       });
@@ -225,7 +227,7 @@ function CreateListingForm() {
                       const isSel = selectedItem?.shopItemId === item.shopItemId;
                       return (
                         <button key={item.shopItemId} type="button"
-                          onClick={() => { setSelectedItem({ type: item.type, shopItemId: item.shopItemId, displayName: item.name }); setItemQuantity(1); }}
+                          onClick={() => { setSelectedItem({ type: item.type, shopItemId: item.shopItemId, displayName: item.name, imageUrl: item.imageUrl ?? undefined }); setItemQuantity(1); }}
                           className={`w-full flex items-center gap-3 rounded-xl border p-2.5 text-left transition-colors ${
                             isSel ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-border hover:border-slate-600"
                           }`}>
