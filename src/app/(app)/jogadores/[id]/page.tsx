@@ -8,7 +8,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardTitle } from "@/components/ui/card";
-import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft } from "lucide-react";
+import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft, Coins } from "lucide-react";
 import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
@@ -699,6 +699,17 @@ export default async function PlayerDetailPage({
                 {activeSeason ? `nesta temporada (excl. revogados)` : "em todas as temporadas"}
               </p>
             </Card>
+          )}
+          {isAdminUser && (
+            <Link href={`/carteira?playerId=${player.id}`}>
+              <Card className="transition-colors hover:border-[#FFCB05]/50 hover:bg-[#FFCB05]/5">
+                <CardTitle className="mb-2 flex items-center gap-2">
+                  <Coins size={18} className="text-primary" /> Carteira
+                </CardTitle>
+                <p className="text-sm font-semibold text-slate-200">Ver relatorio financeiro</p>
+                <p className="mt-1 text-xs text-slate-400">Saldo e historico de ZikaCoins deste jogador.</p>
+              </Card>
+            </Link>
           )}
         </div>
       </div>
