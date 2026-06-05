@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
+  addMascotToArenaTeam,
   adminSetMascotArenaState,
   claimArenaTutorialBonus,
   createArenaTeam,
@@ -37,6 +38,18 @@ export async function createArenaTeamAction(mascotIds: string[], name: string, t
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao criar equipe." };
+  }
+}
+
+export async function addMascotToArenaTeamAction(teamId: string, mascotId: string): Promise<{ error?: string }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    await addMascotToArenaTeam(playerId, teamId, mascotId);
+    revalidatePath("/arena-z");
+    revalidatePath("/mascotes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao adicionar mascote." };
   }
 }
 

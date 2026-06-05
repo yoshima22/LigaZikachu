@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
-import { createArenaTeamAction } from "../actions";
+import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 
 interface ValidMascot {
   id: string;
@@ -138,6 +138,60 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {pending ? "Criando equipe…" : `Criar equipe Arena Z (${selected.size} mascote${selected.size !== 1 ? "s" : ""})`}
+      </button>
+    </form>
+  );
+}
+
+export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: string; mascots: ValidMascot[]; slotsUsed: number }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [mascotId, setMascotId] = useState("");
+  const slotsLeft = Math.max(0, MAX_MASCOTS - slotsUsed);
+
+  if (slotsLeft === 0) return null;
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!mascotId) {
+      toast.error("Escolha um mascote para repor a equipe.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await addMascotToArenaTeamAction(teamId, mascotId);
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success("Mascote adicionado ao time!");
+        setMascotId("");
+        router.refresh();
+      }
+    });
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-3 flex flex-col gap-2 rounded-xl border border-slate-700/70 bg-slate-950/50 p-3 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Repor equipe</p>
+        <select
+          value={mascotId}
+          onChange={event => setMascotId(event.target.value)}
+          disabled={pending || mascots.length === 0}
+          className="mt-1 w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60 disabled:opacity-50"
+        >
+          <option value="">{mascots.length === 0 ? "Nenhum mascote livre disponivel" : `Escolha um mascote (${slotsLeft} slot${slotsLeft > 1 ? "s" : ""})`}</option>
+          {mascots.map(m => (
+            <option key={m.id} value={m.id}>
+              {(m.nickname ?? getPokemonName(m.pokemonId))} - Nv.{m.level}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="submit"
+        disabled={pending || !mascotId}
+        className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-[#1A1A2E] disabled:opacity-40"
+      >
+        {pending ? "Adicionando..." : "Adicionar"}
       </button>
     </form>
   );

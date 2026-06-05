@@ -8,7 +8,7 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, LockBotButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { ArenaTutorial } from "./_components/arena-tutorial";
-import { CreateTeamForm } from "./_components/create-team-form";
+import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 
 export const dynamic = "force-dynamic";
 
@@ -163,7 +163,7 @@ export default async function ArenaZPage() {
     teams.filter(t => t.status === "ACTIVE").flatMap(t => t.members.map(m => m.mascot.id))
   );
   const availableMascots = mascots.filter(m =>
-    (m.arenaState === "FREE" || (m.arenaState === "RESTING" && m.restingUntil && m.restingUntil <= now)) &&
+    (m.arenaState === "FREE" || (m.arenaState === "RESTING" && (!m.restingUntil || m.restingUntil <= now))) &&
     !m.bazarListed &&
     m.expeditions.length === 0 &&
     (!m.restingUntil || m.restingUntil <= now) &&
@@ -340,6 +340,17 @@ export default async function ArenaZPage() {
                         {teamBlockReasons.get(team.id)} Quando o repouso acabar, a equipe volta a poder combater.
                       </p>
                     </div>
+                  )}
+                  {team.status === "ACTIVE" && team.members.length < 6 && (
+                    <AddMascotToTeamForm
+                      teamId={team.id}
+                      mascots={availableMascots.map(m => ({
+                        id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+                        level: m.level, statForce: m.statForce, statAgility: m.statAgility,
+                        statVitality: m.statVitality, arenaState: m.arenaState,
+                      }))}
+                      slotsUsed={team.members.length}
+                    />
                   )}
                   {team.status === "ACTIVE" && botPreviews.get(team.id) && (
                     <div className="mt-4 rounded-2xl border border-green-500/20 bg-green-500/5 p-3">

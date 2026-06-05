@@ -117,16 +117,16 @@ function arenaStatus(mascot: MascotData) {
     return {
       locked: true,
       tone: "border-red-500/30 bg-red-500/10 text-red-200",
-      label: "Ferido na Arena Z",
-      detail: mascot.injuredAt ? `Ferido desde ${new Date(mascot.injuredAt).toLocaleString("pt-BR")}` : "Precisa de Atendimento SUS.",
+      label: "Ferido - Atendimento SUS",
+      detail: mascot.injuredAt ? `Ferido desde ${new Date(mascot.injuredAt).toLocaleString("pt-BR")}. Use Atendimento SUS para iniciar recuperacao.` : "Precisa de Atendimento SUS.",
     };
   }
   if (restingActive) {
     return {
       locked: true,
       tone: "border-blue-500/30 bg-blue-500/10 text-blue-200",
-      label: "Em repouso",
-      detail: `Disponivel apos ${restingUntil.toLocaleString("pt-BR")}.`,
+      label: "Recuperando",
+      detail: `Volta ao banco apos ${restingUntil.toLocaleString("pt-BR")}.`,
     };
   }
   if (mascot.arenaState === "ARENA") {

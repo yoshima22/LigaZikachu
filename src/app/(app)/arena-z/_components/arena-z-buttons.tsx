@@ -169,7 +169,7 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
               <div className="mt-3 rounded-xl border border-red-400/40 bg-red-500/10 p-3">
                 <p className="text-xs font-bold text-red-100">Equipe encerrada</p>
                 <p className="mt-1 text-sm text-red-100/80">
-                  Sua equipe foi derrotada e saiu da Arena. O cofre restante fica disponivel para coleta; cure os mascotes feridos antes de montar uma nova equipe.
+                  Sua equipe tomou K.O. total e saiu da Arena. A parte preservada do cofre foi enviada automaticamente; cure os mascotes feridos antes de montar uma nova equipe.
                 </p>
               </div>
             )}
