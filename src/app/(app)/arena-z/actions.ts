@@ -6,6 +6,7 @@ import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
   addMascotToArenaTeam,
   adminSetMascotArenaState,
+  applyPassiveIncomeForPlayer,
   claimArenaTutorialBonus,
   createArenaTeam,
   deleteArenaTeam,
@@ -108,6 +109,17 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
   }
+}
+
+export async function applyPassiveIncomeAction(): Promise<void> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return;
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return;
+    await applyPassiveIncomeForPlayer(player.id);
+    revalidatePath("/arena-z");
+  } catch { /* silencioso */ }
 }
 
 export async function deleteArenaTeamAction(teamId: string): Promise<{ error?: string }> {

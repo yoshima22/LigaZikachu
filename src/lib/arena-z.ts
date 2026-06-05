@@ -20,6 +20,51 @@ export const ARENA_Z_CONFIG = {
   pvpQuickExitPenaltyHours: 2,
 };
 
+// ── Renda Passiva ─────────────────────────────────────────────────────────────
+// Fórmula moderada: por hora por mascote na equipe
+// 1 ZC + 2 EXP por mascote por hora (cap 24h por sessão)
+const PASSIVE_COINS_PER_MASCOT_PER_H = 1;
+const PASSIVE_EXP_PER_MASCOT_PER_H   = 2;
+const PASSIVE_MAX_HOURS               = 24;  // máximo por sessão (evita acúmulo por abandono)
+const PASSIVE_MIN_INTERVAL_HOURS      = 1;   // não processa se < 1h desde a última vez
+
+export async function applyPassiveIncome(teamId: string): Promise<{ coins: number; exp: number } | null> {
+  const team = await prisma.arenaTeam.findUnique({
+    where: { id: teamId },
+    include: { members: { select: { id: true } } },
+  });
+  if (!team || team.status !== "ACTIVE" || team.members.length === 0) return null;
+
+  const lastAt = team.lastPassiveIncomeAt ?? team.enteredAt;
+  const hoursElapsed = (Date.now() - new Date(lastAt).getTime()) / 3_600_000;
+  if (hoursElapsed < PASSIVE_MIN_INTERVAL_HOURS) return null; // muito cedo
+
+  const hours    = Math.min(hoursElapsed, PASSIVE_MAX_HOURS);
+  const mascots  = team.members.length;
+  const coins    = Math.floor(hours * mascots * PASSIVE_COINS_PER_MASCOT_PER_H);
+  const exp      = Math.floor(hours * mascots * PASSIVE_EXP_PER_MASCOT_PER_H);
+  if (coins === 0 && exp === 0) return null;
+
+  await prisma.arenaTeam.update({
+    where: { id: teamId },
+    data: {
+      vaultCoins: { increment: coins },
+      vaultExp:   { increment: exp },
+      lastPassiveIncomeAt: new Date(),
+    },
+  });
+  return { coins, exp };
+}
+
+/** Aplica renda passiva para TODAS as equipes ativas de um jogador */
+export async function applyPassiveIncomeForPlayer(playerId: string): Promise<void> {
+  const activeTeams = await prisma.arenaTeam.findMany({
+    where: { playerId, status: "ACTIVE" },
+    select: { id: true },
+  });
+  await Promise.all(activeTeams.map(t => applyPassiveIncome(t.id).catch(() => null)));
+}
+
 /** Calcula o multiplicador atual baseado no tempo na Arena */
 export function getTeamTimeMultiplier(enteredAt: Date): number {
   const hoursActive = (Date.now() - new Date(enteredAt).getTime()) / 3_600_000;
@@ -534,6 +579,11 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (!["ACTIVE", "DEFEATED"].includes(team.status)) throw new Error("Equipe ja retirada.");
 
+  // Aplica renda passiva antes de calcular o cofre final (re-lê após atualização)
+  await applyPassiveIncome(teamId).catch(() => null);
+  const refreshed = await prisma.arenaTeam.findUnique({ where: { id: teamId }, include: { members: true } });
+  if (refreshed) { team.vaultCoins = refreshed.vaultCoins; team.vaultExp = refreshed.vaultExp; team.vaultFood = refreshed.vaultFood; team.vaultSweet = refreshed.vaultSweet; }
+
   // Multiplicador por tempo na Arena
   const mult = getTeamTimeMultiplier(team.enteredAt);
   // Penalidade PvP: se retirou dentro de 2h da última batalha
@@ -683,6 +733,9 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   }
 
   assertTeamReady(team);
+
+  // Aplica renda passiva acumulada antes da batalha
+  await applyPassiveIncome(teamId).catch(() => null);
 
   // Cooldown: impede spam de bot battles
   const lastBattle = await prisma.arenaBattle.findFirst({
@@ -1145,6 +1198,12 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
   assertTeamReady(attackTeam);
   assertTeamReady(defenseTeam);
+
+  // Aplica renda passiva para ambos os times antes da batalha PvP
+  await Promise.all([
+    applyPassiveIncome(attackTeamId).catch(() => null),
+    applyPassiveIncome(defenseTeamId).catch(() => null),
+  ]);
 
   const attackers = attackTeam.members.map(m => toArenaMascot(m.mascot));
   const defenders = defenseTeam.members.map(m => toArenaMascot(m.mascot));

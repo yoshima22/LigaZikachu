@@ -1460,6 +1460,7 @@ model ArenaTeam {
   teamType       String          @default("BOTH") // PVE | PVP | BOTH
   pendingBotJson Json?
   pendingBotDifficulty String?
+  lastPassiveIncomeAt DateTime    @default(now())  // última vez que renda passiva foi aplicada
   enteredAt      DateTime        @default(now())
   lastBattleAt   DateTime?
   createdAt      DateTime        @default(now())

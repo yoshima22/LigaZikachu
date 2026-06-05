@@ -174,6 +174,9 @@ export default async function ArenaZPage() {
   const teamBlockReasons = new Map(activeTeams.map(team => [team.id, getTeamBlockedReason(team)]));
   const readyActiveTeams = activeTeams.filter(team => !teamBlockReasons.get(team.id));
   const readyOpponentTeams = opponentTeams.filter(team => !getTeamBlockedReason(team));
+  // Aplica renda passiva acumulada para todas as equipes ativas do jogador
+  await import("./actions").then(m => m.applyPassiveIncomeAction()).catch(() => null);
+
   // Preview com dificuldade Normal por padrão (o jogador pode escolher no botão)
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
   for (const team of readyActiveTeams) {
@@ -317,6 +320,9 @@ export default async function ArenaZPage() {
                             </div>
                           </div>
                         )}
+                        <p className="text-[9px] text-slate-600 mt-1">
+                          💰 Renda passiva: +{team.members.length} ZC e +{team.members.length * 2} EXP por hora (acumula no cofre automaticamente).
+                        </p>
                         {mult < 4 && (
                           <p className="text-[9px] text-slate-600">
                             💡 Prof. Enguiça: Aguarde mais {Math.ceil((4 - mult) / ARENA_Z_CONFIG.multPerHour)}h para atingir o máximo de ×{ARENA_Z_CONFIG.multCap}!
