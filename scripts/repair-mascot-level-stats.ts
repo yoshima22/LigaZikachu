@@ -4,8 +4,6 @@ import path from "node:path";
 
 const prisma = new PrismaClient();
 
-const STAT_BASELINE = Number(process.env.MASCOT_STAT_REPAIR_BASELINE ?? 8);
-const STARTING_STAT_TOTAL = Number(process.env.MASCOT_STAT_REPAIR_TOTAL ?? 40);
 const dryRun = process.argv.includes("--dry-run");
 
 type MascotForRepair = {
@@ -51,18 +49,6 @@ function levelGains(mascot: MascotForRepair): Record<StatKey, number> {
   };
 }
 
-function oldFlatMinimumStats(mascot: MascotForRepair): Record<StatKey, number> {
-  const gains = levelGains(mascot);
-
-  return {
-    statForce: STAT_BASELINE + gains.statForce,
-    statAgility: STAT_BASELINE + gains.statAgility,
-    statCharisma: STAT_BASELINE + gains.statCharisma,
-    statInstinct: STAT_BASELINE + gains.statInstinct,
-    statVitality: STAT_BASELINE + gains.statVitality,
-  };
-}
-
 function distributePoints(total: number, weights: Record<StatKey, number>, minimumPerStat?: number): Record<StatKey, number> {
   const keys = Object.keys(weights) as StatKey[];
   const minimum = minimumPerStat ?? Math.max(1, Math.floor(total * 0.1));
@@ -89,6 +75,10 @@ function distributePoints(total: number, weights: Record<StatKey, number>, minim
     });
 
   return distributed;
+}
+
+function totalPoints(stats: Record<StatKey, number>): number {
+  return (Object.keys(stats) as StatKey[]).reduce((sum, key) => sum + stats[key], 0);
 }
 
 function fallbackWeights(pokemonId: number): Record<StatKey, number> {
@@ -127,33 +117,51 @@ async function pokemonStatProfile(pokemonId: number): Promise<Record<StatKey, nu
   }
 }
 
-async function expectedRebalancedStats(mascot: MascotForRepair): Promise<Record<StatKey, number>> {
+async function additiveDistributionWeights(mascot: MascotForRepair): Promise<Record<StatKey, number>> {
   const profile = await pokemonStatProfile(mascot.pokemonId);
-  const base = distributePoints(STARTING_STAT_TOTAL, profile, Math.floor(STARTING_STAT_TOTAL * 0.1));
-  const gains = levelGains(mascot);
-  const oldFlat = oldFlatMinimumStats(mascot);
-  const statKeys = Object.keys(base) as StatKey[];
-  const currentTotal = statKeys.reduce((sum, key) => sum + mascot[key], 0);
-  const oldFlatTotal = statKeys.reduce((sum, key) => sum + oldFlat[key], 0);
-  const preservedBonusTotal = Math.max(0, currentTotal - oldFlatTotal);
-  const preservedBonus = distributePoints(preservedBonusTotal, profile, 0);
+
+  const weights: Record<StatKey, number> = {
+    statForce: profile.statForce * 0.7 + mascot.statForce * 3.0,
+    statAgility: profile.statAgility * 0.7 + mascot.statAgility * 3.0,
+    statCharisma: profile.statCharisma * 0.7 + mascot.statCharisma * 3.0,
+    statInstinct: profile.statInstinct * 0.7 + mascot.statInstinct * 3.0,
+    statVitality: profile.statVitality * 0.7 + mascot.statVitality * 3.0,
+  };
+
+  if (mascot.personality === "COMPETITIVE") weights.statForce *= 1.15;
+  if (mascot.personality === "LOYAL") weights.statCharisma *= 1.15;
+  if (mascot.personality === "DRAMATIC") weights.statVitality *= 0.85;
+
+  // Pequena variação determinística por espécie para evitar distribuições idênticas.
+  const keys = Object.keys(weights) as StatKey[];
+  keys.forEach((key, index) => {
+    const wobble = 0.92 + (((mascot.pokemonId * (index + 3) + mascot.level * 11) % 17) / 100);
+    weights[key] *= wobble;
+  });
+
+  return weights;
+}
+
+async function expectedAdditiveStats(mascot: MascotForRepair): Promise<Record<StatKey, number>> {
+  const pointsToAdd = totalPoints(levelGains(mascot));
+  const bonus = distributePoints(pointsToAdd, await additiveDistributionWeights(mascot), 0);
 
   return {
-    statForce: base.statForce + gains.statForce + preservedBonus.statForce,
-    statAgility: base.statAgility + gains.statAgility + preservedBonus.statAgility,
-    statCharisma: base.statCharisma + gains.statCharisma + preservedBonus.statCharisma,
-    statInstinct: base.statInstinct + gains.statInstinct + preservedBonus.statInstinct,
-    statVitality: base.statVitality + gains.statVitality + preservedBonus.statVitality,
+    statForce: mascot.statForce + bonus.statForce,
+    statAgility: mascot.statAgility + bonus.statAgility,
+    statCharisma: mascot.statCharisma + bonus.statCharisma,
+    statInstinct: mascot.statInstinct + bonus.statInstinct,
+    statVitality: mascot.statVitality + bonus.statVitality,
   };
 }
 
 async function repairData(mascot: MascotForRepair): Promise<{ data: Partial<Record<StatKey, number>>; deltas: Partial<Record<StatKey, number>> }> {
-  const expected = await expectedRebalancedStats(mascot);
+  const expected = await expectedAdditiveStats(mascot);
   const data: Partial<Record<StatKey, number>> = {};
   const deltas: Partial<Record<StatKey, number>> = {};
 
   (Object.keys(expected) as StatKey[]).forEach((key) => {
-    if (mascot[key] !== expected[key]) {
+    if (expected[key] > mascot[key]) {
       data[key] = expected[key];
       deltas[key] = expected[key] - mascot[key];
     }
@@ -213,9 +221,7 @@ async function main(): Promise<void> {
       {
         createdAt: new Date().toISOString(),
         dryRun,
-        statBaseline: STAT_BASELINE,
-        startingStatTotal: STARTING_STAT_TOTAL,
-        strategy: "pokemon-weighted-rebalance",
+        strategy: "additive-current-stats-weighted",
         totalMascots: mascots.length,
         mascots,
       },
@@ -239,7 +245,7 @@ async function main(): Promise<void> {
           data: {
             mascotId: repair.mascot.id,
             emoji: "FIX",
-            description: `Recalculo de atributos por especie e level-ups acumulados: ${describeDeltas(repair.deltas)}.`,
+            description: `Reparo aditivo de atributos por level-ups acumulados: ${describeDeltas(repair.deltas)}.`,
           },
         }),
       ]);
