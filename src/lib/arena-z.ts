@@ -736,6 +736,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       exp: Math.round(rand(10, 50) * diff.rewardMult),
       food: 0, sweet: 0,
     } : { coins: 0, exp: 0, food: 0, sweet: 0 };
+    const allMascotsAdmin = new Map([...attackers, ...bot.defenders].map(m => [m.id, m]));
     return {
       won, result: combat.result, botName: bot.botName,
       reward: fakeReward, rounds: combat.rounds,
@@ -745,8 +746,22 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       burnedLoot: null,
       stolenByBotLoot: null,
       injuredMascotIds: [], injuredMascots: [],
+      playerMascots: attackers.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level })),
       botMascots: bot.defenders.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, type: getPokemonElement(m.pokemonId) })),
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
+      battleAnimation: combat.log
+        .filter(t => t.action === "ATTACK")
+        .slice(0, 28)
+        .map(t => ({
+          turn: t.turn,
+          attackerName: t.actorName,
+          attackerPokemonId: allMascotsAdmin.get(t.actorId)?.pokemonId ?? 0,
+          defenderName: t.targetName,
+          defenderPokemonId: allMascotsAdmin.get(t.targetId)?.pokemonId ?? 0,
+          damage: t.damage,
+          advantageApplied: t.advantageApplied,
+          isPlayerAttacker: t.actorOwnerId !== null,
+        })),
       debugMode: true,
     };
   }
