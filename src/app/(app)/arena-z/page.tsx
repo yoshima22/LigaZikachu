@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
@@ -129,9 +129,13 @@ export default async function ArenaZPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
-    // PvP: qualquer jogador pode ver equipes ativas de outros
+    // PvP: apenas equipes de outros jogadores que não são exclusivamente PvE
     prisma.arenaTeam.findMany({
-      where: { playerId: { not: player.id }, status: "ACTIVE" },
+      where: {
+        playerId: { not: player.id },
+        status: "ACTIVE",
+        teamType: { in: ["PVP", "BOTH"] }, // não expõe times PvE exclusivos como alvo
+      },
       include: {
         player: { select: { displayName: true, ptcglNick: true } },
         members: { include: { mascot: true }, orderBy: { slot: "asc" } },
@@ -174,8 +178,30 @@ export default async function ArenaZPage() {
   const teamBlockReasons = new Map(activeTeams.map(team => [team.id, getTeamBlockedReason(team)]));
   const readyActiveTeams = activeTeams.filter(team => !teamBlockReasons.get(team.id));
   const readyOpponentTeams = opponentTeams.filter(team => !getTeamBlockedReason(team));
-  // Aplica renda passiva acumulada para todas as equipes ativas do jogador
+  // 1. Aplica renda passiva para as equipes PRÓPRIAS do jogador
   await import("./actions").then(m => m.applyPassiveIncomeAction()).catch(() => null);
+
+  // 2. Aplica renda passiva nos times ADVERSÁRIOS (PvP/BOTH) antes de exibir os cofres,
+  //    para que o jogador veja o valor real e possa tomar decisão informada de ataque.
+  //    Times PvE exclusivos NÃO são afetados por este processo.
+  if (opponentTeams.length > 0) {
+    await Promise.all(opponentTeams.map(t => applyPassiveIncome(t.id).catch(() => null)));
+    // Re-lê apenas os campos de vault para refletir os valores atualizados
+    const freshVaults = await prisma.arenaTeam.findMany({
+      where: { id: { in: opponentTeams.map(t => t.id) } },
+      select: { id: true, vaultCoins: true, vaultExp: true, vaultFood: true, vaultSweet: true },
+    });
+    const vaultMap = new Map(freshVaults.map(v => [v.id, v]));
+    for (const team of opponentTeams) {
+      const v = vaultMap.get(team.id);
+      if (v) {
+        team.vaultCoins = v.vaultCoins;
+        team.vaultExp   = v.vaultExp;
+        team.vaultFood  = v.vaultFood;
+        team.vaultSweet = v.vaultSweet;
+      }
+    }
+  }
 
   // Preview com dificuldade Normal por padrão (o jogador pode escolher no botão)
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
