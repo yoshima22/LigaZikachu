@@ -5,8 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
   adminSetMascotArenaState,
+  claimArenaTutorialBonus,
   createArenaTeam,
   deleteArenaTeam,
+  getTeamTimeMultiplier,
+  applyMultiplierToVault,
   healMascotSus,
   lockBotForTeam,
   purgeAdminArenaData,
@@ -25,17 +28,24 @@ async function getCurrentPlayerId() {
   return player.id;
 }
 
-export async function createArenaTeamAction(formData: FormData): Promise<{ error?: string }> {
+export async function createArenaTeamAction(mascotIds: string[], name: string, teamType: "PVE" | "PVP" | "BOTH"): Promise<{ error?: string }> {
   try {
     const playerId = await getCurrentPlayerId();
-    const name = String(formData.get("name") ?? "Equipe Arena Z");
-    const mascotIds = formData.getAll("mascotIds").map(String);
-    await createArenaTeam(playerId, name, mascotIds);
+    await createArenaTeam(playerId, name, mascotIds, teamType);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao criar equipe." };
+  }
+}
+
+export async function claimArenaTutorialBonusAction(): Promise<{ error?: string; claimed?: boolean }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    return await claimArenaTutorialBonus(playerId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
   }
 }
 

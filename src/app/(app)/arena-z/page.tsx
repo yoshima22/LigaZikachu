@@ -5,10 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog } from "@/lib/arena-z";
-import { createArenaTeamAction } from "./actions";
+import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, LockBotButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { ArenaTutorial } from "./_components/arena-tutorial";
+import { CreateTeamForm } from "./_components/create-team-form";
 
 export const dynamic = "force-dynamic";
 
@@ -126,11 +126,16 @@ export default async function ArenaZPage() {
   ]);
 
   const now = new Date();
+  // Mascotes em equipes ativas não podem entrar em outra equipe
+  const mascotIdsInActiveTeams = new Set(
+    teams.filter(t => t.status === "ACTIVE").flatMap(t => t.members.map(m => m.mascot.id))
+  );
   const availableMascots = mascots.filter(m =>
     (m.arenaState === "FREE" || (m.arenaState === "RESTING" && m.restingUntil && m.restingUntil <= now)) &&
     !m.bazarListed &&
     m.expeditions.length === 0 &&
-    (!m.restingUntil || m.restingUntil <= now)
+    (!m.restingUntil || m.restingUntil <= now) &&
+    !mascotIdsInActiveTeams.has(m.id) // já em equipe ativa = não disponível
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
   const activeTeams = teams.filter(team => team.status === "ACTIVE");
@@ -213,35 +218,12 @@ export default async function ArenaZPage() {
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <section className="rounded-2xl border border-border bg-slate-950/60 p-5">
           <h2 className="font-semibold text-slate-200">Criar equipe</h2>
-          <p className="mt-1 text-xs text-slate-500">Selecione de 1 a 6 mascotes livres. Mascotes em expedicao, Bazar, Arena, feridos ou repouso nao aparecem como validos.</p>
-          <form action={async (formData) => {
-            "use server";
-            await createArenaTeamAction(formData);
-          }} className="mt-4 space-y-4">
-            <input
-              name="name"
-              placeholder="Nome da equipe"
-              className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
-            />
-            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-              {availableMascots.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhum mascote livre para montar equipe.</p>
-              ) : availableMascots.map(m => (
-                <label key={m.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-slate-900/50 p-3 hover:border-[#FFCB05]/30">
-                  <input type="checkbox" name="mascotIds" value={m.id} className="h-4 w-4 accent-[#FFCB05]" />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-slate-200">{m.nickname ?? getPokemonName(m.pokemonId)}</span>
-                    <span className="text-[10px] text-slate-500">Nv.{m.level} | For {m.statForce} | Vel {m.statAgility} | Vit {m.statVitality}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-            <button type="submit" className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E]">
-              Criar equipe Arena Z
-            </button>
-          </form>
+          <p className="mt-1 text-xs text-slate-500">Apenas mascotes livres aparecem. Máximo de 6 por equipe.</p>
+          <CreateTeamForm mascots={availableMascots.map(m => ({
+            id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+            level: m.level, statForce: m.statForce, statAgility: m.statAgility,
+            statVitality: m.statVitality, arenaState: m.arenaState,
+          }))} />
         </section>
 
         <section className="space-y-4">
@@ -262,22 +244,44 @@ export default async function ArenaZPage() {
                       <DeleteTeamButton teamId={team.id} isAdmin={admin} />
                     </div>
                   </div>
-                  <div className="mt-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3 text-xs text-[#FFCB05]">
-                    <p className="font-semibold"><Coins size={13} className="mr-1 inline" />Cofre: {fmtLoot(team)}</p>
-                    {(team.vaultCoins > 0 || team.vaultExp > 0) && (
-                      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
-                        <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-2">
-                          <p className="font-semibold text-green-300">✅ Se retirar agora</p>
-                          <p className="text-slate-300">{team.vaultCoins} ZC · {team.vaultExp} EXP{team.vaultFood > 0 ? ` · ${team.vaultFood} comida` : ""}{team.vaultSweet > 0 ? ` · ${team.vaultSweet} doce` : ""}</p>
+                  {(() => {
+                    const mult = getTeamTimeMultiplier(team.enteredAt);
+                    const hoursActive = (Date.now() - new Date(team.enteredAt).getTime()) / 3_600_000;
+                    const vaultNow = applyMultiplierToVault(
+                      { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
+                      mult, false
+                    );
+                    const multPct = Math.round((mult - 1) * 100);
+                    return (
+                      <div className="mt-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3 text-xs text-[#FFCB05] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold"><Coins size={13} className="mr-1 inline" />Cofre: {fmtLoot(team)}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${mult >= 4 ? "bg-[#FFCB05] text-[#1A1A2E]" : "border border-[#FFCB05]/40 text-[#FFCB05]"}`}>
+                            ×{mult.toFixed(1)}{mult >= 4 ? " MAX!" : ` (+${multPct}%)`}
+                          </span>
                         </div>
-                        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2">
-                          <p className="font-semibold text-red-300">⚠️ Se derrotado</p>
-                          <p className="text-slate-300">Perde ~{Math.floor(team.vaultCoins * 0.4)} ZC · {Math.floor(team.vaultExp * 0.4)} EXP</p>
-                          <p className="text-slate-500">30% roubado · 10% perdido</p>
-                        </div>
+                        <p className="text-[9px] text-slate-500">{Math.floor(hoursActive)}h na Arena · cresce {ARENA_Z_CONFIG.multPerHour * 60}% por hora · máx ×{ARENA_Z_CONFIG.multCap}</p>
+                        {(team.vaultCoins > 0 || team.vaultExp > 0) && (
+                          <div className="grid grid-cols-2 gap-2 text-[10px]">
+                            <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-2">
+                              <p className="font-semibold text-green-300">✅ Se retirar agora</p>
+                              <p className="text-slate-300">{vaultNow.coins} ZC · {vaultNow.exp} EXP{vaultNow.food > 0 ? ` · ${vaultNow.food} 🍖` : ""}</p>
+                            </div>
+                            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2">
+                              <p className="font-semibold text-red-300">⚠️ Se derrotado</p>
+                              <p className="text-slate-300">~{Math.floor(vaultNow.coins * 0.4)} ZC perdidos</p>
+                              <p className="text-slate-500">30% roubado · 10% queimado</p>
+                            </div>
+                          </div>
+                        )}
+                        {mult < 4 && (
+                          <p className="text-[9px] text-slate-600">
+                            💡 Prof. Enguiça: Aguarde mais {Math.ceil((4 - mult) / ARENA_Z_CONFIG.multPerHour)}h para atingir o máximo de ×{ARENA_Z_CONFIG.multCap}!
+                          </p>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {team.members.map(member => (
                       <div key={member.id} className="rounded-xl border border-border/60 bg-slate-950/60 p-3">

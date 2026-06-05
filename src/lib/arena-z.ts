@@ -12,8 +12,37 @@ export const ARENA_Z_CONFIG = {
   defeatedLootPreservedPct: 0.6,
   defeatedLootStolenPct: 0.3,
   defeatedLootBurnPct: 0.1,
-  botCooldownMinutes: 3,  // cooldown entre batalhas de bot por equipe
+  botCooldownMinutes: 3,
+  // Multiplicador de tempo: +8.3% por hora, cap 4x após 36h
+  multPerHour: 1 / 12,  // 1 unidade de mult a cada 12h
+  multCap: 4.0,
+  // Penalidade PvP: retirada rápida após última batalha (<2h) reduz mult em 50%
+  pvpQuickExitPenaltyHours: 2,
 };
+
+/** Calcula o multiplicador atual baseado no tempo na Arena */
+export function getTeamTimeMultiplier(enteredAt: Date): number {
+  const hoursActive = (Date.now() - new Date(enteredAt).getTime()) / 3_600_000;
+  return Math.min(ARENA_Z_CONFIG.multCap, 1 + hoursActive * ARENA_Z_CONFIG.multPerHour);
+}
+
+/** Aplica o multiplicador ao cofre e retorna os valores finais */
+export function applyMultiplierToVault(
+  vault: { coins: number; exp: number; food: number; sweet: number },
+  mult: number,
+  hadRecentBattle: boolean // penalidade PvP quick-exit
+): { coins: number; exp: number; food: number; sweet: number; effectiveMult: number } {
+  // Penalidade: se retirou logo após batalha PvP, perde 30% do mult bonus
+  const bonus = mult - 1;
+  const effectiveMult = hadRecentBattle ? 1 + bonus * 0.7 : mult;
+  return {
+    coins: Math.floor(vault.coins * effectiveMult),
+    exp:   Math.floor(vault.exp * effectiveMult),
+    food:  vault.food,   // comida/doce: não multiplicado (evita excesso)
+    sweet: vault.sweet,
+    effectiveMult,
+  };
+}
 
 // Dificuldades: modificam a faixa de nível do bot
 export const DIFFICULTY_CONFIG = {
@@ -345,15 +374,27 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
   return mascots;
 }
 
-export async function createArenaTeam(playerId: string, name: string, mascotIds: string[]) {
+export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], teamType: "PVE" | "PVP" | "BOTH" = "BOTH") {
+  if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
   const mascots = await validateArenaMascots(playerId, mascotIds);
   const teamName = name.trim() || "Equipe Arena Z";
+
+  // Bloqueia mascotes que já estão em outra equipe ativa
+  const alreadyInTeam = await prisma.arenaTeamMember.findMany({
+    where: { mascotId: { in: mascots.map(m => m.id) }, team: { status: "ACTIVE" } },
+    include: { team: { select: { name: true } } },
+  });
+  if (alreadyInTeam.length > 0) {
+    const names = alreadyInTeam.map(m => `Mascote (${m.mascotId.slice(-4)}) já está na equipe "${m.team.name}"`);
+    throw new Error(names[0]);
+  }
 
   return prisma.$transaction(async (tx) => {
     const team = await tx.arenaTeam.create({
       data: {
         playerId,
         name: teamName,
+        teamType,
         members: {
           create: mascots.map((m, index) => ({ mascotId: m.id, slot: index + 1 })),
         },
@@ -436,29 +477,41 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe ja retirada.");
-  const expPerMascot = team.vaultExp > 0 ? Math.max(1, Math.floor(team.vaultExp / team.members.length)) : 0;
+
+  // Multiplicador por tempo na Arena
+  const mult = getTeamTimeMultiplier(team.enteredAt);
+  // Penalidade PvP: se retirou dentro de 2h da última batalha
+  const lastBattleAt = team.lastBattleAt ? new Date(team.lastBattleAt) : null;
+  const hadRecentBattle = lastBattleAt
+    ? (Date.now() - lastBattleAt.getTime()) < ARENA_Z_CONFIG.pvpQuickExitPenaltyHours * 3_600_000
+    : false;
+  const vaultFinal = applyMultiplierToVault(
+    { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
+    mult, hadRecentBattle
+  );
+  const expPerMascot = vaultFinal.exp > 0 ? Math.max(1, Math.floor(vaultFinal.exp / team.members.length)) : 0;
 
   await prisma.$transaction(async (tx) => {
-    if (team.vaultCoins > 0) {
+    if (vaultFinal.coins > 0) {
       await creditCoins(tx, {
         playerId,
         type: "BET_WON",
-        amount: team.vaultCoins,
-        description: `Retirada do cofre da Arena Z: ${team.vaultCoins} ZC`,
+        amount: vaultFinal.coins,
+        description: `Cofre Arena Z (×${vaultFinal.effectiveMult.toFixed(1)}): ${vaultFinal.coins} ZC`,
       });
     }
-    if (team.vaultFood > 0) {
+    if (vaultFinal.food > 0) {
       await tx.mascotFoodItem.upsert({
         where: { playerId_type: { playerId, type: "FOOD" } },
-        update: { quantity: { increment: team.vaultFood } },
-        create: { playerId, type: "FOOD", quantity: team.vaultFood },
+        update: { quantity: { increment: vaultFinal.food } },
+        create: { playerId, type: "FOOD", quantity: vaultFinal.food },
       });
     }
-    if (team.vaultSweet > 0) {
+    if (vaultFinal.sweet > 0) {
       await tx.mascotFoodItem.upsert({
         where: { playerId_type: { playerId, type: "SWEET" } },
-        update: { quantity: { increment: team.vaultSweet } },
-        create: { playerId, type: "SWEET", quantity: team.vaultSweet },
+        update: { quantity: { increment: vaultFinal.sweet } },
+        create: { playerId, type: "SWEET", quantity: vaultFinal.sweet },
       });
     }
     for (const member of team.members) {
@@ -473,6 +526,8 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   if (expPerMascot > 0) {
     await Promise.all(team.members.map(member => addExp(member.mascotId, expPerMascot).catch(() => null)));
   }
+
+  return { ...vaultFinal, hadPenalty: hadRecentBattle };
 }
 
 export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
@@ -1068,6 +1123,35 @@ export async function healMascotSus(playerId: string, mascotId: string) {
     });
   });
 }
+
+// ── Tutorial bonus ────────────────────────────────────────────────────────────
+
+export async function claimArenaTutorialBonus(playerId: string): Promise<{ error?: string; claimed?: boolean }> {
+  try {
+    const player = await prisma.player.findUnique({ where: { id: playerId }, select: { arenaTutorialClaimed: true } });
+    if (!player) return { error: "Jogador nao encontrado." };
+    if (player.arenaTutorialClaimed) return { claimed: false };
+    const [proteinItem, waterItem] = await Promise.all([
+      prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_STAT", active: true }, select: { id: true } }),
+      prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_MOOD", active: true }, select: { id: true } }),
+    ]);
+    await prisma.$transaction(async (tx) => {
+      await tx.player.update({ where: { id: playerId }, data: { arenaTutorialClaimed: true } });
+      await tx.zikaCoinWallet.upsert({ where: { playerId }, update: { balance: { increment: 200 }, totalEarned: { increment: 200 } }, create: { playerId, balance: 200, totalEarned: 200 } });
+      await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "FOOD" } }, update: { quantity: { increment: 3 } }, create: { playerId, type: "FOOD", quantity: 3 } });
+      await tx.mascotEgg.createMany({ data: [
+        { playerId, type: "COMMON",  origin: "Bônus Arena Z Tutorial" },
+        { playerId, type: "RARE",    origin: "Bônus Arena Z Tutorial" },
+        { playerId, type: "SPECIAL", origin: "Bônus Arena Z Tutorial" },
+      ]});
+      if (proteinItem) await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: proteinItem.id } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: proteinItem.id, quantity: 1 } });
+      if (waterItem) await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: waterItem.id } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: waterItem.id, quantity: 1 } });
+    });
+    return { claimed: true };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function adminSetMascotArenaState(mascotId: string, state: "FREE" | "INJURED" | "RESTING") {
   const restingUntil = state === "RESTING" ? new Date(Date.now() + ARENA_Z_CONFIG.restAfterSusHours * 3_600_000) : null;

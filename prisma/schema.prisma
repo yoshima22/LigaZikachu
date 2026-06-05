@@ -254,6 +254,7 @@ model Player {
   bazarProposals          BazarProposal[]
   bazarFavorites          BazarFavorite[]
   shellGameSessions       ShellGameSession[]
+  arenaTutorialClaimed    Boolean              @default(false)
 
   @@map("players")
 }
@@ -1451,8 +1452,9 @@ model ArenaTeam {
   vaultFood      Int             @default(0)
   vaultSweet     Int             @default(0)
   multiplier     Decimal         @default(1) @db.Decimal(5, 2)
-  pendingBotJson Json?           // bot locked antes da batalha (determinístico)
-  pendingBotDifficulty String?   // dificuldade do bot pendente
+  teamType       String          @default("BOTH") // PVE | PVP | BOTH
+  pendingBotJson Json?
+  pendingBotDifficulty String?
   enteredAt      DateTime        @default(now())
   lastBattleAt   DateTime?
   createdAt      DateTime        @default(now())
