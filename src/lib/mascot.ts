@@ -478,7 +478,15 @@ async function rollExpeditionReward(
   else if ((durationKey === "1h" || durationKey === "30min") && luck > 20) eggType = "RARE";
 
   // Quantidade de comida melhora com duração
-  const foodQtyMax = 1 + Math.floor(rewardBonus / 8);
+  const foodQtyMin =
+    durationKey === "6h" ? 3 :
+    durationKey === "3h" ? 2 :
+    1;
+  const foodQtyMax = foodQtyMin + 1 + Math.floor(rewardBonus / 10);
+  const sweetQty =
+    durationKey === "6h" ? randomInt(2, 3) :
+    durationKey === "3h" ? randomInt(1, 2) :
+    1;
 
   // Valor de moedas escala com duração e nível
   const coinMin = Math.max(50, 50 + rewardBonus * 6 + mascot.level * 2);
@@ -489,9 +497,45 @@ async function rollExpeditionReward(
   const cumFood  = cumSweet + foodWeight;
 
   if (roll < cumEgg)   return { type: "EGG",   eggType };
-  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: 1 };
-  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(1, 1 + foodQtyMax) };
+  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty };
+  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) };
   return { type: "COINS", amount: randomInt(coinMin, coinMax) };
+}
+
+async function rollItemExpeditionReward(
+  mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
+  durationKey: ExpeditionDuration = "1h",
+  allyCount = 0
+): Promise<ExpeditionReward> {
+  const luckBuff = await prisma.mascotBuff.findFirst({
+    where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
+  });
+  const dur = EXPEDITION_DURATIONS[durationKey];
+  const rewardBonus = dur.rewardBonus;
+  const luck = (mascot.statInstinct + Math.floor(mascot.level / 5)) * (luckBuff ? 2 : 1);
+  const allyBonus = Math.min(20, allyCount * 4);
+
+  const eggWeight = 6 + Math.min(26, luck * 0.7) + rewardBonus * 0.8 + allyBonus;
+  const sweetWeight = 34 + rewardBonus * 0.8 + (luckBuff ? 12 : 0);
+  const foodWeight = 60 + rewardBonus * 0.9 + Math.min(20, mascot.level);
+  const roll = Math.random() * (eggWeight + sweetWeight + foodWeight);
+
+  let eggType = "COMMON";
+  if (durationKey === "6h") eggType = luck > 9 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h") eggType = luck > 10 ? "RARE" : "COMMON";
+  else if (luck > 22) eggType = "RARE";
+
+  const quantityBase =
+    durationKey === "6h" ? 4 :
+    durationKey === "3h" ? 3 :
+    durationKey === "1h" ? 2 :
+    1;
+  const bonusQuantity = Math.floor((rewardBonus + allyBonus) / 18);
+  const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
+
+  if (roll < eggWeight) return { type: "EGG", eggType };
+  if (roll < eggWeight + sweetWeight) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) };
+  return { type: "FOOD", foodType: "FOOD", quantity };
 }
 
 function describeExpeditionReward(reward: ExpeditionReward) {
@@ -542,16 +586,28 @@ export async function startExpedition(
   mode: ExpeditionMode = "STANDARD"
 ) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
-  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
-  if (!mascot.isEquipped) throw new Error("Apenas o mascote equipado pode sair em expedição.");
-  if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode sair em expedição.");
-  if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido não pode sair em expedição.");
-  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote em repouso não pode sair em expedição.");
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote nao encontrado.");
+  if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z nao pode sair em expedicao.");
+  if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido nao pode sair em expedicao.");
+  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote em repouso nao pode sair em expedicao.");
 
   const active = await prisma.mascotExpedition.findFirst({
     where: { mascotId, status: "ACTIVE" }
   });
-  if (active) throw new Error("Mascote já está em expedição.");
+  if (active) throw new Error("Mascote ja esta em expedicao.");
+
+  const activePlayerExpeditions = await prisma.mascotExpedition.findMany({
+    where: { status: "ACTIVE", mascot: { playerId } },
+    select: { rewardJson: true },
+  });
+  const sameModeActive = activePlayerExpeditions.some(expedition => {
+    const stored = (expedition.rewardJson as Record<string, unknown> | null) ?? {};
+    return ((stored.mode as ExpeditionMode | undefined) ?? "STANDARD") === mode;
+  });
+  if (sameModeActive) {
+    const label = mode === "TRAINING" ? "treinamento" : mode === "ITEMS" ? "itens" : "padrao";
+    throw new Error(`Voce ja tem uma expedicao de ${label} em andamento.`);
+  }
 
   const dur = EXPEDITION_DURATIONS[durationKey];
   const finishAt = new Date(Date.now() + dur.ms);
@@ -657,7 +713,9 @@ export async function claimExpedition(
   // Modo Treinamento: apenas EXP — sem itens, sem coins
   const reward = mode === "TRAINING"
     ? { type: "NOTHING" as const }
-    : await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
+    : mode === "ITEMS"
+      ? await rollItemExpeditionReward(expedition.mascot, durationKey, allyCount)
+      : await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
   const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
 
   // EXP: base × duração × nível × bônus social
@@ -670,8 +728,10 @@ export async function claimExpedition(
   });
   const rivalBonus = rivalCount > 0 ? 1.15 : 1.0; // rivais = +15% EXP (competição)
   const expMult = mode === "TRAINING"
-    ? TRAINING_EXP_MULT[durationKey]   // treinamento: 4×/8×/20×/40×
-    : dur.expMultiplier;               // padrão: 0.5×/1×/2.5×/5×
+    ? TRAINING_EXP_MULT[durationKey]
+    : mode === "ITEMS"
+      ? 0
+      : dur.expMultiplier;
   const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus);
 
   await prisma.$transaction(async (tx) => {
@@ -714,7 +774,9 @@ export async function claimExpedition(
       const allyPlayerId = rel.mascotB.playerId;
 
       // EXP para o mascote aliado também (participação remota)
-      await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3)).catch(() => {});
+      if (mode !== "ITEMS") {
+        await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3)).catch(() => {});
+      }
 
       // Presente para o dono do aliado: moedas ou comida dependendo do carisma
       const charisma = rel.mascotB.statCharisma;
@@ -759,7 +821,9 @@ export async function claimExpedition(
     }
   });
 
-  await addExp(expedition.mascotId, expeditionExp).catch(() => {});
+  if (expeditionExp > 0) {
+    await addExp(expedition.mascotId, expeditionExp).catch(() => {});
+  }
 
   // Roda eventos sociais automaticamente ao coletar expedição (fire-and-forget)
   triggerSocialEvents().catch(() => {});

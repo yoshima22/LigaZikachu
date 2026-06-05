@@ -20,7 +20,7 @@ import {
   healMascotSusAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS } from "@/lib/mascot-data";
-import type { ExpeditionDuration } from "@/lib/mascot-data";
+import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
 
@@ -177,7 +177,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const [imgFailed, setImgFailed] = useState(false);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
   const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
-  const [expeditionMode, setExpeditionMode] = useState<"STANDARD" | "TRAINING">("STANDARD");
+  const [expeditionMode, setExpeditionMode] = useState<ExpeditionMode>("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
 
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
@@ -579,27 +579,30 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
 
         {/* ── Expedição + Equipar/Desequipar ── */}
         <div className="flex gap-2">
-          {!arenaLocked && !expedition && mascot.isEquipped && (
+          {!arenaLocked && !expedition && (
             <div className="flex-1 space-y-1.5">
-              {/* Modo: Padrão ou Treinamento */}
               <div className="flex gap-1">
-                {(["STANDARD", "TRAINING"] as const).map(m => (
+                {(["STANDARD", "TRAINING", "ITEMS"] as const).map(m => (
                   <button key={m} type="button" onClick={() => setExpeditionMode(m)}
                     className={`flex-1 rounded-lg border py-1 text-[10px] font-semibold transition-colors ${
                       expeditionMode === m
-                        ? m === "TRAINING" ? "border-purple-500/40 bg-purple-500/10 text-purple-400" : "border-blue-500/40 bg-blue-500/10 text-blue-400"
+                        ? m === "TRAINING" ? "border-purple-500/40 bg-purple-500/10 text-purple-400" : m === "ITEMS" ? "border-green-500/40 bg-green-500/10 text-green-400" : "border-blue-500/40 bg-blue-500/10 text-blue-400"
                         : "border-border text-slate-500"
                     }`}>
-                    {m === "TRAINING" ? "🏋️ Treino" : "🗺 Padrão"}
+                    {m === "TRAINING" ? "Treino" : m === "ITEMS" ? "Itens" : "Padrao"}
                   </button>
                 ))}
               </div>
               {expeditionMode === "TRAINING" && (
                 <p className="text-[9px] text-purple-400/80 leading-tight">
-                  Só EXP — sem itens/coins. EXP muito maior que o padrão.
+                  So EXP; sem itens/coins. EXP muito maior que o padrao.
                 </p>
               )}
-              {/* Seletor de duração */}
+              {expeditionMode === "ITEMS" && (
+                <p className="text-[9px] text-green-400/80 leading-tight">
+                  So itens; comida, doces ou ovos. Nao gera EXP nem moedas.
+                </p>
+              )}
               <select
                 value={expeditionDuration}
                 onChange={e => setExpeditionDuration(e.target.value as ExpeditionDuration)}
@@ -608,8 +611,10 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
                 {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, v]) => (
                   <option key={key} value={key}>
                     {expeditionMode === "TRAINING"
-                      ? `🏋️ ${v.label}`
-                      : `🗺 ${v.label} — ×${v.expMultiplier} EXP${v.rewardBonus > 0 ? ` · +${v.rewardBonus}% loot` : ""}`}
+                      ? `Treino ${v.label}`
+                      : expeditionMode === "ITEMS"
+                        ? `Itens ${v.label} - recompensas melhores${v.rewardBonus > 0 ? ` +${v.rewardBonus}%` : ""}`
+                        : `Padrao ${v.label} - x${v.expMultiplier} EXP${v.rewardBonus > 0 ? ` +${v.rewardBonus}% loot` : ""}`}
                   </option>
                 ))}
               </select>
@@ -617,19 +622,21 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
                 <button type="button" disabled={pending}
                   onClick={() => act(
                     () => startExpeditionAction(mascot.id, expeditionDuration, expeditionMode),
-                    `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada!`
+                    `Expedicao de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada!`
                   )}
                   className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border py-1.5 text-[11px] font-medium disabled:opacity-40 ${
                     expeditionMode === "TRAINING"
                       ? "border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
-                      : "border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                      : expeditionMode === "ITEMS"
+                        ? "border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                        : "border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
                   }`}>
-                  <MapPin size={12}/> {expeditionMode === "TRAINING" ? "Treinar" : "Partir"}
+                  <MapPin size={12}/> {expeditionMode === "TRAINING" ? "Treinar" : expeditionMode === "ITEMS" ? "Buscar" : "Partir"}
                 </button>
-                {expeditionMode === "STANDARD" && (
+                {expeditionMode !== "TRAINING" && (
                   <button type="button" onClick={() => setShowLootPreview(true)}
                     className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
-                    🎁 Loot?
+                    Loot?
                   </button>
                 )}
               </div>

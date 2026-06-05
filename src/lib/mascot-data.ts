@@ -572,7 +572,7 @@ export const TRAINING_EXP_MULT: Record<ExpeditionDuration, number> = {
   "6h":    40,  // 40×
 };
 
-export type ExpeditionMode = "STANDARD" | "TRAINING";
+export type ExpeditionMode = "STANDARD" | "TRAINING" | "ITEMS";
 
 // ── Incubadora (em ms) ────────────────────────────────────────────────────────
 
