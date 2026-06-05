@@ -83,13 +83,19 @@ function MascotPanel({
 }) {
   const dead = currentHp <= 0;
   return (
-    <div className={`flex flex-col items-center gap-1 flex-1 transition-all duration-200 ${dead ? "opacity-30 grayscale" : isActive ? "scale-110" : "scale-90 opacity-70"}`}>
+    <div className={`min-w-0 rounded-xl border p-1.5 sm:p-2 transition-all duration-200 ${
+      dead
+        ? "border-slate-800 bg-slate-950/40 opacity-30 grayscale"
+        : isActive
+          ? "border-[#FFCB05]/70 bg-[#FFCB05]/10 shadow-[0_0_18px_rgba(255,203,5,0.18)]"
+          : "border-border/60 bg-slate-950/60 opacity-80"
+    }`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         key={`${mascot.name}-hit-${isHit}`}
         src={getSpriteUrl(mascot.pokemonId, true)}
         alt=""
-        className="h-20 w-20 object-contain"
+        className="mx-auto h-12 w-12 object-contain sm:h-16 sm:w-16 lg:h-20 lg:w-20"
         style={{
           imageRendering: "pixelated",
           animation: isHit ? "mascotShake 0.35s ease-in-out" : isAttacking ? "mascotLunge 0.3s ease-in-out" : "none",
@@ -97,12 +103,12 @@ function MascotPanel({
           transition: "filter 0.1s",
         }}
       />
-      <span className={`text-[9px] font-semibold truncate max-w-[72px] text-center ${isPlayer ? "text-blue-300" : "text-red-300"}`}>
+      <span className={`block truncate text-center text-[8px] font-semibold sm:text-[9px] ${isPlayer ? "text-blue-300" : "text-red-300"}`}>
         {mascot.name}
       </span>
-      <div className="w-full px-1">
+      <div className="mt-1 w-full">
         <HpBar current={currentHp} max={mascot.maxHp} isPlayer={isPlayer} />
-        <span className="text-[8px] text-slate-500">{Math.max(0, currentHp)}/{mascot.maxHp}</span>
+        <span className="block truncate text-center text-[7px] text-slate-500 sm:text-[8px]">{Math.max(0, currentHp)}/{mascot.maxHp}</span>
       </div>
     </div>
   );
@@ -186,44 +192,49 @@ function BattleAnimationModal({
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-        <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4">
+        <div className="max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-2 sm:px-5 sm:pt-4">
             <p className="text-[11px] uppercase tracking-widest text-[#FFCB05] font-semibold">⚔️ Combate em andamento…</p>
             <button type="button" onClick={() => onFinishRef.current()}
-              className="rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white">
+              className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white">
               Pular →
             </button>
           </div>
 
           {/* Progress bar */}
-          <div className="mx-4 h-1 rounded-full bg-slate-800 mb-3">
+          <div className="mx-3 h-1 rounded-full bg-slate-800 mb-3 sm:mx-5">
             <div className="h-1 rounded-full bg-[#FFCB05] transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
 
           {/* Sprites */}
-          <div className="flex items-end justify-between gap-2 px-4">
+          <div className="grid items-center gap-2 px-3 sm:grid-cols-[1fr_90px_1fr] sm:gap-4 sm:px-5 lg:grid-cols-[1fr_120px_1fr]">
             {/* Player side */}
-            {playerMascots.map(m => (
-              <MascotPanel
-                key={m.name}
-                mascot={m}
-                currentHp={hpMap[m.name] ?? m.maxHp}
-                isActive={turn?.isPlayerAttacker ? turn.attackerName === m.name : turn?.defenderName === m.name}
-                isAttacking={phase === "attack" && turn?.isPlayerAttacker === true && turn.attackerName === m.name}
-                isHit={phase === "hit" && turn?.isPlayerAttacker === false && turn.defenderName === m.name}
-                isPlayer
-              />
-            ))}
+            <div>
+              <p className="mb-1 text-center text-[10px] font-bold uppercase tracking-wide text-blue-300 sm:text-left">Sua equipe</p>
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                {playerMascots.map(m => (
+                  <MascotPanel
+                    key={m.name}
+                    mascot={m}
+                    currentHp={hpMap[m.name] ?? m.maxHp}
+                    isActive={turn?.isPlayerAttacker ? turn.attackerName === m.name : turn?.defenderName === m.name}
+                    isAttacking={phase === "attack" && turn?.isPlayerAttacker === true && turn.attackerName === m.name}
+                    isHit={phase === "hit" && turn?.isPlayerAttacker === false && turn.defenderName === m.name}
+                    isPlayer
+                  />
+                ))}
+              </div>
+            </div>
 
             {/* Damage bubble */}
-            <div className="flex flex-col items-center gap-1 min-w-[56px]">
+            <div className="order-first flex items-center justify-center gap-3 sm:order-none sm:flex-col sm:gap-1">
               <span className="text-[9px] text-slate-600">{turn ? `T.${turn.turn}` : ""}</span>
-              <div className="h-10 flex items-center justify-center">
+              <div className="flex h-12 min-w-[74px] items-center justify-center rounded-2xl border border-border bg-slate-900/70 sm:h-20 sm:min-w-0 sm:w-full">
                 {showDamage && turn ? (
                   <div className="text-center">
-                    <div className={`text-xl font-black ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
+                    <div className={`text-2xl font-black sm:text-3xl ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
                       style={{ textShadow: "0 0 10px currentColor" }}>
                       -{turn.damage}
                     </div>
@@ -236,21 +247,26 @@ function BattleAnimationModal({
             </div>
 
             {/* Bot side */}
-            {botMascots.map(m => (
-              <MascotPanel
-                key={m.name}
-                mascot={m}
-                currentHp={hpMap[m.name] ?? m.maxHp}
-                isActive={turn?.isPlayerAttacker ? turn.defenderName === m.name : turn?.attackerName === m.name}
-                isAttacking={phase === "attack" && turn?.isPlayerAttacker === false && turn.attackerName === m.name}
-                isHit={phase === "hit" && turn?.isPlayerAttacker === true && turn.defenderName === m.name}
-                isPlayer={false}
-              />
-            ))}
+            <div>
+              <p className="mb-1 text-center text-[10px] font-bold uppercase tracking-wide text-red-300 sm:text-right">{botName}</p>
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                {botMascots.map(m => (
+                  <MascotPanel
+                    key={m.name}
+                    mascot={m}
+                    currentHp={hpMap[m.name] ?? m.maxHp}
+                    isActive={turn?.isPlayerAttacker ? turn.defenderName === m.name : turn?.attackerName === m.name}
+                    isAttacking={phase === "attack" && turn?.isPlayerAttacker === false && turn.attackerName === m.name}
+                    isHit={phase === "hit" && turn?.isPlayerAttacker === true && turn.defenderName === m.name}
+                    isPlayer={false}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Action text */}
-          <div className="mx-4 mt-3 rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center">
+          <div className="mx-3 mt-3 rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center sm:mx-5">
             {turn ? (
               <p className="text-[11px] text-slate-300">
                 {turn.isPlayerAttacker
