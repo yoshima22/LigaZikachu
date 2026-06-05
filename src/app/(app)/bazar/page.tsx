@@ -140,7 +140,7 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
-            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 40% da aposta (ex: 100 ZC apostados → recebe 140 ZC)). O bônus de 40% sai do cofre. Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
+            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 40% da aposta</strong> (ex: 100 ZC apostados → recebe 140 ZC). O bônus de 40% sai do cofre. Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
           </div>
 
           <div className="space-y-1">
