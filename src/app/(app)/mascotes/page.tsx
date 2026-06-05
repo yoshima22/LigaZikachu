@@ -88,6 +88,18 @@ export default async function MascotesPage() {
   // com interações do usuário (sobrescreve ganhos de felicidade).
   // recalculateMood é chamado apenas dentro de interactAction (exceto para feed).
 
+  // Buffs ativos (EXP_BOOST, LUCK_BOOST têm duração; os outros são imediatos)
+  const activeMascotBuffs = await prisma.mascotBuff.findMany({
+    where: { mascot: { playerId: player.id }, expiresAt: { gt: new Date() } },
+    select: { mascotId: true, type: true, expiresAt: true },
+  });
+  const buffsByMascotId = new Map<string, { type: string; expiresAt: Date }[]>();
+  for (const b of activeMascotBuffs) {
+    const arr = buffsByMascotId.get(b.mascotId) ?? [];
+    arr.push({ type: b.type, expiresAt: b.expiresAt });
+    buffsByMascotId.set(b.mascotId, arr);
+  }
+
   const hasFood    = foods.some(f => f.type === "FOOD"  && f.quantity > 0);
   const hasSweet   = foods.some(f => f.type === "SWEET" && f.quantity > 0);
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
@@ -110,6 +122,7 @@ export default async function MascotesPage() {
     socialCooldownUntil: m.socialCooldownUntil,
     evolutionLocked: m.evolutionLocked,
     isShiny: m.isShiny,
+    activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({
       id: e.id, finishAt: e.finishAt, status: e.status,
       mode: (e.rewardJson as Record<string,unknown> | null)?.mode as string | undefined ?? "STANDARD",

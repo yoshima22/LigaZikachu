@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X, Timer, Zap, Shield, Skull } from "lucide-react";
@@ -73,10 +74,15 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BotBattleResult | null>(null);
   const [difficulty, setDifficulty] = useState<ArenaDifficulty>("normal");
-  const [localCooldown, setLocalCooldown] = useState(cooldownMs);
+  // cooldownEndAt: data de quando o cooldown termina; useTimerExpiry garante reatividade
+  const [cooldownEndAt, setCooldownEndAt] = useState<Date | null>(
+    cooldownMs > 0 ? new Date(Date.now() + cooldownMs) : null
+  );
+  const cooldownExpiry = useTimerExpiry(cooldownEndAt);
+  const onCooldown = !!cooldownEndAt && !cooldownExpiry.expired;
+  const localCooldown = cooldownExpiry.remaining; // para display
 
   const styles = DIFFICULTY_STYLES[difficulty];
-  const onCooldown = localCooldown > 0;
 
   return (
     <>
@@ -114,7 +120,7 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
                 }
                 if (response.result) {
                   setResult(response.result);
-                  setLocalCooldown(cooldownAfterMs);
+                  setCooldownEndAt(new Date(Date.now() + cooldownAfterMs));
                   // NÃO chama router.refresh() aqui — o refresh é feito ao fechar o modal
                   // para garantir que o jogador consiga ler o resultado
                 } else {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Coins, Trophy, Skull, Timer } from "lucide-react";
@@ -184,13 +185,18 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
   const [bet, setBet]         = useState(100);
   const [result, setResult]   = useState<{ won: boolean; prize: number; actualCup: number } | null>(null);
   const [localBalance, setLocalBalance] = useState(balance);
-  const [cooldownMs, setCooldownMs] = useState(0);
+  const [cooldownEndAt, setCooldownEndAt] = useState<Date | null>(null);
 
-  // Carrega cooldown ao montar
+  // Carrega cooldown ao montar e converte para data de expiração
   useEffect(() => {
     if (!playerId) return;
-    getShellGameCooldown().then(r => setCooldownMs(r.cooldownMs));
+    getShellGameCooldown().then(r => {
+      if (r.cooldownMs > 0) setCooldownEndAt(new Date(Date.now() + r.cooldownMs));
+    });
   }, [playerId]);
+
+  const cooldownExpiry = useTimerExpiry(cooldownEndAt);
+  const cooldownMs = cooldownExpiry.remaining;
 
   // Mantém saldo local em sync com props
   useEffect(() => { setLocalBalance(balance); }, [balance]);
@@ -264,7 +270,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
 
     const r = await startShellGameSession(bet);
     if (r.error) { toast.error(r.error); setPhase("idle"); return; }
-    if (r.lastCooldownMs) { setCooldownMs(r.lastCooldownMs); setPhase("idle"); return; }
+    if (r.lastCooldownMs) { setCooldownEndAt(new Date(Date.now() + r.lastCooldownMs)); setPhase("idle"); return; }
     if (!r.sessionId) { setPhase("idle"); return; }
 
     if (r.debugMode) setDebugMode(true);
@@ -305,7 +311,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
     setPhase(r.won ? "won" : "lost");
 
     // Cooldown após jogar
-    setCooldownMs(5 * 60_000);
+    setCooldownEndAt(new Date(Date.now() + 5 * 60_000));
     setTimeout(() => { router.refresh(); }, 1500);
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
 import { Clock, Egg } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
@@ -84,7 +85,9 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const [selectedGen, setSelectedGen] = useState<string>("");
   // Modal de seleção de geração
   const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
-  const isReady = incubator ? new Date() >= new Date(incubator.finishAt) : false;
+  // useTimerExpiry: atualiza automaticamente — botão "Chocar" aparece quando o tempo acaba
+  const incubatorExpiry = useTimerExpiry(incubator?.finishAt ?? null);
+  const isReady = !!incubator && incubatorExpiry.expired;
 
   const handlePutEgg = (eggId: string, genOverride?: string) => {
     startTransition(async () => {

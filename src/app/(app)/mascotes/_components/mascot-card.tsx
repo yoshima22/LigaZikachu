@@ -24,6 +24,7 @@ import {
 import { EXPEDITION_DURATIONS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
+import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
 
 interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
@@ -63,6 +64,7 @@ interface MascotData {
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
   isShiny: boolean;
+  activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
   expeditions: Expedition[];
   events: MascotEvent[];
@@ -190,6 +192,26 @@ function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: st
   return { emoji: "😔", title: "Voltou de mãos vazias...", description: "Desta vez não encontrou nada." };
 }
 
+const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string }> = {
+  EXP_BOOST:  { emoji: "⚡", label: "EXP ×2",       color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300" },
+  LUCK_BOOST: { emoji: "🍀", label: "Sorte",         color: "border-green-500/40 bg-green-500/10 text-green-300" },
+};
+
+function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date }) {
+  const { remaining, expired } = useTimerExpiry(expiresAt);
+  if (expired) return null;
+  const info = BUFF_DISPLAY[type] ?? { emoji: "✨", label: type, color: "border-blue-500/40 bg-blue-500/10 text-blue-300" };
+  const h = Math.floor(remaining / 3_600_000);
+  const m = Math.floor((remaining % 3_600_000) / 60_000);
+  const s = Math.floor((remaining % 60_000) / 1_000);
+  const timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : m > 0 ? `${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s` : `${s}s`;
+  return (
+    <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${info.color}`}>
+      {info.emoji} {info.label} <span className="opacity-70">{timeStr}</span>
+    </span>
+  );
+}
+
 export function MascotCard({ mascot, isAdmin = false }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -217,7 +239,9 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const otherMascots = Array.isArray(mascot.otherMascots) ? mascot.otherMascots : [];
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const expedition = expeditions.find(e => e.status === "ACTIVE");
-  const claimable  = expedition && new Date() >= new Date(expedition.finishAt);
+  // useTimerExpiry: atualiza automaticamente quando a expedição termina
+  const expeditionExpiry = useTimerExpiry(expedition?.finishAt ?? null);
+  const claimable = !!expedition && expeditionExpiry.expired;
   const expNeeded  = Math.max(1, expToNext(mascot.level));
   const expPct     = Math.min(100, Math.max(0, Math.round((mascot.exp / expNeeded) * 100)));
 
@@ -228,19 +252,13 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const arena = arenaStatus(mascot);
   const arenaLocked = !!arena?.locked;
 
-  // Cooldown 3 min — calculado client-side após mount para evitar hydration mismatch
-  const [cooldownMs, setCooldownMs] = useState(0);
-  const onCooldown = cooldownMs > 0;
-  useEffect(() => {
-    if (!mascot.lastInteractedAt) { setCooldownMs(0); return; }
-    const check = () => {
-      const ms = Math.max(0, 3 * 60 * 1000 - (Date.now() - new Date(mascot.lastInteractedAt!).getTime()));
-      setCooldownMs(ms);
-    };
-    check();
-    const iv = setInterval(check, 5000);
-    return () => clearInterval(iv);
-  }, [mascot.lastInteractedAt]);
+  // Cooldown 3 min — useTimerExpiry garante que o botão fica ativo exatamente quando expira
+  const cooldownEndTime = mascot.lastInteractedAt
+    ? new Date(new Date(mascot.lastInteractedAt).getTime() + 3 * 60 * 1000)
+    : null;
+  const cooldownExpiry = useTimerExpiry(cooldownEndTime);
+  const onCooldown = !!cooldownEndTime && !cooldownExpiry.expired;
+  const cooldownMs = cooldownExpiry.remaining;
 
   // Button availability — cooldown applies to all interactions including pet
   const inExpedition = !!expedition && !claimable;
@@ -527,6 +545,15 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             </div>
           </div>
         </div>
+
+        {/* ── Buffs ativos (EXP_BOOST, LUCK_BOOST) ── */}
+        {mascot.activeBuffs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {mascot.activeBuffs.map((buff, i) => (
+              <ActiveBuffBadge key={i} type={buff.type} expiresAt={buff.expiresAt} />
+            ))}
+          </div>
+        )}
 
         {/* ── Stats ── */}
         <div className="space-y-1.5">
