@@ -129,22 +129,21 @@ async function main(): Promise<void> {
     .filter(({ data }) => Object.keys(data).length > 0);
 
   if (!dryRun && repairs.length > 0) {
-    await prisma.$transaction(async (tx) => {
-      for (const repair of repairs) {
-        await tx.mascot.update({
+    for (const repair of repairs) {
+      await prisma.$transaction([
+        prisma.mascot.update({
           where: { id: repair.mascot.id },
           data: repair.data,
-        });
-
-        await tx.mascotEvent.create({
+        }),
+        prisma.mascotEvent.create({
           data: {
             mascotId: repair.mascot.id,
             emoji: "FIX",
             description: `Reparo de atributos por level-ups acumulados: ${describeDeltas(repair.deltas)}.`,
           },
-        });
-      }
-    });
+        }),
+      ]);
+    }
   }
 
   const totalDelta = repairs.reduce(
