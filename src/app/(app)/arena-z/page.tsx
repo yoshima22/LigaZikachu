@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
@@ -313,7 +313,7 @@ export default async function ArenaZPage() {
                     <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-100">
                       <p className="font-bold">Equipe derrotada</p>
                       <p className="mt-1 text-red-100/80">
-                        Esta equipe saiu da Arena porque sofreu K.O./ferimento em combate. Cure os mascotes feridos com Atendimento SUS e colete o cofre restante para encerrar o ciclo.
+                        Todos os mascotes foram nocauteados. Colete o cofre restante para encerrar o ciclo e cure os mascotes feridos.
                       </p>
                     </div>
                   )}
@@ -348,7 +348,7 @@ export default async function ArenaZPage() {
                           </div>
                         )}
                         <p className="text-[9px] text-slate-600 mt-1">
-                          💰 Renda passiva: +{team.members.length} ZC e +{team.members.length * 2} EXP por hora (acumula no cofre automaticamente).
+                          💰 Renda passiva: +{team.members.length * PASSIVE_COINS_PER_MASCOT_PER_H} ZC e +{team.members.length * PASSIVE_EXP_PER_MASCOT_PER_H} EXP por hora (acumula no cofre automaticamente).
                         </p>
                         {mult < 4 && (
                           <p className="text-[9px] text-slate-600">
@@ -404,7 +404,7 @@ export default async function ArenaZPage() {
                                   O bot mostrado acima será o adversário real ao clicar em Combater. Escolha a dificuldade para ajustar o nível.
                                 </p>
                               </div>
-                              <BotBattleButton teamId={team.id} cooldownMs={bot.cooldownMs ?? 0} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
+                              <BotBattleButton teamId={team.id} teamName={team.name} cooldownMs={bot.cooldownMs ?? 0} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                               {bot.mascots.map(m => (

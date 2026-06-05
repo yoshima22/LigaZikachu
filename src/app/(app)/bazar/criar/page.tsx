@@ -68,7 +68,7 @@ function CreateListingForm() {
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState<7 | 14 | 30>(7);
   const [selectedMascotId, setSelectedMascotId] = useState("");
-  const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string } | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string; maxQty: number } | null>(null);
   const [itemQuantity, setItemQuantity] = useState(1);
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -227,7 +227,7 @@ function CreateListingForm() {
                       const isSel = selectedItem?.shopItemId === item.shopItemId;
                       return (
                         <button key={item.shopItemId} type="button"
-                          onClick={() => { setSelectedItem({ type: item.type, shopItemId: item.shopItemId, displayName: item.name, imageUrl: item.imageUrl ?? undefined }); setItemQuantity(1); }}
+                          onClick={() => { setSelectedItem({ type: item.type, shopItemId: item.shopItemId, displayName: item.name, imageUrl: item.imageUrl ?? undefined, maxQty: item.quantity }); setItemQuantity(1); }}
                           className={`w-full flex items-center gap-3 rounded-xl border p-2.5 text-left transition-colors ${
                             isSel ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-border hover:border-slate-600"
                           }`}>
@@ -259,7 +259,7 @@ function CreateListingForm() {
                       const isSel = selectedItem?.type === type && !selectedItem?.shopItemId;
                       return (
                         <button key={type} type="button"
-                          onClick={() => { setSelectedItem({ type, displayName: label }); setItemQuantity(1); }}
+                          onClick={() => { setSelectedItem({ type, displayName: label, maxQty: count }); setItemQuantity(1); }}
                           className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                             isSel ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white" : "border-border text-slate-400 hover:border-slate-600"
                           }`}>
@@ -281,7 +281,7 @@ function CreateListingForm() {
                       const isSel = selectedItem?.type === food.type && !selectedItem?.shopItemId;
                       return (
                         <button key={food.type} type="button"
-                          onClick={() => { setSelectedItem({ type: food.type, displayName: label }); setItemQuantity(1); }}
+                          onClick={() => { setSelectedItem({ type: food.type, displayName: label, maxQty: food.quantity }); setItemQuantity(1); }}
                           className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                             isSel ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white" : "border-border text-slate-400 hover:border-slate-600"
                           }`}>
@@ -302,9 +302,14 @@ function CreateListingForm() {
 
             {selectedItem && (
               <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-400 shrink-0">Quantidade:</label>
-                <input type="number" min={1} value={itemQuantity}
-                  onChange={e => setItemQuantity(parseInt(e.target.value) || 1)}
+                <label className="text-xs text-slate-400 shrink-0">
+                  Quantidade{selectedItem.maxQty > 1 ? ` (máx. ${selectedItem.maxQty})` : ""}:
+                </label>
+                <input type="number" min={1} max={selectedItem.maxQty ?? 99} value={itemQuantity}
+                  onChange={e => {
+                    const v = parseInt(e.target.value) || 1;
+                    setItemQuantity(Math.min(v, selectedItem.maxQty ?? 99));
+                  }}
                   className="w-20 rounded-lg border border-border bg-slate-900 px-2 py-1 text-xs text-slate-200 text-center outline-none" />
               </div>
             )}

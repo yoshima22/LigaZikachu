@@ -67,8 +67,8 @@ export async function runBotBattleAction(teamId: string, difficulty: ArenaDiffic
   try {
     const playerId = await getCurrentPlayerId();
     const result = await runBotBattle(playerId, teamId, difficulty);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    // Não revalidamos aqui para que o modal de resultado/animação permaneça aberto.
+    // O router.refresh() é chamado pelo cliente ao fechar o modal.
     return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao combater bot." };
@@ -79,8 +79,7 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
   try {
     const playerId = await getCurrentPlayerId();
     const result = await runPvpBattle(playerId, attackTeamId, defenseTeamId);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    // Revalidação feita pelo cliente ao fechar o modal
     return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao resolver PvP." };

@@ -21,12 +21,11 @@ export const ARENA_Z_CONFIG = {
 };
 
 // ── Renda Passiva ─────────────────────────────────────────────────────────────
-// Fórmula moderada: por hora por mascote na equipe
-// 1 ZC + 2 EXP por mascote por hora (cap 24h por sessão)
-const PASSIVE_COINS_PER_MASCOT_PER_H = 1;
-const PASSIVE_EXP_PER_MASCOT_PER_H   = 2;
+// Por hora por mascote na equipe
+export const PASSIVE_COINS_PER_MASCOT_PER_H = 4;
+export const PASSIVE_EXP_PER_MASCOT_PER_H   = 8;
 const PASSIVE_MAX_HOURS               = 24;  // máximo por sessão (evita acúmulo por abandono)
-const PASSIVE_MIN_INTERVAL_HOURS      = 1;   // não processa se < 1h desde a última vez
+const PASSIVE_MIN_INTERVAL_HOURS      = 0.5; // processa a cada 30 min
 
 export async function applyPassiveIncome(teamId: string): Promise<{ coins: number; exp: number } | null> {
   const team = await prisma.arenaTeam.findUnique({
@@ -701,14 +700,8 @@ export async function syncDefeatedArenaTeams(playerId: string) {
         });
       }
       if (survivors.length === 0) {
-        await tx.arenaTeam.update({
-          where: { id: team.id },
-          data: {
-            status: "DEFEATED",
-            pendingBotJson: Prisma.JsonNull,
-            pendingBotDifficulty: null,
-          },
-        });
+        // Time vazio — deleta diretamente (sem loot restante, cascade remove membros)
+        await tx.arenaTeam.delete({ where: { id: team.id } });
       }
     }
   });
@@ -811,11 +804,12 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     sweet: baseReward.sweet,
     egg:   baseReward.egg,
   } : baseReward;
-  // Risco de ferimento aumenta com dificuldade
-  const rawInjured = !won ? combat.defeatedMascotIds : [];
-  const injuryChance = won ? 0 : 0.25 * diff.injuryChanceMult;
-  const injuredMascotIds = rawInjured.length > 0
-    ? rawInjured
+  // Pokémon derrotados em combate ficam feridos independente do resultado
+  // (mesmo na vitória, mascotes que caíram ficam indisponíveis para curar e recompor a equipe)
+  const defeatedInCombat = combat.defeatedMascotIds;
+  const injuryChance = 0.25 * diff.injuryChanceMult;
+  const injuredMascotIds = defeatedInCombat.length > 0
+    ? defeatedInCombat
     : (!won && Math.random() < injuryChance ? [pick(attackers).id] : []);
   const teamDefeated = !won && injuredMascotIds.length >= team.members.length;
   const currentVault: ArenaLoot = {
@@ -850,19 +844,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     if (teamDefeated && defeatPreserved) {
       const allMascotIds = team.members.map(m => m.mascotId);
       await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`, allMascotIds);
-      await tx.arenaTeam.update({
-        where: { id: team.id },
-        data: {
-          status: "RETIRED",
-          vaultCoins: 0,
-          vaultExp: 0,
-          vaultFood: 0,
-          vaultSweet: 0,
-          lastBattleAt: new Date(),
-          pendingBotJson: Prisma.JsonNull,
-          pendingBotDifficulty: null,
-        },
-      });
+      // Deleta o time: cascata remove os ArenaTeamMember automaticamente
+      await tx.arenaTeam.delete({ where: { id: team.id } });
     } else {
       await tx.arenaTeam.update({
         where: { id: team.id },
@@ -905,7 +888,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         }).catch(() => null);
       }
     }
-    if (injuredMascotIds.length > 0) {
+    // Se o time não foi deletado (teamDefeated já cuida via cascade), remove membros feridos
+    if (!teamDefeated && injuredMascotIds.length > 0) {
       await tx.arenaTeamMember.deleteMany({
         where: { teamId: team.id, mascotId: { in: injuredMascotIds } },
       });
@@ -951,6 +935,11 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     injuredMascots: team.members
       .filter(member => injuredMascotIds.includes(member.mascotId))
       .map(member => member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)),
+    playerMascots: attackers.map(m => ({
+      pokemonId: m.pokemonId,
+      name: m.name,
+      level: m.level,
+    })),
     botMascots: defenders.map(m => ({
       pokemonId: m.pokemonId,
       name: m.name,
@@ -968,6 +957,22 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         damage: turn.damage,
         advantageApplied: turn.advantageApplied,
       })),
+    battleAnimation: (() => {
+      const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
+      return combat.log
+        .filter(t => t.action === "ATTACK")
+        .slice(0, 28) // cap para animação não ficar longa demais
+        .map(t => ({
+          turn: t.turn,
+          attackerName: t.actorName,
+          attackerPokemonId: allMascots.get(t.actorId)?.pokemonId ?? 0,
+          defenderName: t.targetName,
+          defenderPokemonId: allMascots.get(t.targetId)?.pokemonId ?? 0,
+          damage: t.damage,
+          advantageApplied: t.advantageApplied,
+          isPlayerAttacker: t.actorOwnerId !== null,
+        }));
+    })(),
   };
 }
 

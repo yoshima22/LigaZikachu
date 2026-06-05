@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useCallback } from "react";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X, Timer, Zap, Shield, Skull } from "lucide-react";
+import { X, Timer, Zap, Shield, Skull, ChevronRight } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import {
   adminSetMascotStateAction,
@@ -39,6 +39,164 @@ function CooldownBadge({ ms }: { ms: number }) {
 
 type BotBattleResult = NonNullable<Awaited<ReturnType<typeof runBotBattleAction>>["result"]>;
 
+type AnimTurn = {
+  turn: number;
+  attackerName: string;
+  attackerPokemonId: number;
+  defenderName: string;
+  defenderPokemonId: number;
+  damage: number;
+  advantageApplied: boolean;
+  isPlayerAttacker: boolean;
+};
+
+// ── Animação de combate ───────────────────────────────────────────────────────
+function BattleAnimationModal({
+  turns,
+  playerTeamName,
+  botName,
+  onFinish,
+}: {
+  turns: AnimTurn[];
+  playerTeamName: string;
+  botName: string;
+  onFinish: () => void;
+}) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [showDamage, setShowDamage] = useState(false);
+  const [flash, setFlash] = useState(false);
+
+  const advance = useCallback(() => {
+    setCurrentIdx(i => i + 1);
+  }, []);
+
+  useEffect(() => {
+    if (currentIdx >= turns.length) {
+      const t = setTimeout(onFinish, 600);
+      return () => clearTimeout(t);
+    }
+    setShowDamage(false);
+    setFlash(false);
+    const t1 = setTimeout(() => { setShowDamage(true); setFlash(true); }, 450);
+    const t2 = setTimeout(() => setFlash(false), 750);
+    const t3 = setTimeout(advance, 1500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [currentIdx, turns.length, onFinish, advance]);
+
+  const turn = turns[currentIdx];
+  const progress = turns.length > 0 ? Math.min(100, Math.round((currentIdx / turns.length) * 100)) : 100;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+      <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <p className="text-[11px] uppercase tracking-widest text-[#FFCB05] font-semibold">⚔️ Combate em andamento…</p>
+          <button
+            type="button"
+            onClick={onFinish}
+            className="rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white transition-colors"
+          >
+            Pular →
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mx-4 h-1 rounded-full bg-slate-800 mb-4">
+          <div
+            className="h-1 rounded-full bg-[#FFCB05] transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Battle scene */}
+        <div className="px-4 pb-5">
+          {turn ? (
+            <>
+              {/* Sprites row */}
+              <div className="flex items-end justify-between gap-2 mb-3">
+                {/* Attacker side */}
+                <div className={`flex flex-col items-center gap-1 flex-1 transition-all duration-300 ${!turn.isPlayerAttacker ? "opacity-60 scale-90" : "scale-100"}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={getSpriteUrl(turn.isPlayerAttacker ? turn.attackerPokemonId : turn.defenderPokemonId, true)}
+                    alt=""
+                    className={`h-20 w-20 object-contain transition-transform duration-200 ${turn.isPlayerAttacker ? "translate-x-2" : ""}`}
+                    style={{ imageRendering: "pixelated" }}
+                  />
+                  <span className="text-[9px] text-blue-300 font-semibold truncate max-w-[80px] text-center">
+                    {turn.isPlayerAttacker ? turn.attackerName : turn.defenderName}
+                  </span>
+                  <span className="text-[8px] text-slate-500">{playerTeamName}</span>
+                </div>
+
+                {/* Center: VS / damage */}
+                <div className="flex flex-col items-center gap-1 min-w-[70px]">
+                  <span className="text-[9px] text-slate-600">Turno {turn.turn}</span>
+                  <div className="h-10 flex items-center justify-center">
+                    {showDamage ? (
+                      <div className="text-center">
+                        <div className={`text-2xl font-black transition-all duration-200 ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
+                          style={{ textShadow: flash ? "0 0 12px currentColor" : "none" }}>
+                          -{turn.damage}
+                        </div>
+                        {turn.advantageApplied && (
+                          <div className="text-[8px] text-yellow-400 font-bold">SUPER EFICAZ!</div>
+                        )}
+                      </div>
+                    ) : (
+                      <ChevronRight size={20} className="text-slate-600" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Defender side */}
+                <div className={`flex flex-col items-center gap-1 flex-1 transition-all duration-300 ${turn.isPlayerAttacker ? "opacity-60 scale-90" : "scale-100"}`}
+                  style={{ opacity: showDamage && turn.isPlayerAttacker ? 0.4 : undefined }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={getSpriteUrl(!turn.isPlayerAttacker ? turn.attackerPokemonId : turn.defenderPokemonId, true)}
+                    alt=""
+                    className={`h-20 w-20 object-contain transition-all duration-300 ${showDamage && turn.isPlayerAttacker ? "-translate-x-1" : ""}`}
+                    style={{ imageRendering: "pixelated" }}
+                  />
+                  <span className="text-[9px] text-red-300 font-semibold truncate max-w-[80px] text-center">
+                    {!turn.isPlayerAttacker ? turn.attackerName : turn.defenderName}
+                  </span>
+                  <span className="text-[8px] text-slate-500">{botName}</span>
+                </div>
+              </div>
+
+              {/* Action text */}
+              <div className="rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center">
+                <p className="text-[11px] text-slate-300">
+                  {turn.isPlayerAttacker
+                    ? <><span className="text-blue-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-red-300 font-semibold">{turn.defenderName}</span></>
+                    : <><span className="text-red-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-blue-300 font-semibold">{turn.defenderName}</span></>
+                  }
+                  {showDamage && <span className={` — ${turn.advantageApplied ? "text-yellow-300" : "text-slate-400"}`}> {turn.damage} dano{turn.advantageApplied ? " ⚡" : ""}</span>}
+                </p>
+              </div>
+
+              {/* Turn dots */}
+              <div className="flex justify-center gap-1 mt-3">
+                {turns.slice(0, Math.min(turns.length, 12)).map((_, i) => (
+                  <div key={i} className={`rounded-full transition-all ${i === currentIdx ? "w-3 h-2 bg-[#FFCB05]" : i < currentIdx ? "w-2 h-2 bg-slate-600" : "w-2 h-2 bg-slate-800"}`} />
+                ))}
+                {turns.length > 12 && <span className="text-[9px] text-slate-600 ml-1">+{turns.length - 12}</span>}
+              </div>
+            </>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-sm text-slate-400">Calculando resultado…</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function useArenaAction() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -69,20 +227,25 @@ const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; t
 };
 const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil", normal: "🟡 Normal", hard: "🔴 Difícil" };
 
-export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; cooldownMs?: number; cooldownAfterMs?: number }) {
+export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownMs = 0, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; teamName?: string; cooldownMs?: number; cooldownAfterMs?: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BotBattleResult | null>(null);
+  const [showAnimation, setShowAnimation] = useState(false);
   const [difficulty, setDifficulty] = useState<ArenaDifficulty>("normal");
-  // cooldownEndAt: data de quando o cooldown termina; useTimerExpiry garante reatividade
   const [cooldownEndAt, setCooldownEndAt] = useState<Date | null>(
     cooldownMs > 0 ? new Date(Date.now() + cooldownMs) : null
   );
   const cooldownExpiry = useTimerExpiry(cooldownEndAt);
   const onCooldown = !!cooldownEndAt && !cooldownExpiry.expired;
-  const localCooldown = cooldownExpiry.remaining; // para display
+  const localCooldown = cooldownExpiry.remaining;
 
   const styles = DIFFICULTY_STYLES[difficulty];
+
+  const handleCloseResult = () => {
+    setResult(null);
+    router.refresh();
+  };
 
   return (
     <>
@@ -106,25 +269,19 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
             disabled={pending || onCooldown}
             onClick={() => {
               startTransition(async () => {
-                // 1. Trava o bot (garante que o preview = batalha real)
                 const lockResult = await lockBotAction(teamId, difficulty);
-                if (lockResult.error) {
-                  toast.error(lockResult.error);
-                  return;
-                }
-                // 2. Combate com o bot travado
+                if (lockResult.error) { toast.error(lockResult.error); return; }
                 const response = await runBotBattleAction(teamId, difficulty);
-                if (response.error) {
-                  toast.error(response.error);
-                  return;
-                }
+                if (response.error) { toast.error(response.error); return; }
                 if (response.result) {
                   setResult(response.result);
                   setCooldownEndAt(new Date(Date.now() + cooldownAfterMs));
-                  // NÃO chama router.refresh() aqui — o refresh é feito ao fechar o modal
-                  // para garantir que o jogador consiga ler o resultado
+                  // Mostra animação primeiro, depois o modal de resultado
+                  if (response.result.battleAnimation && response.result.battleAnimation.length > 0) {
+                    setShowAnimation(true);
+                  }
                 } else {
-                  router.refresh(); // só atualiza se não há modal para mostrar
+                  router.refresh();
                 }
               });
             }}
@@ -137,14 +294,31 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
         </div>
       </div>
 
-      {result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setResult(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
+      {/* Animação de combate — aparece primeiro */}
+      {result && showAnimation && (
+        <BattleAnimationModal
+          turns={(result.battleAnimation ?? []) as AnimTurn[]}
+          playerTeamName={teamName}
+          botName={result.botName}
+          onFinish={() => setShowAnimation(false)}
+        />
+      )}
+
+      {/* Modal de resultado — aparece após a animação */}
+      {result && !showAnimation && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          onClick={result.teamDefeated ? undefined : handleCloseResult}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-widest text-[#FFCB05]">Resultado da Arena Z</p>
                 <h3 className={`mt-1 text-lg font-bold ${result.won ? "text-green-300" : "text-red-300"}`}>
-                  {result.won ? "Vitoria contra bot" : "Derrota contra bot"}
+                  {result.won ? "⚔️ Vitória contra bot!" : "💀 Derrota contra bot"}
                 </h3>
                 <p className="mt-1 text-sm text-slate-400">
                   Treinador: <span className="font-semibold text-slate-200">{result.botName}</span>
@@ -160,9 +334,11 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
                   )}
                 </p>
               </div>
-              <button type="button" onClick={() => { setResult(null); router.refresh(); }} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
-                <X size={14} />
-              </button>
+              {!result.teamDefeated && (
+                <button type="button" onClick={handleCloseResult} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
+                  <X size={14} />
+                </button>
+              )}
             </div>
 
             <div className="mt-4 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
@@ -174,18 +350,29 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
 
             {result.injuredMascots.length > 0 && (
               <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
-                <p className="text-xs font-bold text-red-200">Mascotes feridos</p>
+                <p className="text-xs font-bold text-red-200">
+                  {result.won ? "Mascotes nocauteados (saíram feridos)" : "Mascotes feridos"}
+                </p>
                 <p className="mt-1 text-sm text-red-100">{result.injuredMascots.join(", ")}</p>
-                <p className="mt-1 text-[11px] text-red-200/70">Use Atendimento SUS para liberar o mascote depois.</p>
+                <p className="mt-1 text-[11px] text-red-200/70">
+                  {result.won
+                    ? "Eles foram removidos da equipe. O slot fica livre para adicionar um novo mascote."
+                    : "Use Atendimento SUS para liberar o mascote depois."}
+                </p>
               </div>
             )}
 
             {result.teamDefeated && (
-              <div className="mt-3 rounded-xl border border-red-400/40 bg-red-500/10 p-3">
-                <p className="text-xs font-bold text-red-100">Equipe encerrada</p>
+              <div className="mt-3 rounded-xl border border-red-400/40 bg-red-500/15 p-4">
+                <p className="text-sm font-bold text-red-100">💀 Equipe encerrada</p>
                 <p className="mt-1 text-sm text-red-100/80">
-                  Sua equipe tomou K.O. total e saiu da Arena. A parte preservada do cofre foi enviada automaticamente; cure os mascotes feridos antes de montar uma nova equipe.
+                  Todos os mascotes foram nocauteados. O time foi dissolvido e o cofre restante foi creditado automaticamente. Cure os mascotes feridos antes de montar uma nova equipe.
                 </p>
+                {result.preservedLoot && (
+                  <p className="mt-2 text-xs text-green-300">
+                    ✅ Recebido: {result.preservedLoot.coins} ZC + {result.preservedLoot.exp} EXP
+                  </p>
+                )}
               </div>
             )}
 
@@ -207,11 +394,11 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
 
             {result.highlights.length > 0 && (
               <div className="mt-4">
-                <p className="text-xs font-bold text-slate-300">Destaques</p>
+                <p className="text-xs font-bold text-slate-300">Golpes marcantes</p>
                 <div className="mt-2 space-y-1 text-xs text-slate-400">
                   {result.highlights.map(turn => (
                     <p key={turn.turn}>
-                      Turno {turn.turn}: {turn.actorName} causou {turn.damage} dano em {turn.targetName}{turn.advantageApplied ? " com vantagem de tipo" : ""}.
+                      Turno {turn.turn}: <span className="text-slate-200">{turn.actorName}</span> causou <span className="text-[#FFCB05] font-bold">{turn.damage}</span> dano em {turn.targetName}{turn.advantageApplied ? " ⚡ vantagem de tipo" : ""}.
                     </p>
                   ))}
                 </div>
@@ -227,10 +414,10 @@ export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 
 
             <button
               type="button"
-              onClick={() => { setResult(null); router.refresh(); }}
-              className="mt-4 w-full rounded-xl border border-border py-2.5 text-sm font-semibold text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+              onClick={handleCloseResult}
+              className="mt-4 w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-[#1A1A2E] hover:bg-yellow-400 transition-colors"
             >
-              Fechar
+              {result.teamDefeated ? "Entendido — fechar" : "Fechar"}
             </button>
           </div>
         </div>
@@ -263,6 +450,8 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PvpResult | null>(null);
 
+  const handleClose = () => { setResult(null); router.refresh(); };
+
   return (
     <>
       <button
@@ -277,8 +466,9 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
               setResult(r.result);
               const won = r.result.winnerName !== null;
               toast.success(won ? "Vitória no PvP! 🏆" : "Derrota no PvP.");
+            } else {
+              router.refresh();
             }
-            router.refresh();
           });
         }}
         className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:border-red-300 disabled:opacity-50"
@@ -287,7 +477,7 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
       </button>
 
       {result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setResult(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={handleClose}>
           <div className="max-w-sm rounded-2xl border border-red-500/30 bg-slate-950 p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
@@ -299,7 +489,7 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
                   <p className="text-sm text-slate-400">Perdedor: {result.loserName}</p>
                 )}
               </div>
-              <button onClick={() => setResult(null)} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
+              <button onClick={handleClose} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
                 <X size={14}/>
               </button>
             </div>
@@ -316,7 +506,7 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
                 </p>
               </div>
             )}
-            <button onClick={() => setResult(null)} className="w-full rounded-xl bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
+            <button onClick={handleClose} className="w-full rounded-xl bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
           </div>
         </div>
       )}

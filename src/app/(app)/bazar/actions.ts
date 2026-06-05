@@ -1264,26 +1264,65 @@ export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
 
 // ── Auto-cleanup silencioso (chamado no page load do bazar) ──────────────────
 
+const EGG_TYPES_SET = new Set(["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS"]);
+const FOOD_TYPES_SET = new Set(["FOOD","SWEET","MASCOT_FOOD","MASCOT_SWEET"]);
+
+/** Verifica se o item de um listing ainda existe em escrow */
+async function isListingItemStale(listing: { id: string; playerId: string; payload: unknown }): Promise<boolean> {
+  const payload = listing.payload as Record<string, unknown>;
+  const itemType = payload.itemType as string | undefined;
+  const qty = (payload.quantity as number) ?? 1;
+  if (!itemType) return false;
+
+  // ── Ovos (marcados com origin: "bazar:") ─────────────────────────────────
+  if (EGG_TYPES_SET.has(itemType)) {
+    const eggIds = payload.escrowed_egg_ids as string[] | undefined;
+    if (eggIds && eggIds.length > 0) {
+      const existing = await prisma.mascotEgg.count({
+        where: { id: { in: eggIds }, origin: { startsWith: "bazar:" } },
+      });
+      return existing === 0; // todos os ovos sumiram
+    }
+    return false;
+  }
+
+  // ── Comida / Doce (quantidade decrementada no escrow) ────────────────────
+  const foodKey = itemType === "MASCOT_FOOD" ? "FOOD" : itemType === "MASCOT_SWEET" ? "SWEET" : itemType;
+  if (FOOD_TYPES_SET.has(foodKey)) {
+    const food = await prisma.mascotFoodItem.findUnique({
+      where: { playerId_type: { playerId: listing.playerId, type: foodKey as "FOOD" | "SWEET" } },
+    });
+    // Se a linha não existe, o escrow foi perdido (bug ou remoção externa)
+    if (!food) return true;
+    // Se quantidade ficou negativa (não deveria, mas por segurança)
+    return food.quantity < 0;
+  }
+
+  // ── Itens do PlayerInventory (buffs, tickets, etc.) ──────────────────────
+  const shopItemId = payload.shopItemId as string | undefined;
+  if (shopItemId) {
+    const inv = await prisma.playerInventory.findUnique({
+      where: { playerId_itemId: { playerId: listing.playerId, itemId: shopItemId } },
+    });
+    // Linha desapareceu ou quantidade negativa
+    if (!inv) return true;
+    return inv.quantity < 0;
+  }
+
+  return false;
+}
+
 export async function autoCleanupStaleBazarListings(): Promise<void> {
   try {
     const activeListings = await prisma.bazarListing.findMany({
       where: { status: "ACTIVE", category: "ITEM" },
-      select: { id: true, payload: true },
+      select: { id: true, playerId: true, payload: true },
       take: 50,
     });
     const staleIds: string[] = [];
     for (const listing of activeListings) {
-      const payload = listing.payload as Record<string, unknown>;
-      const itemType = payload.itemType as string | undefined;
-      const eggTypes = ["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"];
-      if (eggTypes.includes(itemType ?? "")) {
-        const eggIds = payload.escrowed_egg_ids as string[] | undefined;
-        if (eggIds && eggIds.length > 0) {
-          const existing = await prisma.mascotEgg.count({
-            where: { id: { in: eggIds }, origin: { startsWith: "bazar:" } },
-          });
-          if (existing === 0) staleIds.push(listing.id);
-        }
+      if (await isListingItemStale(listing).catch(() => false)) {
+        staleIds.push(listing.id);
       }
     }
     if (staleIds.length > 0) {
