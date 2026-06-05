@@ -68,7 +68,7 @@ const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; t
 };
 const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil", normal: "🟡 Normal", hard: "🔴 Difícil" };
 
-export function BotBattleButton({ teamId, cooldownMs = 0 }: { teamId: string; cooldownMs?: number }) {
+export function BotBattleButton({ teamId, cooldownMs = 0, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; cooldownMs?: number; cooldownAfterMs?: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BotBattleResult | null>(null);
@@ -107,7 +107,7 @@ export function BotBattleButton({ teamId, cooldownMs = 0 }: { teamId: string; co
                 }
                 if (response.result) {
                   setResult(response.result);
-                  setLocalCooldown(3 * 60 * 1000); // 3min cooldown
+                  setLocalCooldown(cooldownAfterMs);
                   toast.success(response.result.won ? "Vitoria na Arena Z!" : "Derrota na Arena Z.");
                 }
                 router.refresh();

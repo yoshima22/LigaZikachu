@@ -46,6 +46,29 @@ type ArenaRankingRow = {
   stolenExp: number;
 };
 
+type TeamReadiness = {
+  members: Array<{
+    mascot: {
+      arenaState: string;
+      restingUntil: Date | null;
+      nickname: string | null;
+      pokemonId: number;
+    };
+  }>;
+};
+
+function getTeamBlockedReason(team: TeamReadiness) {
+  const now = new Date();
+  for (const member of team.members) {
+    const name = member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId);
+    if (member.mascot.arenaState === "INJURED") return `${name} esta ferido e precisa de Atendimento SUS.`;
+    if (member.mascot.restingUntil && member.mascot.restingUntil > now) {
+      return `${name} esta em repouso ate ${member.mascot.restingUntil.toLocaleString("pt-BR")}.`;
+    }
+  }
+  return null;
+}
+
 function getLootNumber(loot: unknown, key: "coins" | "exp") {
   if (!loot || typeof loot !== "object") return 0;
   const root = loot as { stolen?: unknown };
@@ -148,9 +171,12 @@ export default async function ArenaZPage() {
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
   const activeTeams = teams.filter(team => team.status === "ACTIVE");
+  const teamBlockReasons = new Map(activeTeams.map(team => [team.id, getTeamBlockedReason(team)]));
+  const readyActiveTeams = activeTeams.filter(team => !teamBlockReasons.get(team.id));
+  const readyOpponentTeams = opponentTeams.filter(team => !getTeamBlockedReason(team));
   // Preview com dificuldade Normal por padrão (o jogador pode escolher no botão)
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
-  for (const team of activeTeams) {
+  for (const team of readyActiveTeams) {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
   const arenaRanking = arenaRankingData;
@@ -307,6 +333,14 @@ export default async function ArenaZPage() {
                       </div>
                     ))}
                   </div>
+                  {team.status === "ACTIVE" && teamBlockReasons.get(team.id) && (
+                    <div className="mt-4 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-100">
+                      <p className="font-bold">Equipe aguardando recuperacao</p>
+                      <p className="mt-1 text-yellow-100/80">
+                        {teamBlockReasons.get(team.id)} Quando o repouso acabar, a equipe volta a poder combater.
+                      </p>
+                    </div>
+                  )}
                   {team.status === "ACTIVE" && botPreviews.get(team.id) && (
                     <div className="mt-4 rounded-2xl border border-green-500/20 bg-green-500/5 p-3">
                       {(() => {
@@ -326,7 +360,7 @@ export default async function ArenaZPage() {
                                   Escolha a dificuldade antes de combater → Fácil: -5 níveis, menos loot · Difícil: +5 níveis, mais loot
                                 </p>
                               </div>
-                              <BotBattleButton teamId={team.id} cooldownMs={bot.cooldownMs ?? 0} />
+                              <BotBattleButton teamId={team.id} cooldownMs={bot.cooldownMs ?? 0} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                               {bot.mascots.map(m => (
@@ -359,13 +393,15 @@ export default async function ArenaZPage() {
             <div className="mt-4 space-y-4">
               {activeTeams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Crie uma equipe ativa antes de testar PvP.</p>
-              ) : opponentTeams.length === 0 ? (
+              ) : readyActiveTeams.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Sua equipe ativa ainda esta em repouso ou tem mascote ferido.</p>
+              ) : readyOpponentTeams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhuma equipe adversaria ativa disponivel.</p>
-              ) : activeTeams.map(attackTeam => (
+              ) : readyActiveTeams.map(attackTeam => (
                 <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
                   <p className="text-sm font-bold text-red-100">Atacando com: {attackTeam.name}</p>
                   <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                    {opponentTeams.map(defenseTeam => (
+                    {readyOpponentTeams.map(defenseTeam => (
                       <div key={defenseTeam.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
