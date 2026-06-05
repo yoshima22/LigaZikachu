@@ -1231,7 +1231,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
     select: {
       id: true, pokemonId: true, nickname: true, playerId: true,
       statForce: true, statAgility: true, statVitality: true,
-      statCharisma: true, statInstinct: true, statInstinct: true,
+      statCharisma: true, statInstinct: true,
       happiness: true, mood: true, level: true,
       restingUntil: true, arenaState: true,
     }
