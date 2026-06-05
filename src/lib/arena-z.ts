@@ -22,8 +22,8 @@ export const ARENA_Z_CONFIG = {
 
 // ── Renda Passiva ─────────────────────────────────────────────────────────────
 // Por hora por mascote na equipe
-export const PASSIVE_COINS_PER_MASCOT_PER_H = 4;
-export const PASSIVE_EXP_PER_MASCOT_PER_H   = 8;
+export const PASSIVE_COINS_PER_MASCOT_PER_H = 5;
+export const PASSIVE_EXP_PER_MASCOT_PER_H   = 10;
 const PASSIVE_MAX_HOURS               = 24;  // máximo por sessão (evita acúmulo por abandono)
 const PASSIVE_MIN_INTERVAL_HOURS      = 0.5; // processa a cada 30 min
 
@@ -157,6 +157,23 @@ function pick<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function seededRng(seed: number) {
+  let value = seed % 2147483647;
+  if (value <= 0) value += 2147483646;
+  return () => {
+    value = (value * 16807) % 2147483647;
+    return (value - 1) / 2147483646;
+  };
+}
+
+function seededRand(rng: () => number, min: number, max: number) {
+  return Math.floor(rng() * (max - min + 1)) + min;
+}
+
+function seededPick<T>(rng: () => number, items: T[]) {
+  return items[Math.floor(rng() * items.length)];
+}
+
 function levelBand(level: number) {
   const min = Math.max(1, Math.floor((level - 1) / 5) * 5 + 1);
   return { min, max: min + 4 };
@@ -181,20 +198,20 @@ function toArenaMascot(m: {
   };
 }
 
-function makeBotMascot(index: number, levelMin: number, levelMax: number): ArenaMascot {
+function makeBotMascot(index: number, levelMin: number, levelMax: number, rng: () => number = Math.random): ArenaMascot {
   const pokemonIds = [1, 4, 7, 25, 37, 54, 58, 63, 66, 92, 133, 147, 152, 155, 158, 179, 197, 215, 246];
-  const pokemonId = pick(pokemonIds);
-  const level = rand(levelMin, levelMax);
+  const pokemonId = seededPick(rng, pokemonIds);
+  const level = seededRand(rng, levelMin, levelMax);
   return {
     id: `bot-${index}-${pokemonId}-${level}`,
     ownerId: null,
     pokemonId,
     name: `${getPokemonName(pokemonId)} Bot`,
     level,
-    force: rand(8, 14) + Math.floor(level / 2),
-    agility: rand(8, 14) + Math.floor(level / 2),
-    instinct: rand(8, 14) + Math.floor(level / 3),
-    vitality: rand(8, 14) + Math.floor(level / 2),
+    force: seededRand(rng, 8, 14) + Math.floor(level / 2),
+    agility: seededRand(rng, 8, 14) + Math.floor(level / 2),
+    instinct: seededRand(rng, 8, 14) + Math.floor(level / 3),
+    vitality: seededRand(rng, 8, 14) + Math.floor(level / 2),
     happiness: 70,
     hp: 55 + level * 6 + (10 + Math.floor(level / 2)) * 4,
   };
@@ -312,15 +329,16 @@ function getBotRewardRange(levelMax: number) {
 }
 
 function buildBotOpponent(attackers: ArenaMascot[], difficulty: ArenaDifficulty = "normal", seed?: number) {
+  const rng = seed !== undefined ? seededRng(seed) : Math.random;
   const avgLevel = Math.max(1, Math.round(attackers.reduce((sum, m) => sum + m.level, 0) / attackers.length));
   const diff = DIFFICULTY_CONFIG[difficulty];
   const adjustedLevel = Math.max(1, avgLevel + diff.levelOffset);
   const band = levelBand(adjustedLevel);
-  const botSize = rand(2, Math.min(6, Math.max(2, attackers.length + rand(-1, 1))));
+  const botSize = seededRand(rng, 2, Math.min(6, Math.max(2, attackers.length + seededRand(rng, -1, 1))));
   // Seed determinístico: usa seed se fornecido, caso contrário gera aleatório
-  const nameSeed = seed !== undefined ? seed % BOT_NAMES.length : Math.floor(Math.random() * BOT_NAMES.length);
+  const nameSeed = seed !== undefined ? seed % BOT_NAMES.length : Math.floor(rng() * BOT_NAMES.length);
   const botName = BOT_NAMES[nameSeed];
-  const defenders = Array.from({ length: botSize }, (_, index) => makeBotMascot(index + 1, band.min, band.max));
+  const defenders = Array.from({ length: botSize }, (_, index) => makeBotMascot(index + 1, band.min, band.max, rng));
   return { avgLevel, band, botSize, botName, defenders, rewardRange: getBotRewardRange(band.max), difficulty };
 }
 
@@ -391,6 +409,73 @@ function remainingLoot(loot: ArenaLoot, stolen: ArenaLoot, burned: ArenaLoot): A
     exp: Math.max(0, loot.exp - stolen.exp - burned.exp),
     food: Math.max(0, loot.food - stolen.food - burned.food),
     sweet: Math.max(0, loot.sweet - stolen.sweet - burned.sweet),
+  };
+}
+
+function hasLoot(loot: ArenaLoot) {
+  return loot.coins > 0 || loot.exp > 0 || loot.food > 0 || loot.sweet > 0;
+}
+
+async function dropArenaGroundSpoils(
+  tx: Prisma.TransactionClient,
+  loot: ArenaLoot | null | undefined,
+  sourcePlayerId?: string | null,
+  sourceBattleId?: string | null,
+) {
+  if (!loot || !hasLoot(loot)) return;
+  await tx.arenaGroundSpoil.create({
+    data: {
+      sourceBattleId: sourceBattleId ?? null,
+      sourcePlayerId: sourcePlayerId ?? null,
+      coins: loot.coins,
+      exp: loot.exp,
+      food: loot.food,
+      sweet: loot.sweet,
+      status: "AVAILABLE",
+    },
+  });
+}
+
+async function maybeFindArenaGroundSpoils(
+  tx: Prisma.TransactionClient,
+  winnerPlayerId: string,
+  winnerTeamId: string,
+) {
+  const available = await tx.arenaGroundSpoil.findMany({
+    where: {
+      status: "AVAILABLE",
+      OR: [
+        { sourcePlayerId: null },
+        { sourcePlayerId: { not: winnerPlayerId } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    take: 8,
+  });
+  if (available.length === 0) return null;
+
+  const chance = Math.min(0.75, 0.25 + available.length * 0.06);
+  if (Math.random() > chance) return null;
+
+  const spoil = pick(available);
+  await tx.arenaGroundSpoil.update({
+    where: { id: spoil.id },
+    data: { status: "CLAIMED", foundByPlayerId: winnerPlayerId, claimedAt: new Date() },
+  });
+  await tx.arenaTeam.update({
+    where: { id: winnerTeamId },
+    data: {
+      vaultCoins: { increment: spoil.coins },
+      vaultExp: { increment: spoil.exp },
+      vaultFood: { increment: spoil.food },
+      vaultSweet: { increment: spoil.sweet },
+    },
+  });
+  return {
+    coins: spoil.coins,
+    exp: spoil.exp,
+    food: spoil.food,
+    sweet: spoil.sweet,
   };
 }
 
@@ -837,7 +922,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   const defeatPreserved = defeatSplit ? remainingLoot(currentVault, defeatSplit.stolen, defeatSplit.burned) : null;
 
   await prisma.$transaction(async (tx) => {
-    await tx.arenaBattle.create({
+    const battle = await tx.arenaBattle.create({
       data: {
         type: "BOT",
         result: combat.result,
@@ -859,6 +944,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     if (teamDefeated && defeatPreserved) {
       const allMascotIds = team.members.map(m => m.mascotId);
       await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`, allMascotIds);
+      await dropArenaGroundSpoils(tx, defeatSplit?.burned, playerId, battle.id);
       // Deleta o time: cascata remove os ArenaTeamMember automaticamente
       await tx.arenaTeam.delete({ where: { id: team.id } });
     } else {
@@ -1291,14 +1377,25 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     injuredMascotIds.push(pick(loserTeam.members).mascotId);
   }
   const loserTeamDefeated = !!loserTeam && injuredMascotIds.length >= loserTeam.members.length;
-  const losingLoot: ArenaLoot = loserTeam
-    ? { coins: loserTeam.vaultCoins, exp: loserTeam.vaultExp, food: loserTeam.vaultFood, sweet: loserTeam.vaultSweet }
-    : { coins: 0, exp: 0, food: 0, sweet: 0 };
+  const losingLootWithMultiplier = loserTeam
+    ? applyMultiplierToVault(
+        { coins: loserTeam.vaultCoins, exp: loserTeam.vaultExp, food: loserTeam.vaultFood, sweet: loserTeam.vaultSweet },
+        getTeamTimeMultiplier(loserTeam.enteredAt),
+        false,
+      )
+    : { coins: 0, exp: 0, food: 0, sweet: 0, effectiveMult: 1 };
+  const losingLoot: ArenaLoot = {
+    coins: losingLootWithMultiplier.coins,
+    exp: losingLootWithMultiplier.exp,
+    food: losingLootWithMultiplier.food,
+    sweet: losingLootWithMultiplier.sweet,
+  };
   const lootSplit = loserTeamDefeated ? splitDefeatedLoot(losingLoot) : null;
   const preserved = lootSplit ? remainingLoot(losingLoot, lootSplit.stolen, lootSplit.burned) : null;
+  let foundGroundSpoils: ArenaLoot | null = null;
 
   await prisma.$transaction(async (tx) => {
-    await tx.arenaBattle.create({
+    const battle = await tx.arenaBattle.create({
       data: {
         type: "PVP",
         result: combat.result,
@@ -1330,24 +1427,27 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
           lastBattleAt: new Date(),
         },
       });
+      await dropArenaGroundSpoils(tx, lootSplit.burned, loserTeam?.playerId ?? null, battle.id);
+      foundGroundSpoils = await maybeFindArenaGroundSpoils(tx, winnerTeam.playerId, winnerTeam.id);
     }
 
     if (loserTeam && preserved) {
       if (loserTeamDefeated) {
         const loserMascotIds = loserTeam.members.map(m => m.mascotId);
         await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP", loserMascotIds);
+        await tx.arenaTeam.delete({ where: { id: loserTeam.id } });
+      } else {
+        await tx.arenaTeam.update({
+          where: { id: loserTeam.id },
+          data: {
+            vaultCoins: preserved.coins,
+            vaultExp: preserved.exp,
+            vaultFood: preserved.food,
+            vaultSweet: preserved.sweet,
+            lastBattleAt: new Date(),
+          },
+        });
       }
-      await tx.arenaTeam.update({
-        where: { id: loserTeam.id },
-        data: {
-          status: loserTeamDefeated ? "RETIRED" : loserTeam.status,
-          vaultCoins: loserTeamDefeated ? 0 : preserved.coins,
-          vaultExp: loserTeamDefeated ? 0 : preserved.exp,
-          vaultFood: loserTeamDefeated ? 0 : preserved.food,
-          vaultSweet: loserTeamDefeated ? 0 : preserved.sweet,
-          lastBattleAt: new Date(),
-        },
-      });
     }
 
     if (draw) {
@@ -1394,6 +1494,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     winnerName: winnerTeam?.player.displayName ?? null,
     loserName: loserTeam?.player.displayName ?? null,
     stolen: lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
+    foundGroundSpoils,
     loserTeamDefeated,
   };
 }

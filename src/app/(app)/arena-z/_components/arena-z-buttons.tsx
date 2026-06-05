@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X, Timer, Zap, Shield, Skull, ChevronRight } from "lucide-react";
+import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import {
   adminSetMascotStateAction,
@@ -296,7 +296,7 @@ function useArenaAction() {
   return { pending, run };
 }
 
-function formatLoot(reward: BotBattleResult["reward"]) {
+function formatLoot(reward: { coins: number; exp: number; food: number; sweet: number }) {
   const parts = [`${reward.coins} ZC`, `${reward.exp} EXP`];
   if (reward.food > 0) parts.push(`${reward.food} comida`);
   if (reward.sweet > 0) parts.push(`${reward.sweet} doce`);
@@ -589,6 +589,26 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
                     result.stolen.sweet > 0 ? `${result.stolen.sweet} doce` : null,
                   ].filter(Boolean).join(" / ")}
                 </p>
+              </div>
+            )}
+            {result.foundGroundSpoils && (
+              <div className="relative overflow-hidden rounded-2xl border border-yellow-300/60 bg-gradient-to-br from-yellow-300/20 via-amber-500/10 to-sky-400/10 p-4 shadow-[0_0_35px_rgba(255,203,5,0.25)]">
+                <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#FFCB05]/30 blur-2xl animate-pulse" />
+                <div className="absolute left-6 top-5 h-3 w-3 rounded-full bg-white/80 animate-ping" />
+                <div className="relative flex items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-yellow-200/70 bg-[#FFCB05] text-[#1A1A2E] shadow-lg animate-bounce">
+                    <Sparkles size={24} />
+                  </div>
+                  <div>
+                    <p className="font-pixel text-xs text-[#FFCB05]">Espolios no chao!</p>
+                    <p className="mt-1 text-sm font-semibold text-yellow-50">
+                      Sua equipe encontrou {formatLoot(result.foundGroundSpoils)} perdidos pela Arena.
+                    </p>
+                    <p className="mt-1 text-[11px] text-yellow-100/70">
+                      Esses recursos vieram dos 10% derrubados por equipes que cairam em combate.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
             <button onClick={handleClose} className="w-full rounded-xl bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>

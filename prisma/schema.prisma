@@ -1524,6 +1524,26 @@ model ArenaBattle {
   @@map("arena_battles")
 }
 
+model ArenaGroundSpoil {
+  id              String    @id @default(cuid())
+  sourceBattleId  String?
+  sourcePlayerId  String?
+  foundByPlayerId String?
+  coins           Int       @default(0)
+  exp             Int       @default(0)
+  food            Int       @default(0)
+  sweet           Int       @default(0)
+  itemPayload     Json?
+  status          String    @default("AVAILABLE") // AVAILABLE | CLAIMED | EXPIRED
+  createdAt       DateTime  @default(now())
+  claimedAt       DateTime?
+
+  @@index([status, createdAt])
+  @@index([sourcePlayerId])
+  @@index([foundByPlayerId])
+  @@map("arena_ground_spoils")
+}
+
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
