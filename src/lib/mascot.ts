@@ -1005,6 +1005,48 @@ function pickText(pool: string[], a: string, b: string): string {
 }
 
 const SOCIAL_TEXTS = {
+  // ── RIVAIS ────────────────────────────────────────────────────────────────
+  rival_trap_small: [
+    "{a} deixou uma armadilha boba no caminho de {b}. Não machucou, mas atrasou.",
+    "{a} removeu algumas marcações da rota de {b}.",
+    "{a} trocou placas de lugar e fez {b} perder tempo.",
+    "{a} espalhou pistas falsas pelo trajeto de {b}.",
+    "{a} não sabotou tudo, mas atrapalhou o suficiente para irritar {b}.",
+    "{a} fez uma pequena bagunça na rota de {b}. Simples, mas eficaz.",
+  ],
+  rival_loot_eye: [
+    "{a} descobriu que {b} está acumulando loot na Arena e começou a rondar.",
+    "{a} ouviu rumores sobre o cofre de {b}. A rivalidade ganhou um novo motivo.",
+    "{a} percebeu que {b} está guardando recompensas demais. Péssimo sinal.",
+    "{a} está de olho no que {b} trouxe da Arena.",
+    "{a} não atacou ainda, mas deixou claro que quer o loot de {b}.",
+    "{a} fez questão de deixar {b} saber que sabe sobre o cofre.",
+  ],
+  rival_wound_pride: [
+    "{a} zombou da derrota de {b}. A recuperação vai ser ainda mais amarga.",
+    "{a} apareceu só para lembrar {b} da queda na Arena. Golpe baixo.",
+    "{a} comemorou a derrota de {b} alto demais. {b} ficou furioso.",
+    "{a} transformou a derrota de {b} em piada pública.",
+    "{a} não perdeu a chance de provocar {b} enquanto ele se recuperava.",
+    "{a} mandou uma mensagem de 'condolências' para {b}. Falsidade pura.",
+  ],
+  rival_territory: [
+    "{a} e {b} disputaram território durante horas. Ninguém saiu convencido.",
+    "{a} marcou presença no espaço de {b}. A tensão subiu.",
+    "{a} desafiou {b} sem atacar. Só para deixar o aviso.",
+    "{a} e {b} ficaram frente a frente até alguém ceder caminho. Ninguém cedeu.",
+    "{a} deixou claro que não aceita dividir espaço com {b}.",
+    "{a} ocupou o lugar favorito de {b} de propósito. A mensagem foi recebida.",
+  ],
+  rival_hostile_silence: [
+    "{a} e {b} ficaram no mesmo ambiente sem trocar uma palavra. Foi pior do que brigar.",
+    "{a} passou por {b} como se ele nem existisse. A provocação foi entendida.",
+    "{a} ignorou {b} de propósito. Funcionou.",
+    "{a} e {b} dividiram o mesmo espaço em completo silêncio hostil.",
+    "{a} não fez nada contra {b}. E isso irritou ainda mais.",
+    "{a} e {b} se olharam brevemente. Mais do que suficiente.",
+    "{a} passou por {b} sem fazer nada. Mas {b} sentiu.",
+  ],
   rival_irritate: [
     "{a} cruzou o caminho de {b} e os dois se encararam por um longo tempo. {b} está furioso!",
     "{a} mandou um recado de desafio para {b}. {b} não ficou nem um pouco feliz.",
@@ -1048,6 +1090,19 @@ const SOCIAL_TEXTS = {
     "A batalha entre {a} e {b} já é lenda no grupo. Todo mundo comenta.",
     "{a} e {b} atingiram o nível máximo de rivalidade. Cada encontro é um confronto épico.",
     "Rivais eternos! {a} e {b} se olham e o ar ao redor esquenta. É uma rivalidade que vai durar para sempre.",
+    "{a} e {b} já não precisam de motivo para competir.",
+    "{a} considera qualquer vitória de {b} uma ofensa pessoal.",
+    "{a} treinou o dia inteiro só pensando em superar {b}.",
+    "{a} ouviu o nome de {b} e mudou de humor na hora.",
+    "{a} e {b} estão criando uma rivalidade que todo mundo já acompanha.",
+  ],
+  rival_general: [
+    "{a} fez questão de passar na frente de {b} sem olhar para trás.",
+    "{a} deixou marcas no território de {b}.",
+    "{a} comemorou alto demais perto de {b}.",
+    "{a} ficou treinando justamente onde {b} costuma descansar.",
+    "{a} mandou um olhar que dizia tudo.",
+    "{a} e {b} se olharam e souberam que a próxima batalha está chegando.",
   ],
   ally_cheer: [
     "{a} apareceu com uma surpresa para animar {b}! {b} ficou muito feliz.",
@@ -1085,6 +1140,68 @@ const SOCIAL_TEXTS = {
     "{a} lembrou {b} de todas as suas conquistas. {b} está determinado de novo!",
     "{a} fez um discurso épico de motivação para {b}. Nada vai parar {b} agora!",
     "{a} compartilhou sua própria história de superação com {b}. {b} se inspirou.",
+  ],
+  ally_gift: [
+    "{a} apareceu com um presentinho para {b}. Pequenos gestos fortalecem grandes amizades.",
+    "{a} encontrou algo no caminho e decidiu entregar para {b}.",
+    "{a} trouxe um petisco para {b}. A amizade também se alimenta.",
+    "{a} dividiu parte do que encontrou com {b}. Companheirismo de verdade.",
+    "{a} deixou uma surpresa no cantinho de {b}. Quando {b} viu, ficou animado.",
+    "{a} não trouxe muito — mas o gesto valeu mais que o presente.",
+  ],
+  ally_snack: [
+    "{a} dividiu um lanche com {b}. O clima melhorou na hora.",
+    "{a} percebeu que {b} estava mal e chamou para comer alguma coisa.",
+    "{a} trouxe um petisco simples, mas {b} precisava exatamente disso.",
+    "{a} sentou perto de {b} e os dois dividiram um momento tranquilo.",
+    "{a} fez companhia para {b} durante uma pausa. O humor melhorou.",
+    "{a} apareceu na hora certa com a coisa certa.",
+  ],
+  ally_expedition_guard: [
+    "{a} acompanhou {b} por parte da expedição e ajudou a evitar problemas.",
+    "{a} ficou de olho na rota de {b}. Nenhum rival vai atrapalhar tão fácil.",
+    "{a} marcou o caminho para {b}, evitando que ele caísse em pistas falsas.",
+    "{a} protegeu a retaguarda de {b} durante a expedição.",
+    "{a} percebeu movimentação estranha na rota e avisou {b} a tempo.",
+    "{a} garantiu que {b} chegou no caminho certo.",
+  ],
+  ally_sus_visit: [
+    "{a} visitou {b} no Atendimento SUS e ajudou a levantar o astral.",
+    "{a} ficou esperando {b} sair do atendimento. Ninguém se recupera sozinho.",
+    "{a} levou palavras de apoio para {b} durante a recuperação.",
+    "{a} acompanhou {b} no pós-atendimento. O repouso vai ser um pouco mais leve.",
+    "{a} ficou de guarda enquanto {b} se recuperava.",
+    "{a} apareceu antes mesmo que {b} pedisse. Super Amigos sabem quando é necessário.",
+  ],
+  ally_arena_inspiration: [
+    "{a} e {b} revisaram juntos o último combate. Ambos aprenderam algo novo.",
+    "{a} mostrou para {b} onde poderia melhorar. O treino rendeu bons frutos.",
+    "{a} e {b} transformaram a última batalha em aprendizado.",
+    "{a} e {b} discutiram estratégias até chegarem em uma ideia melhor.",
+    "{a} ajudou {b} a entender o que deu errado na Arena.",
+    "{a} e {b} combinaram o que cada um faria diferente. Progresso conjunto.",
+  ],
+  ally_safe_route: [
+    "{a} indicou uma rota melhor para {b}. A expedição pode render um pouco mais.",
+    "{a} contou sobre um atalho secreto para {b}.",
+    "{a} marcou um ponto de coleta que {b} ainda não conhecia.",
+    "{a} deixou sinais pelo caminho para ajudar {b} a encontrar mais recursos.",
+    "{a} compartilhou uma dica valiosa de exploração com {b}.",
+    "{a} passou o mapa da região para {b} antes de partir.",
+  ],
+  ally_general: [
+    "{a} e {b} passaram um tempo treinando poses de vitória.",
+    "{a} ficou ouvindo {b} reclamar até ele se acalmar.",
+    "{a} dividiu histórias antigas com {b}.",
+    "{a} e {b} criaram uma saudação própria.",
+    "{a} apareceu só para garantir que {b} estava bem.",
+  ],
+  best_friend_general: [
+    "{a} e {b} já sabem o que o outro vai fazer antes mesmo de agir.",
+    "{a} trouxe exatamente o que {b} precisava sem que ele pedisse.",
+    "{a} e {b} têm uma rotina própria de treino e descanso.",
+    "{a} percebeu que {b} estava mal antes de qualquer outro mascote.",
+    "{a} e {b} viraram referência de parceria dentro da Liga.",
   ],
   ally_joint_buff: [
     "{a} e {b} desenvolveram um ataque coordenado! A próxima batalha deles será mais poderosa.",
@@ -1174,10 +1291,10 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
   const rivalPairs = await prisma.mascotRelation.findMany({
     where: { type: "RIVAL" },
     include: {
-      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, arenaState: true } },
+      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, arenaState: true, level: true } },
       mascotB: {
         select: { id: true, pokemonId: true, nickname: true, playerId: true,
-                  arenaState: true, mood: true,
+                  arenaState: true, mood: true, happiness: true, restingUntil: true,
                   expeditions: { where: { status: "ACTIVE" }, take: 1 } }
       },
     },
@@ -1233,17 +1350,54 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       rivalEvent = pickText(SOCIAL_TEXTS.rival_steal_exp, aName, bName);
       summary.events.push(`💀 ${aName} roubou ${stolenExp} EXP de ${bName}!`);
 
+    } else if (eventRoll < 0.50 && rel.mascotB.expeditions.length > 0) {
+      // 🪤 Armadilha leve na rota (rival comum, atraso menor)
+      const expedition = rel.mascotB.expeditions[0];
+      const delayMin = randomInt(5, 15);
+      await prisma.mascotExpedition.update({
+        where: { id: expedition.id },
+        data: { finishAt: new Date(new Date(expedition.finishAt).getTime() + delayMin * 60_000) }
+      }).catch(() => {});
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_trap_small, aName, bName);
+      summary.events.push(`🪤 ${aName} armou uma armadilha leve para ${bName} (+${delayMin}min)`);
+
+    } else if (eventRoll < 0.65 && rel.mascotB.arenaState === "ARENA") {
+      // 🧲 Isca de Loot — alvo na Arena, rival espreitando o cofre
+      await prisma.mascot.update({
+        where: { id: rel.mascotB.id },
+        data: { happiness: { decrement: 5 } }
+      }).catch(() => {});
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_loot_eye, aName, bName);
+      summary.events.push(`🧲 ${aName} está de olho no loot de ${bName}`);
+
+    } else if (isArchRival && eventRoll < 0.75 &&
+               (rel.mascotB.arenaState === "INJURED" || rel.mascotB.arenaState === "RESTING")) {
+      // 💢 Ferida no Orgulho — Rival Direto agrava recuperação
+      const extraMin = randomInt(10, 20);
+      if (rel.mascotB.restingUntil) {
+        const newRest = new Date(new Date(rel.mascotB.restingUntil).getTime() + extraMin * 60_000);
+        await prisma.mascot.update({
+          where: { id: rel.mascotB.id },
+          data: { mood: "ANGRY" as MascotMood, restingUntil: newRest }
+        }).catch(() => {});
+      } else {
+        await prisma.mascot.update({ where: { id: rel.mascotB.id }, data: { mood: "ANGRY" as MascotMood } }).catch(() => {});
+      }
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_wound_pride, aName, bName);
+      summary.events.push(`💢 ${aName} agravou a recuperação de ${bName} (+${extraMin}min)`);
+
+    } else if (isArchRival && eventRoll < 0.88) {
+      // 🔥 Duelo de Território — Rival Direto, só log + contador
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_territory, aName, bName);
+      summary.events.push(`🔥 ${aName} e ${bName} disputaram território`);
+
     } else if (isArchRival) {
       rivalEvent = pickText(SOCIAL_TEXTS.rival_arch, aName, bName);
+    } else if (eventRoll < 0.92) {
+      // 🧊 Silêncio Hostil — sem efeito
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_hostile_silence, aName, bName);
     } else {
-      // Provocação simples sem efeito (mas texto variado)
-      const provocTexts = [
-        ...SOCIAL_TEXTS.rival_irritate.slice(4),
-        `${aName} passou perto de ${bName} e ignorou completamente. Uma provocação silenciosa.`,
-        `${aName} e ${bName} se cruzaram no caminho. Nenhum dos dois cedeu espaço.`,
-        `${aName} deixou uma mensagem de desafio para ${bName}: "A próxima batalha é minha."`,
-      ];
-      rivalEvent = provocTexts[Math.floor(Math.random() * provocTexts.length)];
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_general, aName, bName);
     }
 
     await Promise.all([
@@ -1260,11 +1414,12 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
   const friendPairs = await prisma.mascotRelation.findMany({
     where: { type: "FRIEND" },
     include: {
-      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, happiness: true, isEquipped: true } },
+      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, happiness: true, isEquipped: true, arenaState: true } },
       mascotB: {
         select: { id: true, pokemonId: true, nickname: true, playerId: true,
                   happiness: true, isEquipped: true, arenaState: true,
-                  restingUntil: true }
+                  restingUntil: true, susRestBonusMinutes: true,
+                  expeditions: { where: { status: "ACTIVE" }, take: 1 } }
       },
     },
     orderBy: { interactionCount: "desc" },
@@ -1323,10 +1478,94 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       allyEvent = pickText(SOCIAL_TEXTS.ally_exp, aName, bName);
       summary.events.push(`📚 ${aName} e ${bName} treinaram juntos! +${bonusExp} EXP.`);
 
+    } else if (isBestFriend && eventRoll < 0.60 && rel.mascotB.arenaState === "INJURED") {
+      // 🚑 Visita SUS — Super Amigo reduz repouso pós-cura acumulando bônus
+      const bonusMin = randomInt(15, 30);
+      await prisma.mascot.update({
+        where: { id: rel.mascotB.id },
+        data: { susRestBonusMinutes: { increment: bonusMin } }
+      }).catch(() => {});
+      allyEvent = pickText(SOCIAL_TEXTS.ally_sus_visit, aName, bName);
+      summary.events.push(`🚑 ${aName} visitou ${bName} no SUS! Repouso futuro -${bonusMin}min.`);
+
+    } else if (isBestFriend && eventRoll < 0.70 && rel.mascotB.expeditions && rel.mascotB.expeditions.length > 0) {
+      // 🛡️ Guarda de Expedição — Super Amigo protege rota
+      // Se havia atraso recente (finishAt > original), reduz um pouco
+      const expedition = rel.mascotB.expeditions[0];
+      const guardReductionMin = randomInt(10, 20);
+      const newFinish = new Date(new Date(expedition.finishAt).getTime() - guardReductionMin * 60_000);
+      if (newFinish > new Date()) {
+        await prisma.mascotExpedition.update({ where: { id: expedition.id }, data: { finishAt: newFinish } }).catch(() => {});
+      }
+      allyEvent = pickText(SOCIAL_TEXTS.ally_expedition_guard, aName, bName);
+      summary.events.push(`🛡️ ${aName} protegeu a expedição de ${bName} (-${guardReductionMin}min)`);
+
+    } else if (isBestFriend && eventRoll < 0.80 &&
+               (rel.mascotA.arenaState === "ARENA" || rel.mascotB.arenaState === "ARENA")) {
+      // ✨ Inspiração de Equipe — ambos em/perto da Arena
+      const arenaExp = randomInt(5, 15);
+      await Promise.all([
+        addExp(rel.mascotA.id, arenaExp).catch(() => {}),
+        addExp(rel.mascotB.id, arenaExp).catch(() => {}),
+      ]);
+      allyEvent = pickText(SOCIAL_TEXTS.ally_arena_inspiration, aName, bName);
+      summary.events.push(`✨ ${aName} e ${bName} — inspiração de arena! +${arenaExp} EXP.`);
+
+    } else if (eventRoll < 0.70 && rel.mascotB.expeditions && rel.mascotB.expeditions.length > 0) {
+      // 🧭 Rota Segura — aliado em expedição, ganha item extra (food)
+      await prisma.mascotFoodItem.upsert({
+        where: { playerId_type: { playerId: rel.mascotB.playerId, type: "FOOD" } },
+        update: { quantity: { increment: 1 } },
+        create: { playerId: rel.mascotB.playerId, type: "FOOD", quantity: 1 }
+      }).catch(() => {});
+      allyEvent = pickText(SOCIAL_TEXTS.ally_safe_route, aName, bName);
+      summary.events.push(`🧭 ${aName} garantiu item extra na expedição de ${bName}!`);
+
+    } else if (eventRoll < 0.80 && rel.mascotB.happiness < 50) {
+      // 🧃 Lanche Compartilhado — aliado com baixa felicidade (versão leve do encouragement)
+      const happBoost = randomInt(5, 10);
+      const newMoodSnack = Math.random() < 0.4 ? "HAPPY" : undefined;
+      await prisma.mascot.update({
+        where: { id: rel.mascotB.id },
+        data: { happiness: { increment: happBoost }, ...(newMoodSnack ? { mood: newMoodSnack as MascotMood } : {}) }
+      }).catch(() => {});
+      allyEvent = pickText(SOCIAL_TEXTS.ally_snack, aName, bName);
+      summary.events.push(`🧃 ${aName} dividiu um lanche com ${bName}! +${happBoost} felicidade.`);
+
+    } else if (eventRoll < 0.88) {
+      // 🎁 Presente de Amigo — pequena recompensa para B
+      const giftRoll = Math.random();
+      if (giftRoll < 0.60) {
+        // ZikaCoins (3-10)
+        const coins = randomInt(3, 10);
+        await prisma.zikaCoinWallet.updateMany({
+          where: { playerId: rel.mascotB.playerId },
+          data: { balance: { increment: coins } }
+        }).catch(() => {});
+        allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + ` (+${coins} ZC)`;
+      } else if (giftRoll < 0.90) {
+        // 1 petisco (FOOD)
+        await prisma.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: rel.mascotB.playerId, type: "FOOD" } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: rel.mascotB.playerId, type: "FOOD", quantity: 1 }
+        }).catch(() => {});
+        allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName);
+      } else {
+        // Doce (pequena chance)
+        await prisma.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: rel.mascotB.playerId, type: "SWEET" } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: rel.mascotB.playerId, type: "SWEET", quantity: 1 }
+        }).catch(() => {});
+        allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + " (doce!)";
+      }
+      summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
+
     } else if (isBestFriend) {
-      allyEvent = pickText(SOCIAL_TEXTS.best_friend_bond, aName, bName);
+      allyEvent = pickText(SOCIAL_TEXTS.best_friend_general, aName, bName);
     } else {
-      allyEvent = pickText(SOCIAL_TEXTS.ally_cheer, aName, bName);
+      allyEvent = pickText(SOCIAL_TEXTS.ally_general, aName, bName);
     }
 
     await Promise.all([

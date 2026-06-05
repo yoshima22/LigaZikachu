@@ -1271,7 +1271,11 @@ export async function healMascotSus(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote nao encontrado.");
   if (mascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
-  const restingUntil = new Date(Date.now() + ARENA_Z_CONFIG.restAfterSusHours * 3_600_000);
+  // Aplica bônus acumulado por Super Amigos (visita SUS)
+  const baseRestMs = ARENA_Z_CONFIG.restAfterSusHours * 3_600_000;
+  const bonusReductionMs = (mascot.susRestBonusMinutes ?? 0) * 60_000;
+  const effectiveRestMs = Math.max(30 * 60_000, baseRestMs - bonusReductionMs); // mínimo 30min
+  const restingUntil = new Date(Date.now() + effectiveRestMs);
 
   await prisma.$transaction(async (tx) => {
     await creditCoins(tx, {
@@ -1282,13 +1286,16 @@ export async function healMascotSus(playerId: string, mascotId: string) {
     });
     await tx.mascot.update({
       where: { id: mascot.id },
-      data: { arenaState: "RESTING", injuredAt: null, restingUntil },
+      data: { arenaState: "RESTING", injuredAt: null, restingUntil, susRestBonusMinutes: 0 },
     });
+    const bonusNote = bonusReductionMs > 0
+      ? ` (repouso reduzido ${mascot.susRestBonusMinutes}min por Super Amigos!)`
+      : "";
     await tx.mascotEvent.create({
       data: {
         mascotId: mascot.id,
-        emoji: "SUS",
-        description: `Recebeu Atendimento SUS e entrou em repouso ate ${restingUntil.toLocaleString("pt-BR")}.`,
+        emoji: "🏥",
+        description: `Recebeu Atendimento SUS e entrou em repouso ate ${restingUntil.toLocaleString("pt-BR")}.${bonusNote}`,
       },
     });
   });

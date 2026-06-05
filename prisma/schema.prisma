@@ -1359,6 +1359,7 @@ model Mascot {
   lastFedAt        DateTime?
   bazarListed          Boolean           @default(false)
   socialCooldownUntil  DateTime?         // rival travou interações temporariamente
+  susRestBonusMinutes  Int               @default(0)  // minutos de redução no repouso pós-SUS acumulados por Super Amigos
   arenaState           MascotArenaState  @default(FREE)
   injuredAt            DateTime?
   restingUntil         DateTime?
