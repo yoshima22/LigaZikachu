@@ -594,15 +594,19 @@ export const EXP_REWARDS = {
 
 // ── Sprite URL ────────────────────────────────────────────────────────────────
 
+// IDs máximos com GIF animado no PokeAPI (Black/White animated — gen 1-5 apenas)
+const MAX_ANIMATED_ID = 649;
+
 export function getSpriteUrl(pokemonId: number, animated = false): string {
-  if (animated) {
-    // GIF animado — existe para gen 1-5 (IDs 1-649)
+  // GIFs animados só existem para gen 1-5 (IDs 1-649).
+  // Para IDs > 649 (gen 6+), usar sempre o PNG estático para evitar imagens quebradas.
+  if (animated && pokemonId <= MAX_ANIMATED_ID) {
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${pokemonId}.gif`;
   }
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
 
-// URL do sprite estático (fallback quando GIF não existe)
+// URL do sprite estático (sempre PNG, qualquer geração)
 export function getStaticSpriteUrl(pokemonId: number): string {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
