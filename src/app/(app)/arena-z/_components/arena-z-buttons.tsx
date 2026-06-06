@@ -41,8 +41,10 @@ type BotBattleResult = NonNullable<Awaited<ReturnType<typeof runBotBattleAction>
 
 type AnimTurn = {
   turn: number;
+  attackerId: string;
   attackerName: string;
   attackerPokemonId: number;
+  defenderId: string;
   defenderName: string;
   defenderPokemonId: number;
   damage: number;
@@ -50,7 +52,7 @@ type AnimTurn = {
   isPlayerAttacker: boolean;
 };
 
-type MascotInfo = { pokemonId: number; name: string; level: number; maxHp: number };
+type MascotInfo = { id: string; pokemonId: number; name: string; level: number; maxHp: number };
 
 // ── Animação de combate ───────────────────────────────────────────────────────
 function HpBar({ current, max, isPlayer }: { current: number; max: number; isPlayer: boolean }) {
@@ -132,11 +134,11 @@ function BattleAnimationModal({
   const [currentIdx, setCurrentIdx] = useState(0);
   const [phase, setPhase] = useState<"wait" | "attack" | "hit">("wait");
 
-  // HP tracking keyed by mascot name
+  // HP tracking keyed by stable mascot id; names can repeat.
   const [hpMap, setHpMap] = useState<Record<string, number>>(() => {
     const m: Record<string, number> = {};
-    for (const p of playerMascots) m[p.name] = p.maxHp;
-    for (const b of botMascots) m[b.name] = b.maxHp;
+    for (const p of playerMascots) m[p.id] = p.maxHp;
+    for (const b of botMascots) m[b.id] = b.maxHp;
     return m;
   });
 
@@ -160,7 +162,7 @@ function BattleAnimationModal({
       setPhase("hit");
       setHpMap(prev => ({
         ...prev,
-        [turn.defenderName]: Math.max(0, (prev[turn.defenderName] ?? 0) - turn.damage),
+        [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
       }));
     }, 600);
     // t3: back to idle
@@ -216,12 +218,12 @@ function BattleAnimationModal({
               <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                 {playerMascots.map(m => (
                   <MascotPanel
-                    key={m.name}
+                    key={m.id}
                     mascot={m}
-                    currentHp={hpMap[m.name] ?? m.maxHp}
-                    isActive={turn?.isPlayerAttacker ? turn.attackerName === m.name : turn?.defenderName === m.name}
-                    isAttacking={phase === "attack" && turn?.isPlayerAttacker === true && turn.attackerName === m.name}
-                    isHit={phase === "hit" && turn?.isPlayerAttacker === false && turn.defenderName === m.name}
+                    currentHp={hpMap[m.id] ?? m.maxHp}
+                    isActive={turn?.isPlayerAttacker ? turn.attackerId === m.id : turn?.defenderId === m.id}
+                    isAttacking={phase === "attack" && turn?.isPlayerAttacker === true && turn.attackerId === m.id}
+                    isHit={phase === "hit" && turn?.isPlayerAttacker === false && turn.defenderId === m.id}
                     isPlayer
                   />
                 ))}
@@ -252,12 +254,12 @@ function BattleAnimationModal({
               <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                 {botMascots.map(m => (
                   <MascotPanel
-                    key={m.name}
+                    key={m.id}
                     mascot={m}
-                    currentHp={hpMap[m.name] ?? m.maxHp}
-                    isActive={turn?.isPlayerAttacker ? turn.defenderName === m.name : turn?.attackerName === m.name}
-                    isAttacking={phase === "attack" && turn?.isPlayerAttacker === false && turn.attackerName === m.name}
-                    isHit={phase === "hit" && turn?.isPlayerAttacker === true && turn.defenderName === m.name}
+                    currentHp={hpMap[m.id] ?? m.maxHp}
+                    isActive={turn?.isPlayerAttacker ? turn.defenderId === m.id : turn?.attackerId === m.id}
+                    isAttacking={phase === "attack" && turn?.isPlayerAttacker === false && turn.attackerId === m.id}
+                    isHit={phase === "hit" && turn?.isPlayerAttacker === true && turn.defenderId === m.id}
                     isPlayer={false}
                   />
                 ))}
@@ -550,6 +552,7 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PvpResult | null>(null);
+  const [animatingResult, setAnimatingResult] = useState<PvpResult | null>(null);
 
   const handleClose = () => { setResult(null); router.refresh(); };
 
@@ -564,7 +567,11 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
             const r = await runPvpBattleAction(attackTeamId, defenseTeamId);
             if (r.error) { toast.error(r.error); return; }
             if (r.result) {
-              setResult(r.result);
+              if (r.result.battleAnimation && r.result.battleAnimation.length > 0) {
+                setAnimatingResult(r.result);
+              } else {
+                setResult(r.result);
+              }
               const won = r.result.winnerName !== null;
               toast.success(won ? "Vitória no PvP! 🏆" : "Derrota no PvP.");
             } else {
@@ -576,6 +583,20 @@ export function PvpBattleButton({ attackTeamId, defenseTeamId }: { attackTeamId:
       >
         {pending ? "Combatendo…" : "⚔️ Atacar"}
       </button>
+
+      {animatingResult && (
+        <BattleAnimationModal
+          turns={(animatingResult.battleAnimation ?? []) as AnimTurn[]}
+          playerMascots={(animatingResult.playerMascots ?? []) as MascotInfo[]}
+          botMascots={(animatingResult.botMascots ?? []) as MascotInfo[]}
+          playerTeamName={animatingResult.playerTeamName ?? "Sua equipe"}
+          botName={animatingResult.botName ?? "Oponente"}
+          onFinish={() => {
+            setResult(animatingResult);
+            setAnimatingResult(null);
+          }}
+        />
+      )}
 
       {result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={handleClose}>

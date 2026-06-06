@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MapPin } from "lucide-react";
 import {
@@ -11,7 +12,12 @@ import {
   HUNGER_COLOR, HAPPINESS_COLOR, CHALLENGE_COLOR,
   generateMascotSpeech,
 } from "@/lib/mascot-data";
-import { startExpeditionAction } from "@/app/(app)/mascotes/actions";
+import {
+  adminCancelExpeditionAction,
+  adminClaimExpeditionAction,
+  adminStartExpeditionAction,
+  startExpeditionAction,
+} from "@/app/(app)/mascotes/actions";
 
 interface MascotEvent { id: string; emoji: string; description: string; createdAt: Date }
 interface MascotRelation {
@@ -44,12 +50,13 @@ interface MascotProfileData {
   lastFedAt: Date | null;
   events: MascotEvent[];
   relations: MascotRelation[];
-  activeExpedition?: { finishAt: Date } | null;
+  activeExpedition?: { id: string; finishAt: Date; status: string; rewardJson?: unknown } | null;
 }
 
 interface Props {
   mascot: MascotProfileData;
   isOwner: boolean;
+  isAdmin?: boolean;
 }
 
 function Tip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -64,8 +71,9 @@ function Tip({ text, children }: { text: string; children: React.ReactNode }) {
   );
 }
 
-export function MascotProfileCard({ mascot, isOwner }: Props) {
+export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const [imgFailed, setImgFailed] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
 
@@ -110,6 +118,24 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
       const r = await startExpeditionAction(mascot.id);
       if (r.error) toast.error(r.error);
       else toast.success("Expedição iniciada! Volte em 1 hora.");
+    });
+  };
+
+
+  const expeditionMode = (() => {
+    const data = (expedition?.rewardJson ?? {}) as Record<string, unknown>;
+    return typeof data.mode === "string" ? data.mode : "STANDARD";
+  })();
+  const expeditionModeLabel = expeditionMode === "TRAINING" ? "Treinamento" : expeditionMode === "ITEMS" ? "Itens" : "Padrao";
+
+  const runAdminAction = (action: () => Promise<{ error?: string }>, message: string) => {
+    startTransition(async () => {
+      const result = await action();
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(message);
+        router.refresh();
+      }
     });
   };
 
@@ -306,19 +332,50 @@ export function MascotProfileCard({ mascot, isOwner }: Props) {
           )}
         </div>
 
-        {/* Expedição — só para o dono */}
-        {isOwner && (
+        {/* Expedicao */}
+        {(isOwner || isAdmin || expedition) && (
           <>
             {expedition && !expReady && (
               <div className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/20 bg-blue-500/5 py-2 text-xs text-blue-400">
-                <MapPin size={12} /> Em expedição — falta {expMinutes > 0 ? `${expMinutes}m ` : ""}{String(expSecs).padStart(2,"0")}s
+                <MapPin size={12} /> {expeditionModeLabel}: falta {expMinutes > 0 ? `${expMinutes}m ` : ""}{String(expSecs).padStart(2,"0")}s
               </div>
             )}
-            {!expedition && (
+            {expedition && expReady && (
+              <div className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-green-500/20 bg-green-500/5 py-2 text-xs text-green-300">
+                <MapPin size={12} /> {expeditionModeLabel}: pronta para coleta
+              </div>
+            )}
+            {isOwner && !expedition && (
               <button type="button" disabled={pending} onClick={handleExpedition}
                 className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 disabled:opacity-40">
-                <MapPin size={12} /> Enviar em expedição (1h)
+                <MapPin size={12} /> Enviar em expedicao (1h)
               </button>
+            )}
+            {isAdmin && (
+              <div className="grid gap-2 sm:grid-cols-3">
+                {expedition ? (
+                  <>
+                    <button type="button" disabled={pending} onClick={() => runAdminAction(() => adminClaimExpeditionAction(expedition.id), "Expedicao concluida e coletada.")} className="rounded-xl border border-green-500/30 bg-green-500/10 py-2 text-[11px] font-semibold text-green-300 hover:bg-green-500/20 disabled:opacity-40">
+                      Concluir
+                    </button>
+                    <button type="button" disabled={pending} onClick={() => runAdminAction(() => adminCancelExpeditionAction(expedition.id), "Expedicao cancelada.")} className="rounded-xl border border-red-500/30 bg-red-500/10 py-2 text-[11px] font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-40 sm:col-span-2">
+                      Cancelar expedicao
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" disabled={pending} onClick={() => runAdminAction(() => adminStartExpeditionAction(mascot.id, "30min", "TRAINING"), "Treinamento iniciado.")} className="rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40">
+                      Treinar 30m
+                    </button>
+                    <button type="button" disabled={pending} onClick={() => runAdminAction(() => adminStartExpeditionAction(mascot.id, "1h", "STANDARD"), "Expedicao padrao iniciada.")} className="rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40">
+                      Padrao 1h
+                    </button>
+                    <button type="button" disabled={pending} onClick={() => runAdminAction(() => adminStartExpeditionAction(mascot.id, "1h", "ITEMS"), "Expedicao de itens iniciada.")} className="rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40">
+                      Itens 1h
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </>
         )}

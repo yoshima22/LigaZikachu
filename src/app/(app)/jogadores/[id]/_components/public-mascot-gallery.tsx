@@ -1,17 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { getPokemonElement, getPokemonName, getSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
+import { adminCancelExpeditionAction, adminClaimExpeditionAction, adminStartExpeditionAction } from "@/app/(app)/mascotes/actions";
+import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 
 type PublicMascot = {
   id: string;
   pokemonId: number;
   nickname: string | null;
   level: number;
+  exp?: number;
   mood: string;
+  happiness?: number;
+  personality?: string;
   isEquipped: boolean;
   isFavorite: boolean;
+  statForce?: number;
+  statAgility?: number;
+  statCharisma?: number;
+  statInstinct?: number;
+  statVitality?: number;
+  battleWins?: number;
+  battleLosses?: number;
+  expeditions?: { id: string; finishAt: Date | string; status: string; rewardJson?: unknown }[];
+  relationsAsA?: {
+    id: string;
+    type: string;
+    wins: number;
+    losses: number;
+    mascotB: { id: string; pokemonId: number; nickname: string | null; player: { displayName: string } };
+  }[];
 };
 
 const TYPE_OPTIONS = [
@@ -43,11 +65,26 @@ const TYPE_LABELS: Record<string, string> = {
 
 const PAGE_SIZE = 12;
 
-export function PublicMascotGallery({ mascots }: { mascots: PublicMascot[] }) {
+function expeditionMode(expedition: NonNullable<PublicMascot["expeditions"]>[number] | undefined) {
+  const data = (expedition?.rewardJson ?? {}) as Record<string, unknown>;
+  return typeof data.mode === "string" ? data.mode : "STANDARD";
+}
+
+function modeLabel(mode: string) {
+  if (mode === "TRAINING") return "Treinamento";
+  if (mode === "ITEMS") return "Itens";
+  return "Padrao";
+}
+
+export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: PublicMascot[]; isAdmin?: boolean }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PublicMascot | null>(null);
+  const [adminMode, setAdminMode] = useState<ExpeditionMode>("STANDARD");
+  const [adminDuration, setAdminDuration] = useState<ExpeditionDuration>("1h");
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -77,6 +114,17 @@ export function PublicMascotGallery({ mascots }: { mascots: PublicMascot[] }) {
   const updateType = (value: string) => {
     setType(value);
     setPage(1);
+  };
+
+  const runAdminAction = (action: () => Promise<{ error?: string }>, message: string) => {
+    startTransition(async () => {
+      const result = await action();
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(message);
+        router.refresh();
+      }
+    });
   };
 
   return (
@@ -194,7 +242,72 @@ export function PublicMascotGallery({ mascots }: { mascots: PublicMascot[] }) {
               <Info label="Tipo" value={TYPE_LABELS[getPokemonElement(selected.pokemonId)] ?? getPokemonElement(selected.pokemonId)} />
               <Info label="Humor" value={`${MOOD_EMOJI[selected.mood] ?? ""} ${selected.mood}`} />
               <Info label="Status" value={selected.isFavorite ? "Favorito" : selected.isEquipped ? "Equipado" : "Colecao"} />
+              <Info label="Forca" value={String(selected.statForce ?? "-")} />
+              <Info label="Agilidade" value={String(selected.statAgility ?? "-")} />
+              <Info label="Carisma" value={String(selected.statCharisma ?? "-")} />
+              <Info label="Instinto" value={String(selected.statInstinct ?? "-")} />
+              <Info label="Vitalidade" value={String(selected.statVitality ?? "-")} />
+              <Info label="Batalhas" value={`${selected.battleWins ?? 0}V / ${selected.battleLosses ?? 0}D`} />
             </div>
+            {selected.relationsAsA && selected.relationsAsA.length > 0 && (
+              <div className="mt-4 rounded-xl border border-border/60 bg-slate-900/50 p-3">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Relacoes</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selected.relationsAsA.slice(0, 12).map((relation) => (
+                    <span key={relation.id} className="rounded-lg border border-border/60 px-2 py-1 text-[10px] text-slate-300">
+                      {relation.type === "FRIEND" ? "Amigo" : "Rival"}: {relation.mascotB.nickname ?? getPokemonName(relation.mascotB.pokemonId)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {selected.expeditions?.[0] && (
+              <div className="mt-4 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3">
+                <p className="text-[10px] uppercase tracking-wide text-blue-300">Expedicao ativa</p>
+                <p className="mt-1 text-xs text-slate-300">
+                  {modeLabel(expeditionMode(selected.expeditions[0]))} ate {new Date(selected.expeditions[0].finishAt).toLocaleString("pt-BR")}
+                </p>
+              </div>
+            )}
+            {isAdmin && (
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {selected.expeditions?.[0] ? (
+                  <>
+                    <button disabled={pending} onClick={() => runAdminAction(() => adminClaimExpeditionAction(selected.expeditions![0].id), "Expedicao concluida e premio coletado.")} className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Concluir</button>
+                    <button disabled={pending} onClick={() => runAdminAction(() => adminCancelExpeditionAction(selected.expeditions![0].id), "Expedicao cancelada.")} className="rounded-xl border border-red-500/40 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-40">Cancelar</button>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      value={adminMode}
+                      onChange={(event) => setAdminMode(event.target.value as ExpeditionMode)}
+                      className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]"
+                    >
+                      <option value="STANDARD">Padrao</option>
+                      <option value="TRAINING">Treinamento</option>
+                      <option value="ITEMS">Itens</option>
+                    </select>
+                    <select
+                      value={adminDuration}
+                      onChange={(event) => setAdminDuration(event.target.value as ExpeditionDuration)}
+                      className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]"
+                    >
+                      <option value="30min">30 min</option>
+                      <option value="1h">1 hora</option>
+                      <option value="3h">3 horas</option>
+                      <option value="6h">6 horas</option>
+                    </select>
+                    <button
+                      disabled={pending}
+                      onClick={() => runAdminAction(() => adminStartExpeditionAction(selected.id, adminDuration, adminMode), "Expedicao iniciada.")}
+                      className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40"
+                    >
+                      Iniciar
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

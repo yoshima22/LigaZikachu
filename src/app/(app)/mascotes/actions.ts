@@ -226,6 +226,51 @@ export async function skipExpeditionAction(expeditionId: string): Promise<{ erro
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+export async function adminStartExpeditionAction(
+  mascotId: string,
+  duration: ExpeditionDuration = "1h",
+  mode: import("@/lib/mascot-data").ExpeditionMode = "STANDARD",
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const mascot = await prisma.mascot.findUnique({ where: { id: mascotId }, select: { playerId: true } });
+    if (!mascot) return { error: "Mascote nao encontrado." };
+    await startExpedition(mascot.playerId, mascotId, duration, mode);
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function adminCancelExpeditionAction(expeditionId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const expedition = await prisma.mascotExpedition.findUnique({
+      where: { id: expeditionId },
+      include: { mascot: { select: { playerId: true } } },
+    });
+    if (!expedition) return { error: "Expedicao nao encontrada." };
+    await cancelExpedition(expedition.mascot.playerId, expeditionId);
+    revalidate();
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function adminClaimExpeditionAction(expeditionId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof claimExpedition>> }> {
+  try {
+    await requireAdmin();
+    const expedition = await prisma.mascotExpedition.findUnique({
+      where: { id: expeditionId },
+      include: { mascot: { select: { playerId: true } } },
+    });
+    if (!expedition) return { error: "Expedicao nao encontrada." };
+    if (new Date() < expedition.finishAt) await skipExpedition(expeditionId);
+    const result = await claimExpedition(expedition.mascot.playerId, expeditionId);
+    revalidate();
+    revalidatePath("/caixa-de-presentes");
+    return { result };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
 export async function addExpAdminAction(mascotId: string, amount: number): Promise<{ error?: string; result?: Awaited<ReturnType<typeof addExp>> }> {
   try {
     await requireAdmin();

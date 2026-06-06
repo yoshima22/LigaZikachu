@@ -13,6 +13,7 @@ export const ARENA_Z_CONFIG = {
   defeatedLootStolenPct: 0.3,
   defeatedLootBurnPct: 0.1,
   botCooldownMinutes: 3,
+  pvpCooldownMinutes: 10,
   // Multiplicador de tempo: +8.3% por hora, cap 4x após 36h
   multPerHour: 1 / 12,  // 1 unidade de mult a cada 12h
   multCap: 4.0,
@@ -307,8 +308,8 @@ function botReward(levelMin: number, levelMax: number, difficulty: ArenaDifficul
   }
 
   return {
-    coins: rand(5 * tier, 15 * tier),
-    exp:   rand(5 * tier, 18 * tier),
+    coins: rand(10 * tier, 28 * tier),
+    exp:   rand(14 * tier, 36 * tier),
     food:  Math.random() < Math.min(0.45, tier * 0.05) ? 1 : 0,
     sweet: Math.random() < Math.min(0.2, tier * 0.025) ? 1 : 0,
     egg,
@@ -319,10 +320,10 @@ function botReward(levelMin: number, levelMax: number, difficulty: ArenaDifficul
 function getBotRewardRange(levelMax: number) {
   const tier = Math.ceil(levelMax / 5);
   return {
-    coinsMin: 5 * tier,
-    coinsMax: 15 * tier,
-    expMin: 5 * tier,
-    expMax: 18 * tier,
+    coinsMin: 10 * tier,
+    coinsMax: 28 * tier,
+    expMin: 14 * tier,
+    expMax: 36 * tier,
     foodChance: Math.min(45, tier * 5),
     sweetChance: Math.min(20, tier * 2.5),
   };
@@ -561,6 +562,22 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
 
 export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], teamType: "PVE" | "PVP" | "BOTH" = "BOTH") {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
+  const lastBattle = await prisma.arenaBattle.findFirst({
+    where: { attackerPlayerId: playerId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true, type: true },
+  });
+  if (lastBattle) {
+    const cooldownMinutes = lastBattle.type === "PVP"
+      ? ARENA_Z_CONFIG.pvpCooldownMinutes
+      : ARENA_Z_CONFIG.botCooldownMinutes;
+    const elapsed = Date.now() - lastBattle.createdAt.getTime();
+    const cooldownMs = cooldownMinutes * 60_000;
+    if (elapsed < cooldownMs) {
+      const remaining = Math.ceil((cooldownMs - elapsed) / 1000);
+      throw new Error(`Aguarde ${remaining}s antes de colocar uma nova equipe na Arena.`);
+    }
+  }
   const mascots = await validateArenaMascots(playerId, mascotIds);
   const teamName = name.trim() || "Equipe Arena Z";
 
@@ -831,16 +848,18 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       burnedLoot: null,
       stolenByBotLoot: null,
       injuredMascotIds: [], injuredMascots: [],
-      playerMascots: attackers.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp })),
-      botMascots: bot.defenders.map(m => ({ pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp, type: getPokemonElement(m.pokemonId) })),
+      playerMascots: attackers.map(m => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp })),
+      botMascots: bot.defenders.map(m => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp, type: getPokemonElement(m.pokemonId) })),
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
       battleAnimation: combat.log
         .filter(t => t.action === "ATTACK")
         .slice(0, 28)
         .map(t => ({
           turn: t.turn,
+          attackerId: t.actorId,
           attackerName: t.actorName,
           attackerPokemonId: allMascotsAdmin.get(t.actorId)?.pokemonId ?? 0,
+          defenderId: t.targetId,
           defenderName: t.targetName,
           defenderPokemonId: allMascotsAdmin.get(t.targetId)?.pokemonId ?? 0,
           damage: t.damage,
@@ -1037,12 +1056,14 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       .filter(member => injuredMascotIds.includes(member.mascotId))
       .map(member => member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)),
     playerMascots: attackers.map(m => ({
+      id: m.id,
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
       maxHp: m.hp,
     })),
     botMascots: defenders.map(m => ({
+      id: m.id,
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
@@ -1067,8 +1088,10 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         .slice(0, 28) // cap para animação não ficar longa demais
         .map(t => ({
           turn: t.turn,
+          attackerId: t.actorId,
           attackerName: t.actorName,
           attackerPokemonId: allMascots.get(t.actorId)?.pokemonId ?? 0,
+          defenderId: t.targetId,
           defenderName: t.targetName,
           defenderPokemonId: allMascots.get(t.targetId)?.pokemonId ?? 0,
           damage: t.damage,
@@ -1334,7 +1357,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   });
   if (lastPvp) {
     const elapsed = Date.now() - lastPvp.createdAt.getTime();
-    const pvpCooldown = 10 * 60_000;
+    const pvpCooldown = ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000;
     if (elapsed < pvpCooldown) {
       const rem = Math.ceil((pvpCooldown - elapsed) / 1000);
       throw new Error(`Aguarde ${rem}s antes do proximo ataque PvP.`);
@@ -1489,6 +1512,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     await Promise.all(loserTeam.members.map(member => addExp(member.mascotId, expPerMascot).catch(() => null)));
   }
 
+  const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
+
   return {
     result: combat.result,
     winnerName: winnerTeam?.player.displayName ?? null,
@@ -1496,6 +1521,37 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     stolen: lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
     foundGroundSpoils,
     loserTeamDefeated,
+    playerTeamName: attackTeam.player.displayName,
+    botName: defenseTeam.player.displayName,
+    playerMascots: attackers.map(m => ({
+      id: m.id,
+      pokemonId: m.pokemonId,
+      name: m.name,
+      level: m.level,
+      maxHp: m.hp,
+    })),
+    botMascots: defenders.map(m => ({
+      id: m.id,
+      pokemonId: m.pokemonId,
+      name: m.name,
+      level: m.level,
+      maxHp: m.hp,
+    })),
+    battleAnimation: combat.log
+      .filter(t => t.action === "ATTACK")
+      .slice(0, 28)
+      .map(t => ({
+        turn: t.turn,
+        attackerId: t.actorId,
+        attackerName: t.actorName,
+        attackerPokemonId: allMascots.get(t.actorId)?.pokemonId ?? 0,
+        defenderId: t.targetId,
+        defenderName: t.targetName,
+        defenderPokemonId: allMascots.get(t.targetId)?.pokemonId ?? 0,
+        damage: t.damage,
+        advantageApplied: t.advantageApplied,
+        isPlayerAttacker: t.actorOwnerId === attackTeam.playerId,
+      })),
   };
 }
 

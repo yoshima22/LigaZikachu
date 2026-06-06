@@ -158,7 +158,7 @@ export default async function PlayerDetailPage({
         battleWins: true, battleLosses: true,
         hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
         events: { orderBy: { createdAt: "desc" }, take: 15 },
-        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { finishAt: true } },
+        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
         relationsAsA: {
           include: {
             mascotB: {
@@ -174,12 +174,25 @@ export default async function PlayerDetailPage({
     prisma.mascot.findMany({
       where: { playerId },
       select: {
-        id: true, pokemonId: true, nickname: true, level: true,
-        mood: true, isEquipped: true, isFavorite: true,
+        id: true, pokemonId: true, nickname: true, level: true, exp: true,
+        mood: true, happiness: true, personality: true, isEquipped: true, isFavorite: true,
+        statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+        battleWins: true, battleLosses: true,
+        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
+        relationsAsA: {
+          include: {
+            mascotB: {
+              select: {
+                id: true, pokemonId: true, nickname: true,
+                player: { select: { displayName: true } }
+              }
+            }
+          }
+        },
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
       take: 500,
-    }).catch(() => [] as Array<{ id: string; pokemonId: number; nickname: string | null; level: number; mood: string; isEquipped: boolean; isFavorite: boolean }>),
+    }).catch(() => [] as Array<never>),
   ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
@@ -720,7 +733,7 @@ export default async function PlayerDetailPage({
           <CardTitle className="mb-3 flex items-center gap-2">
             <Swords size={18} className="text-primary" /> Mascotes
           </CardTitle>
-          <PublicMascotGallery mascots={publicMascots} />
+          <PublicMascotGallery mascots={publicMascots} isAdmin={isAdminUser} />
         </Card>
       )}
       {equippedMascot && (
@@ -761,6 +774,7 @@ export default async function PlayerDetailPage({
             })),
           }}
           isOwner={isSelf}
+          isAdmin={isAdminUser}
         />
       )}
 
