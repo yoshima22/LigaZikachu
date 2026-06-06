@@ -17,6 +17,8 @@ type ProposalOfferItem = {
   quantity: number;
   displayName: string;
   mascotId?: string;
+  pokemonId?: number;
+  level?: number;
 };
 
 const EGG_OFFER_TYPES = [
@@ -522,10 +524,24 @@ export async function createProposal(
     });
     if (existing) return { error: "Você já tem uma proposta pendente neste anúncio. Cancele antes de enviar outra." };
 
-    const cleanItems = itemsOffer?.map(item => ({
-      ...item,
-      quantity: item.mascotId ? 1 : Math.max(1, Number(item.quantity) || 1),
-    })) ?? [];
+    const cleanItems = await Promise.all((itemsOffer ?? []).map(async (item) => {
+      const quantity = item.mascotId ? 1 : Math.max(1, Number(item.quantity) || 1);
+      if (!item.mascotId) return { ...item, quantity };
+
+      const mascot = await prisma.mascot.findUnique({
+        where: { id: item.mascotId },
+        select: { pokemonId: true, nickname: true, level: true },
+      });
+      return {
+        ...item,
+        quantity,
+        displayName: mascot
+          ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} Nv.${mascot.level}`
+          : item.displayName,
+        pokemonId: mascot?.pokemonId ?? item.pokemonId,
+        level: mascot?.level ?? item.level,
+      };
+    }));
 
     await prisma.$transaction(async (tx) => {
       await _reserveProposalOffers(tx, player.id, cleanItems);

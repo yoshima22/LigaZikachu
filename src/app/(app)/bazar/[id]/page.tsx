@@ -18,6 +18,8 @@ interface ProposalOfferedItem {
   quantity: number;
   displayName: string;
   mascotId?: string; // para ofertas de mascote
+  pokemonId?: number;
+  level?: number;
 }
 
 interface ProposalItem {
@@ -64,6 +66,32 @@ const PROPOSAL_STATUS_LABEL: Record<string, string> = {
 };
 
 // ── Componente principal ──────────────────────────────────────────────────────
+
+function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => {
+        if (!item.mascotId) {
+          return (
+            <span key={`${item.type}-${item.displayName}`} className="rounded-full border border-border bg-slate-950/60 px-2 py-1 text-[10px] text-slate-300">
+              {item.quantity}x {item.displayName}
+            </span>
+          );
+        }
+
+        return (
+          <span key={item.mascotId} className="inline-flex items-center gap-1.5 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[10px] font-semibold text-[#FFCB05]">
+            {item.pokemonId && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={getSpriteUrl(item.pokemonId, true)} alt="" className="h-5 w-5 object-contain" style={{ imageRendering: "pixelated" }} />
+            )}
+            Mascote: {item.displayName}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function BazarListingPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -372,9 +400,7 @@ export default function BazarListingPage(): React.JSX.Element {
                     </p>
                   )}
                   {p.itemsOffer && p.itemsOffer.length > 0 && (
-                    <p className="text-xs text-slate-400">
-                      + {p.itemsOffer.map(i => i.mascotId ? i.displayName : `${i.quantity}x ${i.displayName}`).join(", ")}
-                    </p>
+                    <ProposalItemsInline items={p.itemsOffer} />
                   )}
                   {p.message && (
                     <p className="text-xs text-slate-400 italic">&quot;{p.message}&quot;</p>

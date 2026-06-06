@@ -6,7 +6,7 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
-import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { AdminMascotStateButton, BotBattleButton, CooldownBadge, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
@@ -456,13 +456,16 @@ export default async function ArenaZPage() {
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Sua equipe ativa ainda esta em repouso ou tem mascote ferido.</p>
               ) : readyOpponentTeams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhuma equipe adversaria ativa disponivel.</p>
-              ) : readyActiveTeams.map(attackTeam => (
+              ) : readyActiveTeams.map(attackTeam => {
+                const pvpCooldownMs = pvpCooldowns.get(attackTeam.id) ?? 0;
+                return (
                 <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-bold text-red-100">Atacando com: {attackTeam.name}</p>
-                    <p className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-200">
-                      Cooldown PvP da equipe
-                    </p>
+                    <div className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-200">
+                      <span>Cooldown PvP da equipe</span>
+                      {pvpCooldownMs > 0 ? <CooldownBadge ms={pvpCooldownMs} /> : <span className="text-green-300">Liberado</span>}
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-3 xl:grid-cols-2">
                     {readyOpponentTeams.map(defenseTeam => (
@@ -477,8 +480,7 @@ export default async function ArenaZPage() {
                           <PvpBattleButton
                             attackTeamId={attackTeam.id}
                             defenseTeamId={defenseTeam.id}
-                            cooldownMs={pvpCooldowns.get(attackTeam.id) ?? 0}
-                            cooldownAfterMs={ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000}
+                            disabled={pvpCooldownMs > 0}
                           />
                         </div>
                         {/* Cofre ao vivo — atualiza a cada 30s sem recarregar a página */}
@@ -501,7 +503,8 @@ export default async function ArenaZPage() {
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

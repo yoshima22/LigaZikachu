@@ -14,7 +14,14 @@ export async function GET() {
     const [mascots, eggs, foods, inventoryItems, wallet, config] = await Promise.all([
       // Mascotes disponíveis (não feridos, não em expedição, não no bazar, não em equipe de arena)
       prisma.mascot.findMany({
-        where: { playerId: player.id },
+        where: {
+          playerId: player.id,
+          bazarListed: false,
+          isEquipped: false,
+          arenaState: "FREE",
+          expeditions: { none: { status: "ACTIVE" } },
+          arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
+        },
         select: {
           id: true, pokemonId: true, nickname: true, level: true,
           personality: true, isEquipped: true, bazarListed: true,
