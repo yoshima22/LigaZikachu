@@ -101,9 +101,104 @@ function MiniMascot({ mascot }: { mascot: MascotData }) {
   );
 }
 
-export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]; isAdmin?: boolean }) {
+type ActiveExpedition = MascotData["expeditions"][number] & {
+  mode: string;
+  mascot: MascotData;
+};
+
+function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExpedition; isAdmin: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const finishAt = new Date(expedition.finishAt).getTime();
+    if (finishAt <= Date.now()) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const exact = setTimeout(() => setNow(Date.now()), Math.max(0, finishAt - Date.now()));
+    return () => {
+      clearInterval(timer);
+      clearTimeout(exact);
+    };
+  }, [expedition.finishAt]);
+
+  const remaining = new Date(expedition.finishAt).getTime() - now;
+  const ready = remaining <= 0;
+  const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
+
+  const collectExpedition = () => {
+    startTransition(async () => {
+      const result = await claimExpeditionAction(expedition.id);
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success("Premios da expedicao coletados.");
+        router.refresh();
+      }
+    });
+  };
+
+  const finishAndCollectExpedition = () => {
+    startTransition(async () => {
+      const skip = await skipExpeditionAction(expedition.id);
+      if (skip.error) {
+        toast.error(skip.error);
+        return;
+      }
+      const result = await claimExpeditionAction(expedition.id);
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success("Expedicao finalizada e premios coletados.");
+        router.refresh();
+      }
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
+      <div className="flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={getSpriteUrl(expedition.mascot.pokemonId, true)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
+          <p className="text-[10px] uppercase tracking-widest text-blue-300">
+            {EXPEDITION_MODE_LABELS[expedition.mode] ?? expedition.mode}
+          </p>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${ready ? "bg-green-500/15 text-green-300" : "bg-blue-500/15 text-blue-300"}`}>
+          {formatRemaining(remaining)}
+        </span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className={`h-full rounded-full transition-all ${ready ? "bg-green-400" : "bg-blue-400"}`}
+          style={{ width: ready ? "100%" : "55%" }}
+        />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          disabled={pending || !ready}
+          onClick={collectExpedition}
+          className="flex-1 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-[11px] font-semibold text-green-300 hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Coletar premios
+        </button>
+        {isAdmin && !ready && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={finishAndCollectExpedition}
+            className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40"
+          >
+            Finalizar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]; isAdmin?: boolean }) {
   const [search, setSearch] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -111,12 +206,6 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
   const [equippedOnly, setEquippedOnly] = useState(false);
   const [expandedOthers, setExpandedOthers] = useState(false);
   const [page, setPage] = useState(1);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const activeExpeditions = mascots.flatMap(mascot =>
     mascot.expeditions
@@ -130,33 +219,6 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
   const visibleExpeditions = activeExpeditions.filter(expedition =>
     expeditionFilter === "ALL" || expedition.mode === expeditionFilter
   );
-
-  const collectExpedition = (expeditionId: string) => {
-    startTransition(async () => {
-      const result = await claimExpeditionAction(expeditionId);
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success("Premios da expedicao coletados.");
-        router.refresh();
-      }
-    });
-  };
-
-  const finishAndCollectExpedition = (expeditionId: string) => {
-    startTransition(async () => {
-      const skip = await skipExpeditionAction(expeditionId);
-      if (skip.error) {
-        toast.error(skip.error);
-        return;
-      }
-      const result = await claimExpeditionAction(expeditionId);
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success("Expedicao finalizada e premios coletados.");
-        router.refresh();
-      }
-    });
-  };
 
   const filtered = mascots.filter(m => {
     const displayName = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
@@ -243,54 +305,13 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
             </select>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleExpeditions.map(expedition => {
-              const remaining = new Date(expedition.finishAt).getTime() - now;
-              const ready = remaining <= 0;
-              const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
-              return (
-                <div key={expedition.id} className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
-                  <div className="flex items-center gap-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getSpriteUrl(expedition.mascot.pokemonId, true)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-blue-300">
-                        {EXPEDITION_MODE_LABELS[expedition.mode] ?? expedition.mode}
-                      </p>
-                    </div>
-                    <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${ready ? "bg-green-500/15 text-green-300" : "bg-blue-500/15 text-blue-300"}`}>
-                      {formatRemaining(remaining)}
-                    </span>
-                  </div>
-                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                    <div
-                      className={`h-full rounded-full ${ready ? "bg-green-400" : "bg-blue-400"}`}
-                      style={{ width: ready ? "100%" : "45%" }}
-                    />
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={pending || !ready}
-                      onClick={() => collectExpedition(expedition.id)}
-                      className="flex-1 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-[11px] font-semibold text-green-300 hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Coletar premios
-                    </button>
-                    {isAdmin && !ready && (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => finishAndCollectExpedition(expedition.id)}
-                        className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40"
-                      >
-                        Finalizar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {visibleExpeditions.map(expedition => (
+              <ExpeditionProgressCard
+                key={expedition.id}
+                expedition={expedition}
+                isAdmin={isAdmin}
+              />
+            ))}
           </div>
           {visibleExpeditions.length === 0 && (
             <p className="mt-4 rounded-xl border border-dashed border-border py-5 text-center text-xs text-slate-500">
