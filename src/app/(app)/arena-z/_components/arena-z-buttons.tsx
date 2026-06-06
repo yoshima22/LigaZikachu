@@ -101,10 +101,10 @@ function MascotPanel({
     }`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        key={`${mascot.name}-hit-${isHit}`}
+        key={`${mascot.id}-hit-${isHit}`}
         src={getSpriteUrl(mascot.pokemonId, true)}
         alt=""
-        className="mx-auto h-12 w-12 object-contain sm:h-16 sm:w-16 lg:h-20 lg:w-20"
+        className="mx-auto h-11 w-11 object-contain sm:h-14 sm:w-14 lg:h-16 lg:w-16 xl:h-[4.5rem] xl:w-[4.5rem]"
         style={{
           imageRendering: "pixelated",
           animation: isHit ? "mascotShake 0.35s ease-in-out" : isAttacking ? "mascotLunge 0.3s ease-in-out" : "none",
@@ -202,7 +202,7 @@ function BattleAnimationModal({
       `}</style>
 
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4">
-        <div className="max-h-[96vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl">
+        <div className="max-h-[96vh] w-full max-w-7xl overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl">
           {/* Header */}
           <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-2 sm:px-5 sm:pt-4">
             <p className="text-[11px] uppercase tracking-widest text-[#FFCB05] font-semibold">⚔️ Combate em andamento…</p>
@@ -218,11 +218,11 @@ function BattleAnimationModal({
           </div>
 
           {/* Sprites */}
-          <div className="grid items-center gap-2 px-3 sm:grid-cols-[1fr_90px_1fr] sm:gap-4 sm:px-5 lg:grid-cols-[1fr_120px_1fr]">
+          <div className="grid items-center gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_88px_minmax(0,1fr)] sm:gap-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
             {/* Player side */}
             <div>
               <p className="mb-1 text-center text-[10px] font-bold uppercase tracking-wide text-blue-300 sm:text-left">Sua equipe</p>
-              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 xl:grid-cols-6">
                 {playerMascots.map(m => (
                   <MascotPanel
                     key={m.id}
@@ -240,7 +240,7 @@ function BattleAnimationModal({
             {/* Damage bubble */}
             <div className="order-first flex items-center justify-center gap-3 sm:order-none sm:flex-col sm:gap-1">
               <span className="text-[9px] text-slate-600">{turn ? `T.${turn.turn}` : ""}</span>
-              <div className="flex h-12 min-w-[74px] items-center justify-center rounded-2xl border border-border bg-slate-900/70 sm:h-20 sm:min-w-0 sm:w-full">
+              <div className="flex h-12 min-w-[74px] items-center justify-center rounded-2xl border border-border bg-slate-900/70 sm:h-20 sm:min-w-0 sm:w-full xl:h-24">
                 {showDamage && turn ? (
                   <div className="text-center">
                     <div className={`text-2xl font-black sm:text-3xl ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
@@ -258,7 +258,7 @@ function BattleAnimationModal({
             {/* Bot side */}
             <div>
               <p className="mb-1 text-center text-[10px] font-bold uppercase tracking-wide text-red-300 sm:text-right">{botName}</p>
-              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 xl:grid-cols-6">
                 {botMascots.map(m => (
                   <MascotPanel
                     key={m.id}
