@@ -251,12 +251,16 @@ function levelStatBonuses(
   return distributeStatPoints(pointsToAdd, weights);
 }
 
-export async function addExp(mascotId: string, amount: number): Promise<LevelUpResult> {
+export async function addExp(
+  mascotId: string,
+  amount: number,
+  options: { ignoreBenchPenalty?: boolean } = {}
+): Promise<LevelUpResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
   // EXP agora é dado a qualquer mascote (equipado ou no banco)
   // Mascotes no banco recebem 50% do EXP (interações presenciais são menos intensas)
-  if (!mascot.isEquipped) amount = Math.max(1, Math.floor(amount * 0.5));
+  if (!options.ignoreBenchPenalty && !mascot.isEquipped) amount = Math.max(1, Math.floor(amount * 0.5));
 
   // Check for active EXP_BOOST buff
   const expBoostBuff = await prisma.mascotBuff.findFirst({

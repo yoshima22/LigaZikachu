@@ -561,6 +561,56 @@ async function creditArenaLoot(
   }
 }
 
+async function getArenaExpMascotIds(teamId: string, playerId: string, enteredAt: Date): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const members = await prisma.arenaTeamMember.findMany({
+    where: { teamId },
+    select: { mascotId: true },
+  });
+  members.forEach(member => ids.add(member.mascotId));
+
+  const battles = await prisma.arenaBattle.findMany({
+    where: {
+      createdAt: { gte: enteredAt },
+      OR: [{ attackTeamId: teamId }, { defenseTeamId: teamId }],
+    },
+    select: { turnLog: true },
+  });
+
+  for (const battle of battles) {
+    const turns = Array.isArray(battle.turnLog) ? battle.turnLog : [];
+    for (const rawTurn of turns) {
+      if (!rawTurn || typeof rawTurn !== "object") continue;
+      const turn = rawTurn as { actorId?: unknown; actorOwnerId?: unknown; targetId?: unknown; targetOwnerId?: unknown };
+      if (turn.actorOwnerId === playerId && typeof turn.actorId === "string") ids.add(turn.actorId);
+      if (turn.targetOwnerId === playerId && typeof turn.targetId === "string") ids.add(turn.targetId);
+    }
+  }
+
+  if (ids.size === 0) return [];
+
+  const validMascots = await prisma.mascot.findMany({
+    where: { id: { in: [...ids] }, playerId },
+    select: { id: true },
+  });
+
+  return validMascots.map(mascot => mascot.id);
+}
+
+async function distributeArenaExp(mascotIds: string[], totalExp: number): Promise<void> {
+  if (totalExp <= 0) return;
+  if (mascotIds.length === 0) throw new Error("Nenhum mascote elegivel para receber EXP da Arena.");
+  const expPerMascot = Math.max(1, Math.floor(totalExp / mascotIds.length));
+  const results = await Promise.allSettled(
+    mascotIds.map(mascotId => addExp(mascotId, expPerMascot, { ignoreBenchPenalty: true })),
+  );
+  const failed = results.filter(result => result.status === "rejected");
+  if (failed.length > 0) {
+    throw new Error(`Falha ao distribuir EXP da Arena para ${failed.length}/${mascotIds.length} mascote(s).`);
+  }
+}
+
 function assertTeamReady(team: {
   members: Array<{
     mascot: {
@@ -776,7 +826,10 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
     { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
     mult, hadRecentBattle
   );
-  const expPerMascot = vaultFinal.exp > 0 ? Math.max(1, Math.floor(vaultFinal.exp / team.members.length)) : 0;
+  const expMascotIds = await getArenaExpMascotIds(team.id, playerId, team.enteredAt);
+  if (vaultFinal.exp > 0 && expMascotIds.length === 0) {
+    throw new Error("Nao foi possivel identificar quais mascotes devem receber a EXP do cofre. A equipe nao foi retirada.");
+  }
 
   await prisma.$transaction(async (tx) => {
     if (vaultFinal.coins > 0) {
@@ -813,9 +866,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
     });
   });
 
-  if (expPerMascot > 0) {
-    await Promise.all(team.members.map(member => addExp(member.mascotId, expPerMascot).catch(() => null)));
-  }
+  await distributeArenaExp(expMascotIds, vaultFinal.exp);
 
   return { ...vaultFinal, hadPenalty: hadRecentBattle };
 }
@@ -1006,6 +1057,9 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   };
   const defeatSplit = teamDefeated ? splitDefeatedLoot(currentVault) : null;
   const defeatPreserved = defeatSplit ? remainingLoot(currentVault, defeatSplit.stolen, defeatSplit.burned) : null;
+  const defeatExpMascotIds = teamDefeated
+    ? await getArenaExpMascotIds(team.id, playerId, team.enteredAt)
+    : [];
 
   await prisma.$transaction(async (tx) => {
     const battle = await tx.arenaBattle.create({
@@ -1100,10 +1154,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     }
   });
 
-  if (teamDefeated && defeatPreserved && defeatPreserved.exp > 0) {
-    const expPerMascot = Math.max(1, Math.floor(defeatPreserved.exp / team.members.length));
-    await Promise.all(team.members.map(member => addExp(member.mascotId, expPerMascot).catch(() => null)));
-  }
+  if (teamDefeated && defeatPreserved) await distributeArenaExp(defeatExpMascotIds, defeatPreserved.exp);
 
   return {
     won,
@@ -1496,6 +1547,9 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   };
   const lootSplit = loserTeamDefeated ? splitDefeatedLoot(losingLoot) : null;
   const preserved = lootSplit ? remainingLoot(losingLoot, lootSplit.stolen, lootSplit.burned) : null;
+  const loserDefeatExpMascotIds = loserTeamDefeated && loserTeam
+    ? await getArenaExpMascotIds(loserTeam.id, loserTeam.playerId, loserTeam.enteredAt)
+    : [];
   let foundGroundSpoils: ArenaLoot | null = null;
 
   await prisma.$transaction(async (tx) => {
@@ -1587,10 +1641,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     }
   });
 
-  if (loserTeamDefeated && preserved && preserved.exp > 0 && loserTeam) {
-    const expPerMascot = Math.max(1, Math.floor(preserved.exp / loserTeam.members.length));
-    await Promise.all(loserTeam.members.map(member => addExp(member.mascotId, expPerMascot).catch(() => null)));
-  }
+  if (loserTeamDefeated && preserved) await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
 
   const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
 
