@@ -535,8 +535,7 @@ async function creditArenaLoot(
   tx: Prisma.TransactionClient,
   playerId: string,
   loot: ArenaLoot,
-  description: string,
-  mascotIds?: string[] // se fornecido, distribui EXP entre esses mascotes
+  description: string
 ) {
   if (loot.coins > 0) {
     await creditCoins(tx, {
@@ -559,16 +558,6 @@ async function creditArenaLoot(
       update: { quantity: { increment: loot.sweet } },
       create: { playerId, type: "SWEET", quantity: loot.sweet },
     });
-  }
-  // Distribui EXP do cofre para os mascotes (level-up tratado após a transação)
-  if (loot.exp > 0 && mascotIds && mascotIds.length > 0) {
-    const expEach = Math.max(1, Math.floor(loot.exp / mascotIds.length));
-    for (const mascotId of mascotIds) {
-      await tx.mascot.update({
-        where: { id: mascotId },
-        data: { exp: { increment: expEach } },
-      }).catch(() => null);
-    }
   }
 }
 
@@ -1039,8 +1028,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       },
     });
     if (teamDefeated && defeatPreserved) {
-      const allMascotIds = team.members.map(m => m.mascotId);
-      await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`, allMascotIds);
+      await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`);
       await dropArenaGroundSpoils(tx, defeatSplit?.burned, playerId, battle.id);
       // Deleta o time: cascata remove os ArenaTeamMember automaticamente
       await tx.arenaTeam.delete({ where: { id: team.id } });
@@ -1549,8 +1537,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
     if (loserTeam && preserved) {
       if (loserTeamDefeated) {
-        const loserMascotIds = loserTeam.members.map(m => m.mascotId);
-        await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP", loserMascotIds);
+        await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP");
         await tx.arenaTeam.delete({ where: { id: loserTeam.id } });
       } else {
         await tx.arenaTeam.update({
