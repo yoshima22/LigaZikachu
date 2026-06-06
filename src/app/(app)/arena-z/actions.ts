@@ -23,12 +23,61 @@ import {
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 
+type ArenaStaleNotice = {
+  attackerName?: string | null;
+  happenedAt?: string | null;
+  battleId?: string | null;
+  message: string;
+};
+
 async function getCurrentPlayerId() {
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado.");
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
   if (!player) throw new Error("Perfil de jogador nao encontrado.");
   return player.id;
+}
+
+async function checkTeamStaleFromIncomingAttack(
+  playerId: string,
+  teamId: string,
+  knownUpdatedAt?: string | null,
+): Promise<ArenaStaleNotice | null> {
+  if (!knownUpdatedAt) return null;
+  const knownDate = new Date(knownUpdatedAt);
+  if (Number.isNaN(knownDate.getTime())) return null;
+
+  const team = await prisma.arenaTeam.findUnique({
+    where: { id: teamId },
+    select: { playerId: true, updatedAt: true, status: true },
+  });
+  if (!team || team.playerId !== playerId) return null;
+  if (team.updatedAt <= knownDate) return null;
+
+  const battle = await prisma.arenaBattle.findFirst({
+    where: {
+      type: "PVP",
+      defenseTeamId: teamId,
+      defenderPlayerId: playerId,
+      createdAt: { gt: knownDate },
+    },
+    include: { attackerPlayer: { select: { displayName: true, ptcglNick: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!battle) {
+    return {
+      message: "Sua equipe mudou depois que esta tela foi carregada. Atualize a Arena antes de iniciar outro combate.",
+    };
+  }
+
+  const attackerName = battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "outro jogador";
+  return {
+    attackerName,
+    happenedAt: battle.createdAt.toISOString(),
+    battleId: battle.id,
+    message: `${attackerName} atacou sua equipe antes desta acao. Atualize para ver o combate resolvido e o estado atual do cofre/mascotes.`,
+  };
 }
 
 export async function createArenaTeamAction(mascotIds: string[], name: string, teamType: "PVE" | "PVP" | "BOTH"): Promise<{ error?: string }> {
@@ -76,9 +125,11 @@ export async function runBotBattleAction(teamId: string, difficulty: ArenaDiffic
   }
 }
 
-export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runPvpBattle>> }> {
+export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string, attackTeamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof runPvpBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();
+    const stale = await checkTeamStaleFromIncomingAttack(playerId, attackTeamId, attackTeamKnownUpdatedAt);
+    if (stale) return { stale };
     const result = await runPvpBattle(playerId, attackTeamId, defenseTeamId);
     // Revalidação feita pelo cliente ao fechar o modal
     return { result };
@@ -149,9 +200,11 @@ export async function purgeAdminArenaDataAction(): Promise<{ error?: string; tea
   }
 }
 
-export async function lockBotAction(teamId: string, difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; result?: Awaited<ReturnType<typeof lockBotForTeam>> }> {
+export async function lockBotAction(teamId: string, difficulty: ArenaDifficulty = "normal", teamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof lockBotForTeam>> }> {
   try {
     const playerId = await getCurrentPlayerId();
+    const stale = await checkTeamStaleFromIncomingAttack(playerId, teamId, teamKnownUpdatedAt);
+    if (stale) return { stale };
     const result = await lockBotForTeam(playerId, teamId, difficulty);
     revalidatePath("/arena-z");
     return { result };

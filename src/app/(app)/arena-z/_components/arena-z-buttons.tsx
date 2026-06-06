@@ -45,6 +45,7 @@ export function PvpCooldownIndicator({ until }: { until: Date | null }) {
 }
 
 type BotBattleResult = NonNullable<Awaited<ReturnType<typeof runBotBattleAction>>["result"]>;
+type ArenaStaleNotice = NonNullable<Awaited<ReturnType<typeof lockBotAction>>["stale"]>;
 
 type AnimTurn = {
   turn: number;
@@ -340,10 +341,35 @@ const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; t
 };
 const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil", normal: "🟡 Normal", hard: "🔴 Difícil" };
 
-export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownUntil = null, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; teamName?: string; cooldownUntil?: Date | null; cooldownAfterMs?: number }) {
+function ArenaStaleModal({ notice, onClose }: { notice: ArenaStaleNotice; onClose: () => void }) {
+  const router = useRouter();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-slate-950 p-5 shadow-[0_0_45px_rgba(248,113,113,0.25)]">
+        <p className="text-xs font-bold uppercase tracking-widest text-red-300">Arena atualizada por outro combate</p>
+        <h3 className="mt-2 text-xl font-black text-white">Voce foi atacado antes.</h3>
+        <p className="mt-2 text-sm text-slate-300">{notice.message}</p>
+        {notice.happenedAt && (
+          <p className="mt-2 text-[11px] text-slate-500">Resolvido em {new Date(notice.happenedAt).toLocaleString("pt-BR")}</p>
+        )}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={() => { onClose(); router.refresh(); }} className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950">
+            Atualizar Arena
+          </button>
+          <button type="button" onClick={onClose} className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-slate-300 hover:text-white">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt, cooldownUntil = null, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; teamName?: string; teamUpdatedAt?: string; cooldownUntil?: Date | null; cooldownAfterMs?: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BotBattleResult | null>(null);
+  const [staleNotice, setStaleNotice] = useState<ArenaStaleNotice | null>(null);
   const [showAnimation, setShowAnimation] = useState(false);
   const [difficulty, setDifficulty] = useState<ArenaDifficulty>("normal");
   // Após batalha: seta o timestamp absoluto de quando o cooldown termina
@@ -384,7 +410,8 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownUntil
             title={onCooldown ? "Cooldown PvE desta equipe ainda ativo." : undefined}
             onClick={() => {
               startTransition(async () => {
-                const lockResult = await lockBotAction(teamId, difficulty);
+                const lockResult = await lockBotAction(teamId, difficulty, teamUpdatedAt);
+                if (lockResult.stale) { setStaleNotice(lockResult.stale); toast.error("Voce foi atacado antes desta acao."); return; }
                 if (lockResult.error) { toast.error(lockResult.error); return; }
                 const response = await runBotBattleAction(teamId, difficulty);
                 if (response.error) { toast.error(response.error); return; }
@@ -539,6 +566,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownUntil
           </div>
         </div>
       )}
+      {staleNotice && <ArenaStaleModal notice={staleNotice} onClose={() => setStaleNotice(null)} />}
     </>
   );
 }
@@ -565,16 +593,19 @@ type PvpResult = Awaited<ReturnType<typeof runPvpBattleAction>>["result"];
 export function PvpBattleButton({
   attackTeamId,
   defenseTeamId,
+  attackTeamUpdatedAt,
   pvpCooldownUntil,
 }: {
   attackTeamId: string;
   defenseTeamId: string;
+  attackTeamUpdatedAt?: string;
   pvpCooldownUntil?: Date | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PvpResult | null>(null);
   const [animatingResult, setAnimatingResult] = useState<PvpResult | null>(null);
+  const [staleNotice, setStaleNotice] = useState<ArenaStaleNotice | null>(null);
   const { expired: cooldownExpired } = useTimerExpiry(pvpCooldownUntil);
   const onCooldown = !!pvpCooldownUntil && !cooldownExpired;
 
@@ -589,7 +620,8 @@ export function PvpBattleButton({
         onClick={() => {
           if (!confirm("Atacar esta equipe? Você pode ganhar ou perder loot do cofre.")) return;
           startTransition(async () => {
-            const r = await runPvpBattleAction(attackTeamId, defenseTeamId);
+            const r = await runPvpBattleAction(attackTeamId, defenseTeamId, attackTeamUpdatedAt);
+            if (r.stale) { setStaleNotice(r.stale); toast.error("Voce foi atacado antes desta acao."); return; }
             if (r.error) { toast.error(r.error); return; }
             if (r.result) {
               if (r.result.battleAnimation && r.result.battleAnimation.length > 0) {
@@ -682,6 +714,7 @@ export function PvpBattleButton({
           </div>
         </div>
       )}
+      {staleNotice && <ArenaStaleModal notice={staleNotice} onClose={() => setStaleNotice(null)} />}
     </>
   );
 }

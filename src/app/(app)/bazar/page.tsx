@@ -13,6 +13,7 @@ import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarLiveRefresh } from "./_components/bazar-live-refresh";
 import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
+import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,7 @@ export default async function BazarPage({
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <ManualRefreshButton label="Atualizar Bazar" />
           {wallet && (
             <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2 text-sm font-bold text-[#FFCB05]">
               💰 {wallet.balance.toLocaleString("pt-BR")} ZC

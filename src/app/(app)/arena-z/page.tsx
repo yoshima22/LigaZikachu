@@ -11,6 +11,7 @@ import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { ArenaLiveRefresh } from "./_components/arena-live-refresh";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
+import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -294,6 +295,14 @@ export default async function ArenaZPage() {
       .filter(Boolean) as string[],
   );
   const arenaRanking = arenaRankingData;
+  const recentIncomingBattle = battles.find(battle =>
+    battle.type === "PVP" &&
+    battle.defenderPlayerId === player.id &&
+    Date.now() - battle.createdAt.getTime() < 30 * 60_000
+  );
+  const recentIncomingName = recentIncomingBattle
+    ? recentIncomingBattle.attackerPlayer?.displayName ?? recentIncomingBattle.attackerPlayer?.ptcglNick ?? "Outro jogador"
+    : null;
 
   return (
     <div className="space-y-6">
@@ -314,11 +323,23 @@ export default async function ArenaZPage() {
               Modo automatico de combate entre mascotes. Monte equipes, enfrente bots, acumule loot em cofre e cuide dos mascotes feridos com Atendimento SUS.
             </p>
           </div>
-          <div className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2 text-sm font-bold text-[#FFCB05]">
-            {wallet?.balance.toLocaleString("pt-BR") ?? 0} ZC
+          <div className="flex flex-wrap items-center gap-2">
+            <ManualRefreshButton label="Atualizar Arena" />
+            <div className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2 text-sm font-bold text-[#FFCB05]">
+              {wallet?.balance.toLocaleString("pt-BR") ?? 0} ZC
+            </div>
           </div>
         </div>
       </div>
+
+      {recentIncomingBattle && (
+        <div className="rounded-2xl border border-red-400/50 bg-red-500/10 p-4 shadow-[0_0_30px_rgba(248,113,113,0.12)]">
+          <p className="text-xs font-bold uppercase tracking-widest text-red-300">Ataque PvP recente</p>
+          <p className="mt-1 text-sm text-red-50">
+            {recentIncomingName} atacou uma das suas equipes em {recentIncomingBattle.createdAt.toLocaleString("pt-BR")}. Atualize/consulte o historico antes de iniciar novos combates.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-4">
@@ -506,7 +527,13 @@ export default async function ArenaZPage() {
                               </div>
                               <div className="space-y-1 text-right">
                                 <p className="text-[10px] uppercase tracking-widest text-green-300/80">Cooldown PvE da equipe</p>
-                                <BotBattleButton teamId={team.id} teamName={team.name} cooldownUntil={bot.cooldownUntil ?? null} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
+                                <BotBattleButton
+                                  teamId={team.id}
+                                  teamName={team.name}
+                                  teamUpdatedAt={team.updatedAt.toISOString()}
+                                  cooldownUntil={bot.cooldownUntil ?? null}
+                                  cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000}
+                                />
                               </div>
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -566,6 +593,7 @@ export default async function ArenaZPage() {
                           <PvpBattleButton
                             attackTeamId={attackTeam.id}
                             defenseTeamId={defenseTeam.id}
+                            attackTeamUpdatedAt={attackTeam.updatedAt.toISOString()}
                             pvpCooldownUntil={pvpCooldownUntil}
                           />
                         </div>

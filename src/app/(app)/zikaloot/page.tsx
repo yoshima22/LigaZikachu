@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { LootBoard } from "./_components/loot-board";
 import { AdminLootPanel } from "./_components/admin-loot-panel";
 import { checkAndRunPendingDraws } from "./actions";
+import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,7 @@ export default async function ZikaLootPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <ManualRefreshButton label="Atualizar ZikaLoot" />
             <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2">
               <Ticket size={16} className="text-[#FFCB05]" />
               <span className="text-sm font-bold text-[#FFCB05]">{ticketCount} ticket{ticketCount !== 1 ? "s" : ""}</span>
