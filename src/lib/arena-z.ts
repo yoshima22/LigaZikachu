@@ -1207,6 +1207,18 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   if (!targetMascot) throw new Error("Mascote nao encontrado.");
   if (targetMascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
 
+  // Política de Fraqueza: bloqueia o ataque e consome o buff
+  const weaknessPolicy = await prisma.mascotBuff.findFirst({
+    where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
+  });
+  if (weaknessPolicy) {
+    await prisma.mascotBuff.delete({ where: { id: weaknessPolicy.id } });
+    await prisma.mascotEvent.create({
+      data: { mascotId: targetMascotId, emoji: "🛡️", description: "Política de Fraqueza ativou! Ataque oportunista bloqueado. (buff consumido)" }
+    });
+    throw new Error("Este mascote está protegido pela Política de Fraqueza! O item foi consumido ao bloquear o ataque.");
+  }
+
   const attackerPlayer = await prisma.player.findUnique({
     where: { id: attackerPlayerId },
     include: { mascots: { where: { arenaState: "FREE" }, take: 1 } }

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Zap } from "lucide-react";
-import { useMascotBuffAction } from "../actions";
+import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction } from "../actions";
 
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
@@ -17,7 +17,18 @@ const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_HAPPY: "🍯",
   MASCOT_BUFF_LUCK:  "🍀",
   MASCOT_BUFF_MOOD:  "💧",
+  LUCKY_EGG:         "🥚✨",
+  WEAKNESS_POLICY:   "🛡️",
+  PICNIC_BASKET:     "🧺⚡",
+  VACATION_TICKET:   "🏖️",
+  XP_SHARE:          "📡",
+  RAINBOW_FEATHER:   "🌈",
 };
+
+// Itens que não precisam de seleção de mascote (aplicados globalmente ou com lógica especial)
+const PLAYER_LEVEL_ITEMS = new Set(["PICNIC_BASKET"]);
+// Itens irreversíveis que precisam de confirmação extra
+const DESTRUCTIVE_ITEMS = new Set(["RAINBOW_FEATHER"]);
 
 const PROTEIN_LIMIT = 3;
 
@@ -41,25 +52,51 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
   const proteinFull = proteinUsed >= PROTEIN_LIMIT;
 
   const handleUse = () => {
-    if (!selectedBuff || !selectedMascot) { toast.error("Selecione um item e um mascote."); return; }
     if (!selectedBuffItem) return;
-    const mascotName = mascots.find(m => m.id === selectedMascot)?.name ?? "mascote";
+    const isPlayerLevel = PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type);
+    const isDestructive = DESTRUCTIVE_ITEMS.has(selectedBuffItem.type);
+
+    if (!isPlayerLevel && !selectedMascot) { toast.error("Selecione um mascote."); return; }
 
     if (isProtein && boostedSet.has(selectedMascot)) {
-      toast.error("Este mascote já recebeu Proteína Zika.");
-      return;
+      toast.error("Este mascote já recebeu Proteína Zika."); return;
     }
     if (isProtein && proteinFull) {
-      toast.error(`Limite atingido: Proteína Zika já foi usada em ${PROTEIN_LIMIT} mascotes.`);
-      return;
+      toast.error(`Limite atingido: Proteína Zika já foi usada em ${PROTEIN_LIMIT} mascotes.`); return;
     }
 
-    if (!confirm(`Usar ${selectedBuffItem.name} em ${mascotName}?`)) return;
+    const mascotName = mascots.find(m => m.id === selectedMascot)?.name ?? "mascote";
+    const confirmMsg = isDestructive
+      ? `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai resetar nível, EXP e todos os atributos para 0. Esta ação é IRREVERSÍVEL. Tem certeza?`
+      : isPlayerLevel
+        ? `Usar ${selectedBuffItem.name} em toda a equipe equipada?`
+        : `Usar ${selectedBuffItem.name} em ${mascotName}?`;
+
+    if (!confirm(confirmMsg)) return;
+    if (isDestructive && !confirm("Confirme novamente: isso não pode ser desfeito.")) return;
 
     startTransition(async () => {
-      const r = await useMascotBuffAction(selectedMascot, selectedBuff);
+      let r: { error?: string };
+      const t = selectedBuffItem.type;
+
+      if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
+      else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot);
+      else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction();
+      else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
+      else if (t === "XP_SHARE") r = await useXpShareAction(selectedMascot);
+      else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot);
+      else r = await useMascotBuffAction(selectedMascot, selectedBuff);
+
       if (r.error) toast.error(r.error);
-      else toast.success("Item usado com sucesso! ✨");
+      else {
+        if (t === "PICNIC_BASKET") toast.success("Piquenique iniciado! Equipe equipada tem bônus por 2h. 🧺");
+        else if (t === "VACATION_TICKET") toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 7 dias. 🏖️`);
+        else if (t === "XP_SHARE") toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
+        else if (t === "RAINBOW_FEATHER") toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);
+        else if (t === "LUCKY_EGG") toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
+        else if (t === "WEAKNESS_POLICY") toast.success(`${mascotName} está protegido contra ataques oportunistas! 🛡️`);
+        else toast.success("Item usado com sucesso! ✨");
+      }
     });
   };
 
@@ -132,6 +169,9 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
       {/* Seletor de mascote + botão */}
       {selectedBuff && (
         <div className="flex flex-wrap items-center gap-3">
+          {selectedBuffItem && PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type) ? (
+            <p className="text-xs text-slate-400">Aplica-se a toda a equipe equipada automaticamente.</p>
+          ) : (
           <select
             value={selectedMascot}
             onChange={e => setSelectedMascot(e.target.value)}
@@ -148,6 +188,8 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
             })}
           </select>
 
+          )}
+
           {/* Aviso por mascote já boosted */}
           {isProtein && selectedMascot && boostedSet.has(selectedMascot) && (
             <span className="text-[10px] text-amber-400 font-semibold">
@@ -155,11 +197,17 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
             </span>
           )}
 
+          {selectedBuffItem?.type === "RAINBOW_FEATHER" && selectedMascot && (
+            <span className="text-[10px] text-red-400 font-semibold">
+              ⚠️ IRREVERSÍVEL — nível e atributos serão zerados
+            </span>
+          )}
+
           <button
             type="button"
             disabled={
               pending ||
-              !selectedMascot ||
+              (!selectedMascot && !PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "")) ||
               (isProtein && (proteinFull || boostedSet.has(selectedMascot)))
             }
             onClick={handleUse}

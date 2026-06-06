@@ -471,6 +471,18 @@ export async function interactWithMascot(
     }
   });
 
+  // Cesta de Piquenique Chocante: +50% EXP e +5 felicidade bônus nas interações
+  const picnicBuff = await prisma.mascotBuff.findFirst({
+    where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } }
+  }).catch(() => null);
+  const picnicExpBonus = picnicBuff ? 0.50 : 0;
+  const picnicHappyBonus = picnicBuff ? 5 : 0;
+
+  if (picnicHappyBonus > 0 && !refused) {
+    const updatedHappiness = Math.min(100, newHappiness + picnicHappyBonus);
+    await prisma.mascot.update({ where: { id: mascotId }, data: { happiness: updatedHappiness } }).catch(() => {});
+  }
+
   if (expGained > 0) {
     // Bônus social: aliados e rivais aumentam EXP por interação
     const relations = await prisma.mascotRelation.findMany({
@@ -479,7 +491,7 @@ export async function interactWithMascot(
     }).catch(() => [] as { type: string }[]);
     const hasFriends = relations.some(r => r.type === "FRIEND");
     const hasRivals  = relations.some(r => r.type === "RIVAL");
-    const socialMult = 1.0 + (hasFriends ? 0.25 : 0) + (hasRivals ? 0.15 : 0);
+    const socialMult = 1.0 + (hasFriends ? 0.25 : 0) + (hasRivals ? 0.15 : 0) + picnicExpBonus;
     const finalExp = Math.round(expGained * socialMult);
     await addExp(mascotId, finalExp).catch(() => {});
   }
@@ -841,7 +853,14 @@ export async function claimExpedition(
   const expMult = mode === "TRAINING"
     ? TRAINING_EXP_MULT[durationKey]
     : mode === "ITEMS" ? 0 : dur.expMultiplier;
-  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus);
+
+  // Ovo da Sorte: +20% EXP se mascote tem buff LUCKY_EGG ativo
+  const luckyEggBuff = mode === "TRAINING" ? await prisma.mascotBuff.findFirst({
+    where: { mascotId: expedition.mascotId, type: "LUCKY_EGG", expiresAt: { gt: new Date() } }
+  }) : null;
+  const luckyEggMult = luckyEggBuff ? 1.20 : 1.0;
+
+  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult);
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
@@ -941,6 +960,33 @@ export async function claimExpedition(
 
   if (expeditionExp > 0) {
     await addExp(expedition.mascotId, expeditionExp).catch(() => {});
+  }
+
+  // Ovo da Sorte: consome o buff após uso (1x por dia)
+  if (luckyEggBuff) {
+    await prisma.mascotBuff.delete({ where: { id: luckyEggBuff.id } }).catch(() => {});
+  }
+
+  // Compartilhador de XP: distribui metade do EXP de TRAINING para Pokémon com XP_SHARE
+  if (mode === "TRAINING" && expeditionExp > 0) {
+    const sharedExp = Math.floor(expeditionExp / 2);
+    if (sharedExp > 0) {
+      const xpShareBuffs = await prisma.mascotBuff.findMany({
+        where: {
+          type: "XP_SHARE",
+          mascot: { playerId },
+          mascotId: { not: expedition.mascotId }, // não conta o próprio mascote
+          expiresAt: { gt: new Date("2090-01-01") },
+        },
+        select: { mascotId: true },
+      }).catch(() => []);
+      for (const xb of xpShareBuffs) {
+        await addExp(xb.mascotId, sharedExp).catch(() => {});
+        await prisma.mascotEvent.create({
+          data: { mascotId: xb.mascotId, emoji: "📡", description: `Compartilhou ${sharedExp} EXP via Compartilhador de XP!` }
+        }).catch(() => {});
+      }
+    }
   }
 
   // Roda eventos sociais automaticamente ao coletar expedição (fire-and-forget)
@@ -1722,6 +1768,159 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
   }
 
   return summary;
+}
+
+// ── Novos Itens Especiais ─────────────────────────────────────────────────────
+
+/** Ovo da Sorte: +20% EXP na próxima expedição TRAINING (1x por dia) */
+export async function applyLuckyEgg(playerId: string, mascotId: string) {
+  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para receber o Ovo da Sorte.");
+  const existing = await prisma.mascotBuff.findFirst({
+    where: { mascotId, type: "LUCKY_EGG", expiresAt: { gt: new Date() } }
+  });
+  if (existing) throw new Error("Este mascote já tem um Ovo da Sorte ativo (recarrega em 24h).");
+  await prisma.mascotBuff.create({
+    data: { mascotId, type: "LUCKY_EGG", expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) }
+  });
+  await logEvent(mascotId, "🥚✨", "Ovo da Sorte ativado! Próxima expedição de treinamento terá +20% EXP.");
+}
+
+/** Política de Fraqueza: protege o Pokémon de ataques oportunistas (1 bloqueio) */
+export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
+  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  const existing = await prisma.mascotBuff.findFirst({
+    where: { mascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
+  });
+  if (existing) throw new Error("Este mascote já tem Política de Fraqueza ativa.");
+  await prisma.mascotBuff.create({
+    data: { mascotId, type: "WEAKNESS_POLICY", expiresAt: new Date("2099-12-31T23:59:59Z") }
+  });
+  await logEvent(mascotId, "🛡️", "Política de Fraqueza equipada! Estará protegido contra ataques oportunistas.");
+}
+
+/** Cesta de Piquenique Chocante: bônus EXP+felicidade em interações por 2h para equipe equipada */
+export async function applyPicnicBasket(playerId: string) {
+  const equippedMascots = await prisma.mascot.findMany({
+    where: { playerId, isEquipped: true, arenaState: "FREE" }
+  });
+  if (equippedMascots.length === 0) throw new Error("Nenhum mascote equipado e livre encontrado.");
+  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  await prisma.mascotBuff.createMany({
+    data: equippedMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
+  });
+  for (const m of equippedMascots) {
+    await logEvent(m.id, "🧺⚡", "Piquenique Chocante! Bônus de EXP e felicidade por 2h durante interações.");
+  }
+  return equippedMascots.length;
+}
+
+/** Ticket de Férias: envia Pokémon com o Professor Carvalho por 7 dias */
+export async function applyVacationTicket(playerId: string, mascotId: string) {
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId },
+    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
+  });
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para ir de férias.");
+  if (mascot.expeditions.length > 0) throw new Error("Mascote está em expedição. Conclua antes das férias.");
+  const finishAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await prisma.mascotExpedition.create({
+    data: { mascotId, finishAt, status: "ACTIVE", rewardJson: { durationKey: "7d", mode: "VACATION" } }
+  });
+  await logEvent(mascotId, "🏖️", `Partiu de férias com o Professor Carvalho por 7 dias! Volta em ${finishAt.toLocaleDateString("pt-BR")}.`);
+}
+
+/** Coleta as Férias: retorna o Pokémon revigorado */
+export async function claimVacation(playerId: string, expeditionId: string) {
+  const expedition = await prisma.mascotExpedition.findUnique({
+    where: { id: expeditionId },
+    include: { mascot: true }
+  });
+  if (!expedition || expedition.mascot.playerId !== playerId) throw new Error("Expedição não encontrada.");
+  if (expedition.status !== "ACTIVE") throw new Error("Férias já coletadas.");
+  if (new Date() < expedition.finishAt) throw new Error("As férias ainda não terminaram.");
+
+  const happinessBonus = 30;
+  const expBonus = 500;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.mascotExpedition.update({
+      where: { id: expeditionId },
+      data: { status: "CLAIMED", rewardJson: { happinessBonus, expBonus } }
+    });
+    await tx.mascot.update({
+      where: { id: expedition.mascotId },
+      data: {
+        happiness: Math.min(100, expedition.mascot.happiness + happinessBonus),
+        mood: "HAPPY",
+      }
+    });
+    await tx.mascotEvent.create({
+      data: {
+        mascotId: expedition.mascotId,
+        emoji: "🌴",
+        description: `Voltou das férias com o Professor Carvalho revigorado! +${happinessBonus} felicidade e +${expBonus} EXP.`
+      }
+    });
+  });
+
+  await addExp(expedition.mascotId, expBonus).catch(() => {});
+  return { happinessBonus, expBonus };
+}
+
+/** Compartilhador de XP: equipa em Pokémon fora de expedição (1 por jogador) */
+export async function applyXpShare(playerId: string, mascotId: string) {
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId },
+    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
+  });
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.expeditions.length > 0) throw new Error("Não pode equipar em mascote em expedição.");
+  const existing = await prisma.mascotBuff.findFirst({
+    where: { mascotId, type: "XP_SHARE", expiresAt: { gt: new Date("2090-01-01") } }
+  });
+  if (existing) throw new Error("Este mascote já tem Compartilhador de XP.");
+  const count = await prisma.mascotBuff.count({
+    where: { type: "XP_SHARE", mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }
+  });
+  if (count >= 1) throw new Error("Você já tem um Compartilhador de XP ativo. Remova-o antes.");
+  await prisma.mascotBuff.create({
+    data: { mascotId, type: "XP_SHARE", expiresAt: new Date("2099-12-31T23:59:59Z") }
+  });
+  await logEvent(mascotId, "📡", "Compartilhador de XP equipado! Receberá metade do EXP de expedições de treinamento.");
+}
+
+/** Remove Compartilhador de XP do Pokémon */
+export async function removeXpShare(playerId: string, mascotId: string) {
+  const buff = await prisma.mascotBuff.findFirst({
+    where: { mascotId, type: "XP_SHARE", mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }
+  });
+  if (!buff) throw new Error("Compartilhador de XP não encontrado neste mascote.");
+  await prisma.mascotBuff.delete({ where: { id: buff.id } });
+  await logEvent(mascotId, "📡", "Compartilhador de XP removido.");
+}
+
+/** Pena Arco-Íris: reseta Pokémon para nível 1 com atributos base */
+export async function applyRainbowFeather(playerId: string, mascotId: string) {
+  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para usar a Pena Arco-Íris.");
+  await prisma.mascot.update({
+    where: { id: mascotId },
+    data: {
+      level: 1, exp: 0,
+      statForce: 10, statAgility: 10, statCharisma: 10, statInstinct: 10, statVitality: 10,
+      happiness: 50, mood: "NEUTRAL",
+    }
+  });
+  // Remove marca de proteína (stats foram resetados)
+  await prisma.mascotBuff.deleteMany({
+    where: { mascotId, type: "STAT_BOOST", expiresAt: { gt: new Date("2090-01-01") } }
+  }).catch(() => {});
+  await logEvent(mascotId, "🌈", "Pena Arco-Íris usada! Atributos e nível resetados. Uma nova jornada começa!");
 }
 
 // ── Utilidades para UI ────────────────────────────────────────────────────────

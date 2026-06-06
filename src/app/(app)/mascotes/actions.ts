@@ -7,6 +7,8 @@ import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
   skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
+  applyLuckyEgg, applyWeaknessPolicy, applyPicnicBasket, applyVacationTicket,
+  claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
 } from "@/lib/mascot";
 import { healMascotSus } from "@/lib/arena-z";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
@@ -401,6 +403,119 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
 
     revalidate();
     return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+// ── Novos itens especiais ─────────────────────────────────────────────────────
+
+export async function useLuckyEggAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    // Consome 1 do inventário
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "LUCKY_EGG", active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Ovo da Sorte no inventário." };
+    await applyLuckyEgg(player.id, mascotId);
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    revalidate(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "WEAKNESS_POLICY", active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Política de Fraqueza no inventário." };
+    await applyWeaknessPolicy(player.id, mascotId);
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    revalidate(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function usePicnicBasketAction(): Promise<{ error?: string; mascotCount?: number }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET", active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Cesta de Piquenique no inventário." };
+    const count = await applyPicnicBasket(player.id);
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    revalidate(); return { mascotCount: count };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function useVacationTicketAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Ticket de Férias no inventário." };
+    await applyVacationTicket(player.id, mascotId);
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    revalidate(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function claimVacationAction(expeditionId: string): Promise<{ error?: string; reward?: { happinessBonus: number; expBonus: number } }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const reward = await claimVacation(player.id, expeditionId);
+    revalidate(); return { reward };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function useXpShareAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "XP_SHARE", active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Compartilhador de XP no inventário." };
+    await applyXpShare(player.id, mascotId);
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    revalidate(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function removeXpShareAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    await removeXpShare(player.id, mascotId);
+    revalidate(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function useRainbowFeatherAction(mascotId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    if (!player) return { error: "Perfil nao encontrado." };
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "RAINBOW_FEATHER", active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Pena Arco-Íris no inventário." };
+    await applyRainbowFeather(player.id, mascotId);
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    revalidate(); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
