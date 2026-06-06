@@ -276,18 +276,19 @@ export async function adminClaimExpeditionAction(expeditionId: string): Promise<
 export async function addExpAdminAction(mascotId: string, amount: number): Promise<{ error?: string; result?: Awaited<ReturnType<typeof addExp>> }> {
   try {
     await requireAdmin();
-    // Bypass do check isEquipped — admin pode dar EXP a qualquer mascote
+    if (!Number.isFinite(amount) || amount <= 0) return { error: "Informe uma quantidade positiva de EXP." };
+    if (amount > 100000) return { error: "Limite por ajuste: 100000 EXP." };
     const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
-    if (!mascot) return { error: "Mascote não encontrado." };
-    // Temporariamente força isEquipped para calcular EXP
-    const originalEquipped = mascot.isEquipped;
-    if (!originalEquipped) {
-      await prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: true } });
-    }
-    const result = await addExp(mascotId, amount);
-    if (!originalEquipped) {
-      await prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: false } });
-    }
+    if (!mascot) return { error: "Mascote nao encontrado." };
+    const cleanAmount = Math.floor(amount);
+    const result = await addExp(mascotId, cleanAmount, { ignoreBenchPenalty: true });
+    await prisma.mascotEvent.create({
+      data: {
+        mascotId,
+        emoji: "ADM",
+        description: `Ajuste admin: +${cleanAmount} EXP${result.leveled ? `, nivel ${result.newLevel}` : ""}${result.evolved ? " e evolucao aplicada" : ""}.`,
+      },
+    });
     revalidate();
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }

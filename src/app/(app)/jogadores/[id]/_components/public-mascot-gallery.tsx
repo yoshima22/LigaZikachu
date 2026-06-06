@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { getPokemonElement, getPokemonName, getSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
-import { adminCancelExpeditionAction, adminClaimExpeditionAction, adminStartExpeditionAction } from "@/app/(app)/mascotes/actions";
+import { addExpAdminAction, adminCancelExpeditionAction, adminClaimExpeditionAction, adminStartExpeditionAction } from "@/app/(app)/mascotes/actions";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 
 type PublicMascot = {
@@ -85,6 +85,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
   const [selected, setSelected] = useState<PublicMascot | null>(null);
   const [adminMode, setAdminMode] = useState<ExpeditionMode>("STANDARD");
   const [adminDuration, setAdminDuration] = useState<ExpeditionDuration>("1h");
+  const [adminExpAmount, setAdminExpAmount] = useState("1000");
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -122,6 +123,26 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
       if (result.error) toast.error(result.error);
       else {
         toast.success(message);
+        router.refresh();
+      }
+    });
+  };
+
+  const runAdminExp = () => {
+    if (!selected) return;
+    const amount = Number(adminExpAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Informe uma quantidade positiva de EXP.");
+      return;
+    }
+    const name = selected.nickname ?? getPokemonName(selected.pokemonId);
+    if (!confirm(`Adicionar ${Math.floor(amount)} EXP para ${name}?`)) return;
+    startTransition(async () => {
+      const result = await addExpAdminAction(selected.id, Math.floor(amount));
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(result.result?.leveled ? `EXP aplicada. Novo nivel: ${result.result.newLevel}.` : "EXP aplicada.");
+        setSelected(null);
         router.refresh();
       }
     });
@@ -271,6 +292,23 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
             )}
             {isAdmin && (
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-3 sm:col-span-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]">Admin: ajustar EXP</p>
+                  <p className="mt-1 text-[10px] text-slate-500">Aplica level up, status e evolucao pela rotina oficial.</p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100000}
+                      value={adminExpAmount}
+                      onChange={(event) => setAdminExpAmount(event.target.value)}
+                      className="min-w-0 flex-1 rounded-xl border border-border bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05]"
+                    />
+                    <button disabled={pending} onClick={runAdminExp} className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
                 {selected.expeditions?.[0] ? (
                   <>
                     <button disabled={pending} onClick={() => runAdminAction(() => adminClaimExpeditionAction(selected.expeditions![0].id), "Expedicao concluida e premio coletado.")} className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Concluir</button>

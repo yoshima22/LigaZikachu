@@ -13,6 +13,7 @@ import {
   generateMascotSpeech,
 } from "@/lib/mascot-data";
 import {
+  addExpAdminAction,
   adminCancelExpeditionAction,
   adminClaimExpeditionAction,
   adminStartExpeditionAction,
@@ -76,6 +77,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
   const router = useRouter();
   const [imgFailed, setImgFailed] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
+  const [adminExpAmount, setAdminExpAmount] = useState("1000");
 
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const spriteUrl = imgFailed ? getStaticSpriteUrl(mascot.pokemonId) : getSpriteUrl(mascot.pokemonId, true);
@@ -118,6 +120,24 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
       const r = await startExpeditionAction(mascot.id);
       if (r.error) toast.error(r.error);
       else toast.success("Expedição iniciada! Volte em 1 hora.");
+    });
+  };
+
+  const handleAdminAddExp = () => {
+    const amount = Number(adminExpAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Informe uma quantidade positiva de EXP.");
+      return;
+    }
+    if (!confirm(`Adicionar ${Math.floor(amount)} EXP para ${name}?`)) return;
+    startTransition(async () => {
+      const r = await addExpAdminAction(mascot.id, Math.floor(amount));
+      if (r.error) toast.error(r.error);
+      else {
+        const result = r.result;
+        toast.success(result?.leveled ? `EXP aplicada. Novo nivel: ${result.newLevel}.` : "EXP aplicada.");
+        router.refresh();
+      }
     });
   };
 
@@ -378,6 +398,33 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
               </div>
             )}
           </>
+        )}
+
+        {isAdmin && (
+          <div className="w-full rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]">Admin: ajustar EXP</p>
+            <p className="mt-1 text-[10px] text-slate-500">
+              Usa a rotina oficial de level up, status e evolucao. Nao reduz EXP por mascote estar no banco.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <input
+                type="number"
+                min={1}
+                max={100000}
+                value={adminExpAmount}
+                onChange={(event) => setAdminExpAmount(event.target.value)}
+                className="min-w-0 flex-1 rounded-xl border border-border bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05]"
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleAdminAddExp}
+                className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40"
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
