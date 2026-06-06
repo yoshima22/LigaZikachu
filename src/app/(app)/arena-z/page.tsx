@@ -116,19 +116,25 @@ export default async function ArenaZPage() {
   if (!player) redirect("/dashboard");
 
   // Sincroniza times + limpa estados expirados automaticamente ao abrir a página
-  await Promise.all([
-    syncDefeatedArenaTeams(player.id),
-    // Libera mascotes do jogador atual com restingUntil expirado
-    prisma.mascot.updateMany({
-      where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lt: new Date() } },
-      data: { arenaState: "FREE", restingUntil: null },
-    }),
-    // Libera mascotes em ARENA sem ArenaTeamMember (estado órfão)
-    prisma.mascot.updateMany({
-      where: { playerId: player.id, arenaState: "ARENA", arenaTeamMembers: { none: {} } },
-      data: { arenaState: "FREE", restingUntil: null },
-    }),
-  ]);
+  await syncDefeatedArenaTeams(player.id);
+  // Libera mascotes com restingUntil expirado
+  await prisma.mascot.updateMany({
+    where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lt: new Date() } },
+    data: { arenaState: "FREE", restingUntil: null },
+  });
+  // Libera mascotes em ARENA órfãos (sem ArenaTeamMember) — two-step para compatibilidade
+  const orphanArenaIds = await prisma.arenaTeamMember.findMany({
+    where: { team: { playerId: player.id } },
+    select: { mascotId: true },
+  }).then(rows => rows.map(r => r.mascotId));
+  await prisma.mascot.updateMany({
+    where: {
+      playerId: player.id,
+      arenaState: "ARENA",
+      id: orphanArenaIds.length > 0 ? { notIn: orphanArenaIds } : undefined,
+    },
+    data: { arenaState: "FREE", restingUntil: null },
+  });
 
   const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, injuredRivals] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
