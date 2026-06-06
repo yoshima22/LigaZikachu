@@ -52,7 +52,7 @@ export default async function BazarPage({
 
   return (
     <div className="space-y-6">
-      <BazarLiveRefresh />
+      {/* BazarLiveRefresh removido — router.refresh() a cada 5s travava o site */}
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div>

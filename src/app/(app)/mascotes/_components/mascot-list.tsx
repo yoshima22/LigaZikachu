@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, MapPin, Search, Star } from "lucide-react";
 import { getPokemonElement, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
+import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { MascotCard } from "./mascot-card";
 
 interface MascotData {
@@ -75,15 +76,6 @@ const EXPEDITION_MODE_LABELS: Record<string, string> = {
   ITEMS: "Itens",
 };
 
-function formatRemaining(ms: number) {
-  if (ms <= 0) return "pronta";
-  const hours = Math.floor(ms / 3_600_000);
-  const minutes = Math.floor((ms % 3_600_000) / 60_000);
-  const seconds = Math.floor((ms % 60_000) / 1000);
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
-  return `${seconds}s`;
-}
 
 function MiniMascot({ mascot }: { mascot: MascotData }) {
   return (
@@ -109,21 +101,8 @@ type ActiveExpedition = MascotData["expeditions"][number] & {
 function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExpedition; isAdmin: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const finishAt = new Date(expedition.finishAt).getTime();
-    if (finishAt <= Date.now()) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    const exact = setTimeout(() => setNow(Date.now()), Math.max(0, finishAt - Date.now()));
-    return () => {
-      clearInterval(timer);
-      clearTimeout(exact);
-    };
-  }, [expedition.finishAt]);
-
-  const remaining = new Date(expedition.finishAt).getTime() - now;
-  const ready = remaining <= 0;
+  const { expired, remaining } = useTimerExpiry(expedition.finishAt);
+  const ready = expired;
   const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
 
   const collectExpedition = () => {
