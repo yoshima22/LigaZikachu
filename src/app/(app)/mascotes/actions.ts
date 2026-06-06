@@ -343,14 +343,16 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     if (!config) return { error: "Este item nao e um buff." };
 
     if (inventoryItem.item.type === "MASCOT_BUFF_STAT") {
-      const proteinEvents = await prisma.mascotEvent.findMany({
+      // Rastreamento confiável via MascotBuff (expiresAt permanente = 2099)
+      const proteinBuffs = await prisma.mascotBuff.findMany({
         where: {
-          description: { contains: "Prote" },
+          type: "STAT_BOOST",
           mascot: { playerId: player.id },
+          expiresAt: { gt: new Date("2090-01-01") }, // marcador permanente
         },
         select: { mascotId: true },
       });
-      const boostedMascotIds = new Set(proteinEvents.map(event => event.mascotId));
+      const boostedMascotIds = new Set(proteinBuffs.map(b => b.mascotId));
       if (boostedMascotIds.has(mascotId)) {
         return { error: "Este mascote ja recebeu Proteina Zika." };
       }
@@ -384,8 +386,13 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       }
 
       // Salva buff com expiração (para EXP_BOOST e LUCK_BOOST)
+      // STAT_BOOST também grava com expiresAt permanente (2099) como marcador confiável de limite
       if (config.hours > 0) {
         await tx.mascotBuff.create({ data: { mascotId, type: config.type, expiresAt } });
+      } else if (config.type === "STAT_BOOST") {
+        await tx.mascotBuff.create({
+          data: { mascotId, type: "STAT_BOOST", expiresAt: new Date("2099-12-31T23:59:59Z") }
+        });
       }
 
       // Log evento

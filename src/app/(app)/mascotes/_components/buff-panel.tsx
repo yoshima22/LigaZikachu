@@ -11,7 +11,6 @@ interface BuffItem {
 }
 interface MascotOption { id: string; name: string; isEquipped: boolean }
 
-// Emoji por tipo de buff — descrição sempre vem do ShopItem.description (banco)
 const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_EXP:   "⚡",
   MASCOT_BUFF_STAT:  "💊",
@@ -20,23 +19,42 @@ const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_MOOD:  "💧",
 };
 
+const PROTEIN_LIMIT = 3;
+
 interface Props {
   buffs: BuffItem[];
   mascots: MascotOption[];
+  proteinBoostedMascotIds?: string[];
 }
 
-export function BuffPanel({ buffs, mascots }: Props) {
+export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Props) {
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
   const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? "");
 
   if (buffs.length === 0) return null;
 
+  const boostedSet = new Set(proteinBoostedMascotIds);
+  const selectedBuffItem = buffs.find(b => b.id === selectedBuff);
+  const isProtein = selectedBuffItem?.type === "MASCOT_BUFF_STAT";
+  const proteinUsed = boostedSet.size;
+  const proteinFull = proteinUsed >= PROTEIN_LIMIT;
+
   const handleUse = () => {
     if (!selectedBuff || !selectedMascot) { toast.error("Selecione um item e um mascote."); return; }
-    const buff = buffs.find(b => b.id === selectedBuff);
-    if (!buff) return;
-    if (!confirm(`Usar ${buff.name} em ${mascots.find(m => m.id === selectedMascot)?.name}?`)) return;
+    if (!selectedBuffItem) return;
+    const mascotName = mascots.find(m => m.id === selectedMascot)?.name ?? "mascote";
+
+    if (isProtein && boostedSet.has(selectedMascot)) {
+      toast.error("Este mascote já recebeu Proteína Zika.");
+      return;
+    }
+    if (isProtein && proteinFull) {
+      toast.error(`Limite atingido: Proteína Zika já foi usada em ${PROTEIN_LIMIT} mascotes.`);
+      return;
+    }
+
+    if (!confirm(`Usar ${selectedBuffItem.name} em ${mascotName}?`)) return;
 
     startTransition(async () => {
       const r = await useMascotBuffAction(selectedMascot, selectedBuff);
@@ -57,6 +75,7 @@ export function BuffPanel({ buffs, mascots }: Props) {
       <div className="grid gap-2 sm:grid-cols-2">
         {buffs.map(buff => {
           const emoji = BUFF_EMOJI[buff.type] ?? "✨";
+          const isThisProtein = buff.type === "MASCOT_BUFF_STAT";
           return (
             <button key={buff.id} type="button"
               onClick={() => setSelectedBuff(buff.id)}
@@ -71,33 +90,81 @@ export function BuffPanel({ buffs, mascots }: Props) {
               ) : (
                 <span className="text-2xl shrink-0">{emoji}</span>
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-white truncate">{buff.name}</p>
                 {buff.description && (
                   <p className="text-[10px] text-slate-500 line-clamp-2">{buff.description}</p>
                 )}
                 <p className="text-[10px] text-[#FFCB05] mt-0.5">×{buff.quantity} disponível</p>
+
+                {/* Indicador de limite da Proteína Zika */}
+                {isThisProtein && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <div className="flex gap-1">
+                      {Array.from({ length: PROTEIN_LIMIT }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-2 w-4 rounded-full ${
+                            i < proteinUsed ? "bg-green-400" : "bg-slate-700"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className={`text-[9px] font-semibold ${proteinFull ? "text-red-400" : "text-slate-400"}`}>
+                      {proteinUsed}/{PROTEIN_LIMIT} mascotes
+                    </span>
+                    {proteinFull && <span className="text-[9px] text-red-400 font-bold">ESGOTADO</span>}
+                  </div>
+                )}
               </div>
             </button>
           );
         })}
       </div>
 
+      {/* Alerta quando proteína selecionada e limite chegou */}
+      {isProtein && proteinFull && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          Você já usou Proteína Zika em {PROTEIN_LIMIT} mascotes. Não é possível usar mais.
+        </div>
+      )}
+
       {/* Seletor de mascote + botão */}
       {selectedBuff && (
         <div className="flex flex-wrap items-center gap-3">
-          <select value={selectedMascot} onChange={e => setSelectedMascot(e.target.value)}
-            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+          <select
+            value={selectedMascot}
+            onChange={e => setSelectedMascot(e.target.value)}
+            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]"
+          >
             <option value="">Selecione o mascote</option>
-            {mascots.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.name}{m.isEquipped ? " ★" : ""}
-              </option>
-            ))}
+            {mascots.map(m => {
+              const alreadyBoosted = isProtein && boostedSet.has(m.id);
+              return (
+                <option key={m.id} value={m.id} disabled={alreadyBoosted}>
+                  {m.name}{m.isEquipped ? " ★" : ""}{alreadyBoosted ? " ✅ (já recebeu)" : ""}
+                </option>
+              );
+            })}
           </select>
-          <button type="button" disabled={pending || !selectedMascot}
+
+          {/* Aviso por mascote já boosted */}
+          {isProtein && selectedMascot && boostedSet.has(selectedMascot) && (
+            <span className="text-[10px] text-amber-400 font-semibold">
+              ✅ Este mascote já recebeu Proteína Zika
+            </span>
+          )}
+
+          <button
+            type="button"
+            disabled={
+              pending ||
+              !selectedMascot ||
+              (isProtein && (proteinFull || boostedSet.has(selectedMascot)))
+            }
             onClick={handleUse}
-            className="rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">
+            className="rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             {pending ? "Usando…" : "Usar item ✨"}
           </button>
         </div>
