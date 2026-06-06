@@ -495,13 +495,13 @@ export default async function ArenaZPage() {
                               <div>
                                 <p className="flex items-center gap-2 text-xs font-bold text-green-200">
                                   <Bot size={14} />
-                                  Possivel bot (normal): {bot.trainerName}
+                                  Previa de bot no Normal: {bot.trainerName}
                                 </p>
                                 <p className="mt-1 text-[10px] text-slate-500">
                                   Faixa Nv.{bot.levelBandMin}-{bot.levelBandMax} | Recompensa estimada: {bot.rewardRange.coinsMin}-{bot.rewardRange.coinsMax} ZC / {bot.rewardRange.expMin}-{bot.rewardRange.expMax} EXP
                                 </p>
                                 <p className="mt-0.5 text-[10px] text-slate-600">
-                                  O bot mostrado acima será o adversário real ao clicar em Combater. Escolha a dificuldade para ajustar o nível.
+                                  Ao clicar em Combater, o adversario e travado para a dificuldade escolhida. Se mudar para Facil ou Dificil, a equipe real pode ser diferente desta previa Normal.
                                 </p>
                               </div>
                               <div className="space-y-1 text-right">
