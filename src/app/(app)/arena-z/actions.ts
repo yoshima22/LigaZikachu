@@ -6,6 +6,7 @@ import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
   addMascotToArenaTeam,
   adminSetMascotArenaState,
+  adminRepairArenaStates,
   applyPassiveIncomeForPlayer,
   claimArenaTutorialBonus,
   createArenaTeam,
@@ -180,5 +181,24 @@ export async function adminSetMascotStateAction(mascotId: string, state: "FREE" 
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao alterar estado." };
+  }
+}
+
+export async function adminRepairArenaAction(targetPlayerId?: string): Promise<{
+  error?: string;
+  fixedOrphanArena?: number;
+  fixedExpiredResting?: number;
+  deletedEmptyTeams?: number;
+  fixedMismatchedTeamMembers?: number;
+  details?: string[];
+}> {
+  try {
+    await requireAdmin();
+    const result = await adminRepairArenaStates(targetPlayerId);
+    revalidatePath("/arena-z");
+    revalidatePath("/mascotes");
+    return result;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao reparar arena." };
   }
 }

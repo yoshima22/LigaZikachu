@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import {
+  adminRepairArenaAction,
   adminSetMascotStateAction,
   deleteArenaTeamAction,
   healMascotSusAction,
@@ -727,6 +728,41 @@ export function PurgeAdminArenaButton() {
     >
       {pending ? "Limpando…" : "🧹 Limpar dados de admin da Arena"}
     </button>
+  );
+}
+
+export function RepairArenaButton({ targetPlayerId }: { targetPlayerId?: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [report, setReport] = useState<string[] | null>(null);
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          startTransition(async () => {
+            const r = await adminRepairArenaAction(targetPlayerId);
+            if (r.error) { toast.error(r.error); return; }
+            const total = (r.fixedOrphanArena ?? 0) + (r.fixedExpiredResting ?? 0) + (r.deletedEmptyTeams ?? 0) + (r.fixedMismatchedTeamMembers ?? 0);
+            toast.success(`Reparo concluído: ${total} item(ns) corrigido(s).`);
+            setReport(r.details ?? []);
+            router.refresh();
+          });
+        }}
+        className="w-full rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-300 hover:bg-yellow-500/20 disabled:opacity-50"
+      >
+        {pending ? "Reparando…" : `🔧 Reparar estado da Arena${targetPlayerId ? " (jogador)" : " (global)"}`}
+      </button>
+      {report && report.length > 0 && (
+        <div className="rounded-xl border border-yellow-500/20 bg-slate-900/60 p-3 text-[10px] text-slate-400 space-y-0.5 max-h-48 overflow-y-auto">
+          {report.map((line, i) => <p key={i}>{line}</p>)}
+        </div>
+      )}
+      {report && report.length === 0 && (
+        <p className="text-[10px] text-green-400">✅ Nenhuma inconsistência encontrada.</p>
+      )}
+    </div>
   );
 }
 

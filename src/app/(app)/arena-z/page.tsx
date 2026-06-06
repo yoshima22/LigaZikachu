@@ -6,7 +6,7 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
-import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
@@ -115,7 +115,20 @@ export default async function ArenaZPage() {
   });
   if (!player) redirect("/dashboard");
 
-  await syncDefeatedArenaTeams(player.id);
+  // Sincroniza times + limpa estados expirados automaticamente ao abrir a página
+  await Promise.all([
+    syncDefeatedArenaTeams(player.id),
+    // Libera mascotes do jogador atual com restingUntil expirado
+    prisma.mascot.updateMany({
+      where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lt: new Date() } },
+      data: { arenaState: "FREE", restingUntil: null },
+    }),
+    // Libera mascotes em ARENA sem ArenaTeamMember (estado órfão)
+    prisma.mascot.updateMany({
+      where: { playerId: player.id, arenaState: "ARENA", arenaTeamMemberships: { none: {} } },
+      data: { arenaState: "FREE", restingUntil: null },
+    }),
+  ]);
 
   const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, injuredRivals] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
@@ -572,7 +585,8 @@ export default async function ArenaZPage() {
             {admin && <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
               <h2 className="font-semibold text-slate-200">Controles admin</h2>
               <p className="mt-1 text-xs text-slate-500">Ferramentas de teste para ferimento, repouso e liberar estado.</p>
-              <div className="mt-3">
+              <div className="mt-3 space-y-2">
+                <RepairArenaButton />
                 <PurgeAdminArenaButton />
               </div>
               <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">

@@ -1617,3 +1617,121 @@ export async function adminSetMascotArenaState(mascotId: string, state: "FREE" |
     },
   });
 }
+
+// ── Reparo de estado da Arena (admin) ─────────────────────────────────────────
+/**
+ * Corrige inconsistências de estado na Arena Z:
+ * 1. Mascotes com arenaState=ARENA que não pertencem a nenhum time ativo → FREE
+ * 2. Mascotes com arenaState=RESTING e restingUntil no passado → FREE
+ * 3. Times ACTIVE sem nenhum membro → deletados
+ * 4. Times com mascotes em ARENA/RESTING sem o mascote ter ArenaTeamMember correspondente → corrigido
+ */
+export async function adminRepairArenaStates(targetPlayerId?: string): Promise<{
+  fixedOrphanArena: number;
+  fixedExpiredResting: number;
+  deletedEmptyTeams: number;
+  fixedMismatchedTeamMembers: number;
+  details: string[];
+}> {
+  const details: string[] = [];
+  const wherePlayer = targetPlayerId ? { playerId: targetPlayerId } : {};
+
+  // 1. Mascotes em ARENA sem ArenaTeamMember ativo
+  const arenaButNoTeam = await prisma.mascot.findMany({
+    where: {
+      ...wherePlayer,
+      arenaState: "ARENA",
+      arenaTeamMemberships: { none: {} },
+    },
+    select: { id: true, nickname: true, pokemonId: true, playerId: true },
+  });
+  if (arenaButNoTeam.length > 0) {
+    await prisma.mascot.updateMany({
+      where: { id: { in: arenaButNoTeam.map(m => m.id) } },
+      data: { arenaState: "FREE", restingUntil: null },
+    });
+    for (const m of arenaButNoTeam) {
+      details.push(`[ARENA→FREE] ${m.nickname ?? `#${m.pokemonId}`} (player ${m.playerId})`);
+    }
+  }
+
+  // 2. Mascotes em RESTING com restingUntil no passado
+  const expiredResting = await prisma.mascot.findMany({
+    where: {
+      ...wherePlayer,
+      arenaState: "RESTING",
+      restingUntil: { lt: new Date() },
+    },
+    select: { id: true, nickname: true, pokemonId: true, playerId: true },
+  });
+  if (expiredResting.length > 0) {
+    await prisma.mascot.updateMany({
+      where: { id: { in: expiredResting.map(m => m.id) } },
+      data: { arenaState: "FREE", restingUntil: null },
+    });
+    for (const m of expiredResting) {
+      details.push(`[RESTING_EXPIRED→FREE] ${m.nickname ?? `#${m.pokemonId}`} (player ${m.playerId})`);
+    }
+  }
+
+  // 3. Times ACTIVE sem nenhum membro
+  const emptyActiveTeams = await prisma.arenaTeam.findMany({
+    where: { ...wherePlayer, status: "ACTIVE", members: { none: {} } },
+    select: { id: true, name: true, playerId: true },
+  });
+  if (emptyActiveTeams.length > 0) {
+    await prisma.arenaTeam.deleteMany({
+      where: { id: { in: emptyActiveTeams.map(t => t.id) } },
+    });
+    for (const t of emptyActiveTeams) {
+      details.push(`[EMPTY_TEAM_DELETED] ${t.name} (player ${t.playerId})`);
+    }
+  }
+
+  // 4. ArenaTeamMembers cujo mascote NÃO está em arenaState=ARENA (mismatch)
+  const mismatchedMembers = await prisma.arenaTeamMember.findMany({
+    where: {
+      team: { status: "ACTIVE", ...wherePlayer },
+      mascot: { arenaState: { not: "ARENA" } },
+    },
+    include: { mascot: { select: { id: true, nickname: true, pokemonId: true, arenaState: true } }, team: { select: { id: true, name: true } } },
+  });
+  const fixedIds: string[] = [];
+  for (const member of mismatchedMembers) {
+    if (member.mascot.arenaState === "FREE") {
+      // Mascote FREE mas ainda registrado como membro — corrige para ARENA
+      await prisma.mascot.update({
+        where: { id: member.mascot.id },
+        data: { arenaState: "ARENA" },
+      });
+      details.push(`[FREE→ARENA mismatch fixed] ${member.mascot.nickname ?? `#${member.mascot.pokemonId}`} na equipe ${member.team.name}`);
+      fixedIds.push(member.mascot.id);
+    }
+    // Se INJURED ou RESTING — remover do time (já é o comportamento de syncDefeated)
+    if (member.mascot.arenaState === "INJURED" || member.mascot.arenaState === "RESTING") {
+      await prisma.arenaTeamMember.delete({ where: { id: member.id } });
+      details.push(`[MEMBER_REMOVED injured/resting] ${member.mascot.nickname ?? `#${member.mascot.pokemonId}`} da equipe ${member.team.name}`);
+      fixedIds.push(member.mascot.id);
+    }
+  }
+
+  // 5. Times que ficaram com 0 membros após remoção
+  const nowEmptyAfterFix = await prisma.arenaTeam.findMany({
+    where: { ...wherePlayer, status: "ACTIVE", members: { none: {} } },
+    select: { id: true, name: true },
+  });
+  if (nowEmptyAfterFix.length > 0) {
+    await prisma.arenaTeam.deleteMany({
+      where: { id: { in: nowEmptyAfterFix.map(t => t.id) } },
+    });
+    for (const t of nowEmptyAfterFix) details.push(`[EMPTY_AFTER_FIX_DELETED] ${t.name}`);
+  }
+
+  return {
+    fixedOrphanArena: arenaButNoTeam.length,
+    fixedExpiredResting: expiredResting.length,
+    deletedEmptyTeams: emptyActiveTeams.length + nowEmptyAfterFix.length,
+    fixedMismatchedTeamMembers: fixedIds.length,
+    details,
+  };
+}
