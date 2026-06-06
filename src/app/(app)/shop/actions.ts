@@ -7,6 +7,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoinTxType, EggType, FoodType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
+import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType } from "@/lib/shop-config";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -313,24 +314,7 @@ const purchaseItemSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(99).default(1),
 });
 
-const CONSUMABLE_TYPES: ShopItemType[] = [
-  ShopItemType.ZIKALOOT_TICKET,
-  ShopItemType.EGG_COMMON, ShopItemType.EGG_RARE, ShopItemType.EGG_SPECIAL,
-  ShopItemType.EGG_GEN1,   ShopItemType.EGG_GEN2, ShopItemType.EGG_GEN3,
-  ShopItemType.EGG_GEN4,   ShopItemType.EGG_GEN5, ShopItemType.EGG_GEN6,
-  ShopItemType.EGG_GEN7,   ShopItemType.EGG_GEN8, ShopItemType.EGG_GEN9,
-  ShopItemType.EGG_GEN6PLUS,
-  ShopItemType.MASCOT_FOOD,  ShopItemType.MASCOT_SWEET,
-  ShopItemType.MASCOT_BUFF_EXP,  ShopItemType.MASCOT_BUFF_STAT,
-  ShopItemType.MASCOT_BUFF_HAPPY, ShopItemType.MASCOT_BUFF_LUCK,
-  ShopItemType.MASCOT_BUFF_MOOD,
-  ShopItemType.LUCKY_EGG,
-  ShopItemType.WEAKNESS_POLICY,
-  ShopItemType.PICNIC_BASKET,
-  ShopItemType.VACATION_TICKET,
-  ShopItemType.XP_SHARE,
-  ShopItemType.RAINBOW_FEATHER,
-];
+const CONSUMABLE_TYPES = CONSUMABLE_SHOP_ITEM_TYPES as readonly string[];
 
 export async function purchaseItem(
   itemIdOrInput: string | z.infer<typeof purchaseItemSchema>
@@ -378,7 +362,7 @@ export async function purchaseItem(
         description: quantity > 1 ? `Compra: ${item.name} x${quantity}` : `Compra: ${item.name}`
       });
 
-      if (item.type.startsWith("EGG_") || item.type === "EGG_COMMON" || item.type === "EGG_RARE" || item.type === "EGG_SPECIAL") {
+      if (isEggShopItemType(item.type)) {
         // Compra de ovo → cria MascotEgg no inventário
         const eggTypeMap: Record<string, EggType> = {
           [ShopItemType.EGG_COMMON]:   EggType.COMMON,
@@ -398,7 +382,7 @@ export async function purchaseItem(
         await tx.mascotEgg.createMany({
           data: Array.from({ length: quantity }, () => ({
             playerId: player.id,
-            type: eggTypeMap[item.type],
+            type: EGG_SHOP_TO_EGG_TYPE[item.type] as EggType,
             origin: "Comprado na ZikaShop"
           }))
         });
@@ -422,7 +406,7 @@ export async function purchaseItem(
           update: { quantity: { increment: quantity } },
           create: { playerId: player.id, type: foodType, quantity }
         });
-      } else if (item.type === ShopItemType.ZIKALOOT_TICKET) {
+      } else if (item.type === ShopItemType.ZIKALOOT_TICKET || isConsumable) {
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId: player.id, itemId } },
           update: { quantity: { increment: quantity } },

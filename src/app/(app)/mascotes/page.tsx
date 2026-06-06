@@ -9,6 +9,7 @@ import { IncubatorPanel } from "./_components/incubator-panel";
 import { BuffPanel } from "./_components/buff-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
+import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function MascotesPage() {
   ];
 
   const eggShopImages = await prisma.shopItem.findMany({
-    where: { type: { in: ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2"] }, imageUrl: { not: null } },
+    where: { type: { in: EGG_SHOP_ITEM_TYPES as unknown as import("@prisma/client").ShopItemType[] }, imageUrl: { not: null } },
     select: { type: true, imageUrl: true }
   });
   const eggImageByType: Record<string, string> = {};

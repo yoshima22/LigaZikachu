@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
+import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import type { EggType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -54,14 +56,13 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
-  const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
   const mascotItems = items.filter((i) =>
-    ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "EGG_GEN1", "EGG_GEN2", "MASCOT_FOOD", "MASCOT_SWEET", ...BUFF_TYPES].includes(i.type)
+    MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number])
   );
   // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
   const buffInventory = inventoryRows.filter(r => {
     const item = items.find(i => i.id === r.itemId);
-    return item && BUFF_TYPES.includes(item.type);
+    return item && MASCOT_SHOP_ITEM_TYPES.includes(item.type as typeof MASCOT_SHOP_ITEM_TYPES[number]);
   });
   for (const row of buffInventory) {
     countByItemId.set(row.itemId, row.quantity);
@@ -69,11 +70,8 @@ export default async function ShopPage() {
   const eggCountByType = new Map(eggCounts.map((row) => [row.type, row._count._all]));
   const foodCountByType = new Map(foodItems.map((row) => [row.type, row.quantity]));
   for (const item of mascotItems) {
-    if (item.type === "EGG_COMMON") countByItemId.set(item.id, eggCountByType.get("COMMON") ?? 0);
-    if (item.type === "EGG_RARE") countByItemId.set(item.id, eggCountByType.get("RARE") ?? 0);
-    if (item.type === "EGG_SPECIAL") countByItemId.set(item.id, eggCountByType.get("SPECIAL") ?? 0);
-    if (item.type === "EGG_GEN1") countByItemId.set(item.id, eggCountByType.get("EGG_GEN1") ?? 0);
-    if (item.type === "EGG_GEN2") countByItemId.set(item.id, eggCountByType.get("EGG_GEN2") ?? 0);
+    const eggType = EGG_SHOP_TO_EGG_TYPE[item.type];
+    if (eggType) countByItemId.set(item.id, eggCountByType.get(eggType as EggType) ?? 0);
     if (item.type === "MASCOT_FOOD") countByItemId.set(item.id, foodCountByType.get("FOOD") ?? 0);
     if (item.type === "MASCOT_SWEET") countByItemId.set(item.id, foodCountByType.get("SWEET") ?? 0);
   }

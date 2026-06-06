@@ -7,6 +7,7 @@ import { CheckCircle, Coins, Lock, ShoppingCart, ZoomIn, X } from "lucide-react"
 import { purchaseItem } from "../actions";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
+import { isConsumableShopItemType } from "@/lib/shop-config";
 
 const rarityColors: Record<string, string> = {
   COMMON:    "border-slate-600/50 text-slate-400",
@@ -44,14 +45,21 @@ interface Props {
   playerId: string | null;
 }
 
-const consumableTypes = new Set([
-  "ZIKALOOT_TICKET",
-  "EGG_COMMON", "EGG_RARE", "EGG_SPECIAL", "EGG_EVENT",
-  "EGG_GEN1", "EGG_GEN2", "EGG_GEN3", "EGG_GEN4", "EGG_GEN5",
-  "EGG_GEN6", "EGG_GEN7", "EGG_GEN8", "EGG_GEN9", "EGG_GEN6PLUS",
-  "MASCOT_FOOD", "MASCOT_SWEET",
-  "MASCOT_BUFF_EXP", "MASCOT_BUFF_STAT", "MASCOT_BUFF_HAPPY", "MASCOT_BUFF_LUCK", "MASCOT_BUFF_MOOD",
-]);
+const mascotItemEmoji: Record<string, string> = {
+  MASCOT_FOOD: "🍖",
+  MASCOT_SWEET: "🍬",
+  MASCOT_BUFF_EXP: "⚡",
+  MASCOT_BUFF_STAT: "💊",
+  MASCOT_BUFF_HAPPY: "🍯",
+  MASCOT_BUFF_LUCK: "🍀",
+  MASCOT_BUFF_MOOD: "💧",
+  LUCKY_EGG: "🥚✨",
+  WEAKNESS_POLICY: "🛡️",
+  PICNIC_BASKET: "🧺⚡",
+  VACATION_TICKET: "🏖️",
+  XP_SHARE: "📡",
+  RAINBOW_FEATHER: "🌈",
+};
 
 export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, playerId }: Props) {
   const router = useRouter();
@@ -137,7 +145,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((item, itemIndex) => {
           const owned = ownedIds.has(item.id);
-          const isConsumable = consumableTypes.has(item.type);
+          const isConsumable = isConsumableShopItemType(item.type);
           const quantity = isConsumable ? getQuantity(item.id) : 1;
           const totalPrice = item.price * quantity;
           const canAfford = balance >= totalPrice;
@@ -195,6 +203,10 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     alt={item.name} className="h-16 w-16 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).src = "/mascot/egg-common.png"; }}
                   />
+                </div>
+              ) : mascotItemEmoji[item.type] ? (
+                <div className="flex h-24 items-center justify-center bg-slate-900 text-4xl">
+                  {mascotItemEmoji[item.type]}
                 </div>
               ) : (["MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as string[]).includes(item.type) ? (
                 <div className="flex h-24 items-center justify-center bg-slate-900 text-4xl">
