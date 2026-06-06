@@ -14,7 +14,13 @@ import { ChevronUp, ChevronDown } from "lucide-react";
 const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
 const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
 const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL"] as const;
-const typeOpts = ["TITLE","BANNER","FRAME","ZIKALOOT_TICKET","EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as const;
+const typeOpts = [
+  "TITLE","BANNER","FRAME","ZIKALOOT_TICKET",
+  "EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2",
+  "MASCOT_FOOD","MASCOT_SWEET",
+  "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
+  "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
+] as const;
 const typeLabel: Record<string, string> = {
   TITLE: "Título", BANNER: "Banner",
   FRAME: "Moldura",
@@ -31,6 +37,12 @@ const typeLabel: Record<string, string> = {
   MASCOT_BUFF_HAPPY: "🍯 Bala de Mel (Buff Felicidade)",
   MASCOT_BUFF_LUCK:  "🍀 Amuleto da Sorte (Buff Expedição)",
   MASCOT_BUFF_MOOD:  "💧 Água Sagrada (Reset Humor)",
+  LUCKY_EGG:         "🥚✨ Ovo da Sorte",
+  WEAKNESS_POLICY:   "🛡️ Política de Fraqueza",
+  PICNIC_BASKET:     "🧺⚡ Cesta de Piquenique Chocante",
+  VACATION_TICKET:   "🏖️ Ticket de Férias do Prof. Carvalho",
+  XP_SHARE:          "📡 Compartilhador de XP",
+  RAINBOW_FEATHER:   "🌈 Pena Arco-Íris",
 };
 const rarityLabel: Record<string, string> = {
   COMMON: "⚪ Comum", UNCOMMON: "🟢 Incomum", RARE: "🔵 Raro",
