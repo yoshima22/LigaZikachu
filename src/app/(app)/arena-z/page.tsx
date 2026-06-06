@@ -9,6 +9,7 @@ import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
+import { ArenaLiveRefresh } from "./_components/arena-live-refresh";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 
 export const dynamic = "force-dynamic";
@@ -175,6 +176,10 @@ export default async function ArenaZPage() {
     }),
     prisma.arenaBattle.findMany({
       where: { OR: [{ attackerPlayerId: player.id }, { defenderPlayerId: player.id }] },
+      include: {
+        attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+        defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
@@ -255,10 +260,31 @@ export default async function ArenaZPage() {
       : null;
     pvpCooldowns.set(team.id, until);
   }));
+  const opportunisticBattles = injuredRivals.length > 0
+    ? await prisma.arenaBattle.findMany({
+        where: {
+          type: "OPPORTUNISTIC",
+          attackerPlayerId: player.id,
+          defenderPlayerId: { in: injuredRivals.map(m => m.playerId) },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { defenderPlayerId: true, createdAt: true },
+      })
+    : [];
+  const attackedInjuryOwners = new Set(
+    opportunisticBattles
+      .filter(battle => {
+        const rival = injuredRivals.find(m => m.playerId === battle.defenderPlayerId);
+        return rival?.injuredAt ? battle.createdAt >= rival.injuredAt : true;
+      })
+      .map(battle => battle.defenderPlayerId)
+      .filter(Boolean) as string[],
+  );
   const arenaRanking = arenaRankingData;
 
   return (
     <div className="space-y-6">
+      <ArenaLiveRefresh />
       <ArenaTutorial />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -643,18 +669,32 @@ export default async function ArenaZPage() {
           {/* Ataques oportunistas */}
           {injuredRivals.length > 0 && (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
-              <h2 className="flex items-center gap-2 font-semibold text-red-200">😈 Rivais Feridos</h2>
-              <p className="mt-1 text-xs text-slate-500">Seus rivais estão feridos. Aproveite para um ataque oportunista.</p>
+              <h2 className="flex items-center gap-2 font-semibold text-red-200">Rivais Feridos</h2>
+              <p className="mt-1 text-xs text-slate-500">Mostra quais rivais feridos ainda podem receber ataque oportunista neste periodo de ferimento.</p>
               <div className="mt-4 space-y-2">
-                {injuredRivals.map(m => (
-                  <div key={m.id} className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-slate-950/50 p-3">
+                {injuredRivals.map(m => {
+                  const alreadyAttacked = attackedInjuryOwners.has(m.playerId);
+                  return (
+                  <div key={m.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${alreadyAttacked ? "border-slate-700 bg-slate-950/40 opacity-75" : "border-red-500/20 bg-slate-950/50"}`}>
                     <span>
                       <span className="block text-xs font-semibold text-slate-200">{m.nickname ?? getPokemonName(m.pokemonId)} (Nv.{m.level})</span>
-                      <span className="text-[10px] text-slate-500">de {m.player.displayName} — Ferido</span>
+                      <span className="text-[10px] text-slate-500">de {m.player.displayName} - {alreadyAttacked ? "ja atacado neste ferimento" : "ferido e vulneravel"}</span>
                     </span>
-                    <OpportunisticAttackButton mascotId={m.id} mascotName={m.nickname ?? getPokemonName(m.pokemonId)} ownerName={m.player.displayName} />
+                    {alreadyAttacked ? (
+                      <button
+                        type="button"
+                        disabled
+                        title="Voce ja fez um ataque oportunista neste periodo de ferimento contra este jogador."
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-500"
+                      >
+                        Ja atacado
+                      </button>
+                    ) : (
+                      <OpportunisticAttackButton mascotId={m.id} mascotName={m.nickname ?? getPokemonName(m.pokemonId)} ownerName={m.player.displayName} />
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -668,10 +708,24 @@ export default async function ArenaZPage() {
                 const log = Array.isArray(battle.turnLog) ? battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; advantageApplied?: boolean; action: string }> : [];
                 const loot = readBattleLoot(battle.lootResult);
                 const injuredCount = Array.isArray(battle.injuredMascotIds) ? battle.injuredMascotIds.length : 0;
+                const attackerName = battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "Atacante";
+                const defenderName = battle.type === "BOT"
+                  ? battle.botName ?? "Bot"
+                  : battle.defenderPlayer?.displayName ?? battle.defenderPlayer?.ptcglNick ?? "Defensor";
+                const resultLabel = battle.result === "ATTACKER_WIN"
+                  ? `${attackerName} venceu`
+                  : battle.result === "DEFENDER_WIN"
+                    ? `${defenderName} venceu`
+                    : "Empate";
                 return (
                   <details key={battle.id} className="rounded-xl border border-border bg-slate-900/40 p-3">
-                    <summary className="cursor-pointer text-sm font-semibold text-slate-200">
-                      {battle.createdAt.toLocaleString("pt-BR")} | {battle.botName ?? "PvP"} | {battle.result}
+                    <summary className="cursor-pointer text-sm font-semibold text-slate-200 marker:text-[#FFCB05]">
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span>{battle.createdAt.toLocaleString("pt-BR")}</span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] ${battle.type === "PVP" ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-green-500/30 bg-green-500/10 text-green-200"}`}>{battle.type}</span>
+                        <span className="text-slate-400">{attackerName} vs {defenderName}</span>
+                        <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">{resultLabel}</span>
+                      </span>
                     </summary>
                     <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
                       {loot && (

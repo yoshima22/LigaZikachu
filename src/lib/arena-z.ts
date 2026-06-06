@@ -856,6 +856,8 @@ export async function syncDefeatedArenaTeams(playerId: string) {
 }
 
 export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
+  await syncDefeatedArenaTeams(playerId).catch(() => null);
+
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
     include: {
