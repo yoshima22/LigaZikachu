@@ -19,21 +19,28 @@ import {
 } from "../actions";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 
-// ── Cooldown counter ──────────────────────────────────────────────────────────
-export function CooldownBadge({ ms }: { ms: number }) {
-  const [rem, setRem] = useState(ms);
-  useEffect(() => {
-    setRem(ms);
-    if (ms <= 0) return;
-    const iv = setInterval(() => setRem(r => Math.max(0, r - 1000)), 1000);
-    return () => clearInterval(iv);
-  }, [ms]);
-  if (rem <= 0) return null;
-  const s = Math.ceil(rem / 1000);
+// ── Cooldown counter — usa timestamp absoluto para evitar dessincronia ────────
+// Aceita Date/string (timestamp absoluto) para não depender de duração relativa calculada no servidor
+export function CooldownBadge({ until }: { until: Date | string | null | undefined }) {
+  const { expired, remaining } = useTimerExpiry(until);
+  if (expired || !until) return null;
+  const s = Math.ceil(remaining / 1000);
   return (
     <span className="flex items-center gap-1 rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
       <Timer size={9} /> {s}s
     </span>
+  );
+}
+
+// Indicador de cooldown PvP por equipe (usa timestamp absoluto)
+export function PvpCooldownIndicator({ until }: { until: Date | null }) {
+  const { expired } = useTimerExpiry(until);
+  const onCooldown = !expired && !!until;
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-200">
+      <span>Cooldown PvP</span>
+      {onCooldown ? <CooldownBadge until={until} /> : <span className="text-green-300">Liberado</span>}
+    </div>
   );
 }
 
@@ -328,17 +335,18 @@ const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; t
 };
 const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil", normal: "🟡 Normal", hard: "🔴 Difícil" };
 
-export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownMs = 0, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; teamName?: string; cooldownMs?: number; cooldownAfterMs?: number }) {
+export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownUntil = null, cooldownAfterMs = 3 * 60 * 1000 }: { teamId: string; teamName?: string; cooldownUntil?: Date | null; cooldownAfterMs?: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<BotBattleResult | null>(null);
   const [showAnimation, setShowAnimation] = useState(false);
   const [difficulty, setDifficulty] = useState<ArenaDifficulty>("normal");
-  const [cooldownEndAt, setCooldownEndAt] = useState<Date | null>(
-    cooldownMs > 0 ? new Date(Date.now() + cooldownMs) : null
-  );
-  const cooldownExpiry = useTimerExpiry(cooldownEndAt);
-  const onCooldown = !!cooldownEndAt && !cooldownExpiry.expired;
+  // Após batalha: seta o timestamp absoluto de quando o cooldown termina
+  const [postBattleCooldownUntil, setPostBattleCooldownUntil] = useState<Date | null>(null);
+  // Usa o cooldown pós-batalha se disponível, senão usa o do servidor
+  const activeCooldownUntil = postBattleCooldownUntil ?? cooldownUntil;
+  const cooldownExpiry = useTimerExpiry(activeCooldownUntil);
+  const onCooldown = !!activeCooldownUntil && !cooldownExpiry.expired;
   const localCooldown = cooldownExpiry.remaining;
 
   const styles = DIFFICULTY_STYLES[difficulty];
@@ -364,7 +372,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownMs = 
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {onCooldown && <CooldownBadge ms={localCooldown} />}
+          {onCooldown && <CooldownBadge until={activeCooldownUntil} />}
           <button
             type="button"
             disabled={pending || onCooldown}
@@ -376,7 +384,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownMs = 
                 if (response.error) { toast.error(response.error); return; }
                 if (response.result) {
                   setResult(response.result);
-                  setCooldownEndAt(new Date(Date.now() + cooldownAfterMs));
+                  setPostBattleCooldownUntil(new Date(Date.now() + cooldownAfterMs));
                   // Mostra animação primeiro, depois o modal de resultado
                   if (response.result.battleAnimation && response.result.battleAnimation.length > 0) {
                     setShowAnimation(true);
@@ -551,16 +559,18 @@ type PvpResult = Awaited<ReturnType<typeof runPvpBattleAction>>["result"];
 export function PvpBattleButton({
   attackTeamId,
   defenseTeamId,
-  disabled = false,
+  pvpCooldownUntil,
 }: {
   attackTeamId: string;
   defenseTeamId: string;
-  disabled?: boolean;
+  pvpCooldownUntil?: Date | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PvpResult | null>(null);
   const [animatingResult, setAnimatingResult] = useState<PvpResult | null>(null);
+  const { expired: cooldownExpired } = useTimerExpiry(pvpCooldownUntil);
+  const onCooldown = !!pvpCooldownUntil && !cooldownExpired;
 
   const handleClose = () => { setResult(null); router.refresh(); };
 
@@ -568,7 +578,7 @@ export function PvpBattleButton({
     <>
       <button
         type="button"
-        disabled={pending || disabled}
+        disabled={pending || onCooldown}
         onClick={() => {
           if (!confirm("Atacar esta equipe? Você pode ganhar ou perder loot do cofre.")) return;
           startTransition(async () => {

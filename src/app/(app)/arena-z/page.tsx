@@ -6,7 +6,7 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
-import { AdminMascotStateButton, BotBattleButton, CooldownBadge, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
@@ -209,17 +209,19 @@ export default async function ArenaZPage() {
   for (const team of readyActiveTeams) {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
-  const pvpCooldowns = new Map<string, number>();
+  // Guarda o timestamp ABSOLUTO de quando o cooldown PvP termina (não uma duração relativa)
+  // Assim o cliente sempre calcula remaining = until - Date.now(), sem errar pelo atraso de entrega
+  const pvpCooldowns = new Map<string, Date | null>();
   await Promise.all(readyActiveTeams.map(async (team) => {
     const lastPvp = await prisma.arenaBattle.findFirst({
       where: { type: "PVP", attackTeamId: team.id },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     });
-    const cooldownMs = lastPvp
-      ? Math.max(0, ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000 - (Date.now() - lastPvp.createdAt.getTime()))
-      : 0;
-    pvpCooldowns.set(team.id, cooldownMs);
+    const until = lastPvp
+      ? new Date(lastPvp.createdAt.getTime() + ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000)
+      : null;
+    pvpCooldowns.set(team.id, until);
   }));
   const arenaRanking = arenaRankingData;
 
@@ -418,7 +420,7 @@ export default async function ArenaZPage() {
                               </div>
                               <div className="space-y-1 text-right">
                                 <p className="text-[10px] uppercase tracking-widest text-green-300/80">Cooldown PvE da equipe</p>
-                                <BotBattleButton teamId={team.id} teamName={team.name} cooldownMs={bot.cooldownMs ?? 0} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
+                                <BotBattleButton teamId={team.id} teamName={team.name} cooldownUntil={bot.cooldownUntil ?? null} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
                               </div>
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -457,15 +459,12 @@ export default async function ArenaZPage() {
               ) : readyOpponentTeams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhuma equipe adversaria ativa disponivel.</p>
               ) : readyActiveTeams.map(attackTeam => {
-                const pvpCooldownMs = pvpCooldowns.get(attackTeam.id) ?? 0;
+                const pvpCooldownUntil = pvpCooldowns.get(attackTeam.id) ?? null;
                 return (
                 <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-bold text-red-100">Atacando com: {attackTeam.name}</p>
-                    <div className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-200">
-                      <span>Cooldown PvP da equipe</span>
-                      {pvpCooldownMs > 0 ? <CooldownBadge ms={pvpCooldownMs} /> : <span className="text-green-300">Liberado</span>}
-                    </div>
+                    <PvpCooldownIndicator until={pvpCooldownUntil} />
                   </div>
                   <div className="mt-3 grid gap-3 xl:grid-cols-2">
                     {readyOpponentTeams.map(defenseTeam => (
@@ -480,7 +479,7 @@ export default async function ArenaZPage() {
                           <PvpBattleButton
                             attackTeamId={attackTeam.id}
                             defenseTeamId={defenseTeam.id}
-                            disabled={pvpCooldownMs > 0}
+                            pvpCooldownUntil={pvpCooldownUntil}
                           />
                         </div>
                         {/* Cofre ao vivo — atualiza a cada 30s sem recarregar a página */}

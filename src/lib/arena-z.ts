@@ -378,9 +378,11 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
-  const cooldownMs = lastBattle
-    ? Math.max(0, ARENA_Z_CONFIG.botCooldownMinutes * 60_000 - (Date.now() - lastBattle.createdAt.getTime()))
-    : 0;
+  // Retorna timestamp absoluto para o cliente calcular remaining = until - Date.now()
+  // Isso evita dessincronização quando a página demora a chegar ao cliente
+  const cooldownUntil = lastBattle
+    ? new Date(lastBattle.createdAt.getTime() + ARENA_Z_CONFIG.botCooldownMinutes * 60_000)
+    : null;
   return {
     trainerName: bot.botName,
     levelBandMin: bot.band.min,
@@ -390,7 +392,9 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
     difficultyLabel: diff.label,
     difficultyColor: diff.color,
     injuryRisk: difficulty === "easy" ? "Baixo" : difficulty === "normal" ? "Médio" : "Alto",
-    cooldownMs,
+    cooldownUntil,
+    /** @deprecated use cooldownUntil */
+    cooldownMs: cooldownUntil ? Math.max(0, cooldownUntil.getTime() - Date.now()) : 0,
     mascots: bot.defenders.map(m => ({
       id: m.id,
       pokemonId: m.pokemonId,
