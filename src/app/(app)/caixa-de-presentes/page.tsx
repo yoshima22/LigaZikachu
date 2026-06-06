@@ -92,7 +92,8 @@ export default async function GiftBoxPage() {
           <form
             action={async () => {
               "use server";
-              await claimAllGifts({ playerId: player.id });
+              const r = await claimAllGifts({ playerId: player.id });
+              if (r.error) console.error("[claimAllGifts page]", r.error);
             }}
           >
             <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
@@ -170,7 +171,8 @@ export default async function GiftBoxPage() {
                   <form
                     action={async () => {
                       "use server";
-                      await claimGift({ giftId: gift.id });
+                      const r = await claimGift({ giftId: gift.id });
+                      if (r.error) console.error("[claimGift page]", r.error);
                     }}
                     className="mt-auto"
                   >

@@ -45,10 +45,18 @@ async function applyGiftReward(
   if (gift.type === "STICKER" && payload) {
     const cardId = typeof payload.cardId === "string" ? payload.cardId : null;
     if (cardId) {
+      // Valida que o card existe antes de criar o sticker (evita FK constraint error)
+      const card = await tx.pokemonCard.findUnique({ where: { id: cardId }, select: { id: true } });
+      if (!card) {
+        // Loga e pula — o presente é marcado como recebido mas sem item
+        // (cardId inválido = configuração incorreta do prêmio)
+        console.error(`[claimGift] STICKER gift ${gift.id}: cardId "${cardId}" não encontrado em PokemonCard. Presente resgatado sem figurinha.`);
+        return;
+      }
       await tx.playerSticker.upsert({
         where: { playerId_cardId: { playerId, cardId } },
         update: { quantity: { increment: 1 } },
-        create: { playerId, cardId, quantity: 1 }
+        create: { playerId, cardId, quantity: 1, isFavorite: false }
       });
     }
     return;
@@ -124,111 +132,124 @@ function revalidateGiftTargets() {
 }
 
 export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
-  const user = await getSessionUser();
-  if (!user) return { error: "Nao autenticado" };
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Nao autenticado" };
 
-  const player = await prisma.player.findUnique({
-    where: { userId: user.id },
-    select: { id: true }
-  });
-  if (!player) return { error: "Jogador nao encontrado" };
+    const player = await prisma.player.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (!player) return { error: "Jogador nao encontrado" };
 
-  const { giftId } = claimGiftSchema.parse(input);
+    const { giftId } = claimGiftSchema.parse(input);
 
-  const gift = await prisma.playerGift.findUnique({
-    where: { id: giftId },
-  });
-
-  if (!gift || gift.playerId !== player.id) {
-    return { error: "Presente nao encontrado" };
-  }
-
-  if (gift.status !== "UNCLAIMED") {
-    return { error: "Presente ja foi resgatado ou expirou" };
-  }
-
-  const now = new Date();
-
-  await prisma.$transaction(async (tx) => {
-    await applyGiftReward(tx, player.id, gift);
-    await tx.playerGift.update({
+    const gift = await prisma.playerGift.findUnique({
       where: { id: giftId },
-      data: { status: GiftStatus.CLAIMED, claimedAt: now },
     });
-    await tx.auditLog.create({
-      data: {
-        actorUserId: user.id,
-        entityType: "playerGift",
-        entityId: giftId,
-        action: "player_gift.claimed",
-        before: { status: gift.status },
-        after: { status: GiftStatus.CLAIMED }
-      }
-    });
-  });
 
-  revalidateGiftTargets();
-  return { success: true };
+    if (!gift || gift.playerId !== player.id) {
+      return { error: "Presente nao encontrado" };
+    }
+
+    if (gift.status !== "UNCLAIMED") {
+      return { error: "Presente ja foi resgatado ou expirou" };
+    }
+
+    const now = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      await applyGiftReward(tx, player.id, gift);
+      await tx.playerGift.update({
+        where: { id: giftId },
+        data: { status: GiftStatus.CLAIMED, claimedAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          entityType: "playerGift",
+          entityId: giftId,
+          action: "player_gift.claimed",
+          before: { status: gift.status },
+          after: { status: GiftStatus.CLAIMED }
+        }
+      });
+    });
+
+    revalidateGiftTargets();
+    return { success: true };
+  } catch (err) {
+    console.error("[claimGift] Erro ao resgatar presente:", err);
+    return { error: err instanceof Error ? err.message : "Erro ao resgatar presente. Tente novamente." };
+  }
 }
 
 export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) {
-  const user = await getSessionUser();
-  if (!user) return { error: "Nao autenticado" };
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Nao autenticado" };
 
-  const player = await prisma.player.findUnique({
-    where: { userId: user.id },
-    select: { id: true }
-  });
-  if (!player) return { error: "Jogador nao encontrado" };
+    const player = await prisma.player.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (!player) return { error: "Jogador nao encontrado" };
 
-  const { playerId } = claimAllGiftsSchema.parse(input);
-  if (playerId !== player.id) return { error: "Sem permissao" };
+    const { playerId } = claimAllGiftsSchema.parse(input);
+    if (playerId !== player.id) return { error: "Sem permissao" };
 
-  const gifts = await prisma.playerGift.findMany({
-    where: {
-      playerId: player.id,
-      status: GiftStatus.UNCLAIMED,
-    },
-    select: { id: true, status: true, type: true, title: true, payload: true }
-  });
-
-  if (gifts.length === 0) {
-    return { success: true, claimed: 0 };
-  }
-
-  const now = new Date();
-  const result = await prisma.$transaction(async (tx) => {
-    let claimed = 0;
-
-    for (const gift of gifts) {
-      const current = await tx.playerGift.findFirst({
-        where: { id: gift.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
-        select: { id: true, type: true, title: true, payload: true }
-      });
-      if (!current) continue;
-
-      await applyGiftReward(tx, player.id, current);
-      await tx.playerGift.update({
-        where: { id: current.id },
-        data: { status: GiftStatus.CLAIMED, claimedAt: now },
-      });
-      claimed++;
-    }
-
-    await tx.auditLog.createMany({
-      data: gifts.map((gift) => ({
-        actorUserId: user.id,
-        entityType: "playerGift",
-        entityId: gift.id,
-        action: "player_gift.claimed",
-        before: { status: gift.status },
-        after: { status: GiftStatus.CLAIMED },
-      }))
+    const gifts = await prisma.playerGift.findMany({
+      where: {
+        playerId: player.id,
+        status: GiftStatus.UNCLAIMED,
+      },
+      select: { id: true, status: true, type: true, title: true, payload: true }
     });
 
-    return { count: claimed };
-  });
+    if (gifts.length === 0) {
+      return { success: true, claimed: 0 };
+    }
 
-  revalidateGiftTargets();
-  return { success: true, claimed: result.count };
+    const now = new Date();
+    const claimedIds: string[] = [];
+
+    // Processa cada presente individualmente para que um erro não bloqueie todos os outros
+    for (const gift of gifts) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          const current = await tx.playerGift.findFirst({
+            where: { id: gift.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
+            select: { id: true, type: true, title: true, payload: true }
+          });
+          if (!current) return;
+
+          await applyGiftReward(tx, player.id, current);
+          await tx.playerGift.update({
+            where: { id: current.id },
+            data: { status: GiftStatus.CLAIMED, claimedAt: now },
+          });
+          await tx.auditLog.create({
+            data: {
+              actorUserId: user.id,
+              entityType: "playerGift",
+              entityId: current.id,
+              action: "player_gift.claimed",
+              before: { status: GiftStatus.UNCLAIMED },
+              after: { status: GiftStatus.CLAIMED },
+            }
+          });
+        });
+        claimedIds.push(gift.id);
+      } catch (err) {
+        // Loga o erro mas continua com os demais presentes
+        console.error(`[claimAllGifts] Erro ao resgatar presente ${gift.id}:`, err);
+      }
+    }
+
+    revalidateGiftTargets();
+    return { success: true, claimed: claimedIds.length };
+  } catch (err) {
+    console.error("[claimAllGifts] Erro geral:", err);
+    return { error: err instanceof Error ? err.message : "Erro ao resgatar presentes." };
+  }
 }
