@@ -91,6 +91,9 @@ async function applyGiftReward(
 
   if (rewardKind === "MASCOT_BUFF") {
     const buffType = typeof payload.buffType === "string" ? payload.buffType : null;
+    const quantity = typeof payload.quantity === "number" && payload.quantity > 0
+      ? Math.floor(payload.quantity)
+      : 1;
     if (buffType) {
       const shopItem = await tx.shopItem.findFirst({
         where: { type: buffType as import("@prisma/client").ShopItemType },
@@ -99,8 +102,8 @@ async function applyGiftReward(
       if (shopItem) {
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId, itemId: shopItem.id } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId, itemId: shopItem.id, quantity: 1, equipped: false }
+          update: { quantity: { increment: quantity } },
+          create: { playerId, itemId: shopItem.id, quantity, equipped: false }
         });
       }
     }

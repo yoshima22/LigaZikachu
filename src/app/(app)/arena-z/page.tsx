@@ -115,6 +115,19 @@ function readBattleLoot(loot: unknown) {
   return null;
 }
 
+function readArenaLootSection(loot: unknown, key: "preserved" | "burned" | "stolen" | "stolenByBot") {
+  if (!loot || typeof loot !== "object") return null;
+  const section = (loot as Record<string, unknown>)[key];
+  if (!section || typeof section !== "object") return null;
+  const data = section as Record<string, unknown>;
+  return {
+    coins: typeof data.coins === "number" ? data.coins : 0,
+    exp: typeof data.exp === "number" ? data.exp : 0,
+    food: typeof data.food === "number" ? data.food : 0,
+    sweet: typeof data.sweet === "number" ? data.sweet : 0,
+  };
+}
+
 export default async function ArenaZPage() {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
@@ -707,6 +720,9 @@ export default async function ArenaZPage() {
               ) : battles.map(battle => {
                 const log = Array.isArray(battle.turnLog) ? battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; advantageApplied?: boolean; action: string }> : [];
                 const loot = readBattleLoot(battle.lootResult);
+                const preservedLoot = readArenaLootSection(battle.lootResult, "preserved");
+                const burnedLoot = readArenaLootSection(battle.lootResult, "burned");
+                const stolenByBotLoot = readArenaLootSection(battle.lootResult, "stolenByBot");
                 const injuredCount = Array.isArray(battle.injuredMascotIds) ? battle.injuredMascotIds.length : 0;
                 const attackerName = battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "Atacante";
                 const defenderName = battle.type === "BOT"
@@ -736,6 +752,21 @@ export default async function ArenaZPage() {
                       {injuredCount > 0 && (
                         <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200">
                           {injuredCount} ferido(s)
+                        </span>
+                      )}
+                      {preservedLoot && (preservedLoot.coins > 0 || preservedLoot.exp > 0) && (
+                        <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-green-200">
+                          Preservado: {preservedLoot.coins} ZC / {preservedLoot.exp} EXP
+                        </span>
+                      )}
+                      {stolenByBotLoot && (stolenByBotLoot.coins > 0 || stolenByBotLoot.exp > 0) && (
+                        <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-1 text-orange-200">
+                          Perdido para bot: {stolenByBotLoot.coins} ZC / {stolenByBotLoot.exp} EXP
+                        </span>
+                      )}
+                      {burnedLoot && (burnedLoot.coins > 0 || burnedLoot.exp > 0 || burnedLoot.food > 0 || burnedLoot.sweet > 0) && (
+                        <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-yellow-200">
+                          Pela Arena: {burnedLoot.coins} ZC / {burnedLoot.exp} EXP
                         </span>
                       )}
                     </div>

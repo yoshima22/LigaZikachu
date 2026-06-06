@@ -294,6 +294,13 @@ export type ArenaLootFull = ArenaLoot & {
   buffItem?: string; // tipo do ShopItem (ex: "MASCOT_BUFF_STAT")
 };
 
+type ArenaItemSpoil = {
+  kind: "MASCOT_BUFF";
+  type: string;
+  quantity: number;
+  label: string;
+};
+
 const BUFF_ITEM_POOL = [
   "MASCOT_BUFF_EXP", "MASCOT_BUFF_STAT", "MASCOT_BUFF_HAPPY",
   "MASCOT_BUFF_LUCK", "MASCOT_BUFF_MOOD",
@@ -442,16 +449,18 @@ async function dropArenaGroundSpoils(
   loot: ArenaLoot | null | undefined,
   sourcePlayerId?: string | null,
   sourceBattleId?: string | null,
+  itemPayload?: ArenaItemSpoil[] | null,
 ) {
-  if (!loot || !hasLoot(loot)) return;
+  if ((!loot || !hasLoot(loot)) && (!itemPayload || itemPayload.length === 0)) return;
   await tx.arenaGroundSpoil.create({
     data: {
       sourceBattleId: sourceBattleId ?? null,
       sourcePlayerId: sourcePlayerId ?? null,
-      coins: loot.coins,
-      exp: loot.exp,
-      food: loot.food,
-      sweet: loot.sweet,
+      coins: loot?.coins ?? 0,
+      exp: loot?.exp ?? 0,
+      food: loot?.food ?? 0,
+      sweet: loot?.sweet ?? 0,
+      itemPayload: itemPayload && itemPayload.length > 0 ? itemPayload as unknown as Prisma.InputJsonValue : undefined,
       status: "AVAILABLE",
     },
   });
@@ -483,6 +492,9 @@ async function maybeFindArenaGroundSpoils(
     where: { id: spoil.id },
     data: { status: "CLAIMED", foundByPlayerId: winnerPlayerId, claimedAt: new Date() },
   });
+  const items = Array.isArray(spoil.itemPayload)
+    ? (spoil.itemPayload as unknown as ArenaItemSpoil[])
+    : [];
   await tx.arenaTeam.update({
     where: { id: winnerTeamId },
     data: {
@@ -492,11 +504,30 @@ async function maybeFindArenaGroundSpoils(
       vaultSweet: { increment: spoil.sweet },
     },
   });
+  for (const item of items) {
+    if (item.kind === "MASCOT_BUFF" && item.type) {
+      await tx.playerGift.create({
+        data: {
+          playerId: winnerPlayerId,
+          type: "CUSTOM",
+          title: `Espolio da Arena: ${item.label}`,
+          description: "Item encontrado no chao da Arena Z apos uma vitoria PvP. Resgate para enviar ao inventario.",
+          payload: {
+            rewardKind: "MASCOT_BUFF",
+            buffType: item.type,
+            source: "ARENA_GROUND_SPOIL",
+            quantity: item.quantity,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
+  }
   return {
     coins: spoil.coins,
     exp: spoil.exp,
     food: spoil.food,
     sweet: spoil.sweet,
+    items,
   };
 }
 

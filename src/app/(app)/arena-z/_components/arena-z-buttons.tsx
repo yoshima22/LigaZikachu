@@ -328,6 +328,11 @@ function formatLoot(reward: { coins: number; exp: number; food: number; sweet: n
   return parts.join(" / ");
 }
 
+function formatSpoilItems(items?: Array<{ label?: string; type?: string; quantity?: number }> | null) {
+  if (!items || items.length === 0) return "";
+  return items.map(item => `${item.quantity ?? 1}x ${item.label ?? item.type ?? "item"}`).join(" / ");
+}
+
 const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; text: string; badge: string }> = {
   easy:   { border: "border-green-500/40",  bg: "bg-green-500/10",  text: "text-green-300",  badge: "bg-green-500/20 text-green-200" },
   normal: { border: "border-yellow-500/40", bg: "bg-yellow-500/10", text: "text-yellow-300", badge: "bg-yellow-500/20 text-yellow-200" },
@@ -517,10 +522,10 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownUntil
               </div>
             )}
 
-            {(result as { buffItem?: string }).buffItem && result.won && (
+            {result.reward.buffItem && result.won && (
               <div className="mt-3 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3">
-                <p className="text-xs font-bold text-purple-300">🎁 Item especial (Difícil)</p>
-                <p className="mt-1 text-sm text-purple-100">Um item buff foi adicionado ao seu inventário!</p>
+                <p className="text-xs font-bold text-purple-300">Item especial dificil</p>
+                <p className="mt-1 text-sm text-purple-100">{result.reward.buffItem} foi adicionado ao seu inventario.</p>
               </div>
             )}
 
@@ -661,6 +666,11 @@ export function PvpBattleButton({
                     <p className="mt-1 text-sm font-semibold text-yellow-50">
                       Sua equipe encontrou {formatLoot(result.foundGroundSpoils)} perdidos pela Arena.
                     </p>
+                    {formatSpoilItems((result.foundGroundSpoils as { items?: Array<{ label?: string; type?: string; quantity?: number }> }).items) && (
+                      <p className="mt-1 text-sm font-semibold text-yellow-50">
+                        Itens enviados para presentes: {formatSpoilItems((result.foundGroundSpoils as { items?: Array<{ label?: string; type?: string; quantity?: number }> }).items)}
+                      </p>
+                    )}
                     <p className="mt-1 text-[11px] text-yellow-100/70">
                       Esses recursos vieram dos 10% derrubados por equipes que cairam em combate.
                     </p>
