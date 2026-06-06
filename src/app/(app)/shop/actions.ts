@@ -87,6 +87,61 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
     price: 350,
     sortOrder: 50,
   },
+  // ── Itens Especiais ───────────────────────────────────────────────────────
+  {
+    type: ShopItemType.LUCKY_EGG,
+    name: "Ovo da Sorte",
+    description: "+20% EXP na próxima expedição de treinamento. Recarrega em 24h por mascote.",
+    imageUrl: null,
+    rarity: ShopItemRarity.UNCOMMON,
+    price: 400,
+    sortOrder: 60,
+  },
+  {
+    type: ShopItemType.WEAKNESS_POLICY,
+    name: "Política de Fraqueza",
+    description: "Protege o Pokémon de ataques oportunistas enquanto ferido. Consumido ao bloquear um ataque.",
+    imageUrl: null,
+    rarity: ShopItemRarity.UNCOMMON,
+    price: 300,
+    sortOrder: 61,
+  },
+  {
+    type: ShopItemType.PICNIC_BASKET,
+    name: "Cesta de Piquenique Chocante",
+    description: "Toda a equipe equipada recebe +50% EXP e +5 felicidade por interação durante 2 horas.",
+    imageUrl: null,
+    rarity: ShopItemRarity.RARE,
+    price: 500,
+    sortOrder: 62,
+  },
+  {
+    type: ShopItemType.VACATION_TICKET,
+    name: "Ticket de Férias do Prof. Carvalho",
+    description: "Envia o Pokémon de férias por 7 dias. Volta revigorado com +30 felicidade e +500 EXP.",
+    imageUrl: null,
+    rarity: ShopItemRarity.RARE,
+    price: 800,
+    sortOrder: 63,
+  },
+  {
+    type: ShopItemType.XP_SHARE,
+    name: "Compartilhador de XP",
+    description: "Equipe em um Pokémon. Quando outra expedição de treinamento terminar, ele recebe metade do EXP. Permanente até remover. Limite: 1 por jogador.",
+    imageUrl: null,
+    rarity: ShopItemRarity.RARE,
+    price: 500,
+    sortOrder: 64,
+  },
+  {
+    type: ShopItemType.RAINBOW_FEATHER,
+    name: "Pena Arco-Íris",
+    description: "Reseta todos os atributos do Pokémon e o coloca de volta no nível 1. Irreversível.",
+    imageUrl: null,
+    rarity: ShopItemRarity.EPIC,
+    price: 3000,
+    sortOrder: 65,
+  },
 ];
 
 export async function createShopItem(
@@ -269,6 +324,12 @@ const CONSUMABLE_TYPES: ShopItemType[] = [
   ShopItemType.MASCOT_BUFF_EXP,  ShopItemType.MASCOT_BUFF_STAT,
   ShopItemType.MASCOT_BUFF_HAPPY, ShopItemType.MASCOT_BUFF_LUCK,
   ShopItemType.MASCOT_BUFF_MOOD,
+  ShopItemType.LUCKY_EGG,
+  ShopItemType.WEAKNESS_POLICY,
+  ShopItemType.PICNIC_BASKET,
+  ShopItemType.VACATION_TICKET,
+  ShopItemType.XP_SHARE,
+  ShopItemType.RAINBOW_FEATHER,
 ];
 
 export async function purchaseItem(

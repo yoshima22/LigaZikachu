@@ -29,7 +29,10 @@ export default async function MascotesPage() {
     data: { arenaState: "FREE", restingUntil: null },
   }).catch(() => null);
 
-  const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
+  const BUFF_TYPES = [
+    "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
+    "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
+  ];
 
   const eggShopImages = await prisma.shopItem.findMany({
     where: { type: { in: ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2"] }, imageUrl: { not: null } },
