@@ -73,8 +73,10 @@ export const EGG_POOLS: Record<string, number[]> = {
   EGG_GEN4: [
     387, 390, 393,       // Starters: Turtwig, Chimchar, Piplup
     396, 399, 401, 403, 406, 408, 410, 412, 415, 417, 418, 420, 422,
-    424, 425, 427, 429, 430, 431, 433, 434, 436, 438, 439, 440, 441,
-    442, 443, 446, 447, 449, 451, 453, 455, 456, 458, 459, 461, 479,
+    // 424 Ambipom removido (evolução de Aipom), 429 Mismagius (de Misdreavus),
+    // 430 Honchkrow (de Murkrow), 461 Weavile (de Sneasel) — forms evoluídas via item
+    425, 427, 431, 433, 434, 436, 438, 439, 440, 441,
+    442, 443, 446, 447, 449, 451, 453, 455, 456, 458, 459, 479,
   ],
 
   // Gen 5 (Unova) — formas iniciais selecionadas
@@ -106,8 +108,9 @@ export const EGG_POOLS: Record<string, number[]> = {
   EGG_GEN8: [
     810, 813, 816,  // Starters Galar
     819, 821, 824, 827, 829, 831, 833, 835, 837, 840, 843, 845, 846,
-    848, 850, 852, 854, 856, 861, 868, 870, 871, 872, 874, 875, 877,
+    848, 850, 852, 854, 856, 868, 870, 871, 872, 874, 875, 877,
     878, 885,
+    // Removidos: 861 Grimmsnarl (evolução da linha 856→857→861)
   ],
 
   // Gen 9 (Paldea)
@@ -121,21 +124,25 @@ export const EGG_POOLS: Record<string, number[]> = {
   // Pool aleatório — inclui todos os gens, garante diversidade
   RANDOM: [] as number[], // preenchido abaixo após todas as definições
 
-  // Gen 6+ legacy alias (mantido para compatibilidade)
+  // Gen 6+ legacy alias (mantido para compatibilidade) — somente formas base
   EGG_GEN6PLUS: [
     650, 653, 656,       // Starters Kalos
-    661, 664, 667, 669, 672, 674, 676, 677, 679, 681, 682, 684, 686,
-    688, 690, 692, 694, 696, 698, 700, 701, 703, 704, 707, 708, 710,
-    712, 714, 716, 720,
+    661, 664, 667, 669, 672, 674, 676, 677, 679, 682, 684, 686,
+    688, 690, 692, 694, 696, 698, 701, 703, 704, 707, 708, 710, 712, 714,
+    // Removidos: 681 Aegislash (evolução de Doublade), 700 Sylveon (evolução de Eevee)
+    // 716 Xerneas, 720 Hoopa são lendários — não entram em ovos normais
     // Alola
     722, 725, 728, 731, 734, 736, 739, 742, 744, 746, 747, 749, 751,
-    753, 755, 757, 759, 761, 764, 765, 766, 767, 769, 771, 774, 775,
-    778, 781, 782, 785, 786, 787, 788,
+    753, 755, 757, 759, 761, 764, 765, 766, 767, 769, 771, 774, 775, 778, 781, 782,
+    // Removidos: 785-788 Tapus são lendários
     // Galar
     810, 813, 816, 819, 821, 824, 827, 829, 831, 833, 835, 837, 840,
-    842, 843, 845, 846, 848, 850, 852, 854, 856, 858, 860, 861, 862,
-    863, 864, 865, 866, 867, 868, 869, 870, 871, 872, 874, 875, 876,
-    877, 878, 880, 881, 882, 883, 884, 885, 886, 887,
+    843, 845, 846, 848, 850, 852, 854, 856, 868, 870, 871, 872, 874, 875, 876,
+    877, 878, 880, 881, 882, 883, 884, 885,
+    // Removidos: 842 Appletun (evolução de Applin), 858/860/861 linha Hatenna/Impidimp
+    // 862 Obstagoon, 863 Perrserker, 864 Cursola, 865 Sirfetch'd, 866 Mr. Rime
+    // 867 Runerigus, 869 Alcremie (evoluções Galar por item/amizade)
+    // 886 Drakloak, 887 Dragapult (evoluções de Dreepy)
   ],
 };
 
@@ -398,6 +405,38 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 872, to: 873, level: 30 },
   { from: 878, to: 879, level: 34 },
   { from: 885, to: 886, level: 30 }, { from: 886, to: 887, level: 50 },
+  // Evoluções por pedra/item/troca — simplificadas por nível para o sistema do jogo
+  // Usadas para mostrar cadeia evolutiva E para filtrar pools de ovos (EVOLVED_IDS)
+  { from: 82,  to: 462, level: 40 }, // Magneton → Magnezone (local especial)
+  { from: 95,  to: 208, level: 36 }, // Onix → Steelix (Metal Coat)
+  { from: 108, to: 463, level: 40 }, // Lickitung → Lickilicky (Rollout + level)
+  { from: 112, to: 464, level: 45 }, // Rhydon → Rhyperior (Protector)
+  { from: 114, to: 465, level: 34 }, // Tangela → Tangrowth (Ancient Power)
+  { from: 117, to: 230, level: 38 }, // Seadra → Kingdra (Dragon Scale)
+  { from: 123, to: 212, level: 38 }, // Scyther → Scizor (Metal Coat)
+  { from: 125, to: 466, level: 45 }, // Electabuzz → Electivire (Electirizer)
+  { from: 126, to: 467, level: 45 }, // Magmar → Magmortar (Magmarizer)
+  { from: 137, to: 233, level: 28 }, // Porygon → Porygon2 (Up-Grade)
+  { from: 176, to: 468, level: 30 }, // Togetic → Togekiss (Shiny Stone)
+  { from: 190, to: 424, level: 32 }, // Aipom → Ambipom (Double Hit)
+  { from: 193, to: 469, level: 33 }, // Yanma → Yanmega (Ancient Power)
+  { from: 198, to: 430, level: 38 }, // Murkrow → Honchkrow (Dusk Stone)
+  { from: 200, to: 429, level: 32 }, // Misdreavus → Mismagius (Dusk Stone)
+  { from: 207, to: 472, level: 35 }, // Gligar → Gliscor (Razor Fang)
+  { from: 215, to: 461, level: 35 }, // Sneasel → Weavile (Razor Claw)
+  { from: 221, to: 473, level: 40 }, // Piloswine → Mamoswine (Ancient Power)
+  { from: 233, to: 474, level: 40 }, // Porygon2 → Porygon-Z (Dubious Disc)
+  { from: 299, to: 476, level: 30 }, // Nosepass → Probopass (local especial)
+  { from: 356, to: 477, level: 45 }, // Dusclops → Dusknoir (Reaper Cloth)
+  // Gen 5 — troca
+  { from: 525, to: 526, level: 36 }, // Boldore → Gigalith (troca)
+  { from: 533, to: 534, level: 40 }, // Gurdurr → Conkeldurr (troca)
+  // Gen 6 — pedra/item
+  { from: 680, to: 681, level: 40 }, // Doublade → Aegislash (Dawn Stone)
+  { from: 714, to: 715, level: 48 }, // Noibat → Noivern (level)
+  { from: 840, to: 841, level: 30 }, // Applin → Flapple (Tart Apple)
+  // Gen 7 — item
+  { from: 868, to: 869, level: 30 }, // Milcery → Alcremie (Sweet item)
   // Gen 9
   { from: 906, to: 907, level: 16 }, { from: 907, to: 908, level: 36 },
   { from: 909, to: 910, level: 16 }, { from: 910, to: 911, level: 36 },
@@ -433,8 +472,33 @@ export const EVOLUTION_MAP = new Map<number, Evolution>(
   EVOLUTIONS.map(e => [e.from, e])
 );
 
-// IDs de formas evoluídas — aplicado nos pools no final do arquivo
+// IDs de formas evoluídas via level-up (mapeadas em EVOLUTIONS)
 export const EVOLVED_IDS = new Set(EVOLUTIONS.map(e => e.to));
+
+// Formas evoluídas por pedra/troca/amizade/regional NÃO mapeadas em EVOLUTIONS
+// Nunca devem aparecer em ovos, mas não têm level-up no sistema do jogo
+const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
+  // Eevee evoluções não mapeadas (pedra/amizade)
+  135, 136, 196, 197, 470, 471, 700,
+  // Tyrogue → Hitmons (depende de stats, não mapeável simples)
+  106, 107, 237,
+  // Gen 1-2 troca não mapeada
+  186,  // Politoed (Poliwhirl + troca — Poliwrath já mapeado)
+  199,  // Slowking (Slowpoke + troca — Slowbro já mapeado)
+  242,  // Blissey (Chansey amizade — Chansey é form. evoluída de Happiny)
+  // Gen 8 Galar — evoluções regionais/item sem base própria
+  862,  // Obstagoon (Linoone-Galar + level)
+  863,  // Perrserker (Meowth-Galar + level)
+  864,  // Cursola (Corsola-Galar + level)
+  865,  // Sirfetch'd (Farfetch'd-Galar + moveset)
+  866,  // Mr. Rime (Mr. Mime-Galar + level)
+  867,  // Runerigus (Yamask-Galar + local)
+  // Gen 9 — evoluções não mapeadas
+  983,  // Annihilape (Primeape + Rage Fist)
+]);
+
+// Conjunto unificado: tudo que não deve aparecer em ovos
+export const ALL_EVOLVED_IDS = new Set<number>([...EVOLVED_IDS, ...EXTRA_EVOLVED]);
 
 // ── Evoluções por pedra — simplificadas como nível ───────────────────────────
 // No jogo original usam pedras (Fire Stone, Water Stone, etc.) mas aqui são
@@ -1309,21 +1373,26 @@ const SPECIAL_COVETED_IDS = [
   935, 942, 963, 967, 971, 974, 977, 996, 999, 1011, 1012,
 ];
 
-// Aplicar filtro de evoluídos nos pools finais
-// EVOLVED_IDS já definido acima após EVOLUTION_MAP
-EGG_POOLS.COMMON = ALL_STANDARD_POKEMON_IDS.filter(id => !EVOLVED_IDS.has(id));
-EGG_POOLS.RANDOM = ALL_STANDARD_POKEMON_IDS.filter(id => !EVOLVED_IDS.has(id));
-EGG_POOLS.RARE = uniquePokemonIds([...ALL_STARTER_IDS, ...RARE_FAN_FAVORITES])
-  .filter(id => !LEGENDARY_POOL.includes(id) && !EVOLVED_IDS.has(id));
-EGG_POOLS.SPECIAL = uniquePokemonIds([...SPECIAL_COVETED_IDS, ...RARE_FAN_FAVORITES])
-  .filter(id => !LEGENDARY_POOL.includes(id) && !EVOLVED_IDS.has(id));
+// ── Filtros finais nos pools ──────────────────────────────────────────────────
+// Predicado único: exclui lendários, evoluídos (level-up + pedra/troca/amizade)
+const isBaseForm = (id: number) =>
+  !LEGENDARY_POOL.includes(id) && !ALL_EVOLVED_IDS.has(id);
 
-// Reaplica filtro nos pools de geração (EGG_GEN1-9) e reconstrói RANDOM
+// COMMON e RANDOM: apenas formas base das gerações curadas (não usa ALL_STANDARD 1-1025)
+// A listagem manual nos pools EGG_GEN1-9 garante controle sobre o que entra
+EGG_POOLS.RARE = uniquePokemonIds([...ALL_STARTER_IDS, ...RARE_FAN_FAVORITES])
+  .filter(isBaseForm);
+EGG_POOLS.SPECIAL = uniquePokemonIds([...SPECIAL_COVETED_IDS, ...RARE_FAN_FAVORITES])
+  .filter(isBaseForm);
+
+// Reaplica filtro completo em TODOS os pools de geração
 for (const key of Object.keys(EGG_POOLS)) {
-  if (key !== "RANDOM" && key !== "COMMON") {
-    EGG_POOLS[key] = EGG_POOLS[key].filter((id: number) => !EVOLVED_IDS.has(id));
+  if (key !== "RANDOM") {
+    EGG_POOLS[key] = EGG_POOLS[key].filter(isBaseForm);
   }
 }
+
+// RANDOM = união de todos os pools de geração após filtragem
 EGG_POOLS.RANDOM = [
   ...EGG_POOLS.EGG_GEN1, ...EGG_POOLS.EGG_GEN2,
   ...EGG_POOLS.EGG_GEN3, ...EGG_POOLS.EGG_GEN4, ...EGG_POOLS.EGG_GEN5,
