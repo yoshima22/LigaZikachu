@@ -94,14 +94,15 @@ export default async function MascotesPage() {
     select: { mascotId: true, type: true, expiresAt: true },
   });
 
-  // Proteína Zika: marcadores permanentes (expiresAt > 2090) para exibir limite na UI
-  const proteinBoostedMascots = await prisma.mascotBuff.findMany({
+  // Proteína Zika: conta quantas doses cada mascote já recebeu (máx 3 por mascote)
+  const proteinBoostedMascots = await prisma.mascotBuff.groupBy({
+    by: ["mascotId"],
     where: {
       type: "STAT_BOOST",
       mascot: { playerId: player.id },
       expiresAt: { gt: new Date("2090-01-01") },
     },
-    select: { mascotId: true },
+    _count: { id: true },
   });
   const buffsByMascotId = new Map<string, { type: string; expiresAt: Date }[]>();
   for (const b of activeMascotBuffs) {
@@ -286,7 +287,7 @@ export default async function MascotesPage() {
         <BuffPanel
           buffs={buffInventory.map(b => ({ id: b.item.id, name: b.item.name, type: b.item.type, quantity: b.quantity, description: b.item.description ?? undefined, imageUrl: b.item.imageUrl ?? undefined }))}
           mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? getPokemonName(m.pokemonId), isEquipped: m.isEquipped }))}
-          proteinBoostedMascotIds={proteinBoostedMascots.map(b => b.mascotId)}
+          proteinDoses={Object.fromEntries(proteinBoostedMascots.map(b => [b.mascotId, b._count.id]))}
         />
       )}
 

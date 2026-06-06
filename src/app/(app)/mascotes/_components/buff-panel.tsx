@@ -35,21 +35,22 @@ const PROTEIN_LIMIT = 3;
 interface Props {
   buffs: BuffItem[];
   mascots: MascotOption[];
-  proteinBoostedMascotIds?: string[];
+  /** mascotId → número de doses de Proteína Zika já recebidas (máx 3) */
+  proteinDoses?: Record<string, number>;
 }
 
-export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Props) {
+export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
   const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? "");
 
   if (buffs.length === 0) return null;
 
-  const boostedSet = new Set(proteinBoostedMascotIds);
   const selectedBuffItem = buffs.find(b => b.id === selectedBuff);
   const isProtein = selectedBuffItem?.type === "MASCOT_BUFF_STAT";
-  const proteinUsed = boostedSet.size;
-  const proteinFull = proteinUsed >= PROTEIN_LIMIT;
+  // Doses do mascote selecionado
+  const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
+  const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
 
   const handleUse = () => {
     if (!selectedBuffItem) return;
@@ -58,11 +59,8 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
 
     if (!isPlayerLevel && !selectedMascot) { toast.error("Selecione um mascote."); return; }
 
-    if (isProtein && boostedSet.has(selectedMascot)) {
-      toast.error("Este mascote já recebeu Proteína Zika."); return;
-    }
     if (isProtein && proteinFull) {
-      toast.error(`Limite atingido: Proteína Zika já foi usada em ${PROTEIN_LIMIT} mascotes.`); return;
+      toast.error(`Este mascote já recebeu ${PROTEIN_LIMIT} doses de Proteína Zika (limite máximo).`); return;
     }
 
     const mascotName = mascots.find(m => m.id === selectedMascot)?.name ?? "mascote";
@@ -142,15 +140,16 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
                         <div
                           key={i}
                           className={`h-2 w-4 rounded-full ${
-                            i < proteinUsed ? "bg-green-400" : "bg-slate-700"
+                            i < selectedMascotDoses ? "bg-green-400" : "bg-slate-700"
                           }`}
                         />
                       ))}
                     </div>
                     <span className={`text-[9px] font-semibold ${proteinFull ? "text-red-400" : "text-slate-400"}`}>
-                      {proteinUsed}/{PROTEIN_LIMIT} mascotes
+                      {selectedMascotDoses}/{PROTEIN_LIMIT} doses
+                      {selectedMascot ? "" : " (selecione mascote)"}
                     </span>
-                    {proteinFull && <span className="text-[9px] text-red-400 font-bold">ESGOTADO</span>}
+                    {proteinFull && <span className="text-[9px] text-red-400 font-bold">MÁXIMO</span>}
                   </div>
                 )}
               </div>
@@ -160,9 +159,9 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
       </div>
 
       {/* Alerta quando proteína selecionada e limite chegou */}
-      {isProtein && proteinFull && (
+      {isProtein && selectedMascot && proteinFull && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          Você já usou Proteína Zika em {PROTEIN_LIMIT} mascotes. Não é possível usar mais.
+          Este mascote já recebeu {PROTEIN_LIMIT} doses de Proteína Zika — limite máximo atingido.
         </div>
       )}
 
@@ -179,10 +178,11 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
           >
             <option value="">Selecione o mascote</option>
             {mascots.map(m => {
-              const alreadyBoosted = isProtein && boostedSet.has(m.id);
+              const doses = isProtein ? (proteinDoses[m.id] ?? 0) : 0;
+              const maxed = isProtein && doses >= PROTEIN_LIMIT;
               return (
-                <option key={m.id} value={m.id} disabled={alreadyBoosted}>
-                  {m.name}{m.isEquipped ? " ★" : ""}{alreadyBoosted ? " ✅ (já recebeu)" : ""}
+                <option key={m.id} value={m.id} disabled={maxed}>
+                  {m.name}{m.isEquipped ? " ★" : ""}{isProtein && doses > 0 ? ` (${doses}/${PROTEIN_LIMIT} doses)` : ""}{maxed ? " — MÁXIMO" : ""}
                 </option>
               );
             })}
@@ -190,10 +190,10 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
 
           )}
 
-          {/* Aviso por mascote já boosted */}
-          {isProtein && selectedMascot && boostedSet.has(selectedMascot) && (
+          {/* Aviso de doses do mascote selecionado */}
+          {isProtein && selectedMascot && selectedMascotDoses > 0 && !proteinFull && (
             <span className="text-[10px] text-amber-400 font-semibold">
-              ✅ Este mascote já recebeu Proteína Zika
+              💊 {selectedMascotDoses}/{PROTEIN_LIMIT} doses usadas neste mascote
             </span>
           )}
 
@@ -208,7 +208,7 @@ export function BuffPanel({ buffs, mascots, proteinBoostedMascotIds = [] }: Prop
             disabled={
               pending ||
               (!selectedMascot && !PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "")) ||
-              (isProtein && (proteinFull || boostedSet.has(selectedMascot)))
+              (isProtein && proteinFull)
             }
             onClick={handleUse}
             className="rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 disabled:cursor-not-allowed"

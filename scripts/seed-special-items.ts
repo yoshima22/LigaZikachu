@@ -62,6 +62,16 @@ const ITEMS = [
 async function main() {
   console.log("Criando itens especiais na loja...");
 
+  // Busca um usuário admin para ser o criador dos itens
+  const adminUser = await prisma.user.findFirst({
+    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+    select: { id: true },
+  });
+  if (!adminUser) {
+    console.error("Nenhum usuário ADMIN encontrado. Crie um admin antes de rodar este script.");
+    process.exit(1);
+  }
+
   for (const item of ITEMS) {
     const existing = await prisma.shopItem.findFirst({ where: { type: item.type } });
     if (existing) {
@@ -76,6 +86,7 @@ async function main() {
         price: item.price,
         active: item.active,
         imageUrl: item.imageUrl,
+        createdById: adminUser.id,
       },
     });
     console.log(`  ✅ ${item.name} criado (id: ${created.id}, preço: ${item.price} ZC)`);

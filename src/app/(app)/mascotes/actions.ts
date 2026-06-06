@@ -346,20 +346,16 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
 
     if (inventoryItem.item.type === "MASCOT_BUFF_STAT") {
       // Rastreamento confiável via MascotBuff (expiresAt permanente = 2099)
-      const proteinBuffs = await prisma.mascotBuff.findMany({
+      // Cada mascote pode receber até 3 doses de Proteína Zika
+      const proteinDosesOnThisMascot = await prisma.mascotBuff.count({
         where: {
+          mascotId,
           type: "STAT_BOOST",
-          mascot: { playerId: player.id },
           expiresAt: { gt: new Date("2090-01-01") }, // marcador permanente
         },
-        select: { mascotId: true },
       });
-      const boostedMascotIds = new Set(proteinBuffs.map(b => b.mascotId));
-      if (boostedMascotIds.has(mascotId)) {
-        return { error: "Este mascote ja recebeu Proteina Zika." };
-      }
-      if (boostedMascotIds.size >= 3) {
-        return { error: "Limite atingido: Proteina Zika pode ser usada em ate 3 mascotes por jogador." };
+      if (proteinDosesOnThisMascot >= 3) {
+        return { error: "Este mascote ja recebeu o limite de 3 doses de Proteina Zika." };
       }
     }
 
