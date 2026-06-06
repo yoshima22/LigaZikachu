@@ -125,7 +125,7 @@ export default async function ArenaZPage() {
     }),
     // Libera mascotes em ARENA sem ArenaTeamMember (estado órfão)
     prisma.mascot.updateMany({
-      where: { playerId: player.id, arenaState: "ARENA", arenaTeamMemberships: { none: {} } },
+      where: { playerId: player.id, arenaState: "ARENA", arenaTeamMembers: { none: {} } },
       data: { arenaState: "FREE", restingUntil: null },
     }),
   ]);

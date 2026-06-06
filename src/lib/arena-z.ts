@@ -1641,7 +1641,7 @@ export async function adminRepairArenaStates(targetPlayerId?: string): Promise<{
     where: {
       ...wherePlayer,
       arenaState: "ARENA",
-      arenaTeamMemberships: { none: {} },
+      arenaTeamMembers: { none: {} },
     },
     select: { id: true, nickname: true, pokemonId: true, playerId: true },
   });
