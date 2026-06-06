@@ -91,9 +91,9 @@ export function applyMultiplierToVault(
 
 // Dificuldades: modificam a faixa de nível do bot
 export const DIFFICULTY_CONFIG = {
-  easy:   { levelOffset: -5, rewardMult: 0.6, injuryChanceMult: 0.4, label: "Fácil",  color: "green", desc: "Bot 5 níveis abaixo. Menos loot, quase sem risco de ferimento." },
-  normal: { levelOffset:  0, rewardMult: 1.0, injuryChanceMult: 1.0, label: "Normal", color: "yellow", desc: "Bot equivalente ao nível médio da equipe." },
-  hard:   { levelOffset: +5, rewardMult: 1.8, injuryChanceMult: 2.5, label: "Difícil", color: "red",   desc: "Bot 5 níveis acima. Loot muito maior, risco alto de ferimento." },
+  easy:   { levelOffset: -1, rewardMult: 0.8, injuryChanceMult: 0.6, label: "Facil",  color: "green", desc: "Bot perto da forca real do time. Menos loot e risco menor." },
+  normal: { levelOffset: +3, rewardMult: 1.2, injuryChanceMult: 1.2, label: "Normal", color: "yellow", desc: "Bot acima da forca real do time, evitando abuso de media baixa." },
+  hard:   { levelOffset: +8, rewardMult: 2.0, injuryChanceMult: 2.8, label: "Dificil", color: "red",   desc: "Bot bem acima da forca real. Loot maior, risco alto de ferimento." },
 } as const;
 export type ArenaDifficulty = keyof typeof DIFFICULTY_CONFIG;
 
@@ -200,7 +200,14 @@ function toArenaMascot(m: {
 }
 
 function makeBotMascot(index: number, levelMin: number, levelMax: number, rng: () => number = Math.random): ArenaMascot {
-  const pokemonIds = [1, 4, 7, 25, 37, 54, 58, 63, 66, 92, 133, 147, 152, 155, 158, 179, 197, 215, 246];
+  const pokemonIds = [
+    1,2,3,4,5,6,7,8,9,12,15,18,20,22,24,25,26,28,31,34,36,38,40,45,49,51,
+    53,55,57,59,62,65,68,71,73,76,78,80,82,85,87,89,91,94,95,97,99,101,
+    103,105,106,107,110,112,115,117,119,121,123,124,125,126,127,128,130,
+    131,134,135,136,139,141,143,149,154,157,160,162,164,166,168,169,171,
+    178,181,184,185,186,189,195,196,197,199,203,205,208,210,212,214,217,
+    219,221,224,226,229,230,232,237,241,242,248,
+  ];
   const pokemonId = seededPick(rng, pokemonIds);
   const level = seededRand(rng, levelMin, levelMax);
   return {
@@ -329,13 +336,22 @@ function getBotRewardRange(levelMax: number) {
   };
 }
 
+function getEffectiveTeamLevel(attackers: ArenaMascot[]) {
+  const levels = attackers.map(m => m.level).sort((a, b) => b - a);
+  const avgLevel = levels.reduce((sum, level) => sum + level, 0) / Math.max(1, levels.length);
+  const topCount = Math.max(1, Math.ceil(levels.length / 2));
+  const topAvg = levels.slice(0, topCount).reduce((sum, level) => sum + level, 0) / topCount;
+  const maxLevel = levels[0] ?? 1;
+  return Math.max(1, Math.round(Math.max(avgLevel, topAvg * 0.9, maxLevel * 0.72)));
+}
+
 function buildBotOpponent(attackers: ArenaMascot[], difficulty: ArenaDifficulty = "normal", seed?: number) {
   const rng = seed !== undefined ? seededRng(seed) : Math.random;
-  const avgLevel = Math.max(1, Math.round(attackers.reduce((sum, m) => sum + m.level, 0) / attackers.length));
+  const avgLevel = getEffectiveTeamLevel(attackers);
   const diff = DIFFICULTY_CONFIG[difficulty];
   const adjustedLevel = Math.max(1, avgLevel + diff.levelOffset);
   const band = levelBand(adjustedLevel);
-  const botSize = seededRand(rng, 2, Math.min(6, Math.max(2, attackers.length + seededRand(rng, -1, 1))));
+  const botSize = Math.min(6, Math.max(2, attackers.length + seededRand(rng, 0, 2)));
   // Seed determinístico: usa seed se fornecido, caso contrário gera aleatório
   const nameSeed = seed !== undefined ? seed % BOT_NAMES.length : Math.floor(rng() * BOT_NAMES.length);
   const botName = BOT_NAMES[nameSeed];
@@ -580,6 +596,27 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
   }
 
   return prisma.$transaction(async (tx) => {
+    const activeLinks = await tx.arenaTeamMember.findMany({
+      where: { mascotId: { in: mascots.map(m => m.id) }, team: { status: "ACTIVE" } },
+      include: { team: { select: { name: true } } },
+    });
+    if (activeLinks.length > 0) {
+      throw new Error(`Mascote ja esta na equipe "${activeLinks[0].team.name}". Atualize a pagina e tente novamente.`);
+    }
+
+    const lockedMascots = await tx.mascot.updateMany({
+      where: {
+        id: { in: mascots.map(m => m.id) },
+        playerId,
+        arenaState: { in: ["FREE", "RESTING"] },
+        arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
+      },
+      data: { arenaState: "ARENA", restingUntil: null, injuredAt: null, isEquipped: false },
+    });
+    if (lockedMascots.count !== mascots.length) {
+      throw new Error("Um mascote deixou de estar disponivel. Atualize a pagina e tente novamente.");
+    }
+
     const team = await tx.arenaTeam.create({
       data: {
         playerId,
@@ -590,12 +627,8 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
         },
       },
     });
-    await tx.mascot.updateMany({
-      where: { id: { in: mascots.map(m => m.id) } },
-      data: { arenaState: "ARENA", isEquipped: false },
-    });
     return team;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function addMascotToArenaTeam(playerId: string, teamId: string, mascotId: string) {
@@ -613,15 +646,28 @@ export async function addMascotToArenaTeam(playerId: string, teamId: string, mas
   if (!slot) throw new Error("Sem slot livre na equipe.");
 
   return prisma.$transaction(async (tx) => {
+    const activeLink = await tx.arenaTeamMember.findFirst({
+      where: { mascotId: mascot.id, team: { status: "ACTIVE" } },
+      include: { team: { select: { name: true } } },
+    });
+    if (activeLink) throw new Error(`Mascote ja esta na equipe "${activeLink.team.name}". Atualize a pagina e tente novamente.`);
+
+    const locked = await tx.mascot.updateMany({
+      where: {
+        id: mascot.id,
+        playerId,
+        arenaState: { in: ["FREE", "RESTING"] },
+        arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
+      },
+      data: { arenaState: "ARENA", restingUntil: null, injuredAt: null, isEquipped: false },
+    });
+    if (locked.count !== 1) throw new Error("Mascote deixou de estar disponivel. Atualize a pagina e tente novamente.");
+
     const member = await tx.arenaTeamMember.create({
       data: { teamId, mascotId: mascot.id, slot },
     });
-    await tx.mascot.update({
-      where: { id: mascot.id },
-      data: { arenaState: "ARENA", restingUntil: null, injuredAt: null, isEquipped: false },
-    });
     return member;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 /** Remove equipe completamente (admin ou dono). Libera mascotes e apaga o registro. */
@@ -756,47 +802,57 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
 
 export async function syncDefeatedArenaTeams(playerId: string) {
   const teams = await prisma.arenaTeam.findMany({
-    where: {
-      playerId,
-      status: "ACTIVE",
-      members: {
-        some: {
-          OR: [
-            { mascot: { arenaState: "INJURED" } },
-            { mascot: { arenaState: "RESTING" } },
-            { mascot: { restingUntil: { not: null } } },
-          ],
-        },
-      },
-    },
+    where: { playerId, status: "ACTIVE" },
     include: { members: { include: { mascot: true } } },
   });
-  if (teams.length === 0) return { updated: 0 };
+
+  const activeMascotIds = new Set(teams.flatMap(team => team.members.map(member => member.mascotId)));
+  const updated = { teams: 0, deletedEmptyTeams: 0, releasedOrphans: 0, removedInvalidMembers: 0 };
 
   await prisma.$transaction(async (tx) => {
     for (const team of teams) {
-      const injured = team.members.filter(member => member.mascot.arenaState === "INJURED");
-      const survivors = team.members.filter(member => member.mascot.arenaState !== "INJURED");
-      const legacyResting = survivors.filter(member => member.mascot.restingUntil || member.mascot.arenaState === "RESTING");
-      if (injured.length > 0) {
+      const invalidMembers = team.members.filter(member =>
+        member.mascot.arenaState === "INJURED" ||
+        member.mascot.arenaState === "RESTING" ||
+        !!member.mascot.restingUntil
+      );
+      const survivors = team.members.filter(member => !invalidMembers.some(invalid => invalid.id === member.id));
+
+      if (invalidMembers.length > 0) {
         await tx.arenaTeamMember.deleteMany({
-          where: { teamId: team.id, mascotId: { in: injured.map(member => member.mascotId) } },
+          where: { id: { in: invalidMembers.map(member => member.id) } },
         });
+        updated.removedInvalidMembers += invalidMembers.length;
       }
+
+      const legacyResting = survivors.filter(member => member.mascot.restingUntil || member.mascot.arenaState === "RESTING");
       if (legacyResting.length > 0) {
         await tx.mascot.updateMany({
           where: { id: { in: legacyResting.map(member => member.mascotId) }, arenaState: { not: "INJURED" } },
           data: { arenaState: "ARENA", restingUntil: null },
         });
       }
+
       if (survivors.length === 0) {
-        // Time vazio — deleta diretamente (sem loot restante, cascade remove membros)
         await tx.arenaTeam.delete({ where: { id: team.id } });
+        updated.deletedEmptyTeams++;
       }
     }
+
+    const orphans = await tx.mascot.updateMany({
+      where: {
+        playerId,
+        arenaState: "ARENA",
+        id: activeMascotIds.size > 0 ? { notIn: [...activeMascotIds] } : undefined,
+        arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
+      },
+      data: { arenaState: "FREE", restingUntil: null, injuredAt: null },
+    });
+    updated.releasedOrphans = orphans.count;
   });
 
-  return { updated: teams.length };
+  updated.teams = teams.length;
+  return updated;
 }
 
 export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
@@ -810,6 +866,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
   if (team.members.length === 0) throw new Error("Equipe vazia.");
+  if (team.teamType === "PVP") throw new Error("Equipe Somente PvP nao pode enfrentar bots.");
 
   // Admin: força debug mode automaticamente (sem cooldown, sem efeito no ranking/loot)
   const ownerUser = await prisma.player.findUnique({ where: { id: playerId }, include: { user: { select: { role: true } } } });
@@ -1099,6 +1156,7 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
+  if (team.teamType === "PVP") throw new Error("Equipe Somente PvP nao pode gerar bot.");
 
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
   const hourSlot = Math.floor(Date.now() / (10 * 60 * 1000));
@@ -1348,6 +1406,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (isAdminBattle) throw new Error("Contas admin nao participam de PvP real. Use o modo debug para testes.");
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE") throw new Error("As duas equipes precisam estar ativas.");
   if (attackTeam.members.length === 0 || defenseTeam.members.length === 0) throw new Error("As equipes precisam ter mascotes.");
+  if (attackTeam.teamType === "PVE") throw new Error("Equipe Somente PvE nao pode atacar jogadores.");
+  if (defenseTeam.teamType === "PVE") throw new Error("Equipe Somente PvE nao fica disponivel para PvP.");
 
   // Cooldown PvP: 10 min entre ataques PvP da mesma equipe atacante
   const lastPvp = await prisma.arenaBattle.findFirst({

@@ -25,10 +25,9 @@ import type { ArenaDifficulty } from "@/lib/arena-z";
 export function CooldownBadge({ until }: { until: Date | string | null | undefined }) {
   const { expired, remaining } = useTimerExpiry(until);
   if (expired || !until) return null;
-  const s = Math.ceil(remaining / 1000);
   return (
-    <span className="flex items-center gap-1 rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
-      <Timer size={9} /> {s}s
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FFCB05]/50 bg-[#FFCB05]/10 px-2.5 py-1 text-[10px] font-bold text-[#FFCB05] shadow-[0_0_12px_rgba(255,203,5,0.12)]">
+      <Timer size={10} /> {formatRemaining(remaining)}
     </span>
   );
 }
@@ -38,7 +37,7 @@ export function PvpCooldownIndicator({ until }: { until: Date | null }) {
   const { expired } = useTimerExpiry(until);
   const onCooldown = !expired && !!until;
   return (
-    <div className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-200">
+    <div className="flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-red-200">
       <span>Cooldown PvP</span>
       {onCooldown ? <CooldownBadge until={until} /> : <span className="text-green-300">Liberado</span>}
     </div>
@@ -377,6 +376,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", cooldownUntil
           <button
             type="button"
             disabled={pending || onCooldown}
+            title={onCooldown ? "Cooldown PvE desta equipe ainda ativo." : undefined}
             onClick={() => {
               startTransition(async () => {
                 const lockResult = await lockBotAction(teamId, difficulty);
@@ -580,6 +580,7 @@ export function PvpBattleButton({
       <button
         type="button"
         disabled={pending || onCooldown}
+        title={onCooldown ? "Cooldown PvP desta equipe ainda ativo." : undefined}
         onClick={() => {
           if (!confirm("Atacar esta equipe? Você pode ganhar ou perder loot do cofre.")) return;
           startTransition(async () => {

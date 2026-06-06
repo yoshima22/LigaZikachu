@@ -20,9 +20,9 @@ interface ValidMascot {
 const MAX_MASCOTS = 6;
 
 const TEAM_TYPE_OPTIONS = [
-  { value: "BOTH" as const, label: "⚔️🤖 PvE + PvP", desc: "Pode fazer bots e desafiar jogadores" },
-  { value: "PVE"  as const, label: "🤖 Somente PvE",  desc: "Apenas batalhas contra bots" },
-  { value: "PVP"  as const, label: "⚔️ Somente PvP",  desc: "Apenas desafios contra jogadores" },
+  { value: "PVE"  as const, label: "Somente PvE",  desc: "Apenas batalhas contra bots" },
+  { value: "PVP"  as const, label: "Somente PvP",  desc: "Apenas desafios contra jogadores" },
+  { value: "BOTH" as const, label: "PvE + PvP", desc: "Pode fazer bots e desafiar jogadores" },
 ];
 
 export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
@@ -30,7 +30,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
-  const [teamType, setTeamType] = useState<"PVE" | "PVP" | "BOTH">("BOTH");
+  const [teamType, setTeamType] = useState<"PVE" | "PVP" | "BOTH">("PVE");
 
   const toggle = (id: string) => {
     setSelected(prev => {

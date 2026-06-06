@@ -27,6 +27,16 @@ function teamStatusLabel(status: string) {
   return status;
 }
 
+function teamTypeInfo(teamType: string) {
+  if (teamType === "PVE") {
+    return { label: "Somente PvE", badge: "border-green-500/40 bg-green-500/10 text-green-200", description: "Seguro contra ataques PvP. Faz apenas combates contra bots." };
+  }
+  if (teamType === "PVP") {
+    return { label: "Somente PvP", badge: "border-red-500/40 bg-red-500/10 text-red-200", description: "Exposto na area PvP. Nao faz combates contra bots." };
+  }
+  return { label: "PvE + PvP", badge: "border-[#FFCB05]/40 bg-[#FFCB05]/10 text-[#FFCB05]", description: "Pode lutar contra bots e tambem fica exposto a ataques PvP." };
+}
+
 function fmtLoot(team: { vaultCoins: number; vaultExp: number; vaultFood: number; vaultSweet: number }) {
   const parts = [
     `${team.vaultCoins} ZC`,
@@ -195,8 +205,11 @@ export default async function ArenaZPage() {
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
   const activeTeams = teams.filter(team => team.status === "ACTIVE");
+  const pvpVisibleTeams = activeTeams.filter(team => team.teamType === "PVP" || team.teamType === "BOTH");
   const teamBlockReasons = new Map(activeTeams.map(team => [team.id, getTeamBlockedReason(team)]));
   const readyActiveTeams = activeTeams.filter(team => !teamBlockReasons.get(team.id));
+  const readyPveTeams = readyActiveTeams.filter(team => team.teamType === "PVE" || team.teamType === "BOTH");
+  const readyPvpTeams = readyActiveTeams.filter(team => team.teamType === "PVP" || team.teamType === "BOTH");
   const readyOpponentTeams = opponentTeams.filter(team => !getTeamBlockedReason(team));
   // 1. Aplica renda passiva para as equipes PRÓPRIAS do jogador
   await import("./actions").then(m => m.applyPassiveIncomeAction()).catch(() => null);
@@ -225,13 +238,13 @@ export default async function ArenaZPage() {
 
   // Preview com dificuldade Normal por padrão (o jogador pode escolher no botão)
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
-  for (const team of readyActiveTeams) {
+  for (const team of readyPveTeams) {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
   // Guarda o timestamp ABSOLUTO de quando o cooldown PvP termina (não uma duração relativa)
   // Assim o cliente sempre calcula remaining = until - Date.now(), sem errar pelo atraso de entrega
   const pvpCooldowns = new Map<string, Date | null>();
-  await Promise.all(readyActiveTeams.map(async (team) => {
+  await Promise.all(readyPvpTeams.map(async (team) => {
     const lastPvp = await prisma.arenaBattle.findFirst({
       where: { type: "PVP", attackTeamId: team.id },
       orderBy: { createdAt: "desc" },
@@ -280,6 +293,15 @@ export default async function ArenaZPage() {
       </div>
 
       {/* ── FAQ Arena Z ── */}
+      {pvpVisibleTeams.length > 0 && (
+        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">
+          <p className="font-bold">Voce tem {pvpVisibleTeams.length} equipe(s) visivel(is) na area PvP.</p>
+          <p className="mt-1 text-xs text-red-100/80">
+            Enquanto estiverem em modo Somente PvP ou PvE + PvP, outros jogadores podem atacar essas equipes. Este aviso aparece na Arena para orientar, sem abrir janelas repetidas.
+          </p>
+        </div>
+      )}
+
       <details className="rounded-2xl border border-border overflow-hidden group">
         <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-300 hover:text-white select-none">
           <span className="flex items-center gap-2">📖 Como funciona a Arena Z?</span>
@@ -330,12 +352,18 @@ export default async function ArenaZPage() {
             <div className="mt-4 space-y-3">
               {teams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-slate-500">Nenhuma equipe criada ainda.</p>
-              ) : teams.map(team => (
+              ) : teams.map(team => {
+                const typeInfo = teamTypeInfo(team.teamType);
+                return (
                 <div key={team.id} className="rounded-2xl border border-border bg-slate-900/40 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold text-slate-100">{team.name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-slate-100">{team.name}</p>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${typeInfo.badge}`}>{typeInfo.label}</span>
+                      </div>
                       <p className="text-[11px] text-slate-500">{teamStatusLabel(team.status)} | {team.members.length} mascote(s) | entrou {team.enteredAt.toLocaleDateString("pt-BR")}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{typeInfo.description}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       {(team.status === "ACTIVE" || team.status === "DEFEATED") && <RetireTeamButton teamId={team.id} defeated={team.status === "DEFEATED"} />}
@@ -460,7 +488,8 @@ export default async function ArenaZPage() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -473,11 +502,11 @@ export default async function ArenaZPage() {
             <div className="mt-4 space-y-4">
               {activeTeams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Crie uma equipe ativa antes de testar PvP.</p>
-              ) : readyActiveTeams.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Sua equipe ativa ainda esta em repouso ou tem mascote ferido.</p>
+              ) : readyPvpTeams.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Voce nao tem equipe pronta em modo Somente PvP ou PvE + PvP.</p>
               ) : readyOpponentTeams.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhuma equipe adversaria ativa disponivel.</p>
-              ) : readyActiveTeams.map(attackTeam => {
+              ) : readyPvpTeams.map(attackTeam => {
                 const pvpCooldownUntil = pvpCooldowns.get(attackTeam.id) ?? null;
                 return (
                 <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
