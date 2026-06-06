@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
 import { buyMiauvadaoOffer, refreshMiauvadaoShopNow } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
+import { getShopItemEmoji } from "@/lib/shop-config";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
 
@@ -51,13 +52,7 @@ function ItemDisplay({ itemType, imageUrl }: { itemType: string; imageUrl?: stri
     return <EggImg src="/mascot/egg-common.png" />;
 
   // 3. Buffs e comidas — emojis grandes (igual à ZikaShop)
-  const EMOJI: Record<string, string> = {
-    MASCOT_FOOD:"🍖", MASCOT_SWEET:"🍬",
-    MASCOT_BUFF_EXP:"⚡", MASCOT_BUFF_STAT:"💊",
-    MASCOT_BUFF_HAPPY:"🍯", MASCOT_BUFF_LUCK:"🍀", MASCOT_BUFF_MOOD:"💧",
-    ZIKALOOT_TICKET:"🎟️",
-  };
-  const emoji = EMOJI[itemType] ?? "📦";
+  const emoji = getShopItemEmoji(itemType);
   return (
     <span className="text-[72px] leading-none select-none
       drop-shadow-[0_2px_12px_rgba(255,203,5,0.3)]">

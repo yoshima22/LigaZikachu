@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { getSpriteUrl, getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import {
   getListing, buyListing, createProposal, acceptProposal,
   rejectProposal, toggleFavorite,
@@ -50,14 +51,6 @@ interface ListingDetail {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ITEM_EMOJI: Record<string, string> = {
-  COMMON:"🥚",RARE:"💙",SPECIAL:"💜",EVENT:"⭐",
-  EGG_GEN1:"1️⃣",EGG_GEN2:"2️⃣",EGG_GEN3:"3️⃣",EGG_GEN4:"4️⃣",EGG_GEN5:"5️⃣",
-  EGG_GEN6:"6️⃣",EGG_GEN7:"7️⃣",EGG_GEN8:"8️⃣",EGG_GEN9:"9️⃣",
-  FOOD:"🍖",SWEET:"🍬",
-  MASCOT_BUFF_EXP:"⚡",MASCOT_BUFF_STAT:"💊",MASCOT_BUFF_HAPPY:"🍯",
-  MASCOT_BUFF_LUCK:"🍀",MASCOT_BUFF_MOOD:"💧",
-};
 const PROPOSAL_STATUS_COLOR: Record<string, string> = {
   PENDING:"text-yellow-400",ACCEPTED:"text-green-400",REJECTED:"text-red-400",CANCELLED:"text-slate-500",
 };
@@ -250,7 +243,7 @@ export default function BazarListingPage(): React.JSX.Element {
               <p className="text-[#FFCB05] font-semibold">Nível {level}</p>
             </div>
           ) : (
-            <span className="text-7xl">{ITEM_EMOJI[itemType ?? ""] ?? "📦"}</span>
+            <span className="text-7xl">{getShopItemEmoji(itemType ?? "")}</span>
           )}
         </div>
 
@@ -460,11 +453,10 @@ interface InventoryData {
 
 function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOfferedItem[]) => void }) {
   const [inventory, setInventory] = useState<InventoryData | null>(null);
-  const ITEM_EMOJI_MAP: Record<string,string> = {"MASCOT_BUFF_EXP":"⚡","MASCOT_BUFF_STAT":"💊","MASCOT_BUFF_HAPPY":"🍯","MASCOT_BUFF_LUCK":"🍀","MASCOT_BUFF_MOOD":"💧","ZIKALOOT_TICKET":"🎟️"};
   const [selected, setSelected] = useState<ProposalOfferedItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const TRADEABLE = new Set(["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD","ZIKALOOT_TICKET"]);
+  const TRADEABLE = new Set<string>(CONSUMABLE_SHOP_ITEM_TYPES);
 
   const loadInventory = async () => {
     if (loaded) return;
@@ -600,9 +592,9 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">✨ Itens Especiais</p>
               {inventory.inventoryItems.map(item => {
-                const key = item.shopItemId;
+                const key = item.type;
                 const sel = selectedKeys.has(key);
-                const emoji = ITEM_EMOJI_MAP[item.type] ?? "📦";
+                const emoji = getShopItemEmoji(item.type);
                 return (
                   <div key={key} className="flex items-center gap-2">
                     <button type="button"

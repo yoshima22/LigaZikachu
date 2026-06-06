@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Coins, Heart, MessageSquare, Clock } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
+import { getShopItemEmoji } from "@/lib/shop-config";
 
 const CATEGORY_LABEL: Record<string, string> = {
   MASCOT: "Mascote", ITEM: "Item", COSMETIC: "Cosmético",
@@ -12,15 +13,6 @@ const LISTING_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   TRADE:        { label: "Troca",       color: "text-blue-400  border-blue-500/30  bg-blue-500/10" },
   SALE_OR_TRADE:{ label: "Venda/Troca", color: "text-purple-400 border-purple-500/30 bg-purple-500/10" },
 };
-const ITEM_EMOJI: Record<string, string> = {
-  COMMON: "🥚", RARE: "💙", SPECIAL: "💜", EVENT: "⭐",
-  EGG_GEN1:"1️⃣", EGG_GEN2:"2️⃣", EGG_GEN3:"3️⃣", EGG_GEN4:"4️⃣", EGG_GEN5:"5️⃣",
-  EGG_GEN6:"6️⃣", EGG_GEN7:"7️⃣", EGG_GEN8:"8️⃣", EGG_GEN9:"9️⃣",
-  FOOD:"🍖", SWEET:"🍬",
-  MASCOT_BUFF_EXP:"⚡", MASCOT_BUFF_STAT:"💊", MASCOT_BUFF_HAPPY:"🍯",
-  MASCOT_BUFF_LUCK:"🍀", MASCOT_BUFF_MOOD:"💧",
-};
-
 interface Listing {
   id: string;
   category: string;
@@ -83,7 +75,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
           />
         ) : (
           <span className="text-5xl">
-            {ITEM_EMOJI[(payload.itemType as string)] ?? "📦"}
+            {getShopItemEmoji(payload.itemType as string)}
           </span>
         )}
         {/* Type badge */}

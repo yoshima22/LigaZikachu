@@ -326,7 +326,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
     setSessionId(null);
   };
 
-  // Cálculo correto: aposta + 40% da aposta = prêmio total; o bonus (40%) sai do cofre
+  // Calculo correto: aposta + 40% da aposta = premio total; tudo sai do cofre.
   const winBonus   = Math.floor(bet * 0.40);
   const totalPrize = bet + winBonus;
   const isPlaying  = phase !== "idle" && phase !== "won" && phase !== "lost";
@@ -382,7 +382,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
           </div>
           <div className="text-[10px] flex flex-col items-end gap-0.5" style={{ color: GOLD_D }}>
             <span>Cofre: <strong style={{ color: "#FFCB05" }}>{vaultBalance.toLocaleString("pt-BR")} ZC</strong></span>
-            <span>Bônus do cofre: <strong style={{ color: "#FFCB05" }}>+{winBonus.toLocaleString("pt-BR")} ZC</strong></span>
+            <span>Sai do cofre: <strong style={{ color: "#FFCB05" }}>{totalPrize.toLocaleString("pt-BR")} ZC</strong></span>
           </div>
         </div>
 
@@ -550,7 +550,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
         <div className="rounded-xl px-3 py-2 text-[10px] space-y-0.5"
           style={{ background: "#0d0b08", color: GOLD_D }}>
           <p>🎯 <strong style={{ color: GOLD }}>Como jogar:</strong> A bolinha começa no copo do meio. Observe enquanto os copos embaralham. Clique no copo que você acha que esconde a bolinha.</p>
-          <p>🏆 <strong style={{ color: GOLD }}>Prêmio:</strong> Aposta + 40% da aposta (ex: 100 ZC apostados → recebe 140 ZC). O bônus de 40% sai do cofre do Miauvadão. Cooldown de 5 min entre jogadas.</p>
+          <p>🏆 <strong style={{ color: GOLD }}>Prêmio:</strong> Aposta + 40% da aposta (ex: 100 ZC apostados → recebe 140 ZC). O premio total sai do cofre do Miauvadao. Cooldown de 5 min entre jogadas.</p>
         </div>
       </div>
       )}

@@ -86,6 +86,27 @@ export const CONSUMABLE_SHOP_ITEM_TYPES = [
   ...MASCOT_SHOP_ITEM_TYPES,
 ] as const;
 
+export const SHOP_ITEM_EMOJI: Record<string, string> = {
+  ZIKALOOT_TICKET: "🎟️",
+  MASCOT_FOOD: "🍖",
+  MASCOT_SWEET: "🍬",
+  MASCOT_BUFF_EXP: "⚡",
+  MASCOT_BUFF_STAT: "💊",
+  MASCOT_BUFF_HAPPY: "🍯",
+  MASCOT_BUFF_LUCK: "🍀",
+  MASCOT_BUFF_MOOD: "💧",
+  LUCKY_EGG: "🥚✨",
+  WEAKNESS_POLICY: "🛡️",
+  PICNIC_BASKET: "🧺",
+  VACATION_TICKET: "🏖️",
+  XP_SHARE: "📡",
+  RAINBOW_FEATHER: "🌈",
+};
+
+export function getShopItemEmoji(type: string): string {
+  return SHOP_ITEM_EMOJI[type] ?? "📦";
+}
+
 export const EGG_SHOP_TO_EGG_TYPE: Record<string, string> = {
   EGG_COMMON: "COMMON",
   EGG_RARE: "RARE",

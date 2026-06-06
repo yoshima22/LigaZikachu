@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getPokemonName } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
+import { MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -24,7 +25,7 @@ type ProposalOfferItem = {
 const EGG_OFFER_TYPES = [
   "COMMON","RARE","SPECIAL","EVENT",
   "EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5",
-  "EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9",
+  "EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS",
 ];
 
 function isEggOfferType(type: string) {
@@ -33,14 +34,11 @@ function isEggOfferType(type: string) {
 
 // Tipos de shop que o Miauvadão pode oferecer (excluindo cosméticos únicos)
 const MIAUVADAO_ELIGIBLE_TYPES = [
-  "EGG_COMMON","EGG_RARE","EGG_SPECIAL",
-  "EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5",
-  "EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS",
-  "MASCOT_FOOD","MASCOT_SWEET",
-  "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY",
-  "MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
+  ...MASCOT_SHOP_ITEM_TYPES,
   "ZIKALOOT_TICKET",
 ];
+
+const MIAUVADAO_MAX_DISCOUNT = 70;
 
 // Faixa de desconto por raridade do item
 const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
@@ -65,7 +63,7 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
   if (shopItems.length === 0) return [];
 
   // Quanto mais ZC no cofre, maior o bônus de desconto (máx +20%)
-  const vaultBonus = Math.min(20, Math.floor(vaultBalance / 500));
+  const vaultBonus = Math.min(14, Math.floor(Math.sqrt(Math.max(0, vaultBalance) / 500) * 3));
   const validUntil = new Date(Date.now() + 24 * 3600_000).toISOString();
 
   // Sorteia até 3 itens distintos
@@ -74,7 +72,13 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 
   return chosen.map(item => {
     const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
-    const discountPct = Math.min(75, minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus + extraBonus);
+    const rawDiscount = minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus + extraBonus;
+    const discountPct = Math.min(
+      MIAUVADAO_MAX_DISCOUNT,
+      rawDiscount >= MIAUVADAO_MAX_DISCOUNT
+        ? (Math.random() < 0.08 ? MIAUVADAO_MAX_DISCOUNT : MIAUVADAO_MAX_DISCOUNT - 1)
+        : rawDiscount,
+    );
     const finalPrice  = Math.max(1, Math.round(item.price * (1 - discountPct / 100)));
     return {
       shopItemId:    item.id,
@@ -1107,17 +1111,17 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
 
 const SHELL_MIN_BET = 50;
 const SHELL_MAX_BET = 2000;
-// Prêmio = aposta + 20% da aposta; o bonus (20%) é debitado do cofre
+// Premio = aposta + 40% da aposta; o premio total e debitado do cofre.
 const SHELL_WIN_BONUS_PCT = 0.40; // jogador ganha aposta + 40% da aposta
 const SHELL_COOLDOWN_MS = 5 * 60_000;
 
 const MIAUVADAO_RAGE: string[] = [
-  "IMPOSSÍVEL! {player} ganhou {prize} ZC e tirou {bonus} ZC do meu cofre! 😾",
-  "{player} acertou e me custou {bonus} ZC de bônus! Prêmio total: {prize} ZC. 🤬",
-  "Como?! {player} venceu {prize} ZC, mas do meu cofre saíram só {bonus} ZC... ainda dói! 😤",
-  "{player} pegou {prize} ZC no total. Meu cofre perdeu {bonus} ZC! Voltaaaa! 🙀",
-  "Minha sorte acabou... {player} ganhou {prize} ZC e eu banquei {bonus} ZC. 😿",
-  "{player} ganhou {prize} ZC! Meu cofre chora pelos {bonus} ZC de bônus. 😭",
+  "IMPOSSIVEL! {player} ganhou {prize} ZC e tirou {debit} ZC do meu cofre!",
+  "{player} acertou e me custou {debit} ZC! Premio total: {prize} ZC.",
+  "Como?! {player} venceu {prize} ZC e tudo saiu do meu cofre... ainda doi!",
+  "{player} pegou {prize} ZC no total. Meu cofre perdeu {debit} ZC! Voltaaaa!",
+  "Minha sorte acabou... {player} ganhou {prize} ZC e eu banquei {debit} ZC.",
+  "{player} ganhou {prize} ZC! Meu cofre chora pelos {debit} ZC.",
 ];
 
 export async function startShellGameSession(betAmount: number): Promise<{
@@ -1194,14 +1198,16 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
     let newBalance = 0;
 
     if (won) {
-      // Prêmio correto: aposta + 20% da aposta. O bonus (20%) é o que sai do cofre.
+      // Premio correto: aposta + 40% da aposta; o premio total sai do cofre.
       const vaultBonus = Math.floor(session.betAmount * SHELL_WIN_BONUS_PCT);
-      prize = session.betAmount + vaultBonus; // ex: aposta 100 → recebe 120, cofre perde 20
+      prize = session.betAmount + vaultBonus; // ex: aposta 100 -> recebe 140
+      const vaultDebit = prize;
       const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
       const message = template
         .replace("{player}", player.displayName)
         .replace("{prize}", prize.toLocaleString("pt-BR"))
-        .replace("{bonus}", vaultBonus.toLocaleString("pt-BR"));
+        .replace("{bonus}", vaultBonus.toLocaleString("pt-BR"))
+        .replace("{debit}", vaultDebit.toLocaleString("pt-BR"));
       const updatedWallet = await prisma.$transaction(async (tx) => {
         await creditCoins(tx, {
           playerId: player.id,
@@ -1211,8 +1217,8 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
         });
         await tx.miauvadaoConfig.upsert({
           where: { id: "singleton" },
-          update: { vaultBalance: { decrement: vaultBonus }, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
-          create: { id: "singleton", lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
+          update: { vaultBalance: { decrement: vaultDebit }, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
+          create: { id: "singleton", vaultBalance: -vaultDebit, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
         });
         await tx.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: true } });
         return tx.zikaCoinWallet.findUniqueOrThrow({

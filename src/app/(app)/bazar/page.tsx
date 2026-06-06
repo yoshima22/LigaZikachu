@@ -52,7 +52,7 @@ export default async function BazarPage({
 
   return (
     <div className="space-y-6">
-      {/* BazarLiveRefresh removido — router.refresh() a cada 5s travava o site */}
+      <BazarLiveRefresh />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div>
@@ -135,11 +135,11 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>📊 Como os descontos são calculados</p>
-            <p>Desconto base = faixa da raridade (COMMON: 15–35%, EPIC: 8–20%, LEGENDARY: 5–15%). Bônus do cofre: <strong style={{ color: "#FFCB05" }}>+1 ponto percentual</strong> por cada 500 ZC no cofre (máx +20 p.p.). Refresh pago: <strong style={{ color: "#FFCB05" }}>+10 pontos percentuais extras</strong> em todos os itens novos.</p>
+            <p>Desconto base = faixa da raridade. O cofre adiciona um bonus suave, com teto raro de <strong style={{ color: "#FFCB05" }}>70%</strong>. Refresh pago adiciona <strong style={{ color: "#FFCB05" }}>+10 pontos percentuais extras</strong> aos itens novos, ainda respeitando o teto.</p>
           </div>
 
           <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Atualizar Ofertas (80 ZC)</p>
+            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Atualizar Ofertas (60 ZC)</p>
             <p>Qualquer jogador pode pagar 60 ZC para atualizar os 3 itens do dia imediatamente. Os 60 ZC vão ao cofre e os novos itens ganham <strong style={{ color: "#FFCB05" }}>+10 pontos de desconto extras</strong> além do normal. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
           </div>
 

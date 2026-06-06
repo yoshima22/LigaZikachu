@@ -7,6 +7,7 @@ import { ArrowLeft, Coins, Info } from "lucide-react";
 import Link from "next/link";
 import { createListing } from "../actions";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
+import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 
 interface InventoryItem {
@@ -38,24 +39,13 @@ interface InventoryData {
 }
 
 // Tipos que podem ser listados no Bazar (excluindo cosméticos únicos de perfil que não são trocáveis)
-const TRADEABLE_TYPES = new Set([
-  "EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2","EGG_GEN3",
-  "EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS",
-  "MASCOT_FOOD","MASCOT_SWEET",
-  "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
-  "ZIKALOOT_TICKET",
-]);
+const TRADEABLE_TYPES = new Set<string>(CONSUMABLE_SHOP_ITEM_TYPES);
 
 const EGG_LABELS: Record<string, string> = {
   COMMON:"Ovo Comum",RARE:"Ovo Raro",SPECIAL:"Ovo Especial",EVENT:"Ovo de Evento",
   EGG_GEN1:"Ovo Gen 1",EGG_GEN2:"Ovo Gen 2",EGG_GEN3:"Ovo Gen 3",EGG_GEN4:"Ovo Gen 4",
   EGG_GEN5:"Ovo Gen 5",EGG_GEN6:"Ovo Gen 6",EGG_GEN7:"Ovo Gen 7",EGG_GEN8:"Ovo Gen 8",EGG_GEN9:"Ovo Gen 9",EGG_GEN6PLUS:"Ovo Gen 6+",
 };
-const ITEM_EMOJI: Record<string, string> = {
-  MASCOT_FOOD:"🍖",MASCOT_SWEET:"🍬",MASCOT_BUFF_EXP:"⚡",MASCOT_BUFF_STAT:"💊",
-  MASCOT_BUFF_HAPPY:"🍯",MASCOT_BUFF_LUCK:"🍀",MASCOT_BUFF_MOOD:"💧",ZIKALOOT_TICKET:"🎟️",
-};
-
 export default function CriarAnuncioPage() { return <CreateListingForm />; }
 
 function CreateListingForm() {
@@ -235,7 +225,7 @@ function CreateListingForm() {
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={item.imageUrl} alt="" className="h-9 w-9 object-contain shrink-0" />
                           ) : (
-                            <span className="text-xl shrink-0">{ITEM_EMOJI[item.type] ?? "📦"}</span>
+                            <span className="text-xl shrink-0">{getShopItemEmoji(item.type)}</span>
                           )}
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-white truncate">{item.name}</p>
