@@ -329,8 +329,8 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"; hours: number; label: string }> = {
       // ⚡ Vitamina Elétrica: EXP dobrado por 2h (verificado em addExp via MascotBuff)
       MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica — EXP dobrado por 2h" },
-      // 💊 Proteína Zika: +3 PERMANENTE em todos os 5 atributos (sem expiração)
-      MASCOT_BUFF_STAT:  { type: "STAT_BOOST",  hours: 0, label: "Proteína Zika — +3 permanente em todos os atributos" },
+      // Proteina Zika: +2 permanente em todos os 5 atributos, limitada a 3 mascotes por jogador.
+      MASCOT_BUFF_STAT:  { type: "STAT_BOOST",  hours: 0, label: "Proteina Zika - +2 permanente em todos os atributos" },
       // 🍯 Bala de Mel: felicidade vai para 100 imediatamente + humor HAPPY
       MASCOT_BUFF_HAPPY: { type: "HAPPINESS",   hours: 0, label: "Bala de Mel — felicidade máxima instantânea" },
       // 🍀 Amuleto da Sorte: chance dobrada de loot raro em expedições por 6h
@@ -340,7 +340,24 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     };
 
     const config = BUFF_CONFIG[inventoryItem.item.type];
-    if (!config) return { error: "Este item não é um buff." };
+    if (!config) return { error: "Este item nao e um buff." };
+
+    if (inventoryItem.item.type === "MASCOT_BUFF_STAT") {
+      const proteinEvents = await prisma.mascotEvent.findMany({
+        where: {
+          description: { contains: "Prote" },
+          mascot: { playerId: player.id },
+        },
+        select: { mascotId: true },
+      });
+      const boostedMascotIds = new Set(proteinEvents.map(event => event.mascotId));
+      if (boostedMascotIds.has(mascotId)) {
+        return { error: "Este mascote ja recebeu Proteina Zika." };
+      }
+      if (boostedMascotIds.size >= 3) {
+        return { error: "Limite atingido: Proteina Zika pode ser usada em ate 3 mascotes por jogador." };
+      }
+    }
 
     const expiresAt = new Date(Date.now() + config.hours * 3_600_000);
 
@@ -360,8 +377,8 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
         await tx.mascot.update({
           where: { id: mascotId },
           data: {
-            statForce: { increment: 3 }, statAgility: { increment: 3 },
-            statCharisma: { increment: 3 }, statInstinct: { increment: 3 }, statVitality: { increment: 3 }
+            statForce: { increment: 2 }, statAgility: { increment: 2 },
+            statCharisma: { increment: 2 }, statInstinct: { increment: 2 }, statVitality: { increment: 2 }
           }
         });
       }

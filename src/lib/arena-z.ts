@@ -374,7 +374,7 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
   const diff = DIFFICULTY_CONFIG[difficulty];
   // Último combate da equipe (para mostrar cooldown)
   const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackTeamId: teamId },
+    where: { attackTeamId: teamId, type: "BOT" },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
@@ -562,22 +562,6 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
 
 export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], teamType: "PVE" | "PVP" | "BOTH" = "BOTH") {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
-  const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackerPlayerId: playerId },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true, type: true },
-  });
-  if (lastBattle) {
-    const cooldownMinutes = lastBattle.type === "PVP"
-      ? ARENA_Z_CONFIG.pvpCooldownMinutes
-      : ARENA_Z_CONFIG.botCooldownMinutes;
-    const elapsed = Date.now() - lastBattle.createdAt.getTime();
-    const cooldownMs = cooldownMinutes * 60_000;
-    if (elapsed < cooldownMs) {
-      const remaining = Math.ceil((cooldownMs - elapsed) / 1000);
-      throw new Error(`Aguarde ${remaining}s antes de colocar uma nova equipe na Arena.`);
-    }
-  }
   const mascots = await validateArenaMascots(playerId, mascotIds);
   const teamName = name.trim() || "Equipe Arena Z";
 
@@ -877,7 +861,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
 
   // Cooldown: impede spam de bot battles
   const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackTeamId: teamId },
+    where: { attackTeamId: teamId, type: "BOT" },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });

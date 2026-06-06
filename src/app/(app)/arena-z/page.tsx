@@ -209,6 +209,18 @@ export default async function ArenaZPage() {
   for (const team of readyActiveTeams) {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
+  const pvpCooldowns = new Map<string, number>();
+  await Promise.all(readyActiveTeams.map(async (team) => {
+    const lastPvp = await prisma.arenaBattle.findFirst({
+      where: { type: "PVP", attackTeamId: team.id },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    const cooldownMs = lastPvp
+      ? Math.max(0, ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000 - (Date.now() - lastPvp.createdAt.getTime()))
+      : 0;
+    pvpCooldowns.set(team.id, cooldownMs);
+  }));
   const arenaRanking = arenaRankingData;
 
   return (
@@ -404,7 +416,10 @@ export default async function ArenaZPage() {
                                   O bot mostrado acima será o adversário real ao clicar em Combater. Escolha a dificuldade para ajustar o nível.
                                 </p>
                               </div>
-                              <BotBattleButton teamId={team.id} teamName={team.name} cooldownMs={bot.cooldownMs ?? 0} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
+                              <div className="space-y-1 text-right">
+                                <p className="text-[10px] uppercase tracking-widest text-green-300/80">Cooldown PvE da equipe</p>
+                                <BotBattleButton teamId={team.id} teamName={team.name} cooldownMs={bot.cooldownMs ?? 0} cooldownAfterMs={ARENA_Z_CONFIG.botCooldownMinutes * 60_000} />
+                              </div>
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                               {bot.mascots.map(m => (
@@ -443,7 +458,12 @@ export default async function ArenaZPage() {
                 <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">Nenhuma equipe adversaria ativa disponivel.</p>
               ) : readyActiveTeams.map(attackTeam => (
                 <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-                  <p className="text-sm font-bold text-red-100">Atacando com: {attackTeam.name}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-red-100">Atacando com: {attackTeam.name}</p>
+                    <p className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-200">
+                      Cooldown PvP da equipe
+                    </p>
+                  </div>
                   <div className="mt-3 grid gap-3 xl:grid-cols-2">
                     {readyOpponentTeams.map(defenseTeam => (
                       <div key={defenseTeam.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
@@ -454,7 +474,12 @@ export default async function ArenaZPage() {
                               Dono: {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick} | {defenseTeam.members.length} mascote(s)
                             </p>
                           </div>
-                          <PvpBattleButton attackTeamId={attackTeam.id} defenseTeamId={defenseTeam.id} />
+                          <PvpBattleButton
+                            attackTeamId={attackTeam.id}
+                            defenseTeamId={defenseTeam.id}
+                            cooldownMs={pvpCooldowns.get(attackTeam.id) ?? 0}
+                            cooldownAfterMs={ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000}
+                          />
                         </div>
                         {/* Cofre ao vivo — atualiza a cada 30s sem recarregar a página */}
                         <PvpVaultLive
