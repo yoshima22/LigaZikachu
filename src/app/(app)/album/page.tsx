@@ -1,5 +1,6 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
@@ -40,7 +41,7 @@ export default async function AlbumPage({
   const duplicateCardIds = ownedStickers.filter((s) => s.quantity > 1).map((s) => s.cardId);
 
   // Build WHERE clause for cards
-  const cardsWhere: Parameters<typeof prisma.pokemonCard.count>[0]['where'] = {
+  const cardsWhere: Prisma.PokemonCardWhereInput = {
     active: true,
     ...(selectedGen ? { generation: selectedGen } : {}),
     ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {}),
