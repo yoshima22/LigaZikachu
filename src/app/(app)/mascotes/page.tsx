@@ -207,11 +207,11 @@ export default async function MascotesPage() {
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-200">💛 Cuidados diários</p>
-            <p><strong className="text-slate-300">Brincar</strong> aumenta felicidade e EXP (mais intenso, escala com nível). <strong className="text-slate-300">Carinho</strong> fortalece o vínculo gradualmente (pode ser recusado). <strong className="text-slate-300">Comida</strong> sacia fome. <strong className="text-slate-300">Doces</strong> dão grande bônus de EXP. Cooldown de <strong className="text-slate-300">3 minutos</strong> entre interações.</p>
+            <p><strong className="text-slate-300">Brincar</strong> é a ação de energia: dá mais EXP, mas tem cooldown maior. <strong className="text-slate-300">Carinho</strong> é vínculo emocional: dá menos EXP e ajuda humor/social. <strong className="text-slate-300">Comida</strong> e <strong className="text-slate-300">doces</strong> sustentam fome, felicidade e pequenas recuperações sem virar luxo.</p>
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-200">🗺 Expedições</p>
-            <p>Envie o mascote <strong className="text-slate-300">equipado</strong> em expedições de <strong className="text-slate-300">30min, 1h, 3h ou 6h</strong>. Quanto mais longa, mais EXP e loot melhor (6h pode trazer Ovo Especial). Os itens vão para a Caixa de Presentes.</p>
+            <p>Envie mascotes livres em expedições de <strong className="text-slate-300">30min, 1h, 3h ou 6h</strong>. O <strong className="text-slate-300">Mascote Companheiro</strong> representa seu perfil, mas expedições e Arena continuam sendo sistemas separados.</p>
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-200">📊 Status</p>
@@ -290,7 +290,7 @@ export default async function MascotesPage() {
       {buffInventory.length > 0 && (
         <BuffPanel
           buffs={buffInventory.map(b => ({ id: b.item.id, name: b.item.name, type: b.item.type, quantity: b.quantity, description: b.item.description ?? undefined, imageUrl: b.item.imageUrl ?? undefined }))}
-          mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? getPokemonName(m.pokemonId), isEquipped: m.isEquipped }))}
+          mascots={mascotData.map(m => ({ id: m.id, name: m.nickname ?? getPokemonName(m.pokemonId), isEquipped: m.isEquipped, isFavorite: m.isFavorite }))}
           proteinDoses={Object.fromEntries(proteinBoostedMascots.map(b => [b.mascotId, b._count.id]))}
         />
       )}

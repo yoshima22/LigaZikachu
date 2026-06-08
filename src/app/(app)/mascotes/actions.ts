@@ -124,7 +124,7 @@ export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ er
 
     if (!mascot.isFavorite) {
       const favoriteCount = await prisma.mascot.count({ where: { playerId: player.id, isFavorite: true } });
-      if (favoriteCount >= 6) return { error: "Voce ja tem 6 mascotes favoritos. Remova um favorito antes." };
+      if (favoriteCount >= 6) return { error: "Você já tem 6 mascotes na Equipe Favorita. Remova um integrante antes." };
     }
 
     await prisma.mascot.update({

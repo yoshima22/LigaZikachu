@@ -87,7 +87,7 @@ function MiniMascot({ mascot }: { mascot: MascotData }) {
         <span className="text-[10px] text-slate-500">
           Nv.{mascot.level} | {TYPE_LABELS[getPokemonElement(mascot.pokemonId)] ?? getPokemonElement(mascot.pokemonId)}
         </span>
-        <span className="block text-[10px] text-slate-600">{mascot.isEquipped ? "Equipado" : mascot.mood}</span>
+        <span className="block text-[10px] text-slate-600">{mascot.isEquipped ? "Companheiro" : mascot.mood}</span>
       </span>
     </div>
   );
@@ -182,7 +182,7 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
   const [moodFilter, setMoodFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [expeditionFilter, setExpeditionFilter] = useState("ALL");
-  const [equippedOnly, setEquippedOnly] = useState(false);
+  const [companionOnly, setCompanionOnly] = useState(false);
   const [expandedOthers, setExpandedOthers] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -205,8 +205,8 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
     const matchSearch = !query || displayName.includes(query) || String(m.pokemonId).includes(query) || getPokemonName(m.pokemonId).toLowerCase().includes(query);
     const matchMood = !moodFilter || m.mood === moodFilter;
     const matchType = !typeFilter || getPokemonElement(m.pokemonId) === typeFilter;
-    const matchEquip = !equippedOnly || m.isEquipped;
-    return matchSearch && matchMood && matchType && matchEquip;
+    const matchCompanion = !companionOnly || m.isEquipped;
+    return matchSearch && matchMood && matchType && matchCompanion;
   });
 
   const favorites = filtered.filter(m => m.isFavorite).slice(0, 6);
@@ -236,6 +236,13 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
 
   return (
     <div className="space-y-5">
+      <div className="rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 text-xs text-slate-400">
+        <p className="font-semibold text-[#FFCB05]">Mascote Companheiro e Equipe Favorita</p>
+        <p className="mt-1 leading-relaxed">
+          O companheiro é o mascote principal do perfil e acompanha suas partidas. A Equipe Favorita reúne até 6 mascotes para vitrine, cuidado diário, piquenique e eventos sociais.
+        </p>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
@@ -255,9 +262,9 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
           <option value="">Todos os tipos</option>
           {TYPE_OPTIONS.map(o => <option key={o} value={o}>{TYPE_LABELS[o]}</option>)}
         </select>
-        <button type="button" onClick={() => setEquippedOnly(v => !v)}
-          className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${equippedOnly ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-500 hover:text-slate-300"}`}>
-          So equipado
+        <button type="button" onClick={() => setCompanionOnly(v => !v)}
+          className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${companionOnly ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-500 hover:text-slate-300"}`}>
+          Só companheiro
         </button>
       </div>
 
@@ -309,8 +316,8 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
           {highlighted.length > 0 ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-[#FFCB05]"><Star size={14} fill="currentColor" /> {favorites.length > 0 ? "Favoritos" : "Destaques"}</h2>
-                <span className="text-[10px] text-slate-500">{favorites.length}/6</span>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-[#FFCB05]"><Star size={14} fill="currentColor" /> {favorites.length > 0 ? "Equipe Favorita" : "Destaques"}</h2>
+                <span className="text-[10px] text-slate-500">{favorites.length > 0 ? `${favorites.length}/6 favoritos` : "sem favoritos"}</span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} />)}

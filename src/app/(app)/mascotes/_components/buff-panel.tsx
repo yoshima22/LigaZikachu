@@ -9,7 +9,7 @@ interface BuffItem {
   id: string; name: string; type: string; quantity: number;
   description?: string; imageUrl?: string;
 }
-interface MascotOption { id: string; name: string; isEquipped: boolean }
+interface MascotOption { id: string; name: string; isEquipped: boolean; isFavorite: boolean }
 
 const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_EXP:   "⚡",
@@ -42,7 +42,7 @@ interface Props {
 export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
-  const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? "");
+  const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? mascots.find(m => m.isFavorite)?.id ?? "");
 
   if (buffs.length === 0) return null;
 
@@ -67,7 +67,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
     const confirmMsg = isDestructive
       ? `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai resetar nível, EXP e todos os atributos para 0. Esta ação é IRREVERSÍVEL. Tem certeza?`
       : isPlayerLevel
-        ? `Usar ${selectedBuffItem.name} em toda a equipe equipada?`
+        ? `Usar ${selectedBuffItem.name} na Equipe Favorita?`
         : `Usar ${selectedBuffItem.name} em ${mascotName}?`;
 
     if (!confirm(confirmMsg)) return;
@@ -87,7 +87,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
 
       if (r.error) toast.error(r.error);
       else {
-        if (t === "PICNIC_BASKET") toast.success("Piquenique iniciado! Equipe equipada tem bônus por 2h. 🧺");
+        if (t === "PICNIC_BASKET") toast.success("Piquenique iniciado! Equipe Favorita tem bônus por 2h. 🧺");
         else if (t === "VACATION_TICKET") toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 7 dias. 🏖️`);
         else if (t === "XP_SHARE") toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         else if (t === "RAINBOW_FEATHER") toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);
@@ -169,7 +169,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
       {selectedBuff && (
         <div className="flex flex-wrap items-center gap-3">
           {selectedBuffItem && PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type) ? (
-            <p className="text-xs text-slate-400">Aplica-se a toda a equipe equipada automaticamente.</p>
+            <p className="text-xs text-slate-400">Aplica-se automaticamente à Equipe Favorita, com até 6 mascotes livres.</p>
           ) : (
           <select
             value={selectedMascot}
@@ -182,7 +182,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
               const maxed = isProtein && doses >= PROTEIN_LIMIT;
               return (
                 <option key={m.id} value={m.id} disabled={maxed}>
-                  {m.name}{m.isEquipped ? " ★" : ""}{isProtein && doses > 0 ? ` (${doses}/${PROTEIN_LIMIT} doses)` : ""}{maxed ? " — MÁXIMO" : ""}
+                  {m.name}{m.isEquipped ? " ★ Companheiro" : m.isFavorite ? " ☆ Equipe Favorita" : ""}{isProtein && doses > 0 ? ` (${doses}/${PROTEIN_LIMIT} doses)` : ""}{maxed ? " — MÁXIMO" : ""}
                 </option>
               );
             })}

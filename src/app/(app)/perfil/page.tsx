@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MatchStatus } from "@prisma/client";
-import { BookOpen, CheckCircle2, ExternalLink, Swords, Trophy } from "lucide-react";
+import { BookOpen, CheckCircle2, ExternalLink, Sparkles, Star, Swords, Trophy } from "lucide-react";
 import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -13,6 +13,119 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
+import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+
+
+type ProfileMascot = {
+  id: string;
+  pokemonId: number;
+  nickname: string | null;
+  level: number;
+  happiness: number;
+  mood: string;
+  isEquipped: boolean;
+  isFavorite: boolean;
+  isShiny: boolean;
+  lastFedAt: Date | null;
+  events: { emoji: string; description: string; createdAt: Date }[];
+};
+
+function MiniProfileMascot({ mascot, label }: { mascot: ProfileMascot; label?: string }) {
+  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-slate-950/60 p-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={getSpriteUrl(mascot.pokemonId, true)}
+        alt={name}
+        className="h-12 w-12 object-contain"
+        style={{ imageRendering: "pixelated" }}
+      />
+      <div className="min-w-0 flex-1">
+        {label && <p className="text-[9px] font-semibold uppercase tracking-widest text-[#FFCB05]">{label}</p>}
+        <p className="truncate text-sm font-semibold text-slate-100">{name}{mascot.isShiny ? " ✨" : ""}</p>
+        <p className="text-[10px] text-slate-500">Nv.{mascot.level} · Felicidade {mascot.happiness}/100</p>
+      </div>
+    </div>
+  );
+}
+
+function MascotProfileOverview({ mascots }: { mascots: ProfileMascot[] }) {
+  if (mascots.length === 0) return null;
+
+  const companion = mascots.find((mascot) => mascot.isEquipped) ?? null;
+  const favoriteTeam = mascots.filter((mascot) => mascot.isFavorite).slice(0, 6);
+  const latestEvent = companion?.events?.[0] ?? mascots.flatMap((mascot) => mascot.events.map((event) => ({ ...event, mascot })))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const shinyCount = mascots.filter((mascot) => mascot.isShiny).length;
+  const highestLevel = mascots.reduce((max, mascot) => Math.max(max, mascot.level), 0);
+
+  return (
+    <Card className="p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Sparkles size={16} className="text-[#FFCB05]" /> Mascote Companheiro e Equipe Favorita
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            O companheiro representa seu perfil. A Equipe Favorita reúne até 6 mascotes para vitrine, cuidado diário e piqueniques.
+          </p>
+        </div>
+        <Link href="/mascotes" className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20">
+          Cuidar dos Mascotes
+        </Link>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.1fr_1.5fr]">
+        <div className="space-y-3">
+          {companion ? (
+            <MiniProfileMascot mascot={companion} label="Mascote Companheiro" />
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">
+              Nenhum mascote companheiro definido ainda.
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-xl border border-border/60 bg-slate-950/50 p-3">
+              <p className="text-lg font-bold text-white">{mascots.length}</p>
+              <p className="text-[10px] text-slate-500">coleção</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-slate-950/50 p-3">
+              <p className="text-lg font-bold text-white">{shinyCount}</p>
+              <p className="text-[10px] text-slate-500">shinies</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-slate-950/50 p-3">
+              <p className="text-lg font-bold text-white">{highestLevel}</p>
+              <p className="text-[10px] text-slate-500">maior nível</p>
+            </div>
+          </div>
+          {latestEvent && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-slate-400">
+              <p className="mb-1 font-semibold text-blue-200">Último evento</p>
+              <p><span className="mr-1">{latestEvent.emoji}</span>{latestEvent.description}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#FFCB05]"><Star size={13} fill="currentColor" /> Equipe Favorita</p>
+            <span className="text-[10px] text-slate-500">{favoriteTeam.length}/6</span>
+          </div>
+          {favoriteTeam.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {favoriteTeam.map((mascot) => <MiniProfileMascot key={mascot.id} mascot={mascot} />)}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">
+              Favorite até 6 mascotes para montar sua Equipe Favorita.
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 async function MeusDecksPreview({ playerId }: { playerId: string }) {
   const decks = await prisma.savedDeck.findMany({
@@ -125,7 +238,7 @@ export default async function PerfilPage() {
     );
   }
 
-  const [ranking, recentMatches, dreamTeam, equippedItems] = await Promise.all([
+  const [ranking, recentMatches, dreamTeam, equippedItems, profileMascots] = await Promise.all([
     computeGlobalRanking(),
     prisma.match.findMany({
       where: {
@@ -156,7 +269,17 @@ export default async function PerfilPage() {
     prisma.playerInventory.findMany({
       where: { playerId: player.id, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true } } }
-    })
+    }),
+    prisma.mascot.findMany({
+      where: { playerId: player.id },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, happiness: true, mood: true,
+        isEquipped: true, isFavorite: true, isShiny: true, lastFedAt: true,
+        events: { orderBy: { createdAt: "desc" }, take: 1, select: { emoji: true, description: true, createdAt: true } },
+      },
+      orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
+      take: 500,
+    }).catch(() => [] as ProfileMascot[])
   ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");

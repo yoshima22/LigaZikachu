@@ -1242,16 +1242,16 @@ export function getTypeAdvantageMultiplier(attackerType: string, defenderType: s
 
 // ── Explicações das personalidades ────────────────────────────────────────────
 export const PERSONALITY_DESCRIPTION: Record<string, string> = {
-  LOYAL:       "Fiel ao treinador. Cresce mais em Carisma. Manda mais presentes para amigos e defende bem em batalhas.",
-  PROUD:       "Orgulhoso e vaidoso. Entra em modo Confiante com mais facilidade. Pode recusar carinho se não estiver feliz.",
-  MISCHIEVOUS: "Travesso e irreverente. Tem mais chance de criar rivalidades e pode 'roubar' itens de rivais.",
-  LAZY:        "Preguiçoso. Rende menos quando felicidade está baixa. Fica cansado mais rápido em interações.",
-  COMPETITIVE: "Competitivo nato. Cresce mais em Força. Fica mais forte quando o treinador vence partidas.",
-  DRAMATIC:    "Dramático. Reage mais intensamente a vitórias e derrotas do treinador.",
-  PLAYFUL:     "Brincalhão. Brincar dá mais EXP e felicidade. Se entedia rápido sem interação.",
-  ELECTRIC:    "Cheio de energia. Tem bônus em expedições. Fica animado com mais facilidade.",
-  TIMID:       "Tímido. Pode recusar carinho e evitar interações. Mas quando cria amizade, é muito leal.",
-  CHAOTIC:     "Caótico e imprevisível. Reações podem surpreender — positivas ou negativas.",
+  LOYAL:       "Leal ao treinador. Ganha mais felicidade com carinho e tende a criar amizades fortes.",
+  PROUD:       "Orgulhoso. Reage mais a vitórias, derrotas e rivalidades; fica melhor quando já está feliz.",
+  MISCHIEVOUS: "Travesso. Puxa provocações, rivalidades leves e eventos de peças sem bloquear demais.",
+  LAZY:        "Preguiçoso. Cansa mais ao brincar, mas mascotes com boa Vitalidade lidam melhor com isso.",
+  COMPETITIVE: "Competitivo. Brilha contra rivais e combina muito com Força alta e vitórias do treinador.",
+  DRAMATIC:    "Dramático. Emoções mais fortes; quando está feliz ou confiante, rende melhor nos eventos.",
+  PLAYFUL:     "Brincalhão. Brincar dá mais felicidade e cerca de 10% mais EXP.",
+  ELECTRIC:    "Elétrico. Tem energia para brincar e expedições curtas, com menor chance de cansar.",
+  TIMID:       "Tímido. Começa devagar no carinho, mas aprende a confiar e cria laços fortes.",
+  CHAOTIC:     "Caótico. Pode gerar eventos raros e imprevisíveis, especialmente com Instinto alto.",
 };
 
 // ── Balão de diálogo ──────────────────────────────────────────────────────────

@@ -727,11 +727,11 @@ export default async function PlayerDetailPage({
         </div>
       </div>
 
-      {/* Mascote equipado — card completo com histórico de relações */}
+      {/* Mascote Companheiro — card completo com histórico de relações */}
       {publicMascots.length > 0 && (
         <Card>
           <CardTitle className="mb-3 flex items-center gap-2">
-            <Swords size={18} className="text-primary" /> Mascotes
+            <Swords size={18} className="text-primary" /> Coleção de Mascotes
           </CardTitle>
           <PublicMascotGallery mascots={publicMascots} isAdmin={isAdminUser} />
         </Card>

@@ -252,18 +252,22 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
   const arena = arenaStatus(mascot);
   const arenaLocked = !!arena?.locked;
 
-  // Cooldown 3 min — useTimerExpiry garante que o botão fica ativo exatamente quando expira
-  const cooldownEndTime = mascot.lastInteractedAt
-    ? new Date(new Date(mascot.lastInteractedAt).getTime() + 3 * 60 * 1000)
-    : null;
-  const cooldownExpiry = useTimerExpiry(cooldownEndTime);
-  const onCooldown = !!cooldownEndTime && !cooldownExpiry.expired;
-  const cooldownMs = cooldownExpiry.remaining;
+  const lastInteractionTime = mascot.lastInteractedAt ? new Date(mascot.lastInteractedAt).getTime() : null;
+  const playCooldownEndTime = lastInteractionTime ? new Date(lastInteractionTime + 45 * 60 * 1000) : null;
+  const petCooldownEndTime = lastInteractionTime ? new Date(lastInteractionTime + 25 * 60 * 1000) : null;
+  const playCooldownExpiry = useTimerExpiry(playCooldownEndTime);
+  const petCooldownExpiry = useTimerExpiry(petCooldownEndTime);
+  const playOnCooldown = !!playCooldownEndTime && !playCooldownExpiry.expired;
+  const petOnCooldown = !!petCooldownEndTime && !petCooldownExpiry.expired;
+  const cooldownMs = Math.min(
+    playOnCooldown ? playCooldownExpiry.remaining : Number.POSITIVE_INFINITY,
+    petOnCooldown ? petCooldownExpiry.remaining : Number.POSITIVE_INFINITY,
+  );
 
-  // Button availability — cooldown applies to all interactions including pet
+  // Button availability — comida e doce não usam cooldown de carinho/brincar.
   const inExpedition = !!expedition && !claimable;
-  const canPlay      = !arenaLocked && !inExpedition && !onCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
-  const canPet       = !arenaLocked && !inExpedition && !onCooldown && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
+  const canPlay      = !arenaLocked && !inExpedition && !playOnCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
+  const canPet       = !arenaLocked && !inExpedition && !petOnCooldown && mascot.mood !== "ANGRY";
   const canFeedFood  = !arenaLocked && !inExpedition && mascot.hasFood  && hungerStatus !== "STUFFED";
   const canFeedSweet = !arenaLocked && !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
 
@@ -289,7 +293,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
       const r = await toggleFavoriteMascotAction(mascot.id);
       if (r.error) toast.error(r.error);
       else {
-        toast.success(mascot.isFavorite ? "Removido dos favoritos." : "Mascote favoritado!");
+        toast.success(mascot.isFavorite ? "Removido da Equipe Favorita." : "Adicionado à Equipe Favorita!");
         router.refresh();
       }
     });
@@ -321,11 +325,11 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
     : (mascot.isShiny ? getShinySprite(mascot.pokemonId, true) : getSpriteUrl(mascot.pokemonId, true));
 
   const STATS = [
-    { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
-    { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Eficiência em expedições e iniciativa em brigas" },
-    { key: "statCharisma", label: "Carisma",    emoji: "💛", value: mascot.statCharisma, tip: "Chance de fazer amigos e receber mais presentes" },
-    { key: "statInstinct", label: "Instinto",   emoji: "🔍", value: mascot.statInstinct, tip: "Encontra itens mais raros em expedições" },
-    { key: "statVitality", label: "Vitalidade", emoji: "🛡",  value: mascot.statVitality, tip: "Resiste melhor a humor ruim e efeitos negativos" },
+    { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Aumenta dano, disputas de rivalidade e presença na Arena Z." },
+    { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Ajuda iniciativa, expedições curtas, esquiva e menor chance de cansar." },
+    { key: "statCharisma", label: "Carisma",    emoji: "💛", value: mascot.statCharisma, tip: "Afeta amizades, presentes, eventos sociais e Super Amigos." },
+    { key: "statInstinct", label: "Instinto",   emoji: "🔍", value: mascot.statInstinct, tip: "Melhora loot, eventos raros, leitura de armadilhas e bons achados." },
+    { key: "statVitality", label: "Vitalidade", emoji: "🛡",  value: mascot.statVitality, tip: "Reduz cansaço, ferimentos, repouso e efeitos negativos." },
   ];
 
   return (
@@ -385,7 +389,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
     <div className={`rounded-2xl border bg-slate-950/60 transition-all ${mascot.isEquipped ? "border-[#FFCB05]/50 ring-1 ring-[#FFCB05]/20" : "border-border"}`}>
       {mascot.isEquipped && (
         <div className="bg-[#FFCB05]/10 border-b border-[#FFCB05]/20 px-3 py-1 text-center text-[10px] font-semibold text-[#FFCB05] uppercase tracking-wider flex items-center justify-center gap-2">
-          ★ Mascote equipado
+          ★ Mascote Companheiro
           {mascot.isShiny && <span className="text-purple-300">✨ Shiny</span>}
         </div>
       )}
@@ -468,7 +472,7 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
                   onClick={handleFavorite}
                   disabled={pending}
                   className={`shrink-0 transition-colors ${mascot.isFavorite ? "text-[#FFCB05]" : "text-slate-600 hover:text-[#FFCB05]"}`}
-                  title={mascot.isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                  title={mascot.isFavorite ? "Remover da Equipe Favorita" : "Adicionar à Equipe Favorita"}
                 >
                   <Star size={12} fill={mascot.isFavorite ? "currentColor" : "none"} />
                 </button>
@@ -631,22 +635,22 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
         )}
 
         {/* Cooldown info */}
-        {onCooldown && (
+        {(playOnCooldown || petOnCooldown) && Number.isFinite(cooldownMs) && (
           <p className="text-[10px] text-center text-slate-600">
-            Próxima interação em {Math.ceil(cooldownMs / 60000)} min
+            Próximo carinho/brincadeira em {Math.ceil(cooldownMs / 60000)} min
           </p>
         )}
 
         {/* ── Ações ── */}
         <div className="grid grid-cols-2 gap-1.5">
-          <Tip text={!canPlay ? (mascot.mood === "TIRED" ? "Está cansado demais" : mascot.mood === "ANGRY" ? "Está bravo" : "Aguarde o cooldown") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP" : "Brincar aumenta felicidade e dá 50% de EXP (mascote no banco)"}>
+          <Tip text={!canPlay ? (mascot.mood === "TIRED" ? "Está cansado demais" : mascot.mood === "ANGRY" ? "Está bravo" : "Aguarde o cooldown de brincar") : mascot.isEquipped ? "Brincar é a interação de energia: mais EXP, cooldown maior." : "Brincar dá energia e EXP; mascotes no banco recebem menos EXP."}>
 
             <button type="button" disabled={pending || !canPlay} onClick={() => handleInteract("PLAY")}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               ⭐ Brincar
             </button>
           </Tip>
-          <Tip text={!canPet ? (mascot.mood === "ANGRY" ? "Está bravo, não quer carinho" : "Pode recusar o carinho agora") : `Carinho fortalece o vínculo gradualmente. Menos intenso que brincar, mas cresce com o nível. Leal ganha bônus. Pode ser recusado por tímidos e bravos.`}>
+          <Tip text={!canPet ? (mascot.mood === "ANGRY" ? "Está bravo, não quer carinho" : "Aguarde o cooldown de carinho") : `Carinho é vínculo emocional: menos EXP, mais cuidado social. Mascotes leais ganham bônus e tímidos aprendem a confiar aos poucos.`}>
             <button type="button" disabled={pending || !canPet} onClick={() => handleInteract("PET")}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               <Heart size={12}/> Carinho
@@ -732,15 +736,15 @@ export function MascotCard({ mascot, isAdmin = false }: Props) {
             </div>
           )}
           {!mascot.isEquipped && (
-            <button type="button" disabled={pending || arenaLocked} onClick={() => act(() => equipMascotAction(mascot.id), "Mascote equipado!")}
+            <button type="button" disabled={pending || arenaLocked} onClick={() => act(() => equipMascotAction(mascot.id), "Mascote Companheiro definido!")}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 py-2 text-xs font-medium text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
-              <Swords size={12}/> Equipar
+              <Swords size={12}/> Definir companheiro
             </button>
           )}
           {mascot.isEquipped && (
-            <button type="button" disabled={pending} onClick={() => act(() => unequipMascotAction(mascot.id), "Desequipado.")}
+            <button type="button" disabled={pending} onClick={() => act(() => unequipMascotAction(mascot.id), "Companheiro removido.")}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-600/40 bg-slate-800/40 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/40 disabled:opacity-40">
-              Desequipar
+              Remover companheiro
             </button>
           )}
         </div>

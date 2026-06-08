@@ -103,6 +103,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
     });
   }, [mascots, search, type]);
 
+  const favoriteTeam = mascots.filter((mascot) => mascot.isFavorite).slice(0, 6);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -172,6 +173,39 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
         </select>
       </div>
 
+      {favoriteTeam.length > 0 && (
+        <section className="space-y-2 rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#FFCB05]">Equipe Favorita</p>
+              <p className="text-[11px] text-slate-500">Os mascotes que este jogador escolheu para vitrine e cuidado diário.</p>
+            </div>
+            <span className="text-[10px] text-slate-500">{favoriteTeam.length}/6</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {favoriteTeam.map((mascot) => {
+              const pokemonName = getPokemonName(mascot.pokemonId);
+              return (
+                <button
+                  key={mascot.id}
+                  type="button"
+                  onClick={() => setSelected(mascot)}
+                  className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-slate-950/70 p-2 text-left transition-colors hover:border-[#FFCB05]/60 hover:bg-[#FFCB05]/10"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={getSpriteUrl(mascot.pokemonId, true)} alt="" className="h-11 w-11 object-contain" style={{ imageRendering: "pixelated" }} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-slate-100">{mascot.nickname ?? pokemonName}</span>
+                    <span className="text-[10px] text-slate-500">Nv.{mascot.level} | {TYPE_LABELS[getPokemonElement(mascot.pokemonId)] ?? getPokemonElement(mascot.pokemonId)}</span>
+                    <span className="block text-[10px] text-[#FFCB05]">{mascot.isEquipped ? "★ Companheiro" : "☆ Equipe Favorita"}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {visible.map((mascot) => {
           const pokemonName = getPokemonName(mascot.pokemonId);
@@ -197,7 +231,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
                   Nv.{mascot.level} | {TYPE_LABELS[getPokemonElement(mascot.pokemonId)] ?? getPokemonElement(mascot.pokemonId)}
                 </span>
                 <span className="block text-[10px] text-slate-600">
-                  {MOOD_EMOJI[mascot.mood] ?? ""}{mascot.isFavorite ? " Favorito" : mascot.isEquipped ? " Equipado" : mascot.mood}
+                  {MOOD_EMOJI[mascot.mood] ?? ""}{mascot.isEquipped ? " Companheiro" : mascot.isFavorite ? " Equipe Favorita" : mascot.mood}
                 </span>
               </span>
             </button>

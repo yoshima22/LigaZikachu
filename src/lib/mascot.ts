@@ -340,9 +340,23 @@ export async function interactWithMascot(
   if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode receber interações.");
 
   const now = new Date();
-  const COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos
-  if (!skipCooldown && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < COOLDOWN_MS) {
-    return { success: false, message: "Espere um pouco antes de interagir novamente.", happinessChange: 0, expGained: 0 };
+  // Documento 3: carinho e brincar deixam de ser clicker rápido.
+  // Comida e doce continuam livres de cooldown para não travar o cuidado básico.
+  const INTERACTION_COOLDOWN_MS: Record<InteractionType, number> = {
+    PET: 25 * 60 * 1000,
+    PLAY: 45 * 60 * 1000,
+    FEED_FOOD: 0,
+    FEED_SWEET: 0,
+  };
+  const cooldownMs = INTERACTION_COOLDOWN_MS[type] ?? 0;
+  if (!skipCooldown && cooldownMs > 0 && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < cooldownMs) {
+    const remaining = Math.ceil((cooldownMs - (now.getTime() - mascot.lastInteractedAt.getTime())) / 60_000);
+    return {
+      success: false,
+      message: `Espere mais ${remaining} min antes dessa interação. Carinho e brincadeira agora têm ritmos diferentes para valorizar o cuidado diário.`,
+      happinessChange: 0,
+      expGained: 0,
+    };
   }
   // Verifica se um rival travou as interações
   if (mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
@@ -361,40 +375,43 @@ export async function interactWithMascot(
 
   switch (type) {
     case "PLAY": {
-      // PLAY: +8 base → cresce com nível. Brincalhão tem bônus extra.
-      const playHappy = 8 + lvlBonus * 2 + (mascot.personality === "PLAYFUL" ? 3 : 0);
-      const playExp   = EXP_REWARDS.PLAY_WITH + lvlBonus * 3;
-      happinessChange = playHappy;
-      expGained = playExp;
-      newMood = mascot.personality === "LAZY" ? "TIRED" : "HAPPY";
-      message = mascot.personality === "LAZY"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é preguiçoso — brincou um pouco mas logo cansou. (+${playHappy} felicidade)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar! (+${playHappy} felicidade, +${playExp} EXP)`;
+      // Brincar: ação de energia. Mais EXP que carinho, mas com cooldown maior.
+      const baseHappy = 8 + Math.min(4, lvlBonus);
+      const personalityHappy = mascot.personality === "PLAYFUL" ? 3 : 0;
+      const vitalityComfort = mascot.statVitality >= 35 || mascot.statAgility >= 35;
+      const shouldTire = mascot.personality === "LAZY" && !vitalityComfort;
+      const playExp = 12 + Math.min(8, lvlBonus * 2);
+      const playExpWithPersonality = mascot.personality === "PLAYFUL" ? Math.round(playExp * 1.1) : playExp;
+
+      happinessChange = baseHappy + personalityHappy;
+      expGained = playExpWithPersonality;
+      newMood = shouldTire ? "TIRED" : mascot.personality === "ELECTRIC" ? "EXCITED" : "HAPPY";
+      message = shouldTire
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} brincou, mas ficou cansado. (+${happinessChange} felicidade, +${expGained} EXP)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gastou energia brincando! (+${happinessChange} felicidade, +${expGained} EXP)`;
       break;
     }
     case "PET": {
-      if (mascot.personality === "TIMID" && mascot.happiness < 40) {
-        refused = true;
-        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
-        break;
-      }
       if (mascot.mood === "ANGRY") {
         refused = true;
         message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
         break;
       }
-      // PET é mais gentil que PLAY: menos felicidade base, mas cresce mais com nível
-      // Razão: Carinho fortalece vínculo gradualmente; brincar é mais intenso
-      const petHappy = 5 + lvlBonus + (mascot.personality === "LOYAL" ? 2 : 0);
-      const petExp   = EXP_REWARDS.PET + lvlBonus;
+      // Carinho: ação emocional/social. Ajuda mascotes tímidos sem bloquear demais.
+      const timidPenalty = mascot.personality === "TIMID" && mascot.happiness < 40 ? -2 : 0;
+      const proudMoodBonus = mascot.personality === "PROUD" && mascot.happiness >= 60 ? 1 : 0;
+      const petHappy = Math.max(3, 5 + Math.min(3, Math.floor(mascot.level / 20)) + (mascot.personality === "LOYAL" ? 2 : 0) + proudMoodBonus + timidPenalty);
+      const petExp = 5 + Math.min(3, Math.floor(mascot.level / 20));
       happinessChange = petHappy;
       expGained = petExp;
       newMood = mascot.happiness + petHappy >= 80 ? "HAPPY" :
                 mascot.mood === "TIRED" ? "NEUTRAL" :
                 mascot.mood === "NEEDY" ? "NEUTRAL" : undefined;
-      message = mascot.personality === "PROUD"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${petExp} EXP)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho! 💛 (+${petHappy} felicidade, +${petExp} EXP)`;
+      message = mascot.personality === "TIMID" && mascot.happiness < 40
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ainda é tímido, mas aceitou um carinho cuidadoso. 💛 (+${petHappy} felicidade, +${petExp} EXP)`
+        : mascot.personality === "PROUD"
+          ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${petExp} EXP)`
+          : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho! 💛 (+${petHappy} felicidade, +${petExp} EXP)`;
       break;
     }
 
@@ -453,7 +470,7 @@ export async function interactWithMascot(
     data: {
       happiness: newHappiness,
       mood: finalMood,
-      lastInteractedAt: now,
+      lastInteractedAt: type === "PLAY" || type === "PET" ? now : mascot.lastInteractedAt,
       lastFedAt: type.startsWith("FEED") ? now : mascot.lastFedAt,
     }
   });
@@ -1788,20 +1805,26 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
   await logEvent(mascotId, "🛡️", "Política de Fraqueza equipada! Estará protegido contra ataques oportunistas.");
 }
 
-/** Cesta de Piquenique Chocante: bônus EXP+felicidade em interações por 2h para equipe equipada */
+/** Cesta de Piquenique Chocante: bônus EXP+felicidade por 2h para a Equipe Favorita */
 export async function applyPicnicBasket(playerId: string) {
-  const equippedMascots = await prisma.mascot.findMany({
-    where: { playerId, isEquipped: true, arenaState: "FREE" }
+  const favoriteMascots = await prisma.mascot.findMany({
+    where: { playerId, isFavorite: true, arenaState: "FREE" },
+    orderBy: [{ isEquipped: "desc" }, { level: "desc" }, { hatchedAt: "asc" }],
+    take: 6,
   });
-  if (equippedMascots.length === 0) throw new Error("Nenhum mascote equipado e livre encontrado.");
+
+  if (favoriteMascots.length === 0) {
+    throw new Error("Nenhum mascote da Equipe Favorita livre encontrado. Favorite até 6 mascotes antes de usar a Cesta de Piquenique.");
+  }
+
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
   await prisma.mascotBuff.createMany({
-    data: equippedMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
+    data: favoriteMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
   });
-  for (const m of equippedMascots) {
-    await logEvent(m.id, "🧺⚡", "Piquenique Chocante! Bônus de EXP e felicidade por 2h durante interações.");
+  for (const m of favoriteMascots) {
+    await logEvent(m.id, "🧺⚡", "Piquenique Chocante com a Equipe Favorita! Bônus de EXP e felicidade por 2h durante interações.");
   }
-  return equippedMascots.length;
+  return favoriteMascots.length;
 }
 
 /** Ticket de Férias: envia Pokémon com o Professor Carvalho por 7 dias */
