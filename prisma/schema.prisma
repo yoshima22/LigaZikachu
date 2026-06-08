@@ -1379,6 +1379,9 @@ model Mascot {
   events           MascotEvent[]
   buffs            MascotBuff[]
   @@index([playerId])
+  @@index([playerId, isFavorite])
+  @@index([playerId, isEquipped])
+  @@index([arenaState, restingUntil])
   @@map("mascots")
 }
 
@@ -1400,6 +1403,9 @@ model MascotRelation {
   mascotA   Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
   mascotB   Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
   @@unique([mascotAId, mascotBId])
+  @@index([mascotAId, type])
+  @@index([mascotBId, type])
+  @@index([type, interactionCount])
   @@map("mascot_relations")
 }
 
@@ -1485,6 +1491,7 @@ model ArenaTeam {
   defenses       ArenaBattle[]   @relation("ArenaBattleDefenseTeam")
 
   @@index([playerId, status])
+  @@index([status, teamType, updatedAt])
   @@map("arena_teams")
 }
 
@@ -1634,6 +1641,9 @@ model BazarListing {
 
   @@index([category, status, createdAt])
   @@index([playerId])
+  @@index([status, expiresAt])
+  @@index([status, category])
+  @@index([status, priceCoins])
   @@map("bazar_listings")
 }
 
@@ -1708,6 +1718,19 @@ model MiauvadaoConfig {
   updatedAt         DateTime @updatedAt
 
   @@map("miauvadao_config")
+}
+
+// ── Configurações do Site (manutenção / páginas desativadas) ───────────────────
+model SiteSettings {
+  id                  String   @id @default(cuid())
+  maintenanceMode     Boolean  @default(false)
+  maintenanceMessage  String?
+  disabledPages       String[] @default([]) // slugs de paginas desligadas
+  mascotBulkActionScope String   @default("ALL") // "ALL" | "FAVORITES"
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  @@map("site_settings")
 }
 
 // Sessão de Shell Game — guarda posição da bolinha no servidor (anti-cheat)

@@ -56,6 +56,30 @@ export async function applyPassiveIncome(teamId: string): Promise<{ coins: numbe
   return { coins, exp };
 }
 
+/**
+ * Calcula (sem gravar no banco) a renda passiva acumulada projetada para uma equipe.
+ * Usado para EXIBIR valores estimados na tela sem custar uma escrita por page-load
+ * (doc05: "Ver tela aplica renda" → "Ver tela calcula renda estimada localmente").
+ * A escrita real só acontece quando o jogador executa uma ação (coletar, atacar, etc.).
+ */
+export function estimatePassiveIncome(team: {
+  status: string;
+  lastPassiveIncomeAt: Date | null;
+  enteredAt: Date;
+  vaultCoins: number;
+  vaultExp: number;
+  membersCount: number;
+}): { coins: number; exp: number } {
+  if (team.status !== "ACTIVE" || team.membersCount === 0) return { coins: 0, exp: 0 };
+  const lastAt = team.lastPassiveIncomeAt ?? team.enteredAt;
+  const hoursElapsed = (Date.now() - new Date(lastAt).getTime()) / 3_600_000;
+  if (hoursElapsed < PASSIVE_MIN_INTERVAL_HOURS) return { coins: 0, exp: 0 };
+  const hours = Math.min(hoursElapsed, PASSIVE_MAX_HOURS);
+  const coins = Math.floor(hours * team.membersCount * PASSIVE_COINS_PER_MASCOT_PER_H);
+  const exp   = Math.floor(hours * team.membersCount * PASSIVE_EXP_PER_MASCOT_PER_H);
+  return { coins, exp };
+}
+
 /** Aplica renda passiva para TODAS as equipes ativas de um jogador */
 export async function applyPassiveIncomeForPlayer(playerId: string): Promise<void> {
   const activeTeams = await prisma.arenaTeam.findMany({

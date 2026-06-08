@@ -112,7 +112,23 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
       || new Date() > new Date(firstOffer.validUntil)
       || !firstOffer.shopItemId;
 
-    if (expired) {
+    // Item inativo no shop? Força refresh
+    let stale = false;
+    if (!expired && offers.length > 0) {
+      const shopItemIds = offers
+        .filter((o) => o.shopItemId)
+        .map((o) => o.shopItemId as string);
+      if (shopItemIds.length > 0) {
+        const activeItems = await prisma.shopItem.findMany({
+          where: { id: { in: shopItemIds }, active: true },
+          select: { id: true },
+        });
+        const activeSet = new Set(activeItems.map((i) => i.id));
+        stale = shopItemIds.some((id) => !activeSet.has(id));
+      }
+    }
+
+    if (expired || stale) {
       const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
       if (newOffers.length > 0) {
         await prisma.miauvadaoConfig.update({
@@ -164,6 +180,27 @@ export async function getListings(filters?: {
   });
 }
 
+// doc05: "View count gravando toda visita" → throttle/batch. Evita uma escrita
+// no banco a cada simples visualização — só conta de novo após alguns minutos
+// por listagem (suficiente para estatística de popularidade, sem custo por hit).
+const VIEW_THROTTLE_MS = 5 * 60 * 1000;
+const recentViewWrites = new Map<string, number>();
+
+function shouldRecordView(listingId: string): boolean {
+  const now = Date.now();
+  const last = recentViewWrites.get(listingId);
+  if (last && now - last < VIEW_THROTTLE_MS) return false;
+  recentViewWrites.set(listingId, now);
+  // evita crescimento ilimitado do mapa em instâncias de longa duração
+  if (recentViewWrites.size > 500) {
+    const cutoff = now - VIEW_THROTTLE_MS;
+    for (const [key, ts] of recentViewWrites) {
+      if (ts < cutoff) recentViewWrites.delete(key);
+    }
+  }
+  return true;
+}
+
 export async function getListing(id: string) {
   const listing = await prisma.bazarListing.findUnique({
     where: { id },
@@ -178,8 +215,8 @@ export async function getListing(id: string) {
       _count: { select: { favorites: true } },
     },
   });
-  if (listing) {
-    // Incrementa views (fire & forget)
+  if (listing && shouldRecordView(id)) {
+    // Incrementa views (fire & forget, throttled)
     prisma.bazarListing.update({ where: { id }, data: { views: { increment: 1 } } }).catch(() => {});
   }
   return listing;
@@ -793,6 +830,17 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
     if (offer.sold >= offer.stock) return { error: "Estoque esgotado." };
     if (new Date() > new Date(offer.validUntil)) return { error: "Oferta expirada." };
 
+    // Verifica se o item ainda esta ativo no shop
+    if (offer.shopItemId) {
+      const shopItem = await prisma.shopItem.findUnique({
+        where: { id: offer.shopItemId },
+        select: { active: true },
+      });
+      if (!shopItem || !shopItem.active) {
+        return { error: "Este item nao esta mais disponivel na loja." };
+      }
+    }
+
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
     if (!wallet || wallet.balance < offer.finalPrice) {
       return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis, oferta custa ${offer.finalPrice} ZC).` };
@@ -1334,7 +1382,17 @@ async function isListingItemStale(listing: { id: string; playerId: string; paylo
   return false;
 }
 
+// Throttle: this used to run on every page load (doc05 risk "Limpeza de
+// anúncios ao abrir página" — "usuário comum vira job runner"). Now it only
+// actually executes the (potentially expensive) scan once per interval per
+// server instance; other page loads are a no-op.
+const BAZAR_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
+let lastBazarCleanupAt = 0;
+
 export async function autoCleanupStaleBazarListings(): Promise<void> {
+  const now = Date.now();
+  if (now - lastBazarCleanupAt < BAZAR_CLEANUP_INTERVAL_MS) return;
+  lastBazarCleanupAt = now;
   try {
     const activeListings = await prisma.bazarListing.findMany({
       where: { status: "ACTIVE", category: "ITEM" },

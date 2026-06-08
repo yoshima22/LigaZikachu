@@ -11,6 +11,7 @@ import {
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
 } from "@/lib/mascot";
 import { healMascotSus } from "@/lib/arena-z";
+import { getSiteSettings } from "@/lib/site-settings";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 
 function revalidate() {
@@ -547,6 +548,57 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
     await prisma.mascotEgg.create({ data: { playerId, type: eggType as import("@prisma/client").EggType, origin: "Admin" } });
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function interactAllAction(type: InteractionType): Promise<{ error?: string; results: { mascotId: string; name: string; success: boolean; message: string }[] }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado.", results: [] };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado.", results: [] };
+
+    const settings = await getSiteSettings();
+    const scope = settings.mascotBulkActionScope ?? "ALL";
+
+    const where: Record<string, unknown> = { playerId: player.id };
+    if (scope === "FAVORITES") where.isFavorite = true;
+
+    const mascots = await prisma.mascot.findMany({
+      where,
+      select: { id: true, nickname: true, pokemonId: true, isFavorite: true },
+      orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
+    });
+
+    const results: { mascotId: string; name: string; success: boolean; message: string }[] = [];
+    const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+
+    for (const m of mascots) {
+      try {
+        if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
+          await recalculateMood(m.id);
+        }
+        const result = await interactWithMascot(player.id, m.id, type, isAdminUser);
+        results.push({
+          mascotId: m.id,
+          name: m.nickname ?? `${m.pokemonId}`,
+          success: result.success,
+          message: result.message,
+        });
+      } catch (err) {
+        results.push({
+          mascotId: m.id,
+          name: m.nickname ?? `${m.pokemonId}`,
+          success: false,
+          message: err instanceof Error ? err.message : "Erro.",
+        });
+      }
+    }
+
+    revalidate();
+    return { results };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro.", results: [] };
+  }
 }
 
 // Travar evolução permanentemente

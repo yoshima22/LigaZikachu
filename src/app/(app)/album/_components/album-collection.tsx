@@ -48,9 +48,10 @@ interface Props {
   generations: number[];
   selectedGen: number | null;
   approvedPlayers?: { id: string; displayName: string }[];
+  friendStickerMap?: Record<string, string[]>;
 }
 
-export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers = [] }: Props) {
+export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers = [], friendStickerMap = {} }: Props) {
   const [pending, startTransition] = useTransition();
   const [favLoading, setFavLoading] = useState<string | null>(null);
   const [giftCard, setGiftCard] = useState<Card | null>(null);
@@ -80,6 +81,10 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
     });
   };
 
+  const selectedHasSticker = giftTargetId && giftCard
+    ? friendStickerMap[giftTargetId]?.includes(giftCard.id) ?? false
+    : false;
+
   return (
     <>
     {/* Modal de enviar figurinha */}
@@ -98,9 +103,16 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
             <select value={giftTargetId} onChange={(e) => setGiftTargetId(e.target.value)}
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]">
               <option value="">Selecione</option>
-              {approvedPlayers.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+              {approvedPlayers.map((p) => (
+                <option key={p.id} value={p.id}>{p.displayName}</option>
+              ))}
             </select>
           </label>
+          {selectedHasSticker && (
+            <p className="text-[11px] text-[#FFCB05]">
+              Este jogador já possui {giftCard.displayName} no álbum.
+            </p>
+          )}
           <div className="flex gap-2">
             <button type="button" disabled={!giftTargetId || pending} onClick={handleSendGift}
               className="flex-1 rounded-lg bg-[#FFCB05] py-2 text-sm font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">

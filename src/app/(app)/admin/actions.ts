@@ -3,8 +3,72 @@
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { sendDeckReminderEmail } from "@/lib/email";
+import { invalidateSiteSettingsCache } from "@/lib/site-settings";
+import { revalidatePath } from "next/cache";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
+
+// ── Site Settings ───────────────────────────────────────────────────────────
+
+export async function getSiteSettings(): Promise<{
+  id: string;
+  maintenanceMode: boolean;
+  maintenanceMessage: string | null;
+  disabledPages: string[];
+  mascotBulkActionScope: string;
+}> {
+  await requireAdmin();
+  const settings = await prisma.siteSettings.findFirst({ orderBy: { updatedAt: "desc" } });
+  if (!settings) {
+    return { id: "", maintenanceMode: false, maintenanceMessage: null, disabledPages: [], mascotBulkActionScope: "ALL" };
+  }
+  return {
+    id: settings.id,
+    maintenanceMode: settings.maintenanceMode,
+    maintenanceMessage: settings.maintenanceMessage,
+    disabledPages: settings.disabledPages ?? [],
+    mascotBulkActionScope: settings.mascotBulkActionScope ?? "ALL",
+  };
+}
+
+export async function updateSiteSettings(
+  settingsId: string | null,
+  data: {
+    maintenanceMode: boolean;
+    maintenanceMessage?: string | null;
+    disabledPages: string[];
+    mascotBulkActionScope?: string;
+  }
+): Promise<{ error?: string; id?: string }> {
+  try {
+    await requireAdmin();
+    const payload = {
+      maintenanceMode: data.maintenanceMode,
+      maintenanceMessage: data.maintenanceMessage?.trim() || null,
+      disabledPages: data.disabledPages,
+      mascotBulkActionScope: data.mascotBulkActionScope ?? "ALL",
+    };
+
+    let result;
+    if (settingsId) {
+      result = await prisma.siteSettings.update({
+        where: { id: settingsId },
+        data: payload,
+      });
+    } else {
+      result = await prisma.siteSettings.create({ data: payload });
+    }
+
+    invalidateSiteSettingsCache();
+    revalidatePath("/api/site-config");
+    revalidatePath("/admin");
+    return { id: result.id };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+// ── Deck Reminder ─────────────────────────────────────────────────────────────
 
 export async function triggerDeckReminder(dryRun = false): Promise<
   | { weeksChecked: number; emailsSent: number; simulated: number; errors: number; details: Array<{ email: string; week: string; status: string }>; dryRun: boolean }

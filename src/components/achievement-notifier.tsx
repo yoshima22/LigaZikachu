@@ -5,6 +5,9 @@ import { toast } from "sonner";
 import { getRecentUnlockedAchievements } from "@/app/(app)/conquistas/actions";
 
 const STORAGE_KEY = "achievement_seen_ids";
+const LAST_CHECK_KEY = "achievement_last_check_at";
+// Throttle: doc05 flags this as "Chamada em todo layout" → recomenda 5-10 min.
+const CHECK_THROTTLE_MS = 6 * 60 * 1000;
 
 const rarityEmoji: Record<string, string> = {
   COMMON:    "🏅",
@@ -33,6 +36,12 @@ export function AchievementNotifier() {
 
     const check = async () => {
       try {
+        try {
+          const lastCheck = Number(localStorage.getItem(LAST_CHECK_KEY) ?? "0");
+          if (Date.now() - lastCheck < CHECK_THROTTLE_MS) return;
+          localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
+        } catch { /* localStorage indisponível — segue sem throttle */ }
+
         const recent = await getRecentUnlockedAchievements();
         if (recent.length === 0) return;
 

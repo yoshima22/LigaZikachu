@@ -5,11 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, applyPassiveIncome } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, estimatePassiveIncome } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
-import { ArenaLiveRefresh } from "./_components/arena-live-refresh";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
@@ -230,29 +229,23 @@ export default async function ArenaZPage() {
   const readyPveTeams = readyActiveTeams.filter(team => team.teamType === "PVE" || team.teamType === "BOTH");
   const readyPvpTeams = readyActiveTeams.filter(team => team.teamType === "PVP" || team.teamType === "BOTH");
   const readyOpponentTeams = opponentTeams.filter(team => !getTeamBlockedReason(team));
-  // 1. Aplica renda passiva para as equipes PRÓPRIAS do jogador
-  await import("./actions").then(m => m.applyPassiveIncomeAction()).catch(() => null);
-
-  // 2. Aplica renda passiva nos times ADVERSÁRIOS (PvP/BOTH) antes de exibir os cofres,
-  //    para que o jogador veja o valor real e possa tomar decisão informada de ataque.
-  //    Times PvE exclusivos NÃO são afetados por este processo.
-  if (opponentTeams.length > 0) {
-    await Promise.all(opponentTeams.map(t => applyPassiveIncome(t.id).catch(() => null)));
-    // Re-lê apenas os campos de vault para refletir os valores atualizados
-    const freshVaults = await prisma.arenaTeam.findMany({
-      where: { id: { in: opponentTeams.map(t => t.id) } },
-      select: { id: true, vaultCoins: true, vaultExp: true, vaultFood: true, vaultSweet: true },
+  // Renda passiva NÃO é mais aplicada (gravada) ao simplesmente abrir a tela —
+  // isso transformava cada visualização em uma escrita no banco (doc05: "Ver
+  // tela aplica renda" / "Aplicar renda de adversários" = risco "Muito alta").
+  // Em vez disso, calculamos uma estimativa local apenas para exibição; a
+  // gravação real acontece quando o jogador executa uma ação (coletar, atacar
+  // etc. — ver applyPassiveIncome nas actions correspondentes).
+  for (const team of [...activeTeams, ...opponentTeams]) {
+    const estimate = estimatePassiveIncome({
+      status: team.status,
+      lastPassiveIncomeAt: team.lastPassiveIncomeAt,
+      enteredAt: team.enteredAt,
+      vaultCoins: team.vaultCoins,
+      vaultExp: team.vaultExp,
+      membersCount: team.members.length,
     });
-    const vaultMap = new Map(freshVaults.map(v => [v.id, v]));
-    for (const team of opponentTeams) {
-      const v = vaultMap.get(team.id);
-      if (v) {
-        team.vaultCoins = v.vaultCoins;
-        team.vaultExp   = v.vaultExp;
-        team.vaultFood  = v.vaultFood;
-        team.vaultSweet = v.vaultSweet;
-      }
-    }
+    team.vaultCoins = team.vaultCoins + estimate.coins;
+    team.vaultExp   = team.vaultExp + estimate.exp;
   }
 
   // Preview com dificuldade Normal por padrão (o jogador pode escolher no botão)
@@ -306,7 +299,6 @@ export default async function ArenaZPage() {
 
   return (
     <div className="space-y-6">
-      <ArenaLiveRefresh />
       <ArenaTutorial />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">

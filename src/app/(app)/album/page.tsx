@@ -14,7 +14,7 @@ const PAGE_SIZE = 100;
 export default async function AlbumPage({
   searchParams
 }: {
-  searchParams: Promise<{ gen?: string; page?: string; owned?: string }>;
+  searchParams: Promise<{ gen?: string; page?: string; owned?: string; dup?: string }>;
 }) {
   const [session, sp] = await Promise.all([getAppSession(), searchParams]);
   if (!session?.user) return null;
@@ -23,31 +23,46 @@ export default async function AlbumPage({
   const selectedGen = sp.gen ? parseInt(sp.gen) : null;
   const currentPage = Math.max(1, sp.page ? parseInt(sp.page) : 1);
   const onlyOwned = sp.owned === "1";
+  const onlyDup = sp.dup === "1";
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
-    select: { id: true }
+    select: { id: true, displayName: true }
   });
 
-  const [wallet, packs, allCards, ownedStickers, otherPlayers] = await Promise.all([
+  const ownedStickers = player
+    ? await prisma.playerSticker.findMany({
+        where: { playerId: player.id },
+        select: { cardId: true, quantity: true, isFavorite: true }
+      })
+    : [];
+  const ownedMap = new Map(ownedStickers.map((s) => [s.cardId, s]));
+  const duplicateCardIds = ownedStickers.filter((s) => s.quantity > 1).map((s) => s.cardId);
+
+  // Build WHERE clause for cards
+  const cardsWhere: Parameters<typeof prisma.pokemonCard.count>[0]['where'] = {
+    active: true,
+    ...(selectedGen ? { generation: selectedGen } : {}),
+    ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {}),
+    ...(onlyDup && player ? { id: { in: duplicateCardIds } } : {})
+  };
+
+  const [wallet, packs, totalCardsInFilter, totalOwnedInFilter, allCards, otherPlayers] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
     prisma.stickerPack.findMany({ where: { active: true }, orderBy: { price: "asc" } }),
-    prisma.pokemonCard.findMany({
+    prisma.pokemonCard.count({ where: cardsWhere }),
+    prisma.pokemonCard.count({
       where: {
-        active: true,
-        ...(selectedGen ? { generation: selectedGen } : {}),
-        ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {})
-      },
+        ...cardsWhere,
+        ...(player ? { stickers: { some: { playerId: player.id } } } : {})
+      }
+    }),
+    prisma.pokemonCard.findMany({
+      where: cardsWhere,
       orderBy: [{ generation: "asc" }, { nationalId: "asc" }],
       skip: (currentPage - 1) * PAGE_SIZE,
       take: PAGE_SIZE
     }),
-    player
-      ? prisma.playerSticker.findMany({
-          where: { playerId: player.id },
-          select: { cardId: true, quantity: true, isFavorite: true }
-        })
-      : [],
     player
       ? prisma.player.findMany({
           where: { active: true, id: { not: player.id } },
@@ -57,15 +72,6 @@ export default async function AlbumPage({
       : []
   ]);
 
-  const ownedMap = new Map(ownedStickers.map((s) => [s.cardId, s]));
-
-  const totalCardsInFilter = await prisma.pokemonCard.count({
-    where: {
-      active: true,
-      ...(selectedGen ? { generation: selectedGen } : {}),
-      ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {})
-    }
-  });
   const totalPages = Math.ceil(totalCardsInFilter / PAGE_SIZE);
 
   // Estatísticas por geração
@@ -96,8 +102,21 @@ export default async function AlbumPage({
     }
   }
 
-  const totalCards = allCards.length;
-  const totalOwned = allCards.filter((c) => ownedMap.has(c.id)).length;
+  const totalCards = totalCardsInFilter;
+  const totalOwned = totalOwnedInFilter;
+
+  // Dados para verificar se amigos já têm figurinhas (envio)
+  const friendStickers = player && otherPlayers.length > 0
+    ? await prisma.playerSticker.findMany({
+        where: { playerId: { in: otherPlayers.map((p) => p.id) } },
+        select: { playerId: true, cardId: true }
+      })
+    : [];
+  const friendStickerMap: Record<string, string[]> = {};
+  for (const s of friendStickers) {
+    friendStickerMap[s.playerId] = friendStickerMap[s.playerId] ?? [];
+    friendStickerMap[s.playerId].push(s.cardId);
+  }
 
   const generations = [...new Set(allCards.map((c) => c.generation))].sort((a, b) => a - b);
 
@@ -147,20 +166,42 @@ export default async function AlbumPage({
       {player && (
         <div className="flex flex-wrap gap-2">
           <Link
-            href={`/album${selectedGen ? `?gen=${selectedGen}` : ""}`}
+            href={(() => {
+              const params = new URLSearchParams();
+              if (selectedGen) params.set("gen", String(selectedGen));
+              return `/album${params.toString() ? `?${params.toString()}` : ""}`;
+            })()}
             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-              !onlyOwned ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"
+              !onlyOwned && !onlyDup ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"
             }`}
           >
-            Todos
+            Todos ({totalCards})
           </Link>
           <Link
-            href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}owned=1`}
+            href={(() => {
+              const params = new URLSearchParams();
+              if (selectedGen) params.set("gen", String(selectedGen));
+              params.set("owned", "1");
+              return `/album?${params.toString()}`;
+            })()}
             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
               onlyOwned ? "border-[#7AC74C]/50 bg-[#7AC74C]/10 text-[#7AC74C]" : "border-border text-slate-400 hover:text-slate-200"
             }`}
           >
             Apenas os meus ({totalOwned})
+          </Link>
+          <Link
+            href={(() => {
+              const params = new URLSearchParams();
+              if (selectedGen) params.set("gen", String(selectedGen));
+              params.set("dup", "1");
+              return `/album?${params.toString()}`;
+            })()}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              onlyDup ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Duplicatas ({duplicateCardIds.length})
           </Link>
         </div>
       )}
@@ -231,12 +272,12 @@ export default async function AlbumPage({
         {totalPages > 1 && (
           <div className="flex items-center gap-2 flex-wrap">
             {currentPage > 1 && (
-              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage - 1}`}
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}${onlyOwned ? 'owned=1&' : ''}${onlyDup ? 'dup=1&' : ''}page=${currentPage - 1}`}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Anterior</Link>
             )}
             <span className="text-xs text-slate-500">Página {currentPage}/{totalPages} · {totalCardsInFilter} Pokémon</span>
             {currentPage < totalPages && (
-              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage + 1}`}
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}${onlyOwned ? 'owned=1&' : ''}${onlyDup ? 'dup=1&' : ''}page=${currentPage + 1}`}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">Próxima →</Link>
             )}
           </div>
@@ -255,16 +296,17 @@ export default async function AlbumPage({
           generations={generations}
           selectedGen={selectedGen}
           approvedPlayers={otherPlayers}
+          friendStickerMap={friendStickerMap}
         />
         {totalPages > 1 && (
           <div className="flex items-center gap-2 flex-wrap">
             {currentPage > 1 && (
-              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage - 1}`}
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}${onlyOwned ? 'owned=1&' : ''}${onlyDup ? 'dup=1&' : ''}page=${currentPage - 1}`}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Anterior</Link>
             )}
             <span className="text-xs text-slate-500">Página {currentPage}/{totalPages}</span>
             {currentPage < totalPages && (
-              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}page=${currentPage + 1}`}
+              <Link href={`/album?${selectedGen ? `gen=${selectedGen}&` : ""}${onlyOwned ? 'owned=1&' : ''}${onlyDup ? 'dup=1&' : ''}page=${currentPage + 1}`}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">Próxima →</Link>
             )}
           </div>

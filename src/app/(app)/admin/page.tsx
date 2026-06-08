@@ -4,6 +4,7 @@ import { DeckReminderPanel } from "./_components/deck-reminder-panel";
 import { BulkSendPanel } from "./_components/bulk-send-panel";
 import { MascotSocialPanel } from "./_components/mascot-social-panel";
 import { UserAccountPanel } from "./_components/user-account-panel";
+import { SiteSettingsPanel } from "./_components/site-settings-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -22,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
+import { getSiteSettings } from "./actions";
 
 const adminCards = [
   {
@@ -106,6 +108,8 @@ export default async function AdminPage() {
     orderBy: [{ type: "asc" }, { name: "asc" }],
     select: { id: true, name: true, type: true, rarity: true, active: true }
   });
+
+  const siteSettings = await getSiteSettings();
 
   return (
     <div className="space-y-8">
@@ -230,6 +234,7 @@ export default async function AdminPage() {
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <GlobalResetPanel />
+      <SiteSettingsPanel initial={siteSettings} />
     </div>
   );
 }
