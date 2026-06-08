@@ -4,11 +4,12 @@
 
 import { prisma } from "@/lib/prisma";
 import {
-  EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
+  EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expForLevel, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
+import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 
@@ -26,27 +27,9 @@ function randomPersonality(): MascotPersonality {
   return randomFrom([...PERSONALITIES]) as MascotPersonality;
 }
 
-/** Sorteio de pokemonId a partir do tipo de ovo */
+/** Sorteio de pokemonId a partir do tipo de ovo. */
 export function rollPokemonFromEgg(eggType: string): number {
-  // Pool aleatório (COMMON sem gen específica) = todas as 9 gerações
-  const pool = eggType === "COMMON" || eggType === "EVENT"
-    ? (EGG_POOLS.RANDOM.length > 0 ? EGG_POOLS.RANDOM : EGG_POOLS.COMMON)
-    : (EGG_POOLS[eggType] ?? EGG_POOLS.RANDOM);
-
-  // Chance lendaria por raridade. SPECIAL e RARE custam mais e devem parecer especiais.
-  // SPECIAL: 6% | RARE: 3% | GEN eggs: 1% | COMMON: 1% | EVENT: 0.3%
-  const legendaryChance =
-    eggType === "SPECIAL" ? 0.06 :
-    eggType === "RARE" ? 0.03 :
-    eggType.startsWith("EGG_GEN") ? 0.01 :
-    eggType === "COMMON" ? 0.01 :   // modo aleatório: +1% de bônus
-    0.003;
-
-  if (Math.random() < legendaryChance) {
-    return randomFrom(LEGENDARY_POOL);
-  }
-
-  return randomFrom(pool);
+  return rollPokemonIdFromEgg(eggType);
 }
 
 // ── Incubação ─────────────────────────────────────────────────────────────────
