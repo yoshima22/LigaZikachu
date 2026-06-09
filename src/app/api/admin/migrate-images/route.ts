@@ -75,8 +75,10 @@ export async function POST(req: NextRequest) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey)
-    return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY não configurada no Vercel" }, { status: 500 });
+  if (!supabaseUrl || !serviceKey) {
+    const missing = [!supabaseUrl && "NEXT_PUBLIC_SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean).join(", ");
+    return NextResponse.json({ error: `Variáveis ausentes no Vercel: ${missing}` }, { status: 500 });
+  }
 
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
