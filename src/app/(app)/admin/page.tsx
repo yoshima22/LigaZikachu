@@ -6,6 +6,7 @@ import { MascotSocialPanel } from "./_components/mascot-social-panel";
 import { AdminExpeditionPanel } from "./_components/admin-expedition-panel";
 import { AdminMascotPanel } from "./_components/admin-mascot-panel";
 import { UserAccountPanel } from "./_components/user-account-panel";
+import { MigrateImagesPanel } from "./_components/migrate-images-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -233,6 +234,7 @@ export default async function AdminPage() {
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
+      <MigrateImagesPanel />
       <GlobalResetPanel />
     </div>
   );
