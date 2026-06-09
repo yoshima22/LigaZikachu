@@ -124,7 +124,7 @@ export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ er
 
     if (!mascot.isFavorite) {
       const favoriteCount = await prisma.mascot.count({ where: { playerId: player.id, isFavorite: true } });
-      if (favoriteCount >= 6) return { error: "Você já tem 6 mascotes na Equipe Favorita. Remova um integrante antes." };
+      if (favoriteCount >= 6) return { error: "Voce ja tem 6 mascotes favoritos. Remova um favorito antes." };
     }
 
     await prisma.mascot.update({
@@ -138,22 +138,110 @@ export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ er
   }
 }
 
-export async function interactAction(mascotId: string, type: InteractionType): Promise<{ error?: string; result?: Awaited<ReturnType<typeof interactWithMascot>> }> {
+export async function interactAction(
+  mascotId: string,
+  type: InteractionType
+): Promise<{ error?: string; result?: Awaited<ReturnType<typeof interactWithMascot>> }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+
+    const player = await prisma.player.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
     if (!player) return { error: "Perfil não encontrado." };
+
     // Não recalcula mood antes de alimentar — o decay comeria o ganho de felicidade
     if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
       await recalculateMood(mascotId);
     }
-    // Admin bypassa cooldown
+
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);
+
     revalidate();
     return { result };
-  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
+  }
+}
+
+export async function interactAllAction(
+  type: InteractionType,
+  scope: "ALL" | "FAVORITES" = "FAVORITES"
+): Promise<{
+  error?: string;
+  results: { mascotId: string; name: string; success: boolean; message: string }[];
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado.", results: [] };
+
+    const player = await prisma.player.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    if (!player) return { error: "Perfil não encontrado.", results: [] };
+
+    const where =
+      scope === "FAVORITES"
+        ? { playerId: player.id, isFavorite: true }
+        : { playerId: player.id };
+
+    const mascots = await prisma.mascot.findMany({
+      where,
+      select: {
+        id: true,
+        nickname: true,
+        pokemonId: true,
+        isFavorite: true,
+      },
+      orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
+      take: scope === "FAVORITES" ? 6 : 100,
+    });
+
+    const results: {
+      mascotId: string;
+      name: string;
+      success: boolean;
+      message: string;
+    }[] = [];
+
+    for (const mascot of mascots) {
+      try {
+        if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
+          await recalculateMood(mascot.id);
+        }
+
+        const result = await interactWithMascot(player.id, mascot.id, type);
+
+        results.push({
+          mascotId: mascot.id,
+          name: mascot.nickname ?? `#${mascot.pokemonId}`,
+          success: result.success,
+          message: result.message,
+        });
+      } catch (err) {
+        results.push({
+          mascotId: mascot.id,
+          name: mascot.nickname ?? `#${mascot.pokemonId}`,
+          success: false,
+          message: err instanceof Error ? err.message : "Erro.",
+        });
+      }
+    }
+
+    revalidate();
+    return { results };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Erro.",
+      results: [],
+    };
+  }
 }
 
 export async function startExpeditionAction(mascotId: string, duration: ExpeditionDuration = "1h", mode: import("@/lib/mascot-data").ExpeditionMode = "STANDARD"): Promise<{ error?: string }> {
@@ -549,7 +637,6 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-// Travar evolução permanentemente
 export async function toggleEvolutionLockAction(mascotId: string, lock: boolean): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
