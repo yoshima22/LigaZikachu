@@ -316,15 +316,21 @@ export async function purgeAdminArenaDataAction(): Promise<{ error?: string; tea
   }
 }
 
-export async function lockBotAction(teamId: string, difficulty: ArenaDifficulty = "normal", teamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof lockBotForTeam>> }> {
+export async function lockBotAction(teamId: string, difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof lockBotForTeam>> }> {
   try {
     const playerId = await getCurrentPlayerId();
-    const stale = await checkTeamStaleFromIncomingAttack(playerId, teamId, teamKnownUpdatedAt);
-    if (stale) return { stale };
+    // Não fazemos checkTeamStaleFromIncomingAttack aqui — qualquer PvE anterior
+    // muda updatedAt causando falso positivo. Bloqueio real por PvP não-visto é
+    // tratado dentro de runBotBattle via getUnseenPvpAttack (throw blockedByUnseenPvp).
     const result = await lockBotForTeam(playerId, teamId, difficulty);
     revalidatePath("/arena-z");
     return { result };
   } catch (err) {
+    // blockedByUnseenPvp: retorna como stale notice com battleId para abrir modal correto
+    if (err instanceof Error && (err as Error & { blockedByUnseenPvp?: boolean; unseenPvp?: { attackerName: string; happenedAt: Date; battleId: string } }).blockedByUnseenPvp) {
+      const pvp = (err as Error & { unseenPvp: { attackerName: string; happenedAt: Date; battleId: string } }).unseenPvp;
+      return { stale: { attackerName: pvp.attackerName, happenedAt: pvp.happenedAt.toISOString(), battleId: pvp.battleId, message: err.message } };
+    }
     return { error: err instanceof Error ? err.message : "Erro ao gerar adversario." };
   }
 }

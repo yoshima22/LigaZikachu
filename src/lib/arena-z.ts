@@ -25,6 +25,7 @@ export const ARENA_Z_CONFIG = {
 // Por hora por mascote na equipe
 export const PASSIVE_COINS_PER_MASCOT_PER_H = 5;
 export const PASSIVE_EXP_PER_MASCOT_PER_H   = 10;
+export const PVE_REWARD_MULT = 0.85; // redução global de 15% nos ganhos PvE
 const PASSIVE_MAX_HOURS               = 24;  // máximo por sessão (evita acúmulo por abandono)
 const PASSIVE_MIN_INTERVAL_HOURS      = 0.5; // processa a cada 30 min
 
@@ -333,13 +334,14 @@ function botReward(levelMin: number, levelMax: number, difficulty: ArenaDifficul
   };
 }
 
-function getBotRewardRange(levelMax: number) {
+function getBotRewardRange(levelMax: number, diffRewardMult = 1.2 /* Normal */) {
   const tier = Math.ceil(levelMax / 5);
+  const m = diffRewardMult * PVE_REWARD_MULT;
   return {
-    coinsMin: 10 * tier,
-    coinsMax: 28 * tier,
-    expMin: 14 * tier,
-    expMax: 36 * tier,
+    coinsMin: Math.round(10 * tier * m),
+    coinsMax: Math.round(28 * tier * m),
+    expMin:   Math.round(14 * tier * m),
+    expMax:   Math.round(36 * tier * m),
     foodChance: Math.min(45, tier * 5),
     sweetChance: Math.min(20, tier * 2.5),
   };
@@ -365,7 +367,7 @@ function buildBotOpponent(attackers: ArenaMascot[], difficulty: ArenaDifficulty 
   const nameSeed = seed !== undefined ? seed % BOT_NAMES.length : Math.floor(rng() * BOT_NAMES.length);
   const botName = BOT_NAMES[nameSeed];
   const defenders = Array.from({ length: botSize }, (_, index) => makeBotMascot(index + 1, band.min, band.max, rng));
-  return { avgLevel, band, botSize, botName, defenders, rewardRange: getBotRewardRange(band.max), difficulty };
+  return { avgLevel, band, botSize, botName, defenders, rewardRange: getBotRewardRange(band.max, diff.rewardMult), difficulty };
 }
 
 function splitDefeatedLoot(loot: ArenaLoot) {
@@ -1048,8 +1050,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     const won = combat.result === "ATTACKER_WIN";
     const diff = DIFFICULTY_CONFIG[difficulty];
     const fakeReward: ArenaLootFull = won ? {
-      coins: Math.round(rand(5, 30) * diff.rewardMult),
-      exp: Math.round(rand(10, 50) * diff.rewardMult),
+      coins: Math.round(rand(5, 30) * diff.rewardMult * PVE_REWARD_MULT),
+      exp: Math.round(rand(10, 50) * diff.rewardMult * PVE_REWARD_MULT),
       food: 0, sweet: 0,
     } : { coins: 0, exp: 0, food: 0, sweet: 0 };
     const allMascotsAdmin = new Map([...attackers, ...bot.defenders].map(m => [m.id, m]));
@@ -1140,8 +1142,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   // Recompensa escalada pela dificuldade
   const baseReward = won ? botReward(band.min, band.max, useDifficulty) : { coins: 0, exp: 0, food: 0, sweet: 0, egg: undefined, buffItem: undefined };
   const reward: ArenaLootFull = won ? {
-    coins: Math.round(baseReward.coins * diff.rewardMult),
-    exp:   Math.round(baseReward.exp   * diff.rewardMult),
+    coins: Math.round(baseReward.coins * diff.rewardMult * PVE_REWARD_MULT),
+    exp:   Math.round(baseReward.exp   * diff.rewardMult * PVE_REWARD_MULT),
     food:  baseReward.food,
     sweet: baseReward.sweet,
     egg:   baseReward.egg,
@@ -1334,6 +1336,15 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
   if (team.teamType === "PVP") throw new Error("Equipe Somente PvP nao pode gerar bot.");
+
+  // Bloqueia lock de bot se há PvP não-visto (mesmo mecanismo de runBotBattle)
+  const unseenPvp = await getUnseenPvpAttack(teamId);
+  if (unseenPvp) {
+    throw Object.assign(
+      new Error(`Voce foi atacado por ${unseenPvp.attackerName} antes deste combate. Visualize o resultado e tente novamente.`),
+      { blockedByUnseenPvp: true, unseenPvp }
+    );
+  }
 
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
   const hourSlot = Math.floor(Date.now() / (10 * 60 * 1000));

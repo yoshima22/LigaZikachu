@@ -565,7 +565,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
             title={onCooldown ? "Cooldown PvE desta equipe ainda ativo." : undefined}
             onClick={() => {
               startTransition(async () => {
-                const lockResult = await lockBotAction(teamId, difficulty, teamUpdatedAt);
+                const lockResult = await lockBotAction(teamId, difficulty);
                 if (lockResult.stale) { setStaleNotice(lockResult.stale); toast.error("Voce foi atacado antes desta acao."); return; }
                 if (lockResult.error) { toast.error(lockResult.error); return; }
                 const response = await runBotBattleAction(teamId, difficulty);
