@@ -71,7 +71,7 @@ export default async function MascotesPage() {
         }
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
-      take: 6,
+      // Sem take: mascotes favoritos/equipados aparecem todos (banco já usa query separada mínima)
     }),
     // Banco — apenas campos mínimos para exibir a lista leve (detalhes carregados ao clicar)
     prisma.mascot.findMany({
