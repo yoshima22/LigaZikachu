@@ -562,6 +562,26 @@ export async function cloneMascotAction(mascotId: string): Promise<{
   }
 }
 
+// ── Remover mascote de uma conta ──────────────────────────────────────────────
+export async function deleteMascotAction(mascotId: string): Promise<{
+  ok: boolean; summary?: string; error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const mascot = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: { pokemonId: true, nickname: true, level: true, playerId: true },
+    });
+    if (!mascot) return { ok: false, error: "Mascote não encontrado." };
+    await prisma.mascot.delete({ where: { id: mascotId } });
+    const { getPokemonName } = await import("@/lib/mascot-data");
+    const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+    return { ok: true, summary: `${name} (Nv.${mascot.level}) removido da conta.` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Criar mascote manualmente para um jogador ─────────────────────────────────
 export async function createMascotForPlayerAction(opts: {
   playerId: string;
