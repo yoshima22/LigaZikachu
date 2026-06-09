@@ -428,21 +428,14 @@ export async function interactWithMascot(
   const PLAY_COOLDOWN_MS = 45 * 60 * 1000;
   const PET_COOLDOWN_MS  = 25 * 60 * 1000;
 
-  // Cada ação usa seu próprio timestamp — PLAY e PET não se bloqueiam mutuamente
+  // PLAY usa lastInteractedAt persistido no banco; PET tem cooldown apenas no cliente
   if (!skipCooldown && type === "PLAY") {
-    const lastPlayed = (mascot as Record<string, unknown>).lastPlayedAt as Date | null ?? mascot.lastInteractedAt;
-    if (lastPlayed && now.getTime() - lastPlayed.getTime() < PLAY_COOLDOWN_MS) {
-      const remaining = Math.ceil((PLAY_COOLDOWN_MS - (now.getTime() - lastPlayed.getTime())) / 60_000);
+    if (mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < PLAY_COOLDOWN_MS) {
+      const remaining = Math.ceil((PLAY_COOLDOWN_MS - (now.getTime() - mascot.lastInteractedAt.getTime())) / 60_000);
       return { success: false, message: `Espere mais ${remaining} min antes de brincar novamente.`, happinessChange: 0, expGained: 0 };
     }
   }
-  if (!skipCooldown && type === "PET") {
-    const lastPetted = (mascot as Record<string, unknown>).lastPettedAt as Date | null;
-    if (lastPetted && now.getTime() - lastPetted.getTime() < PET_COOLDOWN_MS) {
-      const remaining = Math.ceil((PET_COOLDOWN_MS - (now.getTime() - lastPetted.getTime())) / 60_000);
-      return { success: false, message: `Espere mais ${remaining} min antes de fazer carinho novamente.`, happinessChange: 0, expGained: 0 };
-    }
-  }
+  // PET cooldown é gerenciado no cliente (Map _pettedAt) — sem verificação server-side aqui
   // Verifica se um rival travou as interações
   if (type !== "FEED_FOOD" && type !== "FEED_SWEET" && mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
     const remaining = Math.ceil((mascot.socialCooldownUntil.getTime() - now.getTime()) / 60_000);
@@ -566,9 +559,9 @@ export async function interactWithMascot(
       happiness: newHappiness,
       mood: finalMood,
       // Persiste cooldown independente por ação — lastInteractedAt mantido para mood decay
-      lastInteractedAt: type === "PLAY" || type === "PET" ? now : mascot.lastInteractedAt,
-      ...(type === "PLAY" ? { lastPlayedAt: now } : {}),
-      ...(type === "PET"  ? { lastPettedAt:  now } : {}),
+      // lastInteractedAt só atualiza no PLAY (para preservar o cooldown server-side)
+      // PET não atualiza para não bloquear o próximo brincar
+      lastInteractedAt: type === "PLAY" ? now : mascot.lastInteractedAt,
       lastFedAt: type.startsWith("FEED") ? now : mascot.lastFedAt,
     }
   });
