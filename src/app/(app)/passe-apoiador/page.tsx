@@ -1,4 +1,5 @@
-import { getMyPassStatus, PASS_SCHEDULE } from "./actions";
+import { getMyPassStatus } from "./actions";
+import { PASS_SCHEDULE } from "./schedule";
 import { PassPageClient } from "./_components/pass-page-client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
