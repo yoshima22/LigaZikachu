@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, MapPin, Search, Star } from "lucide-react";
+import { MapPin, Search, Star } from "lucide-react";
 import { getPokemonElement, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
 import { MascotBankList } from "./mascot-bank-list";
@@ -202,8 +202,6 @@ export function MascotList({
   const [typeFilter, setTypeFilter] = useState("");
   const [expeditionFilter, setExpeditionFilter] = useState("ALL");
   const [companionOnly, setCompanionOnly] = useState(false);
-  const [expandedOthers, setExpandedOthers] = useState(false);
-  const [page, setPage] = useState(1);
 
   const activeExpeditions = mascots.flatMap(mascot =>
     mascot.expeditions
@@ -228,30 +226,14 @@ export function MascotList({
     return matchSearch && matchMood && matchType && matchCompanion;
   });
 
-  const favorites = filtered.filter(m => m.isFavorite).slice(0, 6);
-  const highlighted = favorites.length > 0 ? favorites : filtered.slice(0, 6);
-  const highlightedIds = new Set(highlighted.map(m => m.id));
-  const others = filtered.filter(m => !highlightedIds.has(m.id));
-  const totalPages = Math.max(1, Math.ceil(others.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const compactOthers = expandedOthers
-    ? others.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-    : others.slice(0, 12);
+  // Todos os mascotes filtrados aparecem como cards (não há limite de 6)
+  // O server já separa: mascots (featured) e bankMascots (banco)
+  const favorites = filtered.filter(m => m.isFavorite);
+  const highlighted = filtered; // mostra todos os featured sem corte
 
-  const updateSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
-
-  const updateMood = (value: string) => {
-    setMoodFilter(value);
-    setPage(1);
-  };
-
-  const updateType = (value: string) => {
-    setTypeFilter(value);
-    setPage(1);
-  };
+  const updateSearch = (value: string) => { setSearch(value); };
+  const updateMood   = (value: string) => { setMoodFilter(value); };
+  const updateType   = (value: string) => { setTypeFilter(value); };
 
   return (
     <div className="space-y-5">
@@ -326,24 +308,31 @@ export function MascotList({
         </section>
       )}
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && bankMascots.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-slate-500">
           Nenhum mascote encontrado com esses filtros.
         </p>
       ) : (
         <>
-          {highlighted.length > 0 ? (
+          {/* Equipe Favorita / Companheiro — todos os mascotes featured */}
+          {highlighted.length > 0 && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-[#FFCB05]"><Star size={14} fill="currentColor" /> {favorites.length > 0 ? "Equipe Favorita" : "Destaques"}</h2>
-                <span className="text-[10px] text-slate-500">{favorites.length > 0 ? `${favorites.length}/6 favoritos` : "sem favoritos"}</span>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-[#FFCB05]">
+                  <Star size={14} fill="currentColor" />
+                  {favorites.length > 0 ? "Equipe Favorita" : "Destaques"}
+                </h2>
+                <span className="text-[10px] text-slate-500">
+                  {favorites.length > 0 ? `${favorites.length} favorito${favorites.length !== 1 ? "s" : ""}` : "sem favoritos"}
+                </span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} />)}
               </div>
             </section>
-          ) : null}
+          )}
 
+          {/* Banco — mascotes não favoritos, carregados de forma mínima */}
           {bankMascots.length > 0 && (
             <MascotBankList
               mascots={bankMascots}
@@ -352,42 +341,9 @@ export function MascotList({
               isAdmin={isAdmin}
             />
           )}
-
-          <p className="text-center text-[10px] text-slate-600">
-            {filtered.length} mascote{filtered.length !== 1 ? "s" : ""} encontrado{filtered.length !== 1 ? "s" : ""}
-          </p>
         </>
       )}
     </div>
   );
 }
 
-function Pagination({ page, totalPages, total, onPage }: { page: number; totalPages: number; total: number; onPage: (page: number) => void }) {
-  if (totalPages <= 1) return (
-    <p className="text-center text-[10px] text-slate-600">{total} mascotes no banco.</p>
-  );
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-      <span>{total} mascotes no banco</span>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onPage(Math.max(1, page - 1))}
-          className="rounded-lg border border-border p-1.5 text-slate-400 disabled:opacity-30"
-        >
-          <ChevronLeft size={13} />
-        </button>
-        <span>Pagina {page}/{totalPages}</span>
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onPage(Math.min(totalPages, page + 1))}
-          className="rounded-lg border border-border p-1.5 text-slate-400 disabled:opacity-30"
-        >
-          <ChevronRight size={13} />
-        </button>
-      </div>
-    </div>
-  );
-}
