@@ -229,6 +229,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
   const [localMood, setLocalMood]           = useState(mascot.mood);
+  const [localExp, setLocalExp]             = useState(mascot.exp);
+  const [localLevel, setLocalLevel]         = useState(mascot.level);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
   // lastPlayedAt/lastPettedAt: null até migração SQL ser aplicada
   // Client-side tracking correto dentro da sessão mesmo sem as colunas no banco
@@ -238,6 +240,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
   // Sincroniza com novas props quando servidor atualiza
   useEffect(() => { setLocalHappiness(mascot.happiness); }, [mascot.happiness]);
   useEffect(() => { setLocalMood(mascot.mood); },           [mascot.mood]);
+  useEffect(() => { setLocalExp(mascot.exp); },             [mascot.exp]);
+  useEffect(() => { setLocalLevel(mascot.level); },         [mascot.level]);
   useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
   useEffect(() => { if (mascot.lastPlayedAt != null) setLocalLastPlayed(mascot.lastPlayedAt); }, [mascot.lastPlayedAt]);
   useEffect(() => { if (mascot.lastPettedAt != null) setLocalLastPetted(mascot.lastPettedAt); }, [mascot.lastPettedAt]);
@@ -250,8 +254,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
   // useTimerExpiry: atualiza automaticamente quando a expedição termina
   const expeditionExpiry = useTimerExpiry(expedition?.finishAt ?? null);
   const claimable = !!expedition && expeditionExpiry.expired;
-  const expNeeded  = Math.max(1, expToNext(mascot.level));
-  const expPct     = Math.min(100, Math.max(0, Math.round((mascot.exp / expNeeded) * 100)));
+  const expNeeded  = Math.max(1, expToNext(localLevel));
+  const expPct     = Math.min(100, Math.max(0, Math.round((localExp / expNeeded) * 100)));
 
   // Derived status — usa estado local otimista
   const hungerStatus    = getHungerStatus(localLastFed);
@@ -322,8 +326,19 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
         toast.success(r.result.message);
         // Atualização otimista imediata — não espera re-render do servidor
         const happChange = r.result.happinessChange ?? 0;
+        const expChange  = r.result.expGained ?? 0;
         setLocalHappiness(h => Math.min(100, Math.max(0, h + happChange)));
         if (r.result.newMood) setLocalMood(r.result.newMood as string);
+        // EXP otimista — avança barra imediatamente; pode subir de nível (simplificado)
+        if (expChange > 0) {
+          setLocalExp(prev => {
+            let exp = prev + expChange;
+            let lvl = localLevel;
+            while (exp >= expToNext(lvl)) { exp -= expToNext(lvl); lvl++; }
+            setLocalLevel(lvl);
+            return exp;
+          });
+        }
         if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
         if (type === "PLAY") setLocalLastPlayed(new Date());
         if (type === "PET")  setLocalLastPetted(new Date());
@@ -499,7 +514,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
                   {PERSONALITY_LABEL[mascot.personality]}
                 </span>
               </Tip>
-              {" "}· Nv. {mascot.level}
+              {" "}· Nv. {localLevel}
             </div>
             {/* Battle record */}
             {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (
@@ -518,7 +533,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
             {/* EXP bar */}
             <div className="space-y-0.5 pt-0.5">
               <div className="flex justify-between text-[9px] text-slate-600">
-                <span>EXP</span><span>{mascot.exp}/{expNeeded}</span>
+                <span>EXP</span><span>{localExp}/{expNeeded}</span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
                 <div className="h-full rounded-full bg-gradient-to-r from-[#FFCB05] to-[#FFD700] transition-all" style={{ width: `${expPct}%` }} />

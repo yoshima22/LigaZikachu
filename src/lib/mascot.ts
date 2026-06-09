@@ -309,7 +309,7 @@ export function computeProceduralStats(
 export async function addExp(
   mascotId: string,
   amount: number,
-  options: { ignoreBenchPenalty?: boolean } = {}
+  options: { ignoreBenchPenalty?: boolean; ignoreExpBoost?: boolean } = {}
 ): Promise<LevelUpResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
@@ -317,11 +317,13 @@ export async function addExp(
   // Mascotes no banco recebem 50% do EXP (interações presenciais são menos intensas)
   if (!options.ignoreBenchPenalty && !mascot.isEquipped) amount = Math.max(1, Math.floor(amount * 0.5));
 
-  // Check for active EXP_BOOST buff
-  const expBoostBuff = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } }
-  });
-  if (expBoostBuff) amount = Math.floor(amount * 2);
+  // Check for active EXP_BOOST buff (ignorado se já foi aplicado pelo caller)
+  if (!options.ignoreExpBoost) {
+    const expBoostBuff = await prisma.mascotBuff.findFirst({
+      where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } }
+    });
+    if (expBoostBuff) amount = Math.floor(amount * 2);
+  }
 
   let { level, exp, pokemonId } = mascot;
   exp += amount;
@@ -429,85 +431,91 @@ export async function interactWithMascot(
 
   // Bônus por nível — cada 10 níveis aumenta eficácia das interações
   const lvlBonus = Math.floor(mascot.level / 10);
+  const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+
+  // Pré-busca multipliers de EXP para calcular o valor real antes de montar a mensagem
+  const [picnicBuff, relations, expBoostBuff] = await Promise.all([
+    prisma.mascotBuff.findFirst({ where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: now } } }).catch(() => null),
+    prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true } }).catch(() => [] as { type: string }[]),
+    prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
+  ]);
+  const picnicExpBonus   = picnicBuff  ? 0.50 : 0;
+  const picnicHappyBonus = picnicBuff  ? 5    : 0;
+  const hasFriends = relations.some(r => r.type === "FRIEND");
+  const hasRivals  = relations.some(r => r.type === "RIVAL");
+  const socialMult = 1.0 + (hasFriends ? 0.25 : 0) + (hasRivals ? 0.15 : 0) + picnicExpBonus;
+  const benchMult  = mascot.isEquipped ? 1.0 : 0.5;
+  const expBoostMult = expBoostBuff ? 2.0 : 1.0;
+
+  // Calcula EXP real que será aplicado (mesmo cálculo do addExp, mas exposto aqui para a mensagem)
+  const calcFinalExp = (base: number) =>
+    Math.max(1, Math.round(base * socialMult * benchMult * expBoostMult));
 
   let happinessChange = 0;
-  let expGained = 0;
+  let expGained = 0;       // EXP real aplicado (após todos os multiplicadores)
   let refused = false;
   let newMood: MascotMood | undefined;
   let message = "";
 
   switch (type) {
     case "PLAY": {
-      // PLAY: +8 base → cresce com nível. Brincalhão tem bônus extra.
       const playHappy = 8 + lvlBonus * 2 + (mascot.personality === "PLAYFUL" ? 3 : 0);
-      const playExp   = EXP_REWARDS.PLAY_WITH + lvlBonus * 3;
+      const playExpBase = EXP_REWARDS.PLAY_WITH + lvlBonus * 3;
+      expGained = calcFinalExp(playExpBase);
       happinessChange = playHappy;
-      expGained = playExp;
       newMood = mascot.personality === "LAZY" ? "TIRED" : "HAPPY";
       message = mascot.personality === "LAZY"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é preguiçoso — brincou um pouco mas logo cansou. (+${playHappy} felicidade)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar! (+${playHappy} felicidade, +${playExp} EXP)`;
+        ? `${mascotName} é preguiçoso — brincou um pouco mas logo cansou. (+${playHappy} felicidade, +${expGained} EXP)`
+        : `${mascotName} adorou brincar! (+${playHappy} felicidade, +${expGained} EXP)`;
       break;
     }
     case "PET": {
       if (mascot.personality === "TIMID" && mascot.happiness < 40) {
         refused = true;
-        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
+        message = `${mascotName} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
         break;
       }
       if (mascot.mood === "ANGRY") {
         refused = true;
-        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
+        message = `${mascotName} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
         break;
       }
-      // PET é mais gentil que PLAY: menos felicidade base, mas cresce mais com nível
-      // Razão: Carinho fortalece vínculo gradualmente; brincar é mais intenso
       const petHappy = 5 + lvlBonus + (mascot.personality === "LOYAL" ? 2 : 0);
-      const petExp   = EXP_REWARDS.PET + lvlBonus;
+      const petExpBase = EXP_REWARDS.PET + lvlBonus;
+      expGained = calcFinalExp(petExpBase);
       happinessChange = petHappy;
-      expGained = petExp;
       newMood = mascot.happiness + petHappy >= 80 ? "HAPPY" :
                 mascot.mood === "TIRED" ? "NEUTRAL" :
                 mascot.mood === "NEEDY" ? "NEUTRAL" : undefined;
       message = mascot.personality === "PROUD"
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${petExp} EXP)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho! 💛 (+${petHappy} felicidade, +${petExp} EXP)`;
+        ? `${mascotName} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${expGained} EXP)`
+        : `${mascotName} gostou do carinho! 💛 (+${petHappy} felicidade, +${expGained} EXP)`;
       break;
     }
 
     case "FEED_FOOD": {
-      const food = await prisma.mascotFoodItem.findUnique({
-        where: { playerId_type: { playerId, type: "FOOD" } }
-      });
+      const food = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "FOOD" } } });
       if (!food || food.quantity <= 0) {
         return { success: false, message: "Você não tem comida no inventário.", happinessChange: 0, expGained: 0 };
       }
-      await prisma.mascotFoodItem.update({
-        where: { playerId_type: { playerId, type: "FOOD" } },
-        data: { quantity: { decrement: 1 } }
-      });
-      happinessChange = 25; // ganho maior para garantir saída do status SAD (threshold 40)
-      expGained = EXP_REWARDS.FEED_FOOD;
+      await prisma.mascotFoodItem.update({ where: { playerId_type: { playerId, type: "FOOD" } }, data: { quantity: { decrement: 1 } } });
+      happinessChange = 25;
+      expGained = calcFinalExp(EXP_REWARDS.FEED_FOOD);
       newMood = "HAPPY";
-      message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} comeu e está satisfeito!`;
+      message = `${mascotName} comeu e está satisfeito! (+${expGained} EXP)`;
       break;
     }
 
     case "FEED_SWEET": {
-      const sweet = await prisma.mascotFoodItem.findUnique({
-        where: { playerId_type: { playerId, type: "SWEET" } }
-      });
+      const sweet = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "SWEET" } } });
       if (!sweet || sweet.quantity <= 0) {
         return { success: false, message: "Você não tem doces no inventário.", happinessChange: 0, expGained: 0 };
       }
-      await prisma.mascotFoodItem.update({
-        where: { playerId_type: { playerId, type: "SWEET" } },
-        data: { quantity: { decrement: 1 } }
-      });
-      happinessChange = 35; // doce dá grande boost de felicidade
-      expGained = EXP_REWARDS.FEED_SWEET;
+      await prisma.mascotFoodItem.update({ where: { playerId_type: { playerId, type: "SWEET" } }, data: { quantity: { decrement: 1 } } });
+      happinessChange = 35;
+      expGained = calcFinalExp(EXP_REWARDS.FEED_SWEET);
       newMood = "EXCITED";
-      message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} amou o doce! Olha aquela energia!`;
+      message = `${mascotName} amou o doce! Olha aquela energia! (+${expGained} EXP)`;
       break;
     }
   }
@@ -516,14 +524,8 @@ export async function interactWithMascot(
     return { success: false, message, happinessChange: 0, expGained: 0, refused: true };
   }
 
-  // EXP sempre aplicado — addExp já reduz 50% para mascotes no banco
-  // Atualiza felicidade (0-100)
-  const newHappiness = Math.min(100, Math.max(0, mascot.happiness + happinessChange));
-
-  // Felicidade alta pode mudar humor para CONFIDENT
-  const finalMood: MascotMood = newHappiness >= 90
-    ? "CONFIDENT"
-    : newMood ?? mascot.mood;
+  const newHappiness = Math.min(100, Math.max(0, mascot.happiness + happinessChange + picnicHappyBonus));
+  const finalMood: MascotMood = newHappiness >= 90 ? "CONFIDENT" : newMood ?? mascot.mood;
 
   await prisma.mascot.update({
     where: { id: mascotId },
@@ -535,29 +537,9 @@ export async function interactWithMascot(
     }
   });
 
-  // Cesta de Piquenique Chocante: +50% EXP e +5 felicidade bônus nas interações
-  const picnicBuff = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } }
-  }).catch(() => null);
-  const picnicExpBonus = picnicBuff ? 0.50 : 0;
-  const picnicHappyBonus = picnicBuff ? 5 : 0;
-
-  if (picnicHappyBonus > 0 && !refused) {
-    const updatedHappiness = Math.min(100, newHappiness + picnicHappyBonus);
-    await prisma.mascot.update({ where: { id: mascotId }, data: { happiness: updatedHappiness } }).catch(() => {});
-  }
-
+  // Aplica EXP — passa ignoreBenchPenalty:true porque já calculamos o bench mult acima
   if (expGained > 0) {
-    // Bônus social: aliados e rivais aumentam EXP por interação
-    const relations = await prisma.mascotRelation.findMany({
-      where: { mascotAId: mascotId },
-      select: { type: true },
-    }).catch(() => [] as { type: string }[]);
-    const hasFriends = relations.some(r => r.type === "FRIEND");
-    const hasRivals  = relations.some(r => r.type === "RIVAL");
-    const socialMult = 1.0 + (hasFriends ? 0.25 : 0) + (hasRivals ? 0.15 : 0) + picnicExpBonus;
-    const finalExp = Math.round(expGained * socialMult);
-    await addExp(mascotId, finalExp).catch(() => {});
+    await addExp(mascotId, expGained, { ignoreBenchPenalty: true, ignoreExpBoost: true }).catch(() => {});
   }
 
   return { success: true, message, happinessChange, expGained, newMood: finalMood };
