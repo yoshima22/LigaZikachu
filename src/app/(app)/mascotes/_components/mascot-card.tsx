@@ -60,6 +60,8 @@ interface MascotData {
   restingUntil: Date | null;
   hatchedAt: Date;
   lastInteractedAt: Date | null;
+  lastPlayedAt: Date | null;
+  lastPettedAt: Date | null;
   lastFedAt: Date | null;
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
@@ -228,13 +230,15 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
   const [localMood, setLocalMood]           = useState(mascot.mood);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
-  const [localLastInteracted, setLocalLastInteracted] = useState(mascot.lastInteractedAt);
+  const [localLastPlayed, setLocalLastPlayed] = useState(mascot.lastPlayedAt);
+  const [localLastPetted, setLocalLastPetted] = useState(mascot.lastPettedAt);
 
   // Sincroniza com novas props quando servidor atualiza
   useEffect(() => { setLocalHappiness(mascot.happiness); }, [mascot.happiness]);
-  useEffect(() => { setLocalMood(mascot.mood); },          [mascot.mood]);
-  useEffect(() => { setLocalLastFed(mascot.lastFedAt); },  [mascot.lastFedAt]);
-  useEffect(() => { setLocalLastInteracted(mascot.lastInteractedAt); }, [mascot.lastInteractedAt]);
+  useEffect(() => { setLocalMood(mascot.mood); },           [mascot.mood]);
+  useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
+  useEffect(() => { setLocalLastPlayed(mascot.lastPlayedAt); }, [mascot.lastPlayedAt]);
+  useEffect(() => { setLocalLastPetted(mascot.lastPettedAt); }, [mascot.lastPettedAt]);
 
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
@@ -261,11 +265,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
     return () => clearInterval(iv);
   }, []);
 
-  // Cooldowns calculados diretamente de localLastInteracted + nowMs
-  // (evita race condition do useTimerExpiry, que inicializa estado uma única vez)
-  const lastInteractionTime = localLastInteracted ? new Date(localLastInteracted).getTime() : null;
-  const playEndMs = lastInteractionTime ? lastInteractionTime + 45 * 60 * 1000 : 0;
-  const petEndMs  = lastInteractionTime ? lastInteractionTime + 25 * 60 * 1000 : 0;
+  // Cooldowns independentes — cada ação tem seu próprio timestamp
+  const playEndMs = localLastPlayed ? new Date(localLastPlayed).getTime() + 45 * 60 * 1000 : 0;
+  const petEndMs  = localLastPetted ? new Date(localLastPetted).getTime() + 25 * 60 * 1000 : 0;
   const playOnCooldown = playEndMs > nowMs;
   const petOnCooldown  = petEndMs  > nowMs;
   const playCooldownRemaining = Math.max(0, playEndMs - nowMs);
@@ -321,7 +323,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
         setLocalHappiness(h => Math.min(100, Math.max(0, h + happChange)));
         if (r.result.newMood) setLocalMood(r.result.newMood as string);
         if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
-        if (type === "PLAY" || type === "PET") setLocalLastInteracted(new Date());
+        if (type === "PLAY") setLocalLastPlayed(new Date());
+        if (type === "PET")  setLocalLastPetted(new Date());
         // Re-render server para atualizar inventário e EXP
         router.refresh();
       }

@@ -649,7 +649,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     battleWins: number; battleLosses: number;
     arenaState: string; bazarListed: boolean;
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
-    lastInteractedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
+    lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; isShiny: boolean;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
@@ -691,7 +691,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         battleWins: m.battleWins, battleLosses: m.battleLosses,
         arenaState: m.arenaState, bazarListed: m.bazarListed,
         injuredAt: m.injuredAt, restingUntil: m.restingUntil, hatchedAt: m.hatchedAt,
-        lastInteractedAt: m.lastInteractedAt, lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
+        lastInteractedAt: m.lastInteractedAt, lastPlayedAt: m.lastPlayedAt, lastPettedAt: m.lastPettedAt, lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
         evolutionLocked: m.evolutionLocked, isShiny: m.isShiny,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({

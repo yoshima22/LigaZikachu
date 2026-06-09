@@ -24,7 +24,7 @@ interface MascotData {
   activeBuffs: { type: string; expiresAt: Date }[];
   arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
   relations?: Array<{ type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }>;
-  hatchedAt: Date; lastInteractedAt: Date | null; lastFedAt: Date | null;
+  hatchedAt: Date; lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string; mode?: string }[];
   events: { id: string; emoji: string; description: string; createdAt: Date }[];
   hasFood: boolean; hasSweet: boolean;

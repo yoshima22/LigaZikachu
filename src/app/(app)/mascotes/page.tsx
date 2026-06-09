@@ -58,7 +58,7 @@ export default async function MascotesPage() {
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
         injuredAt: true, restingUntil: true,
-        hatchedAt: true, lastInteractedAt: true, lastFedAt: true, socialCooldownUntil: true,
+        hatchedAt: true, lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, socialCooldownUntil: true,
         expeditions: {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
@@ -182,6 +182,8 @@ export default async function MascotesPage() {
     restingUntil: m.restingUntil,
     hatchedAt: m.hatchedAt,
     lastInteractedAt: m.lastInteractedAt,
+    lastPlayedAt: m.lastPlayedAt,
+    lastPettedAt: m.lastPettedAt,
     lastFedAt: m.lastFedAt,
     socialCooldownUntil: m.socialCooldownUntil,
     evolutionLocked: m.evolutionLocked,
