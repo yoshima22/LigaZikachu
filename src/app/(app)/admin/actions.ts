@@ -462,6 +462,135 @@ export async function resetStuckMascotAction(mascotId: string): Promise<{
   }
 }
 
+// ── Clonar mascote: copia atributos → cria novo → deleta original ─────────────
+export async function cloneMascotAction(mascotId: string): Promise<{
+  ok: boolean; newMascotId?: string; summary?: string; error?: string;
+}> {
+  try {
+    await requireAdmin();
+
+    const src = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: {
+        playerId: true, pokemonId: true, nickname: true, personality: true,
+        level: true, exp: true, happiness: true, mood: true, isShiny: true,
+        isFavorite: true, isEquipped: true,
+        statForce: true, statAgility: true, statCharisma: true,
+        statInstinct: true, statVitality: true,
+        battleWins: true, battleLosses: true,
+      },
+    });
+    if (!src) return { ok: false, error: "Mascote original não encontrado." };
+
+    const created = await prisma.$transaction(async tx => {
+      // 1. Antes de deletar o antigo, fecha expedições ACTIVE para evitar cascade problems
+      await tx.mascotExpedition.updateMany({
+        where: { mascotId, status: "ACTIVE" },
+        data: { status: "CLAIMED", rewardJson: { type: "NOTHING", adminClone: true } },
+      });
+
+      // 2. Cria o clone com todos os atributos copiados
+      const clone = await tx.mascot.create({
+        data: {
+          playerId:     src.playerId,
+          pokemonId:    src.pokemonId,
+          nickname:     src.nickname,
+          personality:  src.personality,
+          level:        src.level,
+          exp:          src.exp,
+          happiness:    src.happiness,
+          mood:         src.mood,
+          isShiny:      src.isShiny,
+          isFavorite:   src.isFavorite,
+          isEquipped:   src.isEquipped,
+          statForce:    src.statForce,
+          statAgility:  src.statAgility,
+          statCharisma: src.statCharisma,
+          statInstinct: src.statInstinct,
+          statVitality: src.statVitality,
+          battleWins:   src.battleWins,
+          battleLosses: src.battleLosses,
+        },
+      });
+
+      // 3. Log de criação
+      await tx.mascotEvent.create({
+        data: { mascotId: clone.id, emoji: "🔧", description: "Mascote recriado pelo admin (clone)." }
+      }).catch(() => null);
+
+      // 4. Deleta o original (cascade: expeditions, events, relations, buffs)
+      await tx.mascot.delete({ where: { id: mascotId } });
+
+      return clone;
+    });
+
+    const { getPokemonName } = await import("@/lib/mascot-data");
+    const name = src.nickname ?? getPokemonName(src.pokemonId);
+    return {
+      ok: true,
+      newMascotId: created.id,
+      summary: `${name} clonado com sucesso. Novo ID: ${created.id}`,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+// ── Criar mascote manualmente para um jogador ─────────────────────────────────
+export async function createMascotForPlayerAction(opts: {
+  playerId: string;
+  pokemonId: number;
+  personality: import("@prisma/client").MascotPersonality;
+  isShiny: boolean;
+  level: number;
+  nickname?: string;
+  statForce: number;
+  statAgility: number;
+  statCharisma: number;
+  statInstinct: number;
+  statVitality: number;
+  isFavorite: boolean;
+}): Promise<{ ok: boolean; mascotId?: string; summary?: string; error?: string }> {
+  try {
+    await requireAdmin();
+
+    const player = await prisma.player.findUnique({ where: { id: opts.playerId }, select: { id: true } });
+    if (!player) return { ok: false, error: "Jogador não encontrado." };
+
+    if (opts.pokemonId < 1 || opts.pokemonId > 1025)
+      return { ok: false, error: "pokemonId inválido (1–1025)." };
+    if (opts.level < 1 || opts.level > 100)
+      return { ok: false, error: "Nível inválido (1–100)." };
+
+    const mascot = await prisma.mascot.create({
+      data: {
+        playerId:    opts.playerId,
+        pokemonId:   opts.pokemonId,
+        personality: opts.personality,
+        isShiny:     opts.isShiny,
+        isFavorite:  opts.isFavorite,
+        nickname:    opts.nickname?.trim() || null,
+        level:       opts.level,
+        statForce:   opts.statForce,
+        statAgility: opts.statAgility,
+        statCharisma:opts.statCharisma,
+        statInstinct:opts.statInstinct,
+        statVitality:opts.statVitality,
+      },
+    });
+
+    await prisma.mascotEvent.create({
+      data: { mascotId: mascot.id, emoji: "🎁", description: "Mascote adicionado pelo admin." }
+    }).catch(() => null);
+
+    const { getPokemonName } = await import("@/lib/mascot-data");
+    const name = opts.nickname?.trim() || getPokemonName(opts.pokemonId);
+    return { ok: true, mascotId: mascot.id, summary: `${name} (Nv.${opts.level}) criado para o jogador.` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Limpeza de eventos de mascotes de admins ──────────────────────────────────
 
 export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error?: string }> {
