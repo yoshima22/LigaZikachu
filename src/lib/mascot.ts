@@ -120,18 +120,32 @@ export async function hatchEgg(playerId: string): Promise<{ mascotId: string; po
       }).catch(() => null);
     }
 
-    return { m, isShiny, isStatBuffed };
+    return { m, isShiny, isStatBuffed, eggTypeKey };
   });
 
-  const isShiny = (mascot as { isShiny?: boolean }).isShiny ?? false;
-  const isStatBuffed = (mascot as { isStatBuffed?: boolean }).isStatBuffed ?? false;
+  const { m, isShiny, isStatBuffed, eggTypeKey } = mascot as {
+    m: { id: string; statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number };
+    isShiny: boolean; isStatBuffed: boolean; eggTypeKey: string;
+  };
+  const [rangeMin, rangeMax] = EGG_STAT_RANGES[eggTypeKey] ?? [8, 14];
+
   return {
-    mascotId: (mascot as { m: { id: string } }).m.id,
+    mascotId: m.id,
     pokemonId,
     name: getPokemonName(pokemonId),
     isNew: true,
     isShiny,
     isStatBuffed,
+    /** Stats reais ao nascer */
+    stats: {
+      force:    m.statForce,
+      agility:  m.statAgility,
+      charisma: m.statCharisma,
+      instinct: m.statInstinct,
+      vitality: m.statVitality,
+    },
+    /** Range normal do ovo — para comparação visual */
+    statRange: [rangeMin, rangeMax] as [number, number],
   };
 }
 
@@ -249,6 +263,43 @@ function levelStatBonuses(
   });
 
   return distributeStatPoints(pointsToAdd, weights);
+}
+
+/**
+ * Simula o crescimento procedural de stats de nível 1 até `targetLevel`.
+ * Usa a mesma lógica de level-up real, começando de stats base aleatórios
+ * no range de ovo COMMON (8–14). Chame múltiplas vezes para reroll.
+ */
+export function computeProceduralStats(
+  pokemonId: number,
+  targetLevel: number,
+  personality: MascotPersonality,
+): Record<MascotStatKey, number> {
+  // Stats base = ovo COMMON range (8–14)
+  const cur: Record<MascotStatKey, number> & { pokemonId: number; level: number; personality: MascotPersonality } = {
+    pokemonId,
+    level: 1,
+    personality,
+    statForce:    randomInt(8, 14),
+    statAgility:  randomInt(8, 14),
+    statCharisma: randomInt(8, 14),
+    statInstinct: randomInt(8, 14),
+    statVitality: randomInt(8, 14),
+  };
+
+  for (let lvl = 1; lvl < Math.max(1, Math.min(100, targetLevel)); lvl++) {
+    const bonuses = levelStatBonuses({ ...cur, level: lvl }, 1);
+    cur.level = lvl + 1;
+    (Object.keys(bonuses) as MascotStatKey[]).forEach(k => { cur[k] += bonuses[k]; });
+  }
+
+  return {
+    statForce:    cur.statForce,
+    statAgility:  cur.statAgility,
+    statCharisma: cur.statCharisma,
+    statInstinct: cur.statInstinct,
+    statVitality: cur.statVitality,
+  };
 }
 
 export async function addExp(

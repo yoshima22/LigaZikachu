@@ -583,6 +583,24 @@ export async function deleteMascotAction(mascotId: string): Promise<{
 }
 
 // ── Criar mascote manualmente para um jogador ─────────────────────────────────
+/** Calcula stats procedurais para o painel admin (botão "Calcular") */
+export async function computeProceduralStatsAction(opts: {
+  pokemonId: number;
+  level: number;
+  personality: import("@prisma/client").MascotPersonality;
+}): Promise<{ ok: boolean; stats?: { statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number }; error?: string }> {
+  try {
+    await requireAdmin();
+    if (opts.pokemonId < 1 || opts.pokemonId > 1025) return { ok: false, error: "pokemonId inválido." };
+    if (opts.level < 1 || opts.level > 100) return { ok: false, error: "Nível inválido." };
+    const { computeProceduralStats } = await import("@/lib/mascot");
+    const stats = computeProceduralStats(opts.pokemonId, opts.level, opts.personality);
+    return { ok: true, stats };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 export async function createMascotForPlayerAction(opts: {
   playerId: string;
   pokemonId: number;
@@ -596,6 +614,8 @@ export async function createMascotForPlayerAction(opts: {
   statInstinct: number;
   statVitality: number;
   isFavorite: boolean;
+  /** Pontos extras a serem distribuídos aleatoriamente entre os stats */
+  extraRandomPoints?: number;
 }): Promise<{ ok: boolean; mascotId?: string; summary?: string; error?: string }> {
   try {
     await requireAdmin();
@@ -608,6 +628,21 @@ export async function createMascotForPlayerAction(opts: {
     if (opts.level < 1 || opts.level > 100)
       return { ok: false, error: "Nível inválido (1–100)." };
 
+    // Distribui pontos extras aleatoriamente se solicitado
+    let extraF = 0, extraA = 0, extraC = 0, extraI = 0, extraV = 0;
+    const extraPts = Math.max(0, Math.floor(opts.extraRandomPoints ?? 0));
+    if (extraPts > 0) {
+      const keys = ["F","A","C","I","V"] as const;
+      for (let i = 0; i < extraPts; i++) {
+        const k = keys[Math.floor(Math.random() * 5)];
+        if (k === "F") extraF++;
+        else if (k === "A") extraA++;
+        else if (k === "C") extraC++;
+        else if (k === "I") extraI++;
+        else extraV++;
+      }
+    }
+
     const mascot = await prisma.mascot.create({
       data: {
         playerId:    opts.playerId,
@@ -617,11 +652,11 @@ export async function createMascotForPlayerAction(opts: {
         isFavorite:  opts.isFavorite,
         nickname:    opts.nickname?.trim() || null,
         level:       opts.level,
-        statForce:   opts.statForce,
-        statAgility: opts.statAgility,
-        statCharisma:opts.statCharisma,
-        statInstinct:opts.statInstinct,
-        statVitality:opts.statVitality,
+        statForce:   opts.statForce    + extraF,
+        statAgility: opts.statAgility  + extraA,
+        statCharisma:opts.statCharisma + extraC,
+        statInstinct:opts.statInstinct + extraI,
+        statVitality:opts.statVitality + extraV,
       },
     });
 

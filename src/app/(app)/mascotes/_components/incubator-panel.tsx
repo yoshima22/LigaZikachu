@@ -81,7 +81,14 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const resolveEggImg = (type: string) =>
     eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
   const [pending, startTransition] = useTransition();
-  const [hatchResult, setHatchResult] = useState<{ pokemonId: number; name: string } | null>(null);
+  const [hatchResult, setHatchResult] = useState<{
+    pokemonId: number;
+    name: string;
+    isShiny?: boolean;
+    isStatBuffed?: boolean;
+    stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+    statRange?: [number, number];
+  } | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
   // Modal de seleção de geração
   const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
@@ -110,7 +117,14 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
       const r = await hatchEggAction();
       if (r.error) { toast.error(r.error); return; }
       if (r.result) {
-        setHatchResult({ pokemonId: r.result.pokemonId, name: r.result.name });
+        setHatchResult({
+          pokemonId: r.result.pokemonId,
+          name: r.result.name,
+          isShiny: r.result.isShiny,
+          isStatBuffed: r.result.isStatBuffed,
+          stats: r.result.stats,
+          statRange: r.result.statRange,
+        });
         onHatched?.(r.result.pokemonId, r.result.name);
       }
     });
@@ -161,12 +175,65 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
         </h2>
 
         {hatchResult ? (
-          <div className="flex flex-col items-center gap-3 py-6">
+          <div className="flex flex-col items-center gap-3 py-4">
             <div className="text-4xl animate-bounce">🎉</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={getSpriteUrl(hatchResult.pokemonId)} alt={hatchResult.name}
               width={96} height={96} className="object-contain" style={{ imageRendering: "pixelated" }} />
-            <p className="text-lg font-bold text-white">{hatchResult.name} nasceu!</p>
+            <div className="text-center space-y-0.5">
+              <p className="text-lg font-bold text-white">
+                {hatchResult.name} nasceu!
+                {hatchResult.isShiny && <span className="ml-1.5 text-base">✦</span>}
+              </p>
+              {hatchResult.isShiny && (
+                <p className="text-xs text-yellow-400 font-semibold">⚡ Shiny! Raridade extrema.</p>
+              )}
+              {hatchResult.isStatBuffed && (
+                <p className="text-xs text-purple-400 font-semibold">✨ Stats acima do normal pelo tipo de ovo!</p>
+              )}
+            </div>
+
+            {/* Stats ao nascer */}
+            {hatchResult.stats && (
+              <div className="w-full max-w-xs rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold text-center">Stats ao nascer</p>
+                {(() => {
+                  const [rMin, rMax] = hatchResult.statRange ?? [8, 14];
+                  const rows: { label: string; key: keyof typeof hatchResult.stats; emoji: string }[] = [
+                    { label: "Força",      key: "force",    emoji: "⚔️" },
+                    { label: "Agilidade",  key: "agility",  emoji: "💨" },
+                    { label: "Carisma",    key: "charisma", emoji: "✨" },
+                    { label: "Instinto",   key: "instinct", emoji: "🔮" },
+                    { label: "Vitalidade", key: "vitality", emoji: "❤️" },
+                  ];
+                  return rows.map(row => {
+                    const val = hatchResult.stats![row.key];
+                    const isAbove = val > rMax;
+                    const isBelow = val < rMin;
+                    return (
+                      <div key={row.key} className="flex items-center gap-2">
+                        <span className="text-sm w-5 text-center leading-none">{row.emoji}</span>
+                        <span className="text-xs text-slate-400 w-20">{row.label}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${
+                            isAbove ? "bg-purple-400" : isBelow ? "bg-red-500/60" : "bg-[#FFCB05]"
+                          }`} style={{ width: `${Math.min(100, (val / 30) * 100)}%` }} />
+                        </div>
+                        <span className={`text-xs font-bold w-6 text-right ${
+                          isAbove ? "text-purple-300" : isBelow ? "text-red-400" : "text-slate-200"
+                        }`}>{val}</span>
+                        {isAbove && <span className="text-[10px] text-purple-400 leading-none">⬆</span>}
+                        {isBelow && <span className="text-[10px] text-red-400 leading-none">⬇</span>}
+                      </div>
+                    );
+                  });
+                })()}
+                <p className="text-[9px] text-slate-600 text-center pt-0.5">
+                  Range normal deste ovo: {hatchResult.statRange?.[0]}–{hatchResult.statRange?.[1]} por stat
+                </p>
+              </div>
+            )}
+
             <p className="text-xs text-slate-500">Vá até Meus Mascotes para interagir.</p>
             <button onClick={() => setHatchResult(null)} className="mt-1 text-xs text-[#FFCB05] underline">Fechar</button>
           </div>

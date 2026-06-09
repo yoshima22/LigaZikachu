@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Copy, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Copy, Plus, RefreshCw, Sparkles, Trash2, Wand2, Shuffle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPokemonName } from "@/lib/mascot-data";
 import { MascotPersonality } from "@prisma/client";
@@ -10,6 +10,7 @@ import {
   getPlayerMascotsAdmin,
   cloneMascotAction,
   createMascotForPlayerAction,
+  computeProceduralStatsAction,
   deleteMascotAction,
 } from "../actions";
 
@@ -141,7 +142,8 @@ function CloneSection({ players }: Props) {
 
 // ── Seção Criar Mascote ───────────────────────────────────────────────────────
 function CreateSection({ players }: Props) {
-  const [pending, start] = useTransition();
+  const [pending,      start]          = useTransition();
+  const [calcPending,  startCalc]      = useTransition();
   const DEFAULT_STAT = 10;
 
   const [playerId,    setPlayerId]    = useState("");
@@ -151,22 +153,57 @@ function CreateSection({ players }: Props) {
   const [isFavorite,  setIsFavorite]  = useState(false);
   const [level,       setLevel]       = useState("1");
   const [nickname,    setNickname]    = useState("");
-  const [statF,       setStatF]       = useState(String(DEFAULT_STAT));
-  const [statA,       setStatA]       = useState(String(DEFAULT_STAT));
-  const [statC,       setStatC]       = useState(String(DEFAULT_STAT));
-  const [statI,       setStatI]       = useState(String(DEFAULT_STAT));
-  const [statV,       setStatV]       = useState(String(DEFAULT_STAT));
-  const [result,      setResult]      = useState<string | null>(null);
+
+  // Modo procedural
+  const [procedural,  setProcedural]  = useState(false);
+  const [proceduralBase, setProceduralBase] = useState<{ statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number } | null>(null);
+
+  // Stats manuais (usados em modo manual ou como base editável pós-cálculo)
+  const [statF, setStatF] = useState(String(DEFAULT_STAT));
+  const [statA, setStatA] = useState(String(DEFAULT_STAT));
+  const [statC, setStatC] = useState(String(DEFAULT_STAT));
+  const [statI, setStatI] = useState(String(DEFAULT_STAT));
+  const [statV, setStatV] = useState(String(DEFAULT_STAT));
+
+  // Bônus manual por stat (sobre o valor procedural/manual)
+  const [bonusF, setBonusF] = useState("0");
+  const [bonusA, setBonusA] = useState("0");
+  const [bonusC, setBonusC] = useState("0");
+  const [bonusI, setBonusI] = useState("0");
+  const [bonusV, setBonusV] = useState("0");
+
+  // Pontos extras aleatórios
+  const [extraRandom, setExtraRandom] = useState("0");
+
+  const [result, setResult] = useState<string | null>(null);
 
   const statInt = (v: string, fallback = DEFAULT_STAT) => {
-    const n = parseInt(v);
-    return isNaN(n) ? fallback : Math.max(1, Math.min(999, n));
+    const n = parseInt(v); return isNaN(n) ? fallback : Math.max(0, Math.min(999, n));
   };
+  const clampStat = (base: number, bonus: number) => Math.max(1, Math.min(999, base + bonus));
 
   const pokeIdNum = parseInt(pokemonId);
   const previewName = !isNaN(pokeIdNum) && pokeIdNum >= 1 && pokeIdNum <= 1025
     ? getPokemonName(pokeIdNum)
     : null;
+
+  // Calcula proceduralmente
+  const handleCompute = () => {
+    if (!pokeIdNum || pokeIdNum < 1 || pokeIdNum > 1025) { toast.error("Pokémon ID inválido."); return; }
+    const lvl = parseInt(level);
+    if (isNaN(lvl) || lvl < 1 || lvl > 100) { toast.error("Nível inválido."); return; }
+    startCalc(async () => {
+      const r = await computeProceduralStatsAction({ pokemonId: pokeIdNum, level: lvl, personality });
+      if (!r.ok || !r.stats) { toast.error(r.error ?? "Erro ao calcular."); return; }
+      setProceduralBase(r.stats);
+      setStatF(String(r.stats.statForce));
+      setStatA(String(r.stats.statAgility));
+      setStatC(String(r.stats.statCharisma));
+      setStatI(String(r.stats.statInstinct));
+      setStatV(String(r.stats.statVitality));
+      toast.success("Stats procedurais calculados!");
+    });
+  };
 
   const handleCreate = () => {
     if (!playerId) { toast.error("Selecione um jogador."); return; }
@@ -174,30 +211,53 @@ function CreateSection({ players }: Props) {
     const lvl = parseInt(level);
     if (isNaN(lvl) || lvl < 1 || lvl > 100) { toast.error("Nível inválido (1–100)."); return; }
 
+    const finalF = clampStat(statInt(statF), statInt(bonusF, 0));
+    const finalA = clampStat(statInt(statA), statInt(bonusA, 0));
+    const finalC = clampStat(statInt(statC), statInt(bonusC, 0));
+    const finalI = clampStat(statInt(statI), statInt(bonusI, 0));
+    const finalV = clampStat(statInt(statV), statInt(bonusV, 0));
+    const extraPts = Math.max(0, statInt(extraRandom, 0));
+
     const player = players.find(p => p.id === playerId);
     const name = nickname.trim() || (previewName ?? `#${pokeIdNum}`);
-    if (!confirm(`Criar ${name} (Nv.${lvl}${isShiny ? " ✦ Shiny" : ""}) para ${player?.displayName}?`)) return;
+    const summaryLine = [
+      `Criar ${name} (Nv.${lvl}${isShiny ? " ✦ Shiny" : ""}) para ${player?.displayName}`,
+      `Stats: F${finalF} A${finalA} C${finalC} I${finalI} V${finalV}`,
+      extraPts > 0 ? `+${extraPts} pts aleatórios extras` : null,
+    ].filter(Boolean).join("\n");
+    if (!confirm(summaryLine)) return;
 
     start(async () => {
       const r = await createMascotForPlayerAction({
         playerId, pokemonId: pokeIdNum, personality, isShiny, isFavorite,
         level: lvl,
         nickname: nickname.trim() || undefined,
-        statForce:    statInt(statF),
-        statAgility:  statInt(statA),
-        statCharisma: statInt(statC),
-        statInstinct: statInt(statI),
-        statVitality: statInt(statV),
+        statForce:    finalF,
+        statAgility:  finalA,
+        statCharisma: finalC,
+        statInstinct: finalI,
+        statVitality: finalV,
+        extraRandomPoints: extraPts || undefined,
       });
       if (!r.ok) { toast.error(r.error ?? "Erro ao criar."); return; }
       toast.success(r.summary ?? "Mascote criado!");
       setResult(`✅ ${r.summary}\nID: ${r.mascotId}`);
-      // Reset form
+      // Reset
       setPokemonId(""); setNickname(""); setLevel("1"); setIsShiny(false); setIsFavorite(false);
       setStatF(String(DEFAULT_STAT)); setStatA(String(DEFAULT_STAT));
       setStatC(String(DEFAULT_STAT)); setStatI(String(DEFAULT_STAT)); setStatV(String(DEFAULT_STAT));
+      setBonusF("0"); setBonusA("0"); setBonusC("0"); setBonusI("0"); setBonusV("0");
+      setExtraRandom("0"); setProceduralBase(null);
     });
   };
+
+  const statRows = [
+    { label: "Força",      key: "F", val: statF, set: setStatF, bonus: bonusF, setBonus: setBonusF, proc: proceduralBase?.statForce },
+    { label: "Agilidade",  key: "A", val: statA, set: setStatA, bonus: bonusA, setBonus: setBonusA, proc: proceduralBase?.statAgility },
+    { label: "Carisma",    key: "C", val: statC, set: setStatC, bonus: bonusC, setBonus: setBonusC, proc: proceduralBase?.statCharisma },
+    { label: "Instinto",   key: "I", val: statI, set: setStatI, bonus: bonusI, setBonus: setBonusI, proc: proceduralBase?.statInstinct },
+    { label: "Vitalidade", key: "V", val: statV, set: setStatV, bonus: bonusV, setBonus: setBonusV, proc: proceduralBase?.statVitality },
+  ];
 
   return (
     <div className="space-y-4 rounded-xl border border-border/50 bg-slate-900/40 p-4">
@@ -273,24 +333,99 @@ function CreateSection({ players }: Props) {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-slate-400">Stats base</p>
-        <div className="grid grid-cols-5 gap-2">
-          {[
-            { label: "Força",     val: statF, set: setStatF },
-            { label: "Agilidade", val: statA, set: setStatA },
-            { label: "Carisma",   val: statC, set: setStatC },
-            { label: "Instinto",  val: statI, set: setStatI },
-            { label: "Vitalidade",val: statV, set: setStatV },
-          ].map(s => (
-            <div key={s.label} className="space-y-1 text-center">
-              <label className="text-[10px] text-slate-500 block">{s.label}</label>
-              <input type="number" min={1} max={999} value={s.val}
-                onChange={e => s.set(e.target.value)}
-                className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 text-center outline-none focus:border-[#FFCB05]" />
-            </div>
-          ))}
+      {/* ── Stats ─────────────────────────────────────────────────────────────── */}
+      <div className="space-y-3 rounded-xl border border-border/40 bg-slate-900/60 p-3">
+        {/* Toggle procedural */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Wand2 size={13} className="text-purple-400" />
+            <p className="text-xs font-semibold text-slate-300">Stats</p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={procedural} onChange={e => { setProcedural(e.target.checked); setProceduralBase(null); }}
+              className="rounded accent-purple-500" />
+            <span className="text-xs text-slate-300">
+              <Wand2 size={10} className="inline mr-0.5 text-purple-400" /> Gerar proceduralmente
+            </span>
+          </label>
+        </div>
+
+        {/* Botão calcular */}
+        {procedural && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5">
+            <Info size={12} className="text-purple-400 shrink-0" />
+            <p className="text-[11px] text-slate-400 flex-1 min-w-0">
+              Simula o crescimento desde o nível 1 com stats base aleatórios (range ovo Comum), aplicando o algoritmo real de level-up com os pesos da personalidade escolhida.
+            </p>
+            <Button type="button" disabled={calcPending || !pokemonId || !level} onClick={handleCompute}
+              className="gap-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs h-7 px-3 disabled:opacity-40 shrink-0">
+              <Shuffle size={11} className={calcPending ? "animate-spin" : ""} />
+              {calcPending ? "Calculando…" : proceduralBase ? "↺ Reroll" : "Calcular"}
+            </Button>
+          </div>
+        )}
+
+        {/* Grid de stats — base editável */}
+        <div className="space-y-1">
+          <div className="grid grid-cols-5 gap-1.5 text-center">
+            {statRows.map(s => (
+              <div key={s.key} className="space-y-1">
+                <label className="text-[10px] text-slate-500 block">{s.label}</label>
+                <input type="number" min={1} max={999} value={s.val}
+                  onChange={e => s.set(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-slate-900 px-1 py-1.5 text-xs text-slate-200 text-center outline-none focus:border-[#FFCB05]" />
+                {proceduralBase && s.proc !== undefined && (
+                  <p className="text-[9px] text-purple-400/70 leading-none">base:{s.proc}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          {procedural && proceduralBase && (
+            <p className="text-[10px] text-slate-600 italic">Stats preenchidos proceduralmente — edite à vontade antes de criar.</p>
+          )}
+        </div>
+
+        {/* Bônus manual por stat */}
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+            <Plus size={9} /> Bônus manual adicional por stat
+          </p>
+          <div className="grid grid-cols-5 gap-1.5 text-center">
+            {statRows.map(s => {
+              const bval = statInt(s.bonus, 0);
+              const base = statInt(s.val);
+              const total = clampStat(base, bval);
+              return (
+                <div key={`bonus-${s.key}`} className="space-y-1">
+                  <input type="number" min={-999} max={999} value={s.bonus}
+                    onChange={e => s.setBonus(e.target.value)}
+                    className={`w-full rounded-lg border bg-slate-900 px-1 py-1.5 text-xs text-center outline-none focus:border-[#FFCB05] ${
+                      bval > 0 ? "border-green-500/40 text-green-300" :
+                      bval < 0 ? "border-red-500/40 text-red-300"    :
+                      "border-border text-slate-500"
+                    }`} />
+                  {bval !== 0 && (
+                    <p className="text-[9px] text-slate-400 leading-none">= {total}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-slate-600">Soma diretamente ao stat base. Pode ser negativo para reduzir.</p>
+        </div>
+
+        {/* Pontos aleatórios extras */}
+        <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-border/30">
+          <div className="flex items-center gap-2">
+            <Shuffle size={11} className="text-orange-400" />
+            <label className="text-[11px] text-slate-400 font-semibold">Pontos extras aleatórios:</label>
+            <input type="number" min={0} max={500} value={extraRandom}
+              onChange={e => setExtraRandom(e.target.value)}
+              className="w-16 rounded-lg border border-border bg-slate-900 px-2 py-1 text-xs text-slate-200 text-center outline-none focus:border-orange-400/60" />
+          </div>
+          <p className="text-[10px] text-slate-600">
+            Distribuídos aleatoriamente entre os 5 stats ao criar. Útil para variação natural sem definir manualmente.
+          </p>
         </div>
       </div>
 
