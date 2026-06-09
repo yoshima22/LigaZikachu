@@ -12,6 +12,7 @@ import {
   deleteArenaTeamAction,
   healMascotSusAction,
   lockBotAction,
+  markPvpDefenseSeenAction,
   purgeAdminArenaDataAction,
   retireArenaTeamAction,
   runBotBattleAction,
@@ -413,7 +414,8 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
                 const lockResult = await lockBotAction(teamId, difficulty, teamUpdatedAt);
                 if (lockResult.stale) { setStaleNotice(lockResult.stale); toast.error("Voce foi atacado antes desta acao."); return; }
                 if (lockResult.error) { toast.error(lockResult.error); return; }
-                const response = await runBotBattleAction(teamId, difficulty);
+                const response = await runBotBattleAction(teamId, difficulty, teamUpdatedAt);
+                if (response.stale) { setStaleNotice(response.stale); toast.error("Voce foi atacado antes desta acao."); return; }
                 if (response.error) { toast.error(response.error); return; }
                 if (response.result) {
                   setResult(response.result);
@@ -566,25 +568,57 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
           </div>
         </div>
       )}
-      {staleNotice && <ArenaStaleModal notice={staleNotice} onClose={() => setStaleNotice(null)} />}
+      {staleNotice && (
+        <ArenaStaleModal
+          notice={staleNotice}
+          onClose={() => {
+            markPvpDefenseSeenAction(teamId).catch(() => null);
+            setStaleNotice(null);
+          }}
+        />
+      )}
     </>
   );
 }
 
-export function RetireTeamButton({ teamId, defeated = false }: { teamId: string; defeated?: boolean }) {
-  const { pending, run } = useArenaAction();
+export function RetireTeamButton({ teamId, defeated = false, teamUpdatedAt }: { teamId: string; defeated?: boolean; teamUpdatedAt?: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [staleNotice, setStaleNotice] = useState<ArenaStaleNotice | null>(null);
+
+  const handleRetire = () => {
+    if (!confirm(defeated ? "Coletar o cofre restante desta equipe derrotada?" : "Retirar equipe da Arena e coletar o cofre agora?")) return;
+    startTransition(async () => {
+      const r = await retireArenaTeamAction(teamId, teamUpdatedAt);
+      if (r.stale) { setStaleNotice(r.stale); toast.error("Voce foi atacado antes de sair. Veja o combate primeiro."); return; }
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(defeated ? "Cofre restante coletado." : "Equipe retirada e cofre coletado.");
+      router.refresh();
+    });
+  };
+
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => {
-        if (!confirm(defeated ? "Coletar o cofre restante desta equipe derrotada?" : "Retirar equipe da Arena e coletar o cofre agora?")) return;
-        run(() => retireArenaTeamAction(teamId), defeated ? "Cofre restante coletado." : "Equipe retirada e cofre coletado.");
-      }}
-      className="rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300 disabled:opacity-50"
-    >
-      {defeated ? "Coletar cofre restante" : "Retirar e coletar"}
-    </button>
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={handleRetire}
+        className="rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300 disabled:opacity-50"
+      >
+        {pending ? "Processando…" : defeated ? "Coletar cofre restante" : "Retirar e coletar"}
+      </button>
+      {staleNotice && (
+        <ArenaStaleModal
+          notice={staleNotice}
+          onClose={() => {
+            // Ao fechar, marca os ataques PvP como vistos para liberar a próxima ação
+            markPvpDefenseSeenAction(teamId).catch(() => null);
+            setStaleNotice(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }
 

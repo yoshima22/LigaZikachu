@@ -34,6 +34,8 @@ export async function applyPassiveIncome(teamId: string): Promise<{ coins: numbe
     include: { members: { select: { id: true } } },
   });
   if (!team || team.status !== "ACTIVE" || team.members.length === 0) return null;
+  // Renda passiva é exclusiva de equipes PvP ou BOTH — PvE só ganha pelo combate
+  if (team.teamType === "PVE") return null;
 
   const lastAt = team.lastPassiveIncomeAt ?? team.enteredAt;
   const hoursElapsed = (Date.now() - new Date(lastAt).getTime()) / 3_600_000;
@@ -650,10 +652,35 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
   return mascots;
 }
 
+const RETIRE_COOLDOWN_MS = 10 * 60_000; // 10 min após sair com recompensas
+
+/** Verifica se algum dos mascotes está em cooldown pós-retirada (10 min) */
+async function checkRetireCooldown(mascotIds: string[]): Promise<void> {
+  const cooldownSince = new Date(Date.now() - RETIRE_COOLDOWN_MS);
+  const blocked = await prisma.arenaTeamMember.findFirst({
+    where: {
+      mascotId: { in: mascotIds },
+      team: { status: "RETIRED", retiredAt: { gte: cooldownSince } },
+    },
+    include: {
+      mascot: { select: { nickname: true, pokemonId: true } },
+      team: { select: { retiredAt: true } },
+    },
+  });
+  if (!blocked) return;
+  const name = blocked.mascot.nickname ?? getPokemonName(blocked.mascot.pokemonId);
+  const retiredMs = blocked.team.retiredAt ? new Date(blocked.team.retiredAt).getTime() : Date.now();
+  const remaining = Math.ceil((RETIRE_COOLDOWN_MS - (Date.now() - retiredMs)) / 60_000);
+  throw new Error(`${name} precisa esperar ${remaining} min antes de entrar em nova equipe (saiu com recompensas recentemente).`);
+}
+
 export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], teamType: "PVE" | "PVP" | "BOTH" = "BOTH") {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
   const mascots = await validateArenaMascots(playerId, mascotIds);
   const teamName = name.trim() || "Equipe Arena Z";
+
+  // Bloqueia mascotes em cooldown pós-retirada (10 min)
+  await checkRetireCooldown(mascots.map(m => m.id));
 
   // Bloqueia mascotes que já estão em outra equipe ativa
   const alreadyInTeam = await prisma.arenaTeamMember.findMany({
@@ -709,6 +736,9 @@ export async function addMascotToArenaTeam(playerId: string, teamId: string, mas
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Apenas equipes ativas podem receber mascotes.");
   if (team.members.length >= 6) throw new Error("A equipe ja tem 6 mascotes.");
+
+  // Bloqueia mascote em cooldown pós-retirada
+  await checkRetireCooldown([mascotId]);
 
   const [mascot] = await validateArenaMascots(playerId, [mascotId]);
   const usedSlots = new Set(team.members.map(member => member.slot));
@@ -810,6 +840,15 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (!["ACTIVE", "DEFEATED"].includes(team.status)) throw new Error("Equipe ja retirada.");
 
+  // Bloqueia saída se há ataque PvP não visto — defensor precisa visualizar primeiro
+  const unseenPvp = await getUnseenPvpAttack(teamId);
+  if (unseenPvp) {
+    throw Object.assign(
+      new Error(`Voce foi atacado por ${unseenPvp.attackerName} antes de sair. Visualize o combate e tente novamente.`),
+      { unseenPvp }
+    );
+  }
+
   // Aplica renda passiva antes de calcular o cofre final (re-lê após atualização)
   await applyPassiveIncome(teamId).catch(() => null);
   const refreshed = await prisma.arenaTeam.findUnique({ where: { id: teamId }, include: { members: true } });
@@ -862,7 +901,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
     }
     await tx.arenaTeam.update({
       where: { id: team.id },
-      data: { status: "RETIRED", vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0 },
+      data: { status: "RETIRED", vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0, retiredAt: new Date() },
     });
   });
 
@@ -926,6 +965,32 @@ export async function syncDefeatedArenaTeams(playerId: string) {
   return updated;
 }
 
+/**
+ * Verifica se a equipe foi atacada por PvP e o defensor ainda não "viu" o combate.
+ * Retorna o ID da batalha bloqueante ou null se está livre para agir.
+ */
+export async function getUnseenPvpAttack(teamId: string): Promise<{ battleId: string; attackerName: string; happenedAt: Date } | null> {
+  const battle = await prisma.arenaBattle.findFirst({
+    where: { defenseTeamId: teamId, type: "PVP", seenByDefender: false },
+    orderBy: { createdAt: "desc" },
+    include: { attackerPlayer: { select: { displayName: true, ptcglNick: true } } },
+  });
+  if (!battle) return null;
+  return {
+    battleId: battle.id,
+    attackerName: battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "outro jogador",
+    happenedAt: battle.createdAt,
+  };
+}
+
+/** Marca todos os ataques PvP desta equipe como vistos pelo defensor */
+export async function markPvpDefenseSeenForTeam(teamId: string): Promise<void> {
+  await prisma.arenaBattle.updateMany({
+    where: { defenseTeamId: teamId, type: "PVP", seenByDefender: false },
+    data: { seenByDefender: true },
+  });
+}
+
 export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   await syncDefeatedArenaTeams(playerId).catch(() => null);
 
@@ -986,6 +1051,15 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         })),
       debugMode: true,
     };
+  }
+
+  // Se esta equipe foi atacada por PvP e o defensor ainda não viu — bloqueia o PvE
+  const unseenPvp = await getUnseenPvpAttack(teamId);
+  if (unseenPvp) {
+    throw Object.assign(
+      new Error(`Voce foi atacado por ${unseenPvp.attackerName} antes de iniciar PvE. Veja o resultado do combate e tente novamente.`),
+      { blockedByUnseenPvp: true, unseenPvp }
+    );
   }
 
   assertTeamReady(team);

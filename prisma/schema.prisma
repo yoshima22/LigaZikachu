@@ -1481,6 +1481,7 @@ model ArenaTeam {
   lastPassiveIncomeAt DateTime    @default(now())  // última vez que renda passiva foi aplicada
   enteredAt      DateTime        @default(now())
   lastBattleAt   DateTime?
+  retiredAt      DateTime?       // set quando retirou COM recompensas (gera cooldown de 10 min nos mascotes)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -1527,6 +1528,7 @@ model ArenaBattle {
   turnLog          Json
   lootResult       Json?
   injuredMascotIds Json?
+  seenByDefender   Boolean           @default(false) // true após defensor visualizar o ataque
   createdAt        DateTime          @default(now())
 
   attackerPlayer   Player?           @relation("ArenaBattleAttacker", fields: [attackerPlayerId], references: [id], onDelete: SetNull)

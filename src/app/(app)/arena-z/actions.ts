@@ -20,6 +20,7 @@ import {
   runBotBattle,
   runOpportunisticAttack,
   runPvpBattle,
+  markPvpDefenseSeenForTeam,
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 
@@ -113,14 +114,22 @@ export async function claimArenaTutorialBonusAction(): Promise<{ error?: string;
   }
 }
 
-export async function runBotBattleAction(teamId: string, difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
+export async function runBotBattleAction(teamId: string, difficulty: ArenaDifficulty = "normal", teamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();
+    // Verifica se a equipe foi atacada desde o último carregamento do cliente
+    const stale = await checkTeamStaleFromIncomingAttack(playerId, teamId, teamKnownUpdatedAt);
+    if (stale) return { stale };
     const result = await runBotBattle(playerId, teamId, difficulty);
     // Não revalidamos aqui para que o modal de resultado/animação permaneça aberto.
     // O router.refresh() é chamado pelo cliente ao fechar o modal.
     return { result };
   } catch (err) {
+    // blockedByUnseenPvp: converte em stale notice para mostrar modal de PvP não visto
+    if (err instanceof Error && (err as Error & { blockedByUnseenPvp?: boolean; unseenPvp?: { attackerName: string; happenedAt: Date; battleId: string } }).blockedByUnseenPvp) {
+      const pvp = (err as Error & { unseenPvp: { attackerName: string; happenedAt: Date; battleId: string } }).unseenPvp;
+      return { stale: { attackerName: pvp.attackerName, happenedAt: pvp.happenedAt.toISOString(), battleId: pvp.battleId, message: err.message } };
+    }
     return { error: err instanceof Error ? err.message : "Erro ao combater bot." };
   }
 }
@@ -138,16 +147,32 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
   }
 }
 
-export async function retireArenaTeamAction(teamId: string): Promise<{ error?: string }> {
+export async function retireArenaTeamAction(teamId: string, teamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice }> {
   try {
     const playerId = await getCurrentPlayerId();
+    // Verifica ataque PvP pendente antes de permitir saída
+    const stale = await checkTeamStaleFromIncomingAttack(playerId, teamId, teamKnownUpdatedAt);
+    if (stale) return { stale };
     await retireArenaTeam(playerId, teamId);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");
     return {};
   } catch (err) {
+    // Se a função lançou com unseenPvp, converte em stale notice
+    if (err instanceof Error && (err as Error & { unseenPvp?: unknown }).unseenPvp) {
+      const pvp = (err as Error & { unseenPvp: { attackerName: string; happenedAt: Date; battleId: string } }).unseenPvp;
+      return { stale: { attackerName: pvp.attackerName, happenedAt: pvp.happenedAt.toISOString(), battleId: pvp.battleId, message: err.message } };
+    }
     return { error: err instanceof Error ? err.message : "Erro ao retirar equipe." };
   }
+}
+
+/** Marca todos os ataques PvP desta equipe como vistos (chamado após o jogador visualizar o modal stale) */
+export async function markPvpDefenseSeenAction(teamId: string): Promise<void> {
+  try {
+    await markPvpDefenseSeenForTeam(teamId);
+    revalidatePath("/arena-z");
+  } catch { /* silencioso */ }
 }
 
 export async function healMascotSusAction(mascotId: string): Promise<{ error?: string }> {

@@ -169,7 +169,7 @@ export default async function ArenaZPage() {
       orderBy: [{ arenaState: "asc" }, { level: "desc" }],
     }),
     prisma.arenaTeam.findMany({
-      where: { playerId: player.id },
+      where: { playerId: player.id, status: { in: ["ACTIVE", "DEFEATED"] } }, // RETIRED nunca aparece na lista
       include: { members: {
         include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, arenaState: true, restingUntil: true, isShiny: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true } } },
         orderBy: { slot: "asc" }
@@ -409,7 +409,7 @@ export default async function ArenaZPage() {
                       <p className="mt-1 text-[10px] text-slate-500">{typeInfo.description}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      {(team.status === "ACTIVE" || team.status === "DEFEATED") && <RetireTeamButton teamId={team.id} defeated={team.status === "DEFEATED"} />}
+                      {(team.status === "ACTIVE" || team.status === "DEFEATED") && <RetireTeamButton teamId={team.id} defeated={team.status === "DEFEATED"} teamUpdatedAt={team.updatedAt.toISOString()} />}
                       <DeleteTeamButton teamId={team.id} isAdmin={admin} />
                     </div>
                   </div>
@@ -451,9 +451,15 @@ export default async function ArenaZPage() {
                             </div>
                           </div>
                         )}
-                        <p className="text-[9px] text-slate-600 mt-1">
-                          💰 Renda passiva: +{team.members.length * PASSIVE_COINS_PER_MASCOT_PER_H} ZC e +{team.members.length * PASSIVE_EXP_PER_MASCOT_PER_H} EXP por hora (acumula no cofre automaticamente).
-                        </p>
+                        {team.teamType !== "PVE" ? (
+                          <p className="text-[9px] text-slate-600 mt-1">
+                            💰 Renda passiva PvP: +{team.members.length * PASSIVE_COINS_PER_MASCOT_PER_H} ZC e +{team.members.length * PASSIVE_EXP_PER_MASCOT_PER_H} EXP/hora (acumula no cofre).
+                          </p>
+                        ) : (
+                          <p className="text-[9px] text-slate-500 mt-1">
+                            🤖 Equipe PvE: sem renda passiva — lucro vem apenas de vitórias em combate.
+                          </p>
+                        )}
                         {mult < 4 && (
                           <p className="text-[9px] text-slate-600">
                             💡 Prof. Enguiça: Aguarde mais {Math.ceil((4 - mult) / ARENA_Z_CONFIG.multPerHour)}h para atingir o máximo de ×{ARENA_Z_CONFIG.multCap}!

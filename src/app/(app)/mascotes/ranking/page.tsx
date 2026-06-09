@@ -204,14 +204,14 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — grade 4×2 (4 colunas fixas, 2 linhas) */}
       <div className="rounded-xl border border-border bg-slate-900/60 p-1.5">
-        <div className="flex flex-wrap gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {TABS.map(t => (
             <Link
               key={t.key}
               href={`/mascotes/ranking?tab=${t.key}`}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-all w-full ${
                 tab === t.key
                   ? t.key === "diary"
                     ? "bg-purple-500 text-white"
