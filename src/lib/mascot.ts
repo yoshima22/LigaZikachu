@@ -426,13 +426,22 @@ export async function interactWithMascot(
 
   const now = new Date();
   const PLAY_COOLDOWN_MS = 45 * 60 * 1000;
-  const PET_COOLDOWN_MS = 25 * 60 * 1000;
-  const cooldownMs = type === "PLAY" ? PLAY_COOLDOWN_MS : type === "PET" ? PET_COOLDOWN_MS : 0;
+  const PET_COOLDOWN_MS  = 25 * 60 * 1000;
 
-  if (!skipCooldown && cooldownMs > 0 && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < cooldownMs) {
-    const remaining = Math.ceil((cooldownMs - (now.getTime() - mascot.lastInteractedAt.getTime())) / 60_000);
-    const actionName = type === "PLAY" ? "brincar" : "fazer carinho";
-    return { success: false, message: `Espere mais ${remaining} min antes de ${actionName} novamente.`, happinessChange: 0, expGained: 0 };
+  // Cada ação usa seu próprio timestamp — PLAY e PET não se bloqueiam mutuamente
+  if (!skipCooldown && type === "PLAY") {
+    const lastPlayed = (mascot as Record<string, unknown>).lastPlayedAt as Date | null ?? mascot.lastInteractedAt;
+    if (lastPlayed && now.getTime() - lastPlayed.getTime() < PLAY_COOLDOWN_MS) {
+      const remaining = Math.ceil((PLAY_COOLDOWN_MS - (now.getTime() - lastPlayed.getTime())) / 60_000);
+      return { success: false, message: `Espere mais ${remaining} min antes de brincar novamente.`, happinessChange: 0, expGained: 0 };
+    }
+  }
+  if (!skipCooldown && type === "PET") {
+    const lastPetted = (mascot as Record<string, unknown>).lastPettedAt as Date | null;
+    if (lastPetted && now.getTime() - lastPetted.getTime() < PET_COOLDOWN_MS) {
+      const remaining = Math.ceil((PET_COOLDOWN_MS - (now.getTime() - lastPetted.getTime())) / 60_000);
+      return { success: false, message: `Espere mais ${remaining} min antes de fazer carinho novamente.`, happinessChange: 0, expGained: 0 };
+    }
   }
   // Verifica se um rival travou as interações
   if (type !== "FEED_FOOD" && type !== "FEED_SWEET" && mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
@@ -556,7 +565,10 @@ export async function interactWithMascot(
     data: {
       happiness: newHappiness,
       mood: finalMood,
+      // Persiste cooldown independente por ação — lastInteractedAt mantido para mood decay
       lastInteractedAt: type === "PLAY" || type === "PET" ? now : mascot.lastInteractedAt,
+      ...(type === "PLAY" ? { lastPlayedAt: now } : {}),
+      ...(type === "PET"  ? { lastPettedAt:  now } : {}),
       lastFedAt: type.startsWith("FEED") ? now : mascot.lastFedAt,
     }
   });

@@ -1367,6 +1367,8 @@ model Mascot {
   // Timestamps
   hatchedAt        DateTime          @default(now())
   lastInteractedAt DateTime?
+  lastPlayedAt     DateTime?
+  lastPettedAt     DateTime?
   lastFedAt        DateTime?
   bazarListed          Boolean           @default(false)
   socialCooldownUntil  DateTime?         // rival travou interações temporariamente
