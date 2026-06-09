@@ -156,11 +156,14 @@ export async function getListings(filters?: {
   return prisma.bazarListing.findMany({
     where,
     orderBy,
-    include: {
+    select: {
+      id: true, category: true, listingType: true, status: true,
+      payload: true, priceCoins: true, description: true, wantedDesc: true,
+      expiresAt: true, createdAt: true, views: true,
       player: { select: { id: true, displayName: true, avatarUrl: true } },
       _count: { select: { proposals: true, favorites: true } },
     },
-    take: 50,
+    take: 30,
   });
 }
 
@@ -185,19 +188,22 @@ export async function getListing(id: string) {
   return listing;
 }
 
-export async function getRecentTransactions(take = 15) {
+export async function getRecentTransactions(take = 10) {
   return prisma.bazarTransaction.findMany({
     orderBy: { createdAt: "desc" },
+    select: {
+      id: true, category: true, coinsAmount: true,
+      buyerName: true, sellerName: true, description: true, createdAt: true,
+    },
     take,
   });
 }
 
 export async function getMiauvadaoConfig() {
-  return prisma.miauvadaoConfig.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton" },
-    update: {},
-  });
+  // Usa findUnique em vez de upsert para evitar write transaction em toda visita
+  const cfg = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+  if (cfg) return cfg;
+  return prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
 }
 
 // ── Criar anúncio ─────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart } from "lucide-react";
 import Link from "next/link";
-import { getSpriteUrl, getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import {
   getListing, buyListing, createProposal, acceptProposal,
@@ -521,14 +521,22 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🐾 Mascotes</p>
               {inventory.mascots.map(m => {
-                const name = m.nickname ?? `Pokémon #${m.pokemonId}`;
+                const pokeName = getPokemonName(m.pokemonId);
+                const name = m.nickname ?? pokeName;
                 const label = `${name} Nv.${m.level}`;
                 const sel = selectedKeys.has(m.id);
                 return (
                   <button key={m.id} type="button"
-                    onClick={() => toggleItem(m.id, { type: "MASCOT_OFFER", quantity: 1, displayName: label, mascotId: m.id })}
+                    onClick={() => toggleItem(m.id, {
+                      type: "MASCOT_OFFER", quantity: 1,
+                      displayName: label,
+                      mascotId: m.id,
+                      pokemonId: m.pokemonId,
+                    })}
                     className={`w-full text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
-                    <span className="text-xs">🐾</span>
+                    {/* Static sprite — no GIF */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                     {label}
                     {sel && <span className="ml-auto text-[9px]">✓ selecionado</span>}
                   </button>

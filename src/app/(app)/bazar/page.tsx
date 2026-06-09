@@ -45,7 +45,7 @@ export default async function BazarPage({
       maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
       sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
     }),
-    getRecentTransactions(20),
+    getRecentTransactions(10),
     getMiauvadaoConfig(),
   ]);
 
