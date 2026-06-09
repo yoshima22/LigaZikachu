@@ -30,13 +30,13 @@ type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailActio
 
 const PAGE_SIZE = 9;
 
-// Baseline: 5 stats × 10 = 50. Cor baseada no total acima do baseline.
+// Baseline: 5 stats × 10 = 50. Cap: 5 × 250 = 1250. Cor baseada no total acima do baseline.
 function statNameColor(m: Pick<BankMascot, "statForce"|"statAgility"|"statCharisma"|"statInstinct"|"statVitality">): string {
   const total = m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality;
-  const gain  = total - 50; // acima do baseline
-  if (gain >= 150) return "text-yellow-300";  // 🟡 Lendário
-  if (gain >= 80)  return "text-purple-300";  // 🟣 Bastante
-  if (gain >= 30)  return "text-blue-300";    // 🔵 Médio
+  const gain  = total - 50; // acima do baseline (máx ~1200)
+  if (gain >= 750) return "text-yellow-300";  // 🟡 Lendário  (≥150/stat médio)
+  if (gain >= 350) return "text-purple-300";  // 🟣 Bastante  (≥70/stat médio)
+  if (gain >= 100) return "text-blue-300";    // 🔵 Médio     (≥20/stat médio)
   if (gain >= 1)   return "text-green-300";   // 🟢 Pouco
   return "text-slate-200";                    // sem melhoria
 }

@@ -264,9 +264,9 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
                 <span className="w-4 text-center text-xs shrink-0">{s.emoji}</span>
                 <span className="w-16 text-[10px] text-slate-500 shrink-0">{s.label}</span>
                 <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-slate-500" style={{ width: `${Math.min(100, s.value)}%` }} />
+                  <div className="h-full rounded-full bg-slate-500" style={{ width: `${Math.min(100, Math.round((s.value / 250) * 100))}%` }} />
                 </div>
-                <span className="w-5 text-right text-[10px] font-bold text-slate-400 shrink-0">{s.value}</span>
+                <span className="w-7 text-right text-[10px] font-bold text-slate-400 shrink-0">{s.value}</span>
               </div>
             </Tip>
           ))}
