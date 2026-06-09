@@ -42,7 +42,7 @@ const DURATION: Record<string, number> = {
   SLOT_MACHINE:      4800,
   ELEMENTAL_AURA:    4000,
   MIAUVADAO_SEAL:     4600,
-  PILAR_DA_COMUNIDADE: 5200,
+  PILAR_DA_COMUNIDADE: 7000,
 };
 
 // Tempo até a fase "ambient" começar (ms)
@@ -57,7 +57,7 @@ const AMBIENT_AT: Record<string, number> = {
   SLOT_MACHINE:      1700,
   ELEMENTAL_AURA:    900,
   MIAUVADAO_SEAL:     1100,
-  PILAR_DA_COMUNIDADE: 1400,
+  PILAR_DA_COMUNIDADE: 1800,
 };
 
 const FADE_MS = 700;
@@ -944,125 +944,281 @@ function MiauvadaoSealEffect({ name, color, glowColor, flavorText, rarity }: Eff
 }
 
 // ── PILAR DA COMUNIDADE ───────────────────────────────────────────────────────
-// Cristais de luz + pilares dourados + chuva de estrelas
 function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }: EffectProps) {
-  const [ambient, setAmbient] = useState(false);
+  const [phase, setPhase] = useState<"entry"|"reveal"|"ambient">("entry");
   useEffect(() => {
-    const t = setTimeout(() => setAmbient(true), AMBIENT_AT.PILAR_DA_COMUNIDADE);
-    return () => clearTimeout(t);
+    const t1 = setTimeout(() => setPhase("reveal"), 900);
+    const t2 = setTimeout(() => setPhase("ambient"), AMBIENT_AT.PILAR_DA_COMUNIDADE);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  const stars = Array.from({ length: 24 }, (_, i) => ({
-    x: rnd(2, 98), delay: rnd(0, 1.4), size: rnd(10, 22),
-    char: i % 4 === 0 ? "⭐" : i % 4 === 1 ? "✨" : i % 4 === 2 ? "💫" : "🌟",
+  const ambient = phase === "ambient";
+
+  // 9 pilares de alturas variadas
+  const pillars = [
+    { x: 4,  h: 42, w: 2, gold: false, delay: 0.05 },
+    { x: 13, h: 58, w: 2, gold: false, delay: 0.12 },
+    { x: 24, h: 70, w: 3, gold: false, delay: 0.20 },
+    { x: 35, h: 82, w: 3, gold: false, delay: 0.28 },
+    { x: 50, h: 100,w: 7, gold: true,  delay: 0.10 },
+    { x: 65, h: 82, w: 3, gold: false, delay: 0.28 },
+    { x: 76, h: 70, w: 3, gold: false, delay: 0.20 },
+    { x: 87, h: 58, w: 2, gold: false, delay: 0.12 },
+    { x: 96, h: 42, w: 2, gold: false, delay: 0.05 },
+  ];
+
+  // 36 estrelas caindo — dois tipos de velocidade
+  const stars = Array.from({ length: 36 }, (_, i) => ({
+    x: rnd(1, 99),
+    delay: rnd(0, 2.5),
+    dur: rnd(1.6, 3.2),
+    size: rnd(10, 24),
+    char: ["⭐","✨","💫","🌟","⭐","✨"][i % 6],
+    fast: i % 3 === 0,
   }));
 
-  const pillars = [12, 28, 50, 72, 88];
+  // Partículas orbitais que emergem do centro
+  const orbParticles = Array.from({ length: 20 }, (_, i) => {
+    const angle = (i / 20) * 2 * Math.PI;
+    const r = rnd(80, 200);
+    return {
+      px: `${Math.cos(angle) * r}px`,
+      py: `${Math.sin(angle) * r}px`,
+      size: rnd(3, 8),
+      delay: 0.3 + rnd(0, 0.7),
+      gold: i % 3 === 0,
+    };
+  });
+
+  // Raios de luz que irradiam do centro
+  const beams = Array.from({ length: 8 }, (_, i) => ({
+    angle: i * 45,
+    delay: 0.2 + i * 0.06,
+    length: rnd(120, 220),
+    width: rnd(1, 3),
+  }));
+
+  // Anéis de sonar
+  const rings = [
+    { size: 160, delay: 0.05, dur: 1.6 },
+    { size: 260, delay: 0.25, dur: 1.8 },
+    { size: 380, delay: 0.45, dur: 2.0 },
+    { size: 500, delay: 0.65, dur: 2.2 },
+  ];
 
   return (
     <>
-      {/* Background — deep cosmic purple → black */}
+      {/* Background — cosmos profundo com névoa */}
       <div className="absolute inset-0" style={{
         background: ambient
-          ? "radial-gradient(ellipse at 50% 60%, #1a0a3a 0%, #0a0520 50%, #000 100%)"
-          : "radial-gradient(ellipse at 50% 60%, #0d0520 0%, #040210 100%)",
-        animation: "entrance-in 0.2s ease forwards",
-        transition: "background 1.5s ease",
+          ? "radial-gradient(ellipse at 50% 55%, #2a0e50 0%, #160830 35%, #080318 65%, #000 100%)"
+          : "radial-gradient(ellipse at 50% 55%, #120628 0%, #070215 100%)",
+        animation: "entrance-in 0.18s ease forwards",
+        transition: "background 2s ease",
       }} />
 
-      {/* Golden pillars rising from bottom */}
-      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height: "65%", zIndex: 2 }}>
-        {pillars.map((x, i) => (
+      {/* Nebulosa sutil no fundo */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: "radial-gradient(ellipse at 30% 30%, #4a00aa18 0%, transparent 60%), radial-gradient(ellipse at 70% 70%, #FFCB0508 0%, transparent 50%)",
+        zIndex: 1,
+        opacity: ambient ? 1 : 0,
+        transition: "opacity 2s ease",
+      }} />
+
+      {/* Sonar rings do centro */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 2 }}>
+        {rings.map((r, i) => (
           <div key={i} style={{
             position: "absolute",
-            left: `${x}%`,
-            bottom: 0,
-            width: i === 2 ? 6 : 3,
-            height: i === 2 ? "100%" : `${55 + i * 7}%`,
-            background: i === 2
-              ? `linear-gradient(to top, #FFCB05, #fbbf24aa, transparent)`
-              : `linear-gradient(to top, #c084fc88, #a855f744, transparent)`,
-            borderRadius: 4,
-            animation: `pilar-rise 1.2s ${0.1 + i * 0.15}s cubic-bezier(.16,1,.3,1) both`,
-            boxShadow: i === 2
-              ? `0 0 20px #FFCB0566, 0 0 40px #FFCB0522`
-              : `0 0 12px #c084fc44`,
+            width: r.size, height: r.size,
+            borderRadius: "50%",
+            border: `1px solid ${i === 0 ? "#FFCB05" : "#c084fc"}${["99","66","44","22"][i]}`,
+            boxShadow: `0 0 ${15 + i * 8}px ${i === 0 ? "#FFCB05" : "#c084fc"}${["44","33","22","11"][i]}`,
+            animation: `pilar-ring-pulse ${r.dur}s ease-out ${r.delay}s both`,
+            opacity: 0,
           }} />
         ))}
       </div>
 
-      {/* Crystal shards fan */}
-      {ambient && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
-          {Array.from({ length: 12 }, (_, i) => (
-            <div key={i} style={{
-              position: "absolute",
-              width: rnd(2, 5),
-              height: rnd(30, 80),
-              background: `linear-gradient(to top, ${i % 2 === 0 ? "#FFCB05" : "#c084fc"}, transparent)`,
-              borderRadius: 3,
-              transform: `rotate(${-60 + i * 10}deg) translateY(-60px)`,
-              animation: "title-rise-fade 0.8s ease both",
-              animationDelay: `${i * 0.05}s`,
-              opacity: 0.7,
-            }} />
-          ))}
-        </div>
-      )}
+      {/* Raios de luz emanando do centro */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
+        {beams.map((b, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            width: b.width,
+            height: b.length,
+            background: `linear-gradient(to top, ${i % 2 === 0 ? "#FFCB05" : "#c084fc"}, transparent)`,
+            borderRadius: 4,
+            transformOrigin: "bottom center",
+            transform: `rotate(${b.angle}deg) translateY(-${b.length / 2}px)`,
+            animation: `pilar-beam-in 0.8s ease ${b.delay}s both`,
+            opacity: 0,
+          }} />
+        ))}
+      </div>
 
-      {/* Falling stars */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 4 }}>
+      {/* Pilares dourados e roxos */}
+      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height: "75%", zIndex: 4 }}>
+        {pillars.map((p, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${p.x}%`,
+            bottom: 0,
+            width: p.w,
+            height: `${p.h}%`,
+            background: p.gold
+              ? `linear-gradient(to top, #FFCB05ee, #fbbf24cc, #fef08a44, transparent)`
+              : `linear-gradient(to top, #c084fccc, #a855f788, #7c3aed33, transparent)`,
+            borderRadius: `${p.w}px ${p.w}px 0 0`,
+            animation: `pilar-rise 1.4s ${p.delay}s cubic-bezier(.16,1,.3,1) both`,
+            boxShadow: p.gold
+              ? `0 0 ${p.w * 5}px #FFCB0588, 0 0 ${p.w * 12}px #FFCB0533`
+              : `0 0 8px #c084fc66`,
+            opacity: 0,
+          }}>
+            {/* Topo do pilar central tem uma "chama" */}
+            {p.gold && phase !== "entry" && (
+              <div style={{
+                position: "absolute",
+                top: -16,
+                left: "50%",
+                transform: "translateX(-50%)",
+                fontSize: 18,
+                animation: "pilar-float 1.2s ease infinite",
+                filter: "drop-shadow(0 0 8px #FFCB05)",
+              }}>✦</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Partículas orbitais que explodem do centro */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 5 }}>
+        {orbParticles.map((p, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            width: p.size, height: p.size,
+            borderRadius: "50%",
+            background: p.gold ? "#FFCB05" : "#c084fc",
+            boxShadow: `0 0 10px ${p.gold ? "#FFCB05" : "#c084fc"}, 0 0 20px ${p.gold ? "#FFCB0588" : "#c084fc66"}`,
+            // @ts-expect-error CSS vars
+            "--px": p.px, "--py": p.py,
+            animation: "portal-particle 1.6s ease forwards",
+            animationDelay: `${p.delay}s`,
+            opacity: 0,
+          }} />
+        ))}
+      </div>
+
+      {/* Estrelas caindo em duas ondas */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 6 }}>
         {stars.map((s, i) => (
           <div key={i} style={{
             position: "absolute",
             left: `${s.x}%`,
-            top: "-5%",
+            top: "-8%",
             fontSize: s.size,
-            animation: `vip-fall ${1.4 + s.delay}s ${s.delay}s ease-in forwards`,
+            filter: s.fast ? `drop-shadow(0 0 6px #FFCB05)` : undefined,
+            animation: `pilar-star-fall ${s.dur}s ${s.delay}s ease-in ${ambient ? "infinite" : "forwards"}`,
           }}>
             {s.char}
           </div>
         ))}
       </div>
 
-      {/* "Pilar da Comunidade" stamp */}
-      <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ top: "16%", zIndex: 8 }}>
+      {/* Crystal shards fanout — fase ambient */}
+      {ambient && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 7 }}>
+          {Array.from({ length: 16 }, (_, i) => (
+            <div key={i} style={{
+              position: "absolute",
+              width: rnd(1, 4),
+              height: rnd(40, 110),
+              background: `linear-gradient(to top, ${i % 2 === 0 ? "#FFCB05cc" : "#c084fccc"}, transparent)`,
+              borderRadius: 3,
+              transformOrigin: "bottom center",
+              transform: `rotate(${i * 22.5}deg) translateY(-90px)`,
+              animation: `pilar-shard-in 0.6s ease ${i * 0.04}s both`,
+              opacity: 0,
+            }} />
+          ))}
+        </div>
+      )}
+
+      {/* Coroa que desce para pousar sobre o selo */}
+      {phase !== "entry" && (
+        <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ top: "9%", zIndex: 9 }}>
+          <div style={{
+            fontSize: "clamp(28px, 6vw, 48px)",
+            animation: "pilar-crown-drop 0.9s cubic-bezier(.22,1.5,.36,1) 0.6s both",
+            filter: "drop-shadow(0 0 16px #FFCB05) drop-shadow(0 0 32px #FFCB0577)",
+            opacity: 0,
+          }}>
+            👑
+          </div>
+        </div>
+      )}
+
+      {/* Selo "Pilar da Comunidade" */}
+      <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ top: "20%", zIndex: 9 }}>
         <div style={{
-          fontSize: "clamp(11px, 2.5vw, 15px)",
+          fontSize: "clamp(10px, 2.2vw, 14px)",
           fontWeight: 900,
           color: "#FFCB05",
-          border: "2px solid #FFCB0577",
-          padding: "5px clamp(14px, 4vw, 22px)",
+          border: "2px solid #FFCB0588",
+          padding: "6px clamp(16px, 4vw, 28px)",
           borderRadius: 6,
           textTransform: "uppercase",
-          letterSpacing: "0.35em",
-          boxShadow: "0 0 30px #FFCB0533",
-          animation: "seal-stamp 0.7s cubic-bezier(.36,.07,.19,.97) 0.4s both",
-          textShadow: "0 0 20px #FFCB05aa",
-          background: "#FFCB050a",
+          letterSpacing: "0.4em",
+          boxShadow: ambient
+            ? "0 0 40px #FFCB0566, 0 0 80px #FFCB0522, inset 0 0 20px #FFCB0511"
+            : "0 0 30px #FFCB0533",
+          animation: "seal-stamp 0.8s cubic-bezier(.36,.07,.19,.97) 0.8s both",
+          textShadow: "0 0 24px #FFCB05cc",
+          background: "linear-gradient(135deg, #FFCB050d, #c084fc08)",
+          transition: "box-shadow 1s ease",
         }}>
           Pilar da Comunidade
         </div>
       </div>
 
-      {/* Title center */}
-      <div className="absolute inset-0 flex items-center justify-center z-10">
-        <div style={{ animation: "title-rise-fade 0.7s ease 0.9s both", textAlign: "center" }}>
-          <TitleBlock name={name} color={color} glowColor={glowColor} flavorText={flavorText} rarity={rarity} ambient={ambient}
-            nameStyle={{ textShadow: `0 0 30px ${glowColor}, 0 0 70px ${glowColor}88` }} />
+      {/* Linha divisória horizontal brilhante */}
+      {phase !== "entry" && (
+        <div className="absolute inset-x-0 pointer-events-none" style={{
+          top: "36%",
+          height: 1,
+          background: `linear-gradient(90deg, transparent, #FFCB0544, #FFCB05cc, #FFCB0544, transparent)`,
+          animation: "pilar-line-expand 0.8s ease 1.1s both",
+          zIndex: 9,
+          transform: "scaleX(0)",
+        }} />
+      )}
+
+      {/* Título centralizado */}
+      <div className="absolute inset-0 flex items-center justify-center z-10" style={{ marginTop: "6%" }}>
+        <div style={{ animation: "pilar-title-emerge 0.9s cubic-bezier(.16,1,.3,1) 1.2s both", textAlign: "center", opacity: 0 }}>
+          <TitleBlock
+            name={name} color={color} glowColor={glowColor}
+            flavorText={flavorText} rarity={rarity} ambient={ambient}
+            nameStyle={{
+              textShadow: `0 0 30px ${glowColor}, 0 0 80px ${glowColor}88, 0 0 120px #FFCB0544`,
+              fontSize: "clamp(24px, 6vw, 42px)",
+            }}
+          />
         </div>
       </div>
 
-      {/* Community hearts floating up */}
+      {/* Emojis flutuando em ambient */}
       {ambient && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 5 }}>
-          {["💛", "⚡", "🌟", "💛", "✨", "💜"].map((ch, i) => (
+          {["💛", "⚡", "🌟", "💛", "✨", "💜", "⭐", "💫"].map((ch, i) => (
             <div key={i} style={{
               position: "absolute",
-              left: `${15 + i * 14}%`,
-              bottom: "10%",
-              fontSize: 18 + (i % 3) * 6,
-              animation: `pilar-float 2s ${i * 0.3}s ease-in-out infinite`,
+              left: `${8 + i * 12}%`,
+              bottom: "8%",
+              fontSize: 16 + (i % 4) * 5,
+              animation: `pilar-float ${1.8 + (i % 3) * 0.4}s ${i * 0.25}s ease-in-out infinite`,
+              filter: "drop-shadow(0 0 6px #FFCB05)",
             }}>
               {ch}
             </div>
@@ -1070,19 +1226,65 @@ function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }:
         </div>
       )}
 
+      {/* Partículas de poeira dourada no ambient */}
+      {ambient && Array.from({ length: 12 }, (_, i) => (
+        <div key={i} className="absolute rounded-full pointer-events-none" style={{
+          left: `${rnd(5, 95)}%`,
+          top: `${rnd(5, 95)}%`,
+          width: rnd(2, 5), height: rnd(2, 5),
+          background: i % 2 === 0 ? "#FFCB05" : "#c084fc",
+          boxShadow: `0 0 8px ${i % 2 === 0 ? "#FFCB05" : "#c084fc"}`,
+          // @ts-expect-error CSS vars
+          "--ex": `${rnd(-40, 40)}px`, "--ey": `${rnd(-50, -10)}px`, "--er": "0deg",
+          animation: `ember-float ${rnd(2, 4)}s ease ${rnd(0, 2)}s infinite`,
+          opacity: 0, zIndex: 5,
+        }} />
+      ))}
+
       <style>{`
         @keyframes pilar-rise {
-          0%   { transform: scaleY(0); transform-origin: bottom; }
-          100% { transform: scaleY(1); transform-origin: bottom; }
+          0%   { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
+          10%  { opacity: 1; }
+          100% { transform: scaleY(1); transform-origin: bottom; opacity: 1; }
+        }
+        @keyframes pilar-ring-pulse {
+          0%   { opacity: 0; transform: scale(0.2); }
+          30%  { opacity: 0.9; }
+          100% { opacity: 0; transform: scale(1.8); }
+        }
+        @keyframes pilar-beam-in {
+          0%   { opacity: 0; transform: rotate(var(--rot, 0deg)) translateY(var(--ty, 0px)) scaleY(0); }
+          40%  { opacity: 0.6; }
+          100% { opacity: 0.2; transform: rotate(var(--rot, 0deg)) translateY(var(--ty, 0px)) scaleY(1); }
+        }
+        @keyframes pilar-star-fall {
+          0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+          70%  { opacity: 0.8; }
+          100% { transform: translateY(115vh) rotate(540deg) scale(0.5); opacity: 0; }
+        }
+        @keyframes pilar-shard-in {
+          0%   { opacity: 0; transform: rotate(calc(var(--i, 0) * 22.5deg)) translateY(-90px) scaleY(0); }
+          100% { opacity: 0.75; transform: rotate(calc(var(--i, 0) * 22.5deg)) translateY(-90px) scaleY(1); }
         }
         @keyframes pilar-float {
-          0%   { transform: translateY(0); opacity: 0.8; }
-          50%  { opacity: 1; }
-          100% { transform: translateY(-120px); opacity: 0; }
+          0%   { transform: translateY(0) scale(1); opacity: 0.9; }
+          50%  { transform: translateY(-18px) scale(1.1); opacity: 1; }
+          100% { transform: translateY(-140px) scale(0.6); opacity: 0; }
         }
-        @keyframes vip-fall {
-          0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        @keyframes pilar-crown-drop {
+          0%   { opacity: 0; transform: translateY(-60px) scale(0.4) rotate(-15deg); }
+          60%  { transform: translateY(8px) scale(1.15) rotate(5deg); }
+          80%  { transform: translateY(-4px) scale(0.95) rotate(-2deg); }
+          100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+        }
+        @keyframes pilar-line-expand {
+          0%   { transform: scaleX(0); opacity: 0; }
+          100% { transform: scaleX(1); opacity: 1; }
+        }
+        @keyframes pilar-title-emerge {
+          0%   { opacity: 0; transform: translateY(24px) scale(0.88); }
+          60%  { transform: translateY(-4px) scale(1.03); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
       `}</style>
     </>
