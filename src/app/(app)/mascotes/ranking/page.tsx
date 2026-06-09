@@ -199,29 +199,31 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
         </h1>
         <p className="text-sm text-slate-500">
           {isDiary
-            ? "Últimos 60 eventos de todos os mascotes da Liga"
+            ? "Últimos 25 eventos de todos os mascotes da Liga"
             : "Top 50 mascotes · Somente jogadores PLAYER"}
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-slate-900/60 p-1 no-scrollbar">
-        {TABS.map(t => (
-          <Link
-            key={t.key}
-            href={`/mascotes/ranking?tab=${t.key}`}
-            className={`shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
-              tab === t.key
-                ? t.key === "diary"
-                  ? "bg-purple-500 text-white"
-                  : "bg-[#FFCB05] text-slate-900"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <span>{t.emoji}</span>
-            <span>{t.label}</span>
-          </Link>
-        ))}
+      <div className="rounded-xl border border-border bg-slate-900/60 p-1 overflow-hidden">
+        <div className="flex gap-1 overflow-x-auto no-scrollbar">
+          {TABS.map(t => (
+            <Link
+              key={t.key}
+              href={`/mascotes/ranking?tab=${t.key}`}
+              className={`shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
+                tab === t.key
+                  ? t.key === "diary"
+                    ? "bg-purple-500 text-white"
+                    : "bg-[#FFCB05] text-slate-900"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <span>{t.emoji}</span>
+              <span>{t.label}</span>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* ── Diário ── */}
