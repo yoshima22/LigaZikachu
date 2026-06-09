@@ -19,11 +19,27 @@ export type BankMascot = {
   restingUntil: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
   buffs: { id: string }[];
+  statForce: number;
+  statAgility: number;
+  statCharisma: number;
+  statInstinct: number;
+  statVitality: number;
 };
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
 
 const PAGE_SIZE = 9;
+
+// Baseline: 5 stats × 10 = 50. Cor baseada no total acima do baseline.
+function statNameColor(m: Pick<BankMascot, "statForce"|"statAgility"|"statCharisma"|"statInstinct"|"statVitality">): string {
+  const total = m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality;
+  const gain  = total - 50; // acima do baseline
+  if (gain >= 150) return "text-yellow-300";  // 🟡 Lendário
+  if (gain >= 80)  return "text-purple-300";  // 🟣 Bastante
+  if (gain >= 30)  return "text-blue-300";    // 🔵 Médio
+  if (gain >= 1)   return "text-green-300";   // 🟢 Pouco
+  return "text-slate-200";                    // sem melhoria
+}
 
 // ── Tipo → cor de badge ─────────────────────────────────────────────────────
 const TYPE_COLORS: Record<string, string> = {
@@ -139,10 +155,11 @@ function BankRow({
     });
   }, [open, fullData, mascot.id]);
 
-  const name    = mascot.nickname ?? getPokemonName(mascot.pokemonId);
-  const element = getPokemonElement(mascot.pokemonId);
-  const chips   = getOccupationChips(mascot);
+  const name      = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const element   = getPokemonElement(mascot.pokemonId);
+  const chips     = getOccupationChips(mascot);
   const typeColor = TYPE_COLORS[element] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20";
+  const nameColor = statNameColor(mascot);
 
   return (
     <div className="rounded-xl border border-border/50 bg-slate-950/40 overflow-hidden">
@@ -165,7 +182,7 @@ function BankRow({
         {/* Name + info */}
         <span className="flex-1 min-w-0 space-y-0.5">
           <span className="flex items-center gap-1.5 min-w-0">
-            <span className="truncate text-sm font-semibold text-slate-200">{name}</span>
+            <span className={`truncate text-sm font-semibold ${nameColor}`}>{name}</span>
             {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">✦</span>}
           </span>
           <span className="flex items-center gap-1.5 flex-wrap">

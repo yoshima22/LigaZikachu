@@ -92,6 +92,7 @@ export default async function MascotesPage() {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
         arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
+        statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         expeditions: {
           where: { status: "ACTIVE" }, take: 1,
           select: { id: true, finishAt: true, status: true }
