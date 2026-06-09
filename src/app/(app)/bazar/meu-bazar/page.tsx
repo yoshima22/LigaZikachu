@@ -14,18 +14,33 @@ export default async function MeuBazarPage() {
   const player = await prisma.player.findUnique({ where: { userId: session.user.id } });
   if (!player) return notFound();
 
-  const listings = await prisma.bazarListing.findMany({
-    where: { playerId: player.id },
-    include: {
-      proposals: {
-        include: { proposer: { select: { id: true, displayName: true } } },
-        orderBy: { createdAt: "desc" },
+  // Anúncios ativos/reservados — todos; vendidos/cancelados — apenas últimos 4
+  const [activeListings, soldListings] = await Promise.all([
+    prisma.bazarListing.findMany({
+      where: { playerId: player.id, status: { in: ["ACTIVE", "RESERVED"] } },
+      include: {
+        proposals: {
+          include: { proposer: { select: { id: true, displayName: true } } },
+          orderBy: { createdAt: "desc" },
+        },
       },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 30,
-  });
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.bazarListing.findMany({
+      where: { playerId: player.id, status: { in: ["SOLD", "EXPIRED", "CANCELLED"] } },
+      include: {
+        proposals: {
+          include: { proposer: { select: { id: true, displayName: true } } },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+  ]);
+  const listings = [...activeListings, ...soldListings];
 
+  // Últimas 5 propostas enviadas
   const sentProposals = await prisma.bazarProposal.findMany({
     where: { proposerId: player.id },
     include: {
@@ -34,7 +49,7 @@ export default async function MeuBazarPage() {
       },
     },
     orderBy: { createdAt: "desc" },
-    take: 20,
+    take: 5,
   });
 
   return (
@@ -46,7 +61,10 @@ export default async function MeuBazarPage() {
           </Link>
           <div>
             <h1 className="font-pixel text-base text-[#FFCB05]">Meus Anúncios</h1>
-            <p className="text-xs text-slate-500">Gerencie seus anúncios e propostas.</p>
+            <p className="text-xs text-slate-500">
+              Gerencie seus anúncios e propostas.{" "}
+              <span className="text-slate-400">Limite: <strong className="text-[#FFCB05]">8 anúncios</strong> ativos simultâneos · últimos <strong className="text-[#FFCB05]">4 vendidos</strong> exibidos.</span>
+            </p>
           </div>
         </div>
         <Link href="/bazar/criar"

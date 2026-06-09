@@ -250,6 +250,15 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
       return { error: "Defina um preço válido em ZikaCoins." };
     }
 
+    // Limite de 8 anúncios ativos por jogador
+    const MAX_ACTIVE_LISTINGS = 8;
+    const activeCount = await prisma.bazarListing.count({
+      where: { playerId: player.id, status: { in: ["ACTIVE", "RESERVED"] } },
+    });
+    if (activeCount >= MAX_ACTIVE_LISTINGS) {
+      return { error: `Você já possui ${MAX_ACTIVE_LISTINGS} anúncios ativos. Cancele um antes de criar outro.` };
+    }
+
     // Buscar config do Miauvadão (taxa)
     const config = await getMiauvadaoConfig();
     const fee = config.listingFee;

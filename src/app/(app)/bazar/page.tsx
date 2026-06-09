@@ -45,7 +45,7 @@ export default async function BazarPage({
       maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
       sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
     }),
-    getRecentTransactions(10),
+    getRecentTransactions(6),
     getMiauvadaoConfig(),
   ]);
 
@@ -126,7 +126,7 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🏪 Como anunciar no Bazar</p>
-            <p>Clique em <strong style={{ color: "#c9a800" }}>Anunciar</strong> e escolha mascotes ou itens do seu inventário. Defina preço de venda, troca ou ambos. Itens ficam bloqueados enquanto anunciados. Taxa: <strong style={{ color: "#FFCB05" }}>10 ZC por anúncio</strong> (vai ao cofre do Miauvadão).</p>
+            <p>Clique em <strong style={{ color: "#c9a800" }}>Anunciar</strong> e escolha mascotes ou itens do seu inventário. Defina preço de venda, troca ou ambos. Itens ficam bloqueados enquanto anunciados. Taxa: <strong style={{ color: "#FFCB05" }}>10 ZC por anúncio</strong> (vai ao cofre do Miauvadão). Limite: <strong style={{ color: "#FFCB05" }}>8 anúncios ativos</strong> por jogador.</p>
           </div>
 
           <div className="space-y-1">

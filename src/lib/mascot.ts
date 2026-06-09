@@ -1405,7 +1405,19 @@ function getSocialTier(type: "FRIEND" | "RIVAL", count: number): string {
   return count >= 3 ? "Rival Direto" : "Rival";
 }
 
+// Throttle: eventos sociais automáticos rodam no máximo 1x por hora
+let _lastSocialEventRun = 0;
+const SOCIAL_EVENT_THROTTLE_MS = 60 * 60 * 1000; // 1 hora
+
 export async function triggerSocialEvents(): Promise<SocialEventSummary> {
+  // Throttle in-process (evita múltiplos fire-and-forget simultâneos)
+  const now = Date.now();
+  if (now - _lastSocialEventRun < SOCIAL_EVENT_THROTTLE_MS) {
+    return { battles: 0, friendships: 0, events: [] };
+  }
+  _lastSocialEventRun = now;
+
+  // Pega apenas os 40 mascotes mais recentemente interagidos (limita a query)
   const allMascots = await prisma.mascot.findMany({
     where: { player: { user: { role: "PLAYER" } } },
     select: {
@@ -1414,7 +1426,9 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       statCharisma: true, statInstinct: true,
       happiness: true, mood: true, level: true,
       restingUntil: true, arenaState: true,
-    }
+    },
+    orderBy: { lastInteractedAt: "desc" },
+    take: 40,
   });
 
   if (allMascots.length < 2) return { battles: 0, friendships: 0, events: [] };
@@ -1793,7 +1807,38 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
     }).catch(() => {});
   }
 
+  // ── Limpeza: manter apenas as 5 relações mais ativas por mascote ────────────
+  // Roda de forma silenciosa para não bloquear o retorno
+  pruneExcessRelations().catch(() => {});
+
   return summary;
+}
+
+/**
+ * Remove relações excedentes: mantém no máximo 5 por mascote (as com mais interações).
+ * Roda uma vez por ciclo de eventos sociais para manter a tabela enxuta.
+ */
+async function pruneExcessRelations(): Promise<void> {
+  const MAX_RELATIONS = 5;
+  // Pega IDs de mascotes que têm mais de MAX_RELATIONS relações
+  const counts = await prisma.mascotRelation.groupBy({
+    by: ["mascotAId"],
+    _count: { id: true },
+    having: { id: { _count: { gt: MAX_RELATIONS } } },
+  });
+
+  for (const row of counts) {
+    // Busca as relações ordenadas pelas menos interativas (as que serão deletadas)
+    const all = await prisma.mascotRelation.findMany({
+      where: { mascotAId: row.mascotAId },
+      orderBy: { interactionCount: "desc" },
+      select: { id: true },
+    });
+    const toDelete = all.slice(MAX_RELATIONS).map(r => r.id);
+    if (toDelete.length > 0) {
+      await prisma.mascotRelation.deleteMany({ where: { id: { in: toDelete } } }).catch(() => {});
+    }
+  }
 }
 
 // ── Novos Itens Especiais ─────────────────────────────────────────────────────
