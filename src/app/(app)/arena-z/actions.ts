@@ -178,8 +178,13 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
     attackerWon: boolean;
     rounds: number;
     happenedAt: string;
+    isCurrentUserDefender: boolean;
     // Loot do DEFENSOR: positivo = ganhou (vitória), negativo = perdeu (derrota)
     defenderLoot: { coins: number; exp: number; food: number; sweet: number } | null;
+    // Recompensas extras de defesa
+    defenseRewardCoins: number;
+    defenderEgg: string | null;
+    attackerEgg: string | null;
     // Resumo do turno em texto
     turnLines: string[];
     injuredCount: number;
@@ -216,6 +221,11 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
         ? stolen              // ganhou
         : { coins: -(stolen.coins), exp: -(stolen.exp), food: -(stolen.food), sweet: -(stolen.sweet) }  // perdeu
       : null;
+    // Recompensas adicionais da defesa (armazenadas no lootResult pelo runPvpBattle)
+    const defenseRewardCoins = (loot?.defenseRewardCoins as number | undefined) ?? 0;
+    const defenderEgg = (loot?.defenderEgg as string | undefined) ?? null;
+    const attackerEgg = (loot?.attackerEgg as string | undefined) ?? null;
+    const isCurrentUserDefender = battle.defenderPlayerId === playerId;
 
     const log = Array.isArray(battle.turnLog)
       ? (battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; advantageApplied?: boolean }>)
@@ -234,7 +244,11 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
         attackerWon,
         rounds: battle.rounds,
         happenedAt: battle.createdAt.toISOString(),
+        isCurrentUserDefender,
         defenderLoot,
+        defenseRewardCoins,
+        defenderEgg,
+        attackerEgg,
         turnLines,
         injuredCount,
       },

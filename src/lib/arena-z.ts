@@ -857,10 +857,36 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   const hadRecentBattle = lastBattleAt
     ? (Date.now() - lastBattleAt.getTime()) < ARENA_Z_CONFIG.pvpQuickExitPenaltyHours * 3_600_000
     : false;
-  const vaultFinal = applyMultiplierToVault(
-    { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
-    mult, hadRecentBattle
-  );
+
+  let vaultFinal: ReturnType<typeof applyMultiplierToVault>;
+  if (team.teamType === "BOTH") {
+    // Para equipes BOTH: o multiplicador de tempo se aplica apenas à renda passiva PvP estimada.
+    // A parcela de ZC/EXP ganhos em batalhas PvE é paga sem multiplicador extra.
+    const hoursActive = (Date.now() - new Date(team.enteredAt).getTime()) / 3_600_000;
+    const cappedHours = Math.min(hoursActive, PASSIVE_MAX_HOURS);
+    const memberCount = team.members.length;
+    const estimatedPvpCoins = Math.floor(cappedHours * memberCount * PASSIVE_COINS_PER_MASCOT_PER_H);
+    const estimatedPvpExp   = Math.floor(cappedHours * memberCount * PASSIVE_EXP_PER_MASCOT_PER_H);
+    // Porção PvP (renda passiva): limitada ao que existe no cofre
+    const pvpCoins = Math.min(team.vaultCoins, estimatedPvpCoins);
+    const pvpExp   = Math.min(team.vaultExp, estimatedPvpExp);
+    const pveCoins = Math.max(0, team.vaultCoins - pvpCoins);
+    const pveExp   = Math.max(0, team.vaultExp - pvpExp);
+    // Aplica multiplicador apenas à porção PvP
+    const pvpPart = applyMultiplierToVault({ coins: pvpCoins, exp: pvpExp, food: 0, sweet: 0 }, mult, hadRecentBattle);
+    vaultFinal = {
+      coins: pveCoins + pvpPart.coins,
+      exp:   pveExp   + pvpPart.exp,
+      food:  team.vaultFood,
+      sweet: team.vaultSweet,
+      effectiveMult: pvpPart.effectiveMult,
+    };
+  } else {
+    vaultFinal = applyMultiplierToVault(
+      { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
+      mult, hadRecentBattle
+    );
+  }
   const expMascotIds = await getArenaExpMascotIds(team.id, playerId, team.enteredAt);
   if (vaultFinal.exp > 0 && expMascotIds.length === 0) {
     throw new Error("Nao foi possivel identificar quais mascotes devem receber a EXP do cofre. A equipe nao foi retirada.");
@@ -1524,6 +1550,36 @@ export function formatTurnLog(log: PartialTurnLog[]): string[] {
   });
 }
 
+// ── Helpers PvP: recompensas de defesa, drops de ovo ─────────────────────────
+
+/** Rolagem ponderada simples — retorna true com probabilidade `chance` (0–1) */
+function roll(chance: number): boolean {
+  return Math.random() < chance;
+}
+
+/** Retorna o tipo de ovo dropado (ou null) com base nas probabilidades da tabela */
+function rollPvpEggDrop(scenario: "easy" | "balanced" | "hard" | "rival" | "defense" | "perfect_defense"): import("@prisma/client").EggType | null {
+  const tables: Record<typeof scenario, { type: import("@prisma/client").EggType; chance: number }[]> = {
+    easy:             [{ type: "COMMON", chance: 0.10 }, { type: "RARE", chance: 0.005 }],
+    balanced:         [{ type: "COMMON", chance: 0.18 }, { type: "RARE", chance: 0.008 }, { type: "SPECIAL", chance: 0.005 }],
+    hard:             [{ type: "COMMON", chance: 0.28 }, { type: "RARE", chance: 0.015 }, { type: "SPECIAL", chance: 0.008 }, { type: "EVENT", chance: 0.005 }],
+    rival:            [{ type: "COMMON", chance: 0.32 }, { type: "RARE", chance: 0.018 }, { type: "SPECIAL", chance: 0.010 }, { type: "EVENT", chance: 0.005 }],
+    defense:          [{ type: "COMMON", chance: 0.16 }, { type: "RARE", chance: 0.007 }, { type: "SPECIAL", chance: 0.005 }],
+    perfect_defense:  [{ type: "COMMON", chance: 0.25 }, { type: "RARE", chance: 0.012 }, { type: "SPECIAL", chance: 0.007 }, { type: "EVENT", chance: 0.005 }],
+  };
+  // Percorre do mais raro ao mais comum (raridades não se acumulam)
+  const table = [...tables[scenario]].reverse();
+  for (const entry of table) {
+    if (roll(entry.chance)) return entry.type;
+  }
+  return null;
+}
+
+/** Calcula o nível total de um time (soma dos níveis dos membros) */
+function teamTotalLevel(members: { mascot: { level: number } }[]): number {
+  return members.reduce((s, m) => s + m.mascot.level, 0);
+}
+
 export async function runPvpBattle(playerId: string, attackTeamId: string, defenseTeamId: string) {
   if (attackTeamId === defenseTeamId) throw new Error("Escolha duas equipes diferentes.");
 
@@ -1604,6 +1660,60 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   const draw = combat.result === "DRAW";
   const winnerTeam = attackerWon ? attackTeam : defenderWon ? defenseTeam : null;
   const loserTeam = attackerWon ? defenseTeam : defenderWon ? attackTeam : null;
+
+  // ── Cenário PvP: determina tipo de batalha para drops e recompensas ────────
+  const atkTotal = teamTotalLevel(attackTeam.members);
+  const defTotal = teamTotalLevel(defenseTeam.members);
+  const levelRatio = atkTotal > 0 && defTotal > 0 ? atkTotal / defTotal : 1;
+  const isBalanced = levelRatio >= 0.8 && levelRatio <= 1.25;
+  const attackerStronger = levelRatio > 1.25;
+  const defenderStronger = levelRatio < 0.8;
+
+  // Verifica relação de RIVAL entre mascotes dos dois jogadores
+  const isRival = await prisma.mascotRelation.findFirst({
+    where: {
+      type: "RIVAL",
+      OR: [
+        { mascotA: { playerId: attackTeam.playerId }, mascotB: { playerId: defenseTeam.playerId } },
+        { mascotA: { playerId: defenseTeam.playerId }, mascotB: { playerId: attackTeam.playerId } },
+      ],
+    },
+    select: { id: true },
+  }).then(r => !!r).catch(() => false);
+
+  // Cenário de ataque (para drops do atacante que venceu)
+  const attackScenario: "easy" | "balanced" | "hard" | "rival" = isRival
+    ? "rival"
+    : isBalanced
+      ? "balanced"
+      : attackerStronger
+        ? "easy"
+        : "hard";
+
+  // Cenário de defesa (para drops do defensor que venceu)
+  const perfectDefense = defenderWon && attackerStronger; // defensor venceu sendo mais fraco
+  const defenseScenario: "defense" | "perfect_defense" = perfectDefense ? "perfect_defense" : "defense";
+
+  // Drops de ovo: quem ganhou rola para ovo
+  const attackerEgg = attackerWon ? rollPvpEggDrop(attackScenario) : null;
+  const defenderEgg = defenderWon ? rollPvpEggDrop(defenseScenario) : null;
+
+  // Recompensas ZC de defesa bem-sucedida (vão para o cofre do defensor)
+  let defenseRewardCoins = 0;
+  if (defenderWon) {
+    const baseMin = isBalanced ? 150 : 80;
+    const baseMax = isBalanced ? 250 : 180;
+    defenseRewardCoins = Math.floor(baseMin + Math.random() * (baseMax - baseMin + 1));
+    if (isRival) defenseRewardCoins += 50;
+    if (perfectDefense) defenseRewardCoins += 80;
+  }
+
+  // IDs dos mascotes defensores que sobreviveram (para dar EXP de defesa)
+  const survivingDefenderMascotIds = defenderWon
+    ? defenseTeam.members
+        .map(m => m.mascotId)
+        .filter(id => !combat.defeatedMascotIds.includes(id))
+    : [];
   const injuredMascotIds = loserTeam
     ? combat.defeatedMascotIds.filter(id => loserTeam.members.some(member => member.mascotId === id))
     : [];
@@ -1648,6 +1758,9 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
           stolen: lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
           burned: lootSplit?.burned ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
           preserved: preserved ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
+          defenseRewardCoins,
+          attackerEgg: attackerEgg ?? null,
+          defenderEgg: defenderEgg ?? null,
         } as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
       },
@@ -1666,6 +1779,26 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       });
       await dropArenaGroundSpoils(tx, lootSplit.burned, loserTeam?.playerId ?? null, battle.id);
       foundGroundSpoils = await maybeFindArenaGroundSpoils(tx, winnerTeam.playerId, winnerTeam.id);
+    }
+
+    // Recompensa ZC de defesa bem-sucedida → adicionada ao cofre do defensor
+    if (defenseRewardCoins > 0 && defenseTeam.status === "ACTIVE") {
+      await tx.arenaTeam.update({
+        where: { id: defenseTeam.id },
+        data: { vaultCoins: { increment: defenseRewardCoins } },
+      });
+    }
+
+    // Drops de ovo (fora da transação de loot principal, entrega direta ao inventário)
+    if (attackerEgg) {
+      await tx.mascotEgg.create({
+        data: { playerId: attackTeam.playerId, type: attackerEgg, origin: `Vitória PvP contra ${defenseTeam.player.displayName}` },
+      });
+    }
+    if (defenderEgg) {
+      await tx.mascotEgg.create({
+        data: { playerId: defenseTeam.playerId, type: defenderEgg, origin: `Defesa PvP contra ${attackTeam.player.displayName}` },
+      });
     }
 
     if (loserTeam && preserved) {
@@ -1722,6 +1855,16 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
   if (loserTeamDefeated && preserved) await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
 
+  // EXP de defesa para mascotes defensores sobreviventes (30 EXP base + 20 extra se perfeita)
+  if (survivingDefenderMascotIds.length > 0) {
+    const defenseExp = perfectDefense ? 50 : 30;
+    await Promise.all(
+      survivingDefenderMascotIds.map(id =>
+        addExp(id, defenseExp, { ignoreBenchPenalty: true }).catch(() => null)
+      )
+    );
+  }
+
   const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
 
   return {
@@ -1729,6 +1872,9 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     winnerName: winnerTeam?.player.displayName ?? null,
     loserName: loserTeam?.player.displayName ?? null,
     stolen: lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
+    defenseRewardCoins,
+    defenderEgg,
+    attackerEgg,
     foundGroundSpoils,
     loserTeamDefeated,
     playerTeamName: attackTeam.player.displayName,

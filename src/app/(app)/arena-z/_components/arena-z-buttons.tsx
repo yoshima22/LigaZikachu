@@ -362,9 +362,19 @@ const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil"
 
 type BattleDetails = NonNullable<Awaited<ReturnType<typeof getArenaBattleDetailsAction>>["battle"]>;
 
+const EGG_LABEL: Record<string, string> = {
+  COMMON: "🥚 Ovo Comum",
+  RARE: "🔵 Ovo Raro",
+  SPECIAL: "🌟 Ovo Especial",
+  EVENT: "🧪 Ovo Laboratório",
+};
+
 function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; onClose: () => void }) {
   const defenderGained = battle.defenderLoot && battle.defenderLoot.coins > 0;
   const defenderLost = battle.defenderLoot && battle.defenderLoot.coins < 0;
+  // Ovo relevante para o usuário atual
+  const myEgg = battle.isCurrentUserDefender ? battle.defenderEgg : battle.attackerEgg;
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4">
       <div className="w-full max-w-md rounded-2xl border border-red-400/40 bg-slate-950 p-5 shadow-2xl">
@@ -381,16 +391,16 @@ function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; on
           {new Date(battle.happenedAt).toLocaleString("pt-BR")}
         </p>
 
-        {/* Resultado do cofre */}
+        {/* Resultado do cofre (loot roubado/perdido) */}
         {battle.defenderLoot && (defenderGained || defenderLost) && (
           <div className={`mt-3 rounded-xl border p-3 ${defenderGained ? "border-green-500/30 bg-green-500/10" : "border-red-500/30 bg-red-500/10"}`}>
             <p className={`text-xs font-bold ${defenderGained ? "text-green-300" : "text-red-300"}`}>
-              {defenderGained ? "💰 Cofre: ganhos da defesa" : "💸 Cofre: perdas do ataque"}
+              {defenderGained ? "💰 Loot roubado do atacante" : "💸 Cofre: perdas do ataque"}
             </p>
             <p className="mt-1 text-sm text-slate-200">
               {defenderGained
-                ? `+${battle.defenderLoot.coins} ZC · +${battle.defenderLoot.exp} EXP${battle.defenderLoot.food > 0 ? ` · +${battle.defenderLoot.food} comida` : ""}${battle.defenderLoot.sweet > 0 ? ` · +${battle.defenderLoot.sweet} doce` : ""}`
-                : `${battle.defenderLoot.coins} ZC · ${battle.defenderLoot.exp} EXP${battle.defenderLoot.food < 0 ? ` · ${battle.defenderLoot.food} comida` : ""}${battle.defenderLoot.sweet < 0 ? ` · ${battle.defenderLoot.sweet} doce` : ""}`}
+                ? `+${battle.defenderLoot.coins} ZC · +${battle.defenderLoot.exp} EXP${battle.defenderLoot.food > 0 ? ` · +${battle.defenderLoot.food} comida` : ""}`
+                : `${battle.defenderLoot.coins} ZC · ${battle.defenderLoot.exp} EXP${battle.defenderLoot.food < 0 ? ` · ${battle.defenderLoot.food} comida` : ""}`}
             </p>
             {defenderGained && (
               <p className="mt-1 text-[11px] text-green-400/70">Já adicionado ao cofre da sua equipe.</p>
@@ -398,10 +408,28 @@ function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; on
           </div>
         )}
 
+        {/* Recompensa ZC de defesa */}
+        {battle.isCurrentUserDefender && battle.defenderWon && battle.defenseRewardCoins > 0 && (
+          <div className="mt-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 p-3">
+            <p className="text-xs font-bold text-[#FFCB05]">🏅 Recompensa de defesa</p>
+            <p className="mt-1 text-sm text-slate-200">+{battle.defenseRewardCoins} ZC adicionados ao cofre</p>
+          </div>
+        )}
+
+        {/* Drop de ovo */}
+        {myEgg && (
+          <div className="mt-2 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3">
+            <p className="text-xs font-bold text-purple-300">🎁 Drop de ovo!</p>
+            <p className="mt-1 text-sm text-slate-200">{EGG_LABEL[myEgg] ?? myEgg} adicionado à sua coleção.</p>
+          </div>
+        )}
+
         {battle.injuredCount > 0 && (
-          <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+          <div className="mt-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
             <p className="text-xs font-bold text-red-300">
-              {battle.attackerWon ? `${battle.injuredCount} mascote(s) seus ficaram feridos` : `${battle.injuredCount} mascote(s) do atacante ficaram feridos`}
+              {battle.attackerWon
+                ? `${battle.injuredCount} mascote(s) seus ficaram feridos`
+                : `${battle.injuredCount} mascote(s) do atacante ficaram feridos`}
             </p>
           </div>
         )}
@@ -409,7 +437,9 @@ function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; on
         {/* Resumo de turnos */}
         {battle.turnLines.length > 0 && (
           <details className="mt-3">
-            <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300">Ver log de turnos ({battle.rounds} turnos)</summary>
+            <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300">
+              Ver log de turnos ({battle.rounds} turnos)
+            </summary>
             <div className="mt-2 space-y-0.5 max-h-40 overflow-y-auto rounded-lg bg-slate-900/60 p-2">
               {battle.turnLines.map((line, i) => (
                 <p key={i} className="text-[10px] text-slate-400">{line}</p>
