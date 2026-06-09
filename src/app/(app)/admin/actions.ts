@@ -392,6 +392,86 @@ export async function startAdminExpeditionAction(
   }
 }
 
+// ── Diagnóstico + reset completo de um mascote travado ────────────────────────
+export async function resetStuckMascotAction(mascotId: string): Promise<{
+  ok: boolean;
+  before?: Record<string, unknown>;
+  fixed?: string[];
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+
+    const mascot = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: {
+        id: true, pokemonId: true, nickname: true, playerId: true,
+        arenaState: true, injuredAt: true, restingUntil: true, bazarListed: true,
+        expeditions: { where: { status: "ACTIVE" }, select: { id: true, finishAt: true } },
+      },
+    });
+    if (!mascot) return { ok: false, error: "Mascote não encontrado." };
+
+    const before = {
+      arenaState:    mascot.arenaState,
+      injuredAt:     mascot.injuredAt,
+      restingUntil:  mascot.restingUntil,
+      bazarListed:   mascot.bazarListed,
+      activeExpeditions: mascot.expeditions.length,
+    };
+
+    const fixed: string[] = [];
+
+    // 1. Encerra expedições ACTIVE que sobraram
+    if (mascot.expeditions.length > 0) {
+      await prisma.mascotExpedition.updateMany({
+        where: { id: { in: mascot.expeditions.map(e => e.id) } },
+        data: { status: "CLAIMED", rewardJson: { type: "NOTHING", adminReset: true } },
+      });
+      fixed.push(`${mascot.expeditions.length} expedição(ões) ACTIVE encerrada(s)`);
+    }
+
+    // 2. Reseta arenaState para FREE (independente do estado atual)
+    const updates: Record<string, unknown> = {};
+    if (mascot.arenaState !== "FREE") {
+      updates.arenaState = "FREE";
+      fixed.push(`arenaState: ${mascot.arenaState} → FREE`);
+    }
+
+    // 3. Limpa injuredAt / restingUntil se presentes
+    if (mascot.injuredAt) {
+      updates.injuredAt = null;
+      fixed.push("injuredAt limpo");
+    }
+    if (mascot.restingUntil) {
+      updates.restingUntil = null;
+      fixed.push("restingUntil limpo");
+    }
+
+    // 4. Limpa bazarListed se o anúncio não existe mais
+    if (mascot.bazarListed) {
+      const listing = await prisma.bazarListing.findFirst({
+        where: { payload: { path: ["mascotId"], equals: mascotId }, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (!listing) {
+        updates.bazarListed = false;
+        fixed.push("bazarListed limpo (anúncio não encontrado)");
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await prisma.mascot.update({ where: { id: mascotId }, data: updates });
+    }
+
+    if (fixed.length === 0) fixed.push("Nenhum problema encontrado — mascote já está em estado normal.");
+
+    return { ok: true, before, fixed };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Limpeza de eventos de mascotes de admins ──────────────────────────────────
 
 export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error?: string }> {

@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { MapPin, RefreshCw, CheckCircle } from "lucide-react";
+import { MapPin, RefreshCw, CheckCircle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPokemonName } from "@/lib/mascot-data";
-import { getPlayerMascotsAdmin, startAdminExpeditionAction, completeAdminExpeditionAction } from "../actions";
+import { getPlayerMascotsAdmin, startAdminExpeditionAction, completeAdminExpeditionAction, resetStuckMascotAction } from "../actions";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 
 const DURATIONS: { value: ExpeditionDuration; label: string; hint: string }[] = [
@@ -43,6 +43,8 @@ export function AdminExpeditionPanel({ players }: Props) {
   const [mode,       setMode]       = useState<ExpeditionMode>("STANDARD");
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [completing, setCompleting] = useState<string | null>(null); // mascotId being completed
+  const [resetting,  setResetting]  = useState<string | null>(null); // mascotId being reset
+  const [resetLog,   setResetLog]   = useState<string[]>([]);
 
   // Carrega mascotes ao selecionar jogador
   const handlePlayerChange = (id: string) => {
@@ -93,6 +95,23 @@ export function AdminExpeditionPanel({ players }: Props) {
       if (!res.ok) { toast.error(res.error ?? "Erro ao completar."); return; }
       toast.success(`Expedição de ${name} completada!`);
       setLastResult(`✅ Expedição de ${name} completada. Recompensa: ${JSON.stringify(res.reward)}`);
+      const updated = await getPlayerMascotsAdmin(playerId);
+      if (!updated.error) setMascots(updated.mascots);
+    });
+  };
+
+  const handleReset = (m: Mascot) => {
+    const name = m.nickname ?? getPokemonName(m.pokemonId);
+    if (!confirm(`Destravar ${name}?\n\nIsso vai:\n• Encerrar expedições ativas\n• Resetar arenaState para FREE\n• Limpar injuredAt / restingUntil\n• Limpar bazarListed órfão`)) return;
+    setResetting(m.id);
+    setResetLog([]);
+    startTransition(async () => {
+      const res = await resetStuckMascotAction(m.id);
+      setResetting(null);
+      if (!res.ok) { toast.error(res.error ?? "Erro ao resetar."); return; }
+      toast.success(`${name} destravado!`);
+      setResetLog(res.fixed ?? []);
+      setLastResult(`🔧 ${name} destravado. Ver log abaixo.`);
       const updated = await getPlayerMascotsAdmin(playerId);
       if (!updated.error) setMascots(updated.mascots);
     });
@@ -180,6 +199,34 @@ export function AdminExpeditionPanel({ players }: Props) {
               </option>
             ))}
           </select>
+          {/* Lista de mascotes com botão Destravar */}
+          {mascots.length > 0 && (
+            <div className="mt-2 max-h-52 overflow-y-auto space-y-1 rounded-xl border border-border/40 bg-slate-900/40 p-2">
+              {mascots.map(m => {
+                const name = m.nickname ?? getPokemonName(m.pokemonId);
+                const isOccupied = m.activeExpedition || m.arenaState !== "FREE" || m.bazarListed;
+                return (
+                  <div key={m.id} className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 ${isOccupied ? "bg-orange-500/5 border border-orange-500/15" : "border border-transparent"}`}>
+                    <span className="text-xs text-slate-300 truncate min-w-0">
+                      <span className="font-medium">{name}</span>
+                      <span className="ml-1.5 text-[10px] text-slate-500">{mascotStatus(m)}</span>
+                    </span>
+                    <Button
+                      type="button"
+                      disabled={pending || resetting === m.id}
+                      onClick={() => handleReset(m)}
+                      className="h-6 shrink-0 gap-1 rounded-md bg-orange-500/10 border border-orange-500/25 text-orange-300 hover:bg-orange-500/20 text-[10px] font-semibold px-2"
+                    >
+                      {resetting === m.id
+                        ? <RefreshCw size={10} className="animate-spin" />
+                        : <><Wrench size={10} /> Destravar</>
+                      }
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Duração */}
@@ -264,6 +311,14 @@ export function AdminExpeditionPanel({ players }: Props) {
         <p className="rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-2.5 text-xs text-green-300">
           {lastResult}
         </p>
+      )}
+      {resetLog.length > 0 && (
+        <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-4 py-3 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-orange-400">Log do reset</p>
+          {resetLog.map((line, i) => (
+            <p key={i} className="text-xs text-orange-300">• {line}</p>
+          ))}
+        </div>
       )}
     </div>
   );
