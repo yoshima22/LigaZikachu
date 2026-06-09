@@ -4,39 +4,42 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import Link from "next/link";
 
-type RankTab = "level" | "force" | "happiness" | "friends" | "battles" | "exp";
+type RankTab = "level" | "force" | "happiness" | "friends" | "battles";
 
 interface PageProps {
   searchParams: Promise<{ tab?: string }>;
 }
 
+// Campos escalares explícitos — evita puxar colunas que podem não existir ainda no banco
+const MASCOT_SELECT = {
+  id: true, pokemonId: true, nickname: true, level: true, exp: true,
+  happiness: true, mood: true,
+  statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+  battleWins: true, battleLosses: true,
+  player: { select: { id: true, displayName: true } },
+} as const;
+
 async function getRanking(tab: RankTab) {
-  // Filtro base: apenas jogadores PLAYER (sem admins)
   const playerFilter = { player: { user: { role: "PLAYER" as const } } };
 
-  // ── Amigos: sort em memória para contar só relações FRIEND ────────────────
+  // ── Amigos ────────────────────────────────────────────────────────────────
   if (tab === "friends") {
     const mascots = await prisma.mascot.findMany({
       where: playerFilter,
-      include: {
-        player: { select: { id: true, displayName: true } },
-        // conta APENAS relações do tipo FRIEND (não rivais)
+      select: {
+        ...MASCOT_SELECT,
         relationsAsA: {
           where: { type: "FRIEND" },
           select: { id: true, interactionCount: true },
         },
       },
-      take: 200, // carrega mais e ordena em memória
+      take: 200,
     });
 
-    // Ordena por contagem real de amigos + interações acumuladas como tiebreaker
     return mascots
       .map(m => ({
-        id: m.id,
-        pokemonId: m.pokemonId,
-        nickname: m.nickname,
-        ownerName: m.player.displayName,
-        ownerId: m.player.id,
+        id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+        ownerName: m.player.displayName, ownerId: m.player.id,
         level: m.level,
         value: m.relationsAsA.length,
         value2: m.relationsAsA.reduce((sum, r) => sum + r.interactionCount, 0),
@@ -47,11 +50,11 @@ async function getRanking(tab: RankTab) {
       .slice(0, 50);
   }
 
-  // ── Batalhas: ranking por vitórias com aproveitamento ────────────────────
+  // ── Batalhas ──────────────────────────────────────────────────────────────
   if (tab === "battles") {
     const mascots = await prisma.mascot.findMany({
       where: playerFilter,
-      include: { player: { select: { id: true, displayName: true } } },
+      select: MASCOT_SELECT,
       orderBy: [{ battleWins: "desc" }, { battleLosses: "asc" }, { id: "asc" }],
       take: 50,
     });
@@ -59,62 +62,39 @@ async function getRanking(tab: RankTab) {
       const total = m.battleWins + m.battleLosses;
       const pct   = total > 0 ? Math.round((m.battleWins / total) * 100) : 0;
       return {
-        id: m.id,
-        pokemonId: m.pokemonId,
-        nickname: m.nickname,
-        ownerName: m.player.displayName,
-        ownerId: m.player.id,
+        id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+        ownerName: m.player.displayName, ownerId: m.player.id,
         level: m.level,
-        value: m.battleWins,
-        value2: 0,
-        valueLabel: "vitórias",
+        value: m.battleWins, value2: 0, valueLabel: "vitórias",
         extra: total > 0 ? `${pct}% aproveit. (${m.battleLosses}D)` : "sem derrotas",
       };
     });
   }
 
-  // ── Nível com EXP como tiebreaker ────────────────────────────────────────
+  // ── Nível — desempate: exp → soma de stats ─────────────────────────────
   if (tab === "level") {
     const mascots = await prisma.mascot.findMany({
       where: playerFilter,
-      include: { player: { select: { id: true, displayName: true } } },
+      select: MASCOT_SELECT,
       orderBy: [{ level: "desc" }, { exp: "desc" }, { id: "asc" }],
-      take: 50,
+      take: 200, // carrega mais para aplicar desempate de stats em memória
     });
-    return mascots.map(m => ({
-      id: m.id,
-      pokemonId: m.pokemonId,
-      nickname: m.nickname,
-      ownerName: m.player.displayName,
-      ownerId: m.player.id,
-      level: m.level,
-      value: m.level,
-      value2: 0,
-      valueLabel: "nível",
-      extra: `${m.exp} EXP acumulado`,
-    }));
-  }
 
-  // ── EXP total ─────────────────────────────────────────────────────────────
-  if (tab === "exp") {
-    const mascots = await prisma.mascot.findMany({
-      where: playerFilter,
-      include: { player: { select: { id: true, displayName: true } } },
-      orderBy: [{ exp: "desc" }, { level: "desc" }, { id: "asc" }],
-      take: 50,
-    });
-    return mascots.map(m => ({
-      id: m.id,
-      pokemonId: m.pokemonId,
-      nickname: m.nickname,
-      ownerName: m.player.displayName,
-      ownerId: m.player.id,
-      level: m.level,
-      value: m.exp,
-      value2: 0,
-      valueLabel: "EXP",
-      extra: `Nível ${m.level}`,
-    }));
+    return mascots
+      .map(m => ({
+        id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+        ownerName: m.player.displayName, ownerId: m.player.id,
+        level: m.level, exp: m.exp,
+        totalStats: m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality,
+        value: m.level, value2: 0, valueLabel: "nível",
+        extra: `${m.exp.toLocaleString("pt-BR")} EXP · Stats ${m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality}`,
+      }))
+      .sort((a, b) =>
+        b.level - a.level ||
+        b.exp - a.exp ||
+        b.totalStats - a.totalStats
+      )
+      .slice(0, 50);
   }
 
   // ── Força e Felicidade ────────────────────────────────────────────────────
@@ -123,27 +103,23 @@ async function getRanking(tab: RankTab) {
     happiness: [{ happiness: "desc" as const }, { level: "desc" as const }, { id: "asc" as const }],
   };
   const labelMap: Record<"force" | "happiness", string> = {
-    force:     "Força",
-    happiness: "Felicidade",  // corrigido: era "Humor" mas é o valor numérico de happiness
+    force: "Força", happiness: "Felicidade",
   };
-  const extraFn: Record<"force" | "happiness", (m: { statForce: number; statAgility: number; statVitality: number; statCharisma: number; statInstinct: number; level: number; mood: string }) => string> = {
+  const extraFn: Record<"force" | "happiness", (m: { statForce: number; statAgility: number; statVitality: number; level: number; mood: string }) => string> = {
     force:     m => `Agi ${m.statAgility} · Vit ${m.statVitality} · Nv.${m.level}`,
     happiness: m => `Humor: ${m.mood} · Nv.${m.level}`,
   };
 
   const mascots = await prisma.mascot.findMany({
     where: playerFilter,
-    include: { player: { select: { id: true, displayName: true } } },
+    select: MASCOT_SELECT,
     orderBy: orderByMap[tab as "force" | "happiness"],
     take: 50,
   });
 
   return mascots.map(m => ({
-    id: m.id,
-    pokemonId: m.pokemonId,
-    nickname: m.nickname,
-    ownerName: m.player.displayName,
-    ownerId: m.player.id,
+    id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+    ownerName: m.player.displayName, ownerId: m.player.id,
     level: m.level,
     value: tab === "force" ? m.statForce : m.happiness,
     value2: 0,
@@ -153,17 +129,18 @@ async function getRanking(tab: RankTab) {
 }
 
 const TABS: { key: RankTab; label: string; emoji: string }[] = [
-  { key: "level",     label: "Nível",       emoji: "⭐" },
-  { key: "force",     label: "Força",       emoji: "💪" },
-  { key: "happiness", label: "Felicidade",  emoji: "💛" },
-  { key: "friends",   label: "Amigos",      emoji: "💚" },
-  { key: "battles",   label: "Batalhas",    emoji: "⚔️" },
-  { key: "exp",       label: "EXP",         emoji: "📈" },
+  { key: "level",     label: "Nível",      emoji: "⭐" },
+  { key: "force",     label: "Força",      emoji: "💪" },
+  { key: "happiness", label: "Felicidade", emoji: "💛" },
+  { key: "friends",   label: "Amigos",     emoji: "💚" },
+  { key: "battles",   label: "Batalhas",   emoji: "⚔️" },
 ];
 
 export default async function MascotRankingPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const tab = (params.tab as RankTab) ?? "level";
+  const rawTab = params.tab ?? "level";
+  const validTabs: RankTab[] = ["level", "force", "happiness", "friends", "battles"];
+  const tab: RankTab = validTabs.includes(rawTab as RankTab) ? (rawTab as RankTab) : "level";
   const ranking = await getRanking(tab);
 
   return (
@@ -200,25 +177,21 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
             key={entry.id}
             className={`flex items-center gap-3 px-4 py-3 ${i !== 0 ? "border-t border-border/40" : ""} ${i < 3 ? "bg-[#FFCB05]/5" : ""}`}
           >
-            {/* Rank */}
             <span className={`w-7 shrink-0 text-center text-sm font-bold ${
               i === 0 ? "text-[#FFCB05]" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-slate-600"
             }`}>
               {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
             </span>
 
-            {/* Sprite */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={getSpriteUrl(entry.pokemonId, false)}
               alt={entry.nickname ?? getPokemonName(entry.pokemonId)}
-              width={48}
-              height={48}
+              width={48} height={48}
               className="shrink-0 object-contain"
               style={{ imageRendering: "pixelated" }}
             />
 
-            {/* Info */}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">
                 {entry.nickname ?? getPokemonName(entry.pokemonId)}
@@ -231,7 +204,6 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
               )}
             </div>
 
-            {/* Value */}
             <div className="shrink-0 text-right">
               <p className="text-base font-bold text-[#FFCB05]">{entry.value.toLocaleString("pt-BR")}</p>
               <p className="text-[10px] text-slate-600">{entry.valueLabel}</p>
