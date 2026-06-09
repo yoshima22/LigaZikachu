@@ -350,6 +350,31 @@ export async function getPlayerMascotsAdmin(playerId: string): Promise<{
   }
 }
 
+// ── Completar expedição de um mascote (admin) — skip + claim com recompensa ───
+export async function completeAdminExpeditionAction(
+  playerId: string,
+  mascotId: string,
+): Promise<{ ok: boolean; reward?: unknown; error?: string }> {
+  try {
+    await requireAdmin();
+    const { skipExpedition, claimExpedition } = await import("@/lib/mascot");
+
+    const expedition = await prisma.mascotExpedition.findFirst({
+      where: { mascotId, status: "ACTIVE" },
+      select: { id: true, finishAt: true },
+    });
+    if (!expedition) return { ok: false, error: "Nenhuma expedição ativa encontrada para este mascote." };
+
+    if (expedition.finishAt > new Date()) {
+      await skipExpedition(expedition.id);
+    }
+    const { reward } = await claimExpedition(playerId, expedition.id);
+    return { ok: true, reward };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Iniciar expedição em nome de um jogador (admin) ───────────────────────────
 export async function startAdminExpeditionAction(
   playerId: string,

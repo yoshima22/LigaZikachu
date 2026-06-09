@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { MapPin, RefreshCw } from "lucide-react";
+import { MapPin, RefreshCw, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPokemonName } from "@/lib/mascot-data";
-import { getPlayerMascotsAdmin, startAdminExpeditionAction } from "../actions";
+import { getPlayerMascotsAdmin, startAdminExpeditionAction, completeAdminExpeditionAction } from "../actions";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 
 const DURATIONS: { value: ExpeditionDuration; label: string; hint: string }[] = [
@@ -36,12 +36,13 @@ interface Props {
 export function AdminExpeditionPanel({ players }: Props) {
   const [pending, startTransition] = useTransition();
 
-  const [playerId,  setPlayerId]  = useState("");
-  const [mascots,   setMascots]   = useState<Mascot[]>([]);
-  const [mascotId,  setMascotId]  = useState("");
-  const [duration,  setDuration]  = useState<ExpeditionDuration>("1h");
-  const [mode,      setMode]      = useState<ExpeditionMode>("STANDARD");
+  const [playerId,   setPlayerId]   = useState("");
+  const [mascots,    setMascots]    = useState<Mascot[]>([]);
+  const [mascotId,   setMascotId]   = useState("");
+  const [duration,   setDuration]   = useState<ExpeditionDuration>("1h");
+  const [mode,       setMode]       = useState<ExpeditionMode>("STANDARD");
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [completing, setCompleting] = useState<string | null>(null); // mascotId being completed
 
   // Carrega mascotes ao selecionar jogador
   const handlePlayerChange = (id: string) => {
@@ -82,6 +83,21 @@ export function AdminExpeditionPanel({ players }: Props) {
     });
   };
 
+  const handleComplete = (m: Mascot) => {
+    const name = m.nickname ?? getPokemonName(m.pokemonId);
+    if (!confirm(`Completar expedição de ${name} agora?\nA recompensa completa será entregue normalmente.`)) return;
+    setCompleting(m.id);
+    startTransition(async () => {
+      const res = await completeAdminExpeditionAction(playerId, m.id);
+      setCompleting(null);
+      if (!res.ok) { toast.error(res.error ?? "Erro ao completar."); return; }
+      toast.success(`Expedição de ${name} completada!`);
+      setLastResult(`✅ Expedição de ${name} completada. Recompensa: ${JSON.stringify(res.reward)}`);
+      const updated = await getPlayerMascotsAdmin(playerId);
+      if (!updated.error) setMascots(updated.mascots);
+    });
+  };
+
   const selectedMascot = mascots.find(m => m.id === mascotId);
 
   function mascotStatus(m: Mascot): string {
@@ -100,6 +116,36 @@ export function AdminExpeditionPanel({ players }: Props) {
         <h3 className="font-semibold text-slate-200">Expedições Admin</h3>
         <span className="text-xs text-slate-500">— iniciar expedição em nome de um jogador</span>
       </div>
+
+      {/* Expedições ativas do jogador — botão Completar */}
+      {mascots.filter(m => m.activeExpedition).length > 0 && (
+        <div className="space-y-2 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+          <p className="text-xs font-semibold text-blue-300">
+            🗺 Expedições ativas ({mascots.filter(m => m.activeExpedition).length})
+          </p>
+          <div className="space-y-1.5">
+            {mascots.filter(m => m.activeExpedition).map(m => (
+              <div key={m.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-slate-900/60 px-3 py-2">
+                <span className="text-xs text-slate-300">
+                  <span className="font-semibold">{m.nickname ?? getPokemonName(m.pokemonId)}</span>
+                  <span className="ml-1.5 text-slate-500">Nv.{m.level}</span>
+                </span>
+                <Button
+                  type="button"
+                  disabled={pending || completing === m.id}
+                  onClick={() => handleComplete(m)}
+                  className="h-7 gap-1.5 rounded-lg bg-green-500/15 border border-green-500/30 text-green-300 hover:bg-green-500/25 text-[11px] font-semibold px-3"
+                >
+                  {completing === m.id
+                    ? <><RefreshCw size={11} className="animate-spin" /> Completando…</>
+                    : <><CheckCircle size={11} /> Completar</>
+                  }
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Jogador */}
