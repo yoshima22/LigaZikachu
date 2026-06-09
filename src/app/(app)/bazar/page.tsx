@@ -10,7 +10,6 @@ import { ShellGame } from "./_components/shell-game";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
-import { BazarLiveRefresh } from "./_components/bazar-live-refresh";
 import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
@@ -32,11 +31,12 @@ export default async function BazarPage({
 
   const wallet = playerId ? await getOrCreateWallet(playerId) : null;
 
-  // Auto-rotate Miauvadão offers + cleanup stale bazar listings (fire both in parallel)
-  await Promise.all([
+  // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
+  // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
+  Promise.all([
     autoRefreshMiauvadaoIfNeeded(),
     autoCleanupStaleBazarListings(),
-  ]);
+  ]).catch(() => null);
 
   const [listings, transactions, miauvadao] = await Promise.all([
     getListings({
@@ -53,7 +53,6 @@ export default async function BazarPage({
 
   return (
     <div className="space-y-6">
-      <BazarLiveRefresh />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div>
