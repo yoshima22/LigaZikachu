@@ -10,6 +10,7 @@ import {
   adminRepairArenaAction,
   adminSetMascotStateAction,
   deleteArenaTeamAction,
+  getArenaBattleDetailsAction,
   healMascotSusAction,
   lockBotAction,
   markPvpDefenseSeenAction,
@@ -359,23 +360,129 @@ const DIFFICULTY_STYLES: Record<ArenaDifficulty, { border: string; bg: string; t
 };
 const DIFFICULTY_LABELS: Record<ArenaDifficulty, string> = { easy: "🟢 Fácil", normal: "🟡 Normal", hard: "🔴 Difícil" };
 
+type BattleDetails = NonNullable<Awaited<ReturnType<typeof getArenaBattleDetailsAction>>["battle"]>;
+
+function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; onClose: () => void }) {
+  const defenderGained = battle.defenderLoot && battle.defenderLoot.coins > 0;
+  const defenderLost = battle.defenderLoot && battle.defenderLoot.coins < 0;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-red-400/40 bg-slate-950 p-5 shadow-2xl">
+        <p className="text-xs font-bold uppercase tracking-widest text-red-300">Combate PvP recebido</p>
+        <h3 className={`mt-2 text-lg font-black ${battle.defenderWon ? "text-green-300" : battle.attackerWon ? "text-red-300" : "text-yellow-300"}`}>
+          {battle.defenderWon ? "🛡️ Sua defesa venceu!" : battle.attackerWon ? "💀 Você foi derrotado" : "🤝 Empate"}
+        </h3>
+        <p className="mt-1 text-sm text-slate-400">
+          <span className="text-red-300 font-semibold">{battle.attackerName}</span> atacou{" "}
+          <span className="text-blue-300 font-semibold">{battle.defenderName}</span>
+          {" "}· {battle.rounds} turnos
+        </p>
+        <p className="mt-0.5 text-[11px] text-slate-600">
+          {new Date(battle.happenedAt).toLocaleString("pt-BR")}
+        </p>
+
+        {/* Resultado do cofre */}
+        {battle.defenderLoot && (defenderGained || defenderLost) && (
+          <div className={`mt-3 rounded-xl border p-3 ${defenderGained ? "border-green-500/30 bg-green-500/10" : "border-red-500/30 bg-red-500/10"}`}>
+            <p className={`text-xs font-bold ${defenderGained ? "text-green-300" : "text-red-300"}`}>
+              {defenderGained ? "💰 Cofre: ganhos da defesa" : "💸 Cofre: perdas do ataque"}
+            </p>
+            <p className="mt-1 text-sm text-slate-200">
+              {defenderGained
+                ? `+${battle.defenderLoot.coins} ZC · +${battle.defenderLoot.exp} EXP${battle.defenderLoot.food > 0 ? ` · +${battle.defenderLoot.food} comida` : ""}${battle.defenderLoot.sweet > 0 ? ` · +${battle.defenderLoot.sweet} doce` : ""}`
+                : `${battle.defenderLoot.coins} ZC · ${battle.defenderLoot.exp} EXP${battle.defenderLoot.food < 0 ? ` · ${battle.defenderLoot.food} comida` : ""}${battle.defenderLoot.sweet < 0 ? ` · ${battle.defenderLoot.sweet} doce` : ""}`}
+            </p>
+            {defenderGained && (
+              <p className="mt-1 text-[11px] text-green-400/70">Já adicionado ao cofre da sua equipe.</p>
+            )}
+          </div>
+        )}
+
+        {battle.injuredCount > 0 && (
+          <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+            <p className="text-xs font-bold text-red-300">
+              {battle.attackerWon ? `${battle.injuredCount} mascote(s) seus ficaram feridos` : `${battle.injuredCount} mascote(s) do atacante ficaram feridos`}
+            </p>
+          </div>
+        )}
+
+        {/* Resumo de turnos */}
+        {battle.turnLines.length > 0 && (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300">Ver log de turnos ({battle.rounds} turnos)</summary>
+            <div className="mt-2 space-y-0.5 max-h-40 overflow-y-auto rounded-lg bg-slate-900/60 p-2">
+              {battle.turnLines.map((line, i) => (
+                <p key={i} className="text-[10px] text-slate-400">{line}</p>
+              ))}
+            </div>
+          </details>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-950"
+        >
+          Entendido
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ArenaStaleModal({ notice, onClose }: { notice: ArenaStaleNotice; onClose: () => void }) {
   const router = useRouter();
+  const [loadingBattle, setLoadingBattle] = useState(false);
+  const [battleDetails, setBattleDetails] = useState<BattleDetails | null>(null);
+
+  const handleViewBattle = async () => {
+    if (!notice.battleId) return;
+    setLoadingBattle(true);
+    const r = await getArenaBattleDetailsAction(notice.battleId);
+    setLoadingBattle(false);
+    if (r.error) { toast.error(r.error); return; }
+    if (r.battle) setBattleDetails(r.battle);
+  };
+
+  if (battleDetails) {
+    return (
+      <ArenaBattleResultModal
+        battle={battleDetails}
+        onClose={() => {
+          setBattleDetails(null);
+          onClose();
+          router.refresh();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-slate-950 p-5 shadow-[0_0_45px_rgba(248,113,113,0.25)]">
-        <p className="text-xs font-bold uppercase tracking-widest text-red-300">Arena atualizada por outro combate</p>
-        <h3 className="mt-2 text-xl font-black text-white">Voce foi atacado antes.</h3>
+        <p className="text-xs font-bold uppercase tracking-widest text-red-300">Arena — ataque PvP recebido</p>
+        <h3 className="mt-2 text-xl font-black text-white">Você foi atacado!</h3>
         <p className="mt-2 text-sm text-slate-300">{notice.message}</p>
         {notice.happenedAt && (
-          <p className="mt-2 text-[11px] text-slate-500">Resolvido em {new Date(notice.happenedAt).toLocaleString("pt-BR")}</p>
+          <p className="mt-2 text-[11px] text-slate-500">Ocorrido em {new Date(notice.happenedAt).toLocaleString("pt-BR")}</p>
         )}
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          <button type="button" onClick={() => { onClose(); router.refresh(); }} className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950">
+        <div className={`mt-4 grid gap-2 ${notice.battleId ? "sm:grid-cols-2" : ""}`}>
+          {notice.battleId && (
+            <button
+              type="button"
+              disabled={loadingBattle}
+              onClick={handleViewBattle}
+              className="rounded-xl border border-red-400/50 bg-red-500/15 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+            >
+              {loadingBattle ? "Carregando…" : "⚔️ Ver combate"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { onClose(); router.refresh(); }}
+            className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950"
+          >
             Atualizar Arena
-          </button>
-          <button type="button" onClick={onClose} className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-slate-300 hover:text-white">
-            Fechar
           </button>
         </div>
       </div>

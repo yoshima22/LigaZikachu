@@ -167,6 +167,83 @@ export async function retireArenaTeamAction(teamId: string): Promise<{ error?: s
   }
 }
 
+/** Retorna detalhes de um combate PvP para exibição no modal "foi atacado" */
+export async function getArenaBattleDetailsAction(battleId: string): Promise<{
+  error?: string;
+  battle?: {
+    result: string;
+    attackerName: string;
+    defenderName: string;
+    defenderWon: boolean;
+    attackerWon: boolean;
+    rounds: number;
+    happenedAt: string;
+    // Loot do DEFENSOR: positivo = ganhou (vitória), negativo = perdeu (derrota)
+    defenderLoot: { coins: number; exp: number; food: number; sweet: number } | null;
+    // Resumo do turno em texto
+    turnLines: string[];
+    injuredCount: number;
+  };
+}> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    const battle = await prisma.arenaBattle.findUnique({
+      where: { id: battleId },
+      include: {
+        attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+        defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+      },
+    });
+    if (!battle) return { error: "Batalha não encontrada." };
+    // Garante que o jogador participou desta batalha
+    if (battle.attackerPlayerId !== playerId && battle.defenderPlayerId !== playerId) {
+      return { error: "Sem permissão." };
+    }
+
+    const attackerName = battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "Atacante";
+    const defenderName = battle.defenderPlayer?.displayName ?? battle.defenderPlayer?.ptcglNick ?? "Defensor";
+    const defenderWon = battle.result === "DEFENDER_WIN";
+    const attackerWon = battle.result === "ATTACKER_WIN";
+
+    // Loot: stolen = o que o vencedor tirou do perdedor
+    const loot = battle.lootResult as Record<string, unknown> | null;
+    const stolen = loot?.stolen as { coins: number; exp: number; food: number; sweet: number } | undefined;
+    // Do ponto de vista do defensor:
+    //   Se defensor venceu → ganhou o "stolen" (tirou do atacante e adicionou ao cofre)
+    //   Se atacante venceu → perdeu o "stolen" (foi tirado do seu cofre)
+    const defenderLoot = stolen
+      ? defenderWon
+        ? stolen              // ganhou
+        : { coins: -(stolen.coins), exp: -(stolen.exp), food: -(stolen.food), sweet: -(stolen.sweet) }  // perdeu
+      : null;
+
+    const log = Array.isArray(battle.turnLog)
+      ? (battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; advantageApplied?: boolean }>)
+      : [];
+    const turnLines = log.slice(0, 15).map(t =>
+      `T${t.turn}: ${t.actorName} → ${t.targetName} (${t.damage} dano${t.advantageApplied ? " ⚡" : ""})`
+    );
+    const injuredCount = Array.isArray(battle.injuredMascotIds) ? battle.injuredMascotIds.length : 0;
+
+    return {
+      battle: {
+        result: battle.result,
+        attackerName,
+        defenderName,
+        defenderWon,
+        attackerWon,
+        rounds: battle.rounds,
+        happenedAt: battle.createdAt.toISOString(),
+        defenderLoot,
+        turnLines,
+        injuredCount,
+      },
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao buscar batalha." };
+  }
+}
+
 /** Marca todos os ataques PvP desta equipe como vistos (chamado após o jogador visualizar o modal stale) */
 export async function markPvpDefenseSeenAction(teamId: string): Promise<void> {
   try {
