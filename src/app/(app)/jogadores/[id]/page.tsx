@@ -18,8 +18,7 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
-import { MascotProfileCard } from "./_components/mascot-profile-card";
-import { PublicMascotGallery } from "./_components/public-mascot-gallery";
+import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI } from "@/lib/mascot-data";
 
 export default async function PlayerDetailPage({
   params
@@ -146,61 +145,16 @@ export default async function PlayerDetailPage({
       : [],
   ]);
 
-  // Mascote equipado — dados completos para o card do perfil
-  const [equippedMascot, publicMascots] = await Promise.all([
-    prisma.mascot.findFirst({
-      where: { playerId, isEquipped: true },
-      select: {
-        id: true, pokemonId: true, nickname: true, level: true, exp: true,
-        happiness: true, mood: true, personality: true, isEquipped: true,
-        statForce: true, statAgility: true, statCharisma: true,
-        statInstinct: true, statVitality: true,
-        battleWins: true, battleLosses: true,
-        hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
-        events: { orderBy: { createdAt: "desc" }, take: 5 },
-        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
-        relationsAsA: {
-          take: 6,
-          include: {
-            mascotB: {
-              select: {
-                id: true, pokemonId: true, nickname: true,
-                player: { select: { displayName: true } }
-              }
-            }
-          }
-        }
-      }
-    }).catch(() => null),
-    // Perfil público: mostra apenas mascotes do time ativo na Arena
-    prisma.arenaTeamMember.findMany({
-      where: { team: { playerId, status: "ACTIVE" } },
-      include: {
-        mascot: {
-          select: {
-            id: true, pokemonId: true, nickname: true, level: true,
-            mood: true, happiness: true, isEquipped: true, isFavorite: true,
-            statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-            battleWins: true, battleLosses: true,
-            expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
-            relationsAsA: {
-              take: 5,
-              include: {
-                mascotB: {
-                  select: {
-                    id: true, pokemonId: true, nickname: true,
-                    player: { select: { displayName: true } }
-                  }
-                }
-              }
-            },
-          },
-        },
-      },
-      orderBy: { slot: "asc" },
-      take: 6,
-    }).then(members => members.map(m => m.mascot)).catch(() => [] as Array<never>),
-  ]);
+  // Time principal — apenas os 6 favoritos, campos mínimos para o grid simplificado
+  const favoriteMascots = await prisma.mascot.findMany({
+    where: { playerId, isFavorite: true },
+    select: {
+      id: true, pokemonId: true, nickname: true, level: true,
+      mood: true, isEquipped: true, isShiny: true,
+    },
+    orderBy: { level: "desc" },
+    take: 6,
+  }).catch(() => [] as Array<never>);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
   const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
@@ -734,55 +688,47 @@ export default async function PlayerDetailPage({
         </div>
       </div>
 
-      {/* Mascote Companheiro — card completo com histórico de relações */}
-      {publicMascots.length > 0 && (
-        <Card>
-          <CardTitle className="mb-3 flex items-center gap-2">
-            <Swords size={18} className="text-primary" /> Time Ativo na Arena
-          </CardTitle>
-          <PublicMascotGallery mascots={publicMascots} isAdmin={isAdminUser} />
+      {/* ⭐ Time Principal — grid simplificado com os 6 favoritos */}
+      {favoriteMascots.length > 0 && (
+        <Card className="p-5">
+          <CardTitle className="mb-4 flex items-center gap-2">⭐ Time Principal</CardTitle>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+            {(favoriteMascots as Array<{
+              id: string; pokemonId: number; nickname: string | null;
+              level: number; mood: string; isEquipped: boolean; isShiny: boolean;
+            }>).map((m) => {
+              const element = getPokemonElement(m.pokemonId);
+              const name = m.nickname ?? getPokemonName(m.pokemonId);
+              const TYPE_LABELS: Record<string, string> = {
+                normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama",
+                electric:"Elétrico", psychic:"Psíquico", fighting:"Lutador",
+                dark:"Noturno", steel:"Metal", dragon:"Dragão", fairy:"Fada",
+                ghost:"Fantasma", poison:"Venenoso", ground:"Terra",
+                rock:"Pedra", flying:"Voador", bug:"Inseto", ice:"Gelo",
+              };
+              return (
+                <div key={m.id} className="flex flex-col items-center gap-1.5 rounded-xl border border-border/60 bg-slate-900/50 p-2.5 text-center">
+                  {/* Static sprite — sem GIF */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={getStaticSpriteUrl(m.pokemonId)}
+                    alt={name}
+                    className="h-12 w-12 object-contain"
+                    style={{ imageRendering: "pixelated" }}
+                    loading="lazy"
+                  />
+                  <p className="w-full truncate text-[11px] font-semibold text-slate-200 leading-tight">{name}</p>
+                  <p className="text-[10px] text-slate-500">Nv.{m.level}</p>
+                  <p className="text-[10px] text-slate-600">{TYPE_LABELS[element] ?? element}</p>
+                  <p className="text-[10px]">{MOOD_EMOJI[m.mood] ?? ""}</p>
+                  {m.isEquipped && (
+                    <span className="rounded-full bg-[#FFCB05]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">★</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </Card>
-      )}
-      {equippedMascot && (
-        <MascotProfileCard
-          mascot={{
-            id: equippedMascot.id,
-            pokemonId: equippedMascot.pokemonId,
-            nickname: equippedMascot.nickname,
-            level: equippedMascot.level,
-            exp: equippedMascot.exp,
-            happiness: equippedMascot.happiness,
-            mood: equippedMascot.mood,
-            personality: equippedMascot.personality,
-            isEquipped: equippedMascot.isEquipped,
-            statForce: equippedMascot.statForce,
-            statAgility: equippedMascot.statAgility,
-            statCharisma: equippedMascot.statCharisma,
-            statInstinct: equippedMascot.statInstinct,
-            statVitality: equippedMascot.statVitality,
-            battleWins: equippedMascot.battleWins,
-            battleLosses: equippedMascot.battleLosses,
-            hatchedAt: equippedMascot.hatchedAt,
-            lastInteractedAt: equippedMascot.lastInteractedAt,
-            lastFedAt: equippedMascot.lastFedAt,
-            events: equippedMascot.events,
-            activeExpedition: equippedMascot.expeditions[0] ?? null,
-            relations: equippedMascot.relationsAsA.map(r => ({
-              id: r.id,
-              type: r.type,
-              wins: r.wins,
-              losses: r.losses,
-              otherMascot: {
-                id: r.mascotB.id,
-                pokemonId: r.mascotB.pokemonId,
-                nickname: r.mascotB.nickname,
-                player: { displayName: r.mascotB.player.displayName },
-              }
-            })),
-          }}
-          isOwner={isSelf}
-          isAdmin={isAdminUser}
-        />
       )}
 
       {isAdminUser && (

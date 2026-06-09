@@ -159,7 +159,7 @@ function BankRow({
                   Completo
                 </button>
               </div>
-              <div className={`px-2 pb-2 ${view === "full" ? "" : "max-h-[420px] overflow-hidden"}`}>
+              <div className="px-2 pb-2">
                 <MascotCard
                   mascot={{ ...fullData, hasFood, hasSweet }}
                   isAdmin={isAdmin}

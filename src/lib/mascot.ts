@@ -4,12 +4,11 @@
 
 import { prisma } from "@/lib/prisma";
 import {
-  EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
+  EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expForLevel, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
-import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 
@@ -27,9 +26,27 @@ function randomPersonality(): MascotPersonality {
   return randomFrom([...PERSONALITIES]) as MascotPersonality;
 }
 
-/** Sorteio de pokemonId a partir do tipo de ovo. */
+/** Sorteio de pokemonId a partir do tipo de ovo */
 export function rollPokemonFromEgg(eggType: string): number {
-  return rollPokemonIdFromEgg(eggType);
+  // Pool aleatório (COMMON sem gen específica) = todas as 9 gerações
+  const pool = eggType === "COMMON" || eggType === "EVENT"
+    ? (EGG_POOLS.RANDOM.length > 0 ? EGG_POOLS.RANDOM : EGG_POOLS.COMMON)
+    : (EGG_POOLS[eggType] ?? EGG_POOLS.RANDOM);
+
+  // Chance lendaria por raridade. SPECIAL e RARE custam mais e devem parecer especiais.
+  // SPECIAL: 6% | RARE: 3% | GEN eggs: 1% | COMMON: 1% | EVENT: 0.3%
+  const legendaryChance =
+    eggType === "SPECIAL" ? 0.06 :
+    eggType === "RARE" ? 0.03 :
+    eggType.startsWith("EGG_GEN") ? 0.01 :
+    eggType === "COMMON" ? 0.01 :   // modo aleatório: +1% de bônus
+    0.003;
+
+  if (Math.random() < legendaryChance) {
+    return randomFrom(LEGENDARY_POOL);
+  }
+
+  return randomFrom(pool);
 }
 
 // ── Incubação ─────────────────────────────────────────────────────────────────
@@ -340,26 +357,17 @@ export async function interactWithMascot(
   if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode receber interações.");
 
   const now = new Date();
-  // Documento 3: carinho e brincar deixam de ser clicker rápido.
-  // Comida e doce continuam livres de cooldown para não travar o cuidado básico.
-  const INTERACTION_COOLDOWN_MS: Record<InteractionType, number> = {
-    PET: 25 * 60 * 1000,
-    PLAY: 45 * 60 * 1000,
-    FEED_FOOD: 0,
-    FEED_SWEET: 0,
-  };
-  const cooldownMs = INTERACTION_COOLDOWN_MS[type] ?? 0;
+  const PLAY_COOLDOWN_MS = 45 * 60 * 1000;
+  const PET_COOLDOWN_MS = 25 * 60 * 1000;
+  const cooldownMs = type === "PLAY" ? PLAY_COOLDOWN_MS : type === "PET" ? PET_COOLDOWN_MS : 0;
+
   if (!skipCooldown && cooldownMs > 0 && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < cooldownMs) {
     const remaining = Math.ceil((cooldownMs - (now.getTime() - mascot.lastInteractedAt.getTime())) / 60_000);
-    return {
-      success: false,
-      message: `Espere mais ${remaining} min antes dessa interação. Carinho e brincadeira agora têm ritmos diferentes para valorizar o cuidado diário.`,
-      happinessChange: 0,
-      expGained: 0,
-    };
+    const actionName = type === "PLAY" ? "brincar" : "fazer carinho";
+    return { success: false, message: `Espere mais ${remaining} min antes de ${actionName} novamente.`, happinessChange: 0, expGained: 0 };
   }
   // Verifica se um rival travou as interações
-  if (mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
+  if (type !== "FEED_FOOD" && type !== "FEED_SWEET" && mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
     const remaining = Math.ceil((mascot.socialCooldownUntil.getTime() - now.getTime()) / 60_000);
     return { success: false, message: `Um rival atordoou este mascote! Interações travadas por mais ${remaining} min.`, happinessChange: 0, expGained: 0, refused: true };
   }
@@ -375,43 +383,40 @@ export async function interactWithMascot(
 
   switch (type) {
     case "PLAY": {
-      // Brincar: ação de energia. Mais EXP que carinho, mas com cooldown maior.
-      const baseHappy = 8 + Math.min(4, lvlBonus);
-      const personalityHappy = mascot.personality === "PLAYFUL" ? 3 : 0;
-      const vitalityComfort = mascot.statVitality >= 35 || mascot.statAgility >= 35;
-      const shouldTire = mascot.personality === "LAZY" && !vitalityComfort;
-      const playExp = 12 + Math.min(8, lvlBonus * 2);
-      const playExpWithPersonality = mascot.personality === "PLAYFUL" ? Math.round(playExp * 1.1) : playExp;
-
-      happinessChange = baseHappy + personalityHappy;
-      expGained = playExpWithPersonality;
-      newMood = shouldTire ? "TIRED" : mascot.personality === "ELECTRIC" ? "EXCITED" : "HAPPY";
-      message = shouldTire
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} brincou, mas ficou cansado. (+${happinessChange} felicidade, +${expGained} EXP)`
-        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gastou energia brincando! (+${happinessChange} felicidade, +${expGained} EXP)`;
+      // PLAY: +8 base → cresce com nível. Brincalhão tem bônus extra.
+      const playHappy = 8 + lvlBonus * 2 + (mascot.personality === "PLAYFUL" ? 3 : 0);
+      const playExp   = EXP_REWARDS.PLAY_WITH + lvlBonus * 3;
+      happinessChange = playHappy;
+      expGained = playExp;
+      newMood = mascot.personality === "LAZY" ? "TIRED" : "HAPPY";
+      message = mascot.personality === "LAZY"
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é preguiçoso — brincou um pouco mas logo cansou. (+${playHappy} felicidade)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} adorou brincar! (+${playHappy} felicidade, +${playExp} EXP)`;
       break;
     }
     case "PET": {
+      if (mascot.personality === "TIMID" && mascot.happiness < 40) {
+        refused = true;
+        message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
+        break;
+      }
       if (mascot.mood === "ANGRY") {
         refused = true;
         message = `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
         break;
       }
-      // Carinho: ação emocional/social. Ajuda mascotes tímidos sem bloquear demais.
-      const timidPenalty = mascot.personality === "TIMID" && mascot.happiness < 40 ? -2 : 0;
-      const proudMoodBonus = mascot.personality === "PROUD" && mascot.happiness >= 60 ? 1 : 0;
-      const petHappy = Math.max(3, 5 + Math.min(3, Math.floor(mascot.level / 20)) + (mascot.personality === "LOYAL" ? 2 : 0) + proudMoodBonus + timidPenalty);
-      const petExp = 5 + Math.min(3, Math.floor(mascot.level / 20));
+      // PET é mais gentil que PLAY: menos felicidade base, mas cresce mais com nível
+      // Razão: Carinho fortalece vínculo gradualmente; brincar é mais intenso
+      const petHappy = 5 + lvlBonus + (mascot.personality === "LOYAL" ? 2 : 0);
+      const petExp   = EXP_REWARDS.PET + lvlBonus;
       happinessChange = petHappy;
       expGained = petExp;
       newMood = mascot.happiness + petHappy >= 80 ? "HAPPY" :
                 mascot.mood === "TIRED" ? "NEUTRAL" :
                 mascot.mood === "NEEDY" ? "NEUTRAL" : undefined;
-      message = mascot.personality === "TIMID" && mascot.happiness < 40
-        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ainda é tímido, mas aceitou um carinho cuidadoso. 💛 (+${petHappy} felicidade, +${petExp} EXP)`
-        : mascot.personality === "PROUD"
-          ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${petExp} EXP)`
-          : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho! 💛 (+${petHappy} felicidade, +${petExp} EXP)`;
+      message = mascot.personality === "PROUD"
+        ? `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aceitou o carinho com dignidade! 👑 (+${petHappy} felicidade, +${petExp} EXP)`
+        : `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} gostou do carinho! 💛 (+${petHappy} felicidade, +${petExp} EXP)`;
       break;
     }
 
@@ -1005,6 +1010,16 @@ async function logEvent(mascotId: string, emoji: string, description: string) {
   await prisma.mascotEvent.create({ data: { mascotId, emoji, description } }).catch(() => {});
 }
 
+/**
+ * Versão probabilística para eventos puramente cosméticos/narrativos
+ * (sem efeito real no jogo). Reduz writes sem perder eventos importantes.
+ * Grava apenas 1 em cada 3 chamadas.
+ */
+async function logEventMaybe(mascotId: string, emoji: string, description: string) {
+  if (Math.random() > 0.33) return; // pula ~67% das vezes
+  await prisma.mascotEvent.create({ data: { mascotId, emoji, description } }).catch(() => {});
+}
+
 // ── Efeito do resultado da partida do treinador ───────────────────────────────
 
 export async function applyMatchResultToMascot(playerId: string, won: boolean): Promise<void> {
@@ -1443,8 +1458,8 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
         ]);
         const msg = pickText(SOCIAL_TEXTS.ally_cheer, aName, bName);
         await Promise.all([
-          logEvent(a.id, "💚", msg),
-          logEvent(partner.id, "💚", pickText(SOCIAL_TEXTS.ally_cheer, bName, aName)),
+          logEventMaybe(a.id, "💚", msg),
+          logEventMaybe(partner.id, "💚", pickText(SOCIAL_TEXTS.ally_cheer, bName, aName)),
         ]);
         summary.friendships++;
         summary.events.push(`💚 ${aName} e ${bName} interagiram!`);
@@ -1565,9 +1580,12 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       rivalEvent = pickText(SOCIAL_TEXTS.rival_general, aName, bName);
     }
 
+    // Eventos com efeito real já foram logados acima; aqui chegam apenas cosméticos
+    const hasRealEffect = eventRoll < 0.65 || (isArchRival && eventRoll < 0.75);
+    const logFn = hasRealEffect ? logEvent : logEventMaybe;
     await Promise.all([
-      logEvent(rel.mascotA.id, "😤", rivalEvent).catch(() => {}),
-      logEvent(rel.mascotB.id, "😤", rivalEvent).catch(() => {}),
+      logFn(rel.mascotA.id, "😤", rivalEvent).catch(() => {}),
+      logFn(rel.mascotB.id, "😤", rivalEvent).catch(() => {}),
     ]);
     await prisma.mascotRelation.update({
       where: { id: rel.id },
@@ -1761,9 +1779,13 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       allyEvent = pickText(SOCIAL_TEXTS.ally_general, aName, bName);
     }
 
+    // Eventos com efeito real (presentes, redução de repouso, boost de EXP) sempre logam
+    // Eventos cosméticos (best_friend_general, ally_general) usam logEventMaybe
+    const allyHasEffect = eventRoll < 0.50;
+    const allyLogFn = allyHasEffect ? logEvent : logEventMaybe;
     await Promise.all([
-      logEvent(rel.mascotA.id, isBestFriend ? "💛" : "💚", allyEvent).catch(() => {}),
-      logEvent(rel.mascotB.id, isBestFriend ? "💛" : "💚", allyEvent).catch(() => {}),
+      allyLogFn(rel.mascotA.id, isBestFriend ? "💛" : "💚", allyEvent).catch(() => {}),
+      allyLogFn(rel.mascotB.id, isBestFriend ? "💛" : "💚", allyEvent).catch(() => {}),
     ]);
     await prisma.mascotRelation.update({
       where: { id: rel.id },
@@ -1805,26 +1827,20 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
   await logEvent(mascotId, "🛡️", "Política de Fraqueza equipada! Estará protegido contra ataques oportunistas.");
 }
 
-/** Cesta de Piquenique Chocante: bônus EXP+felicidade por 2h para a Equipe Favorita */
+/** Cesta de Piquenique Chocante: bônus EXP+felicidade em interações por 2h para equipe equipada */
 export async function applyPicnicBasket(playerId: string) {
-  const favoriteMascots = await prisma.mascot.findMany({
-    where: { playerId, isFavorite: true, arenaState: "FREE" },
-    orderBy: [{ isEquipped: "desc" }, { level: "desc" }, { hatchedAt: "asc" }],
-    take: 6,
+  const equippedMascots = await prisma.mascot.findMany({
+    where: { playerId, isEquipped: true, arenaState: "FREE" }
   });
-
-  if (favoriteMascots.length === 0) {
-    throw new Error("Nenhum mascote da Equipe Favorita livre encontrado. Favorite até 6 mascotes antes de usar a Cesta de Piquenique.");
-  }
-
+  if (equippedMascots.length === 0) throw new Error("Nenhum mascote equipado e livre encontrado.");
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
   await prisma.mascotBuff.createMany({
-    data: favoriteMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
+    data: equippedMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
   });
-  for (const m of favoriteMascots) {
-    await logEvent(m.id, "🧺⚡", "Piquenique Chocante com a Equipe Favorita! Bônus de EXP e felicidade por 2h durante interações.");
+  for (const m of equippedMascots) {
+    await logEvent(m.id, "🧺⚡", "Piquenique Chocante! Bônus de EXP e felicidade por 2h durante interações.");
   }
-  return favoriteMascots.length;
+  return equippedMascots.length;
 }
 
 /** Ticket de Férias: envia Pokémon com o Professor Carvalho por 7 dias */
