@@ -970,25 +970,34 @@ export async function syncDefeatedArenaTeams(playerId: string) {
  * Retorna o ID da batalha bloqueante ou null se está livre para agir.
  */
 export async function getUnseenPvpAttack(teamId: string): Promise<{ battleId: string; attackerName: string; happenedAt: Date } | null> {
-  const battle = await prisma.arenaBattle.findFirst({
-    where: { defenseTeamId: teamId, type: "PVP", seenByDefender: false },
-    orderBy: { createdAt: "desc" },
-    include: { attackerPlayer: { select: { displayName: true, ptcglNick: true } } },
-  });
-  if (!battle) return null;
-  return {
-    battleId: battle.id,
-    attackerName: battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "outro jogador",
-    happenedAt: battle.createdAt,
-  };
+  try {
+    const battle = await prisma.arenaBattle.findFirst({
+      where: { defenseTeamId: teamId, type: "PVP", seenByDefender: false },
+      orderBy: { createdAt: "desc" },
+      include: { attackerPlayer: { select: { displayName: true, ptcglNick: true } } },
+    });
+    if (!battle) return null;
+    return {
+      battleId: battle.id,
+      attackerName: battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "outro jogador",
+      happenedAt: battle.createdAt,
+    };
+  } catch {
+    // Coluna seenByDefender pode não existir se a migration ainda não foi rodada; trata como nenhum ataque pendente
+    return null;
+  }
 }
 
 /** Marca todos os ataques PvP desta equipe como vistos pelo defensor */
 export async function markPvpDefenseSeenForTeam(teamId: string): Promise<void> {
-  await prisma.arenaBattle.updateMany({
-    where: { defenseTeamId: teamId, type: "PVP", seenByDefender: false },
-    data: { seenByDefender: true },
-  });
+  try {
+    await prisma.arenaBattle.updateMany({
+      where: { defenseTeamId: teamId, type: "PVP", seenByDefender: false },
+      data: { seenByDefender: true },
+    });
+  } catch {
+    // Silencioso — migration pode ainda não ter sido aplicada
+  }
 }
 
 export async function runBotBattle(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {

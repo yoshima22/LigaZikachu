@@ -114,12 +114,12 @@ export async function claimArenaTutorialBonusAction(): Promise<{ error?: string;
   }
 }
 
-export async function runBotBattleAction(teamId: string, difficulty: ArenaDifficulty = "normal", teamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
+export async function runBotBattleAction(teamId: string, difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof runBotBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();
-    // Verifica se a equipe foi atacada desde o último carregamento do cliente
-    const stale = await checkTeamStaleFromIncomingAttack(playerId, teamId, teamKnownUpdatedAt);
-    if (stale) return { stale };
+    // Nota: NÃO fazemos checkTeamStaleFromIncomingAttack aqui porque lockBotAction
+    // já o fez E porque o próprio lockBot muda updatedAt, causando falso positivo.
+    // O bloqueio por PvP não-visto é tratado dentro de runBotBattle via getUnseenPvpAttack.
     const result = await runBotBattle(playerId, teamId, difficulty);
     // Não revalidamos aqui para que o modal de resultado/animação permaneça aberto.
     // O router.refresh() é chamado pelo cliente ao fechar o modal.
@@ -147,12 +147,12 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
   }
 }
 
-export async function retireArenaTeamAction(teamId: string, teamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice }> {
+export async function retireArenaTeamAction(teamId: string): Promise<{ error?: string; stale?: ArenaStaleNotice }> {
   try {
     const playerId = await getCurrentPlayerId();
-    // Verifica ataque PvP pendente antes de permitir saída
-    const stale = await checkTeamStaleFromIncomingAttack(playerId, teamId, teamKnownUpdatedAt);
-    if (stale) return { stale };
+    // Nota: NÃO fazemos checkTeamStaleFromIncomingAttack aqui — qualquer PvE anterior
+    // muda updatedAt e causaria falso positivo. O bloqueio por PvP não-visto é tratado
+    // dentro de retireArenaTeam via getUnseenPvpAttack (throw com unseenPvp).
     await retireArenaTeam(playerId, teamId);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");

@@ -414,7 +414,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
                 const lockResult = await lockBotAction(teamId, difficulty, teamUpdatedAt);
                 if (lockResult.stale) { setStaleNotice(lockResult.stale); toast.error("Voce foi atacado antes desta acao."); return; }
                 if (lockResult.error) { toast.error(lockResult.error); return; }
-                const response = await runBotBattleAction(teamId, difficulty, teamUpdatedAt);
+                const response = await runBotBattleAction(teamId, difficulty);
                 if (response.stale) { setStaleNotice(response.stale); toast.error("Voce foi atacado antes desta acao."); return; }
                 if (response.error) { toast.error(response.error); return; }
                 if (response.result) {
@@ -589,7 +589,7 @@ export function RetireTeamButton({ teamId, defeated = false, teamUpdatedAt }: { 
   const handleRetire = () => {
     if (!confirm(defeated ? "Coletar o cofre restante desta equipe derrotada?" : "Retirar equipe da Arena e coletar o cofre agora?")) return;
     startTransition(async () => {
-      const r = await retireArenaTeamAction(teamId, teamUpdatedAt);
+      const r = await retireArenaTeamAction(teamId);
       if (r.stale) { setStaleNotice(r.stale); toast.error("Voce foi atacado antes de sair. Veja o combate primeiro."); return; }
       if (r.error) { toast.error(r.error); return; }
       toast.success(defeated ? "Cofre restante coletado." : "Equipe retirada e cofre coletado.");
