@@ -371,7 +371,12 @@ export default async function MascotesPage() {
       />
 
       {/* Ações em massa da Equipe Favorita */}
-      {favoriteMascotCount > 0 && <BulkInteractPanel scope="FAVORITES" />}
+      {favoriteMascotCount > 0 && (
+        <BulkInteractPanel
+          scope="FAVORITES"
+          mascotIds={featuredMascots.filter(m => m.isFavorite).map(m => m.id)}
+        />
+      )}
 
       {/* Meus Mascotes com paginação e filtros */}
       <div className="space-y-4">

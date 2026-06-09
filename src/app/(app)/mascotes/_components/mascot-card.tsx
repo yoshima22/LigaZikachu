@@ -82,10 +82,33 @@ interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; 
 const _playedAt = new Map<string, number>(); // mascotId → timestamp ms
 const _pettedAt = new Map<string, number>();
 
-/** Marca que o mascote acabou de brincar (usado pelo BulkInteractPanel também) */
+const PLAY_CD_MS = 45 * 60 * 1000;
+const PET_CD_MS  = 25 * 60 * 1000;
+
+/** Marca que o mascote acabou de brincar */
 export function markPlayed(mascotId: string) { _playedAt.set(mascotId, Date.now()); }
-/** Marca que o mascote acabou de receber carinho (usado pelo BulkInteractPanel também) */
+/** Marca que o mascote acabou de receber carinho */
 export function markPetted(mascotId: string) { _pettedAt.set(mascotId, Date.now()); }
+/** Verifica se brincar está em cooldown agora */
+export function isPlayOnCooldown(mascotId: string, nowMs: number): boolean {
+  const t = _playedAt.get(mascotId) ?? 0;
+  return t > 0 && t + PLAY_CD_MS > nowMs;
+}
+/** Verifica se carinho está em cooldown agora */
+export function isPetOnCooldown(mascotId: string, nowMs: number): boolean {
+  const t = _pettedAt.get(mascotId) ?? 0;
+  return t > 0 && t + PET_CD_MS > nowMs;
+}
+/** Tempo restante de cooldown de brincar em ms */
+export function playRemainingMs(mascotId: string, nowMs: number): number {
+  const t = _playedAt.get(mascotId) ?? 0;
+  return Math.max(0, t + PLAY_CD_MS - nowMs);
+}
+/** Tempo restante de cooldown de carinho em ms */
+export function petRemainingMs(mascotId: string, nowMs: number): number {
+  const t = _pettedAt.get(mascotId) ?? 0;
+  return Math.max(0, t + PET_CD_MS - nowMs);
+}
 
 // Tooltip component
 function Tip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -278,8 +301,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   }, []);
 
   // Cooldowns independentes — lidos do Map de módulo (sobrevive a remounts)
-  const playEndMs = (_playedAt.get(mascot.id) ?? 0) + 45 * 60 * 1000;
-  const petEndMs  = (_pettedAt.get(mascot.id) ?? 0) + 25 * 60 * 1000;
+  const playEndMs = (_playedAt.get(mascot.id) ?? 0) + PLAY_CD_MS;
+  const petEndMs  = (_pettedAt.get(mascot.id) ?? 0) + PET_CD_MS;
   const playOnCooldown = (_playedAt.get(mascot.id) ?? 0) > 0 && playEndMs > nowMs;
   const petOnCooldown  = (_pettedAt.get(mascot.id) ?? 0) > 0 && petEndMs  > nowMs;
   const playCooldownRemaining = Math.max(0, playEndMs - nowMs);
