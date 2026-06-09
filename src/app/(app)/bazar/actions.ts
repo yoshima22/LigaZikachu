@@ -132,7 +132,7 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
 
 // ── Buscar listagens ──────────────────────────────────────────────────────────
 
-export const LISTINGS_PAGE_SIZE = 12;
+const LISTINGS_PAGE_SIZE = 12;
 
 export async function getListings(filters?: {
   category?: BazarItemCategory;
