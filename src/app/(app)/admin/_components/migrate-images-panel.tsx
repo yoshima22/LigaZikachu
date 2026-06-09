@@ -13,6 +13,7 @@ export function MigrateImagesPanel() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<MigrateResult[] | null>(null);
   const [summary, setSummary] = useState<{ ok: number; errors: number; dry: boolean } | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const run = async (dry: boolean) => {
     if (!dry && !confirm(
@@ -22,13 +23,16 @@ export function MigrateImagesPanel() {
     setLoading(true);
     setResults(null);
     setSummary(null);
+    setApiError(null);
 
     try {
       const res = await fetch(`/api/admin/migrate-images${dry ? "?dry=1" : ""}`, { method: "POST" });
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error ?? "Erro na migração");
+        const msg = data.error ?? `Erro HTTP ${res.status}`;
+        toast.error(msg);
+        setApiError(msg);
         return;
       }
 
@@ -41,7 +45,9 @@ export function MigrateImagesPanel() {
         toast.success(`Migração concluída: ${data.ok} migrados, ${data.errors} erros`);
       }
     } catch (err) {
-      toast.error("Erro de rede: " + String(err));
+      const msg = "Erro de rede: " + String(err);
+      toast.error(msg);
+      setApiError(msg);
     } finally {
       setLoading(false);
     }
@@ -81,6 +87,14 @@ export function MigrateImagesPanel() {
           Migrar de verdade
         </Button>
       </div>
+
+      {apiError && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300 space-y-1">
+          <p className="font-semibold">❌ Erro ao chamar a API:</p>
+          <p className="font-mono break-all">{apiError}</p>
+          <p className="text-red-400/70 mt-1">Verifique se o <code>SUPABASE_SERVICE_ROLE_KEY</code> está configurado no Vercel e se você está logado como admin.</p>
+        </div>
+      )}
 
       {summary && (
         <div className={`rounded-xl border px-4 py-2.5 text-xs font-semibold ${summary.errors > 0 ? "border-red-500/20 bg-red-500/5 text-red-300" : "border-green-500/20 bg-green-500/5 text-green-300"}`}>

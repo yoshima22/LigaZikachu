@@ -41,6 +41,31 @@ function base64ToBuffer(dataUrl: string): { buffer: Buffer; mimeType: string; ex
   return { buffer: Buffer.from(match[2], "base64"), mimeType, ext };
 }
 
+export async function GET(req: NextRequest) {
+  if (!(await checkAdmin()))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Diagnóstico rápido — conta quantos registros têm base64
+  const [shopBase64, shopNull, shopUrl, packsBase64, packsNull, packsUrl] = await Promise.all([
+    prisma.shopItem.count({ where: { imageUrl: { startsWith: "data:" } } }),
+    prisma.shopItem.count({ where: { imageUrl: null } }),
+    prisma.shopItem.count({ where: { AND: [{ imageUrl: { not: null } }, { NOT: { imageUrl: { startsWith: "data:" } } }] } }),
+    prisma.stickerPack.count({ where: { imageUrl: { startsWith: "data:" } } }),
+    prisma.stickerPack.count({ where: { imageUrl: null } }),
+    prisma.stickerPack.count({ where: { AND: [{ imageUrl: { not: null } }, { NOT: { imageUrl: { startsWith: "data:" } } }] } }),
+  ]);
+
+  const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  return NextResponse.json({
+    diagnostic: true,
+    env: { SUPABASE_SERVICE_ROLE_KEY: hasServiceKey ? "✅ configurada" : "❌ AUSENTE" },
+    shop_items: { base64: shopBase64, null: shopNull, url: shopUrl },
+    sticker_packs: { base64: packsBase64, null: packsNull, url: packsUrl },
+    total_to_migrate: shopBase64 + packsBase64,
+  });
+}
+
 export async function POST(req: NextRequest) {
   if (!(await checkAdmin()))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
