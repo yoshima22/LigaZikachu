@@ -6,8 +6,16 @@ import { prisma } from "@/lib/prisma";
 import { Trophy } from "lucide-react";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
+import { unstable_cache } from "next/cache";
 
-export const dynamic = "force-dynamic";
+// Ranking cacheado por 5 minutos por seasonId.
+// Revalidado explicitamente via revalidateTag("ranking") em partidas/actions.ts.
+// Substitui force-dynamic (que recalculava tudo a cada visita).
+const getCachedRanking = unstable_cache(
+  (seasonId: string) => computeGlobalRanking(seasonId || undefined),
+  ["global-ranking"],
+  { revalidate: 300, tags: ["ranking"] }, // 5 min ou invalidação por tag
+);
 
 export default async function RankingPage({
   searchParams
@@ -20,7 +28,7 @@ export default async function RankingPage({
     orderBy: { startDate: "desc" }
   });
   const selectedSeasonId = seasonId && seasons.some((season) => season.id === seasonId) ? seasonId : "";
-  const ranking = await computeGlobalRanking(selectedSeasonId || undefined);
+  const ranking = await getCachedRanking(selectedSeasonId);
 
   return (
     <div className="space-y-6">

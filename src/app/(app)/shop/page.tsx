@@ -26,7 +26,13 @@ export default async function ShopPage() {
     player ? getOrCreateWallet(player.id) : null,
     prisma.shopItem.findMany({
       where: { active: true },
-      orderBy: [{ type: "asc" }, { rarity: "asc" }, { price: "asc" }]
+      orderBy: [{ type: "asc" }, { rarity: "asc" }, { price: "asc" }],
+      // select explícito: exclui flavorText (@db.Text), entranceEffect e metadata do payload da listagem
+      select: {
+        id: true, type: true, name: true, description: true, imageUrl: true,
+        rarity: true, price: true, sortOrder: true, theme: true,
+        metadata: true, flavorText: true, entranceEffect: true,
+      },
     }),
     player
       ? prisma.playerInventory.findMany({

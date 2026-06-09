@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { RefreshCw } from "lucide-react";
 
 const WATCHED_TABLES = [
   "bazar_listings",
@@ -11,9 +12,16 @@ const WATCHED_TABLES = [
   "miauvadao_config",
 ] as const;
 
+/**
+ * Substitui o router.refresh() automático por badge manual.
+ * Antes: qualquer evento disparava router.refresh() após 450ms, recarregando o Bazar inteiro.
+ * Agora: badge "Há novidades no Bazar" — o usuário atualiza quando quiser.
+ */
 export function BazarLiveRefresh() {
   const router = useRouter();
-  const refreshTimer = useRef<number | null>(null);
+  const [hasUpdates, setHasUpdates] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -21,42 +29,51 @@ export function BazarLiveRefresh() {
     if (!supabaseUrl || !supabaseAnonKey) return;
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 6,
-        },
-      },
+      auth: { autoRefreshToken: false, persistSession: false },
+      realtime: { params: { eventsPerSecond: 2 } },
     });
 
-    const scheduleRefresh = () => {
+    const scheduleFlag = () => {
       if (document.visibilityState !== "visible") return;
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-      refreshTimer.current = window.setTimeout(() => {
-        router.refresh();
-      }, 450);
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      // Apenas sinaliza novidades, NÃO dispara router.refresh() automaticamente
+      debounceTimer.current = setTimeout(() => setHasUpdates(true), 2000);
     };
 
     const channel = WATCHED_TABLES.reduce(
-      (currentChannel, table) =>
-        currentChannel.on(
-          "postgres_changes",
-          { event: "*", schema: "public", table },
-          scheduleRefresh,
-        ),
-      supabase.channel("bazar-live-refresh"),
+      (ch, table) =>
+        ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
+      supabase.channel("bazar-live-badge"),
     );
 
     channel.subscribe();
 
     return () => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
       void supabase.removeChannel(channel);
     };
-  }, [router]);
+  }, []);
 
-  return null;
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setHasUpdates(false);
+    router.refresh();
+    setTimeout(() => setRefreshing(false), 1500);
+  };
+
+  if (!hasUpdates) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
+      <button
+        type="button"
+        onClick={handleRefresh}
+        disabled={refreshing}
+        className="flex items-center gap-2 rounded-xl border border-yellow-500/40 bg-slate-900/95 px-4 py-2.5 text-sm font-semibold text-yellow-300 shadow-xl backdrop-blur-sm hover:bg-slate-800 transition-colors disabled:opacity-60"
+      >
+        <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+        {refreshing ? "Atualizando…" : "🏪 Há novidades no Bazar"}
+      </button>
+    </div>
+  );
 }

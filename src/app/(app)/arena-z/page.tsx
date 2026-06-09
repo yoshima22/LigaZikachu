@@ -170,7 +170,10 @@ export default async function ArenaZPage() {
     }),
     prisma.arenaTeam.findMany({
       where: { playerId: player.id },
-      include: { members: { include: { mascot: true }, orderBy: { slot: "asc" } } },
+      include: { members: {
+        include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, arenaState: true, restingUntil: true, isShiny: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true } } },
+        orderBy: { slot: "asc" }
+      }},
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
@@ -183,7 +186,10 @@ export default async function ArenaZPage() {
       },
       include: {
         player: { select: { displayName: true, ptcglNick: true } },
-        members: { include: { mascot: true }, orderBy: { slot: "asc" } },
+        members: {
+          include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, arenaState: true, restingUntil: true, isShiny: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true } } },
+          orderBy: { slot: "asc" }
+        },
       },
       orderBy: { updatedAt: "desc" },
       take: 20,

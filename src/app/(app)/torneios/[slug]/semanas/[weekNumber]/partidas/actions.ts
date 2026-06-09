@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { MatchStatus, ResultSource, Role, TournamentFormat, ZikaCoinTxType, type Prisma } from "@prisma/client";
@@ -328,7 +328,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
 
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
-    revalidatePath("/ranking");
+    revalidatePath("/ranking"); revalidateTag("ranking");
     revalidatePath("/dashboard");
     revalidatePath("/", "layout");
     return { success: true, confirmed: true };
@@ -885,7 +885,7 @@ export async function confirmAllWeekResults(
     revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
     revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
     revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
-    revalidatePath("/ranking");
+    revalidatePath("/ranking"); revalidateTag("ranking");
     revalidatePath("/dashboard");
     revalidatePath("/", "layout");
 

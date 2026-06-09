@@ -40,7 +40,9 @@ export default async function AlbumPage({
       },
       orderBy: [{ generation: "asc" }, { nationalId: "asc" }],
       skip: (currentPage - 1) * PAGE_SIZE,
-      take: PAGE_SIZE
+      take: PAGE_SIZE,
+      // select explícito: exclui active, createdAt — campos de auditoria não usados na listagem
+      select: { id: true, nationalId: true, name: true, displayName: true, generation: true, types: true, rarity: true, imageUrl: true },
     }),
     player
       ? prisma.playerSticker.findMany({
