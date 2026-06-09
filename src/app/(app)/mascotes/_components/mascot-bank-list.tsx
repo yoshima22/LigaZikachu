@@ -144,16 +144,20 @@ function BankRow({
   const [fullData, setFullData] = useState<FullMascotData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const handleExpand = useCallback(() => {
-    if (open) { setOpen(false); return; }
-    setOpen(true);
-    if (fullData) return;
+  const fetchFull = useCallback(() => {
     startLoading(async () => {
       const res = await getMascotDetailAction(mascot.id);
       if (res.error || !res.data) { setLoadError(res.error ?? "Erro ao carregar."); return; }
       setFullData(res.data);
     });
-  }, [open, fullData, mascot.id]);
+  }, [mascot.id]);
+
+  const handleExpand = useCallback(() => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (fullData) return;
+    fetchFull();
+  }, [open, fullData, fetchFull]);
 
   const name      = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const element   = getPokemonElement(mascot.pokemonId);
@@ -263,6 +267,7 @@ function BankRow({
                   mascot={{ ...fullData, hasFood, hasSweet }}
                   isAdmin={isAdmin}
                   compactView={view === "basic"}
+                  onRefresh={fetchFull}
                 />
               </div>
             </>

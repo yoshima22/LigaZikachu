@@ -76,7 +76,7 @@ interface MascotData {
   otherMascots?: { id: string; name: string }[];
 }
 
-interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean }
+interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; onRefresh?: () => void }
 
 // Tooltip component
 function Tip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -214,7 +214,7 @@ function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date })
   );
 }
 
-export function MascotCard({ mascot, isAdmin = false, compactView = false }: Props) {
+export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
@@ -344,6 +344,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
         if (type === "PET")  setLocalLastPetted(new Date());
         // Re-render server para atualizar inventário e EXP
         router.refresh();
+        onRefresh?.();
       }
     });
   };
