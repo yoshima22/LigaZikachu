@@ -82,6 +82,11 @@ interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; 
 const _playedAt = new Map<string, number>(); // mascotId → timestamp ms
 const _pettedAt = new Map<string, number>();
 
+/** Marca que o mascote acabou de brincar (usado pelo BulkInteractPanel também) */
+export function markPlayed(mascotId: string) { _playedAt.set(mascotId, Date.now()); }
+/** Marca que o mascote acabou de receber carinho (usado pelo BulkInteractPanel também) */
+export function markPetted(mascotId: string) { _pettedAt.set(mascotId, Date.now()); }
+
 // Tooltip component
 function Tip({ text, children }: { text: string; children: React.ReactNode }) {
   return (
@@ -342,8 +347,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         }
         if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
         // Grava no Map de módulo — persiste mesmo que o componente remonte
-        if (type === "PLAY") { _playedAt.set(mascot.id, Date.now()); setNowMs(Date.now()); }
-        if (type === "PET")  { _pettedAt.set(mascot.id, Date.now()); setNowMs(Date.now()); }
+        if (type === "PLAY") { markPlayed(mascot.id); setNowMs(Date.now()); }
+        if (type === "PET")  { markPetted(mascot.id); setNowMs(Date.now()); }
         // Re-render server para atualizar inventário e EXP
         router.refresh();
         onRefresh?.();
@@ -665,31 +670,20 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           </button>
         )}
 
-        {/* Cooldown info */}
-        {(playOnCooldown || petOnCooldown) && (
-          <div className="space-y-0.5 text-center text-[10px] text-slate-600">
-            {petOnCooldown && (
-              <p>Carinho disponível em {formatRemaining(petCooldownRemaining)}</p>
-            )}
-            {playOnCooldown && (
-              <p>Brincar disponível em {formatRemaining(playCooldownRemaining)}</p>
-            )}
-          </div>
-        )}
-
         {/* ── Ações ── */}
         <div className="grid grid-cols-2 gap-1.5">
-          <Tip text={!canPlay ? (mascot.mood === "TIRED" ? "Está cansado demais" : mascot.mood === "ANGRY" ? "Está bravo" : playOnCooldown ? "Brincar ainda está em cooldown" : "Indisponível agora") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP. Cooldown: 45 min." : "Brincar aumenta felicidade e dá 50% de EXP no banco. Cooldown: 45 min."}>
-
+          <Tip text={!canPlay ? (localMood === "TIRED" ? "Está cansado demais" : localMood === "ANGRY" ? "Está bravo" : playOnCooldown ? "Brincar ainda está em cooldown" : "Indisponível agora") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP. Cooldown: 45 min." : "Brincar aumenta felicidade e dá 50% de EXP no banco. Cooldown: 45 min."}>
             <button type="button" disabled={pending || !canPlay} onClick={() => handleInteract("PLAY")}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
-              ⭐ Brincar
+              className="flex w-full flex-col items-center justify-center rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
+              <span>⭐ Brincar</span>
+              {playOnCooldown && <span className="text-[9px] text-slate-500 mt-0.5">{formatRemaining(playCooldownRemaining)}</span>}
             </button>
           </Tip>
-          <Tip text={!canPet ? (mascot.mood === "ANGRY" ? "Está bravo, não quer carinho" : petOnCooldown ? "Carinho ainda está em cooldown" : "Pode recusar o carinho agora") : `Carinho fortalece o vínculo gradualmente. Cooldown: 25 min. Menos intenso que brincar, mas cresce com o nível. Leal ganha bônus. Pode ser recusado por tímidos e bravos.`}>
+          <Tip text={!canPet ? (localMood === "ANGRY" ? "Está bravo, não quer carinho" : petOnCooldown ? "Carinho ainda está em cooldown" : "Pode recusar o carinho agora") : `Carinho fortalece o vínculo gradualmente. Cooldown: 25 min. Menos intenso que brincar, mas cresce com o nível. Leal ganha bônus. Pode ser recusado por tímidos e bravos.`}>
             <button type="button" disabled={pending || !canPet} onClick={() => handleInteract("PET")}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
-              <Heart size={12}/> Carinho
+              className="flex w-full flex-col items-center justify-center rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
+              <span className="flex items-center gap-1"><Heart size={12}/> Carinho</span>
+              {petOnCooldown && <span className="text-[9px] text-slate-500 mt-0.5">{formatRemaining(petCooldownRemaining)}</span>}
             </button>
           </Tip>
           <Tip text={!canFeedFood ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : "Sem comida no estoque") : "Comida sacia por mais tempo — funciona mesmo em expedição"}>
