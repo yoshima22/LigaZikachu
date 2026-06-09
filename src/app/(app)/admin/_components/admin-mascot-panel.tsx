@@ -60,8 +60,9 @@ function CloneSection({ players }: Props) {
     if (!confirm(
       `Clonar ${name} (Nv.${m.level})?\n\n` +
       `• Todos os atributos, nível, personalidade e stats serão copiados.\n` +
+      `• Amigos e rivais serão transferidos para o clone.\n` +
       `• O mascote original será DELETADO e substituído pelo clone.\n` +
-      `• Expedições, relações e eventos NÃO são copiados.`
+      `• Expedições ativas e histórico de eventos NÃO são copiados.`
     )) return;
 
     start(async () => {
@@ -116,8 +117,8 @@ function CloneSection({ players }: Props) {
         return (
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300 space-y-0.5">
             <p className="font-semibold">⚠️ O original será deletado após a clonagem.</p>
-            <p className="text-slate-400">Expedições ativas serão encerradas sem recompensa. Relações e histórico de eventos não são copiados.</p>
-            <p className="text-slate-400">Stats, nível, personalidade, humor, apelido{m.isShiny ? ", ✦ shiny" : ""} serão preservados.</p>
+            <p className="text-slate-400">Expedições ativas serão encerradas sem recompensa. Histórico de eventos não é copiado.</p>
+            <p className="text-slate-400">Stats, nível, personalidade, humor, apelido{m.isShiny ? ", ✦ shiny" : ""}, amigos e rivais serão preservados.</p>
           </div>
         );
       })()}

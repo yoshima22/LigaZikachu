@@ -478,12 +478,19 @@ export async function cloneMascotAction(mascotId: string): Promise<{
         statForce: true, statAgility: true, statCharisma: true,
         statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
+        // Relações para transferir ao clone
+        relationsAsA: {
+          select: { mascotBId: true, type: true, wins: true, losses: true, interactionCount: true },
+        },
+        relationsAsB: {
+          select: { mascotAId: true, type: true, wins: true, losses: true, interactionCount: true },
+        },
       },
     });
     if (!src) return { ok: false, error: "Mascote original não encontrado." };
 
     const created = await prisma.$transaction(async tx => {
-      // 1. Antes de deletar o antigo, fecha expedições ACTIVE para evitar cascade problems
+      // 1. Fecha expedições ACTIVE para evitar cascade problems
       await tx.mascotExpedition.updateMany({
         where: { mascotId, status: "ACTIVE" },
         data: { status: "CLAIMED", rewardJson: { type: "NOTHING", adminClone: true } },
@@ -513,23 +520,42 @@ export async function cloneMascotAction(mascotId: string): Promise<{
         },
       });
 
-      // 3. Log de criação
+      // 3. Transfere relações (amigos/rivais) para o novo ID
+      // relationsAsA: o mascote original era o "A" — recria com o clone como "A"
+      for (const rel of src.relationsAsA) {
+        await tx.mascotRelation.upsert({
+          where:  { mascotAId_mascotBId: { mascotAId: clone.id, mascotBId: rel.mascotBId } },
+          create: { mascotAId: clone.id, mascotBId: rel.mascotBId, type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+          update: { type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+        }).catch(() => null); // ignora se mascotB não existir mais
+      }
+      // relationsAsB: o mascote original era o "B" — recria com o clone como "B"
+      for (const rel of src.relationsAsB) {
+        await tx.mascotRelation.upsert({
+          where:  { mascotAId_mascotBId: { mascotAId: rel.mascotAId, mascotBId: clone.id } },
+          create: { mascotAId: rel.mascotAId, mascotBId: clone.id, type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+          update: { type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+        }).catch(() => null); // ignora se mascotA não existir mais
+      }
+
+      // 4. Log de criação
       await tx.mascotEvent.create({
-        data: { mascotId: clone.id, emoji: "🔧", description: "Mascote recriado pelo admin (clone)." }
+        data: { mascotId: clone.id, emoji: "🔧", description: "Mascote recriado pelo admin (clone). Amigos e rivais preservados." }
       }).catch(() => null);
 
-      // 4. Deleta o original (cascade: expeditions, events, relations, buffs)
+      // 5. Deleta o original (cascade: expeditions, events, relations antigas, buffs)
       await tx.mascot.delete({ where: { id: mascotId } });
 
-      return clone;
+      return { clone, relationsA: src.relationsAsA.length, relationsB: src.relationsAsB.length };
     });
 
     const { getPokemonName } = await import("@/lib/mascot-data");
     const name = src.nickname ?? getPokemonName(src.pokemonId);
+    const totalRels = created.relationsA + created.relationsB;
     return {
       ok: true,
-      newMascotId: created.id,
-      summary: `${name} clonado com sucesso. Novo ID: ${created.id}`,
+      newMascotId: created.clone.id,
+      summary: `${name} clonado com sucesso. ${totalRels} relação(ões) transferida(s). Novo ID: ${created.clone.id}`,
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro" };
