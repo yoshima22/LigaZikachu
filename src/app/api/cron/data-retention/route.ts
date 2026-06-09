@@ -34,10 +34,19 @@ export async function GET(req: NextRequest) {
 
   const results: Record<string, number> = {};
 
-  // 1. MascotEvent — apaga eventos com mais de 7 dias
-  const mascotEventsResult = await prisma.mascotEvent.deleteMany({
-    where: { createdAt: { lt: daysAgo(7) } },
-  }).catch(() => ({ count: 0 }));
+  // 1. MascotEvent — mantém apenas os 4 mais recentes por mascote
+  // Usa SQL direto pois Prisma não suporta DELETE com window functions nativamente
+  const mascotEventsResult = await prisma.$executeRaw`
+    DELETE FROM mascot_events
+    WHERE id NOT IN (
+      SELECT id FROM (
+        SELECT id,
+          ROW_NUMBER() OVER (PARTITION BY "mascotId" ORDER BY "createdAt" DESC) AS rn
+        FROM mascot_events
+      ) ranked
+      WHERE rn <= 4
+    )
+  `.then(count => ({ count })).catch(() => ({ count: 0 }));
   results.mascotEvents = mascotEventsResult.count;
 
   // 2. Sessions expiradas (NextAuth sessions)

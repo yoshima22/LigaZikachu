@@ -46,9 +46,10 @@ export default async function MascotesPage() {
     if (e.imageUrl) eggImageByType[key] = e.imageUrl;
   }
 
-  const [mascots, eggs, incubator, foods, buffInventory] = await Promise.all([
+  const [featuredMascots, bankMascots, eggs, incubator, foods, buffInventory] = await Promise.all([
+    // Equipe Favorita + Companheiro — carrega dados completos (até 6)
     prisma.mascot.findMany({
-      where: { playerId: player.id },
+      where: { playerId: player.id, OR: [{ isFavorite: true }, { isEquipped: true }] },
       include: {
         expeditions: {
           where: { status: "ACTIVE" },
@@ -56,10 +57,7 @@ export default async function MascotesPage() {
           take: 1,
           select: { id: true, finishAt: true, status: true, rewardJson: true }
         },
-        events: {
-          orderBy: { createdAt: "desc" },
-          take: 2
-        },
+        events: { orderBy: { createdAt: "desc" }, take: 4 },
         relationsAsA: {
           include: {
             mascotB: {
@@ -72,7 +70,21 @@ export default async function MascotesPage() {
           take: 5
         }
       },
-      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }]
+      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
+      take: 6,
+    }),
+    // Banco — apenas campos mínimos para exibir a lista leve (detalhes carregados ao clicar)
+    prisma.mascot.findMany({
+      where: { playerId: player.id, isFavorite: false, isEquipped: false },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
+        arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
+        expeditions: {
+          where: { status: "ACTIVE" }, take: 1,
+          select: { id: true, finishAt: true, status: true }
+        },
+      },
+      orderBy: [{ level: "desc" }, { id: "asc" }],
     }),
     prisma.mascotEgg.findMany({
       where: { playerId: player.id, incubation: null },
@@ -93,22 +105,22 @@ export default async function MascotesPage() {
   // com interações do usuário (sobrescreve ganhos de felicidade).
   // recalculateMood é chamado apenas dentro de interactAction (exceto para feed).
 
-  // Buffs ativos (EXP_BOOST, LUCK_BOOST têm duração; os outros são imediatos)
-  const activeMascotBuffs = await prisma.mascotBuff.findMany({
-    where: { mascot: { playerId: player.id }, expiresAt: { gt: new Date() } },
+  // Buffs ativos — apenas para mascotes da Equipe Favorita (banco carrega ao clicar)
+  const featuredIds = featuredMascots.map(m => m.id);
+  const activeMascotBuffs = featuredIds.length > 0 ? await prisma.mascotBuff.findMany({
+    where: { mascotId: { in: featuredIds }, expiresAt: { gt: new Date() } },
     select: { mascotId: true, type: true, expiresAt: true },
-  });
+  }) : [];
 
-  // Proteína Zika: conta quantas doses cada mascote já recebeu (máx 3 por mascote)
-  const proteinBoostedMascots = await prisma.mascotBuff.groupBy({
+  const proteinBoostedMascots = featuredIds.length > 0 ? await prisma.mascotBuff.groupBy({
     by: ["mascotId"],
     where: {
       type: "STAT_BOOST",
-      mascot: { playerId: player.id },
+      mascotId: { in: featuredIds },
       expiresAt: { gt: new Date("2090-01-01") },
     },
     _count: { id: true },
-  });
+  }) : [];
   const buffsByMascotId = new Map<string, { type: string; expiresAt: Date }[]>();
   for (const b of activeMascotBuffs) {
     const arr = buffsByMascotId.get(b.mascotId) ?? [];
@@ -120,9 +132,10 @@ export default async function MascotesPage() {
   const hasSweet   = foods.some(f => f.type === "SWEET" && f.quantity > 0);
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
-  const favoriteMascotCount = mascots.filter(m => m.isFavorite).length;
+  const favoriteMascotCount = featuredMascots.filter(m => m.isFavorite).length;
 
-  const mascotData = mascots.map(m => ({
+  // mascotData: apenas para a Equipe Favorita (renderizada com card completo)
+  const mascotData = featuredMascots.map(m => ({
     id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
     level: m.level, exp: m.exp, happiness: m.happiness,
     mood: m.mood, personality: m.personality, isEquipped: m.isEquipped, isFavorite: m.isFavorite,
@@ -158,7 +171,7 @@ export default async function MascotesPage() {
     events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
     hasFood, hasSweet,
     // Admin: lista de outros mascotes para trigger de batalha/amizade
-    otherMascots: admin ? mascots.filter(o => o.id !== m.id && o.playerId !== player.id).map(o => ({
+    otherMascots: admin ? featuredMascots.filter(o => o.id !== m.id).map(o => ({
       id: o.id,
       name: o.nickname ?? getPokemonName(o.pokemonId),
     })) : undefined,
@@ -330,10 +343,10 @@ export default async function MascotesPage() {
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-slate-200">🐾 Meus Mascotes</h2>
-          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{mascots.length}</span>
+          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{featuredMascots.length + bankMascots.length}</span>
         </div>
 
-        {mascots.length === 0 ? (
+        {featuredMascots.length === 0 && bankMascots.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
             <Egg size={36} className="mx-auto text-slate-600" />
             <p className="text-sm text-slate-500">Você ainda não tem mascotes.</p>
@@ -343,7 +356,13 @@ export default async function MascotesPage() {
             </Link>
           </div>
         ) : (
-          <MascotList mascots={mascotData} isAdmin={admin} />
+          <MascotList
+            mascots={mascotData}
+            bankMascots={bankMascots}
+            hasFood={hasFood}
+            hasSweet={hasSweet}
+            isAdmin={admin}
+          />
         )}
       </div>
     </div>
