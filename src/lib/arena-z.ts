@@ -652,7 +652,7 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
   return mascots;
 }
 
-const RETIRE_COOLDOWN_MS = 10 * 60_000; // 10 min após sair com recompensas
+export const RETIRE_COOLDOWN_MS = 10 * 60_000; // 10 min após sair com recompensas
 
 /** Verifica se algum dos mascotes está em cooldown pós-retirada (10 min) */
 async function checkRetireCooldown(mascotIds: string[]): Promise<void> {
@@ -777,20 +777,16 @@ export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin 
     include: { members: true, player: { include: { user: { select: { role: true } } } } },
   });
   if (!team) throw new Error("Equipe nao encontrada.");
-  const ownerIsAdmin = ["ADMIN","SUPER_ADMIN"].includes(team.player.user.role);
   if (!isAdmin && team.playerId !== playerId) throw new Error("Sem permissao.");
-  // Jogador comum so pode remover equipes proprias nao ativas
-  if (!isAdmin && !ownerIsAdmin && team.status === "ACTIVE") {
-    throw new Error("Use 'Retirar e coletar' para equipes ativas antes de remover.");
-  }
 
   await prisma.$transaction(async (tx) => {
-    // Libera todos os mascotes
+    // Libera todos os mascotes (feridos permanecem feridos, apenas sai do ARENA)
     await tx.mascot.updateMany({
-      where: { id: { in: team.members.map(m => m.mascotId) } },
+      where: { id: { in: team.members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
       data: { arenaState: "FREE", restingUntil: null }
     });
     // Remove a equipe (cascade apaga members via FK)
+    // Nota: abandono NÃO credita o cofre e NÃO define retiredAt (sem penalidade de 10 min)
     await tx.arenaTeam.delete({ where: { id: teamId } });
   });
 }

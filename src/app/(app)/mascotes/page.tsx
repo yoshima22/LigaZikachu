@@ -11,6 +11,8 @@ import { BulkInteractPanel } from "./_components/bulk-interact-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
+import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,7 @@ export default async function MascotesPage() {
     if (e.imageUrl) eggImageByType[key] = e.imageUrl;
   }
 
-  const [featuredMascots, bankMascots, eggs, incubator, foods, buffInventory] = await Promise.all([
+  const [featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory] = await Promise.all([
     // Equipe Favorita + Companheiro — select explícito para não buscar colunas desnecessárias
     prisma.mascot.findMany({
       where: { playerId: player.id, OR: [{ isFavorite: true }, { isEquipped: true }] },
@@ -125,6 +127,12 @@ export default async function MascotesPage() {
       where: { playerId: player.id },
       select: { type: true, quantity: true },
     }),
+    // Penalidade de retirada da Arena — time mais recente retirado nos últimos 10 min
+    prisma.arenaTeam.findFirst({
+      where: { playerId: player.id, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
+      orderBy: { retiredAt: "desc" },
+      select: { retiredAt: true },
+    }).catch(() => null),
     // Buffs do inventário — select explícito na linha de junction
     prisma.playerInventory.findMany({
       where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as unknown as import("@prisma/client").ShopItemType[] } } },
@@ -240,6 +248,11 @@ export default async function MascotesPage() {
           </Link>
         </div>
       </div>
+
+      {/* Penalidade de retirada da Arena */}
+      {lastRetiredTeam?.retiredAt && (
+        <RetirePenaltyBadge retiredAt={lastRetiredTeam.retiredAt} />
+      )}
 
       {/* Como funciona — explicação para o jogador */}
       <details className="rounded-2xl border border-border bg-slate-950/50 overflow-hidden group">

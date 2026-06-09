@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams } from "@/lib/arena-z";
-import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
+import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams } from "@/lib/arena-z";
+import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 
@@ -161,7 +161,7 @@ export default async function ArenaZPage() {
     });
   }).catch(() => null);
 
-  const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, injuredRivals] = await Promise.all([
+  const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -204,6 +204,12 @@ export default async function ArenaZPage() {
       take: 10,
     }),
     getArenaRanking(20),
+    // Penalidade de retirada — time mais recente retirado nos últimos 10 min
+    prisma.arenaTeam.findFirst({
+      where: { playerId: player.id, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
+      orderBy: { retiredAt: "desc" },
+      select: { retiredAt: true },
+    }),
     // Mascotes de rivais que estão feridos (para ataque oportunista)
     prisma.mascot.findMany({
       where: {
@@ -382,6 +388,11 @@ export default async function ArenaZPage() {
         <section className="rounded-2xl border border-border bg-slate-950/60 p-5">
           <h2 className="font-semibold text-slate-200">Criar equipe</h2>
           <p className="mt-1 text-xs text-slate-500">Apenas mascotes livres aparecem. Máximo de 6 por equipe.</p>
+          {lastRetiredTeam?.retiredAt && (
+            <div className="mt-3">
+              <RetirePenaltyBadge retiredAt={lastRetiredTeam.retiredAt} />
+            </div>
+          )}
           <CreateTeamForm mascots={availableMascots.map(m => ({
             id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
             level: m.level, statForce: m.statForce, statAgility: m.statAgility,
@@ -410,7 +421,7 @@ export default async function ArenaZPage() {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       {(team.status === "ACTIVE" || team.status === "DEFEATED") && <RetireTeamButton teamId={team.id} defeated={team.status === "DEFEATED"} teamUpdatedAt={team.updatedAt.toISOString()} />}
-                      <DeleteTeamButton teamId={team.id} isAdmin={admin} />
+                      <DeleteTeamButton teamId={team.id} isAdmin={admin} teamStatus={team.status} />
                     </div>
                   </div>
                   {team.status === "DEFEATED" && (

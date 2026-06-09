@@ -21,6 +21,23 @@ import {
 } from "../actions";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 
+// ── Badge de penalidade de retirada (10 min após coletar recompensas) ──────────
+export function RetirePenaltyBadge({ retiredAt }: { retiredAt: string | Date | null | undefined }) {
+  const cooldownUntil = retiredAt ? new Date(new Date(retiredAt).getTime() + 10 * 60_000) : null;
+  const { expired, remaining } = useTimerExpiry(cooldownUntil);
+  if (expired || !cooldownUntil) return null;
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+      <Timer size={12} className="shrink-0 text-orange-400" />
+      <span>
+        <span className="font-bold">Penalidade de saída ativa:</span>{" "}
+        nova equipe disponível em{" "}
+        <span className="font-mono font-bold text-orange-300">{formatRemaining(remaining)}</span>
+      </span>
+    </div>
+  );
+}
+
 // ── Cooldown counter — usa timestamp absoluto para evitar dessincronia ────────
 // Aceita Date/string (timestamp absoluto) para não depender de duração relativa calculada no servidor
 export function CooldownBadge({ until }: { until: Date | string | null | undefined }) {
@@ -767,19 +784,27 @@ export function SusButton({ mascotId }: { mascotId: string }) {
   );
 }
 
-export function DeleteTeamButton({ teamId, isAdmin = false }: { teamId: string; isAdmin?: boolean }) {
+export function DeleteTeamButton({ teamId, isAdmin = false, teamStatus = "RETIRED" }: { teamId: string; isAdmin?: boolean; teamStatus?: string }) {
   const { pending, run } = useArenaAction();
+  const isActive = teamStatus === "ACTIVE";
+  const confirmMsg = isActive
+    ? "Abandonar equipe? O cofre acumulado será PERDIDO. Os mascotes voltam ao banco sem penalidade de 10 min. Confirmar?"
+    : "Remover equipe? Os mascotes voltam ao banco.";
   return (
     <button
       type="button"
       disabled={pending}
       onClick={() => {
-        if (!confirm("Remover equipe permanentemente? Os mascotes voltam ao banco.")) return;
-        run(() => deleteArenaTeamAction(teamId), "Equipe removida.");
+        if (!confirm(confirmMsg)) return;
+        run(() => deleteArenaTeamAction(teamId), isActive ? "Equipe abandonada." : "Equipe removida.");
       }}
-      className="rounded-xl border border-slate-600/40 bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-400 hover:border-red-500/40 hover:text-red-400 disabled:opacity-50"
+      className={`rounded-xl border px-3 py-2 text-xs font-semibold disabled:opacity-50 ${
+        isActive
+          ? "border-orange-600/40 bg-orange-600/10 text-orange-400 hover:border-orange-400/60 hover:text-orange-300"
+          : "border-slate-600/40 bg-slate-800/40 text-slate-400 hover:border-red-500/40 hover:text-red-400"
+      }`}
     >
-      🗑 Remover
+      {isActive ? "🚪 Abandonar" : "🗑 Remover"}
     </button>
   );
 }
