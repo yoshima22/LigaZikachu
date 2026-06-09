@@ -254,20 +254,28 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
   const arena = arenaStatus(mascot);
   const arenaLocked = !!arena?.locked;
 
-  // Cooldowns separados por ação de cuidado. Comida e doce usam lastFedAt e não entram nesse bloqueio.
+  // Tick local — atualiza a cada segundo para que cooldowns reflitam imediatamente após a interação
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Cooldowns calculados diretamente de localLastInteracted + nowMs
+  // (evita race condition do useTimerExpiry, que inicializa estado uma única vez)
   const lastInteractionTime = localLastInteracted ? new Date(localLastInteracted).getTime() : null;
-  const playCooldownEndTime = lastInteractionTime ? new Date(lastInteractionTime + 45 * 60 * 1000) : null;
-  const petCooldownEndTime = lastInteractionTime ? new Date(lastInteractionTime + 25 * 60 * 1000) : null;
-  const playCooldownExpiry = useTimerExpiry(playCooldownEndTime);
-  const petCooldownExpiry = useTimerExpiry(petCooldownEndTime);
-  const playOnCooldown = !!playCooldownEndTime && !playCooldownExpiry.expired;
-  const petOnCooldown = !!petCooldownEndTime && !petCooldownExpiry.expired;
+  const playEndMs = lastInteractionTime ? lastInteractionTime + 45 * 60 * 1000 : 0;
+  const petEndMs  = lastInteractionTime ? lastInteractionTime + 25 * 60 * 1000 : 0;
+  const playOnCooldown = playEndMs > nowMs;
+  const petOnCooldown  = petEndMs  > nowMs;
+  const playCooldownRemaining = Math.max(0, playEndMs - nowMs);
+  const petCooldownRemaining  = Math.max(0, petEndMs  - nowMs);
 
   // Button availability
   const inExpedition = !!expedition && !claimable;
   const canPlay      = !arenaLocked && !inExpedition && !playOnCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
   const canPet       = !arenaLocked && !inExpedition && !petOnCooldown && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
-  const canFeedFood  = !arenaLocked && !inExpedition && mascot.hasFood  && hungerStatus !== "STUFFED";
+  const canFeedFood  = !arenaLocked && mascot.hasFood  && hungerStatus !== "STUFFED"; // comida permitida em expedição
   const canFeedSweet = !arenaLocked && !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
 
   const act = (fn: () => Promise<{ error?: string; result?: unknown }>, successMsg?: string) => {
@@ -638,10 +646,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
         {(playOnCooldown || petOnCooldown) && (
           <div className="space-y-0.5 text-center text-[10px] text-slate-600">
             {petOnCooldown && (
-              <p>Carinho disponível em {Math.ceil(petCooldownExpiry.remaining / 60000)} min</p>
+              <p>Carinho disponível em {formatRemaining(petCooldownRemaining)}</p>
             )}
             {playOnCooldown && (
-              <p>Brincar disponível em {Math.ceil(playCooldownExpiry.remaining / 60000)} min</p>
+              <p>Brincar disponível em {formatRemaining(playCooldownRemaining)}</p>
             )}
           </div>
         )}
@@ -661,7 +669,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
               <Heart size={12}/> Carinho
             </button>
           </Tip>
-          <Tip text={!canFeedFood ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : !mascot.hasFood ? "Sem comida no estoque" : "Em expedição") : "Comida sacia por mais tempo"}>
+          <Tip text={!canFeedFood ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : "Sem comida no estoque") : "Comida sacia por mais tempo — funciona mesmo em expedição"}>
             <button type="button" disabled={pending || !canFeedFood} onClick={() => handleInteract("FEED_FOOD")}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               <Utensils size={12}/> Comida
