@@ -25,8 +25,8 @@ export default async function MascotesPage() {
   });
   if (!player) return notFound();
 
-  // Limpa automaticamente repouso expirado para não mostrar badge "Repouso concluído" preso
-  await prisma.mascot.updateMany({
+  // Limpa repouso expirado — fire-and-forget para não bloquear o carregamento da página
+  prisma.mascot.updateMany({
     where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lte: new Date() } },
     data: { arenaState: "FREE", restingUntil: null },
   }).catch(() => null);
@@ -58,7 +58,7 @@ export default async function MascotesPage() {
         },
         events: {
           orderBy: { createdAt: "desc" },
-          take: 8
+          take: 2
         },
         relationsAsA: {
           include: {
@@ -69,7 +69,7 @@ export default async function MascotesPage() {
               }
             }
           },
-          take: 20
+          take: 5
         }
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }]

@@ -157,9 +157,10 @@ export default async function PlayerDetailPage({
         statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         hatchedAt: true, lastInteractedAt: true, lastFedAt: true,
-        events: { orderBy: { createdAt: "desc" }, take: 15 },
+        events: { orderBy: { createdAt: "desc" }, take: 5 },
         expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
         relationsAsA: {
+          take: 6,
           include: {
             mascotB: {
               select: {
@@ -174,12 +175,13 @@ export default async function PlayerDetailPage({
     prisma.mascot.findMany({
       where: { playerId },
       select: {
-        id: true, pokemonId: true, nickname: true, level: true, exp: true,
-        mood: true, happiness: true, personality: true, isEquipped: true, isFavorite: true,
+        id: true, pokemonId: true, nickname: true, level: true,
+        mood: true, happiness: true, isEquipped: true, isFavorite: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
         relationsAsA: {
+          take: 5,
           include: {
             mascotB: {
               select: {
@@ -191,7 +193,7 @@ export default async function PlayerDetailPage({
         },
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
-      take: 500,
+      take: 50,
     }).catch(() => [] as Array<never>),
   ]);
 

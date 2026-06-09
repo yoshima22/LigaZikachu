@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/mascot-social",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/data-retention",
+      "schedule": "30 4 * * *"
     }
   ]
 }
