@@ -204,19 +204,19 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      {/* Tabs — sem overflow-hidden no wrapper para não cortar o scroll */}
-      <div className="rounded-xl border border-border bg-slate-900/60 p-1">
-        <div className="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
+      {/* Tabs */}
+      <div className="rounded-xl border border-border bg-slate-900/60 p-1.5">
+        <div className="flex flex-wrap gap-1">
           {TABS.map(t => (
             <Link
               key={t.key}
               href={`/mascotes/ranking?tab=${t.key}`}
-              className={`shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
                 tab === t.key
                   ? t.key === "diary"
                     ? "bg-purple-500 text-white"
                     : "bg-[#FFCB05] text-slate-900"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
               }`}
             >
               <span>{t.emoji}</span>
