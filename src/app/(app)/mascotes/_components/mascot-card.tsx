@@ -78,6 +78,10 @@ interface MascotData {
 
 interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; onRefresh?: () => void }
 
+// Map de módulo — persiste mesmo que o componente remonte (ex: router.refresh em Next.js App Router)
+const _playedAt = new Map<string, number>(); // mascotId → timestamp ms
+const _pettedAt = new Map<string, number>();
+
 // Tooltip component
 function Tip({ text, children }: { text: string; children: React.ReactNode }) {
   return (
@@ -232,10 +236,6 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [localExp, setLocalExp]             = useState(mascot.exp);
   const [localLevel, setLocalLevel]         = useState(mascot.level);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
-  // lastPlayedAt/lastPettedAt: null até migração SQL ser aplicada
-  // Client-side tracking correto dentro da sessão mesmo sem as colunas no banco
-  const [localLastPlayed, setLocalLastPlayed] = useState<Date | null>(mascot.lastPlayedAt ?? null);
-  const [localLastPetted, setLocalLastPetted] = useState<Date | null>(mascot.lastPettedAt ?? null);
 
   // Sincroniza com novas props quando servidor atualiza
   useEffect(() => { setLocalHappiness(mascot.happiness); }, [mascot.happiness]);
@@ -243,8 +243,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   useEffect(() => { setLocalExp(mascot.exp); },             [mascot.exp]);
   useEffect(() => { setLocalLevel(mascot.level); },         [mascot.level]);
   useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
-  useEffect(() => { if (mascot.lastPlayedAt != null) setLocalLastPlayed(mascot.lastPlayedAt); }, [mascot.lastPlayedAt]);
-  useEffect(() => { if (mascot.lastPettedAt != null) setLocalLastPetted(mascot.lastPettedAt); }, [mascot.lastPettedAt]);
+  // lastPlayedAt/lastPettedAt: sincroniza do servidor quando disponível (após migração SQL)
+  useEffect(() => { if (mascot.lastPlayedAt) _playedAt.set(mascot.id, new Date(mascot.lastPlayedAt).getTime()); }, [mascot.id, mascot.lastPlayedAt]);
+  useEffect(() => { if (mascot.lastPettedAt) _pettedAt.set(mascot.id, new Date(mascot.lastPettedAt).getTime()); }, [mascot.id, mascot.lastPettedAt]);
 
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
@@ -271,18 +272,18 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     return () => clearInterval(iv);
   }, []);
 
-  // Cooldowns independentes — cada ação tem seu próprio timestamp
-  const playEndMs = localLastPlayed ? new Date(localLastPlayed).getTime() + 45 * 60 * 1000 : 0;
-  const petEndMs  = localLastPetted ? new Date(localLastPetted).getTime() + 25 * 60 * 1000 : 0;
-  const playOnCooldown = playEndMs > nowMs;
-  const petOnCooldown  = petEndMs  > nowMs;
+  // Cooldowns independentes — lidos do Map de módulo (sobrevive a remounts)
+  const playEndMs = (_playedAt.get(mascot.id) ?? 0) + 45 * 60 * 1000;
+  const petEndMs  = (_pettedAt.get(mascot.id) ?? 0) + 25 * 60 * 1000;
+  const playOnCooldown = (_playedAt.get(mascot.id) ?? 0) > 0 && playEndMs > nowMs;
+  const petOnCooldown  = (_pettedAt.get(mascot.id) ?? 0) > 0 && petEndMs  > nowMs;
   const playCooldownRemaining = Math.max(0, playEndMs - nowMs);
   const petCooldownRemaining  = Math.max(0, petEndMs  - nowMs);
 
-  // Button availability
+  // Button availability — usa estado otimista local (localMood, localHappiness)
   const inExpedition = !!expedition && !claimable;
-  const canPlay      = !arenaLocked && !inExpedition && !playOnCooldown && mascot.mood !== "TIRED" && mascot.mood !== "ANGRY";
-  const canPet       = !arenaLocked && !inExpedition && !petOnCooldown && mascot.mood !== "ANGRY" && !(mascot.personality === "TIMID" && mascot.happiness < 40);
+  const canPlay      = !arenaLocked && !inExpedition && !playOnCooldown && localMood !== "TIRED" && localMood !== "ANGRY";
+  const canPet       = !arenaLocked && !inExpedition && !petOnCooldown && localMood !== "ANGRY" && !(mascot.personality === "TIMID" && localHappiness < 40);
   const canFeedFood  = !arenaLocked && mascot.hasFood  && hungerStatus !== "STUFFED"; // comida permitida em expedição
   const canFeedSweet = !arenaLocked && !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
 
@@ -340,8 +341,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           });
         }
         if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
-        if (type === "PLAY") setLocalLastPlayed(new Date());
-        if (type === "PET")  setLocalLastPetted(new Date());
+        // Grava no Map de módulo — persiste mesmo que o componente remonte
+        if (type === "PLAY") { _playedAt.set(mascot.id, Date.now()); setNowMs(Date.now()); }
+        if (type === "PET")  { _pettedAt.set(mascot.id, Date.now()); setNowMs(Date.now()); }
         // Re-render server para atualizar inventário e EXP
         router.refresh();
         onRefresh?.();

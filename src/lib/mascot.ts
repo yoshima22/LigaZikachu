@@ -539,7 +539,7 @@ export async function interactWithMascot(
 
   // Aplica EXP — passa ignoreBenchPenalty:true porque já calculamos o bench mult acima
   if (expGained > 0) {
-    await addExp(mascotId, expGained, { ignoreBenchPenalty: true, ignoreExpBoost: true }).catch(() => {});
+    await addExp(mascotId, expGained, { ignoreBenchPenalty: true, ignoreExpBoost: true });
   }
 
   return { success: true, message, happinessChange, expGained, newMood: finalMood };
