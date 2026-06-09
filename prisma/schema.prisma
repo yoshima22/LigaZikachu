@@ -255,6 +255,7 @@ model Player {
   bazarFavorites          BazarFavorite[]
   shellGameSessions       ShellGameSession[]
   arenaTutorialClaimed    Boolean              @default(false)
+  supporterPasses         SupporterPass[]
 
   @@map("players")
 }
@@ -1040,6 +1041,7 @@ enum ZikaCoinTxType {
   STICKER_PACK_PURCHASE
   DUPLICATE_STICKER_CONVERSION
   ADMIN_ADJUSTMENT
+  VIP_PASS_REWARD
 }
 
 enum ZikaCoinTxStatus {
@@ -1156,6 +1158,7 @@ enum TitleEntranceEffect {
   SLOT_MACHINE
   ELEMENTAL_AURA
   MIAUVADAO_SEAL
+  PILAR_DA_COMUNIDADE
 }
 
 model ShopItem {
@@ -1190,6 +1193,8 @@ model PlayerInventory {
   equipped    Boolean   @default(false)
   quantity    Int       @default(1)
   purchasedAt DateTime  @default(now())
+  // "SHOP" | "VIP_PASS" | "ADMIN_GRANT" | null
+  source      String?
   player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   item        ShopItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   @@unique([playerId, itemId])
@@ -1708,6 +1713,47 @@ model MiauvadaoConfig {
   updatedAt         DateTime @updatedAt
 
   @@map("miauvadao_config")
+}
+
+// ── Passe Apoiador ────────────────────────────────────────────────────────────
+
+model SupporterPass {
+  id               String               @id @default(cuid())
+  playerId         String
+  active           Boolean              @default(true)
+  startsAt         DateTime             @default(now())
+  expiresAt        DateTime
+  // VIP title ShopItem id granted to the player
+  titleItemId      String?
+  createdByAdminId String?
+  revokedByAdminId String?
+  revokedAt        DateTime?
+  revokeReason     String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  player           Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  claims           SupporterPassClaim[]
+
+  @@index([playerId])
+  @@index([active, expiresAt])
+  @@map("supporter_passes")
+}
+
+model SupporterPassClaim {
+  id            String    @id @default(cuid())
+  passId        String
+  playerId      String
+  dayNumber     Int       // 1–30
+  rewardType    String    // "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT"
+  rewardPayload Json
+  claimedAt     DateTime  @default(now())
+
+  pass          SupporterPass @relation(fields: [passId], references: [id], onDelete: Cascade)
+
+  @@unique([passId, dayNumber])
+  @@index([playerId])
+  @@map("supporter_pass_claims")
 }
 
 // Sessão de Shell Game — guarda posição da bolinha no servidor (anti-cheat)

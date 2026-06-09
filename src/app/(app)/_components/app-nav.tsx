@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Star,
   Store,
   Swords,
   Ticket,
@@ -67,6 +68,7 @@ function buildProfileLinks(playerId?: string) {
     { href: "/insignias", label: "Insignias", icon: Medal, adminOnly: false },
     { href: "/caixa-de-presentes", label: "Presentes", icon: Gift, adminOnly: false },
     { href: "/codigos", label: "Codigos", icon: Package, adminOnly: false },
+    { href: "/passe-apoiador", label: "Passe Apoiador", icon: Star, adminOnly: false },
     { href: "/jogadores", label: "Jogadores", icon: Users, adminOnly: false }
   ];
 }

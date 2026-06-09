@@ -16,7 +16,8 @@ import { createPortal } from "react-dom";
 export type TitleEntranceEffect =
   | "NONE" | "LIGHTNING_STRIKE" | "BOSS_ALERT" | "CHAMPION_ARENA"
   | "COIN_RAIN" | "DIMENSIONAL_RIFT" | "ULTRA_RARE_REVEAL"
-  | "GLITCH_HACK" | "SLOT_MACHINE" | "ELEMENTAL_AURA" | "MIAUVADAO_SEAL";
+  | "GLITCH_HACK" | "SLOT_MACHINE" | "ELEMENTAL_AURA" | "MIAUVADAO_SEAL"
+  | "PILAR_DA_COMUNIDADE";
 
 export interface TitleEntranceProps {
   name: string;
@@ -40,7 +41,8 @@ const DURATION: Record<string, number> = {
   GLITCH_HACK:       3800,
   SLOT_MACHINE:      4800,
   ELEMENTAL_AURA:    4000,
-  MIAUVADAO_SEAL:    4600,
+  MIAUVADAO_SEAL:     4600,
+  PILAR_DA_COMUNIDADE: 5200,
 };
 
 // Tempo até a fase "ambient" começar (ms)
@@ -54,7 +56,8 @@ const AMBIENT_AT: Record<string, number> = {
   GLITCH_HACK:       1200,
   SLOT_MACHINE:      1700,
   ELEMENTAL_AURA:    900,
-  MIAUVADAO_SEAL:    1100,
+  MIAUVADAO_SEAL:     1100,
+  PILAR_DA_COMUNIDADE: 1400,
 };
 
 const FADE_MS = 700;
@@ -940,6 +943,152 @@ function MiauvadaoSealEffect({ name, color, glowColor, flavorText, rarity }: Eff
   );
 }
 
+// ── PILAR DA COMUNIDADE ───────────────────────────────────────────────────────
+// Cristais de luz + pilares dourados + chuva de estrelas
+function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }: EffectProps) {
+  const [ambient, setAmbient] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setAmbient(true), AMBIENT_AT.PILAR_DA_COMUNIDADE);
+    return () => clearTimeout(t);
+  }, []);
+
+  const stars = Array.from({ length: 24 }, (_, i) => ({
+    x: rnd(2, 98), delay: rnd(0, 1.4), size: rnd(10, 22),
+    char: i % 4 === 0 ? "⭐" : i % 4 === 1 ? "✨" : i % 4 === 2 ? "💫" : "🌟",
+  }));
+
+  const pillars = [12, 28, 50, 72, 88];
+
+  return (
+    <>
+      {/* Background — deep cosmic purple → black */}
+      <div className="absolute inset-0" style={{
+        background: ambient
+          ? "radial-gradient(ellipse at 50% 60%, #1a0a3a 0%, #0a0520 50%, #000 100%)"
+          : "radial-gradient(ellipse at 50% 60%, #0d0520 0%, #040210 100%)",
+        animation: "entrance-in 0.2s ease forwards",
+        transition: "background 1.5s ease",
+      }} />
+
+      {/* Golden pillars rising from bottom */}
+      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height: "65%", zIndex: 2 }}>
+        {pillars.map((x, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${x}%`,
+            bottom: 0,
+            width: i === 2 ? 6 : 3,
+            height: i === 2 ? "100%" : `${55 + i * 7}%`,
+            background: i === 2
+              ? `linear-gradient(to top, #FFCB05, #fbbf24aa, transparent)`
+              : `linear-gradient(to top, #c084fc88, #a855f744, transparent)`,
+            borderRadius: 4,
+            animation: `pilar-rise 1.2s ${0.1 + i * 0.15}s cubic-bezier(.16,1,.3,1) both`,
+            boxShadow: i === 2
+              ? `0 0 20px #FFCB0566, 0 0 40px #FFCB0522`
+              : `0 0 12px #c084fc44`,
+          }} />
+        ))}
+      </div>
+
+      {/* Crystal shards fan */}
+      {ambient && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
+          {Array.from({ length: 12 }, (_, i) => (
+            <div key={i} style={{
+              position: "absolute",
+              width: rnd(2, 5),
+              height: rnd(30, 80),
+              background: `linear-gradient(to top, ${i % 2 === 0 ? "#FFCB05" : "#c084fc"}, transparent)`,
+              borderRadius: 3,
+              transform: `rotate(${-60 + i * 10}deg) translateY(-60px)`,
+              animation: "title-rise-fade 0.8s ease both",
+              animationDelay: `${i * 0.05}s`,
+              opacity: 0.7,
+            }} />
+          ))}
+        </div>
+      )}
+
+      {/* Falling stars */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 4 }}>
+        {stars.map((s, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${s.x}%`,
+            top: "-5%",
+            fontSize: s.size,
+            animation: `vip-fall ${1.4 + s.delay}s ${s.delay}s ease-in forwards`,
+          }}>
+            {s.char}
+          </div>
+        ))}
+      </div>
+
+      {/* "Pilar da Comunidade" stamp */}
+      <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ top: "16%", zIndex: 8 }}>
+        <div style={{
+          fontSize: "clamp(11px, 2.5vw, 15px)",
+          fontWeight: 900,
+          color: "#FFCB05",
+          border: "2px solid #FFCB0577",
+          padding: "5px clamp(14px, 4vw, 22px)",
+          borderRadius: 6,
+          textTransform: "uppercase",
+          letterSpacing: "0.35em",
+          boxShadow: "0 0 30px #FFCB0533",
+          animation: "seal-stamp 0.7s cubic-bezier(.36,.07,.19,.97) 0.4s both",
+          textShadow: "0 0 20px #FFCB05aa",
+          background: "#FFCB050a",
+        }}>
+          Pilar da Comunidade
+        </div>
+      </div>
+
+      {/* Title center */}
+      <div className="absolute inset-0 flex items-center justify-center z-10">
+        <div style={{ animation: "title-rise-fade 0.7s ease 0.9s both", textAlign: "center" }}>
+          <TitleBlock name={name} color={color} glowColor={glowColor} flavorText={flavorText} rarity={rarity} ambient={ambient}
+            nameStyle={{ textShadow: `0 0 30px ${glowColor}, 0 0 70px ${glowColor}88` }} />
+        </div>
+      </div>
+
+      {/* Community hearts floating up */}
+      {ambient && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 5 }}>
+          {["💛", "⚡", "🌟", "💛", "✨", "💜"].map((ch, i) => (
+            <div key={i} style={{
+              position: "absolute",
+              left: `${15 + i * 14}%`,
+              bottom: "10%",
+              fontSize: 18 + (i % 3) * 6,
+              animation: `pilar-float 2s ${i * 0.3}s ease-in-out infinite`,
+            }}>
+              {ch}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pilar-rise {
+          0%   { transform: scaleY(0); transform-origin: bottom; }
+          100% { transform: scaleY(1); transform-origin: bottom; }
+        }
+        @keyframes pilar-float {
+          0%   { transform: translateY(0); opacity: 0.8; }
+          50%  { opacity: 1; }
+          100% { transform: translateY(-120px); opacity: 0; }
+        }
+        @keyframes vip-fall {
+          0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+      `}</style>
+    </>
+  );
+}
+
 // ── Portal principal ──────────────────────────────────────────────────────────
 export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, flavorText, onComplete }: TitleEntranceProps) {
   const [mounted, setMounted] = useState(false);
@@ -979,7 +1128,8 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
       {effect === "GLITCH_HACK"       && <GlitchHackEffect       {...props}/>}
       {effect === "SLOT_MACHINE"      && <SlotMachineEffect      {...props}/>}
       {effect === "ELEMENTAL_AURA"    && <ElementalAuraEffect    {...props}/>}
-      {effect === "MIAUVADAO_SEAL"    && <MiauvadaoSealEffect    {...props}/>}
+      {effect === "MIAUVADAO_SEAL"      && <MiauvadaoSealEffect      {...props}/>}
+      {effect === "PILAR_DA_COMUNIDADE" && <PilarDaComunidadeEffect  {...props}/>}
     </div>
   );
 

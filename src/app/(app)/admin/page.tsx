@@ -7,6 +7,7 @@ import { AdminExpeditionPanel } from "./_components/admin-expedition-panel";
 import { AdminMascotPanel } from "./_components/admin-mascot-panel";
 import { UserAccountPanel } from "./_components/user-account-panel";
 import { MigrateImagesPanel } from "./_components/migrate-images-panel";
+import { VipPassPanel } from "./_components/vip-pass-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -22,6 +23,7 @@ import {
 import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { adminListActiveVips } from "@/app/(app)/passe-apoiador/actions";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -99,6 +101,8 @@ export default async function AdminPage() {
       orderBy: { displayName: "asc" },
     }),
   ]);
+
+  const vipsResult = await adminListActiveVips();
 
   const allUsers = await prisma.user.findMany({
     orderBy: { name: "asc" },
@@ -234,6 +238,18 @@ export default async function AdminPage() {
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
+      <VipPassPanel
+        players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))}
+        activeVips={(vipsResult.passes ?? []).map(p => ({
+          passId: p.id,
+          playerId: p.player.id,
+          displayName: p.player.displayName,
+          startsAt: p.startsAt,
+          expiresAt: p.expiresAt,
+          daysRemaining: Math.max(0, Math.ceil((new Date(p.expiresAt).getTime() - Date.now()) / 86400000)),
+          claimedDays: p.claimsCount,
+        }))}
+      />
       <MigrateImagesPanel />
       <GlobalResetPanel />
     </div>
