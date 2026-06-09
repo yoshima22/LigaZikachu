@@ -132,40 +132,68 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
 
 // ── Buscar listagens ──────────────────────────────────────────────────────────
 
+export const LISTINGS_PAGE_SIZE = 12;
+
 export async function getListings(filters?: {
   category?: BazarItemCategory;
   type?: BazarListingType;
-  minPrice?: number;
   maxPrice?: number;
   search?: string;
   sortBy?: "newest" | "cheapest" | "expensive";
+  page?: number;
 }) {
+  const page     = Math.max(1, filters?.page ?? 1);
+  const skip     = (page - 1) * LISTINGS_PAGE_SIZE;
+  const search   = filters?.search?.trim();
+
+  // Filtro de busca textual: description + wantedDesc (case-insensitive)
+  // e campos de payload via JSON path (case-sensitive, mas suficiente para nomes de itens)
+  const searchFilter = search
+    ? {
+        OR: [
+          { description: { contains: search, mode: "insensitive" as const } },
+          { wantedDesc:   { contains: search, mode: "insensitive" as const } },
+          { payload: { path: ["pokemonName"],  string_contains: search } },
+          { payload: { path: ["displayName"],  string_contains: search } },
+          { payload: { path: ["nickname"],     string_contains: search } },
+        ],
+      }
+    : {};
+
   const where = {
     status: "ACTIVE" as BazarListingStatus,
     expiresAt: { gt: new Date() },
     ...(filters?.category ? { category: filters.category } : {}),
-    ...(filters?.type ? { listingType: filters.type } : {}),
-    ...(filters?.minPrice !== undefined ? { priceCoins: { gte: filters.minPrice } } : {}),
+    ...(filters?.type     ? { listingType: filters.type }  : {}),
     ...(filters?.maxPrice !== undefined ? { priceCoins: { lte: filters.maxPrice } } : {}),
+    ...searchFilter,
   };
 
   const orderBy =
-    filters?.sortBy === "cheapest" ? { priceCoins: "asc" as const } :
+    filters?.sortBy === "cheapest"  ? { priceCoins: "asc"  as const } :
     filters?.sortBy === "expensive" ? { priceCoins: "desc" as const } :
     { createdAt: "desc" as const };
 
-  return prisma.bazarListing.findMany({
-    where,
-    orderBy,
-    select: {
-      id: true, category: true, listingType: true, status: true,
-      payload: true, priceCoins: true, description: true, wantedDesc: true,
-      expiresAt: true, createdAt: true, views: true,
-      player: { select: { id: true, displayName: true, avatarUrl: true } },
-      _count: { select: { proposals: true, favorites: true } },
-    },
-    take: 30,
-  });
+  const select = {
+    id: true, category: true, listingType: true, status: true,
+    payload: true, priceCoins: true, description: true, wantedDesc: true,
+    expiresAt: true, createdAt: true, views: true,
+    player: { select: { id: true, displayName: true, avatarUrl: true } },
+    _count: { select: { proposals: true, favorites: true } },
+  };
+
+  const [listings, total] = await Promise.all([
+    prisma.bazarListing.findMany({ where, orderBy, select, skip, take: LISTINGS_PAGE_SIZE }),
+    prisma.bazarListing.count({ where }),
+  ]);
+
+  return {
+    listings,
+    total,
+    page,
+    pageSize: LISTINGS_PAGE_SIZE,
+    totalPages: Math.ceil(total / LISTINGS_PAGE_SIZE),
+  };
 }
 
 export async function getListing(id: string) {

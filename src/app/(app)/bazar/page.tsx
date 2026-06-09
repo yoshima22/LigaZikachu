@@ -10,6 +10,7 @@ import { ShellGame } from "./_components/shell-game";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
+import { BazarPagination } from "./_components/bazar-pagination";
 import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
@@ -38,16 +39,19 @@ export default async function BazarPage({
     autoCleanupStaleBazarListings(),
   ]).catch(() => null);
 
-  const [listings, transactions, miauvadao] = await Promise.all([
+  const [listingsResult, transactions, miauvadao] = await Promise.all([
     getListings({
       category: searchParams.cat as BazarItemCategory | undefined,
       type: searchParams.type as BazarListingType | undefined,
       maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
       sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
+      search: searchParams.q || undefined,
+      page: searchParams.page ? parseInt(searchParams.page) : 1,
     }),
     getRecentTransactions(6),
     getMiauvadaoConfig(),
   ]);
+  const { listings, total, page, totalPages } = listingsResult;
 
   const dailyOffers = (miauvadao.dailyOffers as unknown[]) ?? [];
 
@@ -182,18 +186,33 @@ export default async function BazarPage({
       {/* Listings + Feed */}
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
+          {/* Cabeçalho com contador e label de busca ativa */}
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-semibold text-slate-200">Anúncios ativos</h2>
             <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
-              {listings.length}
+              {total} {total === 1 ? "resultado" : "resultados"}
             </span>
+            {searchParams.q && (
+              <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">
+                🔍 &ldquo;{searchParams.q}&rdquo;
+              </span>
+            )}
+            {totalPages > 1 && (
+              <span className="ml-auto text-[10px] text-slate-500">
+                Página {page} de {totalPages}
+              </span>
+            )}
           </div>
 
           {listings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
-              <p className="text-3xl">🏪</p>
-              <p className="text-sm text-slate-500">Nenhum anúncio encontrado.</p>
-              {playerId && (
+              <p className="text-3xl">{searchParams.q ? "🔍" : "🏪"}</p>
+              <p className="text-sm text-slate-500">
+                {searchParams.q
+                  ? `Nenhum anúncio encontrado para "${searchParams.q}".`
+                  : "Nenhum anúncio encontrado."}
+              </p>
+              {playerId && !searchParams.q && (
                 <Link href="/bazar/criar"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E]">
                   <Plus size={12}/> Criar primeiro anúncio
@@ -214,6 +233,16 @@ export default async function BazarPage({
                 />
               ))}
             </div>
+          )}
+
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <BazarPagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={12}
+            />
           )}
         </div>
 
