@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getPokemonName } from "@/lib/mascot-data";
@@ -122,6 +122,7 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
             offersRefreshedAt: new Date(),
           },
         });
+        revalidateTag("miauvadao-config");
       }
     }
   } catch {
@@ -199,11 +200,22 @@ export async function getRecentTransactions(take = 10) {
   });
 }
 
+const _getMiauvadaoConfigCached = unstable_cache(
+  async () => {
+    const cfg = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+    if (cfg) return cfg;
+    return prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
+  },
+  ["miauvadao-config"],
+  { revalidate: 60, tags: ["miauvadao-config"] },
+);
+
 export async function getMiauvadaoConfig() {
-  // Usa findUnique em vez de upsert para evitar write transaction em toda visita
-  const cfg = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-  if (cfg) return cfg;
-  return prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
+  return _getMiauvadaoConfigCached();
+}
+
+export async function invalidateMiauvadaoCache() {
+  revalidateTag("miauvadao-config");
 }
 
 // ── Criar anúncio ─────────────────────────────────────────────────────────────
@@ -900,6 +912,7 @@ export async function adminUpdateListingFee(fee: number): Promise<{ error?: stri
   try {
     await requireAdmin();
     await prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { listingFee: fee } });
+    revalidateTag("miauvadao-config");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -943,6 +956,7 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
       }
     });
 
+    revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
     return { newBalance: updatedWallet.balance };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -955,6 +969,7 @@ export async function adminAdjustVault(amount: number): Promise<{ error?: string
       where: { id: "singleton" },
       data: { vaultBalance: { increment: amount } }
     });
+    revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
     return { newBalance: config.vaultBalance };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -979,6 +994,7 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
       },
     });
 
+    revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
     return {};
   } catch (err) {
