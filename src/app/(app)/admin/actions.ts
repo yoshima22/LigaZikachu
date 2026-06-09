@@ -637,6 +637,100 @@ export async function createMascotForPlayerAction(opts: {
   }
 }
 
+// ── Migração de imagens base64 → Supabase Storage ────────────────────────────
+
+export type MigrateImageResult = {
+  table: string; id: string; name: string; size: string; url?: string; error?: string;
+};
+
+function slugifyName(name: string) {
+  return name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function parseBase64(dataUrl: string): { buffer: Buffer; mimeType: string; ext: string } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+  if (!match) throw new Error("Formato data URL inválido");
+  const mimeType = match[1];
+  const ext = mimeType.split("/")[1].replace("jpeg", "jpg").replace("svg+xml", "svg");
+  return { buffer: Buffer.from(match[2], "base64"), mimeType, ext };
+}
+
+export async function migrateImagesToStorageAction(dry: boolean): Promise<{
+  dry: boolean; ok: number; errors: number; results: MigrateImageResult[]; error?: string;
+}> {
+  try {
+    await requireAdmin();
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      const missing = [!supabaseUrl && "NEXT_PUBLIC_SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean).join(", ");
+      return { dry, ok: 0, errors: 0, results: [], error: `Variáveis ausentes no Vercel: ${missing}` };
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
+    const BUCKET = "assets";
+    const results: MigrateImageResult[] = [];
+
+    // shop_items
+    const shopItems = await prisma.shopItem.findMany({
+      where: { imageUrl: { startsWith: "data:" } },
+      select: { id: true, name: true, type: true, imageUrl: true },
+    });
+
+    for (const item of shopItems) {
+      try {
+        const { buffer, mimeType, ext } = parseBase64(item.imageUrl!);
+        const storagePath = `shop/${item.type.toLowerCase()}/${slugifyName(item.name)}-${item.id.slice(-6)}.${ext}`;
+        const sizeKb = `${(buffer.length / 1024).toFixed(0)} kB`;
+
+        if (!dry) {
+          const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, buffer, { contentType: mimeType, upsert: true, cacheControl: "31536000" });
+          if (uploadError) throw new Error(uploadError.message);
+          const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+          await prisma.shopItem.update({ where: { id: item.id }, data: { imageUrl: data.publicUrl } });
+          results.push({ table: "shop_items", id: item.id, name: item.name, size: sizeKb, url: data.publicUrl });
+        } else {
+          results.push({ table: "shop_items", id: item.id, name: item.name, size: sizeKb, url: `[DRY] ${storagePath}` });
+        }
+      } catch (err) {
+        results.push({ table: "shop_items", id: item.id, name: item.name, size: "?", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    // sticker_packs
+    const packs = await prisma.stickerPack.findMany({
+      where: { imageUrl: { startsWith: "data:" } },
+      select: { id: true, name: true, imageUrl: true },
+    });
+
+    for (const pack of packs) {
+      try {
+        const { buffer, mimeType, ext } = parseBase64(pack.imageUrl!);
+        const storagePath = `stickers/packs/${slugifyName(pack.name)}-${pack.id.slice(-6)}.${ext}`;
+        const sizeKb = `${(buffer.length / 1024).toFixed(0)} kB`;
+
+        if (!dry) {
+          const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, buffer, { contentType: mimeType, upsert: true, cacheControl: "31536000" });
+          if (uploadError) throw new Error(uploadError.message);
+          const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+          await prisma.stickerPack.update({ where: { id: pack.id }, data: { imageUrl: data.publicUrl } });
+          results.push({ table: "sticker_packs", id: pack.id, name: pack.name, size: sizeKb, url: data.publicUrl });
+        } else {
+          results.push({ table: "sticker_packs", id: pack.id, name: pack.name, size: sizeKb, url: `[DRY] ${storagePath}` });
+        }
+      } catch (err) {
+        results.push({ table: "sticker_packs", id: pack.id, name: pack.name, size: "?", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    return { dry, ok: results.filter(r => !r.error).length, errors: results.filter(r => r.error).length, results };
+  } catch (err) {
+    return { dry, ok: 0, errors: 0, results: [], error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ── Limpeza de eventos de mascotes de admins ──────────────────────────────────
 
 export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error?: string }> {

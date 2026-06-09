@@ -1,38 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { HardDriveUpload, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-type MigrateResult = {
-  table: string; id: string; name: string; size: string; url?: string; error?: string;
-};
+import { migrateImagesToStorageAction, type MigrateImageResult } from "../actions";
 
 export function MigrateImagesPanel() {
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<MigrateResult[] | null>(null);
+  const [pending, start] = useTransition();
+  const [results, setResults] = useState<MigrateImageResult[] | null>(null);
   const [summary, setSummary] = useState<{ ok: number; errors: number; dry: boolean } | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const run = async (dry: boolean) => {
+  const run = (dry: boolean) => {
     if (!dry && !confirm(
       `⚠️ Isso vai fazer upload de todas as imagens base64 para o Supabase Storage e atualizar o banco.\n\nCertifique-se de que o bucket "assets" (público) foi criado.\n\nContinuar?`
     )) return;
 
-    setLoading(true);
-    setResults(null);
-    setSummary(null);
-    setApiError(null);
+    start(async () => {
+      setResults(null);
+      setSummary(null);
+      setApiError(null);
 
-    try {
-      const res = await fetch(`/api/admin/migrate-images${dry ? "?dry=1" : ""}`, { method: "POST" });
-      const data = await res.json();
+      const data = await migrateImagesToStorageAction(dry);
 
-      if (!res.ok) {
-        const msg = data.error ?? `Erro HTTP ${res.status}`;
-        toast.error(msg);
-        setApiError(msg);
+      if (data.error) {
+        toast.error(data.error);
+        setApiError(data.error);
         return;
       }
 
@@ -44,13 +38,7 @@ export function MigrateImagesPanel() {
       } else {
         toast.success(`Migração concluída: ${data.ok} migrados, ${data.errors} erros`);
       }
-    } catch (err) {
-      const msg = "Erro de rede: " + String(err);
-      toast.error(msg);
-      setApiError(msg);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
@@ -70,16 +58,16 @@ export function MigrateImagesPanel() {
       <div className="flex gap-3">
         <Button
           type="button"
-          disabled={loading}
+          disabled={pending}
           onClick={() => run(true)}
           className="gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200"
         >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={13} className={pending ? "animate-spin" : ""} />
           Dry Run (só listar)
         </Button>
         <Button
           type="button"
-          disabled={loading}
+          disabled={pending}
           onClick={() => run(false)}
           className="gap-2 bg-purple-600 hover:bg-purple-500 text-white"
         >
@@ -90,9 +78,8 @@ export function MigrateImagesPanel() {
 
       {apiError && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300 space-y-1">
-          <p className="font-semibold">❌ Erro ao chamar a API:</p>
+          <p className="font-semibold">❌ Erro:</p>
           <p className="font-mono break-all">{apiError}</p>
-          <p className="text-red-400/70 mt-1">Verifique se o <code>SUPABASE_SERVICE_ROLE_KEY</code> está configurado no Vercel e se você está logado como admin.</p>
         </div>
       )}
 
@@ -112,10 +99,9 @@ export function MigrateImagesPanel() {
                 <span className="font-semibold">{r.name}</span>
                 <span className="ml-2 text-slate-500">{r.table} · {r.size}</span>
                 {r.error && <span className="ml-2 text-red-400">❌ {r.error}</span>}
+                {r.url && !r.error && <span className="ml-2 text-slate-500 truncate">{r.url}</span>}
               </span>
-              {r.url && !r.error && (
-                <span className="shrink-0 text-green-400 truncate max-w-[200px]" title={r.url}>✓</span>
-              )}
+              {!r.error && <span className="shrink-0 text-green-400">✓</span>}
             </div>
           ))}
         </div>
