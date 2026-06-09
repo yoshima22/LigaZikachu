@@ -204,9 +204,9 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="rounded-xl border border-border bg-slate-900/60 p-1 overflow-hidden">
-        <div className="flex gap-1 overflow-x-auto no-scrollbar">
+      {/* Tabs — sem overflow-hidden no wrapper para não cortar o scroll */}
+      <div className="rounded-xl border border-border bg-slate-900/60 p-1">
+        <div className="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
           {TABS.map(t => (
             <Link
               key={t.key}

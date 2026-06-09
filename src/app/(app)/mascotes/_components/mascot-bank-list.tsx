@@ -279,6 +279,11 @@ function BankRow({
 }
 
 // ── MascotBankList ───────────────────────────────────────────────────────────
+const BANK_TYPE_OPTIONS = [
+  "normal","fire","water","grass","electric","psychic","fighting",
+  "dark","steel","dragon","fairy","ghost","poison","ground","rock","flying","bug","ice",
+];
+
 export function MascotBankList({
   mascots,
   hasFood,
@@ -292,6 +297,7 @@ export function MascotBankList({
 }) {
   const [search, setSearch]     = useState("");
   const [ocup, setOcup]         = useState<OcupFilter>("all");
+  const [typeFilter, setTypeFilter] = useState("");
   const [page, setPage]         = useState(1);
 
   // Filtragem
@@ -299,7 +305,8 @@ export function MascotBankList({
     const name = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
     const q    = search.toLowerCase();
     const matchSearch = !q || name.includes(q) || String(m.pokemonId).includes(q);
-    return matchSearch && matchOcup(m, ocup);
+    const matchType   = !typeFilter || getPokemonElement(m.pokemonId) === typeFilter;
+    return matchSearch && matchType && matchOcup(m, ocup);
   });
 
   // Paginação
@@ -310,6 +317,7 @@ export function MascotBankList({
   // Volta para página 1 quando filtros mudam
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleOcup   = (v: OcupFilter) => { setOcup(v); setPage(1); };
+  const handleType   = (v: string) => { setTypeFilter(v); setPage(1); };
 
   // Contadores para cada situação (para exibir no select)
   const busyCount = mascots.filter(m => isBusy(m)).length;
@@ -345,6 +353,17 @@ export function MascotBankList({
             className="rounded-xl border border-border bg-slate-900 pl-7 pr-3 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600 w-36"
           />
         </div>
+        {/* Tipo de Pokémon */}
+        <select
+          value={typeFilter}
+          onChange={e => handleType(e.target.value)}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="">Todos os tipos</option>
+          {BANK_TYPE_OPTIONS.map(t => (
+            <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+          ))}
+        </select>
         {/* Situação / ocupação */}
         <select
           value={ocup}
