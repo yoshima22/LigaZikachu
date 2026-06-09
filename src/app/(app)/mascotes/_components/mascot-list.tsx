@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { MapPin, Search, Star } from "lucide-react";
 import { getPokemonElement, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
-import { MascotBankList } from "./mascot-bank-list";
+import { MascotBankList, type BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { MascotCard } from "./mascot-card";
 
@@ -178,12 +178,6 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
   );
 }
 
-type BankMascotMinimal = {
-  id: string; pokemonId: number; nickname: string | null; level: number; mood: string; isShiny: boolean;
-  arenaState: string; bazarListed: boolean; injuredAt: Date | null; restingUntil: Date | null;
-  expeditions: { id: string; finishAt: Date; status: string }[];
-};
-
 export function MascotList({
   mascots,
   bankMascots = [],
@@ -192,7 +186,7 @@ export function MascotList({
   isAdmin = false,
 }: {
   mascots: MascotData[];
-  bankMascots?: BankMascotMinimal[];
+  bankMascots?: BankMascot[];
   hasFood?: boolean;
   hasSweet?: boolean;
   isAdmin?: boolean;

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
-import { ChevronDown, ChevronUp, Loader2, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { getPokemonElement, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getMascotDetailAction } from "../actions";
 import { MascotCard } from "./mascot-card";
 
-type BankMascot = {
+export type BankMascot = {
   id: string;
   pokemonId: number;
   nickname: string | null;
@@ -18,9 +18,34 @@ type BankMascot = {
   injuredAt: Date | null;
   restingUntil: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
+  buffs: { id: string }[];
 };
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
+
+const PAGE_SIZE = 9;
+
+// ── Tipo → cor de badge ─────────────────────────────────────────────────────
+const TYPE_COLORS: Record<string, string> = {
+  normal:   "bg-slate-500/25 text-slate-300 border-slate-500/30",
+  fire:     "bg-orange-500/20 text-orange-300 border-orange-500/30",
+  water:    "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  grass:    "bg-green-500/20 text-green-300 border-green-500/30",
+  electric: "bg-yellow-400/20 text-yellow-300 border-yellow-400/30",
+  psychic:  "bg-pink-500/20 text-pink-300 border-pink-500/30",
+  fighting: "bg-red-600/20 text-red-300 border-red-600/30",
+  dark:     "bg-slate-700/40 text-slate-400 border-slate-600/30",
+  steel:    "bg-slate-400/20 text-slate-300 border-slate-400/30",
+  dragon:   "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  fairy:    "bg-pink-400/20 text-pink-200 border-pink-400/30",
+  ghost:    "bg-purple-600/20 text-purple-300 border-purple-600/30",
+  poison:   "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  ground:   "bg-amber-600/20 text-amber-300 border-amber-600/30",
+  rock:     "bg-stone-500/20 text-stone-300 border-stone-500/30",
+  flying:   "bg-sky-500/20 text-sky-300 border-sky-500/30",
+  bug:      "bg-lime-500/20 text-lime-300 border-lime-500/30",
+  ice:      "bg-cyan-400/20 text-cyan-300 border-cyan-400/30",
+};
 
 const TYPE_LABELS: Record<string, string> = {
   normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama", electric:"Elétrico",
@@ -29,12 +54,63 @@ const TYPE_LABELS: Record<string, string> = {
   ground:"Terra", rock:"Pedra", flying:"Voador", bug:"Inseto", ice:"Gelo",
 };
 
-const STATE_BADGE: Record<string, { label: string; cls: string }> = {
-  ARENA:   { label: "Na Arena",  cls: "bg-red-500/15 text-red-300" },
-  RESTING: { label: "Repouso",   cls: "bg-blue-500/15 text-blue-300" },
-  INJURED: { label: "Ferido",    cls: "bg-orange-500/15 text-orange-300" },
-};
+// ── Ocupação ────────────────────────────────────────────────────────────────
+type OcupFilter = "all" | "free" | "busy" | "expedition" | "bazar" | "arena" | "resting" | "injured" | "buff";
 
+const OCUP_OPTIONS: { value: OcupFilter; label: string }[] = [
+  { value: "all",        label: "Todas situações" },
+  { value: "free",       label: "🟢 Livre" },
+  { value: "busy",       label: "🔴 Ocupado" },
+  { value: "expedition", label: "🗺 Expedição" },
+  { value: "bazar",      label: "🏪 No Bazar" },
+  { value: "arena",      label: "⚔️ Na Arena" },
+  { value: "resting",    label: "💤 Repouso" },
+  { value: "injured",    label: "🩹 Ferido" },
+  { value: "buff",       label: "✨ Com Bônus" },
+];
+
+function getOccupationChips(mascot: BankMascot): { label: string; cls: string }[] {
+  const chips: { label: string; cls: string }[] = [];
+  if (mascot.expeditions.length > 0)
+    chips.push({ label: "🗺 Expedição", cls: "bg-blue-500/15 text-blue-300 border-blue-500/20" });
+  if (mascot.bazarListed)
+    chips.push({ label: "🏪 Bazar", cls: "bg-yellow-500/15 text-yellow-300 border-yellow-500/20" });
+  if (mascot.arenaState === "ARENA")
+    chips.push({ label: "⚔️ Arena", cls: "bg-red-500/15 text-red-300 border-red-500/20" });
+  if (mascot.arenaState === "RESTING")
+    chips.push({ label: "💤 Repouso", cls: "bg-sky-500/15 text-sky-300 border-sky-500/20" });
+  if (mascot.arenaState === "INJURED")
+    chips.push({ label: "🩹 Ferido", cls: "bg-orange-500/15 text-orange-300 border-orange-500/20" });
+  if (mascot.buffs.length > 0)
+    chips.push({ label: "✨ Bônus", cls: "bg-purple-500/15 text-purple-300 border-purple-500/20" });
+  return chips;
+}
+
+function isBusy(mascot: BankMascot) {
+  return (
+    mascot.expeditions.length > 0 ||
+    mascot.bazarListed ||
+    mascot.arenaState !== "FREE" ||
+    mascot.buffs.length > 0
+  );
+}
+
+function matchOcup(mascot: BankMascot, filter: OcupFilter): boolean {
+  switch (filter) {
+    case "all":        return true;
+    case "free":       return !isBusy(mascot);
+    case "busy":       return isBusy(mascot);
+    case "expedition": return mascot.expeditions.length > 0;
+    case "bazar":      return mascot.bazarListed;
+    case "arena":      return mascot.arenaState === "ARENA";
+    case "resting":    return mascot.arenaState === "RESTING";
+    case "injured":    return mascot.arenaState === "INJURED";
+    case "buff":       return mascot.buffs.length > 0;
+    default:           return true;
+  }
+}
+
+// ── BankRow ─────────────────────────────────────────────────────────────────
 function BankRow({
   mascot,
   hasFood,
@@ -55,7 +131,7 @@ function BankRow({
   const handleExpand = useCallback(() => {
     if (open) { setOpen(false); return; }
     setOpen(true);
-    if (fullData) return; // already loaded
+    if (fullData) return;
     startLoading(async () => {
       const res = await getMascotDetailAction(mascot.id);
       if (res.error || !res.data) { setLoadError(res.error ?? "Erro ao carregar."); return; }
@@ -63,10 +139,10 @@ function BankRow({
     });
   }, [open, fullData, mascot.id]);
 
-  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const name    = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const element = getPokemonElement(mascot.pokemonId);
-  const stateBadge = STATE_BADGE[mascot.arenaState];
-  const hasActiveExp = mascot.expeditions.length > 0;
+  const chips   = getOccupationChips(mascot);
+  const typeColor = TYPE_COLORS[element] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20";
 
   return (
     <div className="rounded-xl border border-border/50 bg-slate-950/40 overflow-hidden">
@@ -76,47 +152,54 @@ function BankRow({
         onClick={handleExpand}
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-800/40 transition-colors"
       >
-        {/* Static sprite — tiny, no GIF */}
+        {/* Static sprite */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getStaticSpriteUrl(mascot.pokemonId)}
           alt=""
-          className="h-8 w-8 object-contain shrink-0 opacity-80"
+          className={`h-9 w-9 object-contain shrink-0 ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
           style={{ imageRendering: "pixelated" }}
           loading="lazy"
         />
 
-        {/* Name + level */}
-        <span className="flex-1 min-w-0">
-          <span className="block truncate text-sm font-semibold text-slate-200">{name}</span>
-          <span className="text-[10px] text-slate-500">
-            Nv.{mascot.level} · {TYPE_LABELS[element] ?? element} · {MOOD_EMOJI[mascot.mood] ?? "•"} {mascot.mood}
+        {/* Name + info */}
+        <span className="flex-1 min-w-0 space-y-0.5">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="truncate text-sm font-semibold text-slate-200">{name}</span>
+            {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">✦</span>}
+          </span>
+          <span className="flex items-center gap-1.5 flex-wrap">
+            {/* Nível */}
+            <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
+            {/* Tipo — badge colorido */}
+            <span className={`rounded border px-1.5 py-px text-[9px] font-bold ${typeColor}`}>
+              {TYPE_LABELS[element] ?? element}
+            </span>
+            {/* Humor */}
+            <span className="text-[10px] text-slate-600">
+              {MOOD_EMOJI[mascot.mood] ?? "•"} {mascot.mood}
+            </span>
           </span>
         </span>
 
-        {/* State badges */}
-        <span className="flex items-center gap-1 shrink-0">
-          {stateBadge && (
-            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${stateBadge.cls}`}>
-              {stateBadge.label}
+        {/* Occupation chips + chevron */}
+        <span className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[140px]">
+          {chips.map(c => (
+            <span key={c.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${c.cls}`}>
+              {c.label}
             </span>
-          )}
-          {hasActiveExp && (
-            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[9px] font-bold text-blue-300">
-              Expedição
-            </span>
-          )}
-          {mascot.bazarListed && (
-            <span className="rounded-full bg-yellow-500/15 px-2 py-0.5 text-[9px] font-bold text-yellow-300">
-              No Bazar
+          ))}
+          {chips.length === 0 && (
+            <span className="rounded border px-1.5 py-px text-[9px] font-semibold bg-green-500/10 text-green-400 border-green-500/20">
+              🟢 Livre
             </span>
           )}
           {loading ? (
-            <Loader2 size={13} className="animate-spin text-slate-500 ml-1" />
+            <Loader2 size={13} className="animate-spin text-slate-500 ml-1 shrink-0" />
           ) : open ? (
-            <ChevronUp size={13} className="text-slate-500 ml-1" />
+            <ChevronUp size={13} className="text-slate-500 ml-1 shrink-0" />
           ) : (
-            <ChevronDown size={13} className="text-slate-500 ml-1" />
+            <ChevronDown size={13} className="text-slate-500 ml-1 shrink-0" />
           )}
         </span>
       </button>
@@ -134,7 +217,6 @@ function BankRow({
           )}
           {fullData && (
             <>
-              {/* Basic / Full toggle */}
               <div className="flex items-center gap-2 px-3 pt-3 pb-1">
                 <button
                   type="button"
@@ -174,6 +256,7 @@ function BankRow({
   );
 }
 
+// ── MascotBankList ───────────────────────────────────────────────────────────
 export function MascotBankList({
   mascots,
   hasFood,
@@ -185,49 +268,117 @@ export function MascotBankList({
   hasSweet: boolean;
   isAdmin: boolean;
 }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch]     = useState("");
+  const [ocup, setOcup]         = useState<OcupFilter>("all");
+  const [page, setPage]         = useState(1);
 
-  const filtered = search
-    ? mascots.filter(m => {
-        const name = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
-        return name.includes(search.toLowerCase()) || String(m.pokemonId).includes(search);
-      })
-    : mascots;
+  // Filtragem
+  const filtered = mascots.filter(m => {
+    const name = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
+    const q    = search.toLowerCase();
+    const matchSearch = !q || name.includes(q) || String(m.pokemonId).includes(q);
+    return matchSearch && matchOcup(m, ocup);
+  });
+
+  // Paginação
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages);
+  const pageItems  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Volta para página 1 quando filtros mudam
+  const handleSearch = (v: string) => { setSearch(v); setPage(1); };
+  const handleOcup   = (v: OcupFilter) => { setOcup(v); setPage(1); };
+
+  // Contadores para cada situação (para exibir no select)
+  const busyCount = mascots.filter(m => isBusy(m)).length;
+  const freeCount = mascots.length - busyCount;
 
   if (mascots.length === 0) return null;
 
   return (
     <section className="space-y-3">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-slate-300">
           Banco de mascotes
           <span className="ml-2 text-[10px] text-slate-500 font-normal">({mascots.length})</span>
+          {freeCount > 0 && (
+            <span className="ml-1.5 text-[10px] text-green-500/70 font-normal">{freeCount} livres</span>
+          )}
+          {busyCount > 0 && (
+            <span className="ml-1 text-[10px] text-slate-600 font-normal">· {busyCount} ocupados</span>
+          )}
         </h2>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-2">
+        {/* Busca */}
         <div className="relative">
           <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => handleSearch(e.target.value)}
             placeholder="Buscar..."
             className="rounded-xl border border-border bg-slate-900 pl-7 pr-3 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600 w-36"
           />
         </div>
+        {/* Situação / ocupação */}
+        <select
+          value={ocup}
+          onChange={e => handleOcup(e.target.value as OcupFilter)}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          {OCUP_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
-      <div className="space-y-1">
-        {filtered.map(m => (
-          <BankRow
-            key={m.id}
-            mascot={m}
-            hasFood={hasFood}
-            hasSweet={hasSweet}
-            isAdmin={isAdmin}
-          />
-        ))}
-      </div>
-
-      {filtered.length === 0 && (
+      {/* Lista paginada */}
+      {pageItems.length === 0 ? (
         <p className="text-center text-xs text-slate-600 py-4">Nenhum mascote encontrado.</p>
+      ) : (
+        <div className="space-y-1">
+          {pageItems.map(m => (
+            <BankRow
+              key={m.id}
+              mascot={m}
+              hasFood={hasFood}
+              hasSweet={hasSweet}
+              isAdmin={isAdmin}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setPage(p => p - 1)}
+            className="flex items-center gap-1 rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={12} /> Anterior
+          </button>
+
+          <span className="text-xs text-slate-500">
+            Página <span className="font-semibold text-slate-300">{safePage}</span> de{" "}
+            <span className="font-semibold text-slate-300">{totalPages}</span>
+            <span className="ml-1 text-slate-600">({filtered.length} mascotes)</span>
+          </span>
+
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setPage(p => p + 1)}
+            className="flex items-center gap-1 rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Próxima <ChevronRight size={12} />
+          </button>
+        </div>
       )}
     </section>
   );

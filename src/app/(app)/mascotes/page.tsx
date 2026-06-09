@@ -96,6 +96,12 @@ export default async function MascotesPage() {
           where: { status: "ACTIVE" }, take: 1,
           select: { id: true, finishAt: true, status: true }
         },
+        // Bônus ativos — take:1 só para saber se existe algum
+        buffs: {
+          where: { expiresAt: { gt: new Date() } },
+          select: { id: true },
+          take: 1,
+        },
       },
       orderBy: [{ level: "desc" }, { id: "asc" }],
     }),
