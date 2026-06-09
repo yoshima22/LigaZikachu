@@ -47,19 +47,33 @@ export default async function MascotesPage() {
   }
 
   const [featuredMascots, bankMascots, eggs, incubator, foods, buffInventory] = await Promise.all([
-    // Equipe Favorita + Companheiro — carrega dados completos (até 6)
+    // Equipe Favorita + Companheiro — select explícito para não buscar colunas desnecessárias
     prisma.mascot.findMany({
       where: { playerId: player.id, OR: [{ isFavorite: true }, { isEquipped: true }] },
-      include: {
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, exp: true,
+        happiness: true, mood: true, personality: true,
+        isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true,
+        statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+        battleWins: true, battleLosses: true,
+        arenaState: true, bazarListed: true,
+        injuredAt: true, restingUntil: true,
+        hatchedAt: true, lastInteractedAt: true, lastFedAt: true, socialCooldownUntil: true,
         expeditions: {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
           take: 1,
           select: { id: true, finishAt: true, status: true, rewardJson: true }
         },
-        events: { orderBy: { createdAt: "desc" }, take: 4 },
+        events: {
+          orderBy: { createdAt: "desc" },
+          take: 4,
+          select: { id: true, emoji: true, description: true, createdAt: true }
+        },
         relationsAsA: {
-          include: {
+          select: {
+            type: true,
+            interactionCount: true,
             mascotB: {
               select: {
                 id: true, pokemonId: true, nickname: true,
@@ -71,7 +85,6 @@ export default async function MascotesPage() {
         }
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
-      // Sem take: mascotes favoritos/equipados aparecem todos (banco já usa query separada mínima)
     }),
     // Banco — apenas campos mínimos para exibir a lista leve (detalhes carregados ao clicar)
     prisma.mascot.findMany({
@@ -86,18 +99,32 @@ export default async function MascotesPage() {
       },
       orderBy: [{ level: "desc" }, { id: "asc" }],
     }),
+    // Ovos — apenas campos usados pelo IncubatorPanel
     prisma.mascotEgg.findMany({
       where: { playerId: player.id, incubation: null },
+      select: { id: true, type: true, obtainedAt: true, origin: true },
       orderBy: { obtainedAt: "asc" }
     }),
+    // Incubadora — egg só precisa do type
     prisma.mascotIncubator.findUnique({
       where: { playerId: player.id },
-      include: { egg: true }
+      select: {
+        id: true, startedAt: true, finishAt: true, hatched: true,
+        egg: { select: { type: true } }
+      },
     }),
-    prisma.mascotFoodItem.findMany({ where: { playerId: player.id } }),
+    // Comida — apenas type e quantity
+    prisma.mascotFoodItem.findMany({
+      where: { playerId: player.id },
+      select: { type: true, quantity: true },
+    }),
+    // Buffs do inventário — select explícito na linha de junction
     prisma.playerInventory.findMany({
       where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as unknown as import("@prisma/client").ShopItemType[] } } },
-      include: { item: { select: { id: true, name: true, type: true, description: true, imageUrl: true } } }
+      select: {
+        quantity: true,
+        item: { select: { id: true, name: true, type: true, description: true, imageUrl: true } }
+      },
     }),
   ]);
 
