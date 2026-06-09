@@ -3,7 +3,7 @@
 /**
  * VipCelebration — animação de boas-vindas ao Passe Apoiador.
  * Pure CSS + React, zero imagens externas, zero egress Supabase.
- * Duração total: 5000ms
+ * Duração total: 7000ms
  */
 
 import { useEffect, useState } from "react";
@@ -71,10 +71,10 @@ export function VipCelebration({ onDone }: Props) {
     setMounted(true);
     const t1 = setTimeout(() => setPhase("burst"),    120);
     const t2 = setTimeout(() => setPhase("title"),    700);
-    const t3 = setTimeout(() => setPhase("subtitle"), 1300);
-    const t4 = setTimeout(() => setPhase("ambient"),  2000);
-    const t5 = setTimeout(() => setPhase("fading"),   4200);
-    const t6 = setTimeout(() => { setPhase("done"); onDone(); }, 5000);
+    const t3 = setTimeout(() => setPhase("subtitle"), 1400);
+    const t4 = setTimeout(() => setPhase("ambient"),  2200);
+    const t5 = setTimeout(() => setPhase("fading"),   6100);
+    const t6 = setTimeout(() => { setPhase("done"); onDone(); }, 7000);
     return () => { [t1,t2,t3,t4,t5,t6].forEach(clearTimeout); };
   }, [onDone]);
 
@@ -255,20 +255,22 @@ export function VipCelebration({ onDone }: Props) {
           &ldquo;Sem você, as luzes se apagariam. Obrigado por manter a Liga viva.&rdquo;
         </p>
 
-        {/* Emojis de comunidade */}
-        {phase === "ambient" && (
-          <div style={{ display: "flex", justifyContent: "center", gap: 14, fontSize: 22, marginBottom: 16 }}>
-            {["💛","⚡","🌟","💜","✨","🔥"].map((ch, i) => (
-              <span key={i} style={{
-                display: "inline-block",
-                animation: `vip-emoji-bob 1.4s ${i * 0.15}s ease-in-out infinite`,
-                filter: "drop-shadow(0 0 6px #FFCB0588)",
-              }}>
-                {ch}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Emojis de comunidade — sempre montados, visibilidade via opacity para evitar pop */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 14, fontSize: 22, marginBottom: 16 }}>
+          {["💛","⚡","🌟","💜","✨","🔥"].map((ch, i) => (
+            <span key={i} style={{
+              display: "inline-block",
+              opacity: phase === "ambient" || phase === "fading" ? 1 : 0,
+              transition: `opacity 0.5s ease ${i * 0.1}s`,
+              animation: phase === "ambient" || phase === "fading"
+                ? `vip-emoji-bob 1.4s ${i * 0.15}s ease-in-out infinite`
+                : undefined,
+              filter: "drop-shadow(0 0 6px #FFCB0588)",
+            }}>
+              {ch}
+            </span>
+          ))}
+        </div>
 
         <p style={{ color: "#475569", fontSize: 11, margin: 0, opacity: subtitleVisible ? 1 : 0, transition: "opacity 0.5s 0.5s" }}>
           Toque para continuar

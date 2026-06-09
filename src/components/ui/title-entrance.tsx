@@ -42,7 +42,7 @@ const DURATION: Record<string, number> = {
   SLOT_MACHINE:      4800,
   ELEMENTAL_AURA:    4000,
   MIAUVADAO_SEAL:     4600,
-  PILAR_DA_COMUNIDADE: 7000,
+  PILAR_DA_COMUNIDADE: 7200,
 };
 
 // Tempo até a fase "ambient" começar (ms)
@@ -57,7 +57,7 @@ const AMBIENT_AT: Record<string, number> = {
   SLOT_MACHINE:      1700,
   ELEMENTAL_AURA:    900,
   MIAUVADAO_SEAL:     1100,
-  PILAR_DA_COMUNIDADE: 1800,
+  PILAR_DA_COMUNIDADE: 2200,
 };
 
 const FADE_MS = 700;
@@ -947,7 +947,7 @@ function MiauvadaoSealEffect({ name, color, glowColor, flavorText, rarity }: Eff
 function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }: EffectProps) {
   const [phase, setPhase] = useState<"entry"|"reveal"|"ambient">("entry");
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("reveal"), 900);
+    const t1 = setTimeout(() => setPhase("reveal"), 800);
     const t2 = setTimeout(() => setPhase("ambient"), AMBIENT_AT.PILAR_DA_COMUNIDADE);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
@@ -1182,16 +1182,17 @@ function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }:
         </div>
       </div>
 
-      {/* Linha divisória horizontal brilhante */}
+      {/* Separador decorativo — sem transform inline (evita artefato de linha) */}
       {phase !== "entry" && (
-        <div className="absolute inset-x-0 pointer-events-none" style={{
-          top: "36%",
-          height: 1,
-          background: `linear-gradient(90deg, transparent, #FFCB0544, #FFCB05cc, #FFCB0544, transparent)`,
-          animation: "pilar-line-expand 0.8s ease 1.1s both",
-          zIndex: 9,
-          transform: "scaleX(0)",
-        }} />
+        <div className="absolute inset-x-0 flex justify-center items-center gap-3 pointer-events-none" style={{
+          top: "36%", zIndex: 9,
+          animation: "pilar-sep-in 0.7s ease 1.1s both",
+          opacity: 0,
+        }}>
+          <span style={{ color: "#c084fc77", fontSize: 8 }}>◆</span>
+          <span style={{ color: "#FFCB05", fontSize: 16, filter: "drop-shadow(0 0 10px #FFCB05) drop-shadow(0 0 22px #FFCB0566)" }}>✦</span>
+          <span style={{ color: "#c084fc77", fontSize: 8 }}>◆</span>
+        </div>
       )}
 
       {/* Título centralizado */}
@@ -1208,23 +1209,23 @@ function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }:
         </div>
       </div>
 
-      {/* Emojis flutuando em ambient */}
-      {ambient && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 5 }}>
-          {["💛", "⚡", "🌟", "💛", "✨", "💜", "⭐", "💫"].map((ch, i) => (
-            <div key={i} style={{
-              position: "absolute",
-              left: `${8 + i * 12}%`,
-              bottom: "8%",
-              fontSize: 16 + (i % 4) * 5,
-              animation: `pilar-float ${1.8 + (i % 3) * 0.4}s ${i * 0.25}s ease-in-out infinite`,
-              filter: "drop-shadow(0 0 6px #FFCB05)",
-            }}>
-              {ch}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Emojis flutuando — sempre montados, aparecem via opacity para evitar pop */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 5 }}>
+        {["💛", "⚡", "🌟", "💛", "✨", "💜", "⭐", "💫"].map((ch, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${8 + i * 12}%`,
+            bottom: "8%",
+            fontSize: 16 + (i % 4) * 5,
+            opacity: ambient ? 1 : 0,
+            transition: `opacity 0.5s ease ${i * 0.1}s`,
+            animation: ambient ? `pilar-float ${1.8 + (i % 3) * 0.4}s ${i * 0.25}s ease-in-out infinite` : undefined,
+            filter: "drop-shadow(0 0 6px #FFCB05)",
+          }}>
+            {ch}
+          </div>
+        ))}
+      </div>
 
       {/* Partículas de poeira dourada no ambient */}
       {ambient && Array.from({ length: 12 }, (_, i) => (
@@ -1277,9 +1278,10 @@ function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }:
           80%  { transform: translateY(-4px) scale(0.95) rotate(-2deg); }
           100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
         }
-        @keyframes pilar-line-expand {
-          0%   { transform: scaleX(0); opacity: 0; }
-          100% { transform: scaleX(1); opacity: 1; }
+        @keyframes pilar-sep-in {
+          0%   { opacity: 0; transform: scale(0.3); }
+          60%  { transform: scale(1.18); }
+          100% { opacity: 1; transform: scale(1); }
         }
         @keyframes pilar-title-emerge {
           0%   { opacity: 0; transform: translateY(24px) scale(0.88); }
