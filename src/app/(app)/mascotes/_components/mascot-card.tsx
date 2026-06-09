@@ -695,7 +695,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
         {/* ── Ações ── */}
         <div className="grid grid-cols-2 gap-1.5">
-          <Tip text={!canPlay ? (localMood === "TIRED" ? "Está cansado demais" : localMood === "ANGRY" ? "Está bravo" : playOnCooldown ? "Brincar ainda está em cooldown" : "Indisponível agora") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP. Cooldown: 45 min." : "Brincar aumenta felicidade e dá 50% de EXP no banco. Cooldown: 45 min."}>
+          <Tip text={!canPlay ? (localMood === "TIRED" ? "Está cansado demais" : localMood === "ANGRY" ? "Está bravo" : playOnCooldown ? "Brincar ainda está em cooldown" : "Indisponível agora") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP. +50% EXP bônus de mascote ativo. Cooldown: 45 min." : mascot.isFavorite ? "Brincar aumenta felicidade e dá EXP. +25% EXP bônus de favorito. Cooldown: 45 min." : "Brincar aumenta felicidade e dá EXP base. Cooldown: 45 min."}>
             <button type="button" disabled={pending || !canPlay} onClick={() => handleInteract("PLAY")}
               className="flex w-full flex-col items-center justify-center rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               <span>⭐ Brincar</span>

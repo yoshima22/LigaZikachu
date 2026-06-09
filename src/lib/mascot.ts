@@ -413,6 +413,17 @@ export async function interactWithMascot(
   if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote em repouso não pode receber interações ainda.");
   if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode receber interações.");
 
+  // Bloqueia brincar/carinho se mascote está em expedição ativa
+  if (type === "PLAY" || type === "PET") {
+    const activeExp = await prisma.mascotExpedition.findFirst({
+      where: { mascotId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (activeExp) {
+      return { success: false, message: `${getPokemonName(mascot.pokemonId)} está em expedição — só aceita comida por enquanto.`, happinessChange: 0, expGained: 0 };
+    }
+  }
+
   const now = new Date();
   const PLAY_COOLDOWN_MS = 45 * 60 * 1000;
   const PET_COOLDOWN_MS = 25 * 60 * 1000;
@@ -457,7 +468,7 @@ export async function interactWithMascot(
   else if (rivalCount > 0) socialBonus += 0.05;         // Rival comum: +5%
   socialBonus = Math.min(socialBonus, 0.25);            // cap total +25%
   const socialMult = 1.0 + socialBonus + picnicExpBonus;
-  const benchMult  = mascot.isEquipped ? 1.0 : 0.5;
+  const benchMult  = mascot.isEquipped ? 1.5 : (mascot.isFavorite ? 1.25 : 1.0);
   const expBoostMult = expBoostBuff ? 2.0 : 1.0;
 
   // Calcula EXP real que será aplicado (mesmo cálculo do addExp, mas exposto aqui para a mensagem)

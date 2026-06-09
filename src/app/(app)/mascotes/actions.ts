@@ -721,3 +721,64 @@ export async function toggleEvolutionLockAction(mascotId: string, lock: boolean)
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
+
+export async function feedAllAction(): Promise<{
+  error?: string; fed: number; skipped: number; noFood: boolean;
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado.", fed: 0, skipped: 0, noFood: false };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado.", fed: 0, skipped: 0, noFood: false };
+
+    // Verifica estoque de comida
+    const food = await prisma.mascotFoodItem.findUnique({
+      where: { playerId_type: { playerId: player.id, type: "FOOD" } },
+    });
+    if (!food || food.quantity <= 0) {
+      return { fed: 0, skipped: 0, noFood: true };
+    }
+
+    // Busca todos os mascotes não empanturrados (lastFedAt <= 2h atrás = disponível)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const mascots = await prisma.mascot.findMany({
+      where: {
+        playerId: player.id,
+        arenaState: { notIn: ["INJURED", "ARENA"] },
+        OR: [{ lastFedAt: null }, { lastFedAt: { lt: twoHoursAgo } }],
+      },
+      select: { id: true, pokemonId: true },
+      orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
+    });
+
+    const toFeed = mascots.slice(0, food.quantity); // não alimenta mais do que tem no estoque
+    if (toFeed.length === 0) {
+      return { fed: 0, skipped: mascots.length, noFood: false };
+    }
+
+    // Alimenta em batch
+    await prisma.$transaction(async (tx) => {
+      // Decrementa estoque
+      await tx.mascotFoodItem.update({
+        where: { playerId_type: { playerId: player.id, type: "FOOD" } },
+        data: { quantity: { decrement: toFeed.length } },
+      });
+      // Atualiza cada mascote individualmente para poder clampar happiness
+      const now = new Date();
+      await Promise.all(toFeed.map(m =>
+        tx.mascot.update({
+          where: { id: m.id },
+          data: {
+            happiness: { increment: 20 },
+            lastFedAt: now,
+          },
+        })
+      ));
+    });
+
+    revalidate();
+    return { fed: toFeed.length, skipped: mascots.length - toFeed.length, noFood: false };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro.", fed: 0, skipped: 0, noFood: false };
+  }
+}

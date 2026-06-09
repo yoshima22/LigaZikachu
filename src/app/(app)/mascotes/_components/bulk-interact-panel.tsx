@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
-import { Gamepad2, Hand, Loader2, Users } from "lucide-react";
-import { interactAllAction } from "../actions";
+import { Gamepad2, Hand, Loader2, Users, Utensils } from "lucide-react";
+import { interactAllAction, feedAllAction } from "../actions";
 import { markPlayed, markPetted, isPlayOnCooldown, isPetOnCooldown } from "./mascot-card";
 import { formatRemaining } from "@/hooks/use-timer-expiry";
 
@@ -22,6 +22,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const router = useRouter();
   const [pendingPlay, startPlay] = useTransition();
   const [pendingPet, startPet] = useTransition();
+  const [pendingFeedAll, startFeedAll] = useTransition();
   const isFavoriteTeam = scope === "FAVORITES";
 
   // Tick de 1s — atualiza cooldowns em tempo real
@@ -36,8 +37,9 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const availableForPet  = mascotIds.filter(id => !isPetOnCooldown(id, nowMs)).length;
 
   // Botão desabilitado só quando NENHUM mascote está disponível
-  const playDisabled = pendingPlay || pendingPet || availableForPlay === 0;
-  const petDisabled  = pendingPlay || pendingPet || availableForPet  === 0;
+  const playDisabled    = pendingPlay || pendingPet || pendingFeedAll || availableForPlay === 0;
+  const petDisabled     = pendingPlay || pendingPet || pendingFeedAll || availableForPet  === 0;
+  const feedAllDisabled = pendingPlay || pendingPet || pendingFeedAll;
 
   const handlePlayAll = () => {
     startPlay(async () => {
@@ -60,6 +62,23 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
 
       if (fail > 0) {
         toast.info(`${fail} ${pluralMascot(fail)} estavam em cooldown, Arena, expedição ou indisponíveis.`);
+      }
+    });
+  };
+
+  const handleFeedAll = () => {
+    startFeedAll(async () => {
+      const res = await feedAllAction();
+      if (res.error) { toast.error(res.error); return; }
+      if (res.noFood) { toast.warning("Sem comida no estoque para alimentar os mascotes."); return; }
+      if (res.fed === 0) {
+        toast.info("Todos os mascotes já estão satisfeitos.");
+      } else {
+        const msg = res.skipped > 0
+          ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. ${res.skipped} já estava${res.skipped !== 1 ? "m" : ""} satisfeito${res.skipped !== 1 ? "s" : ""}.`
+          : `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}!`;
+        toast.success(msg);
+        router.refresh();
       }
     });
   };
@@ -94,7 +113,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
             <Users size={15} className="text-[#FFCB05]" />
-            {isFavoriteTeam ? "Cuidar da Equipe Favorita" : "Cuidar dos Mascotes"}
+            {isFavoriteTeam ? "Cuidar dos Favoritos" : "Cuidar dos Mascotes"}
           </h3>
           <p className="max-w-2xl text-xs text-slate-500">
             {isFavoriteTeam
@@ -116,7 +135,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
         >
           <span className="flex items-center gap-2">
             {pendingPlay ? <Loader2 size={14} className="animate-spin" /> : <Gamepad2 size={14} />}
-            Brincar com a equipe
+            {isFavoriteTeam ? "Brincar nos Favoritos" : "Brincar com todos"}
           </span>
           <span className="text-[9px] font-normal text-[#FFCB05]/60">
             {availableForPlay === 0
@@ -134,13 +153,27 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
         >
           <span className="flex items-center gap-2">
             {pendingPet ? <Loader2 size={14} className="animate-spin" /> : <Hand size={14} />}
-            Carinho na equipe
+            {isFavoriteTeam ? "Carinho nos Favoritos" : "Carinho em todos"}
           </span>
           <span className="text-[9px] font-normal text-rose-400/60">
             {availableForPet === 0
               ? "Todos em cooldown"
               : `${availableForPet} disponível${availableForPet !== 1 ? "is" : ""}`}
           </span>
+        </button>
+
+        {/* Alimentar Todos */}
+        <button
+          type="button"
+          disabled={feedAllDisabled}
+          onClick={handleFeedAll}
+          className="flex flex-col items-center gap-0.5 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="flex items-center gap-2">
+            {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
+            Alimentar Todos
+          </span>
+          <span className="text-[9px] font-normal text-green-400/60">Inclusive banco</span>
         </button>
       </div>
     </div>
