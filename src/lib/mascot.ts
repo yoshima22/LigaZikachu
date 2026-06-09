@@ -436,14 +436,27 @@ export async function interactWithMascot(
   // Pré-busca multipliers de EXP para calcular o valor real antes de montar a mensagem
   const [picnicBuff, relations, expBoostBuff] = await Promise.all([
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: now } } }).catch(() => null),
-    prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true } }).catch(() => [] as { type: string }[]),
+    prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true, interactionCount: true } }).catch(() => [] as { type: string; interactionCount: number }[]),
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
   ]);
   const picnicExpBonus   = picnicBuff  ? 0.50 : 0;
   const picnicHappyBonus = picnicBuff  ? 5    : 0;
-  const hasFriends = relations.some(r => r.type === "FRIEND");
-  const hasRivals  = relations.some(r => r.type === "RIVAL");
-  const socialMult = 1.0 + (hasFriends ? 0.25 : 0) + (hasRivals ? 0.15 : 0) + picnicExpBonus;
+
+  // Bônus social escalado por tier (§12 do doc social)
+  const friendRels     = relations.filter(r => r.type === "FRIEND");
+  const rivalRels      = relations.filter(r => r.type === "RIVAL");
+  const friendCount    = friendRels.length;
+  const hasSuperFriend = friendRels.some(r => r.interactionCount >= 5);
+  const rivalCount     = rivalRels.length;
+  const hasDirectRival = rivalRels.some(r => r.interactionCount >= 3);
+  let socialBonus = 0;
+  if (friendCount === 1) socialBonus += 0.05;          // 1 amigo: +5%
+  else if (friendCount >= 2) socialBonus += 0.10;       // 2+ amigos: +10%
+  if (hasSuperFriend) socialBonus += 0.10;              // Super Amigo: +10% extra
+  if (hasDirectRival) socialBonus += 0.10;              // Rival Direto: +10%
+  else if (rivalCount > 0) socialBonus += 0.05;         // Rival comum: +5%
+  socialBonus = Math.min(socialBonus, 0.25);            // cap total +25%
+  const socialMult = 1.0 + socialBonus + picnicExpBonus;
   const benchMult  = mascot.isEquipped ? 1.0 : 0.5;
   const expBoostMult = expBoostBuff ? 2.0 : 1.0;
 
@@ -892,10 +905,15 @@ export async function claimExpedition(
   const expBase = EXP_REWARDS.EXPEDITION;
   const levelMult = 1 + Math.floor(expedition.mascot.level / 20) * 0.25;
   const allyExpBonus = 1 + allyCount * 0.1;
-  const rivalCount = await prisma.mascotRelation.count({
-    where: { mascotAId: expedition.mascotId, type: "RIVAL" }
+  // Bônus de rival em expedição escalado por tier (§12.1 do doc social)
+  const rivalRelsExp = await prisma.mascotRelation.findMany({
+    where: { mascotAId: expedition.mascotId, type: "RIVAL" },
+    select: { interactionCount: true },
   });
-  const rivalBonus = rivalCount > 0 ? 1.15 : 1.0;
+  const rivalCount = rivalRelsExp.length;
+  const hasDirectRivalExp = rivalRelsExp.some(r => r.interactionCount >= 3);
+  const perRivalBonus = hasDirectRivalExp ? 0.10 : (rivalCount > 0 ? 0.05 : 0);
+  const rivalBonus = 1.0 + Math.min(perRivalBonus * rivalCount, 0.15); // cap +15%
   const expMult = mode === "TRAINING"
     ? TRAINING_EXP_MULT[durationKey]
     : mode === "ITEMS" ? 0 : dur.expMultiplier;
@@ -1442,6 +1460,51 @@ function getSocialTier(type: "FRIEND" | "RIVAL", count: number): string {
   return count >= 3 ? "Rival Direto" : "Rival";
 }
 
+// ── Limites diários de eventos negativos por mascote (§11 doc social) ─────────
+// Mantidos em memória; resetam a cada dia
+const _dailyNegEvents = new Map<string, { day: string; count: number }>();
+const _dailyExpDelay  = new Map<string, { day: string; min: number }>();
+const _dailySocialCd  = new Map<string, { day: string; min: number }>();
+
+function _today() { return new Date().toISOString().slice(0, 10); }
+
+function _canNegEvent(id: string): boolean {
+  const e = _dailyNegEvents.get(id);
+  return !e || e.day !== _today() || e.count < 2; // max 2 eventos negativos/dia
+}
+function _incNegEvent(id: string) {
+  const today = _today();
+  const e = _dailyNegEvents.get(id);
+  if (!e || e.day !== today) _dailyNegEvents.set(id, { day: today, count: 1 });
+  else e.count++;
+}
+/** Retorna quantos minutos de delay ainda cabem no dia (cap 45 min). */
+function _allowedExpDelay(id: string, requested: number): number {
+  const today = _today();
+  const e = _dailyExpDelay.get(id);
+  const used = (!e || e.day !== today) ? 0 : e.min;
+  return Math.min(requested, Math.max(0, 45 - used));
+}
+function _trackExpDelay(id: string, min: number) {
+  const today = _today();
+  const e = _dailyExpDelay.get(id);
+  if (!e || e.day !== today) _dailyExpDelay.set(id, { day: today, min });
+  else e.min += min;
+}
+/** Retorna quantos minutos de trava social ainda cabem no dia (cap 30 min). */
+function _allowedSocialCd(id: string, requested: number): number {
+  const today = _today();
+  const e = _dailySocialCd.get(id);
+  const used = (!e || e.day !== today) ? 0 : e.min;
+  return Math.min(requested, Math.max(0, 30 - used));
+}
+function _trackSocialCd(id: string, min: number) {
+  const today = _today();
+  const e = _dailySocialCd.get(id);
+  if (!e || e.day !== today) _dailySocialCd.set(id, { day: today, min });
+  else e.min += min;
+}
+
 // Throttle: eventos sociais automáticos rodam no máximo 1x por hora
 let _lastSocialEventRun = 0;
 const SOCIAL_EVENT_THROTTLE_MS = 60 * 60 * 1000; // 1 hora
@@ -1485,7 +1548,13 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
 
     const aName = a.nickname ?? getPokemonName(a.pokemonId);
     const bName = partner.nickname ?? getPokemonName(partner.pokemonId);
-    const isBattle = Math.random() < 0.6;
+    // Distribuição §8: 45% batalha, 35% amizade, 20% neutro
+    // Carisma médio aumenta chance de amizade em até +5%
+    const avgCarisma = ((a.statCharisma ?? 10) + (partner.statCharisma ?? 10)) / 2;
+    const carismaBias = Math.min(0.05, avgCarisma / 500);
+    const eventRoll2 = Math.random();
+    const isBattle  = eventRoll2 < (0.45 - carismaBias);
+    const isNeutral = eventRoll2 >= (0.80 + carismaBias);
 
     if (isBattle) {
       try {
@@ -1493,6 +1562,21 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
         summary.battles++;
         summary.events.push(`⚔️ ${result.summary}`);
       } catch { /* ignora */ }
+    } else if (isNeutral) {
+      // Evento neutro — apenas narrativo
+      const neutralTexts = [
+        `${aName} e ${bName} se cruzaram num torneio e cada um seguiu o seu caminho.`,
+        `${aName} notou ${bName} de longe. Por agora, nada aconteceu.`,
+        `${aName} e ${bName} estavam no mesmo lugar ao mesmo tempo — apenas coincidência.`,
+        `${aName} espiou ${bName} discretamente, mas não agiu.`,
+        `${aName} e ${bName} trocaram um olhar rápido antes de seguir em frente.`,
+      ];
+      const neutralMsg = neutralTexts[Math.floor(Math.random() * neutralTexts.length)];
+      await Promise.all([
+        logEventMaybe(a.id, "👀", neutralMsg),
+        logEventMaybe(partner.id, "👀", neutralMsg),
+      ]).catch(() => {});
+      summary.events.push(`👀 ${aName} e ${bName} — evento neutro`);
     } else {
       try {
         await prisma.$transaction([
@@ -1526,6 +1610,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       mascotB: {
         select: { id: true, pokemonId: true, nickname: true, playerId: true,
                   arenaState: true, mood: true, happiness: true, restingUntil: true,
+                  statAgility: true, statVitality: true,
                   expeditions: { where: { status: "ACTIVE" }, take: 1 } }
       },
     },
@@ -1543,79 +1628,130 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
     const eventRoll = Math.random();
     let rivalEvent: string;
 
+    // Pula se mascote alvo já atingiu limite de eventos negativos do dia
+    const bVitality  = rel.mascotB.statVitality  ?? 10;
+    const bAgility   = rel.mascotB.statAgility   ?? 10;
+
     if (isArchRival && eventRoll < 0.15) {
       // Rival Direto: trava interações do alvo por 15-30 min
-      const stunMin = randomInt(15, 30);
-      const stunUntil = new Date(Date.now() + stunMin * 60_000);
-      await prisma.mascot.update({
-        where: { id: rel.mascotB.id },
-        data: { socialCooldownUntil: stunUntil, mood: "ANGRY" as MascotMood }
-      }).catch(() => {});
-      rivalEvent = pickText(SOCIAL_TEXTS.rival_stun, aName, bName);
-      summary.events.push(`😠 ${aName} travou ${bName} por ${stunMin}min!`);
+      // Vitalidade do alvo reduz duração (§13: resiste a atordoamento)
+      const rawStun = randomInt(15, 30);
+      const vitalityDiscount = Math.floor(bVitality / 20); // -1 min por 20 de vitalidade
+      const stunMin = _allowedSocialCd(rel.mascotB.id, Math.max(5, rawStun - vitalityDiscount));
+      if (stunMin > 0 && _canNegEvent(rel.mascotB.id)) {
+        const stunUntil = new Date(Date.now() + stunMin * 60_000);
+        await prisma.mascot.update({
+          where: { id: rel.mascotB.id },
+          data: { socialCooldownUntil: stunUntil, mood: "ANGRY" as MascotMood }
+        }).catch(() => {});
+        _trackSocialCd(rel.mascotB.id, stunMin);
+        _incNegEvent(rel.mascotB.id);
+        rivalEvent = pickText(SOCIAL_TEXTS.rival_stun, aName, bName);
+        summary.events.push(`😠 ${aName} travou ${bName} por ${stunMin}min!`);
+      } else {
+        rivalEvent = `${aName} tentou atrapalhar ${bName}, mas ${bName} resistiu! (limite diário atingido)`;
+        summary.events.push(`🛡️ ${bName} resistiu ao ataque de ${aName}`);
+      }
 
     } else if (eventRoll < 0.25 && rel.mascotB.expeditions.length > 0) {
       // Atrasa expedição ativa em 15-25 min
+      // Agilidade do alvo reduz atraso (§13: evita armadilhas)
       const expedition = rel.mascotB.expeditions[0];
-      const delayMin = randomInt(15, 25);
-      await prisma.mascotExpedition.update({
-        where: { id: expedition.id },
-        data: { finishAt: new Date(new Date(expedition.finishAt).getTime() + delayMin * 60_000) }
-      }).catch(() => {});
-      rivalEvent = pickText(SOCIAL_TEXTS.rival_expedition_delay, aName, bName);
-      summary.events.push(`🌪️ ${aName} atrasou a expedição de ${bName} em ${delayMin}min!`);
+      const rawDelay = randomInt(15, 25);
+      const agilityDiscount = Math.floor(bAgility / 15);
+      const delayMin = _allowedExpDelay(rel.mascotB.id, Math.max(5, rawDelay - agilityDiscount));
+      if (delayMin > 0 && _canNegEvent(rel.mascotB.id)) {
+        await prisma.mascotExpedition.update({
+          where: { id: expedition.id },
+          data: { finishAt: new Date(new Date(expedition.finishAt).getTime() + delayMin * 60_000) }
+        }).catch(() => {});
+        _trackExpDelay(rel.mascotB.id, delayMin);
+        _incNegEvent(rel.mascotB.id);
+        rivalEvent = pickText(SOCIAL_TEXTS.rival_expedition_delay, aName, bName);
+        summary.events.push(`🌪️ ${aName} atrasou a expedição de ${bName} em ${delayMin}min!`);
+      } else {
+        rivalEvent = `${bName} estava preparado e evitou o sabotador ${aName}!`;
+        summary.events.push(`🛡️ ${bName} esquivou da sabotagem de ${aName}`);
+      }
 
     } else if (eventRoll < 0.40) {
       // Irrita (muda humor para ANGRY)
-      await prisma.mascot.update({
-        where: { id: rel.mascotB.id },
-        data: { mood: "ANGRY" as MascotMood, happiness: { decrement: 5 } }
-      }).catch(() => {});
-      rivalEvent = pickText(SOCIAL_TEXTS.rival_irritate, aName, bName);
-      summary.events.push(`😠 ${aName} irritou ${bName}!`);
+      if (_canNegEvent(rel.mascotB.id)) {
+        await prisma.mascot.update({
+          where: { id: rel.mascotB.id },
+          data: { mood: "ANGRY" as MascotMood, happiness: { decrement: 5 } }
+        }).catch(() => {});
+        _incNegEvent(rel.mascotB.id);
+        rivalEvent = pickText(SOCIAL_TEXTS.rival_irritate, aName, bName);
+        summary.events.push(`😠 ${aName} provocou ${bName}!`);
+      } else {
+        rivalEvent = `${aName} tentou provocar ${bName}, mas ${bName} ignorou.`;
+        summary.events.push(`😑 ${bName} ignorou ${aName}`);
+      }
 
     } else if (isArchRival && eventRoll < 0.55) {
-      // Rival Direto: roubo de EXP pequeno
-      const stolenExp = randomInt(3, 10);
-      await addExp(rel.mascotA.id, stolenExp).catch(() => {});
-      rivalEvent = pickText(SOCIAL_TEXTS.rival_steal_exp, aName, bName);
-      summary.events.push(`💀 ${aName} roubou ${stolenExp} EXP de ${bName}!`);
+      // Rival Direto: motivação competitiva (EXP para A — não é roubo real de B)
+      const bonusExp = randomInt(3, 10);
+      await addExp(rel.mascotA.id, bonusExp).catch(() => {});
+      rivalEvent = pickText(SOCIAL_TEXTS.rival_steal_exp, aName, bName)
+        .replace(/roubou.*EXP.*de/i, "se motivou ao rivalizar com")
+        || `${aName} se motivou intensamente rivalizando com ${bName} e ganhou +${bonusExp} EXP!`;
+      summary.events.push(`🔥 ${aName} ganhou motivação competitiva de rivalizar com ${bName} (+${bonusExp} EXP)`);
 
     } else if (eventRoll < 0.50 && rel.mascotB.expeditions.length > 0) {
       // 🪤 Armadilha leve na rota (rival comum, atraso menor)
       const expedition = rel.mascotB.expeditions[0];
-      const delayMin = randomInt(5, 15);
-      await prisma.mascotExpedition.update({
-        where: { id: expedition.id },
-        data: { finishAt: new Date(new Date(expedition.finishAt).getTime() + delayMin * 60_000) }
-      }).catch(() => {});
-      rivalEvent = pickText(SOCIAL_TEXTS.rival_trap_small, aName, bName);
-      summary.events.push(`🪤 ${aName} armou uma armadilha leve para ${bName} (+${delayMin}min)`);
+      const rawDelay = randomInt(5, 15);
+      const agilityDiscount = Math.floor(bAgility / 20);
+      const delayMin = _allowedExpDelay(rel.mascotB.id, Math.max(2, rawDelay - agilityDiscount));
+      if (delayMin > 0 && _canNegEvent(rel.mascotB.id)) {
+        await prisma.mascotExpedition.update({
+          where: { id: expedition.id },
+          data: { finishAt: new Date(new Date(expedition.finishAt).getTime() + delayMin * 60_000) }
+        }).catch(() => {});
+        _trackExpDelay(rel.mascotB.id, delayMin);
+        _incNegEvent(rel.mascotB.id);
+        rivalEvent = pickText(SOCIAL_TEXTS.rival_trap_small, aName, bName);
+        summary.events.push(`🪤 ${aName} armou uma armadilha leve para ${bName} (+${delayMin}min)`);
+      } else {
+        rivalEvent = `${bName} detectou a armadilha de ${aName} a tempo e desviou!`;
+        summary.events.push(`🛡️ ${bName} detectou armadilha de ${aName}`);
+      }
 
     } else if (eventRoll < 0.65 && rel.mascotB.arenaState === "ARENA") {
       // 🧲 Isca de Loot — alvo na Arena, rival espreitando o cofre
-      await prisma.mascot.update({
-        where: { id: rel.mascotB.id },
-        data: { happiness: { decrement: 5 } }
-      }).catch(() => {});
-      rivalEvent = pickText(SOCIAL_TEXTS.rival_loot_eye, aName, bName);
-      summary.events.push(`🧲 ${aName} está de olho no loot de ${bName}`);
+      if (_canNegEvent(rel.mascotB.id)) {
+        await prisma.mascot.update({
+          where: { id: rel.mascotB.id },
+          data: { happiness: { decrement: 5 } }
+        }).catch(() => {});
+        _incNegEvent(rel.mascotB.id);
+        rivalEvent = pickText(SOCIAL_TEXTS.rival_loot_eye, aName, bName);
+        summary.events.push(`🧲 ${aName} está de olho no loot de ${bName}`);
+      } else {
+        rivalEvent = `${aName} espreitou ${bName} na Arena, mas não conseguiu mais incomodar por hoje.`;
+        summary.events.push(`👁️ ${aName} espreitou ${bName} (sem efeito)`);
+      }
 
     } else if (isArchRival && eventRoll < 0.75 &&
                (rel.mascotB.arenaState === "INJURED" || rel.mascotB.arenaState === "RESTING")) {
-      // 💢 Ferida no Orgulho — Rival Direto agrava recuperação
-      const extraMin = randomInt(10, 20);
-      if (rel.mascotB.restingUntil) {
+      // 💢 Ferida no Orgulho — Rival Direto agrava recuperação (Vitalidade resiste)
+      const rawExtra = randomInt(10, 20);
+      const vitalityDiscount = Math.floor(bVitality / 15);
+      const extraMin = Math.max(5, rawExtra - vitalityDiscount);
+      if (_canNegEvent(rel.mascotB.id) && rel.mascotB.restingUntil) {
         const newRest = new Date(new Date(rel.mascotB.restingUntil).getTime() + extraMin * 60_000);
         await prisma.mascot.update({
           where: { id: rel.mascotB.id },
           data: { mood: "ANGRY" as MascotMood, restingUntil: newRest }
         }).catch(() => {});
-      } else {
+        _incNegEvent(rel.mascotB.id);
+      } else if (_canNegEvent(rel.mascotB.id)) {
         await prisma.mascot.update({ where: { id: rel.mascotB.id }, data: { mood: "ANGRY" as MascotMood } }).catch(() => {});
+        _incNegEvent(rel.mascotB.id);
       }
       rivalEvent = pickText(SOCIAL_TEXTS.rival_wound_pride, aName, bName);
-      summary.events.push(`💢 ${aName} agravou a recuperação de ${bName} (+${extraMin}min)`);
+      summary.events.push(`💢 ${aName} perturbou a recuperação de ${bName} (+${extraMin}min)`);
 
     } else if (isArchRival && eventRoll < 0.88) {
       // 🔥 Duelo de Território — Rival Direto, só log + contador
