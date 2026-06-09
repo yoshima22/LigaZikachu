@@ -416,10 +416,8 @@ export async function interactWithMascot(
   const PET_COOLDOWN_MS = 25 * 60 * 1000;
   const cooldownMs = type === "PLAY" ? PLAY_COOLDOWN_MS : type === "PET" ? PET_COOLDOWN_MS : 0;
 
-  // Cooldowns independentes: PLAY usa lastPlayedAt, PET usa lastPettedAt
-  const cooldownRef = type === "PLAY" ? mascot.lastPlayedAt : type === "PET" ? mascot.lastPettedAt : null;
-  if (!skipCooldown && cooldownMs > 0 && cooldownRef && now.getTime() - cooldownRef.getTime() < cooldownMs) {
-    const remaining = Math.ceil((cooldownMs - (now.getTime() - cooldownRef.getTime())) / 60_000);
+  if (!skipCooldown && cooldownMs > 0 && mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < cooldownMs) {
+    const remaining = Math.ceil((cooldownMs - (now.getTime() - mascot.lastInteractedAt.getTime())) / 60_000);
     const actionName = type === "PLAY" ? "brincar" : "fazer carinho";
     return { success: false, message: `Espere mais ${remaining} min antes de ${actionName} novamente.`, happinessChange: 0, expGained: 0 };
   }
@@ -533,8 +531,6 @@ export async function interactWithMascot(
       happiness: newHappiness,
       mood: finalMood,
       lastInteractedAt: type === "PLAY" || type === "PET" ? now : mascot.lastInteractedAt,
-      lastPlayedAt:     type === "PLAY"  ? now : mascot.lastPlayedAt,
-      lastPettedAt:     type === "PET"   ? now : mascot.lastPettedAt,
       lastFedAt: type.startsWith("FEED") ? now : mascot.lastFedAt,
     }
   });

@@ -60,8 +60,8 @@ interface MascotData {
   restingUntil: Date | null;
   hatchedAt: Date;
   lastInteractedAt: Date | null;
-  lastPlayedAt: Date | null;
-  lastPettedAt: Date | null;
+  lastPlayedAt?: Date | null;  // presente após migração SQL
+  lastPettedAt?: Date | null;  // presente após migração SQL
   lastFedAt: Date | null;
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
@@ -230,15 +230,17 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false }: Pro
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
   const [localMood, setLocalMood]           = useState(mascot.mood);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
-  const [localLastPlayed, setLocalLastPlayed] = useState(mascot.lastPlayedAt);
-  const [localLastPetted, setLocalLastPetted] = useState(mascot.lastPettedAt);
+  // lastPlayedAt/lastPettedAt: null até migração SQL ser aplicada
+  // Client-side tracking correto dentro da sessão mesmo sem as colunas no banco
+  const [localLastPlayed, setLocalLastPlayed] = useState<Date | null>(mascot.lastPlayedAt ?? null);
+  const [localLastPetted, setLocalLastPetted] = useState<Date | null>(mascot.lastPettedAt ?? null);
 
   // Sincroniza com novas props quando servidor atualiza
   useEffect(() => { setLocalHappiness(mascot.happiness); }, [mascot.happiness]);
   useEffect(() => { setLocalMood(mascot.mood); },           [mascot.mood]);
   useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
-  useEffect(() => { setLocalLastPlayed(mascot.lastPlayedAt); }, [mascot.lastPlayedAt]);
-  useEffect(() => { setLocalLastPetted(mascot.lastPettedAt); }, [mascot.lastPettedAt]);
+  useEffect(() => { if (mascot.lastPlayedAt != null) setLocalLastPlayed(mascot.lastPlayedAt); }, [mascot.lastPlayedAt]);
+  useEffect(() => { if (mascot.lastPettedAt != null) setLocalLastPetted(mascot.lastPettedAt); }, [mascot.lastPettedAt]);
 
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];

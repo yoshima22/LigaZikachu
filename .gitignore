@@ -12,3 +12,5 @@ backups
 prisma/dev.db
 android-webview/.gradle
 android-webview/app/build
+LigaZikachuApp.zip
+.vs/

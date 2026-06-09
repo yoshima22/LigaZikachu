@@ -1366,9 +1366,7 @@ model Mascot {
   battleLosses     Int               @default(0)
   // Timestamps
   hatchedAt        DateTime          @default(now())
-  lastInteractedAt DateTime?   // última interação qualquer (usado para cálculo de humor)
-  lastPlayedAt     DateTime?   // cooldown independente de Brincar (45 min)
-  lastPettedAt     DateTime?   // cooldown independente de Carinho (25 min)
+  lastInteractedAt DateTime?
   lastFedAt        DateTime?
   bazarListed          Boolean           @default(false)
   socialCooldownUntil  DateTime?         // rival travou interações temporariamente
