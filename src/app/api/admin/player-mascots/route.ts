@@ -1,21 +1,18 @@
 /**
  * Diagnóstico: lista todos os mascotes de um jogador pelo displayName.
  * GET /api/admin/player-mascots?name=Erick
- * Header: Authorization: Bearer <CRON_SECRET>
+ * Acesso: sessão de admin logado no site (não precisa de CRON_SECRET)
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAppSession } from "@/lib/session";
+import { isAdmin } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) {
+  const session = await getAppSession();
+  if (!session?.user || !isAdmin(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   const player = await prisma.player.findFirst({
     where: { displayName: { contains: name, mode: "insensitive" } },
-    select: { id: true, displayName: true, userId: true },
+    select: { id: true, displayName: true },
   });
 
   if (!player) return NextResponse.json({ error: "Jogador não encontrado" }, { status: 404 });
