@@ -59,7 +59,7 @@ async function getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary: 
     const events = await prisma.mascotEvent.findMany({
       where: { mascot: PLAYER_FILTER },
       orderBy: { createdAt: "desc" },
-      take: 60,
+      take: 25,
       select: {
         id: true, emoji: true, description: true, createdAt: true,
         mascot: {
@@ -205,12 +205,12 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-border bg-slate-900/60 p-1 sm:flex sm:flex-wrap">
+      <div className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-slate-900/60 p-1 no-scrollbar">
         {TABS.map(t => (
           <Link
             key={t.key}
             href={`/mascotes/ranking?tab=${t.key}`}
-            className={`rounded-lg py-2 text-center text-xs font-semibold transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
               tab === t.key
                 ? t.key === "diary"
                   ? "bg-purple-500 text-white"
@@ -218,8 +218,8 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <span className="block text-base leading-none">{t.emoji}</span>
-            <span className="block mt-0.5">{t.label}</span>
+            <span>{t.emoji}</span>
+            <span>{t.label}</span>
           </Link>
         ))}
       </div>
