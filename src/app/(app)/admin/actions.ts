@@ -321,6 +321,52 @@ export async function adminReactivateUser(userId: string): Promise<{ error?: str
   }
 }
 
+// ── Listar mascotes de um jogador (admin) ─────────────────────────────────────
+export async function getPlayerMascotsAdmin(playerId: string): Promise<{
+  mascots: { id: string; pokemonId: number; nickname: string | null; level: number; isFavorite: boolean; isEquipped: boolean; arenaState: string; bazarListed: boolean; activeExpedition: boolean }[];
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const mascots = await prisma.mascot.findMany({
+      where: { playerId },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true,
+        isFavorite: true, isEquipped: true, arenaState: true, bazarListed: true,
+        expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 },
+      },
+      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }],
+    });
+    return {
+      mascots: mascots.map(m => ({
+        id: m.id, pokemonId: m.pokemonId, nickname: m.nickname, level: m.level,
+        isFavorite: m.isFavorite, isEquipped: m.isEquipped,
+        arenaState: m.arenaState, bazarListed: m.bazarListed,
+        activeExpedition: m.expeditions.length > 0,
+      })),
+    };
+  } catch (err) {
+    return { mascots: [], error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+// ── Iniciar expedição em nome de um jogador (admin) ───────────────────────────
+export async function startAdminExpeditionAction(
+  playerId: string,
+  mascotId: string,
+  duration: import("@/lib/mascot-data").ExpeditionDuration,
+  mode: import("@/lib/mascot-data").ExpeditionMode,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const { startExpedition } = await import("@/lib/mascot");
+    await startExpedition(playerId, mascotId, duration, mode);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Limpeza de eventos de mascotes de admins ──────────────────────────────────
 
 export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error?: string }> {

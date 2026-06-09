@@ -3,6 +3,7 @@ import { GlobalResetPanel } from "./_components/global-reset-panel";
 import { DeckReminderPanel } from "./_components/deck-reminder-panel";
 import { BulkSendPanel } from "./_components/bulk-send-panel";
 import { MascotSocialPanel } from "./_components/mascot-social-panel";
+import { AdminExpeditionPanel } from "./_components/admin-expedition-panel";
 import { UserAccountPanel } from "./_components/user-account-panel";
 import {
   AlertTriangle,
@@ -227,6 +228,7 @@ export default async function AdminPage() {
 
       <UserAccountPanel users={allUsers} />
       <MascotSocialPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
+      <AdminExpeditionPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <GlobalResetPanel />
