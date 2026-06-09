@@ -9,6 +9,63 @@ import type { DayReward } from "./schedule";
 export type { DayReward } from "./schedule";
 import { PASS_SCHEDULE } from "./schedule";
 
+// ── Calendário: leitura com fallback para o hardcoded ─────────────────────────
+
+export async function getActiveSchedule(): Promise<DayReward[]> {
+  try {
+    const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: "singleton" } });
+    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30) {
+      return cfg.schedule as DayReward[];
+    }
+  } catch { /* tabela ainda não existe — usa fallback */ }
+  return PASS_SCHEDULE;
+}
+
+export async function adminGetSchedule(): Promise<{ schedule: DayReward[]; isCustom: boolean }> {
+  await requireAdmin();
+  try {
+    const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: "singleton" } });
+    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30) {
+      return { schedule: cfg.schedule as DayReward[], isCustom: true };
+    }
+  } catch { /* fallback */ }
+  return { schedule: PASS_SCHEDULE, isCustom: false };
+}
+
+export async function adminSaveSchedule(
+  schedule: DayReward[]
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const user = await getSessionUser();
+    if (schedule.length !== 30) return { ok: false, error: "O calendário precisa ter exatamente 30 dias." };
+
+    await prisma.passScheduleConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", schedule: schedule as object[], updatedBy: user?.id },
+      update: { schedule: schedule as object[], updatedBy: user?.id },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro ao salvar." };
+  }
+}
+
+export async function adminResetSchedule(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.passScheduleConfig.deleteMany({ where: { id: "singleton" } });
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro ao resetar." };
+  }
+}
+
 // ── Status do passe do jogador logado ─────────────────────────────────────────
 
 export type PassStatus = {
@@ -102,7 +159,8 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
     if (dayNumber < 1 || dayNumber > 30) return { ok: false, error: "Dia inválido." };
 
-    const reward = PASS_SCHEDULE.find(r => r.day === dayNumber);
+    const activeSchedule = await getActiveSchedule();
+    const reward = activeSchedule.find(r => r.day === dayNumber);
     if (!reward) return { ok: false, error: "Recompensa não configurada." };
 
     let stickerResult: ClaimResult["stickerResult"] | undefined;
