@@ -109,21 +109,27 @@ export const EGG_RATE_PROFILES: Record<"COMMON" | "RARE" | "SPECIAL", EggRatePro
     ],
   },
   RARE: {
-    legendaryChance: 0.03,
+    // Legendary chance: ~3.5% (+0.5% vs anterior)
+    legendaryChance: 0.035,
     buckets: [
-      { label: "starter", weight: 30, pokemonIds: STARTER_IDS },
-      { label: "rare_favorite", weight: 35, pokemonIds: RARE_FAN_FAVORITES },
-      { label: "pseudo_legendary_base", weight: 15, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_cameo", weight: 17, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
+      // Peso total: 97 (mesmo de antes). "Melhor loot" (pseudo + special_cameo):
+      //   Antes: (15+17)/97 = 33%  →  Agora: (18+19)/97 = 38.1%  (+5.1%)
+      { label: "starter",              weight: 27, pokemonIds: STARTER_IDS },
+      { label: "rare_favorite",        weight: 33, pokemonIds: RARE_FAN_FAVORITES },
+      { label: "pseudo_legendary_base", weight: 18, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
+      { label: "special_cameo",        weight: 19, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
     ],
   },
   SPECIAL: {
-    legendaryChance: 0.06,
+    // Legendary chance: ~6.5% (+0.5% vs anterior)
+    legendaryChance: 0.065,
     buckets: [
-      { label: "pseudo_legendary_base", weight: 25, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_coveted", weight: 35, pokemonIds: SPECIAL_COVETED_IDS },
-      { label: "paradox", weight: 18, pokemonIds: PARADOX_IDS },
-      { label: "fossil_and_ancient", weight: 16, pokemonIds: FOSSIL_AND_ANCIENT_IDS },
+      // Peso total: 94 (mesmo de antes). "Melhor loot" (pseudo + paradox):
+      //   Antes: (25+18)/94 = 45.7%  →  Agora: (27+19)/94 = 48.9%  (+3.2%)
+      { label: "pseudo_legendary_base", weight: 27, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
+      { label: "special_coveted",       weight: 34, pokemonIds: SPECIAL_COVETED_IDS },
+      { label: "paradox",               weight: 19, pokemonIds: PARADOX_IDS },
+      { label: "fossil_and_ancient",    weight: 14, pokemonIds: FOSSIL_AND_ANCIENT_IDS },
     ],
   },
 };

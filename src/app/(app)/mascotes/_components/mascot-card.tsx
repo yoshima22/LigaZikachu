@@ -196,13 +196,13 @@ function arenaStatus(mascot: MascotData) {
   return null;
 }
 
-interface ExpeditionRewardDisplay {
+export interface ExpeditionRewardDisplay {
   emoji: string;
   title: string;
   description: string;
 }
 
-function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }): ExpeditionRewardDisplay {
+export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }): ExpeditionRewardDisplay {
   if (reward.type === "TRAINING") {
     const exp = reward.exp ?? 0;
     const dur = reward.durationLabel ?? "";

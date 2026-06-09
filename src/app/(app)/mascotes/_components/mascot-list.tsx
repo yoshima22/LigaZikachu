@@ -8,7 +8,7 @@ import { getPokemonElement, getPokemonName, getSpriteUrl } from "@/lib/mascot-da
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
 import { MascotBankList, type BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
-import { MascotCard } from "./mascot-card";
+import { MascotCard, rewardToDisplay, type ExpeditionRewardDisplay } from "./mascot-card";
 
 interface MascotData {
   id: string; pokemonId: number; nickname: string | null;
@@ -102,6 +102,7 @@ type ActiveExpedition = MascotData["expeditions"][number] & {
 function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExpedition; isAdmin: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [reward, setReward] = useState<ExpeditionRewardDisplay | null>(null);
   const { expired, remaining } = useTimerExpiry(expedition.finishAt);
   const ready = expired;
   const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
@@ -109,72 +110,90 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
   const collectExpedition = () => {
     startTransition(async () => {
       const result = await claimExpeditionAction(expedition.id);
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success("Premios da expedicao coletados.");
-        router.refresh();
+      if (result.error) { toast.error(result.error); return; }
+      if (result.result?.reward) {
+        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }));
       }
+      router.refresh();
     });
   };
 
   const finishAndCollectExpedition = () => {
     startTransition(async () => {
       const skip = await skipExpeditionAction(expedition.id);
-      if (skip.error) {
-        toast.error(skip.error);
-        return;
-      }
+      if (skip.error) { toast.error(skip.error); return; }
       const result = await claimExpeditionAction(expedition.id);
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success("Expedicao finalizada e premios coletados.");
-        router.refresh();
+      if (result.error) { toast.error(result.error); return; }
+      if (result.result?.reward) {
+        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }));
       }
+      router.refresh();
     });
   };
 
   return (
-    <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
-      <div className="flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={getSpriteUrl(expedition.mascot.pokemonId, true)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
-          <p className="text-[10px] uppercase tracking-widest text-blue-300">
-            {EXPEDITION_MODE_LABELS[expedition.mode] ?? expedition.mode}
-          </p>
+    <>
+      {/* Modal de recompensa — idêntico ao do MascotCard */}
+      {reward && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setReward(null)}>
+          <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="text-6xl">{reward.emoji}</div>
+            <div className="space-y-1">
+              <p className="text-lg font-bold text-white">{reward.title}</p>
+              <p className="text-sm text-slate-400">{reward.description}</p>
+            </div>
+            <button
+              onClick={() => setReward(null)}
+              className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors"
+            >
+              Fechar
+            </button>
+          </div>
         </div>
-        <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${ready ? "bg-green-500/15 text-green-300" : "bg-blue-500/15 text-blue-300"}`}>
-          {formatRemaining(remaining)}
-        </span>
-      </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
-        <div
-          className={`h-full rounded-full transition-all ${ready ? "bg-green-400" : "bg-blue-400"}`}
-          style={{ width: ready ? "100%" : "55%" }}
-        />
-      </div>
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          disabled={pending || !ready}
-          onClick={collectExpedition}
-          className="flex-1 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-[11px] font-semibold text-green-300 hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Coletar premios
-        </button>
-        {isAdmin && !ready && (
+      )}
+
+      <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
+        <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={getSpriteUrl(expedition.mascot.pokemonId, true)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
+            <p className="text-[10px] uppercase tracking-widest text-blue-300">
+              {EXPEDITION_MODE_LABELS[expedition.mode] ?? expedition.mode}
+            </p>
+          </div>
+          <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${ready ? "bg-green-500/15 text-green-300" : "bg-blue-500/15 text-blue-300"}`}>
+            {formatRemaining(remaining)}
+          </span>
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+          <div
+            className={`h-full rounded-full transition-all ${ready ? "bg-green-400" : "bg-blue-400"}`}
+            style={{ width: ready ? "100%" : "55%" }}
+          />
+        </div>
+        <div className="mt-3 flex gap-2">
           <button
             type="button"
-            disabled={pending}
-            onClick={finishAndCollectExpedition}
-            className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40"
+            disabled={pending || !ready}
+            onClick={collectExpedition}
+            className="flex-1 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-[11px] font-semibold text-green-300 hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Finalizar
+            🎁 Coletar prêmios
           </button>
-        )}
+          {isAdmin && !ready && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={finishAndCollectExpedition}
+              className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40"
+            >
+              Finalizar
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
