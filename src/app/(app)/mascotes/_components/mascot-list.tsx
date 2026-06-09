@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, MapPin, Search, Star } from "lucide-react";
 import { getPokemonElement, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
+import { MascotBankList } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { MascotCard } from "./mascot-card";
 
@@ -177,7 +178,25 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
   );
 }
 
-export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]; isAdmin?: boolean }) {
+type BankMascotMinimal = {
+  id: string; pokemonId: number; nickname: string | null; level: number; mood: string; isShiny: boolean;
+  arenaState: string; bazarListed: boolean; injuredAt: Date | null; restingUntil: Date | null;
+  expeditions: { id: string; finishAt: Date; status: string }[];
+};
+
+export function MascotList({
+  mascots,
+  bankMascots = [],
+  hasFood = false,
+  hasSweet = false,
+  isAdmin = false,
+}: {
+  mascots: MascotData[];
+  bankMascots?: BankMascotMinimal[];
+  hasFood?: boolean;
+  hasSweet?: boolean;
+  isAdmin?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -325,28 +344,13 @@ export function MascotList({ mascots, isAdmin = false }: { mascots: MascotData[]
             </section>
           ) : null}
 
-          {others.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-slate-300">Banco de mascotes</h2>
-                <button type="button" onClick={() => setExpandedOthers(v => !v)}
-                  className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-slate-400 hover:text-slate-200">
-                  {expandedOthers ? "Recolher" : `Expandir (${others.length})`}
-                </button>
-              </div>
-              {expandedOthers ? (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {compactOthers.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} />)}
-                  </div>
-                  <Pagination page={safePage} totalPages={totalPages} onPage={setPage} total={others.length} />
-                </>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {compactOthers.map(m => <MiniMascot key={m.id} mascot={m} />)}
-                </div>
-              )}
-            </section>
+          {bankMascots.length > 0 && (
+            <MascotBankList
+              mascots={bankMascots}
+              hasFood={hasFood}
+              hasSweet={hasSweet}
+              isAdmin={isAdmin}
+            />
           )}
 
           <p className="text-center text-[10px] text-slate-600">

@@ -172,29 +172,34 @@ export default async function PlayerDetailPage({
         }
       }
     }).catch(() => null),
-    prisma.mascot.findMany({
-      where: { playerId },
-      select: {
-        id: true, pokemonId: true, nickname: true, level: true,
-        mood: true, happiness: true, isEquipped: true, isFavorite: true,
-        statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-        battleWins: true, battleLosses: true,
-        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
-        relationsAsA: {
-          take: 5,
-          include: {
-            mascotB: {
-              select: {
-                id: true, pokemonId: true, nickname: true,
-                player: { select: { displayName: true } }
+    // Perfil público: mostra apenas mascotes do time ativo na Arena
+    prisma.arenaTeamMember.findMany({
+      where: { team: { playerId, status: "ACTIVE" } },
+      include: {
+        mascot: {
+          select: {
+            id: true, pokemonId: true, nickname: true, level: true,
+            mood: true, happiness: true, isEquipped: true, isFavorite: true,
+            statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+            battleWins: true, battleLosses: true,
+            expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
+            relationsAsA: {
+              take: 5,
+              include: {
+                mascotB: {
+                  select: {
+                    id: true, pokemonId: true, nickname: true,
+                    player: { select: { displayName: true } }
+                  }
+                }
               }
-            }
-          }
+            },
+          },
         },
       },
-      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
-      take: 50,
-    }).catch(() => [] as Array<never>),
+      orderBy: { slot: "asc" },
+      take: 6,
+    }).then(members => members.map(m => m.mascot)).catch(() => [] as Array<never>),
   ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
@@ -733,7 +738,7 @@ export default async function PlayerDetailPage({
       {publicMascots.length > 0 && (
         <Card>
           <CardTitle className="mb-3 flex items-center gap-2">
-            <Swords size={18} className="text-primary" /> Coleção de Mascotes
+            <Swords size={18} className="text-primary" /> Time Ativo na Arena
           </CardTitle>
           <PublicMascotGallery mascots={publicMascots} isAdmin={isAdminUser} />
         </Card>

@@ -637,6 +637,77 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+// ── Carregamento sob demanda de um mascote do banco ─────────────────────────
+// Chamado pelo cliente apenas ao clicar no mascote, evitando carregar todos.
+export async function getMascotDetailAction(mascotId: string): Promise<{
+  error?: string;
+  data?: {
+    id: string; pokemonId: number; nickname: string | null;
+    level: number; exp: number; happiness: number; mood: string; personality: string;
+    isEquipped: boolean; isFavorite: boolean;
+    statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number;
+    battleWins: number; battleLosses: number;
+    arenaState: string; bazarListed: boolean;
+    injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
+    lastInteractedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
+    evolutionLocked: boolean; isShiny: boolean;
+    activeBuffs: { type: string; expiresAt: Date }[];
+    relations: { type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
+    expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
+    events: { id: string; emoji: string; description: string; createdAt: Date }[];
+  };
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const m = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      include: {
+        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
+        events: { orderBy: { createdAt: "desc" }, take: 4 },
+        relationsAsA: {
+          take: 5,
+          include: { mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { id: true, displayName: true } } } } },
+        },
+      },
+    });
+    if (!m || m.playerId !== player.id) return { error: "Mascote não encontrado." };
+
+    const activeBuffs = await prisma.mascotBuff.findMany({
+      where: { mascotId, expiresAt: { gt: new Date() } },
+      select: { type: true, expiresAt: true },
+    });
+
+    return {
+      data: {
+        id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+        level: m.level, exp: m.exp, happiness: m.happiness,
+        mood: m.mood, personality: m.personality, isEquipped: m.isEquipped, isFavorite: m.isFavorite,
+        statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma,
+        statInstinct: m.statInstinct, statVitality: m.statVitality,
+        battleWins: m.battleWins, battleLosses: m.battleLosses,
+        arenaState: m.arenaState, bazarListed: m.bazarListed,
+        injuredAt: m.injuredAt, restingUntil: m.restingUntil, hatchedAt: m.hatchedAt,
+        lastInteractedAt: m.lastInteractedAt, lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
+        evolutionLocked: m.evolutionLocked, isShiny: m.isShiny,
+        activeBuffs,
+        relations: m.relationsAsA.map(r => ({
+          type: r.type, interactionCount: r.interactionCount,
+          mascotB: { id: r.mascotB.id, pokemonId: r.mascotB.pokemonId, nickname: r.mascotB.nickname, ownerName: r.mascotB.player.displayName, ownerId: r.mascotB.player.id },
+        })),
+        expeditions: m.expeditions.map(e => ({
+          id: e.id, finishAt: e.finishAt, status: e.status,
+          mode: (e.rewardJson as Record<string, unknown> | null)?.mode as string ?? "STANDARD",
+        })),
+        events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
+      },
+    };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
 export async function toggleEvolutionLockAction(mascotId: string, lock: boolean): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
