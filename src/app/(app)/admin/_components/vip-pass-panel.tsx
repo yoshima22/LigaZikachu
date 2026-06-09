@@ -33,16 +33,22 @@ export function VipPassPanel({ players, activeVips }: Props) {
   const [revokePending, startRevoke] = useTransition();
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [durationDays, setDurationDays] = useState(30);
+  const [startDay, setStartDay] = useState(1);
   const [revokeReason, setRevokeReason] = useState("");
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const handleGrant = () => {
     if (!selectedPlayerId) { toast.error("Selecione um jogador."); return; }
     startGrant(async () => {
-      const result = await adminGrantVip({ playerId: selectedPlayerId, days: durationDays });
+      const result = await adminGrantVip({
+        playerId: selectedPlayerId,
+        days: durationDays,
+        startDay: startDay > 1 ? startDay : undefined,
+      });
       if (result.ok) {
-        toast.success("Passe VIP concedido com sucesso!");
+        toast.success(`Passe VIP concedido! ${startDay > 1 ? `Iniciado no dia ${startDay}.` : ""}`);
         setSelectedPlayerId("");
+        setStartDay(1);
       } else {
         toast.error(result.error ?? "Erro ao conceder VIP.");
       }
@@ -96,8 +102,8 @@ export function VipPassPanel({ players, activeVips }: Props) {
                   <option key={p.id} value={p.id}>{p.displayName}</option>
                 ))}
               </select>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-400">Dias:</label>
+                <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-400 whitespace-nowrap">Duração (dias):</label>
                 <input
                   type="number"
                   min={1}
@@ -105,6 +111,17 @@ export function VipPassPanel({ players, activeVips }: Props) {
                   value={durationDays}
                   onChange={e => setDurationDays(Number(e.target.value))}
                   className="w-20 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-400 whitespace-nowrap">Iniciar no dia:</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={startDay}
+                  onChange={e => setStartDay(Math.max(1, Math.min(30, Number(e.target.value))))}
+                  className="w-16 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50"
                 />
               </div>
               <Button
@@ -117,7 +134,11 @@ export function VipPassPanel({ players, activeVips }: Props) {
               </Button>
             </div>
             <p className="text-xs text-slate-500">
-              Conceder cria um passe de {durationDays} dias, adiciona o título &quot;Pilar da Comunidade&quot; ao inventário e registra no log de auditoria.
+              Cria um passe de <strong className="text-slate-400">{durationDays} dias</strong>, adiciona o título &quot;Pilar da Comunidade&quot; e registra no log.
+              {startDay > 1 && (
+                <> Os dias <strong className="text-orange-400">1–{startDay - 1}</strong> serão marcados como já resgatados <em>(sem duplicar recompensas)</em> — use para corrigir passes sem histórico.</>
+              )}
+              {" "}Passes anteriores do jogador permanecem ativos.
             </p>
           </div>
 

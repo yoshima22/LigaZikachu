@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Star, Gift, Calendar, CheckCircle2, Lock, Sparkles, Clock } from "lucide-react";
+import { Star, Gift, Calendar, CheckCircle2, Lock, Sparkles, Clock, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PassStatus, ClaimResult } from "../actions";
 import type { DayReward } from "../schedule";
@@ -16,6 +17,8 @@ interface Props {
 }
 
 export function PassPageClient({ status, schedule }: Props) {
+  const router     = useRouter();
+  const searchParams = useSearchParams();
   const [pending, start] = useTransition();
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -34,6 +37,8 @@ export function PassPageClient({ status, schedule }: Props) {
 
   const claimedDays = new Set(status.claims.map(c => c.dayNumber));
   const today = status.todayDay;
+  const hasMultiplePasses = status.allActivePasses.length > 1;
+  const selectedPassId    = status.pass?.id ?? null;
 
   const handleClaim = (day: number) => {
     if (!status.pass) return;
@@ -82,6 +87,46 @@ export function PassPageClient({ status, schedule }: Props) {
     <div className="space-y-6 pb-12">
       {showCelebration && <VipCelebration onDone={celebDone} />}
       {claimResult && <RewardClaimModal result={claimResult} onClose={() => setClaimResult(null)} />}
+
+      {/* Seletor de passes — só aparece quando há mais de um ativo */}
+      {hasMultiplePasses && (
+        <div className="rounded-xl border border-yellow-400/20 bg-yellow-950/10 p-3">
+          <p className="text-[10px] uppercase tracking-widest text-yellow-400/60 font-semibold mb-2 flex items-center gap-1">
+            <Star size={10} className="text-yellow-400" />
+            Você tem {status.allActivePasses.length} passes ativos — selecione qual visualizar
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {status.allActivePasses.map((p, idx) => {
+              const isSelected = p.id === selectedPassId;
+              // Filtra os claims pré-criados (DEBUG_SKIP) do contador real
+              const realClaims = p.claimsCount; // backend já filtra ou usa o total
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set("passId", p.id);
+                    router.push(`/passe-apoiador?${params.toString()}`);
+                  }}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${
+                    isSelected
+                      ? "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 font-semibold"
+                      : "border-border text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                  }`}
+                >
+                  <Star size={10} className={isSelected ? "text-yellow-400" : "text-slate-600"} />
+                  <span>Passe {idx + 1}</span>
+                  <span className="text-slate-500">·</span>
+                  <span>{realClaims}/30 dias</span>
+                  <span className="text-slate-500">·</span>
+                  <span>{p.daysRemaining}d restantes</span>
+                  {isSelected && <ChevronRight size={10} className="text-yellow-400" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="rounded-2xl border border-yellow-400/20 bg-gradient-to-r from-yellow-950/30 via-purple-950/20 to-yellow-950/30 p-6 relative overflow-hidden">

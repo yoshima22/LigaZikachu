@@ -68,6 +68,14 @@ export async function adminResetSchedule(): Promise<{ ok: boolean; error?: strin
 
 // ── Status do passe do jogador logado ─────────────────────────────────────────
 
+export type ActivePassSummary = {
+  id: string;
+  startsAt: Date;
+  expiresAt: Date;
+  daysRemaining: number;
+  claimsCount: number;
+};
+
 export type PassStatus = {
   pass: {
     id: string;
@@ -82,29 +90,51 @@ export type PassStatus = {
   todayDay: number | null; // null = não tem passe ativo
   canClaimToday: boolean;
   isNewVip: boolean; // nunca teve passe antes (para celebração)
+  /** Todos os passes ativos — para o seletor quando houver mais de um */
+  allActivePasses: ActivePassSummary[];
   error?: string;
 };
 
-export async function getMyPassStatus(): Promise<PassStatus> {
-  const empty: PassStatus = { pass: null, claims: [], todayDay: null, canClaimToday: false, isNewVip: false };
+export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
+  const empty: PassStatus = { pass: null, claims: [], todayDay: null, canClaimToday: false, isNewVip: false, allActivePasses: [] };
   try {
     const user = await getSessionUser();
     if (!user) return empty;
     const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (!player) return empty;
 
-    const pass = await prisma.supporterPass.findFirst({
+    // Lista de todos os passes ativos para o seletor
+    const allActiveRaw = await prisma.supporterPass.findMany({
       where: { playerId: player.id, active: true },
-      include: { claims: { select: { dayNumber: true, claimedAt: true }, orderBy: { dayNumber: "asc" } } },
+      select: { id: true, startsAt: true, expiresAt: true, _count: { select: { claims: true } } },
       orderBy: { createdAt: "desc" },
     });
+    const now = new Date();
+    const allActivePasses: ActivePassSummary[] = allActiveRaw.map(p => ({
+      id: p.id,
+      startsAt: p.startsAt,
+      expiresAt: p.expiresAt,
+      daysRemaining: Math.max(0, Math.ceil((p.expiresAt.getTime() - now.getTime()) / 86400000)),
+      claimsCount: p._count.claims,
+    }));
+
+    // Seleciona o passe: pelo ID se fornecido, senão o mais recente ativo
+    const pass = passId
+      ? await prisma.supporterPass.findFirst({
+          where: { id: passId, playerId: player.id, active: true },
+          include: { claims: { select: { dayNumber: true, claimedAt: true }, orderBy: { dayNumber: "asc" } } },
+        })
+      : await prisma.supporterPass.findFirst({
+          where: { playerId: player.id, active: true },
+          include: { claims: { select: { dayNumber: true, claimedAt: true }, orderBy: { dayNumber: "asc" } } },
+          orderBy: { createdAt: "desc" },
+        });
 
     if (!pass) {
       const hadPass = await prisma.supporterPass.count({ where: { playerId: player.id } });
-      return { ...empty, isNewVip: hadPass === 0 };
+      return { ...empty, allActivePasses, isNewVip: hadPass === 0 };
     }
 
-    const now = new Date();
     const isExpired = now > pass.expiresAt || !pass.active;
     const msElapsed = Math.max(0, now.getTime() - pass.startsAt.getTime());
     const daysElapsed = Math.floor(msElapsed / 86400000);
@@ -119,6 +149,7 @@ export async function getMyPassStatus(): Promise<PassStatus> {
       todayDay: isExpired ? null : todayDay,
       canClaimToday,
       isNewVip: false,
+      allActivePasses,
     };
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : "Erro" };
@@ -269,6 +300,8 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
 export async function adminGrantVip(opts: {
   playerId: string;
   days: number;
+  /** Iniciar o passe a partir deste dia (1–30). Dias anteriores serão marcados como resgatados sem entregar recompensas. */
+  startDay?: number;
 }): Promise<{ ok: boolean; passId?: string; error?: string }> {
   try {
     const admin = await getSessionUser();
@@ -277,13 +310,13 @@ export async function adminGrantVip(opts: {
     const player = await prisma.player.findUnique({ where: { id: opts.playerId }, select: { id: true, displayName: true } });
     if (!player) return { ok: false, error: "Jogador não encontrado." };
 
-    // Desativa passes anteriores ativos
-    await prisma.supporterPass.updateMany({
-      where: { playerId: opts.playerId, active: true },
-      data: { active: false, revokedAt: new Date(), revokeReason: "Substituído por novo passe" },
-    });
+    const startDay = Math.max(1, Math.min(30, opts.startDay ?? 1));
 
-    const startsAt = new Date();
+    // Se startDay > 1, rewind startsAt para que "hoje" seja o dia startDay
+    const now = new Date();
+    const startsAt = startDay > 1
+      ? new Date(now.getTime() - (startDay - 1) * 86400000)
+      : now;
     const expiresAt = new Date(startsAt.getTime() + opts.days * 86400000);
 
     // Encontrar ou criar o título "Pilar da Comunidade"
@@ -329,13 +362,35 @@ export async function adminGrantVip(opts: {
       },
     });
 
+    // Pré-criar claims para dias anteriores ao startDay (sem entregar recompensas)
+    if (startDay > 1) {
+      const activeSchedule = await getActiveSchedule();
+      await prisma.supporterPassClaim.createMany({
+        data: Array.from({ length: startDay - 1 }, (_, i) => {
+          const day = i + 1;
+          const reward = activeSchedule.find(r => r.day === day);
+          return {
+            passId: pass.id,
+            playerId: opts.playerId,
+            dayNumber: day,
+            rewardType: "DEBUG_SKIP",
+            rewardPayload: {
+              skipped: true,
+              originalReward: reward ?? null,
+              reason: `Passe iniciado no dia ${startDay} pelo admin`,
+            },
+          };
+        }),
+      });
+    }
+
     await prisma.auditLog.create({
       data: {
         actorUserId: admin!.id,
         action: "VIP_GRANTED",
         entityType: "SupporterPass",
         entityId: pass.id,
-        metadata: { playerId: opts.playerId, playerName: player.displayName, days: opts.days, expiresAt },
+        metadata: { playerId: opts.playerId, playerName: player.displayName, days: opts.days, startDay, expiresAt },
       },
     });
 
