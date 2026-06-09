@@ -64,7 +64,11 @@ export async function startIncubation(playerId: string, eggId: string) {
   });
 }
 
-export async function hatchEgg(playerId: string): Promise<{ mascotId: string; pokemonId: number; name: string; isNew: boolean; isShiny: boolean; isStatBuffed: boolean }> {
+export async function hatchEgg(playerId: string): Promise<{
+  mascotId: string; pokemonId: number; name: string; isNew: boolean; isShiny: boolean; isStatBuffed: boolean;
+  stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+  statRange: [number, number];
+}> {
   const incubator = await prisma.mascotIncubator.findUnique({
     where: { playerId },
     include: { egg: true }
