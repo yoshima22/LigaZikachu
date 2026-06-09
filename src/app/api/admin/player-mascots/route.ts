@@ -1,19 +1,22 @@
 /**
  * Diagnóstico: lista todos os mascotes de um jogador pelo displayName.
  * GET /api/admin/player-mascots?name=Erick
- * Acesso: sessão de admin logado no site (não precisa de CRON_SECRET)
+ * Acesso: sessão de admin logado no site
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAppSession } from "@/lib/session";
-import { isAdmin } from "@/lib/auth/permissions";
+import { auth } from "@/auth";
+import { Role } from "@prisma/client";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const session = await getAppSession();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await auth();
+  const role = session?.user?.role as Role | undefined;
+  const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+
+  if (!session?.user || !isAdmin) {
+    return NextResponse.json({ error: "Unauthorized — faça login como admin" }, { status: 401 });
   }
 
   const name = req.nextUrl.searchParams.get("name");
