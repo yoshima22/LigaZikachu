@@ -271,9 +271,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   useEffect(() => { setLocalExp(mascot.exp); },             [mascot.exp]);
   useEffect(() => { setLocalLevel(mascot.level); },         [mascot.level]);
   useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
-  // lastPlayedAt/lastPettedAt: sincroniza do servidor quando disponível (após migração SQL)
-  useEffect(() => { if (mascot.lastPlayedAt) _playedAt.set(mascot.id, new Date(mascot.lastPlayedAt).getTime()); }, [mascot.id, mascot.lastPlayedAt]);
-  useEffect(() => { if (mascot.lastPettedAt) _pettedAt.set(mascot.id, new Date(mascot.lastPettedAt).getTime()); }, [mascot.id, mascot.lastPettedAt]);
+  // (seed do Map movido para depois do useState de nowMs — veja abaixo)
 
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
@@ -299,6 +297,30 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     const iv = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(iv);
   }, []);
+
+  // Semeia o Map de cooldown a partir do servidor (sobrevive a refresh de página)
+  // Prioriza lastPlayedAt (quando disponível após migração), cai para lastInteractedAt como proxy
+  // Chama setNowMs para forçar re-render e aplicar o cooldown imediatamente na UI
+  useEffect(() => {
+    const ts = mascot.lastPlayedAt
+      ? new Date(mascot.lastPlayedAt).getTime()
+      : mascot.lastInteractedAt
+        ? new Date(mascot.lastInteractedAt).getTime()
+        : 0;
+    if (ts > 0 && ts > (_playedAt.get(mascot.id) ?? 0)) {
+      _playedAt.set(mascot.id, ts);
+      setNowMs(Date.now()); // força re-render para refletir cooldown na UI
+    }
+  }, [mascot.id, mascot.lastPlayedAt, mascot.lastInteractedAt]);
+  useEffect(() => {
+    if (mascot.lastPettedAt) {
+      const ts = new Date(mascot.lastPettedAt).getTime();
+      if (ts > (_pettedAt.get(mascot.id) ?? 0)) {
+        _pettedAt.set(mascot.id, ts);
+        setNowMs(Date.now());
+      }
+    }
+  }, [mascot.id, mascot.lastPettedAt]);
 
   // Cooldowns independentes — lidos do Map de módulo (sobrevive a remounts)
   const playEndMs = (_playedAt.get(mascot.id) ?? 0) + PLAY_CD_MS;
@@ -348,8 +370,16 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
       const r = await interactAction(mascot.id, type);
       if (r.error) { toast.error(r.error); return; }
       if (r.result) {
+        // Ação recusada por personalidade/humor (ex: tímido, raiva)
         if (r.result.refused) {
           toast.info(r.result.message);
+          return;
+        }
+        // Ação bloqueada por cooldown ou expedição — não aplica estado, não marca timer
+        if (!r.result.success) {
+          toast.info(r.result.message);
+          // Refresh para ressincronizar lastInteractedAt e mostrar cooldown correto
+          router.refresh();
           return;
         }
         toast.success(r.result.message);
