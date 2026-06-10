@@ -252,12 +252,12 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
 }
 
 const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string; permanent?: boolean; areas?: string }> = {
-  EXP_BOOST:       { emoji: "⚡",   label: "EXP ×2",         color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
+  EXP_BOOST:       { emoji: "⚡",   label: "EXP +25%",       color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
   LUCK_BOOST:      { emoji: "🍀",   label: "Sorte",           color: "border-green-500/40 bg-green-500/10 text-green-300" },
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200", areas: "Expedição ✓ · Arena ✗ · Interações ✗" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política Fraqueza", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
-  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique +10%", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
+  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique +15%", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
   XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
 };
 

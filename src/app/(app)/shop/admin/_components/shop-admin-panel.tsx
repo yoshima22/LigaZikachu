@@ -74,23 +74,29 @@ interface Item {
 
 type FrameMeta  = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
 type BannerMeta = { focusX: number; focusY: number }; // object-position em % (0-100)
+type BuffMeta   = { buffHours: number; expMultiplierPct: number; happinessBonus: number };
+
+const BUFF_ITEM_TYPES = new Set(["MASCOT_BUFF_EXP", "PICNIC_BASKET", "LUCKY_EGG"]);
 
 type FormData = {
   type: typeof typeOpts[number]; name: string; description: string;
   imageUrl: string; rarity: typeof rarityOpts[number]; price: number;
   frameMeta: FrameMeta;
   bannerMeta: BannerMeta;
+  buffMeta: BuffMeta;
   theme: typeof themeOpts[number];
   flavorText: string;
   entranceEffect: typeof effectOpts[number];
 };
 const DEFAULT_FRAME_META:  FrameMeta  = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
 const DEFAULT_BANNER_META: BannerMeta = { focusX: 50, focusY: 50 };
+const DEFAULT_BUFF_META:   BuffMeta   = { buffHours: 2, expMultiplierPct: 25, happinessBonus: 5 };
 
 const EMPTY: FormData = {
   type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100,
   frameMeta: DEFAULT_FRAME_META,
   bannerMeta: DEFAULT_BANNER_META,
+  buffMeta: DEFAULT_BUFF_META,
   theme: "NEUTRAL",
   flavorText: "",
   entranceEffect: "NONE",
@@ -98,7 +104,7 @@ const EMPTY: FormData = {
 
 const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
   const meta = i.metadata && typeof i.metadata === "object" && !Array.isArray(i.metadata)
-    ? (i.metadata as Partial<FrameMeta & BannerMeta>)
+    ? (i.metadata as Partial<FrameMeta & BannerMeta & BuffMeta>)
     : {};
   return {
     type: i.type as typeof typeOpts[number], name: i.name, description: i.description ?? "",
@@ -111,6 +117,11 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
     bannerMeta: {
       focusX: (meta as Partial<BannerMeta>).focusX ?? 50,
       focusY: (meta as Partial<BannerMeta>).focusY ?? 50,
+    },
+    buffMeta: {
+      buffHours:        meta.buffHours        ?? DEFAULT_BUFF_META.buffHours,
+      expMultiplierPct: meta.expMultiplierPct ?? DEFAULT_BUFF_META.expMultiplierPct,
+      happinessBonus:   meta.happinessBonus   ?? DEFAULT_BUFF_META.happinessBonus,
     },
     theme: (i.theme as typeof themeOpts[number]) ?? "NEUTRAL",
     flavorText: i.flavorText ?? "",
@@ -326,6 +337,62 @@ function FrameMetaEditor({ frameMeta, setFrameMeta, imageUrl }: {
   );
 }
 
+function BuffMetaEditor({ buffMeta, setBuffMeta, itemType }: {
+  buffMeta: BuffMeta;
+  setBuffMeta: (m: BuffMeta) => void;
+  itemType: string;
+}) {
+  const showHappiness = itemType === "PICNIC_BASKET";
+  const showExpPct    = itemType === "MASCOT_BUFF_EXP" || itemType === "PICNIC_BASKET" || itemType === "LUCKY_EGG";
+  return (
+    <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-4 md:col-span-2 lg:col-span-3">
+      <p className="text-xs font-semibold text-[#FFCB05]">⚡ Configurações de Buff</p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="space-y-1 text-xs text-slate-400">
+          <div className="flex justify-between">
+            <span>Duração (horas)</span>
+            <span className="text-[#FFCB05] font-semibold">{buffMeta.buffHours}h</span>
+          </div>
+          <input type="number" min={1} max={72} step={1}
+            value={buffMeta.buffHours}
+            onChange={e => setBuffMeta({ ...buffMeta, buffHours: Math.max(1, parseInt(e.target.value) || 1) })}
+            className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+          <p className="text-[10px] text-slate-600">Quanto tempo o buff dura após uso</p>
+        </label>
+        {showExpPct && (
+          <label className="space-y-1 text-xs text-slate-400">
+            <div className="flex justify-between">
+              <span>Bônus de EXP (%)</span>
+              <span className="text-[#FFCB05] font-semibold">+{buffMeta.expMultiplierPct}%</span>
+            </div>
+            <input type="number" min={1} max={200} step={1}
+              value={buffMeta.expMultiplierPct}
+              onChange={e => setBuffMeta({ ...buffMeta, expMultiplierPct: Math.max(1, parseInt(e.target.value) || 1) })}
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+            <p className="text-[10px] text-slate-600">Percentual adicional de EXP (25 = +25%)</p>
+          </label>
+        )}
+        {showHappiness && (
+          <label className="space-y-1 text-xs text-slate-400">
+            <div className="flex justify-between">
+              <span>Bônus de Felicidade</span>
+              <span className="text-[#FFCB05] font-semibold">+{buffMeta.happinessBonus}</span>
+            </div>
+            <input type="number" min={0} max={50} step={1}
+              value={buffMeta.happinessBonus}
+              onChange={e => setBuffMeta({ ...buffMeta, happinessBonus: Math.max(0, parseInt(e.target.value) || 0) })}
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+            <p className="text-[10px] text-slate-600">Felicidade extra por interação/batalha</p>
+          </label>
+        )}
+      </div>
+      <p className="text-[10px] text-slate-500">
+        Esses valores são lidos em tempo real pelo sistema — sem necessidade de reiniciar.
+      </p>
+    </div>
+  );
+}
+
 function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   form: FormData; setForm: (f: FormData) => void;
   onSave: () => void; onCancel: () => void; pending: boolean; label: string;
@@ -333,6 +400,7 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   const isFrame  = (form.type as string) === "FRAME";
   const isBanner = (form.type as string) === "BANNER";
   const isTitle  = (form.type as string) === "TITLE";
+  const isBuff   = BUFF_ITEM_TYPES.has(form.type);
   const isMascotItem = ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"].includes(form.type);
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
@@ -464,6 +532,14 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
           setBannerMeta={(m) => setForm({ ...form, bannerMeta: m })}
         />
       )}
+      {/* Editor de configurações de buff */}
+      {isBuff && (
+        <BuffMetaEditor
+          itemType={form.type}
+          buffMeta={form.buffMeta}
+          setBuffMeta={(m) => setForm({ ...form, buffMeta: m })}
+        />
+      )}
       <div className="flex gap-2 md:col-span-2 lg:col-span-3">
         <Button type="button" disabled={!form.name || pending} onClick={onSave}
           className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">{label}</Button>
@@ -485,8 +561,9 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
     imageUrl: f.imageUrl || undefined,
     description: f.description || undefined,
     metadata:
-      f.type === "FRAME"  ? f.frameMeta  :
-      f.type === "BANNER" ? f.bannerMeta :
+      f.type === "FRAME"        ? f.frameMeta  :
+      f.type === "BANNER"       ? f.bannerMeta :
+      BUFF_ITEM_TYPES.has(f.type) ? f.buffMeta  :
       undefined,
     theme: f.type === "TITLE" ? f.theme : undefined,
     flavorText: f.type === "TITLE" && f.flavorText ? f.flavorText : null,

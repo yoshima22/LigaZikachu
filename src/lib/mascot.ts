@@ -319,12 +319,20 @@ export async function addExp(
 
   // Check for active EXP_BOOST buff (ignorado se já foi aplicado pelo caller)
   if (!options.ignoreExpBoost) {
-    const [expBoostBuff, picnicBuff] = await Promise.all([
+    const [expBoostBuff, picnicBuff, expBoostItem, picnicItem] = await Promise.all([
       prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } }),
       prisma.mascotBuff.findFirst({ where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } } }),
+      prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_EXP" }, select: { metadata: true } }),
+      prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" }, select: { metadata: true } }),
     ]);
-    if (expBoostBuff) amount = Math.floor(amount * 2);
-    if (picnicBuff)   amount = Math.floor(amount * 1.10);
+    if (expBoostBuff) {
+      const pct = (expBoostItem?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25;
+      amount = Math.floor(amount * (1 + pct / 100));
+    }
+    if (picnicBuff) {
+      const pct = (picnicItem?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15;
+      amount = Math.floor(amount * (1 + pct / 100));
+    }
   }
 
   let { level, exp, pokemonId } = mascot;
@@ -454,8 +462,12 @@ export async function interactWithMascot(
     prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true, interactionCount: true } }).catch(() => [] as { type: string; interactionCount: number }[]),
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
   ]);
-  const picnicExpBonus   = picnicBuff  ? 0.10 : 0;
-  const picnicHappyBonus = picnicBuff  ? 5    : 0;
+  const [picnicItemMeta, expBoostItemMeta] = await Promise.all([
+    picnicBuff   ? prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" },    select: { metadata: true } }) : Promise.resolve(null),
+    expBoostBuff ? prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_EXP" }, select: { metadata: true } }) : Promise.resolve(null),
+  ]);
+  const picnicExpBonus   = picnicBuff ? ((picnicItemMeta?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 0;
+  const picnicHappyBonus = picnicBuff ? ((picnicItemMeta?.metadata as { happinessBonus?: number } | null)?.happinessBonus ?? 5) : 0;
 
   // Bônus social escalado por tier (§12 do doc social)
   const friendRels     = relations.filter(r => r.type === "FRIEND");
@@ -473,7 +485,7 @@ export async function interactWithMascot(
   socialBonus = Math.min(socialBonus, 0.25);            // cap total +25%
   const socialMult = 1.0 + socialBonus + picnicExpBonus;
   const benchMult  = mascot.isEquipped ? 1.5 : (mascot.isFavorite ? 1.25 : 1.0);
-  const expBoostMult = expBoostBuff ? 2.0 : 1.0;
+  const expBoostMult = expBoostBuff ? 1 + ((expBoostItemMeta?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
 
   // Calcula EXP real que será aplicado (mesmo cálculo do addExp, mas exposto aqui para a mensagem)
   const calcFinalExp = (base: number) =>
@@ -2065,22 +2077,26 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
   await logEvent(mascotId, "🛡️", "Política de Fraqueza equipada! Estará protegido contra ataques oportunistas.");
 }
 
-/** Cesta de Piquenique Chocante: +10% EXP e +5 felicidade em batalhas, interações e expedições por 2h para os 6 favoritos */
+/** Cesta de Piquenique Chocante: EXP% e felicidade aos 6 favoritos por N horas (config via ShopItem.metadata) */
 export async function applyPicnicBasket(playerId: string) {
-  const favoriteMascots = await prisma.mascot.findMany({
-    where: { playerId, isFavorite: true, arenaState: "FREE" },
-    take: 6,
-  });
+  const [favoriteMascots, picnicShopItem] = await Promise.all([
+    prisma.mascot.findMany({ where: { playerId, isFavorite: true, arenaState: "FREE" }, take: 6 }),
+    prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" }, select: { metadata: true } }),
+  ]);
   if (favoriteMascots.length === 0) throw new Error("Nenhum mascote favorito livre encontrado. Marque até 6 mascotes como favorito.");
+  const picnicMeta = picnicShopItem?.metadata as { buffHours?: number; expMultiplierPct?: number; happinessBonus?: number } | null;
+  const hours  = picnicMeta?.buffHours        ?? 2;
+  const expPct = picnicMeta?.expMultiplierPct ?? 15;
+  const happy  = picnicMeta?.happinessBonus   ?? 5;
   const mascotIds = favoriteMascots.map(m => m.id);
-  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
   // Remove buffs PICNIC_BASKET anteriores (sem acúmulo) e cria novos
   await prisma.mascotBuff.deleteMany({ where: { mascotId: { in: mascotIds }, type: "PICNIC_BASKET" } });
   await prisma.mascotBuff.createMany({
     data: mascotIds.map(id => ({ mascotId: id, type: "PICNIC_BASKET" as const, expiresAt }))
   });
   for (const m of favoriteMascots) {
-    await logEvent(m.id, "🧺⚡", "Piquenique Chocante! +10% EXP e +5 felicidade em batalhas, interações e expedições por 2h.");
+    await logEvent(m.id, "🧺⚡", `Piquenique Chocante! +${expPct}% EXP e +${happy} felicidade em batalhas, interações e expedições por ${hours}h.`);
   }
   return favoriteMascots.length;
 }

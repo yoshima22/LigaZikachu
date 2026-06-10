@@ -114,11 +114,15 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
     if (expired) {
       const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
       if (newOffers.length > 0) {
+        // Reset global manual refresh counter when auto-refresh fires
+        const currentRefreshData = (config.playerRefreshData ?? {}) as Record<string, unknown>;
+        const resetRefreshData = { ...currentRefreshData, "__global__": { date: "", count: 0 } };
         await prisma.miauvadaoConfig.update({
           where: { id: "singleton" },
           data: {
             dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
             offersRefreshedAt: new Date(),
+            playerRefreshData: resetRefreshData as unknown as import("@prisma/client").Prisma.InputJsonValue,
           },
         });
         revalidateTag("miauvadao-config");
@@ -972,24 +976,27 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
     const configBefore = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
     const vaultBeforeRefresh = configBefore?.vaultBalance ?? 0;
 
-    // Verificar cooldown e limite diário por jogador
+    // Verificar cooldown (por jogador) e limite diário compartilhado (global)
     const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-    const refreshData = (configBefore?.playerRefreshData ?? {}) as Record<string, { date: string; count: number; lastAt: string }>;
-    const myData = refreshData[player.id];
+    const refreshData = (configBefore?.playerRefreshData ?? {}) as Record<string, { date?: string; count?: number; lastAt?: string }>;
 
-    if (myData) {
-      if (myData.date === todayBRT && myData.count >= REFRESH_DAILY_LIMIT)
-        return { error: `Limite diário atingido (${REFRESH_DAILY_LIMIT} atualizações por dia).` };
-      if (myData.lastAt && Date.now() - new Date(myData.lastAt).getTime() < REFRESH_COOLDOWN_MS) {
-        const remaining = Math.ceil((REFRESH_COOLDOWN_MS - (Date.now() - new Date(myData.lastAt).getTime())) / 60000);
-        return { error: `Aguarde ${remaining} min antes de atualizar novamente.` };
-      }
+    // Limite global compartilhado entre todos os jogadores
+    const globalData = refreshData["__global__"];
+    const globalCount = globalData?.date === todayBRT ? (globalData.count ?? 0) : 0;
+    if (globalCount >= REFRESH_DAILY_LIMIT)
+      return { error: `Limite diário atingido (${REFRESH_DAILY_LIMIT} atualizações compartilhadas por dia).` };
+
+    // Cooldown individual (evita spam de um único jogador)
+    const myData = refreshData[player.id];
+    if (myData?.lastAt && Date.now() - new Date(myData.lastAt).getTime() < REFRESH_COOLDOWN_MS) {
+      const remaining = Math.ceil((REFRESH_COOLDOWN_MS - (Date.now() - new Date(myData.lastAt).getTime())) / 60000);
+      return { error: `Aguarde ${remaining} min antes de atualizar novamente.` };
     }
 
-    const newCount = myData?.date === todayBRT ? myData.count + 1 : 1;
     const updatedRefreshData = {
       ...refreshData,
-      [player.id]: { date: todayBRT, count: newCount, lastAt: new Date().toISOString() },
+      "__global__": { date: todayBRT, count: globalCount + 1 },
+      [player.id]: { lastAt: new Date().toISOString() },
     };
 
     const [updatedWallet] = await prisma.$transaction([

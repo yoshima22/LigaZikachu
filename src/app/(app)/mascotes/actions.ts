@@ -419,8 +419,8 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "Você não tem este item." };
 
     const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"; hours: number; label: string }> = {
-      // ⚡ Vitamina Elétrica: EXP dobrado por 2h (verificado em addExp via MascotBuff)
-      MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica — EXP dobrado por 2h" },
+      // ⚡ Vitamina Elétrica: +25% EXP por 2h (percentual e duração config via ShopItem.metadata)
+      MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica — +25% EXP por 2h" },
       // Proteina Zika: +2 permanente em todos os 5 atributos, limitada a 3 mascotes por jogador.
       MASCOT_BUFF_STAT:  { type: "STAT_BOOST",  hours: 0, label: "Proteina Zika - +2 permanente em todos os atributos" },
       // 🍯 Bala de Mel: felicidade vai para 100 imediatamente + humor HAPPY
@@ -449,7 +449,9 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       }
     }
 
-    const expiresAt = new Date(Date.now() + config.hours * 3_600_000);
+    const itemMeta = inventoryItem.item.metadata as { buffHours?: number } | null;
+    const effectiveHours = itemMeta?.buffHours ?? config.hours;
+    const expiresAt = new Date(Date.now() + effectiveHours * 3_600_000);
 
     // Verifica se há EXP_BOOST ativo para informar o cliente que será substituído
     let replacedExistingBuff = false;

@@ -20,7 +20,7 @@ const createItemSchema = z.object({
   imageUrl: z.string().url().optional().or(z.literal("")),
   rarity: z.nativeEnum(ShopItemRarity),
   price: z.number().int().min(1).max(999999),
-  // metadata para molduras: posicionamento e escala
+  // metadata para molduras, banners e buffs
   metadata: z.object({
     // Moldura (FRAME)
     frameScale:   z.number().min(0.1).max(6).optional(),
@@ -29,6 +29,10 @@ const createItemSchema = z.object({
     // Banner
     focusX: z.number().min(0).max(100).optional(),
     focusY: z.number().min(0).max(100).optional(),
+    // Buff (MASCOT_BUFF_EXP, PICNIC_BASKET, LUCKY_EGG)
+    buffHours:        z.number().min(1).max(72).optional(),
+    expMultiplierPct: z.number().min(1).max(200).optional(),
+    happinessBonus:   z.number().min(0).max(50).optional(),
   }).optional().nullable(),
   // Título: tema visual, frase de sabor e efeito de entrada
   theme: z.nativeEnum(TitleTheme).optional(),
