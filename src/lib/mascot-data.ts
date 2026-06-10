@@ -642,9 +642,9 @@ export const EXPEDITION_DURATION_MS = 60 * 60 * 1000; // 1 hora (padrão legado)
 
 export const EXPEDITION_DURATIONS = {
   "30min": { ms: 30 * 60 * 1000,           label: "30 minutos", expMultiplier: 0.5,  rewardBonus: 0 },
-  "1h":    { ms: 60 * 60 * 1000,           label: "1 hora",     expMultiplier: 1.0,  rewardBonus: 5 },
-  "3h":    { ms: 3 * 60 * 60 * 1000,       label: "3 horas",    expMultiplier: 2.5,  rewardBonus: 15 },
-  "6h":    { ms: 6 * 60 * 60 * 1000,       label: "6 horas",    expMultiplier: 5.0,  rewardBonus: 30 },
+  "1h":    { ms: 60 * 60 * 1000,           label: "1 hora",     expMultiplier: 1.2,  rewardBonus: 5 },
+  "3h":    { ms: 3 * 60 * 60 * 1000,       label: "3 horas",    expMultiplier: 3.2,  rewardBonus: 15 },
+  "6h":    { ms: 6 * 60 * 60 * 1000,       label: "6 horas",    expMultiplier: 7.0,  rewardBonus: 30 },
   "7d":    { ms: 7 * 24 * 60 * 60 * 1000,  label: "7 dias (Férias)", expMultiplier: 0, rewardBonus: 0 },
 } as const;
 export type ExpeditionDuration = keyof typeof EXPEDITION_DURATIONS;

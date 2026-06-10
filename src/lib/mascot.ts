@@ -452,7 +452,7 @@ export async function interactWithMascot(
     prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true, interactionCount: true } }).catch(() => [] as { type: string; interactionCount: number }[]),
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
   ]);
-  const picnicExpBonus   = picnicBuff  ? 0.50 : 0;
+  const picnicExpBonus   = picnicBuff  ? 0.40 : 0;
   const picnicHappyBonus = picnicBuff  ? 5    : 0;
 
   // Bônus social escalado por tier (§12 do doc social)
@@ -808,6 +808,8 @@ export async function startExpedition(
     const label = mode === "TRAINING" ? "treinamento" : mode === "ITEMS" ? "itens" : "padrao";
     throw new Error(`Voce ja tem uma expedicao de ${label} em andamento.`);
   }
+
+  if (durationKey === "7d") throw new Error("Para enviar o mascote de férias, use o Ticket de Férias do Prof. Carvalho no seu inventário.");
 
   const dur = EXPEDITION_DURATIONS[durationKey];
   const finishAt = new Date(Date.now() + dur.ms);
@@ -2061,20 +2063,21 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
   await logEvent(mascotId, "🛡️", "Política de Fraqueza equipada! Estará protegido contra ataques oportunistas.");
 }
 
-/** Cesta de Piquenique Chocante: bônus EXP+felicidade em interações por 2h para equipe equipada */
+/** Cesta de Piquenique Chocante: bônus de 40% EXP e +5 felicidade em interações por 2h para os 6 favoritos */
 export async function applyPicnicBasket(playerId: string) {
-  const equippedMascots = await prisma.mascot.findMany({
-    where: { playerId, isEquipped: true, arenaState: "FREE" }
+  const favoriteMascots = await prisma.mascot.findMany({
+    where: { playerId, isFavorite: true, arenaState: "FREE" },
+    take: 6,
   });
-  if (equippedMascots.length === 0) throw new Error("Nenhum mascote equipado e livre encontrado.");
+  if (favoriteMascots.length === 0) throw new Error("Nenhum mascote favorito livre encontrado. Marque até 6 mascotes como favorito.");
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
   await prisma.mascotBuff.createMany({
-    data: equippedMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
+    data: favoriteMascots.map(m => ({ mascotId: m.id, type: "PICNIC_BASKET" as const, expiresAt }))
   });
-  for (const m of equippedMascots) {
-    await logEvent(m.id, "🧺⚡", "Piquenique Chocante! Bônus de EXP e felicidade por 2h durante interações.");
+  for (const m of favoriteMascots) {
+    await logEvent(m.id, "🧺⚡", "Piquenique Chocante! Interações com os favoritos têm +40% EXP e +5 felicidade por 2h.");
   }
-  return equippedMascots.length;
+  return favoriteMascots.length;
 }
 
 /** Ticket de Férias: envia Pokémon com o Professor Carvalho por 7 dias */
@@ -2093,7 +2096,7 @@ export async function applyVacationTicket(playerId: string, mascotId: string) {
   await logEvent(mascotId, "🏖️", `Partiu de férias com o Professor Carvalho por 7 dias! Volta em ${finishAt.toLocaleDateString("pt-BR")}.`);
 }
 
-/** Coleta as Férias: retorna o Pokémon revigorado */
+/** Coleta as Férias: retorna o Pokémon revigorado com felicidade máxima, empanturrado e 2000 EXP */
 export async function claimVacation(playerId: string, expeditionId: string) {
   const expedition = await prisma.mascotExpedition.findUnique({
     where: { id: expeditionId },
@@ -2103,32 +2106,39 @@ export async function claimVacation(playerId: string, expeditionId: string) {
   if (expedition.status !== "ACTIVE") throw new Error("Férias já coletadas.");
   if (new Date() < expedition.finishAt) throw new Error("As férias ainda não terminaram.");
 
-  const happinessBonus = 30;
-  const expBonus = 500;
+  const expBonus = 2000;
+  // Chance de 30% de trazer um Ovo Comum de volta
+  const gotEgg = Math.random() < 0.30;
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
       where: { id: expeditionId },
-      data: { status: "CLAIMED", rewardJson: { happinessBonus, expBonus } }
+      data: { status: "CLAIMED", rewardJson: { expBonus, gotEgg } }
     });
     await tx.mascot.update({
       where: { id: expedition.mascotId },
       data: {
-        happiness: Math.min(100, expedition.mascot.happiness + happinessBonus),
+        happiness: 100,
         mood: "HAPPY",
+        lastFedAt: new Date(), // EMPANTURRADO: volta bem alimentado
       }
     });
+    if (gotEgg) {
+      await tx.mascotEgg.create({
+        data: { playerId, type: "COMMON", origin: "VACATION" }
+      });
+    }
     await tx.mascotEvent.create({
       data: {
         mascotId: expedition.mascotId,
         emoji: "🌴",
-        description: `Voltou das férias com o Professor Carvalho revigorado! +${happinessBonus} felicidade e +${expBonus} EXP.`
+        description: `Voltou das férias com o Professor Carvalho! Felicidade máxima, empanturrado e +${expBonus} EXP.${gotEgg ? " Trouxe um Ovo Comum de presente! 🥚" : ""}`
       }
     });
   });
 
   await addExp(expedition.mascotId, expBonus).catch(() => {});
-  return { happinessBonus, expBonus };
+  return { expBonus, gotEgg };
 }
 
 /** Compartilhador de XP: equipa em Pokémon fora de expedição (1 por jogador) */

@@ -837,15 +837,17 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 onChange={e => setExpeditionDuration(e.target.value as ExpeditionDuration)}
                 className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1 text-[11px] text-slate-300 outline-none focus:border-blue-500/60"
               >
-                {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, v]) => (
-                  <option key={key} value={key}>
-                    {expeditionMode === "TRAINING"
-                      ? `Treino ${v.label}`
-                      : expeditionMode === "ITEMS"
-                        ? `Itens ${v.label} - recompensas melhores${v.rewardBonus > 0 ? ` +${v.rewardBonus}%` : ""}`
-                        : `Padrao ${v.label} - x${v.expMultiplier} EXP${v.rewardBonus > 0 ? ` +${v.rewardBonus}% loot` : ""}`}
-                  </option>
-                ))}
+                {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][])
+                  .filter(([key]) => key !== "7d") // férias usa Ticket de Férias no painel de itens
+                  .map(([key, v]) => (
+                    <option key={key} value={key}>
+                      {expeditionMode === "TRAINING"
+                        ? `Treino ${v.label}`
+                        : expeditionMode === "ITEMS"
+                          ? `Itens ${v.label} - recompensas melhores${v.rewardBonus > 0 ? ` +${v.rewardBonus}%` : ""}`
+                          : `Padrao ${v.label} - x${v.expMultiplier} EXP${v.rewardBonus > 0 ? ` +${v.rewardBonus}% loot` : ""}`}
+                    </option>
+                  ))}
               </select>
               <div className="flex gap-1.5">
                 <button type="button" disabled={pending}

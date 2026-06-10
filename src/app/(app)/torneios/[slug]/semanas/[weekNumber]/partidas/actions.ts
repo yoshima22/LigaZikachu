@@ -12,8 +12,8 @@ import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrat
 import { applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
 import { rewardEquippedMascot } from "@/lib/mascot";
 
-const MATCH_WIN_COINS  = 50;
-const MATCH_LOSS_COINS = 35;
+const MATCH_WIN_COINS  = 180;
+const MATCH_LOSS_COINS = 120;
 
 /** Credita ZikaCoins ao vencedor e perdedor de uma partida confirmada */
 async function awardMatchCoins(
