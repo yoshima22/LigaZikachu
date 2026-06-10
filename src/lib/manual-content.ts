@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "./prisma";
 
 export type ManualContentMap = Record<string, string>;
@@ -89,17 +90,23 @@ export const MANUAL_DEFAULTS: ManualContentMap = {
 
 const CONTENT_ID = "manual";
 
+const fetchManualContent = unstable_cache(
+  async (): Promise<ManualContentMap> => {
+    try {
+      const record = await prisma.siteContent.findUnique({ where: { id: CONTENT_ID } });
+      if (!record) return { ...MANUAL_DEFAULTS };
+      const stored = record.data as ManualContentMap;
+      return { ...MANUAL_DEFAULTS, ...stored };
+    } catch {
+      return { ...MANUAL_DEFAULTS };
+    }
+  },
+  ["manual-content"],
+  { tags: ["manual-content"] }
+);
+
 export async function getManualContent(): Promise<ManualContentMap> {
-  try {
-    const record = await prisma.siteContent.findUnique({ where: { id: CONTENT_ID } });
-    if (!record) return { ...MANUAL_DEFAULTS };
-    const stored = record.data as ManualContentMap;
-    // Mescla defaults com valores salvos (defaults para chaves ausentes)
-    return { ...MANUAL_DEFAULTS, ...stored };
-  } catch {
-    // Tabela ainda não existe ou DB offline — retorna defaults
-    return { ...MANUAL_DEFAULTS };
-  }
+  return fetchManualContent();
 }
 
 export async function saveManualContent(

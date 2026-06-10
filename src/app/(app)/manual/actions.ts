@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { saveManualContent } from "@/lib/manual-content";
@@ -14,6 +14,7 @@ export async function saveManualText(input: z.infer<typeof saveSchema>) {
   const user = await requireAdmin();
   const { key, value } = saveSchema.parse(input);
   await saveManualContent(key, value.trim(), user.id);
+  revalidateTag("manual-content");
   revalidatePath("/manual");
   return { success: true };
 }

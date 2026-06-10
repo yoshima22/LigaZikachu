@@ -4,8 +4,6 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { getManualContent } from "@/lib/manual-content";
 import { EditableText } from "./_components/EditableText";
 
-export const dynamic = "force-dynamic";
-
 function Section({ id, title, emoji, children }: { id: string; title: string; emoji: string; children: React.ReactNode }) {
   return (
     <section id={id} className="rounded-2xl border border-border bg-slate-950/60 p-6 space-y-4 scroll-mt-6">
