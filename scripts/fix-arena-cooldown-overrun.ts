@@ -30,7 +30,7 @@ async function main() {
       nickname: true,
       pokemonId: true,
       restingUntil: true,
-      player: { select: { username: true } },
+      player: { select: { displayName: true } },
     },
   });
 
@@ -43,7 +43,7 @@ async function main() {
   for (const m of overrun) {
     const name = m.nickname ?? `#${m.pokemonId}`;
     const remaining = Math.ceil((m.restingUntil!.getTime() - now.getTime()) / 60_000);
-    console.log(`  ${name} (${m.player.username}) — restingUntil: ${m.restingUntil!.toISOString()} (~${remaining} min restantes)`);
+    console.log(`  ${name} (${m.player.displayName}) — restingUntil: ${m.restingUntil!.toISOString()} (~${remaining} min restantes)`);
   }
 
   if (!apply) {

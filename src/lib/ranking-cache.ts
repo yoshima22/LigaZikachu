@@ -1,4 +1,4 @@
-"use server";
+// Server-only — não adicionar "use server" pois unstable_cache não exige Server Action
 /**
  * ranking-cache.ts — Wrappers cacheados para computeGlobalRanking e computePlayerRanking.
  *
