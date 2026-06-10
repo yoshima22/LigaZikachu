@@ -26,6 +26,13 @@ export const ARENA_Z_CONFIG = {
 export const PASSIVE_COINS_PER_MASCOT_PER_H = 5;
 export const PASSIVE_EXP_PER_MASCOT_PER_H   = 10;
 export const PVE_REWARD_MULT = 0.85; // redução global de 15% nos ganhos PvE
+
+// ── Debuff de estamina da Arena ───────────────────────────────────────────────
+// A cada hora na arena, time perde 2% dos stats em combate, máx 72% em 36h+
+export function getArenaDebuffPct(enteredAt: Date): number {
+  const hoursInArena = (Date.now() - new Date(enteredAt).getTime()) / 3_600_000;
+  return Math.min(0.72, Math.floor(hoursInArena) * 0.02);
+}
 const PASSIVE_MAX_HOURS               = 24;  // máximo por sessão (evita acúmulo por abandono)
 const PASSIVE_MIN_INTERVAL_HOURS      = 0.5; // processa a cada 30 min
 
@@ -186,19 +193,20 @@ function levelBand(level: number) {
 function toArenaMascot(m: {
   id: string; playerId: string; pokemonId: number; nickname: string | null; level: number;
   statForce: number; statAgility: number; statInstinct: number; statVitality: number; happiness: number;
-}): ArenaMascot {
+}, debuffPct = 0): ArenaMascot {
+  const mult = 1 - debuffPct; // e.g. debuffPct=0.20 → mult=0.80 → 80% dos stats
   return {
     id: m.id,
     ownerId: m.playerId,
     pokemonId: m.pokemonId,
     name: m.nickname ?? getPokemonName(m.pokemonId),
     level: m.level,
-    force: m.statForce,
-    agility: m.statAgility,
-    instinct: m.statInstinct,
-    vitality: m.statVitality,
+    force: Math.max(1, Math.round(m.statForce * mult)),
+    agility: Math.max(1, Math.round(m.statAgility * mult)),
+    instinct: Math.max(1, Math.round(m.statInstinct * mult)),
+    vitality: Math.max(1, Math.round(m.statVitality * mult)),
     happiness: m.happiness,
-    hp: 55 + m.level * 6 + m.statVitality * 4,
+    hp: Math.max(10, Math.round((55 + m.level * 6 + m.statVitality * 4) * mult)),
   };
 }
 
@@ -1115,7 +1123,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     }
   }
 
-  const attackers = team.members.map(m => toArenaMascot(m.mascot));
+  const teamDebuffPct = getArenaDebuffPct(team.enteredAt);
+  const attackers = team.members.map(m => toArenaMascot(m.mascot, teamDebuffPct));
 
   // Bot determinístico: usa pendingBotJson se disponível
   const useDifficulty = (team.pendingBotDifficulty as ArenaDifficulty | null) ?? difficulty;
@@ -1453,6 +1462,19 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   if (!targetMascot) throw new Error("Mascote nao encontrado.");
   if (targetMascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
 
+  // Verifica se o atacante tem um mascote com relação RIVAL com o mascote alvo
+  const rivalRelation = await prisma.mascotRelation.findFirst({
+    where: {
+      type: "RIVAL",
+      OR: [
+        { mascotA: { playerId: attackerPlayerId }, mascotBId: targetMascotId },
+        { mascotB: { playerId: attackerPlayerId }, mascotAId: targetMascotId },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!rivalRelation) throw new Error("Seu time nao tem rivais com este mascote. Apenas rivais podem atacar mascotes feridos.");
+
   // Política de Fraqueza: bloqueia o ataque e consome o buff
   const weaknessPolicy = await prisma.mascotBuff.findFirst({
     where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
@@ -1663,8 +1685,10 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     applyPassiveIncome(defenseTeamId).catch(() => null),
   ]);
 
-  const attackers = attackTeam.members.map(m => toArenaMascot(m.mascot));
-  const defenders = defenseTeam.members.map(m => toArenaMascot(m.mascot));
+  const attackDebuffPct = getArenaDebuffPct(attackTeam.enteredAt);
+  const defenseDebuffPct = getArenaDebuffPct(defenseTeam.enteredAt);
+  const attackers = attackTeam.members.map(m => toArenaMascot(m.mascot, attackDebuffPct));
+  const defenders = defenseTeam.members.map(m => toArenaMascot(m.mascot, defenseDebuffPct));
   const combat = runCombat(attackers, defenders);
   const attackerWon = combat.result === "ATTACKER_WIN";
   const defenderWon = combat.result === "DEFENDER_WIN";
@@ -1880,13 +1904,15 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
   return {
     result: combat.result,
+    attackerWon,
     winnerName: winnerTeam?.player.displayName ?? null,
     loserName: loserTeam?.player.displayName ?? null,
-    stolen: lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 },
+    // stolen e foundGroundSpoils só visíveis para quem venceu (atacante)
+    stolen: attackerWon ? (lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 }) : { coins: 0, exp: 0, food: 0, sweet: 0 },
     defenseRewardCoins,
     defenderEgg,
     attackerEgg,
-    foundGroundSpoils,
+    foundGroundSpoils: attackerWon ? foundGroundSpoils : null,
     loserTeamDefeated,
     playerTeamName: attackTeam.player.displayName,
     botName: defenseTeam.player.displayName,

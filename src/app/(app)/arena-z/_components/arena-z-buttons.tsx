@@ -860,7 +860,7 @@ export function PvpBattleButton({
                 <X size={14}/>
               </button>
             </div>
-            {(result.stolen.coins > 0 || result.stolen.exp > 0) && (
+            {result.attackerWon && (result.stolen.coins > 0 || result.stolen.exp > 0) && (
               <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
                 <p className="text-xs font-bold text-[#FFCB05]">Loot roubado</p>
                 <p className="text-sm text-slate-200">
@@ -873,7 +873,7 @@ export function PvpBattleButton({
                 </p>
               </div>
             )}
-            {result.foundGroundSpoils && (
+            {result.attackerWon && result.foundGroundSpoils && (
               <div className="relative overflow-hidden rounded-2xl border border-yellow-300/60 bg-gradient-to-br from-yellow-300/20 via-amber-500/10 to-sky-400/10 p-4 shadow-[0_0_35px_rgba(255,203,5,0.25)]">
                 <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#FFCB05]/30 blur-2xl animate-pulse" />
                 <div className="absolute left-6 top-5 h-3 w-3 rounded-full bg-white/80 animate-ping" />

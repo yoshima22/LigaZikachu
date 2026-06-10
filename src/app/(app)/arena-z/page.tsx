@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
-import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams } from "@/lib/arena-z";
+import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H, RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog, getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams, getArenaDebuffPct } from "@/lib/arena-z";
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
@@ -408,6 +408,8 @@ export default async function ArenaZPage() {
                 <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-slate-500">Nenhuma equipe criada ainda.</p>
               ) : teams.map(team => {
                 const typeInfo = teamTypeInfo(team.teamType);
+                const debuffPct = team.status === "ACTIVE" ? getArenaDebuffPct(team.enteredAt) : 0;
+                const debuffDisplay = Math.round(debuffPct * 100);
                 return (
                 <div key={team.id} className="rounded-2xl border border-border bg-slate-900/40 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -415,6 +417,11 @@ export default async function ArenaZPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-bold text-slate-100">{team.name}</p>
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${typeInfo.badge}`}>{typeInfo.label}</span>
+                        {debuffDisplay > 0 && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${debuffDisplay >= 60 ? "border-red-500/60 bg-red-500/20 text-red-300" : debuffDisplay >= 30 ? "border-orange-500/60 bg-orange-500/15 text-orange-300" : "border-yellow-600/50 bg-yellow-600/10 text-yellow-400"}`}>
+                            😓 -{debuffDisplay}% stats
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-500">{teamStatusLabel(team.status)} | {team.members.length} mascote(s) | entrou {team.enteredAt.toLocaleDateString("pt-BR")}</p>
                       <p className="mt-1 text-[10px] text-slate-500">{typeInfo.description}</p>
@@ -581,11 +588,21 @@ export default async function ArenaZPage() {
                     <PvpCooldownIndicator until={pvpCooldownUntil} />
                   </div>
                   <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                    {readyOpponentTeams.map(defenseTeam => (
+                    {readyOpponentTeams.map(defenseTeam => {
+                      const oppDebuffPct = getArenaDebuffPct(defenseTeam.enteredAt);
+                      const oppDebuffDisplay = Math.round(oppDebuffPct * 100);
+                      return (
                       <div key={defenseTeam.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-xs font-bold text-slate-100">{defenseTeam.name}</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-xs font-bold text-slate-100">{defenseTeam.name}</p>
+                              {oppDebuffDisplay > 0 && (
+                                <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${oppDebuffDisplay >= 60 ? "border-red-500/60 bg-red-500/20 text-red-300" : oppDebuffDisplay >= 30 ? "border-orange-500/60 bg-orange-500/15 text-orange-300" : "border-yellow-600/50 bg-yellow-600/10 text-yellow-400"}`}>
+                                  😓 -{oppDebuffDisplay}%
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-slate-500">
                               Dono: {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick} | {defenseTeam.members.length} mascote(s)
                             </p>
@@ -614,7 +631,8 @@ export default async function ArenaZPage() {
                           ))}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
                 );
