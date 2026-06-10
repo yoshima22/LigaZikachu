@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onStickerPackOpened, onGiftSent } from "@/lib/achievement-events";
@@ -29,7 +30,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
     const actor = await getSessionUser();
     if (!actor) return { ...EMPTY, error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { ...EMPTY, error: "Jogador não encontrado." };
 
     const pack = await prisma.stickerPack.findUnique({ where: { id: packId } });
@@ -142,7 +143,7 @@ export async function toggleFavoriteSticker(cardId: string): Promise<{ error?: s
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const sticker = await prisma.playerSticker.findUnique({
@@ -177,7 +178,7 @@ export async function sendStickerGift(cardId: string, targetPlayerId: string): P
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
     if (player.id === targetPlayerId) return { error: "Você não pode enviar para si mesmo." };
 

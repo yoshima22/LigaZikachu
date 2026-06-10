@@ -21,7 +21,17 @@ export default async function InventarioPage() {
 
   const inventory = await prisma.playerInventory.findMany({
     where: { playerId: player.id },
-    include: { item: true },
+    select: {
+      id: true,
+      equipped: true,
+      purchasedAt: true,
+      item: {
+        select: {
+          id: true, name: true, type: true, rarity: true,
+          description: true, imageUrl: true, theme: true, flavorText: true,
+        }
+      }
+    },
     orderBy: { purchasedAt: "desc" }
   });
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 
 const deckSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -16,7 +17,7 @@ export async function saveDeck(raw: z.infer<typeof deckSchema>): Promise<{ id?: 
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const data = deckSchema.parse(raw);
@@ -36,7 +37,7 @@ export async function updateDeck(deckId: string, raw: z.infer<typeof deckSchema>
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const deck = await prisma.savedDeck.findUnique({ where: { id: deckId } });
@@ -60,7 +61,7 @@ export async function deleteDeck(deckId: string): Promise<{ error?: string }> {
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const deck = await prisma.savedDeck.findUnique({ where: { id: deckId } });

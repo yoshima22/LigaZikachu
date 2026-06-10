@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
@@ -266,7 +267,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   if (!match.playerBId) throw new Error("Partida sem adversario");
   if (match.status !== MatchStatus.PENDING_CONFIRMATION) throw new Error("Partida ja foi reportada");
 
-  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const player = await getSessionPlayer(user.id);
   if (!player) throw new Error("Jogador nao encontrado");
 
   const isPlayer = match.playerAId === player.id || match.playerBId === player.id;
@@ -358,7 +359,7 @@ export async function chooseMatchDeck(input: z.infer<typeof deckChoiceSchema>) {
   if (!user) throw new Error("Nao autenticado");
 
   const { matchId, deckSubmissionId, applyToWeek } = deckChoiceSchema.parse(input);
-  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const player = await getSessionPlayer(user.id);
   if (!player) throw new Error("Jogador nao encontrado");
 
   const match = await prisma.match.findUnique({
@@ -447,7 +448,7 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
   const playerBId = match.playerBId;
   if (winnerId !== match.playerAId && winnerId !== match.playerBId) throw new Error("Vencedor invalido");
 
-  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const player = await getSessionPlayer(user.id);
   const isParticipant = !!player && (match.playerAId === player.id || match.playerBId === player.id);
   const canCorrect =
     user.role === Role.ADMIN ||
@@ -551,7 +552,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   if (!match.winnerPlayerId) throw new Error("Nenhum resultado foi reportado para esta partida");
   if (match.status !== "PENDING_CONFIRMATION") throw new Error("Esta partida nao esta pendente de confirmacao");
 
-  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const player = await getSessionPlayer(user.id);
   if (!player) throw new Error("Jogador nao encontrado");
 
   const participantIds = [match.playerAId, match.playerBId];
@@ -656,7 +657,7 @@ export async function disputeMatchResult(input: z.infer<typeof disputeSchema>) {
   if (!match) throw new Error("Partida não encontrada");
   if (!match.playerBId) throw new Error("Partida sem adversário");
 
-  const player = await prisma.player.findUnique({ where: { userId: user.id } });
+  const player = await getSessionPlayer(user.id);
   if (!player) throw new Error("Jogador não encontrado");
 
   const isPlayer = match.playerAId === player.id || match.playerBId === player.id;

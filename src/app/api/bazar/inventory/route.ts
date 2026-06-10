@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
+import { getMiauvadaoConfig } from "@/app/(app)/bazar/actions";
 
 export async function GET() {
   try {
@@ -57,7 +58,7 @@ export async function GET() {
         orderBy: [{ item: { type: "asc" } }, { item: { name: "asc" } }],
       }),
       getOrCreateWallet(player.id),
-      prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } }),
+      getMiauvadaoConfig(),
     ]);
 
     return NextResponse.json({

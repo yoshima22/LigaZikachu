@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { DeckSubmissionStatus, MatchStatus, ResultSource, Role, SeasonStatus, TournamentFormat, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus, type Prisma } from "@prisma/client";
 import {
   canSubmitTournamentWeekDeck,
@@ -283,7 +284,7 @@ export async function createTournament(
         }
       });
 
-      const player = await prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true } });
+      const player = await getSessionPlayer(actor.id);
       if (player) {
         await prisma.tournamentRegistration.create({
           data: {
@@ -1249,7 +1250,7 @@ export async function submitTournamentWeekDeck(
     const user = await getSessionUser();
     if (!user) return { error: "Nao autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil de jogador nao encontrado." };
 
     const data = submitTournamentWeekDeckSchema.parse(raw);
@@ -1380,7 +1381,7 @@ export async function deleteOwnDeckSubmission(
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const submission = await prisma.deckSubmission.findUnique({
@@ -1443,7 +1444,7 @@ export async function submitDeckForMatch(raw: {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const match = await prisma.match.findUnique({
@@ -1579,7 +1580,7 @@ export async function selfRegister(
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil de jogador não encontrado." };
 
     const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId } });
@@ -1742,7 +1743,7 @@ export async function withdrawRegistration(
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const reg = await prisma.tournamentRegistration.findUnique({

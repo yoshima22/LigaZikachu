@@ -6,8 +6,10 @@
  * Retorna um objeto compatível com session.user do NextAuth.
  */
 
+import { cache } from "react";
 import { auth } from "@/auth";
 import { getManualSessionUser } from "@/lib/manual-session";
+import { prisma } from "@/lib/prisma";
 import type { Role, UserStatus } from "@prisma/client";
 
 export interface AppSession {
@@ -45,3 +47,19 @@ export async function getAppSession(): Promise<AppSession | null> {
 
   return null;
 }
+
+/**
+ * getSessionPlayer() — busca o Player associado ao usuário logado.
+ *
+ * Usa React.cache() para deduplicar dentro do mesmo request:
+ * a primeira chamada vai ao banco, todas as subsequentes na mesma
+ * requisição reutilizam o resultado sem nova query.
+ *
+ * Uso: `const player = await getSessionPlayer()` em qualquer server component ou action.
+ */
+export const getSessionPlayer = cache(async (userId: string) => {
+  return prisma.player.findUnique({
+    where: { userId },
+    select: { id: true, displayName: true, ptcglNick: true, avatarUrl: true },
+  });
+});

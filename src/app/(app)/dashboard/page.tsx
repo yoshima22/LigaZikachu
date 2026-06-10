@@ -218,10 +218,11 @@ export default async function DashboardPage() {
     opponentName: string;
   }> = [];
 
-  for (const w of openWeeks) {
-    const weekMatches = await prisma.match.findMany({
+  if (openWeeks.length > 0) {
+    // Busca todas as partidas das semanas abertas em uma única query (evita N+1)
+    const allWeekMatches = await prisma.match.findMany({
       where: {
-        tournamentWeekId: w.id,
+        tournamentWeekId: { in: openWeeks.map(w => w.id) },
         OR: [{ playerAId: player.id }, { playerBId: player.id }]
       },
       include: {
@@ -229,20 +230,24 @@ export default async function DashboardPage() {
         playerB: { select: { id: true, displayName: true } }
       }
     }).catch((error) => {
-      console.error("[Dashboard] week matches lookup failed", { userId: user.id, playerId: player.id, weekId: w.id, error });
+      console.error("[Dashboard] week matches lookup failed", { userId: user.id, playerId: player.id, error });
       return [];
     });
-    for (const m of weekMatches) {
+
+    const weekById = Object.fromEntries(openWeeks.map(w => [w.id, w]));
+    for (const m of allWeekMatches) {
+      if (!m.tournamentWeekId) continue; // narrowing — filtro IN garante que nunca é null
       const isA = m.playerAId === player.id;
       const submissionId = isA ? m.playerADeckSubmissionId : m.playerBDeckSubmissionId;
       if (!submissionId) {
+        const w = weekById[m.tournamentWeekId];
         const opponent = isA ? m.playerB?.displayName : m.playerA.displayName;
         matchesNeedingDeck.push({
           matchId: m.id,
-          weekId: w.id,
-          weekNumber: w.weekNumber,
-          tournamentSlug: w.tournament.slug,
-          tournamentName: w.tournament.name,
+          weekId: m.tournamentWeekId,
+          weekNumber: w?.weekNumber ?? 0,
+          tournamentSlug: w?.tournament.slug ?? "",
+          tournamentName: w?.tournament.name ?? "",
           opponentName: opponent ?? "Adversário"
         });
       }

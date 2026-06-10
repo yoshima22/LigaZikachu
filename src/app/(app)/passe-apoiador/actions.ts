@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { creditCoins } from "@/lib/zikacoins";
 import { ZikaCoinTxType } from "@prisma/client";
 import type { DayReward } from "./schedule";
@@ -100,7 +101,7 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
   try {
     const user = await getSessionUser();
     if (!user) return empty;
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return empty;
 
     // Lista de todos os passes ativos para o seletor
@@ -172,7 +173,7 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
   try {
     const user = await getSessionUser();
     if (!user) return { ok: false, error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { ok: false, error: "Jogador não encontrado." };
 
     // Validações de segurança

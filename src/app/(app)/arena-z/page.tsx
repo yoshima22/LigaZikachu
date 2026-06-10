@@ -9,6 +9,7 @@ import { ARENA_Z_CONFIG, PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_
 import { AdminMascotStateButton, BotBattleButton, DeleteTeamButton, OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton, PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge, RetireTeamButton, SusButton } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
+import { ArenaGuide } from "./_components/arena-guide";
 
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
@@ -297,6 +298,7 @@ export default async function ArenaZPage() {
   return (
     <div className="space-y-6">
       <ArenaTutorial />
+      <ArenaGuide />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

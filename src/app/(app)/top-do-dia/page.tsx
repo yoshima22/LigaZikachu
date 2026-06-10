@@ -4,7 +4,7 @@ import { TournamentStatus } from "@prisma/client";
 import { CalendarDays, Crown, Swords, Trophy } from "lucide-react";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 120; // 2 min — top do dia muda com partidas confirmadas
 
 const MEDAL = ["🥇", "🥈", "🥉"];
 const POSITION_COLOR = ["text-[#FFCB05]", "text-slate-300", "text-amber-600"];

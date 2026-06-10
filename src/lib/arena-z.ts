@@ -798,11 +798,10 @@ export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin 
 
   await prisma.$transaction(async (tx) => {
     // Libera todos os mascotes (feridos permanecem feridos, apenas sai do ARENA)
-    // Abandono sem recompensas → cooldown mais curto (15 min) via restingUntil em estado FREE
-    const abandonCooldownUntil = new Date(Date.now() + ARENA_ENTRY_COOLDOWN_ABANDON_MS);
+    // Abandono sem recompensas → sem cooldown de re-entrada
     await tx.mascot.updateMany({
       where: { id: { in: team.members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
-      data: { arenaState: "FREE", restingUntil: abandonCooldownUntil }
+      data: { arenaState: "FREE", restingUntil: null }
     });
     // Remove a equipe (cascade apaga members via FK)
     // Nota: abandono NÃO credita o cofre e NÃO define retiredAt (sem penalidade de 10 min)
@@ -934,8 +933,8 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
         create: { playerId, type: "SWEET", quantity: vaultFinal.sweet },
       });
     }
-    // restingUntil em mascote FREE = cooldown de re-entrada na arena (30 min)
-    const entryCooldownUntil = new Date(Date.now() + ARENA_ENTRY_COOLDOWN_MS);
+    // restingUntil em mascote FREE = cooldown de re-entrada na arena (10 min)
+    const entryCooldownUntil = new Date(Date.now() + RETIRE_COOLDOWN_MS);
     for (const member of team.members) {
       await tx.mascot.updateMany({
         where: { id: member.mascotId, arenaState: { not: "INJURED" } },

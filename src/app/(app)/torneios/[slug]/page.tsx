@@ -28,9 +28,13 @@ export default async function TorneioDetailPage({
     include: {
       weeks: { orderBy: { weekNumber: "asc" } },
       registrations: {
-        include: {
+        select: {
+          id: true, status: true, registeredAt: true,
           player: {
-            include: { user: { select: { image: true } } }
+            select: {
+              id: true, displayName: true, ptcglNick: true, avatarUrl: true,
+              user: { select: { image: true } }
+            }
           }
         },
         orderBy: { registeredAt: "asc" }

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
-import { computePlayerRanking } from "@/lib/ranking";
+import { getCachedPlayerRanking } from "@/lib/ranking-cache";
+import type { computePlayerRanking } from "@/lib/ranking";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -75,7 +76,7 @@ export default async function PlayerDetailPage({
   const isAdminUser = isAdmin(session.user.role);
 
   const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory] = await Promise.all([
-    activeSeason ? computePlayerRanking(activeSeason.seasonId) : [],
+    activeSeason ? getCachedPlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
         OR: [{ playerAId: playerId }, { playerBId: playerId }],

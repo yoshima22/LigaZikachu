@@ -1,5 +1,6 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { getActiveStickerPacks } from "@/lib/shop-cache";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
@@ -31,7 +32,7 @@ export default async function AlbumPage({
 
   const [wallet, packs, allCards, ownedStickers, otherPlayers] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
-    prisma.stickerPack.findMany({ where: { active: true }, orderBy: { price: "asc" } }),
+    getActiveStickerPacks(),
     prisma.pokemonCard.findMany({
       where: {
         active: true,

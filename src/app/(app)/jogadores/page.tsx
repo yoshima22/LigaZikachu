@@ -1,7 +1,7 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
-import { computePlayerRanking } from "@/lib/ranking";
+import { getCachedPlayerRanking } from "@/lib/ranking-cache";
 import { PlayerFilters } from "./_components/player-filters";
 import { PlayersTable, type PlayerRow } from "./_components/players-table";
 import { SeasonStatus, UserStatus } from "@prisma/client";
@@ -69,7 +69,7 @@ export default async function PlayersPage({
     orderBy: { createdAt: "desc" }
   });
 
-  const ranking = activeSeason ? await computePlayerRanking(activeSeason.id) : [];
+  const ranking = activeSeason ? await getCachedPlayerRanking(activeSeason.id) : [];
   const rankMap = new Map(ranking.map((r) => [r.playerId, r]));
 
   const rows: PlayerRow[] = users

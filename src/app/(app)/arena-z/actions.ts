@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import {
   addMascotToArenaTeam,
   adminSetMascotArenaState,
@@ -34,7 +35,7 @@ type ArenaStaleNotice = {
 async function getCurrentPlayerId() {
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado.");
-  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const player = await getSessionPlayer(user.id);
   if (!player) throw new Error("Perfil de jogador nao encontrado.");
   return player.id;
 }
@@ -282,7 +283,7 @@ export async function applyPassiveIncomeAction(): Promise<void> {
   try {
     const user = await getSessionUser();
     if (!user) return;
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return;
     await applyPassiveIncomeForPlayer(player.id);
     revalidatePath("/arena-z");
@@ -293,7 +294,7 @@ export async function deleteArenaTeamAction(teamId: string): Promise<{ error?: s
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     await deleteArenaTeam(player.id, teamId, isAdminUser);

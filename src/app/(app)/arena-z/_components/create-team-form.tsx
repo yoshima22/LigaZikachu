@@ -123,47 +123,46 @@ function MascotPick({
         <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#FFCB05] text-[8px] font-black text-[#1A1A2E]">✓</span>
       )}
 
-      <div className={compact ? "p-2" : "p-2.5"}>
-        {/* Sprite + name row */}
-        <div className="flex items-center gap-2">
+      <div className={`flex flex-col items-center ${compact ? "p-1.5 gap-0.5" : "p-2 gap-1"}`}>
+        {/* Sprite centralizado */}
+        <div className={`flex justify-center ${compact ? "pb-0" : "pb-1"}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={getSpriteUrl(m.pokemonId, true)}
             alt=""
-            className={`shrink-0 object-contain ${compact ? "h-10 w-10" : "h-12 w-12"} ${blocked ? "grayscale" : ""}`}
+            className={`object-contain ${compact ? "h-10 w-10" : "h-14 w-14"} ${blocked ? "grayscale" : ""}`}
             style={{ imageRendering: "pixelated" }}
             onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
           />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold leading-tight text-slate-100">
-              {displayName(m)}
-            </p>
-            <p className="text-[10px] text-slate-500">Nv.{m.level}</p>
-            {!compact && (
-              <p className="text-[9px] text-slate-600 mt-0.5">
-                Σ<span className="text-slate-400 font-semibold">{totalStats(m)}</span>
-              </p>
-            )}
-          </div>
+        </div>
+        {/* Nome + nível */}
+        <div className="text-center leading-tight">
+          <p className="truncate text-[10px] font-semibold text-slate-100">
+            {displayName(m)}
+          </p>
+          <p className="text-[9px] text-slate-500">
+            Nv.{m.level}{!compact && <span className="ml-1 text-slate-600">Σ{totalStats(m)}</span>}
+          </p>
         </div>
 
-        {/* Stats */}
-        {!compact && (
-          <div className="mt-2 grid grid-cols-4 gap-0.5 text-center text-[9px]">
-            {[
-              { k: "For", v: m.statForce,    c: "text-red-400" },
-              { k: "Vel", v: m.statAgility,  c: "text-yellow-400" },
-              { k: "Ins", v: m.statInstinct, c: "text-blue-400" },
-              { k: "Vit", v: m.statVitality, c: "text-green-400" },
-            ].map(s => (
-              <div key={s.k} className="rounded bg-slate-800/60 py-0.5">
-                <div className="text-slate-600">{s.k}</div>
-                <div className={`font-bold ${s.c}`}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
+
+      {/* Stats — fora do flex central para ocupar largura total */}
+      {!compact && (
+        <div className="px-2 pb-2 grid grid-cols-4 gap-0.5 text-center text-[9px]">
+          {[
+            { k: "For", v: m.statForce,    c: "text-red-400" },
+            { k: "Vel", v: m.statAgility,  c: "text-yellow-400" },
+            { k: "Ins", v: m.statInstinct, c: "text-blue-400" },
+            { k: "Vit", v: m.statVitality, c: "text-green-400" },
+          ].map(s => (
+            <div key={s.k} className="rounded bg-slate-800/60 py-0.5">
+              <div className="text-slate-600">{s.k}</div>
+              <div className={`font-bold ${s.c}`}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Block banner */}
       {block && bs && (
@@ -271,17 +270,15 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
     const q = search.trim().toLowerCase();
     if (q) list = list.filter(m => displayName(m).toLowerCase().includes(q));
     list = [...list].sort((a, b) => {
-      // selected always first
-      const as = selected.has(a.id) ? 1 : 0;
-      const bs = selected.has(b.id) ? 1 : 0;
-      if (bs !== as) return bs - as;
+      // ordem estável sem mover selecionados — apenas ordena pelo critério escolhido
       if (sort === "level_desc") return b.level - a.level;
       if (sort === "level_asc")  return a.level - b.level;
       if (sort === "stats_desc") return totalStats(b) - totalStats(a);
       return displayName(a).localeCompare(displayName(b));
     });
     return list;
-  }, [mascots, filter, search, sort, selected, now]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mascots, filter, search, sort, now]); // 'selected' intencionalmente excluído para evitar reordenação ao clicar
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

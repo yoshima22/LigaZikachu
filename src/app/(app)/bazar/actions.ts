@@ -6,6 +6,8 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getPokemonName } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
 import { MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { getShopItemImages } from "@/lib/shop-cache";
+import { getSessionPlayer } from "@/lib/session";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -99,11 +101,8 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 /** Checa se as ofertas expiraram e gera novas automaticamente a partir do shop */
 export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
   try {
-    const config = await prisma.miauvadaoConfig.upsert({
-      where: { id: "singleton" },
-      create: { id: "singleton" },
-      update: {},
-    });
+    // Usa o cache (60s TTL) para não bater no banco a cada page load
+    const config = await getMiauvadaoConfig();
 
     const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const firstOffer = offers[0];
@@ -270,7 +269,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     // Validação básica
@@ -433,7 +432,7 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const listing = await prisma.bazarListing.findUnique({ where: { id: listingId } });
@@ -473,7 +472,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const listing = await prisma.bazarListing.findUnique({
@@ -564,7 +563,7 @@ export async function createProposal(
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const listing = await prisma.bazarListing.findUnique({ where: { id: listingId } });
@@ -630,7 +629,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const proposal = await prisma.bazarProposal.findUnique({
@@ -780,7 +779,7 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const proposal = await prisma.bazarProposal.findUnique({
@@ -812,7 +811,7 @@ export async function toggleFavorite(listingId: string): Promise<{ error?: strin
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const existing = await prisma.bazarFavorite.findUnique({
@@ -837,7 +836,7 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const config = await getMiauvadaoConfig();
@@ -960,7 +959,7 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const REFRESH_COST = 60;
@@ -1190,7 +1189,7 @@ export async function startShellGameSession(betAmount: number): Promise<{
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     if (isAdmin) {
@@ -1240,7 +1239,7 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     if (isAdmin && sessionId.startsWith("debug-")) {
@@ -1335,7 +1334,7 @@ export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
   try {
     const user = await getSessionUser();
     if (!user) return { cooldownMs: 0 };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { cooldownMs: 0 };
     const last = await prisma.shellGameSession.findFirst({ where: { playerId: player.id }, orderBy: { createdAt: "desc" } });
     if (!last) return { cooldownMs: 0 };

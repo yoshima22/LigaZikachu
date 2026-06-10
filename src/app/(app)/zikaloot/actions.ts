@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { ZikaLootStatus, ZikaCoinTxType, ShopItemType, Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { onLootWon } from "@/lib/achievement-events";
@@ -50,7 +51,7 @@ export async function pickLootNumber(
     if (!actor) return { error: "Não autenticado." };
     if (number < 1 || number > 200) return { error: "Número deve ser entre 1 e 200." };
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const loot = await prisma.zikaLoot.findUnique({ where: { id: lootId } });

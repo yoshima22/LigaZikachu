@@ -4,7 +4,7 @@ import { BookOpen, CheckCircle2, ExternalLink, Sparkles, Star, Swords, Trophy } 
 import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { computeGlobalRanking } from "@/lib/ranking";
+import { getCachedGlobalRanking } from "@/lib/ranking-cache";
 import { isDeckRegistrationLocked } from "@/lib/decks";
 import { isAdmin } from "@/lib/auth/permissions";
 import { Card } from "@/components/ui/card";
@@ -239,7 +239,7 @@ export default async function PerfilPage() {
   }
 
   const [ranking, recentMatches, dreamTeam, equippedItems, profileMascots] = await Promise.all([
-    computeGlobalRanking(),
+    getCachedGlobalRanking(),
     prisma.match.findMany({
       where: {
         OR: [{ playerAId: player.id }, { playerBId: player.id }],

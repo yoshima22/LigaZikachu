@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { getSessionPlayer } from "@/lib/session";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
@@ -22,7 +23,7 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     // Bloqueia ovos que estão em escrow no Bazar
@@ -53,7 +54,7 @@ export async function hatchEggAction(): Promise<{ error?: string; result?: Await
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const result = await hatchEgg(player.id);
     revalidate();
@@ -64,7 +65,7 @@ export async function hatchEggAction(): Promise<{ error?: string; result?: Await
 export async function skipIncubationAction(): Promise<{ error?: string }> {
   try {
     const user = await requireAdmin();
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nÃ£o encontrado." };
 
     const incubator = await prisma.mascotIncubator.findUnique({
@@ -87,7 +88,7 @@ export async function equipMascotAction(mascotId: string): Promise<{ error?: str
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await equipMascot(player.id, mascotId);
     revalidate();
@@ -99,7 +100,7 @@ export async function renameMascotAction(mascotId: string, nickname: string): Pr
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
@@ -113,7 +114,7 @@ export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ er
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
 
     const mascot = await prisma.mascot.findUnique({
@@ -248,7 +249,7 @@ export async function startExpeditionAction(mascotId: string, duration: Expediti
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await startExpedition(player.id, mascotId, duration, mode);
     revalidate();
@@ -260,7 +261,7 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     await healMascotSus(player.id, mascotId);
     revalidate();
@@ -274,7 +275,7 @@ export async function claimExpeditionAction(expeditionId: string): Promise<{ err
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const result = await claimExpedition(player.id, expeditionId);
     revalidate();
@@ -287,7 +288,7 @@ export async function unequipMascotAction(mascotId: string): Promise<{ error?: s
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await unequipMascot(player.id, mascotId);
     revalidate();
@@ -299,7 +300,7 @@ export async function cancelExpeditionAction(expeditionId: string): Promise<{ er
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await cancelExpedition(player.id, expeditionId);
     revalidate();
@@ -407,7 +408,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const [mascot, inventoryItem] = await Promise.all([
@@ -496,7 +497,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
 export async function useLuckyEggAction(mascotId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     // Consome 1 do inventário
     const shopItem = await prisma.shopItem.findFirst({ where: { type: "LUCKY_EGG", active: true }, select: { id: true } });
@@ -512,7 +513,7 @@ export async function useLuckyEggAction(mascotId: string): Promise<{ error?: str
 export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const shopItem = await prisma.shopItem.findFirst({ where: { type: "WEAKNESS_POLICY", active: true }, select: { id: true } });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
@@ -527,7 +528,7 @@ export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error
 export async function usePicnicBasketAction(): Promise<{ error?: string; mascotCount?: number }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const shopItem = await prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET", active: true }, select: { id: true } });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
@@ -542,7 +543,7 @@ export async function usePicnicBasketAction(): Promise<{ error?: string; mascotC
 export async function useVacationTicketAction(mascotId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true }, select: { id: true } });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
@@ -557,7 +558,7 @@ export async function useVacationTicketAction(mascotId: string): Promise<{ error
 export async function claimVacationAction(expeditionId: string): Promise<{ error?: string; reward?: { happinessBonus: number; expBonus: number } }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const reward = await claimVacation(player.id, expeditionId);
     revalidate(); return { reward };
@@ -567,7 +568,7 @@ export async function claimVacationAction(expeditionId: string): Promise<{ error
 export async function useXpShareAction(mascotId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const shopItem = await prisma.shopItem.findFirst({ where: { type: "XP_SHARE", active: true }, select: { id: true } });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
@@ -582,7 +583,7 @@ export async function useXpShareAction(mascotId: string): Promise<{ error?: stri
 export async function removeXpShareAction(mascotId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     await removeXpShare(player.id, mascotId);
     revalidate(); return {};
@@ -592,7 +593,7 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
 export async function useRainbowFeatherAction(mascotId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const shopItem = await prisma.shopItem.findFirst({ where: { type: "RAINBOW_FEATHER", active: true }, select: { id: true } });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
@@ -660,7 +661,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
     const m = await prisma.mascot.findUnique({
@@ -715,7 +716,7 @@ export async function toggleEvolutionLockAction(mascotId: string, lock: boolean)
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
@@ -731,7 +732,7 @@ export async function feedAllAction(): Promise<{
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado.", fed: 0, skipped: 0, noFood: false };
-    const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado.", fed: 0, skipped: 0, noFood: false };
 
     // Verifica estoque de comida

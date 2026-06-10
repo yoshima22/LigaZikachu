@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { invalidateShopCache } from "@/lib/shop-cache";
+import { getSessionPlayer } from "@/lib/session";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
@@ -165,6 +167,7 @@ export async function createShopItem(
     });
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    void invalidateShopCache();
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues[0].message };
@@ -193,6 +196,7 @@ export async function updateShopItem(
     });
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    void invalidateShopCache();
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues[0].message };
@@ -206,6 +210,7 @@ export async function deleteShopItem(itemId: string): Promise<{ error?: string }
     await prisma.shopItem.delete({ where: { id: itemId } });
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    void invalidateShopCache();
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -258,6 +263,7 @@ export async function reorderShopItem(
 
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    void invalidateShopCache();
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -270,6 +276,7 @@ export async function toggleShopItem(itemId: string, active: boolean): Promise<{
     await prisma.shopItem.update({ where: { id: itemId }, data: { active } });
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    void invalidateShopCache();
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -301,6 +308,7 @@ export async function createDefaultMascotShopItems(): Promise<{ error?: string; 
 
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    void invalidateShopCache();
     return { created };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -329,7 +337,7 @@ export async function purchaseItem(
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
@@ -442,7 +450,7 @@ export async function equipItem(itemId: string, equip: boolean): Promise<{ error
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const owned = await prisma.playerInventory.findUnique({

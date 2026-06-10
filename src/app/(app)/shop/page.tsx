@@ -7,6 +7,7 @@ import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
 import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { getActiveShopItems } from "@/lib/shop-cache";
 import type { EggType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -24,16 +25,7 @@ export default async function ShopPage() {
 
   const [wallet, items, inventoryRows, eggCounts, foodItems] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
-    prisma.shopItem.findMany({
-      where: { active: true },
-      orderBy: [{ type: "asc" }, { rarity: "asc" }, { price: "asc" }],
-      // select explícito: exclui flavorText (@db.Text), entranceEffect e metadata do payload da listagem
-      select: {
-        id: true, type: true, name: true, description: true, imageUrl: true,
-        rarity: true, price: true, sortOrder: true, theme: true,
-        metadata: true, flavorText: true, entranceEffect: true,
-      },
-    }),
+    getActiveShopItems(),
     player
       ? prisma.playerInventory.findMany({
           where: { playerId: player.id },

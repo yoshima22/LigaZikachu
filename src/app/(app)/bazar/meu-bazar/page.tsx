@@ -1,4 +1,4 @@
-import { getAppSession } from "@/lib/session";
+import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -11,7 +11,7 @@ export default async function MeuBazarPage() {
   const session = await getAppSession();
   if (!session?.user) return notFound();
 
-  const player = await prisma.player.findUnique({ where: { userId: session.user.id } });
+  const player = await getSessionPlayer(session.user.id);
   if (!player) return notFound();
 
   // Anúncios ativos/reservados — todos; vendidos/cancelados — apenas últimos 4

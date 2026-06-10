@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { AchievementType, AchievementRarity, AchievementCategory, AchievementScope, AchievementEventType, Prisma } from "@prisma/client";
 
 // ── Criar/editar conquista ────────────────────────────────────────────────────
@@ -308,7 +309,7 @@ export async function getMyAchievements(): Promise<{
     const actor = await getSessionUser();
     if (!actor) return { unlocked: [], error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { unlocked: [] };
 
     const records = await prisma.playerAchievement.findMany({

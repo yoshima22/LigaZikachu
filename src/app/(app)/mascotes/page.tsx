@@ -11,6 +11,7 @@ import { BulkInteractPanel } from "./_components/bulk-interact-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { getShopItemImages } from "@/lib/shop-cache";
 import { RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
 import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 
@@ -43,14 +44,11 @@ export default async function MascotesPage() {
     "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
   ];
 
-  const eggShopImages = await prisma.shopItem.findMany({
-    where: { type: { in: EGG_SHOP_ITEM_TYPES as unknown as import("@prisma/client").ShopItemType[] }, imageUrl: { not: null } },
-    select: { type: true, imageUrl: true }
-  });
+  const rawEggImages = await getShopItemImages([...EGG_SHOP_ITEM_TYPES]);
   const eggImageByType: Record<string, string> = {};
-  for (const e of eggShopImages) {
-    const key = e.type.replace("EGG_",""); // EGG_RARE → RARE, EGG_GEN1 → GEN1
-    if (e.imageUrl) eggImageByType[key] = e.imageUrl;
+  for (const [type, url] of Object.entries(rawEggImages)) {
+    const key = type.replace("EGG_", ""); // EGG_RARE → RARE, EGG_GEN1 → GEN1
+    eggImageByType[key] = url;
   }
 
   const [featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory] = await Promise.all([

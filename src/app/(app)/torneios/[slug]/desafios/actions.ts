@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { ChallengeStatus, ChallengeType, Prisma } from "@prisma/client";
 import { parseChallengeConfig } from "./config";
 import { sendNotificationToUser } from "@/lib/notifications";
@@ -130,7 +131,7 @@ export async function createChallenge(
         where: { id: data.tournamentId },
         select: { id: true, name: true, slug: true, seasonId: true, challengeConfig: true }
       }),
-      prisma.player.findUnique({ where: { userId: actor.id }, select: { id: true, displayName: true } })
+      getSessionPlayer(actor.id)
     ]);
 
     if (!tournament) return { error: "Torneio não encontrado." };

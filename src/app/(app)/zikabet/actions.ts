@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { ZikaBetStatus, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { parseBetConfig } from "@/lib/zikabet";
@@ -79,7 +80,7 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     if (!actor) return { error: "Não autenticado." };
     const data = placeBetSchema.parse(raw);
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const match = await prisma.match.findUnique({
@@ -301,7 +302,7 @@ export async function undoBet(betId: string): Promise<{ error?: string }> {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
 
-    const player = await prisma.player.findUnique({ where: { userId: actor.id } });
+    const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
 
     const bet = await prisma.zikaBet.findUnique({
