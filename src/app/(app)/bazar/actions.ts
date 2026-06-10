@@ -955,6 +955,10 @@ export async function adminUpdateListingFee(fee: number): Promise<{ error?: stri
   }
 }
 
+const REFRESH_COST        = 100;
+const REFRESH_COOLDOWN_MS = 15 * 60 * 1000; // 15 min
+const REFRESH_DAILY_LIMIT = 3;
+
 export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBalance?: number }> {
   try {
     const user = await getSessionUser();
@@ -962,33 +966,47 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
-    const REFRESH_COST = 60;
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
     if (!wallet || wallet.balance < REFRESH_COST) return { error: `Saldo insuficiente (precisa de ${REFRESH_COST} ZC).` };
 
-    // Lê o vault ANTES de incrementar — desconto extra é calculado sobre preço base,
-    // não acumula com incrementos de refreshes anteriores
     const configBefore = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
     const vaultBeforeRefresh = configBefore?.vaultBalance ?? 0;
 
-    // Deduct cost, add to vault
+    // Verificar cooldown e limite diário por jogador
+    const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+    const refreshData = (configBefore?.playerRefreshData ?? {}) as Record<string, { date: string; count: number; lastAt: string }>;
+    const myData = refreshData[player.id];
+
+    if (myData) {
+      if (myData.date === todayBRT && myData.count >= REFRESH_DAILY_LIMIT)
+        return { error: `Limite diário atingido (${REFRESH_DAILY_LIMIT} atualizações por dia).` };
+      if (myData.lastAt && Date.now() - new Date(myData.lastAt).getTime() < REFRESH_COOLDOWN_MS) {
+        const remaining = Math.ceil((REFRESH_COOLDOWN_MS - (Date.now() - new Date(myData.lastAt).getTime())) / 60000);
+        return { error: `Aguarde ${remaining} min antes de atualizar novamente.` };
+      }
+    }
+
+    const newCount = myData?.date === todayBRT ? myData.count + 1 : 1;
+    const updatedRefreshData = {
+      ...refreshData,
+      [player.id]: { date: todayBRT, count: newCount, lastAt: new Date().toISOString() },
+    };
+
     const [updatedWallet] = await prisma.$transaction([
       prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: REFRESH_COST } } }),
       prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: REFRESH_COST } } }),
     ]);
 
-    // Roll com vault PRÉ-refresh + bonus fixo de +10pp sobre preço BASE
-    // Não usa o vaultBalance incrementado para evitar escalonamento de desconto
     const newOffers = await rollMiauvadaoOffers(vaultBeforeRefresh, 10);
 
-    const msg = `O ${player.displayName} investiu 60 ZC e atualizou as ofertas com descontos melhores! 🛍️`;
+    const msg = `O ${player.displayName} investiu ${REFRESH_COST} ZC e atualizou as ofertas com descontos melhores! 🛍️`;
     await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
       data: {
         dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        playerRefreshData: updatedRefreshData as unknown as import("@prisma/client").Prisma.InputJsonValue,
         lastNpcMessage: msg,
         lastNpcMessageAt: new Date(),
-        // NOTE: offersRefreshedAt NOT updated — timer stays the same
       }
     });
 

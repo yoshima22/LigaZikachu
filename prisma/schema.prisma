@@ -1709,7 +1709,8 @@ model MiauvadaoConfig {
   vaultBalance      Int      @default(0)
   listingFee        Int      @default(10)
   dailyOffers       Json     @default("[]")
-  offersRefreshedAt DateTime?
+  offersRefreshedAt    DateTime?
+  playerRefreshData    Json      @default("{}")   // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
   // Shell Game — última mensagem do NPC
   lastWinnerMessage String?
   lastWinnerAt      DateTime?
