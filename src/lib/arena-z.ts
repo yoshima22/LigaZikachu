@@ -868,6 +868,11 @@ export async function addMascotToArenaTeam(playerId: string, teamId: string, mas
   await checkRetireCooldown([mascotId]);
 
   const [mascot] = await validateArenaMascots(playerId, [mascotId]);
+
+  // Respeita o limite de nível da sala
+  if (mascot.level > (team.roomLevel ?? 999)) {
+    throw new Error(`${mascot.nickname ?? getPokemonName(mascot.pokemonId)} (nível ${mascot.level}) está acima do limite desta sala (nível ${team.roomLevel}). Escolha um mascote dentro do limite.`);
+  }
   const usedSlots = new Set(team.members.map(member => member.slot));
   const slot = [1, 2, 3, 4, 5, 6].find(candidate => !usedSlots.has(candidate));
   if (!slot) throw new Error("Sem slot livre na equipe.");
