@@ -108,9 +108,15 @@ export default async function ArenaZPage({
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
-    select: { id: true, displayName: true, arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true },
+    select: { id: true, displayName: true },
   });
   if (!player) redirect("/dashboard");
+
+  // Colunas novas (adicionadas na reformulação Jun/2026) — lidas separadamente para não quebrar se migration ainda não rodou
+  const playerArenaData = await prisma.player.findUnique({
+    where: { id: player.id },
+    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true },
+  }).catch(() => null);
 
   syncDefeatedArenaTeams(player.id).catch(() => null);
   prisma.mascot.updateMany({
@@ -119,9 +125,33 @@ export default async function ArenaZPage({
   }).catch(() => null);
 
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const pveEarnedToday = player.arenaPveCoinsDate === todayBRT ? (player.arenaPveCoinsEarned ?? 0) : 0;
+  const pveEarnedToday = playerArenaData?.arenaPveCoinsDate === todayBRT ? (playerArenaData.arenaPveCoinsEarned ?? 0) : 0;
   const pveCapRemaining = Math.max(0, PVE_DAILY_COINS_CAP - pveEarnedToday);
-  const shieldUsedToday = player.susShieldDate === todayBRT;
+  const shieldUsedToday = playerArenaData?.susShieldDate === todayBRT;
+
+  // Verifica se colunas da reformulação Jun/2026 já existem no DB
+  const dbReady = await prisma.$queryRaw<[{exists: boolean}]>`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'arena_teams' AND column_name = 'roomLevel'
+    ) AS exists
+  `.then(r => r[0]?.exists ?? false).catch(() => false);
+
+  if (!dbReady) {
+    return (
+      <div className="rounded-2xl border border-orange-500/40 bg-orange-500/10 p-8 text-center space-y-3">
+        <p className="font-pixel text-lg text-orange-300">Arena Z — Migração Necessária</p>
+        <p className="text-sm text-slate-300">As novas colunas do banco de dados ainda não foram criadas.</p>
+        <p className="text-xs text-slate-500">Rode o SQL de migração no Supabase e faça redeploy.</p>
+        <pre className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-left text-[10px] text-slate-300 overflow-x-auto">{`ALTER TABLE players ADD COLUMN IF NOT EXISTS "arenaPveCoinsDate" TEXT DEFAULT '';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS "arenaPveCoinsEarned" INTEGER DEFAULT 0;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS "susShieldDate" TEXT DEFAULT '';
+ALTER TABLE arena_teams DROP COLUMN IF EXISTS "teamType";
+ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "roomLevel" INTEGER DEFAULT 0;
+ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`}</pre>
+      </div>
+    );
+  }
 
   const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
@@ -192,8 +222,8 @@ export default async function ArenaZPage({
       include: { player: { select: { displayName: true } } },
       take: 10,
     }),
-    getRoomsData(player.id),
-    getTopArenaPlayers(),
+    getRoomsData(player.id).catch(() => ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] }))),
+    getTopArenaPlayers().catch(() => [] as never[]),
   ]);
 
   const now = new Date();
