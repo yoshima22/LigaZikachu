@@ -77,6 +77,10 @@ export const SPECIAL_MASCOT_SHOP_ITEM_TYPES = [
   "RAINBOW_FEATHER",
 ] as const;
 
+// Itens que só podem existir uma vez no inventário do jogador.
+// Ao tentar ganhar/comprar um segundo exemplar, ele é automaticamente vendido pela metade do preço.
+export const UNIQUE_ITEM_TYPES: ReadonlySet<string> = new Set(["XP_SHARE"]);
+
 export const MASCOT_SHOP_ITEM_TYPES = [
   ...EGG_SHOP_ITEM_TYPES,
   ...MASCOT_FOOD_SHOP_ITEM_TYPES,

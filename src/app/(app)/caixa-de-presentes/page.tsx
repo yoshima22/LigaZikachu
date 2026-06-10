@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
-import { Gift, PackageOpen, Ticket } from "lucide-react";
+import { Gift, Ticket } from "lucide-react";
 import { GiftStatus, GiftType } from "@prisma/client";
 import { getAppSession } from "@/lib/session";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge, type BadgeVariant } from "@/components/ui/status-badge";
 import { prisma } from "@/lib/prisma";
-import { claimAllGifts, claimGift } from "./actions";
+import { GiftClaimButton, ClaimAllGiftsButton } from "./_components/GiftClaimButton";
 
 export const dynamic = "force-dynamic";
 
@@ -89,18 +88,7 @@ export default async function GiftBoxPage() {
         </div>
 
         {unclaimedCount > 0 && (
-          <form
-            action={async () => {
-              "use server";
-              const r = await claimAllGifts({ playerId: player.id });
-              if (r.error) console.error("[claimAllGifts page]", r.error);
-            }}
-          >
-            <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
-              <PackageOpen size={16} className="mr-2" />
-              Receber todos ({unclaimedCount})
-            </Button>
-          </form>
+          <ClaimAllGiftsButton playerId={player.id} count={unclaimedCount} />
         )}
       </div>
 
@@ -168,18 +156,9 @@ export default async function GiftBoxPage() {
                 </dl>
 
                 {gift.status === GiftStatus.UNCLAIMED && (
-                  <form
-                    action={async () => {
-                      "use server";
-                      const r = await claimGift({ giftId: gift.id });
-                      if (r.error) console.error("[claimGift page]", r.error);
-                    }}
-                    className="mt-auto"
-                  >
-                    <Button type="submit" className="w-full">
-                      Receber presente
-                    </Button>
-                  </form>
+                  <div className="mt-auto">
+                    <GiftClaimButton giftId={gift.id} />
+                  </div>
                 )}
               </Card>
             );

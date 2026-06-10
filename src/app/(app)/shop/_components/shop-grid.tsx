@@ -95,10 +95,17 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
       try {
         const result = await purchaseItem({ itemId, quantity });
         if (result.error) { toast.error(result.error); return; }
-        toast.success(quantity > 1
-          ? `${quantity}x "${name}" adicionados ao seu inventário!`
-          : `"${name}" adicionado ao seu inventário!`
-        );
+        if (result.autoSold) {
+          toast.info(
+            `Você já possui "${result.autoSold.itemName}". Como é um item único, ele foi automaticamente vendido por ${result.autoSold.coins} ZC (metade do preço).`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(quantity > 1
+            ? `${quantity}x "${name}" adicionados ao seu inventário!`
+            : `"${name}" adicionado ao seu inventário!`
+          );
+        }
         router.refresh();
       } catch { toast.error("Erro ao comprar item."); }
       finally { setBuyingId(null); }

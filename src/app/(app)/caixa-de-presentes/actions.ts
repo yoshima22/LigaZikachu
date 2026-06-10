@@ -6,6 +6,7 @@ import { EggType, FoodType, GiftStatus, ZikaCoinTxType, type Prisma } from "@pri
 import { getSessionUser } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
+import { UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 
 const claimGiftSchema = z.object({
   giftId: z.string().min(1),
@@ -39,19 +40,16 @@ async function applyGiftReward(
   tx: Prisma.TransactionClient,
   playerId: string,
   gift: ClaimableGift
-) {
+): Promise<{ autoSold?: { itemName: string; coins: number } }> {
   const payload = getPayloadRecord(gift.payload);
 
   if (gift.type === "STICKER" && payload) {
     const cardId = typeof payload.cardId === "string" ? payload.cardId : null;
     if (cardId) {
-      // Valida que o card existe antes de criar o sticker (evita FK constraint error)
       const card = await tx.pokemonCard.findUnique({ where: { id: cardId }, select: { id: true } });
       if (!card) {
-        // Loga e pula — o presente é marcado como recebido mas sem item
-        // (cardId inválido = configuração incorreta do prêmio)
         console.error(`[claimGift] STICKER gift ${gift.id}: cardId "${cardId}" não encontrado em PokemonCard. Presente resgatado sem figurinha.`);
-        return;
+        return {};
       }
       await tx.playerSticker.upsert({
         where: { playerId_cardId: { playerId, cardId } },
@@ -59,10 +57,10 @@ async function applyGiftReward(
         create: { playerId, cardId, quantity: 1, isFavorite: false }
       });
     }
-    return;
+    return {};
   }
 
-  if (gift.type !== "CUSTOM" || !payload) return;
+  if (gift.type !== "CUSTOM" || !payload) return {};
 
   const rewardKind = typeof payload.rewardKind === "string" ? payload.rewardKind : null;
 
@@ -74,7 +72,7 @@ async function applyGiftReward(
         origin: typeof payload.origin === "string" ? payload.origin : gift.title
       }
     });
-    return;
+    return {};
   }
 
   if (rewardKind === "MASCOT_FOOD" && isFoodType(payload.foodType)) {
@@ -86,7 +84,7 @@ async function applyGiftReward(
       update: { quantity: { increment: quantity } },
       create: { playerId, type: payload.foodType, quantity }
     });
-    return;
+    return {};
   }
 
   if (rewardKind === "MASCOT_BUFF") {
@@ -97,9 +95,25 @@ async function applyGiftReward(
     if (buffType) {
       const shopItem = await tx.shopItem.findFirst({
         where: { type: buffType as import("@prisma/client").ShopItemType },
-        select: { id: true }
+        select: { id: true, name: true, price: true }
       });
       if (shopItem) {
+        // Itens únicos: se o jogador já possui, vende automaticamente pela metade
+        if (UNIQUE_ITEM_TYPES.has(buffType)) {
+          const existing = await tx.playerInventory.findUnique({
+            where: { playerId_itemId: { playerId, itemId: shopItem.id } }
+          });
+          if (existing) {
+            const halfPrice = Math.floor(shopItem.price / 2);
+            await creditCoins(tx, {
+              playerId,
+              type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
+              amount: halfPrice,
+              description: `Reembolso automático: ${shopItem.name} (item único já possuído)`
+            });
+            return { autoSold: { itemName: shopItem.name, coins: halfPrice } };
+          }
+        }
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId, itemId: shopItem.id } },
           update: { quantity: { increment: quantity } },
@@ -107,7 +121,7 @@ async function applyGiftReward(
         });
       }
     }
-    return;
+    return {};
   }
 
   if (rewardKind === "ZIKA_COINS") {
@@ -123,6 +137,7 @@ async function applyGiftReward(
       });
     }
   }
+  return {};
 }
 
 function revalidateGiftTargets() {
@@ -161,8 +176,10 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
 
     const now = new Date();
 
+    let autoSold: { itemName: string; coins: number } | undefined;
     await prisma.$transaction(async (tx) => {
-      await applyGiftReward(tx, player.id, gift);
+      const result = await applyGiftReward(tx, player.id, gift);
+      if (result.autoSold) autoSold = result.autoSold;
       await tx.playerGift.update({
         where: { id: giftId },
         data: { status: GiftStatus.CLAIMED, claimedAt: now },
@@ -180,7 +197,7 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
     });
 
     revalidateGiftTargets();
-    return { success: true };
+    return { success: true, autoSold };
   } catch (err) {
     console.error("[claimGift] Erro ao resgatar presente:", err);
     return { error: err instanceof Error ? err.message : "Erro ao resgatar presente. Tente novamente." };
@@ -215,6 +232,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
 
     const now = new Date();
     const claimedIds: string[] = [];
+    const autoSolds: { itemName: string; coins: number }[] = [];
 
     // Processa cada presente individualmente para que um erro não bloqueie todos os outros
     for (const gift of gifts) {
@@ -226,7 +244,8 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
           });
           if (!current) return;
 
-          await applyGiftReward(tx, player.id, current);
+          const result = await applyGiftReward(tx, player.id, current);
+          if (result.autoSold) autoSolds.push(result.autoSold);
           await tx.playerGift.update({
             where: { id: current.id },
             data: { status: GiftStatus.CLAIMED, claimedAt: now },
@@ -250,7 +269,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
     }
 
     revalidateGiftTargets();
-    return { success: true, claimed: claimedIds.length };
+    return { success: true, claimed: claimedIds.length, autoSolds: autoSolds.length > 0 ? autoSolds : undefined };
   } catch (err) {
     console.error("[claimAllGifts] Erro geral:", err);
     return { error: err instanceof Error ? err.message : "Erro ao resgatar presentes." };

@@ -9,7 +9,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoinTxType, EggType, FoodType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
-import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType } from "@/lib/shop-config";
+import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType, UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -330,7 +330,7 @@ const CONSUMABLE_TYPES = CONSUMABLE_SHOP_ITEM_TYPES as readonly string[];
 
 export async function purchaseItem(
   itemIdOrInput: string | z.infer<typeof purchaseItemSchema>
-): Promise<{ error?: string; purchased?: number }> {
+): Promise<{ error?: string; purchased?: number; autoSold?: { itemName: string; coins: number } }> {
   try {
     const { itemId, quantity } = purchaseItemSchema.parse(
       typeof itemIdOrInput === "string"
@@ -358,7 +358,24 @@ export async function purchaseItem(
       const alreadyOwns = await prisma.playerInventory.findUnique({
         where: { playerId_itemId: { playerId: player.id, itemId } }
       });
-      if (alreadyOwns) return { error: "Você já possui este item." };
+      if (alreadyOwns) {
+        if (UNIQUE_ITEM_TYPES.has(item.type)) {
+          // Item único: reembolsa metade do preço em vez de bloquear
+          const halfPrice = Math.floor(item.price / 2);
+          await prisma.$transaction(async (tx) => {
+            await creditCoins(tx, {
+              playerId: player.id,
+              type: ZikaCoinTxType.SHOP_PURCHASE,
+              amount: halfPrice,
+              description: `Reembolso automático: ${item.name} (item único já possuído)`
+            });
+          });
+          revalidatePath("/carteira");
+          revalidatePath("/", "layout");
+          return { autoSold: { itemName: item.name, coins: halfPrice } };
+        }
+        return { error: "Você já possui este item." };
+      }
     }
 
     const wallet = await getOrCreateWallet(player.id);
