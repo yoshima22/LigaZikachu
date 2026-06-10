@@ -25,6 +25,28 @@ const BUFF_EMOJI: Record<string, string> = {
   RAINBOW_FEATHER:   "🌈",
 };
 
+// Onde cada buff de EXP se aplica
+const EXP_BUFF_AREAS: Record<string, { label: string; applies: boolean }[]> = {
+  MASCOT_BUFF_EXP: [
+    { label: "Expedição",   applies: true },
+    { label: "Arena",       applies: true },
+    { label: "Interações",  applies: true },
+    { label: "Férias",      applies: false },
+  ],
+  PICNIC_BASKET: [
+    { label: "Expedição",   applies: true },
+    { label: "Arena",       applies: true },
+    { label: "Interações",  applies: true },
+    { label: "Férias",      applies: false },
+  ],
+  LUCKY_EGG: [
+    { label: "Expedição",   applies: true },
+    { label: "Arena",       applies: false },
+    { label: "Interações",  applies: false },
+    { label: "Férias",      applies: false },
+  ],
+};
+
 // Itens que não precisam de seleção de mascote (aplicados globalmente ou com lógica especial)
 const PLAYER_LEVEL_ITEMS = new Set(["PICNIC_BASKET"]);
 // Itens irreversíveis que precisam de confirmação extra
@@ -37,9 +59,11 @@ interface Props {
   mascots: MascotOption[];
   /** mascotId → número de doses de Proteína Zika já recebidas (máx 3) */
   proteinDoses?: Record<string, number>;
+  /** mascotId → buffs ativos (para detectar sobreposição de EXP_BOOST) */
+  activeBuffsByMascot?: Record<string, string[]>;
 }
 
-export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
+export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMascot = {} }: Props) {
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
   const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? mascots.find(m => m.isFavorite)?.id ?? "");
@@ -48,9 +72,13 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
 
   const selectedBuffItem = buffs.find(b => b.id === selectedBuff);
   const isProtein = selectedBuffItem?.type === "MASCOT_BUFF_STAT";
-  // Doses do mascote selecionado
+  const isExpBuff = selectedBuffItem?.type === "MASCOT_BUFF_EXP";
   const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
+
+  // Verifica se o mascote selecionado já tem EXP_BOOST ativo
+  const selectedMascotActiveBuffs = selectedMascot ? (activeBuffsByMascot[selectedMascot] ?? []) : [];
+  const mascotHasExpBoost = selectedMascotActiveBuffs.includes("EXP_BOOST");
 
   const handleUse = () => {
     if (!selectedBuffItem) return;
@@ -64,17 +92,23 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
     }
 
     const mascotName = mascots.find(m => m.id === selectedMascot)?.name ?? "mascote";
-    const confirmMsg = isDestructive
-      ? `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai resetar nível, EXP e todos os atributos para 0. Esta ação é IRREVERSÍVEL. Tem certeza?`
-      : isPlayerLevel
-        ? `Usar ${selectedBuffItem.name} na Equipe Favorita?`
-        : `Usar ${selectedBuffItem.name} em ${mascotName}?`;
+
+    let confirmMsg: string;
+    if (isDestructive) {
+      confirmMsg = `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai resetar nível, EXP e todos os atributos para 0. Esta ação é IRREVERSÍVEL. Tem certeza?`;
+    } else if (isExpBuff && mascotHasExpBoost) {
+      confirmMsg = `${mascotName} já tem uma Vitamina Elétrica ativa. Usar outra irá REMOVER o buff atual e aplicar um novo. Deseja continuar?`;
+    } else if (isPlayerLevel) {
+      confirmMsg = `Usar ${selectedBuffItem.name} na Equipe Favorita?`;
+    } else {
+      confirmMsg = `Usar ${selectedBuffItem.name} em ${mascotName}?`;
+    }
 
     if (!confirm(confirmMsg)) return;
     if (isDestructive && !confirm("Confirme novamente: isso não pode ser desfeito.")) return;
 
     startTransition(async () => {
-      let r: { error?: string };
+      let r: { error?: string; replacedExistingBuff?: boolean };
       const t = selectedBuffItem.type;
 
       if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
@@ -87,13 +121,23 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
 
       if (r.error) toast.error(r.error);
       else {
-        if (t === "PICNIC_BASKET") toast.success("Piquenique iniciado! Equipe Favorita tem bônus por 2h. 🧺");
-        else if (t === "VACATION_TICKET") toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 7 dias. 🏖️`);
-        else if (t === "XP_SHARE") toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
-        else if (t === "RAINBOW_FEATHER") toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);
-        else if (t === "LUCKY_EGG") toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
-        else if (t === "WEAKNESS_POLICY") toast.success(`${mascotName} está protegido contra ataques oportunistas! 🛡️`);
-        else toast.success("Item usado com sucesso! ✨");
+        if (r.replacedExistingBuff) {
+          toast.success(`Vitamina Elétrica anterior removida. Novo buff aplicado em ${mascotName}! ⚡`);
+        } else if (t === "PICNIC_BASKET") {
+          toast.success("Piquenique iniciado! Equipe Favorita tem bônus por 2h. 🧺");
+        } else if (t === "VACATION_TICKET") {
+          toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 7 dias. 🏖️`);
+        } else if (t === "XP_SHARE") {
+          toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
+        } else if (t === "RAINBOW_FEATHER") {
+          toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);
+        } else if (t === "LUCKY_EGG") {
+          toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
+        } else if (t === "WEAKNESS_POLICY") {
+          toast.success(`${mascotName} está protegido contra ataques oportunistas! 🛡️`);
+        } else {
+          toast.success("Item usado com sucesso! ✨");
+        }
       }
     });
   };
@@ -111,17 +155,18 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
         {buffs.map(buff => {
           const emoji = BUFF_EMOJI[buff.type] ?? "✨";
           const isThisProtein = buff.type === "MASCOT_BUFF_STAT";
+          const areas = EXP_BUFF_AREAS[buff.type];
           return (
             <button key={buff.id} type="button"
               onClick={() => setSelectedBuff(buff.id)}
-              className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+              className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
                 selectedBuff === buff.id
                   ? "border-[#FFCB05]/50 bg-[#FFCB05]/10"
                   : "border-border bg-slate-900/40 hover:border-slate-600"
               }`}>
               {buff.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={buff.imageUrl} alt="" className="h-8 w-8 object-contain shrink-0" />
+                <img src={buff.imageUrl} alt="" className="h-8 w-8 object-contain shrink-0 mt-0.5" />
               ) : (
                 <span className="text-2xl shrink-0">{emoji}</span>
               )}
@@ -131,6 +176,19 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
                   <p className="text-[10px] text-slate-500 line-clamp-2">{buff.description}</p>
                 )}
                 <p className="text-[10px] text-[#FFCB05] mt-0.5">×{buff.quantity} disponível</p>
+
+                {/* Indicador de onde o buff de EXP se aplica */}
+                {areas && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {areas.map(a => (
+                      <span key={a.label} className={`text-[9px] font-semibold px-1 rounded ${
+                        a.applies ? "text-green-300 bg-green-500/10 border border-green-500/20" : "text-slate-600 bg-slate-800/40 border border-slate-700/30 line-through"
+                      }`}>
+                        {a.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* Indicador de limite da Proteína Zika */}
                 {isThisProtein && (
@@ -165,6 +223,14 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
         </div>
       )}
 
+      {/* Alerta de substituição de EXP_BOOST */}
+      {isExpBuff && selectedMascot && mascotHasExpBoost && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
+          <span className="shrink-0">⚠️</span>
+          <span>Este mascote já tem uma <strong>Vitamina Elétrica</strong> ativa. Usar outra irá remover o buff atual e aplicar um novo no lugar.</span>
+        </div>
+      )}
+
       {/* Seletor de mascote + botão */}
       {selectedBuff && (
         <div className="flex flex-wrap items-center gap-3">
@@ -180,14 +246,14 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {} }: Props) {
             {mascots.map(m => {
               const doses = isProtein ? (proteinDoses[m.id] ?? 0) : 0;
               const maxed = isProtein && doses >= PROTEIN_LIMIT;
+              const hasBoost = isExpBuff && (activeBuffsByMascot[m.id] ?? []).includes("EXP_BOOST");
               return (
                 <option key={m.id} value={m.id} disabled={maxed}>
-                  {m.name}{m.isEquipped ? " ★ Companheiro" : m.isFavorite ? " ☆ Equipe Favorita" : ""}{isProtein && doses > 0 ? ` (${doses}/${PROTEIN_LIMIT} doses)` : ""}{maxed ? " — MÁXIMO" : ""}
+                  {m.name}{m.isEquipped ? " ★ Companheiro" : m.isFavorite ? " ☆ Equipe Favorita" : ""}{isProtein && doses > 0 ? ` (${doses}/${PROTEIN_LIMIT} doses)` : ""}{maxed ? " — MÁXIMO" : ""}{hasBoost ? " ⚡ buff ativo" : ""}
                 </option>
               );
             })}
           </select>
-
           )}
 
           {/* Aviso de doses do mascote selecionado */}

@@ -112,7 +112,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.PICNIC_BASKET,
     name: "Cesta de Piquenique Chocante",
-    description: "Toda a equipe equipada recebe +50% EXP e +5 felicidade por interação durante 2 horas.",
+    description: "Os 6 Pokémon favoritos da sua equipe ganham +10% EXP e +5 felicidade em interações e batalhas durante 2 horas. (batalha, interações e expedições)",
     imageUrl: null,
     rarity: ShopItemRarity.RARE,
     price: 500,

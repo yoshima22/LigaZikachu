@@ -404,7 +404,7 @@ export async function adminFormFriendshipAction(mascotAId: string, mascotBId: st
 }
 
 // Usar buff em um mascote
-export async function useMascotBuffAction(mascotId: string, itemId: string): Promise<{ error?: string }> {
+export async function useMascotBuffAction(mascotId: string, itemId: string): Promise<{ error?: string; replacedExistingBuff?: boolean }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
@@ -451,6 +451,13 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
 
     const expiresAt = new Date(Date.now() + config.hours * 3_600_000);
 
+    // Verifica se há EXP_BOOST ativo para informar o cliente que será substituído
+    let replacedExistingBuff = false;
+    if (config.type === "EXP_BOOST") {
+      const existing = await prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } });
+      if (existing) replacedExistingBuff = true;
+    }
+
     await prisma.$transaction(async (tx) => {
       // Remove 1 do inventário
       await tx.playerInventory.update({
@@ -474,8 +481,13 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       }
 
       // Salva buff com expiração (para EXP_BOOST e LUCK_BOOST)
+      // EXP_BOOST substitui qualquer buff ativo do mesmo tipo (sem acúmulo)
       // STAT_BOOST também grava com expiresAt permanente (2099) como marcador confiável de limite
       if (config.hours > 0) {
+        if (config.type === "EXP_BOOST") {
+          // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas)
+          await tx.mascotBuff.deleteMany({ where: { mascotId, type: "EXP_BOOST" } });
+        }
         await tx.mascotBuff.create({ data: { mascotId, type: config.type, expiresAt } });
       } else if (config.type === "STAT_BOOST") {
         await tx.mascotBuff.create({
@@ -488,7 +500,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     });
 
     revalidate();
-    return {};
+    return { replacedExistingBuff };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

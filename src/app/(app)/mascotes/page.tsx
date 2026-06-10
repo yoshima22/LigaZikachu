@@ -371,6 +371,7 @@ export default async function MascotesPage() {
     isFavorite: m.isFavorite,
   }))}
   proteinDoses={Object.fromEntries(proteinBoostedMascots.map(b => [b.mascotId, b._count.id]))}
+  activeBuffsByMascot={Object.fromEntries([...buffsByMascotId.entries()].map(([id, buffs]) => [id, buffs.map(b => b.type)]))}
 />
       )}
 
