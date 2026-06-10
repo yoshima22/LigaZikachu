@@ -875,12 +875,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   }`}>
                   <MapPin size={12}/> {expeditionMode === "TRAINING" ? "Treinar" : expeditionMode === "ITEMS" ? "Buscar" : "Partir"}
                 </button>
-                {expeditionMode !== "TRAINING" && (
-                  <button type="button" onClick={() => setShowLootPreview(true)}
-                    className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
-                    Loot?
-                  </button>
-                )}
+                <button type="button" onClick={() => setShowLootPreview(true)}
+                  className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
+                  Loot?
+                </button>
               </div>
             </div>
           )}
