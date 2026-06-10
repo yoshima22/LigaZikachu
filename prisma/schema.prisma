@@ -1792,3 +1792,13 @@ model PassScheduleConfig {
 
   @@map("pass_schedule_config")
 }
+
+// Conteúdo editável do site (textos do manual, etc.)
+model SiteContent {
+  id        String   @id  // ex: "manual"
+  data      Json     @default("{}")  // Record<string, string> — chave → texto
+  updatedAt DateTime @updatedAt
+  updatedBy String?  // userId do admin que editou por último
+
+  @@map("site_content")
+}

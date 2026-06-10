@@ -47,6 +47,7 @@ const colecaoLinks = [
   { href: "/pokedex",   label: "Pokedex",     icon: Search,       adminOnly: false },
   { href: "/professor", label: "Prof. Enguiça", icon: Sparkles,   adminOnly: false },
   { href: "/album",     label: "Álbum",       icon: BookOpen,     adminOnly: false },
+  { href: "/manual",    label: "Manual",      icon: BookOpen,     adminOnly: false },
   { href: "/carteira",  label: "Carteira",    icon: Coins,        adminOnly: false },
   { href: "/inventario", label: "Inventário", icon: Package,      adminOnly: false }
 ];
