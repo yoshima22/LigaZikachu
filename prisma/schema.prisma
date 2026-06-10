@@ -1373,10 +1373,9 @@ model Mascot {
   susRestBonusMinutes  Int               @default(0)
   evolutionLocked      Boolean           @default(false)
   isShiny              Boolean           @default(false) // variante shiny — sprite diferente e marcador visual
-  arenaState              MascotArenaState  @default(FREE)
-  injuredAt               DateTime?
-  restingUntil            DateTime?
-  arenaEntryCooldownUntil DateTime?         // cooldown individual por mascote antes de poder voltar à arena
+  arenaState           MascotArenaState  @default(FREE)
+  injuredAt            DateTime?
+  restingUntil         DateTime?         // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
   arenaTeamMembers ArenaTeamMember[]

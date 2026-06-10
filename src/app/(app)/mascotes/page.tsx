@@ -32,6 +32,11 @@ export default async function MascotesPage() {
     where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lte: new Date() } },
     data: { arenaState: "FREE", restingUntil: null },
   }).catch(() => null);
+  // Limpa cooldown de re-entrada expirado (FREE + restingUntil no passado)
+  prisma.mascot.updateMany({
+    where: { playerId: player.id, arenaState: "FREE", restingUntil: { lte: new Date() } },
+    data: { restingUntil: null },
+  }).catch(() => null);
 
   const BUFF_TYPES = [
     "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
@@ -59,7 +64,7 @@ export default async function MascotesPage() {
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
-        injuredAt: true, restingUntil: true, arenaEntryCooldownUntil: true,
+        injuredAt: true, restingUntil: true,
         hatchedAt: true, lastInteractedAt: true, lastFedAt: true, socialCooldownUntil: true,
         expeditions: {
           where: { status: "ACTIVE" },
@@ -93,7 +98,7 @@ export default async function MascotesPage() {
       where: { playerId: player.id, isFavorite: false, isEquipped: false },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
-        arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true, arenaEntryCooldownUntil: true,
+        arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         expeditions: {
           where: { status: "ACTIVE" }, take: 1,
@@ -188,7 +193,6 @@ export default async function MascotesPage() {
     bazarListed: m.bazarListed,
     injuredAt: m.injuredAt,
     restingUntil: m.restingUntil,
-    arenaEntryCooldownUntil: m.arenaEntryCooldownUntil ?? null,
     hatchedAt: m.hatchedAt,
     lastInteractedAt: m.lastInteractedAt,
     lastPlayedAt: null,

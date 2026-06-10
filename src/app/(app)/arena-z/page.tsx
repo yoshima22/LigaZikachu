@@ -401,7 +401,7 @@ export default async function ArenaZPage() {
             statVitality: m.statVitality, statInstinct: m.statInstinct,
             arenaState: m.arenaState,
             restingUntil: m.restingUntil?.toISOString() ?? null,
-            arenaEntryCooldownUntil: (m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil?.toISOString() ?? null,
+            arenaEntryCooldownUntil: null,
           }))} />
         </section>
 
@@ -516,7 +516,7 @@ export default async function ArenaZPage() {
                         statVitality: m.statVitality, statInstinct: m.statInstinct,
                         arenaState: m.arenaState,
                         restingUntil: m.restingUntil?.toISOString() ?? null,
-                        arenaEntryCooldownUntil: (m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil?.toISOString() ?? null,
+                        arenaEntryCooldownUntil: null,
                       }))}
                       slotsUsed={team.members.length}
                     />

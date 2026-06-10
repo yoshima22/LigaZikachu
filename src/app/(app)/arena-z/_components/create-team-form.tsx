@@ -40,14 +40,15 @@ function fmtCountdown(ms: number): string {
   return `${h}h ${m % 60}min`;
 }
 
-/** Returns null if available, or a { label, until } if blocked */
+/** Returns null if available, or a { label, until } if blocked.
+ * FREE + restingUntil no futuro = cooldown de re-entrada na arena (sem migration extra). */
 function getMascotBlock(m: ValidMascot, now: number): { label: string; until?: number } | null {
   if (m.arenaState === "ARENA") return { label: "Na arena" };
   if (m.arenaState === "INJURED") return { label: "Ferido" };
   const resting = m.restingUntil ? new Date(m.restingUntil).getTime() : 0;
   if (m.arenaState === "RESTING" && resting > now) return { label: "Repouso", until: resting };
-  const cooldown = m.arenaEntryCooldownUntil ? new Date(m.arenaEntryCooldownUntil).getTime() : 0;
-  if (cooldown > now) return { label: "Cooldown arena", until: cooldown };
+  // FREE + restingUntil = cooldown de re-entrada na arena
+  if (m.arenaState === "FREE" && resting > now) return { label: "Cooldown arena", until: resting };
   return null;
 }
 

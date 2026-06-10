@@ -658,8 +658,9 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
     if (m.arenaState === "INJURED") throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} esta ferido.`);
     if (m.arenaState === "RESTING" && m.restingUntil && m.restingUntil > now) throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} esta em repouso.`);
     if (m.arenaState === "ARENA") throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} ja esta em uma equipe da Arena.`);
-    if ((m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil && (m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil! > now) {
-      const rem = Math.ceil(((m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil!.getTime() - now.getTime()) / 60_000);
+    // Cooldown de re-entrada: FREE + restingUntil no futuro = saiu da arena recentemente
+    if (m.arenaState === "FREE" && m.restingUntil && m.restingUntil > now) {
+      const rem = Math.ceil((m.restingUntil.getTime() - now.getTime()) / 60_000);
       throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} ainda esta em cooldown de re-entrada na Arena (${rem} min).`);
     }
   }
@@ -797,11 +798,11 @@ export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin 
 
   await prisma.$transaction(async (tx) => {
     // Libera todos os mascotes (feridos permanecem feridos, apenas sai do ARENA)
-    // Abandono sem recompensas → cooldown mais curto (15 min)
+    // Abandono sem recompensas → cooldown mais curto (15 min) via restingUntil em estado FREE
     const abandonCooldownUntil = new Date(Date.now() + ARENA_ENTRY_COOLDOWN_ABANDON_MS);
     await tx.mascot.updateMany({
       where: { id: { in: team.members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
-      data: { arenaState: "FREE", restingUntil: null, arenaEntryCooldownUntil: abandonCooldownUntil }
+      data: { arenaState: "FREE", restingUntil: abandonCooldownUntil }
     });
     // Remove a equipe (cascade apaga members via FK)
     // Nota: abandono NÃO credita o cofre e NÃO define retiredAt (sem penalidade de 10 min)
@@ -933,11 +934,12 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
         create: { playerId, type: "SWEET", quantity: vaultFinal.sweet },
       });
     }
+    // restingUntil em mascote FREE = cooldown de re-entrada na arena (30 min)
     const entryCooldownUntil = new Date(Date.now() + ARENA_ENTRY_COOLDOWN_MS);
     for (const member of team.members) {
       await tx.mascot.updateMany({
         where: { id: member.mascotId, arenaState: { not: "INJURED" } },
-        data: { arenaState: "FREE", restingUntil: null, arenaEntryCooldownUntil: entryCooldownUntil },
+        data: { arenaState: "FREE", restingUntil: entryCooldownUntil },
       });
     }
     await tx.arenaTeam.update({
@@ -2087,6 +2089,12 @@ export async function adminRepairArenaStates(targetPlayerId?: string): Promise<{
       details.push(`[RESTING_EXPIRED→FREE] ${m.nickname ?? `#${m.pokemonId}`} (player ${m.playerId})`);
     }
   }
+
+  // 2b. Mascotes FREE com restingUntil no passado (cooldown de re-entrada expirado)
+  await prisma.mascot.updateMany({
+    where: { ...wherePlayer, arenaState: "FREE", restingUntil: { lt: new Date() } },
+    data: { restingUntil: null },
+  }).catch(() => null);
 
   // 3. Times ACTIVE sem nenhum membro
   const emptyActiveTeams = await prisma.arenaTeam.findMany({
