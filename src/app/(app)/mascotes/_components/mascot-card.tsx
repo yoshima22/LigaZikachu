@@ -22,7 +22,7 @@ import {
   toggleEvolutionLockAction,
   removeXpShareAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
@@ -484,15 +484,26 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           <p className="text-[11px] text-slate-500">Baseado em Instinto {mascot.statInstinct} · Nível {mascot.level}</p>
           <div className="space-y-3">
             {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, dur]) => {
+              if (key === "7d") return null;
               const luck = mascot.statInstinct + Math.floor(mascot.level / 10);
               const eggChance   = Math.min(35, 5 + luck * 0.3 + dur.rewardBonus * 0.3).toFixed(0);
               const sweetChance = Math.min(25, 12 + dur.rewardBonus * 0.3).toFixed(0);
               const coinMin = 50 + dur.rewardBonus * 5;
               const coinMax = coinMin + 150 + dur.rewardBonus * 10;
               const eggQuality = key === "6h" ? "🥚 Especial/Raro" : key === "3h" ? "🥚 Raro/Comum" : "🥚 Comum";
+              // EXP de treinamento: base × mult × levelMult (sem aliados/lucky egg = mínimo; com 3 aliados + lucky egg = máximo)
+              const levelMult = 1 + Math.floor(mascot.level / 20) * 0.25;
+              const expMult = TRAINING_EXP_MULT[key as ExpeditionDuration] ?? 0;
+              const expMin = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult);
+              const expMax = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * 1.3 * 1.2); // +3 aliados (+30%) + lucky egg (+20%)
               return (
                 <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-1.5">
-                  <p className="text-xs font-semibold text-blue-400">{dur.label} · EXP ×{dur.expMultiplier}</p>
+                  <p className="text-xs font-semibold text-blue-400">{dur.label}</p>
+                  <div className="mb-1 rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1 text-[10px]">
+                    <span className="text-green-400">⚔️ Treinamento: </span>
+                    <strong className="text-green-200">{expMin.toLocaleString("pt-BR")}–{expMax.toLocaleString("pt-BR")} EXP</strong>
+                    <span className="ml-1 text-slate-500">(max com aliados + Lucky Egg)</span>
+                  </div>
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-400">
                     <span>🥚 Ovo: <strong className="text-slate-200">~{eggChance}%</strong> ({eggQuality.split(" ")[1]})</span>
                     <span>🍬 Doce: <strong className="text-slate-200">~{sweetChance}%</strong></span>
