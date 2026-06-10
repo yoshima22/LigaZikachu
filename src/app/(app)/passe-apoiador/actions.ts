@@ -67,6 +67,21 @@ export async function adminResetSchedule(): Promise<{ ok: boolean; error?: strin
   }
 }
 
+// ── Utilitário: dias de calendário decorridos em BRT ─────────────────────────
+// Conta quantos dias do calendário (meia-noite BRT) separaram duas datas.
+// Assim, "dia 2" libera na meia-noite seguinte à criação — não após 24h corridas.
+function calendarDaysBRT(from: Date, to: Date): number {
+  const TZ = "America/Sao_Paulo";
+  // Formata como "YYYY-MM-DD" no fuso BRT e compara datas, sem depender de hora
+  const toYMD = (d: Date) =>
+    d.toLocaleDateString("sv-SE", { timeZone: TZ }); // sv-SE dá "YYYY-MM-DD"
+  const fromStr = toYMD(from);
+  const toStr   = toYMD(to);
+  const msFrom  = new Date(fromStr).getTime();
+  const msTo    = new Date(toStr).getTime();
+  return Math.floor((msTo - msFrom) / 86400000);
+}
+
 // ── Status do passe do jogador logado ─────────────────────────────────────────
 
 export type ActivePassSummary = {
@@ -137,8 +152,9 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     }
 
     const isExpired = now > pass.expiresAt || !pass.active;
-    const msElapsed = Math.max(0, now.getTime() - pass.startsAt.getTime());
-    const daysElapsed = Math.floor(msElapsed / 86400000);
+    // Usa dias de calendário em BRT para que o dia 2 libere na meia-noite seguinte,
+    // independente do horário em que o passe foi criado.
+    const daysElapsed = calendarDaysBRT(pass.startsAt, now);
     const daysRemaining = Math.max(0, Math.ceil((pass.expiresAt.getTime() - now.getTime()) / 86400000));
     const todayDay = Math.min(30, daysElapsed + 1);
     const alreadyClaimed = pass.claims.some(c => c.dayNumber === todayDay);
@@ -185,9 +201,8 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (!pass.active || new Date() > pass.expiresAt) return { ok: false, error: "Passe expirado." };
     if (pass.claims.length > 0) return { ok: false, error: "Dia já resgatado." };
 
-    // Verificar que o dia já chegou
-    const msElapsed = Math.max(0, Date.now() - pass.startsAt.getTime());
-    const currentDay = Math.min(30, Math.floor(msElapsed / 86400000) + 1);
+    // Verificar que o dia já chegou (calendário BRT, não 24h corridas)
+    const currentDay = Math.min(30, calendarDaysBRT(pass.startsAt, new Date()) + 1);
     if (dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
     if (dayNumber < 1 || dayNumber > 30) return { ok: false, error: "Dia inválido." };
 
@@ -313,10 +328,16 @@ export async function adminGrantVip(opts: {
 
     const startDay = Math.max(1, Math.min(30, opts.startDay ?? 1));
 
-    // Se startDay > 1, rewind startsAt para que "hoje" seja o dia startDay
+    // Se startDay > 1, rewind startsAt para que "hoje" seja o dia startDay.
+    // Usamos meia-noite BRT do dia de criação menos (startDay-1) dias, para que
+    // o cálculo de calendário BRT dê o dia correto.
     const now = new Date();
+    const TZ = "America/Sao_Paulo";
+    // Meia-noite BRT de hoje
+    const todayBRTStr = now.toLocaleDateString("sv-SE", { timeZone: TZ }); // "YYYY-MM-DD"
+    const todayBRTMidnight = new Date(`${todayBRTStr}T00:00:00-03:00`);
     const startsAt = startDay > 1
-      ? new Date(now.getTime() - (startDay - 1) * 86400000)
+      ? new Date(todayBRTMidnight.getTime() - (startDay - 1) * 86400000)
       : now;
     const expiresAt = new Date(startsAt.getTime() + opts.days * 86400000);
 
