@@ -13,7 +13,7 @@ import {
   getArenaDebuffPct, getRoomsData, getTopArenaPlayers,
 } from "@/lib/arena-z";
 import {
-  AdminMascotStateButton, BotBattleButton, DeleteTeamButton,
+  AdminMascotStateButton, BotBattleButton, DeleteTeamButton, GroundSpoilCollectButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge,
   RetireTeamButton, SusButton,
@@ -153,7 +153,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     );
   }
 
-  const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
+  const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers, groundSpoils] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -224,6 +224,11 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     }),
     getRoomsData(player.id).catch(() => ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] }))),
     getTopArenaPlayers().catch(() => [] as never[]),
+    prisma.arenaGroundSpoil.findMany({
+      where: { status: "AVAILABLE", sourcePlayerId: { not: player.id } },
+      orderBy: { createdAt: "asc" },
+      take: 10,
+    }).catch(() => [] as never[]),
   ]);
 
   const now = new Date();
@@ -615,6 +620,63 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                   </div>
                 </div>
               </details>
+            )}
+
+            {/* Espólios no chão */}
+            {groundSpoils.length > 0 && (
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-amber-200 flex items-center gap-2">
+                      💰 Espólios no Chão
+                    </h3>
+                    <p className="text-[10px] text-amber-400/70 mt-0.5">
+                      Itens deixados por batalhas recentes. Tenha uma equipe ativa para coletar.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-300">
+                    {groundSpoils.length} disponíve{groundSpoils.length !== 1 ? "is" : "l"}
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {groundSpoils.map(spoil => (
+                    <div key={spoil.id} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/15 bg-slate-950/60 px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        {spoil.coins > 0 && (
+                          <span className="rounded border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1.5 py-0.5 font-bold text-[#FFCB05]">
+                            {spoil.coins} ZC
+                          </span>
+                        )}
+                        {spoil.exp > 0 && (
+                          <span className="rounded border border-blue-400/30 bg-blue-400/10 px-1.5 py-0.5 font-bold text-blue-300">
+                            {spoil.exp} EXP
+                          </span>
+                        )}
+                        {spoil.food > 0 && (
+                          <span className="rounded border border-green-400/30 bg-green-400/10 px-1.5 py-0.5 font-bold text-green-300">
+                            🍖×{spoil.food}
+                          </span>
+                        )}
+                        {spoil.sweet > 0 && (
+                          <span className="rounded border border-pink-400/30 bg-pink-400/10 px-1.5 py-0.5 font-bold text-pink-300">
+                            🍬×{spoil.sweet}
+                          </span>
+                        )}
+                        <span className="text-slate-600 self-center">
+                          há {Math.floor((Date.now() - new Date(spoil.createdAt).getTime()) / 60000)} min
+                        </span>
+                      </div>
+                      <GroundSpoilCollectButton
+                        spoilId={spoil.id}
+                        coins={spoil.coins}
+                        exp={spoil.exp}
+                        food={spoil.food}
+                        sweet={spoil.sweet}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Ranking */}

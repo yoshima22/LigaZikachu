@@ -9,6 +9,7 @@ import { getSpriteUrl } from "@/lib/mascot-data";
 import {
   adminRepairArenaAction,
   adminSetMascotStateAction,
+  collectGroundSpoilAction,
   deleteArenaTeamAction,
   getArenaBattleDetailsAction,
   healMascotSusAction,
@@ -1080,5 +1081,54 @@ export function OpportunisticAttackButton({ mascotId, mascotName, ownerName }: {
         </div>
       )}
     </>
+  );
+}
+
+// ── GroundSpoilCollectButton ───────────────────────────────────────────────
+
+export function GroundSpoilCollectButton({ spoilId, coins, exp, food, sweet }: {
+  spoilId: string;
+  coins: number;
+  exp: number;
+  food: number;
+  sweet: number;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [collected, setCollected] = useState(false);
+
+  if (collected) {
+    return (
+      <span className="rounded-lg border border-green-500/30 bg-green-500/10 px-2 py-1 text-[10px] font-bold text-green-300">
+        ✓ Coletado!
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        startTransition(async () => {
+          const r = await collectGroundSpoilAction(spoilId);
+          if (r.error) {
+            toast.error(r.error);
+          } else {
+            setCollected(true);
+            const parts = [];
+            if (r.loot?.coins) parts.push(`${r.loot.coins} ZC`);
+            if (r.loot?.exp)   parts.push(`${r.loot.exp} EXP`);
+            if (r.loot?.food)  parts.push(`${r.loot.food} petisco`);
+            if (r.loot?.sweet) parts.push(`${r.loot.sweet} doce`);
+            toast.success(`Espólio coletado! ${parts.join(", ")}`);
+            router.refresh();
+          }
+        });
+      }}
+      className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 transition-colors"
+    >
+      {pending ? "…" : "Coletar"}
+    </button>
   );
 }

@@ -3,8 +3,8 @@
 import { useState, useTransition, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, X, ArrowUpDown, ChevronDown, ChevronUp, Users } from "lucide-react";
-import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
+import { Search, X, ArrowUpDown, ChevronDown } from "lucide-react";
+import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 
 export interface ValidMascot {
@@ -35,6 +35,45 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "stats_desc", label: "Stats ↓" },
   { value: "name_asc",   label: "Nome A→Z" },
 ];
+
+// Cores por tipo
+const TYPE_COLORS: Record<string, string> = {
+  fire:     "bg-orange-500/20 text-orange-300 border-orange-500/40",
+  water:    "bg-blue-500/20 text-blue-300 border-blue-500/40",
+  grass:    "bg-green-500/20 text-green-300 border-green-500/40",
+  electric: "bg-yellow-400/20 text-yellow-300 border-yellow-400/40",
+  psychic:  "bg-pink-500/20 text-pink-300 border-pink-500/40",
+  ghost:    "bg-purple-600/20 text-purple-300 border-purple-600/40",
+  dragon:   "bg-indigo-500/20 text-indigo-300 border-indigo-500/40",
+  fighting: "bg-red-600/20 text-red-300 border-red-600/40",
+  ground:   "bg-amber-600/20 text-amber-300 border-amber-600/40",
+  rock:     "bg-stone-500/20 text-stone-300 border-stone-500/40",
+  ice:      "bg-cyan-400/20 text-cyan-300 border-cyan-400/40",
+  poison:   "bg-violet-500/20 text-violet-300 border-violet-500/40",
+  bug:      "bg-lime-500/20 text-lime-300 border-lime-500/40",
+  flying:   "bg-sky-400/20 text-sky-300 border-sky-400/40",
+  dark:     "bg-slate-600/30 text-slate-300 border-slate-600/50",
+  steel:    "bg-slate-400/20 text-slate-200 border-slate-400/40",
+  fairy:    "bg-rose-400/20 text-rose-300 border-rose-400/40",
+  normal:   "bg-slate-700/30 text-slate-400 border-slate-700/40",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  fire: "Fogo", water: "Água", grass: "Planta", electric: "Elétrico",
+  psychic: "Psíquico", ghost: "Fantasma", dragon: "Dragão", fighting: "Lutador",
+  ground: "Terra", rock: "Pedra", ice: "Gelo", poison: "Veneno",
+  bug: "Inseto", flying: "Voador", dark: "Sombrio", steel: "Aço",
+  fairy: "Fada", normal: "Normal",
+};
+
+function TypeBadge({ type, small = false }: { type: string; small?: boolean }) {
+  const cls = TYPE_COLORS[type] ?? TYPE_COLORS.normal;
+  return (
+    <span className={`inline-block rounded border px-1 font-bold uppercase tracking-widest ${small ? "text-[8px] py-0" : "text-[9px] py-0.5"} ${cls}`}>
+      {TYPE_LABELS[type] ?? type}
+    </span>
+  );
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -74,7 +113,7 @@ const BLOCK_STYLE: Record<string, { icon: string; label: string; cls: string }> 
   cooldown: { icon: "⏳", label: "Cooldown Arena",   cls: "bg-orange-500/10 text-orange-300 border-orange-500/20" },
 };
 
-// ── LiveCountdown (ticks every second) ────────────────────────────────────
+// ── LiveCountdown ────────────────────────────────────────────────────────
 
 function LiveCountdown({ until, className = "" }: { until: number; className?: string }) {
   const [rem, setRem] = useState(() => until - Date.now());
@@ -86,17 +125,36 @@ function LiveCountdown({ until, className = "" }: { until: number; className?: s
   return <span className={className}>{fmtCountdown(rem)}</span>;
 }
 
-// ── MascotCard (grid item) ─────────────────────────────────────────────────
+// ── MascotCard ─────────────────────────────────────────────────────────────
 
 function MascotPick({
-  m, selected, maxReached, onToggle, now, compact,
+  m, selected, maxReached, onToggle, now, compact, roomLevel,
 }: {
-  m: ValidMascot; selected: boolean; maxReached: boolean; onToggle: () => void; now: number; compact: boolean;
+  m: ValidMascot; selected: boolean; maxReached: boolean; onToggle: () => void;
+  now: number; compact: boolean; roomLevel: ArenaRoomLevel;
 }) {
   const block = getBlock(m, now);
   const blocked = block !== null;
+  const overLevel = m.level > roomLevel;
   const clickable = !blocked && (!maxReached || selected);
   const bs = block ? BLOCK_STYLE[block.type] : null;
+  const pokemonType = getPokemonElement(m.pokemonId);
+  const beats = (TYPE_ADVANTAGE[pokemonType] ?? []).slice(0, 2);
+
+  let borderCls: string;
+  if (selected && overLevel) {
+    borderCls = "border-red-500/70 bg-red-500/10 ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.2)]";
+  } else if (selected) {
+    borderCls = "border-[#FFCB05]/60 bg-[#FFCB05]/8 ring-1 ring-[#FFCB05]/30 shadow-[0_0_14px_rgba(255,203,5,0.18)]";
+  } else if (blocked) {
+    borderCls = "border-slate-700/40 bg-slate-900/30 opacity-55 cursor-not-allowed";
+  } else if (maxReached) {
+    borderCls = "border-slate-700/40 bg-slate-900/30 opacity-40 cursor-not-allowed";
+  } else if (overLevel) {
+    borderCls = "border-red-900/40 bg-slate-900/50 opacity-70 hover:border-red-700/50 cursor-pointer";
+  } else {
+    borderCls = "border-slate-700/60 bg-slate-900/50 hover:border-[#FFCB05]/30 hover:bg-slate-900/80 cursor-pointer";
+  }
 
   return (
     <button
@@ -104,24 +162,23 @@ function MascotPick({
       disabled={!clickable}
       onClick={clickable ? onToggle : undefined}
       title={blocked ? (bs?.label ?? "") : displayName(m)}
-      className={[
-        "relative flex flex-col rounded-xl border transition-all duration-150 text-left overflow-hidden",
-        selected
-          ? "border-[#FFCB05]/60 bg-[#FFCB05]/8 ring-1 ring-[#FFCB05]/30 shadow-[0_0_14px_rgba(255,203,5,0.18)]"
-          : blocked
-            ? "border-slate-700/40 bg-slate-900/30 opacity-55 cursor-not-allowed"
-            : maxReached
-              ? "border-slate-700/40 bg-slate-900/30 opacity-40 cursor-not-allowed"
-              : "border-slate-700/60 bg-slate-900/50 hover:border-[#FFCB05]/30 hover:bg-slate-900/80 cursor-pointer",
-      ].join(" ")}
+      className={`relative flex flex-col rounded-xl border transition-all duration-150 text-left overflow-hidden ${borderCls}`}
     >
-      {/* Selected check */}
-      {selected && (
+      {/* Check / over-level indicator */}
+      {selected && !overLevel && (
         <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#FFCB05] text-[8px] font-black text-[#1A1A2E]">✓</span>
+      )}
+      {selected && overLevel && (
+        <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white">!</span>
+      )}
+      {/* Over-level ribbon (not selected) */}
+      {!selected && overLevel && (
+        <div className="absolute top-0 left-0 right-0 bg-red-900/60 text-center text-[8px] font-bold text-red-300 py-0.5 z-10">
+          Nv.{m.level} &gt; sala
+        </div>
       )}
 
       <div className={`flex flex-col items-center ${compact ? "p-1.5 gap-0.5" : "p-2 gap-1"}`}>
-        {/* Sprite centralizado */}
         <div className={`flex justify-center ${compact ? "pb-0" : "pb-1"}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -132,19 +189,22 @@ function MascotPick({
             onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
           />
         </div>
-        {/* Nome + nível */}
         <div className="text-center leading-tight">
-          <p className="truncate text-[10px] font-semibold text-slate-100">
-            {displayName(m)}
-          </p>
+          <p className="truncate text-[10px] font-semibold text-slate-100">{displayName(m)}</p>
           <p className="text-[9px] text-slate-500">
             Nv.{m.level}{!compact && <span className="ml-1 text-slate-600">Σ{totalStats(m)}</span>}
           </p>
+          {!compact && (
+            <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
+              <TypeBadge type={pokemonType} small />
+              {beats.map(b => (
+                <span key={b} className="text-[8px] text-slate-600">▶{TYPE_LABELS[b] ?? b}</span>
+              ))}
+            </div>
+          )}
         </div>
-
       </div>
 
-      {/* Stats — fora do flex central para ocupar largura total */}
       {!compact && (
         <div className="px-2 pb-2 grid grid-cols-4 gap-0.5 text-center text-[9px]">
           {[
@@ -161,7 +221,6 @@ function MascotPick({
         </div>
       )}
 
-      {/* Block banner */}
       {block && bs && (
         <div className={`flex items-center justify-between gap-1 border-t px-2 py-1 text-[9px] font-medium ${bs.cls}`}>
           <span>{bs.icon} {bs.label}</span>
@@ -172,46 +231,49 @@ function MascotPick({
   );
 }
 
-// ── SelectedBar (shows 6 slots with selected sprites) ─────────────────────
+// ── SelectedBar ────────────────────────────────────────────────────────────
 
 function SelectedBar({
-  mascots, selected, onRemove,
+  mascots, selected, onRemove, roomLevel,
 }: {
-  mascots: ValidMascot[]; selected: Set<string>; onRemove: (id: string) => void;
+  mascots: ValidMascot[]; selected: Set<string>; onRemove: (id: string) => void; roomLevel: ArenaRoomLevel;
 }) {
   const selList = mascots.filter(m => selected.has(m.id));
 
   return (
     <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-2">
-      <span className="text-[9px] font-bold uppercase tracking-widest text-[#FFCB05]/70 shrink-0">
-        Time
-      </span>
+      <span className="text-[9px] font-bold uppercase tracking-widest text-[#FFCB05]/70 shrink-0">Time</span>
       <div className="flex flex-1 gap-1.5">
         {Array.from({ length: MAX_MASCOTS }).map((_, i) => {
           const m = selList[i];
+          const overLevel = m && m.level > roomLevel;
           return m ? (
             <button
               key={m.id}
               type="button"
               onClick={() => onRemove(m.id)}
-              title={`Remover ${displayName(m)}`}
+              title={overLevel ? `Nível ${m.level} acima do máximo da sala` : `Remover ${displayName(m)}`}
               className="relative group shrink-0"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={getSpriteUrl(m.pokemonId, true)}
                 alt={displayName(m)}
-                className="h-9 w-9 object-contain rounded-lg bg-slate-800/60 ring-1 ring-[#FFCB05]/30 group-hover:ring-red-400/60 transition-all"
+                className={`h-9 w-9 object-contain rounded-lg bg-slate-800/60 transition-all ${
+                  overLevel
+                    ? "ring-2 ring-red-500/70 group-hover:ring-red-400"
+                    : "ring-1 ring-[#FFCB05]/30 group-hover:ring-red-400/60"
+                }`}
                 style={{ imageRendering: "pixelated" }}
                 onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
               />
+              {overLevel && (
+                <span className="absolute -left-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-black text-white">!</span>
+              )}
               <span className="absolute -right-1 -top-1 hidden group-hover:flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-black text-white">×</span>
             </button>
           ) : (
-            <div
-              key={i}
-              className="h-9 w-9 shrink-0 rounded-lg border border-dashed border-slate-700/50 bg-slate-900/30"
-            />
+            <div key={i} className="h-9 w-9 shrink-0 rounded-lg border border-dashed border-slate-700/50 bg-slate-900/30" />
           );
         })}
       </div>
@@ -233,14 +295,18 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("level_desc");
   const [filter, setFilter] = useState<FilterKey>("available");
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [showConfig, setShowConfig] = useState(false);
+  const [levelError, setLevelError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 3000);
     return () => clearInterval(id);
   }, []);
+
+  // Clear level error when room changes
+  useEffect(() => { setLevelError(null); }, [roomLevel]);
 
   const toggle = useCallback((id: string) => {
     setSelected(prev => {
@@ -250,7 +316,14 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
       next.add(id);
       return next;
     });
+    setLevelError(null);
   }, []);
+
+  // All unique types present in the mascot pool
+  const availableTypes = useMemo(() => {
+    const types = new Set(mascots.filter(m => getBlock(m, now) === null).map(m => getPokemonElement(m.pokemonId)));
+    return [...types].sort();
+  }, [mascots, now]);
 
   const counts = useMemo(() => ({
     available: mascots.filter(m => getBlock(m, now) === null).length,
@@ -264,10 +337,12 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
       if (filter === "cooldown")  { const b = getBlock(m, now); return b?.type === "cooldown" || b?.type === "resting"; }
       return true;
     });
+    if (typeFilter) {
+      list = list.filter(m => getPokemonElement(m.pokemonId) === typeFilter);
+    }
     const q = search.trim().toLowerCase();
     if (q) list = list.filter(m => displayName(m).toLowerCase().includes(q));
     list = [...list].sort((a, b) => {
-      // ordem estável sem mover selecionados — apenas ordena pelo critério escolhido
       if (sort === "level_desc") return b.level - a.level;
       if (sort === "level_asc")  return a.level - b.level;
       if (sort === "stats_desc") return totalStats(b) - totalStats(a);
@@ -275,17 +350,23 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mascots, filter, search, sort, now]); // 'selected' intencionalmente excluído para evitar reordenação ao clicar
+  }, [mascots, filter, search, sort, typeFilter, now]);
+
+  const overLevelSelected = useMemo(
+    () => mascots.filter(m => selected.has(m.id) && m.level > roomLevel),
+    [mascots, selected, roomLevel]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selected.size === 0) { toast.error("Selecione ao menos 1 mascote."); return; }
-    // Valida nível máximo da sala selecionada
-    const overLevel = mascots.filter(m => selected.has(m.id) && m.level > roomLevel);
-    if (overLevel.length > 0) {
-      toast.error(`${overLevel[0].nickname ?? getPokemonName(overLevel[0].pokemonId)} (Nv.${overLevel[0].level}) está acima do máximo da sala (Nv.${roomLevel}).`);
+    if (overLevelSelected.length > 0) {
+      setLevelError(
+        `Seu time tem ${overLevelSelected.length === 1 ? "um integrante que não atende" : `${overLevelSelected.length} integrantes que não atendem`} ao nível máximo da sala (Nv.${roomLevel}).`
+      );
       return;
     }
+    setLevelError(null);
     startTransition(async () => {
       const r = await createArenaTeamAction([...selected], name.trim(), roomLevel);
       if (r.error) toast.error(r.error);
@@ -298,56 +379,45 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
 
       {/* ── Barra de seleção ── */}
       {selected.size > 0 && (
-        <SelectedBar mascots={mascots} selected={selected} onRemove={toggle} />
+        <SelectedBar mascots={mascots} selected={selected} onRemove={toggle} roomLevel={roomLevel} />
       )}
 
-      {/* ── Configurações (nome, sala) colapsável ── */}
-      <div className="rounded-xl border border-border bg-slate-900/40">
-        <button
-          type="button"
-          onClick={() => setShowConfig(v => !v)}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-xs text-slate-400 hover:text-slate-200"
-        >
-          <span className="flex items-center gap-1.5 font-semibold">
-            <Users size={12} />
-            {name || "Nome automático"}
-            <span className="rounded-full border border-[#FFCB05]/40 text-[#FFCB05] px-1.5 py-0.5 text-[9px] font-bold">
-              Sala Nv.{roomLevel}
-            </span>
-          </span>
-          {showConfig ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-        {showConfig && (
-          <div className="border-t border-border px-3 pb-3 pt-2 space-y-2">
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Nome da equipe (vazio = automático)"
-              className="w-full rounded-lg border border-border bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
-            />
-            <div>
-              <p className="mb-1.5 text-[10px] text-slate-500 font-semibold">Sala (nível máximo dos mascotes):</p>
-              <div className="flex flex-wrap gap-1.5">
-                {ARENA_ROOM_OPTIONS.map(lvl => (
-                  <button key={lvl} type="button" onClick={() => setRoomLevel(lvl)}
-                    className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
-                      roomLevel === lvl
-                        ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
-                        : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
-                    }`}>
-                    Nv.{lvl}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
-            </div>
+      {/* ── Configurações fixas (nome + sala) ── */}
+      <div className="rounded-xl border border-border bg-slate-900/40 px-3 py-3 space-y-2">
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Nome da equipe (vazio = automático)"
+          className="w-full rounded-lg border border-border bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
+        />
+        <div>
+          <p className="mb-1.5 text-[10px] text-slate-500 font-semibold">Sala (nível máximo dos mascotes):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {ARENA_ROOM_OPTIONS.map(lvl => (
+              <button key={lvl} type="button" onClick={() => setRoomLevel(lvl)}
+                className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
+                  roomLevel === lvl
+                    ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
+                    : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                }`}>
+                Nv.{lvl}
+              </button>
+            ))}
           </div>
-        )}
+          <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
+        </div>
       </div>
+
+      {/* ── Erro de nível ── */}
+      {levelError && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 font-semibold flex items-start gap-2">
+          <span className="shrink-0">⚠️</span>
+          <span>{levelError}</span>
+        </div>
+      )}
 
       {/* ── Controles de busca/filtro ── */}
       <div className="space-y-2">
-        {/* Busca */}
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
@@ -363,9 +433,8 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
           )}
         </div>
 
-        {/* Filtros + Sort + Compact toggle */}
+        {/* Status pills */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {/* Filter pills */}
           {(["available","cooldown","all"] as FilterKey[]).map(f => {
             const labels = {
               available: `✅ Livres (${counts.available})`,
@@ -385,7 +454,6 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
           })}
 
           <div className="ml-auto flex items-center gap-1.5">
-            {/* Sort */}
             <div className="relative flex items-center gap-1 rounded-lg border border-border bg-slate-900 px-2 py-1">
               <ArrowUpDown size={10} className="text-slate-500 shrink-0" />
               <select
@@ -396,7 +464,6 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            {/* Compact toggle */}
             <button type="button" onClick={() => setCompact(v => !v)}
               className={`rounded-lg border px-2 py-1 text-[10px] transition-colors ${compact ? "border-[#FFCB05]/40 text-[#FFCB05]" : "border-border text-slate-500"}`}
               title={compact ? "Modo detalhado" : "Modo compacto"}
@@ -405,6 +472,44 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
             </button>
           </div>
         </div>
+
+        {/* Filtro por tipo */}
+        {availableTypes.length > 1 && (
+          <div className="flex flex-wrap gap-1 items-center">
+            <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest shrink-0">Tipo:</span>
+            <button
+              type="button"
+              onClick={() => setTypeFilter(null)}
+              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold transition-colors ${
+                !typeFilter ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              Todos
+            </button>
+            {availableTypes.map(type => {
+              const active = typeFilter === type;
+              const cls = TYPE_COLORS[type] ?? TYPE_COLORS.normal;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setTypeFilter(active ? null : type)}
+                  className={`rounded-full border px-2 py-0.5 text-[9px] font-bold transition-all ${
+                    active ? cls : "border-border text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {TYPE_LABELS[type] ?? type}
+                  {/* Show what this type beats */}
+                  {active && (TYPE_ADVANTAGE[type] ?? []).length > 0 && (
+                    <span className="ml-1 text-[8px] opacity-70">
+                      ▶{(TYPE_ADVANTAGE[type] ?? []).map(t => TYPE_LABELS[t] ?? t).join(", ")}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Grade de mascotes ── */}
@@ -412,6 +517,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         {displayed.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-slate-500">
             {search ? `Nenhum resultado para "${search}"` :
+              typeFilter ? `Nenhum mascote do tipo ${TYPE_LABELS[typeFilter] ?? typeFilter} disponível.` :
               filter === "available" ? "Nenhum mascote livre agora — veja \"Cooldown\" ou \"Todos\"." :
               filter === "cooldown"  ? "Nenhum mascote em cooldown." :
               "Nenhum mascote disponível."}
@@ -427,6 +533,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
                 onToggle={() => toggle(m.id)}
                 now={now}
                 compact={compact}
+                roomLevel={roomLevel}
               />
             ))}
           </div>
@@ -443,7 +550,9 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
           ? "Criando equipe…"
           : selected.size === 0
             ? "Selecione ao menos 1 mascote"
-            : `✅ Criar equipe "${name || "Arena Z"}" com ${selected.size} mascote${selected.size !== 1 ? "s" : ""}`}
+            : overLevelSelected.length > 0
+              ? `⚠️ ${overLevelSelected.length} mascote(s) fora do nível da sala`
+              : `✅ Criar equipe com ${selected.size} mascote${selected.size !== 1 ? "s" : ""}`}
       </button>
     </form>
   );
@@ -489,7 +598,6 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
 
   return (
     <form onSubmit={submit} className="mt-3 rounded-xl border border-slate-700/50 bg-slate-950/60">
-      {/* Header / toggle */}
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -503,13 +611,12 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
           {available.length > 0
             ? <span className="text-green-400 font-semibold">{available.length} disponíve{available.length !== 1 ? "is" : "l"}</span>
             : <span className="text-orange-400">Nenhum livre agora</span>}
-          {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
         </span>
       </button>
 
       {open && (
         <div className="border-t border-slate-700/50 p-3 space-y-2">
-          {/* Search */}
           <div className="relative">
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
             <input
@@ -520,7 +627,6 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
             />
           </div>
 
-          {/* Grid de disponíveis */}
           {filtered.length === 0 && available.length === 0 ? (
             <p className="rounded-lg border border-dashed border-slate-700 p-3 text-center text-[11px] text-slate-500">
               Nenhum mascote livre agora.
@@ -557,12 +663,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                     <div className="min-w-0">
                       <p className="truncate text-[10px] font-semibold text-slate-200">{displayName(m)}</p>
                       <p className="text-[9px] text-slate-500">Nv.{m.level} · Σ{totalStats(m)}</p>
-                      <p className="text-[9px] text-slate-600">
-                        <span className="text-red-400">{m.statForce}</span>/
-                        <span className="text-yellow-400">{m.statAgility}</span>/
-                        <span className="text-blue-400">{m.statInstinct}</span>/
-                        <span className="text-green-400">{m.statVitality}</span>
-                      </p>
+                      <TypeBadge type={getPokemonElement(m.pokemonId)} small />
                     </div>
                   </button>
                 );
@@ -570,7 +671,6 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
             </div>
           )}
 
-          {/* Em cooldown */}
           {cooling.length > 0 && (
             <details className="group">
               <summary className="cursor-pointer list-none text-[9px] text-slate-600 hover:text-slate-400 flex items-center gap-1">
@@ -598,7 +698,6 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
             </details>
           )}
 
-          {/* Preview do selecionado + botão submit */}
           {selected && (
             <div className="flex items-center gap-2 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
