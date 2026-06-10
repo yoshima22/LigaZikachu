@@ -121,6 +121,9 @@ export default async function AlbumPage({
                 {wallet.balance.toLocaleString("pt-BR")} ZC
               </Link>
             )}
+            <Link href="/album/manual" className="flex items-center gap-1.5 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10">
+              <BookOpen size={14} /> Manual
+            </Link>
             {admin && (
               <Link href="/album/admin" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-slate-200">
                 <Settings size={14} /> Admin

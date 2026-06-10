@@ -123,6 +123,12 @@ function CreateListingForm() {
         </div>
       </div>
 
+      {/* Limite de anúncios */}
+      <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2 text-[11px] text-slate-400">
+        <Info size={12} className="shrink-0 text-[#FFCB05]"/>
+        <span>Limite: <strong className="text-[#FFCB05]">8 anúncios ativos</strong> simultâneos por jogador.</span>
+      </div>
+
       <div className="rounded-2xl border border-border bg-slate-950/60 p-5 space-y-6">
 
         {/* Categoria */}

@@ -649,8 +649,29 @@ export type ExpeditionReward =
   | { type: "EGG";       eggType: string }
   | { type: "FOOD";      foodType: "FOOD" | "SWEET"; quantity: number }
   | { type: "COINS";     amount: number }
+  | { type: "BUFF_ITEM"; shopItemType: string }
   | { type: "TRAINING";  exp: number; durationLabel: string }  // retorna só EXP, nunca itens
   | { type: "NOTHING" };
+
+// Pool de itens especiais que podem ser encontrados em expedições
+function rollBuffItemType(durationKey: ExpeditionDuration): string {
+  const roll = Math.random() * 100;
+  if (durationKey === "6h") {
+    if (roll < 34) return "MASCOT_BUFF_EXP";   // 34% — Vitamina Elétrica
+    if (roll < 62) return "MASCOT_BUFF_LUCK";  // 28% — Amuleto da Sorte
+    if (roll < 78) return "PICNIC_BASKET";     // 16% — Cesta de Piquenique
+    if (roll < 92) return "WEAKNESS_POLICY";  // 14% — Política de Fraqueza
+    return "LUCKY_EGG";                        //  8% — Ovo da Sorte
+  }
+  if (durationKey === "3h") {
+    if (roll < 42) return "MASCOT_BUFF_EXP";
+    if (roll < 72) return "MASCOT_BUFF_LUCK";
+    if (roll < 88) return "PICNIC_BASKET";
+    return "WEAKNESS_POLICY";
+  }
+  // 1h / 30min: apenas buffs comuns
+  return roll < 55 ? "MASCOT_BUFF_EXP" : "MASCOT_BUFF_LUCK";
+}
 
 async function rollExpeditionReward(
   mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
@@ -677,12 +698,14 @@ async function rollExpeditionReward(
   if (Math.random() * 100 < nothingChance) return { type: "NOTHING" };
 
   // ── Distribuição ponderada dos tipos de recompensa ───────────────────────────
-  // Pesos somam ~100; mais luck/duração = maior chance de ovo e sweet
-  const eggWeight   = 8  + Math.min(22, luck * 0.6) + rewardBonus * 0.6 + allyBonus;
-  const sweetWeight = 15 + rewardBonus * 0.4 + (hasLuckBuff ? 10 : 0);
-  const foodWeight  = 35 + levelFloor * 0.5 + rewardBonus * 0.2;
-  const coinWeight  = 42 + levelFloor * 0.5;
-  const total       = eggWeight + sweetWeight + foodWeight + coinWeight;
+  // Ovos escalam fortemente com duração — em 6h padrão, competem com moedas/comida
+  const eggWeight   = 15 + Math.min(28, luck * 0.9) + rewardBonus * 1.0 + allyBonus;
+  const sweetWeight = 14 + rewardBonus * 0.4 + (hasLuckBuff ? 10 : 0);
+  const foodWeight  = 32 + levelFloor * 0.4 + rewardBonus * 0.15;
+  const coinWeight  = 38 + levelFloor * 0.5;
+  // Item especial (buff) — apenas em expedições longas (6h), muito raro
+  const buffWeight  = durationKey === "6h" ? 4 + (hasLuckBuff ? 2 : 0) : 0;
+  const total       = eggWeight + sweetWeight + foodWeight + coinWeight + buffWeight;
   const roll        = Math.random() * total;
 
   // Ovo: qualidade cresce com duração e nível
@@ -709,11 +732,13 @@ async function rollExpeditionReward(
   const cumEgg   = eggWeight;
   const cumSweet = cumEgg + sweetWeight;
   const cumFood  = cumSweet + foodWeight;
+  const cumCoin  = cumFood + coinWeight;
 
   if (roll < cumEgg)   return { type: "EGG",   eggType };
   if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty };
   if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) };
-  return { type: "COINS", amount: randomInt(coinMin, coinMax) };
+  if (roll < cumCoin)  return { type: "COINS", amount: randomInt(coinMin, coinMax) };
+  return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
 async function rollItemExpeditionReward(
@@ -729,15 +754,23 @@ async function rollItemExpeditionReward(
   const luck = (mascot.statInstinct + Math.floor(mascot.level / 5)) * (luckBuff ? 2 : 1);
   const allyBonus = Math.min(20, allyCount * 4);
 
-  const eggWeight = 6 + Math.min(26, luck * 0.7) + rewardBonus * 0.8 + allyBonus;
-  const sweetWeight = 34 + rewardBonus * 0.8 + (luckBuff ? 12 : 0);
-  const foodWeight = 60 + rewardBonus * 0.9 + Math.min(20, mascot.level);
-  const roll = Math.random() * (eggWeight + sweetWeight + foodWeight);
+  // Em modo ITENS: ovos são o drop dominante em expedições longas (6h)
+  const eggWeight   = 12 + Math.min(30, luck * 1.0) + rewardBonus * 1.5 + allyBonus;
+  const sweetWeight = 22 + rewardBonus * 0.4 + (luckBuff ? 8 : 0);
+  const foodWeight  = 38 + rewardBonus * 0.3 + Math.min(10, mascot.level);
+  // Item especial (buff): mais comum no modo ITENS, escala com duração
+  const buffWeight  =
+    durationKey === "6h"    ? 14 + (luckBuff ? 4 : 0) :
+    durationKey === "3h"    ? 8 :
+    durationKey === "1h"    ? 4 :
+    2;
+  const total = eggWeight + sweetWeight + foodWeight + buffWeight;
+  const roll = Math.random() * total;
 
   let eggType = "COMMON";
-  if (durationKey === "6h") eggType = luck > 9 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h") eggType = luck > 10 ? "RARE" : "COMMON";
-  else if (luck > 22) eggType = "RARE";
+  if (durationKey === "6h")       eggType = luck > 9 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h")  eggType = luck > 10 ? "RARE" : "COMMON";
+  else if (luck > 22)             eggType = "RARE";
 
   const quantityBase =
     durationKey === "6h" ? 4 :
@@ -747,9 +780,10 @@ async function rollItemExpeditionReward(
   const bonusQuantity = Math.floor((rewardBonus + allyBonus) / 18);
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
-  if (roll < eggWeight) return { type: "EGG", eggType };
-  if (roll < eggWeight + sweetWeight) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) };
-  return { type: "FOOD", foodType: "FOOD", quantity };
+  if (roll < eggWeight)                         return { type: "EGG", eggType };
+  if (roll < eggWeight + sweetWeight)           return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) };
+  if (roll < eggWeight + sweetWeight + foodWeight) return { type: "FOOD", foodType: "FOOD", quantity };
+  return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
 function describeExpeditionReward(reward: ExpeditionReward) {
@@ -788,6 +822,25 @@ function describeExpeditionReward(reward: ExpeditionReward) {
           rewardLabel: `${reward.amount} ZikaCoins`,
         }
       };
+    case "BUFF_ITEM": {
+      const BUFF_LABELS: Record<string, string> = {
+        MASCOT_BUFF_EXP:  "Vitamina Elétrica",
+        MASCOT_BUFF_LUCK: "Amuleto da Sorte",
+        PICNIC_BASKET:    "Cesta de Piquenique Chocante",
+        WEAKNESS_POLICY:  "Política de Fraqueza",
+        LUCKY_EGG:        "Ovo da Sorte",
+      };
+      const label = BUFF_LABELS[reward.shopItemType] ?? "Item Especial";
+      return {
+        title: `${label} encontrado!`,
+        description: "Seu mascote voltou da expedição com um item especial.",
+        payload: {
+          rewardKind: "MASCOT_BUFF",
+          buffType: reward.shopItemType,
+          rewardLabel: label,
+        }
+      };
+    }
     case "NOTHING":
       return null;
   }
