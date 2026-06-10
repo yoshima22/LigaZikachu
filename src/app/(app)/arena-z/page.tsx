@@ -379,160 +379,284 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       </nav>
 
       {/* ══ TAB: SALAS ══ */}
-      {activeTab === "salas" && (
-        <div className="space-y-6">
-          <div>
-            <h2 className="font-semibold text-slate-200 mb-1">Salas por Nível</h2>
-            <p className="text-xs text-slate-500">Cada sala aceita mascotes com nível máximo indicado. Clique para ver as equipes dentro.</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {roomsData.map(room => {
-              const myTeamsInRoom = room.teams.filter(t => t.isOwn);
-              return (
-                <div key={room.roomLevel} className={`rounded-2xl border p-4 ${myTeamsInRoom.length > 0 ? "border-[#FFCB05]/40 bg-[#FFCB05]/5" : "border-border bg-slate-950/60"}`}>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nv. ≤{room.roomLevel}</p>
-                      <p className="mt-1 text-2xl font-black text-slate-100">{room.teamCount}</p>
-                      <p className="text-[10px] text-slate-500">equipe{room.teamCount !== 1 ? "s" : ""}</p>
-                    </div>
-                    {myTeamsInRoom.length > 0 && (
-                      <span className="rounded-full bg-[#FFCB05]/20 border border-[#FFCB05]/40 px-2 py-0.5 text-[10px] font-bold text-[#FFCB05]">
-                        {myTeamsInRoom.length} sua{myTeamsInRoom.length !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-                  {room.teams.length > 0 && (
-                    <details className="mt-3 group">
-                      <summary className="cursor-pointer text-[10px] text-slate-500 hover:text-slate-300 list-none flex items-center gap-1">
-                        <ChevronDown size={10} className="group-open:rotate-180 transition-transform" />
-                        Ver equipes
-                      </summary>
-                      <div className="mt-2 space-y-2">
-                        {room.teams.map(t => (
-                          <div key={t.id} className={`rounded-xl border p-2.5 text-[10px] ${t.isOwn ? "border-[#FFCB05]/30 bg-[#FFCB05]/5" : "border-slate-700/50 bg-slate-900/40"}`}>
-                            <p className="font-semibold text-slate-200 truncate">{t.name}</p>
-                            <p className="text-slate-500">{t.playerName}</p>
-                            <div className="mt-1.5 flex flex-wrap gap-1">
-                              {t.members.map((m, i) => (
-                                <span key={i} className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[9px] text-slate-400">
-                                  {m.name ?? "???"} Nv.{m.level}
-                                </span>
-                              ))}
-                            </div>
-                            {t.vaultCoins !== null && (
-                              <p className="mt-1 text-[#FFCB05]">{t.vaultCoins} ZC no cofre</p>
+      {activeTab === "salas" && (() => {
+        // pré-calcula mapa de oponentes por sala
+        const opponentsBySala = new Map<number, typeof opponentTeams>();
+        for (const t of readyOpponentTeams) {
+          const lvl = t.roomLevel ?? 0;
+          if (!opponentsBySala.has(lvl)) opponentsBySala.set(lvl, []);
+          opponentsBySala.get(lvl)!.push(t);
+        }
+        const activeRooms = roomsData.filter(r => r.teamCount > 0);
+        const emptyRooms = roomsData.filter(r => r.teamCount === 0);
+
+        return (
+          <div className="space-y-4">
+            {/* Legenda rápida */}
+            <div className="flex flex-wrap gap-3 text-[10px] text-slate-500">
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#FFCB05]" />Sua equipe nesta sala</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-400" />Oponente atacável</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-600" />Vazia</span>
+            </div>
+
+            {/* Salas com atividade */}
+            {activeRooms.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+                <p className="text-2xl mb-2">🏟️</p>
+                <p className="text-sm text-slate-400 font-semibold">Arena vazia</p>
+                <p className="text-xs text-slate-600 mt-1">Nenhum jogador na arena ainda.</p>
+                <Link href={tabLink("montar")} className="mt-3 inline-block rounded-xl bg-[#FFCB05]/10 border border-[#FFCB05]/30 px-4 py-2 text-xs font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20">
+                  Montar equipe →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activeRooms.map(room => {
+                  const myTeams = room.teams.filter(t => t.isOwn);
+                  const otherTeams = room.teams.filter(t => !t.isOwn);
+                  const opponents = opponentsBySala.get(room.roomLevel) ?? [];
+                  const hasOpponents = opponents.length > 0 && readyActiveTeams.length > 0;
+
+                  return (
+                    <details key={room.roomLevel} className="group rounded-2xl border overflow-hidden
+                      border-border bg-slate-950/60
+                      open:border-slate-600/60"
+                      open={myTeams.length > 0 || hasOpponents}
+                    >
+                      {/* ── Cabeçalho da sala ── */}
+                      <summary className="flex cursor-pointer select-none items-center gap-4 px-5 py-4 hover:bg-slate-900/40 transition-colors">
+                        {/* Nível */}
+                        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl border border-slate-700 bg-slate-900/80 text-center">
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">nv.</span>
+                          <span className="text-lg font-black leading-none text-slate-100">≤{room.roomLevel}</span>
+                        </div>
+
+                        {/* Info central */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-sm text-slate-200">
+                              Sala {room.roomLevel}
+                            </span>
+                            {myTeams.length > 0 && (
+                              <span className="rounded-full border border-[#FFCB05]/50 bg-[#FFCB05]/10 px-2 py-0.5 text-[9px] font-bold text-[#FFCB05]">
+                                ★ {myTeams.length} sua{myTeams.length !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                            {hasOpponents && (
+                              <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[9px] font-bold text-red-300">
+                                ⚔️ {opponents.length} atacável{opponents.length !== 1 ? "is" : ""}
+                              </span>
                             )}
                           </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                          {/* Barra de ocupação */}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="flex gap-0.5">
+                              {Array.from({ length: Math.min(room.teamCount, 12) }).map((_, i) => {
+                                const t = room.teams[i];
+                                const color = !t ? "bg-slate-800" : t.isOwn ? "bg-[#FFCB05]" : "bg-slate-500";
+                                return <div key={i} className={`h-1.5 w-3 rounded-full ${color}`} />;
+                              })}
+                              {room.teamCount > 12 && <span className="text-[9px] text-slate-600 ml-1">+{room.teamCount - 12}</span>}
+                            </div>
+                            <span className="text-[10px] text-slate-500">{room.teamCount} equipe{room.teamCount !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
 
-          {/* PvP contra oponentes */}
-          {readyOpponentTeams.length > 0 && readyActiveTeams.length > 0 && (
-            <div className="rounded-2xl border border-red-500/20 bg-slate-950/60 p-5">
-              <h2 className="font-semibold text-slate-200 flex items-center gap-2"><Swords size={16} /> Atacar Equipes</h2>
-              <p className="mt-1 text-xs text-slate-500">Ataque equipes de outros jogadores. Vencer rouba 30% do cofre deles.</p>
-              <div className="mt-4 space-y-4">
-                {readyActiveTeams.map(attackTeam => {
-                  const pvpCooldownUntil = pvpCooldowns.get(attackTeam.id) ?? null;
-                  return (
-                    <div key={attackTeam.id} className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <p className="text-sm font-bold text-red-100">Com: {attackTeam.name}</p>
-                        <PvpCooldownIndicator until={pvpCooldownUntil} />
-                      </div>
-                      <div className="grid gap-3 xl:grid-cols-2">
-                        {readyOpponentTeams.map(defenseTeam => {
-                          const debuff = Math.round(getArenaDebuffPct(defenseTeam.enteredAt) * 100);
-                          return (
-                            <div key={defenseTeam.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
-                              <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <p className="text-xs font-bold text-slate-100">{defenseTeam.name}</p>
-                                    {debuff > 0 && (
-                                      <span className="rounded-full border px-1.5 py-0.5 text-[9px] font-bold border-orange-500/50 text-orange-300">
-                                        😓 -{debuff}%
+                        {/* Seta */}
+                        <ChevronDown size={16} className="shrink-0 text-slate-600 transition-transform group-open:rotate-180" />
+                      </summary>
+
+                      {/* ── Conteúdo expandido ── */}
+                      <div className="border-t border-border/50 px-5 py-4 space-y-4">
+
+                        {/* Minhas equipes nesta sala */}
+                        {myTeams.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]/80 mb-2">Suas equipes nesta sala</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {myTeams.map(t => (
+                                <div key={t.id} className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-3">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-bold text-[#FFCB05]">{t.name}</p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5">
+                                        {t.members.length} mascote{t.members.length !== 1 ? "s" : ""} · na arena há {Math.floor((Date.now() - new Date(t.enteredAt).getTime()) / 3_600_000)}h
+                                      </p>
+                                    </div>
+                                    {t.vaultCoins !== null && t.vaultCoins > 0 && (
+                                      <span className="shrink-0 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[10px] font-bold text-[#FFCB05]">
+                                        {t.vaultCoins} ZC
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-[10px] text-slate-500">
-                                    {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick} · Sala Nv.{defenseTeam.roomLevel}
-                                  </p>
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {t.members.map((m, i) => (
+                                      <span key={i} className="flex items-center gap-1 rounded-full border border-[#FFCB05]/20 bg-slate-900/60 px-2 py-0.5 text-[9px] text-slate-300">
+                                        <span className="font-semibold">Nv.{m.level}</span>
+                                        <span className="text-slate-500">{m.name ?? "—"}</span>
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
-                                <PvpBattleButton
-                                  attackTeamId={attackTeam.id}
-                                  defenseTeamId={defenseTeam.id}
-                                  attackTeamUpdatedAt={attackTeam.updatedAt.toISOString()}
-                                  pvpCooldownUntil={pvpCooldownUntil}
-                                />
-                              </div>
-                              <PvpVaultLive
-                                teamId={defenseTeam.id}
-                                initialCoins={defenseTeam.vaultCoins}
-                                initialExp={defenseTeam.vaultExp}
-                                initialFood={defenseTeam.vaultFood}
-                                initialSweet={defenseTeam.vaultSweet}
-                                initialMultiplier={parseFloat(getTeamTimeMultiplier(defenseTeam.enteredAt).toFixed(1))}
-                              />
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {defenseTeam.members.slice(0, 6).map(member => (
-                                  <span key={member.id} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-slate-400">
-                                    {member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)} Nv.{member.mascot.level}
-                                  </span>
-                                ))}
-                              </div>
+                              ))}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                          </div>
+                        )}
 
-          {/* Ranking */}
-          <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
-            <h2 className="font-semibold text-slate-200 mb-1">🏆 Ranking</h2>
-            {arenaRankingData.length === 0 ? (
-              <p className="text-xs text-slate-500 mt-2">Nenhum combate registrado ainda.</p>
-            ) : (
-              <div className="mt-3 space-y-1.5">
-                {arenaRankingData.map((row, i) => {
-                  const total = row.wins + row.losses + row.draws;
-                  const wr = total > 0 ? Math.round((row.wins / total) * 100) : 0;
-                  const MEDALS = ["🥇", "🥈", "🥉"];
-                  return (
-                    <div key={row.playerId} className="flex items-center gap-3 rounded-xl border border-border/60 bg-slate-900/40 px-3 py-2">
-                      <span className="w-6 text-center text-sm font-bold text-[#FFCB05]">{MEDALS[i] ?? i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-xs font-semibold text-slate-200">{row.name}</p>
-                        <p className="text-[10px] text-slate-500">
-                          <span className="text-green-300">{row.wins}V</span>{" "}
-                          <span className="text-red-300">{row.losses}D</span>
-                          {row.draws > 0 && <span className="text-slate-400"> {row.draws}E</span>}
-                        </p>
+                        {/* Equipes de outros jogadores */}
+                        {otherTeams.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+                              Outros jogadores nesta sala
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                              {otherTeams.map(t => {
+                                const isAttackable = opponents.some(o => o.id === t.id) && readyActiveTeams.length > 0;
+                                return (
+                                  <div key={t.id} className={`rounded-xl border p-3 ${isAttackable ? "border-red-500/25 bg-red-500/5" : "border-slate-700/50 bg-slate-900/30"}`}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-xs font-semibold text-slate-200">{t.name}</p>
+                                        <p className="text-[10px] text-slate-500">{t.playerName}</p>
+                                      </div>
+                                      {isAttackable && (
+                                        <span className="shrink-0 rounded-full border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-300">
+                                          ⚔️ atacável
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {t.members.map((m, i) => (
+                                        <span key={i} className="rounded border border-slate-700/60 bg-slate-800/50 px-1.5 py-0.5 text-[9px] text-slate-400">
+                                          {m.name ? <>{m.name} <span className="text-slate-600">Nv.{m.level}</span></> : <span className="text-slate-600">??? Nv.{m.level}</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PvP: atacar equipes desta sala */}
+                        {hasOpponents && (
+                          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 space-y-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">⚔️ Atacar nesta sala</p>
+                            {readyActiveTeams.map(attackTeam => {
+                              const pvpCooldownUntil = pvpCooldowns.get(attackTeam.id) ?? null;
+                              return (
+                                <div key={attackTeam.id}>
+                                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                                    <p className="text-[11px] font-semibold text-slate-300">
+                                      Atacando com: <span className="text-slate-100">{attackTeam.name}</span>
+                                    </p>
+                                    <PvpCooldownIndicator until={pvpCooldownUntil} />
+                                  </div>
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    {opponents.map(defenseTeam => {
+                                      const debuff = Math.round(getArenaDebuffPct(defenseTeam.enteredAt) * 100);
+                                      return (
+                                        <div key={defenseTeam.id} className="rounded-xl border border-slate-700/60 bg-slate-950/60 p-3">
+                                          <div className="flex items-start justify-between gap-2 mb-2">
+                                            <div>
+                                              <p className="text-[11px] font-bold text-slate-100">{defenseTeam.name}</p>
+                                              <p className="text-[10px] text-slate-500">
+                                                {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick}
+                                                {debuff > 0 && <span className="ml-1 text-orange-400"> · -{debuff}% stats</span>}
+                                              </p>
+                                            </div>
+                                            <PvpBattleButton
+                                              attackTeamId={attackTeam.id}
+                                              defenseTeamId={defenseTeam.id}
+                                              attackTeamUpdatedAt={attackTeam.updatedAt.toISOString()}
+                                              pvpCooldownUntil={pvpCooldownUntil}
+                                            />
+                                          </div>
+                                          <PvpVaultLive
+                                            teamId={defenseTeam.id}
+                                            initialCoins={defenseTeam.vaultCoins}
+                                            initialExp={defenseTeam.vaultExp}
+                                            initialFood={defenseTeam.vaultFood}
+                                            initialSweet={defenseTeam.vaultSweet}
+                                            initialMultiplier={parseFloat(getTeamTimeMultiplier(defenseTeam.enteredAt).toFixed(1))}
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-bold text-slate-300">{wr}%</p>
-                        <p className="text-[10px] text-[#FFCB05]">{row.stolenCoins} ZC</p>
-                      </div>
-                    </div>
+                    </details>
                   );
                 })}
               </div>
             )}
+
+            {/* Salas vazias — colapsadas em um bloco só */}
+            {emptyRooms.length > 0 && (
+              <details className="group rounded-2xl border border-border/40 overflow-hidden">
+                <summary className="flex cursor-pointer select-none items-center gap-3 px-5 py-3 text-xs text-slate-600 hover:text-slate-400">
+                  <ChevronDown size={13} className="transition-transform group-open:rotate-180" />
+                  {emptyRooms.length} sala{emptyRooms.length !== 1 ? "s" : ""} vazia{emptyRooms.length !== 1 ? "s" : ""} ({emptyRooms.map(r => `Nv.${r.roomLevel}`).join(", ")})
+                </summary>
+                <div className="border-t border-border/30 px-5 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    {emptyRooms.map(r => (
+                      <div key={r.roomLevel} className="flex h-10 w-16 flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-center opacity-50">
+                        <span className="text-[8px] text-slate-600">NÍV.</span>
+                        <span className="text-sm font-bold text-slate-500">≤{r.roomLevel}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
+
+            {/* Ranking */}
+            <details className="group rounded-2xl border border-border bg-slate-950/60 overflow-hidden">
+              <summary className="flex cursor-pointer select-none items-center justify-between gap-3 px-5 py-4 font-semibold text-slate-200 hover:text-white">
+                <span>🏆 Ranking Arena Z</span>
+                <ChevronDown size={14} className="text-slate-500 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-border/50 px-5 py-4">
+                {arenaRankingData.length === 0 ? (
+                  <p className="text-xs text-slate-500">Nenhum combate registrado ainda.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {arenaRankingData.map((row, i) => {
+                      const total = row.wins + row.losses + row.draws;
+                      const wr = total > 0 ? Math.round((row.wins / total) * 100) : 0;
+                      const MEDALS = ["🥇", "🥈", "🥉"];
+                      return (
+                        <div key={row.playerId} className="flex items-center gap-3 rounded-xl border border-border/60 bg-slate-900/40 px-3 py-2">
+                          <span className="w-6 text-center text-sm font-bold text-[#FFCB05]">{MEDALS[i] ?? i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-xs font-semibold text-slate-200">{row.name}</p>
+                            <p className="text-[10px] text-slate-500">
+                              <span className="text-green-300">{row.wins}V</span>{" "}
+                              <span className="text-red-300">{row.losses}D</span>
+                              {row.draws > 0 && <span className="text-slate-400"> {row.draws}E</span>}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-bold text-slate-300">{wr}%</p>
+                            <p className="text-[10px] text-[#FFCB05]">{row.stolenCoins} ZC</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </details>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══ TAB: MINHAS EQUIPES ══ */}
       {activeTab === "equipes" && (
