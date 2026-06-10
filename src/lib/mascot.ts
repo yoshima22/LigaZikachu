@@ -381,6 +381,27 @@ export async function addExp(
     data: { level, exp, pokemonId, ...statUpdates, ...nicknameUpdate }
   });
 
+  // Auto-kick da arena se o nível ultrapassou o limite da sala
+  if (leveled) {
+    const membership = await prisma.arenaTeamMember.findFirst({
+      where: { mascotId },
+      include: { team: { select: { roomLevel: true } } }
+    });
+    if (membership && membership.team.roomLevel !== null && level > membership.team.roomLevel) {
+      await prisma.$transaction([
+        prisma.arenaTeamMember.delete({ where: { id: membership.id } }),
+        prisma.mascot.update({ where: { id: mascotId }, data: { arenaState: "FREE" } }),
+        prisma.mascotEvent.create({
+          data: {
+            mascotId,
+            emoji: "📤",
+            description: `Saiu da equipe da Arena automaticamente: atingiu nível ${level}, que ultrapassa o limite da Sala ${membership.team.roomLevel}.`
+          }
+        })
+      ]);
+    }
+  }
+
   return { leveled, newLevel: level, evolved, newPokemonId };
 }
 
@@ -2154,7 +2175,7 @@ export async function applyPicnicBasket(playerId: string) {
   return favoriteMascots.length;
 }
 
-/** Ticket de Férias: envia Pokémon com o Professor Carvalho por 7 dias */
+/** Ticket de Férias: envia Pokémon com o Professor Carvalho pelos dias configurados no shop */
 export async function applyVacationTicket(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId },
@@ -2163,14 +2184,17 @@ export async function applyVacationTicket(playerId: string, mascotId: string) {
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para ir de férias.");
   if (mascot.expeditions.length > 0) throw new Error("Mascote está em expedição. Conclua antes das férias.");
-  const finishAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
+  const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
+  const vacationDays = meta.vacationDays ?? 7;
+  const finishAt = new Date(Date.now() + vacationDays * 24 * 60 * 60 * 1000);
   await prisma.mascotExpedition.create({
-    data: { mascotId, finishAt, status: "ACTIVE", rewardJson: { durationKey: "7d", mode: "VACATION" } }
+    data: { mascotId, finishAt, status: "ACTIVE", rewardJson: { durationKey: `${vacationDays}d`, mode: "VACATION" } }
   });
-  await logEvent(mascotId, "🏖️", `Partiu de férias com o Professor Carvalho por 7 dias! Volta em ${finishAt.toLocaleDateString("pt-BR")}.`);
+  await logEvent(mascotId, "🏖️", `Partiu de férias com o Professor Carvalho por ${vacationDays} dias! Volta em ${finishAt.toLocaleDateString("pt-BR")}.`);
 }
 
-/** Coleta as Férias: retorna o Pokémon revigorado com felicidade máxima, empanturrado e 2000 EXP */
+/** Coleta as Férias: retorna o Pokémon revigorado com felicidade máxima, empanturrado e EXP configurado no shop */
 export async function claimVacation(playerId: string, expeditionId: string) {
   const expedition = await prisma.mascotExpedition.findUnique({
     where: { id: expeditionId },
@@ -2180,9 +2204,11 @@ export async function claimVacation(playerId: string, expeditionId: string) {
   if (expedition.status !== "ACTIVE") throw new Error("Férias já coletadas.");
   if (new Date() < expedition.finishAt) throw new Error("As férias ainda não terminaram.");
 
-  const expBonus = 2000;
-  // Chance de 30% de trazer um Ovo Comum de volta
-  const gotEgg = Math.random() < 0.30;
+  const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
+  const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
+  const expBonus = meta.expBonus ?? 6000;
+  const eggChancePct = meta.eggChancePct ?? 30;
+  const gotEgg = Math.random() * 100 < eggChancePct;
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({

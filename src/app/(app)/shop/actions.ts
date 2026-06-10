@@ -33,6 +33,10 @@ const createItemSchema = z.object({
     buffHours:        z.number().min(1).max(72).optional(),
     expMultiplierPct: z.number().min(1).max(200).optional(),
     happinessBonus:   z.number().min(0).max(50).optional(),
+    // Vacation (VACATION_TICKET)
+    vacationDays:  z.number().int().min(1).max(30).optional(),
+    expBonus:      z.number().int().min(100).max(100000).optional(),
+    eggChancePct:  z.number().int().min(0).max(100).optional(),
   }).optional().nullable(),
   // Título: tema visual, frase de sabor e efeito de entrada
   theme: z.nativeEnum(TitleTheme).optional(),
@@ -233,10 +237,9 @@ export async function reorderShopItem(
     });
     if (!item) return { error: "Item não encontrado." };
 
-    // Busca o vizinho na mesma categoria na direção desejada
+    // Busca o vizinho global (sem filtro de tipo) na direção desejada
     const neighbor = await prisma.shopItem.findFirst({
       where: {
-        type: item.type,
         sortOrder: direction === "up"
           ? { lt: item.sortOrder }
           : { gt: item.sortOrder }
@@ -246,9 +249,8 @@ export async function reorderShopItem(
     });
 
     if (!neighbor) {
-      // Já está no extremo — normaliza os sortOrders do grupo
+      // Já está no extremo — normaliza todos os sortOrders globalmente
       const all = await prisma.shopItem.findMany({
-        where: { type: item.type },
         orderBy: { sortOrder: "asc" },
         select: { id: true }
       });
