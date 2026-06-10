@@ -20,6 +20,7 @@ import {
   healMascotSusAction,
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
+  removeXpShareAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -250,19 +251,27 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
   return { emoji: "😔", title: "Voltou de mãos vazias...", description: "Desta vez não encontrou nada." };
 }
 
-const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string }> = {
-  EXP_BOOST:  { emoji: "⚡", label: "EXP ×2",       color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300" },
-  LUCK_BOOST: { emoji: "🍀", label: "Sorte",         color: "border-green-500/40 bg-green-500/10 text-green-300" },
+const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string; permanent?: boolean }> = {
+  EXP_BOOST:       { emoji: "⚡",   label: "EXP ×2",         color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300" },
+  LUCK_BOOST:      { emoji: "🍀",   label: "Sorte",           color: "border-green-500/40 bg-green-500/10 text-green-300" },
+  STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
+  LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200" },
+  WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política Fraqueza", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
+  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique",      color: "border-orange-500/40 bg-orange-500/10 text-orange-300" },
+  XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
 };
 
 function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date }) {
   const { remaining, expired } = useTimerExpiry(expiresAt);
   if (expired) return null;
   const info = BUFF_DISPLAY[type] ?? { emoji: "✨", label: type, color: "border-blue-500/40 bg-blue-500/10 text-blue-300" };
+  const isPermanent = info.permanent || expiresAt.getFullYear() >= 2090;
   const h = Math.floor(remaining / 3_600_000);
   const m = Math.floor((remaining % 3_600_000) / 60_000);
   const s = Math.floor((remaining % 60_000) / 1_000);
-  const timeStr = h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : m > 0 ? `${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s` : `${s}s`;
+  const timeStr = isPermanent
+    ? "Permanente"
+    : h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : m > 0 ? `${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s` : `${s}s`;
   return (
     <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${info.color}`}>
       {info.emoji} {info.label} <span className="opacity-70">{timeStr}</span>
@@ -663,11 +672,31 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           </div>
         </div>
 
-        {/* ── Buffs ativos (EXP_BOOST, LUCK_BOOST) ── */}
+        {/* ── Buffs ativos ── */}
         {mascot.activeBuffs.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {mascot.activeBuffs.map((buff, i) => (
-              <ActiveBuffBadge key={i} type={buff.type} expiresAt={buff.expiresAt} />
+              buff.type === "XP_SHARE" ? (
+                <span key={i} className="flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+                  📡 Comp. XP <span className="opacity-70">Permanente</span>
+                  <button
+                    type="button"
+                    title="Remover Compartilhador de XP"
+                    className="ml-1 rounded-full hover:bg-red-500/20 text-red-400 hover:text-red-300 px-1 leading-none"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!confirm("Remover Compartilhador de XP deste mascote?")) return;
+                      startTransition(async () => {
+                        const r = await removeXpShareAction(mascot.id);
+                        if (r.error) toast.error(r.error);
+                        else { toast.success("Compartilhador de XP removido. 📡"); router.refresh(); }
+                      });
+                    }}
+                  >✕</button>
+                </span>
+              ) : (
+                <ActiveBuffBadge key={i} type={buff.type} expiresAt={buff.expiresAt} />
+              )
             ))}
           </div>
         )}
