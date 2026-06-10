@@ -1593,12 +1593,12 @@ function roll(chance: number): boolean {
 /** Retorna o tipo de ovo dropado (ou null) com base nas probabilidades da tabela */
 function rollPvpEggDrop(scenario: "easy" | "balanced" | "hard" | "rival" | "defense" | "perfect_defense"): import("@prisma/client").EggType | null {
   const tables: Record<typeof scenario, { type: import("@prisma/client").EggType; chance: number }[]> = {
-    easy:             [{ type: "COMMON", chance: 0.10 }, { type: "RARE", chance: 0.005 }],
-    balanced:         [{ type: "COMMON", chance: 0.18 }, { type: "RARE", chance: 0.008 }, { type: "SPECIAL", chance: 0.005 }],
-    hard:             [{ type: "COMMON", chance: 0.28 }, { type: "RARE", chance: 0.015 }, { type: "SPECIAL", chance: 0.008 }, { type: "EVENT", chance: 0.005 }],
-    rival:            [{ type: "COMMON", chance: 0.32 }, { type: "RARE", chance: 0.018 }, { type: "SPECIAL", chance: 0.010 }, { type: "EVENT", chance: 0.005 }],
-    defense:          [{ type: "COMMON", chance: 0.16 }, { type: "RARE", chance: 0.007 }, { type: "SPECIAL", chance: 0.005 }],
-    perfect_defense:  [{ type: "COMMON", chance: 0.25 }, { type: "RARE", chance: 0.012 }, { type: "SPECIAL", chance: 0.007 }, { type: "EVENT", chance: 0.005 }],
+    easy:             [{ type: "COMMON", chance: 0.05 }, { type: "RARE", chance: 0.0025 }],
+    balanced:         [{ type: "COMMON", chance: 0.09 }, { type: "RARE", chance: 0.004 }, { type: "SPECIAL", chance: 0.0025 }],
+    hard:             [{ type: "COMMON", chance: 0.14 }, { type: "RARE", chance: 0.0075 }, { type: "SPECIAL", chance: 0.004 }, { type: "EVENT", chance: 0.0025 }],
+    rival:            [{ type: "COMMON", chance: 0.16 }, { type: "RARE", chance: 0.009 }, { type: "SPECIAL", chance: 0.005 }, { type: "EVENT", chance: 0.0025 }],
+    defense:          [{ type: "COMMON", chance: 0.08 }, { type: "RARE", chance: 0.0035 }, { type: "SPECIAL", chance: 0.0025 }],
+    perfect_defense:  [{ type: "COMMON", chance: 0.125 }, { type: "RARE", chance: 0.006 }, { type: "SPECIAL", chance: 0.0035 }, { type: "EVENT", chance: 0.0025 }],
   };
   // Percorre do mais raro ao mais comum (raridades não se acumulam)
   const table = [...tables[scenario]].reverse();
@@ -1736,11 +1736,11 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   // Recompensas ZC de defesa bem-sucedida (vão para o cofre do defensor)
   let defenseRewardCoins = 0;
   if (defenderWon) {
-    const baseMin = isBalanced ? 150 : 80;
-    const baseMax = isBalanced ? 250 : 180;
+    const baseMin = isBalanced ? 75 : 40;
+    const baseMax = isBalanced ? 125 : 90;
     defenseRewardCoins = Math.floor(baseMin + Math.random() * (baseMax - baseMin + 1));
-    if (isRival) defenseRewardCoins += 50;
-    if (perfectDefense) defenseRewardCoins += 80;
+    if (isRival) defenseRewardCoins += 25;
+    if (perfectDefense) defenseRewardCoins += 40;
   }
 
   // IDs dos mascotes defensores que sobreviveram (para dar EXP de defesa)
