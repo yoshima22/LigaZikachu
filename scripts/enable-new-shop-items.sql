@@ -29,7 +29,7 @@ WHERE type IN ('LUCKY_EGG', 'WEAKNESS_POLICY', 'PICNIC_BASKET', 'VACATION_TICKET
 -- ── 2. Remover do inventário de todos os jogadores ───────────
 
 DELETE FROM player_inventory
-WHERE item_id IN (
+WHERE "itemId" IN (
   SELECT id FROM shop_items
   WHERE type IN ('LUCKY_EGG', 'WEAKNESS_POLICY', 'PICNIC_BASKET', 'VACATION_TICKET', 'XP_SHARE', 'RAINBOW_FEATHER')
 );

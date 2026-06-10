@@ -107,18 +107,24 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
       };
     }
   } else {
-    // Center card
+    // Center card — responsive width respecting small screens
     cardStyle = {
       position: "fixed",
       top: "50%",
       left: "50%",
       transform: "translate(-50%, -50%)",
-      width: 360
+      width: "min(360px, calc(100vw - 32px))"
     };
   }
 
+  // Clicking anywhere on the dark backdrop skips the tutorial
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    // Only trigger if the click was on the backdrop itself, not on the card
+    if (e.target === e.currentTarget) onSkip();
+  };
+
   return (
-    <div className="fixed inset-0 z-[9999]" style={{ pointerEvents: "auto" }}>
+    <div className="fixed inset-0 z-[9999]" style={{ pointerEvents: "auto" }} onClick={handleBackdropClick}>
       {/* Overlay */}
       {hasTarget && targetRect ? (
         // Spotlight overlay using SVG clip path
@@ -159,17 +165,19 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
           />
         </svg>
       ) : (
-        // Full dark overlay for center steps
+        // Full dark overlay for center steps — clickable to skip
         <div
           className="fixed inset-0 bg-black/75"
-          style={{ pointerEvents: "none" }}
+          onClick={onSkip}
+          style={{ cursor: "pointer" }}
         />
       )}
 
-      {/* Tutorial card */}
+      {/* Tutorial card — stopPropagation so clicks inside don't skip */}
       <div
         style={cardStyle}
         className="z-[10000] rounded-2xl border border-[#FFCB05]/40 bg-[#1A1A2E] shadow-2xl p-5 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
@@ -224,6 +232,8 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
             </button>
           </div>
         </div>
+        {/* Mobile hint */}
+        <p className="text-center text-[10px] text-slate-600 sm:hidden">toque fora para pular</p>
       </div>
     </div>
   );

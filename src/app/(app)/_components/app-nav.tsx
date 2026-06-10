@@ -175,7 +175,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, playerId }: 
       )}
 
       {variant === "mobile" && (
-      <div className="grid gap-2 px-4 pb-3 md:hidden">
+      <div className="md:hidden px-4 pb-3">
         <div className="flex flex-wrap items-center gap-1">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
@@ -313,7 +313,7 @@ function MobileNavGroup({
         <ChevronDown size={13} className={`transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-9 z-50 min-w-44 rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
+        <div className="absolute left-0 top-9 z-[60] min-w-44 max-h-[60vh] overflow-y-auto rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
             <Link key={href} href={href} onClick={() => setOpenMenu(null)}
               className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">

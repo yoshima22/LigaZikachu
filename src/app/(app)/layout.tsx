@@ -109,6 +109,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                 </div>
               </Link>
               {/* Logout — form POST evita prefetch do Next.js (que causava logout automático) */}
+              {/* ZikaCoins — visible on mobile only (desktop shows in user card) */}
+              {wallet != null && (
+                <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#FFCB05] sm:hidden">
+                  🪙 {wallet.balance.toLocaleString("pt-BR")}
+                </span>
+              )}
               <form action={async () => {
                 "use server";
                 const { cookies } = await import("next/headers");
@@ -134,7 +140,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         </header>
 
         {/* Main content */}
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
+        <main className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-8">{children}</main>
         <FcmTokenRegistrar />
         <AchievementNotifier />
         {!admin && <WelcomeTutorial />}

@@ -655,42 +655,72 @@ export default async function ArenaZPage() {
             <p className="mt-1 text-xs text-slate-500">
               Calculado a partir dos combates PvE e PvP resolvidos.
             </p>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left text-xs">
-                <thead className="text-[10px] uppercase tracking-wide text-slate-500">
-                  <tr className="border-b border-border">
-                    <th className="py-2 pr-3">#</th>
-                    <th className="py-2 pr-3">Jogador</th>
-                    <th className="py-2 pr-3 text-right">V</th>
-                    <th className="py-2 pr-3 text-right">D</th>
-                    <th className="py-2 pr-3 text-right">E</th>
-                    <th className="py-2 pr-3 text-right">Aproveitamento</th>
-                    <th className="py-2 pr-3 text-right">Loot roubado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {arenaRanking.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-500">Nenhum combate registrado ainda.</td>
-                    </tr>
-                  ) : arenaRanking.map((row, index) => {
+            {arenaRanking.length === 0 ? (
+              <p className="mt-4 text-xs text-slate-500">Nenhum combate registrado ainda.</p>
+            ) : (
+              <>
+                {/* Desktop: tabela */}
+                <div className="mt-4 hidden overflow-x-auto sm:block">
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-[10px] uppercase tracking-wide text-slate-500">
+                      <tr className="border-b border-border">
+                        <th className="py-2 pr-3">#</th>
+                        <th className="py-2 pr-3">Jogador</th>
+                        <th className="py-2 pr-3 text-right">V</th>
+                        <th className="py-2 pr-3 text-right">D</th>
+                        <th className="py-2 pr-3 text-right">E</th>
+                        <th className="py-2 pr-3 text-right">Aprov.</th>
+                        <th className="py-2 pr-3 text-right">Loot roubado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {arenaRanking.map((row, index) => {
+                        const total = row.wins + row.losses + row.draws;
+                        const winRate = total > 0 ? Math.round((row.wins / total) * 100) : 0;
+                        return (
+                          <tr key={row.playerId} className="border-b border-border/60 last:border-0">
+                            <td className="py-2 pr-3 font-bold text-[#FFCB05]">{index + 1}</td>
+                            <td className="py-2 pr-3 font-semibold text-slate-200">{row.name}</td>
+                            <td className="py-2 pr-3 text-right text-green-300">{row.wins}</td>
+                            <td className="py-2 pr-3 text-right text-red-300">{row.losses}</td>
+                            <td className="py-2 pr-3 text-right text-slate-400">{row.draws}</td>
+                            <td className="py-2 pr-3 text-right text-slate-300">{winRate}%</td>
+                            <td className="py-2 pr-3 text-right text-[#FFCB05]">{row.stolenCoins} ZC / {row.stolenExp} EXP</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Mobile: cards */}
+                <div className="mt-3 space-y-2 sm:hidden">
+                  {arenaRanking.map((row, index) => {
                     const total = row.wins + row.losses + row.draws;
                     const winRate = total > 0 ? Math.round((row.wins / total) * 100) : 0;
+                    const MEDALS = ["🥇", "🥈", "🥉"];
                     return (
-                      <tr key={row.playerId} className="border-b border-border/60 last:border-0">
-                        <td className="py-2 pr-3 font-bold text-[#FFCB05]">{index + 1}</td>
-                        <td className="py-2 pr-3 font-semibold text-slate-200">{row.name}</td>
-                        <td className="py-2 pr-3 text-right text-green-300">{row.wins}</td>
-                        <td className="py-2 pr-3 text-right text-red-300">{row.losses}</td>
-                        <td className="py-2 pr-3 text-right text-slate-400">{row.draws}</td>
-                        <td className="py-2 pr-3 text-right text-slate-300">{winRate}%</td>
-                        <td className="py-2 pr-3 text-right text-[#FFCB05]">{row.stolenCoins} ZC / {row.stolenExp} EXP</td>
-                      </tr>
+                      <div key={row.playerId} className="flex items-center gap-3 rounded-xl border border-border/60 bg-slate-900/40 px-3 py-2.5">
+                        <span className="w-6 shrink-0 text-center text-sm font-bold text-[#FFCB05]">
+                          {MEDALS[index] ?? index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-slate-200">{row.name}</p>
+                          <p className="text-[10px] text-slate-500">
+                            <span className="text-green-300">{row.wins}V</span>
+                            {" "}<span className="text-red-300">{row.losses}D</span>
+                            {row.draws > 0 && <span className="text-slate-400"> {row.draws}E</span>}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-xs font-bold text-slate-300">{winRate}%</p>
+                          <p className="text-[10px] text-[#FFCB05]">{row.stolenCoins} ZC</p>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className={`grid gap-4 ${admin ? "lg:grid-cols-2" : ""}`}>
