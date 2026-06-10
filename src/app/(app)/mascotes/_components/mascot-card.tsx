@@ -82,13 +82,27 @@ interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; 
 const _playedAt = new Map<string, number>(); // mascotId → timestamp ms
 const _pettedAt = new Map<string, number>();
 
+const LS_PET_PREFIX = "petCd_";
+/** Lê o timestamp de carinho do localStorage (sobrevive a page refresh) */
+function lsPetGet(mascotId: string): number {
+  try { return parseInt(localStorage.getItem(LS_PET_PREFIX + mascotId) ?? "0", 10) || 0; } catch { return 0; }
+}
+/** Grava o timestamp de carinho no localStorage */
+function lsPetSet(mascotId: string, ts: number) {
+  try { localStorage.setItem(LS_PET_PREFIX + mascotId, String(ts)); } catch { /* ignorado */ }
+}
+
 const PLAY_CD_MS = 45 * 60 * 1000;
 const PET_CD_MS  = 25 * 60 * 1000;
 
 /** Marca que o mascote acabou de brincar */
 export function markPlayed(mascotId: string) { _playedAt.set(mascotId, Date.now()); }
-/** Marca que o mascote acabou de receber carinho */
-export function markPetted(mascotId: string) { _pettedAt.set(mascotId, Date.now()); }
+/** Marca que o mascote acabou de receber carinho (persiste no localStorage) */
+export function markPetted(mascotId: string) {
+  const now = Date.now();
+  _pettedAt.set(mascotId, now);
+  lsPetSet(mascotId, now);
+}
 /** Verifica se brincar está em cooldown agora */
 export function isPlayOnCooldown(mascotId: string, nowMs: number): boolean {
   const t = _playedAt.get(mascotId) ?? 0;
@@ -312,15 +326,15 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
       setNowMs(Date.now()); // força re-render para refletir cooldown na UI
     }
   }, [mascot.id, mascot.lastPlayedAt, mascot.lastInteractedAt]);
+  // Semeia cooldown de carinho a partir do localStorage (persiste entre refreshes)
   useEffect(() => {
-    if (mascot.lastPettedAt) {
-      const ts = new Date(mascot.lastPettedAt).getTime();
-      if (ts > (_pettedAt.get(mascot.id) ?? 0)) {
-        _pettedAt.set(mascot.id, ts);
-        setNowMs(Date.now());
-      }
+    const ts = lsPetGet(mascot.id);
+    if (ts > 0 && ts > (_pettedAt.get(mascot.id) ?? 0)) {
+      _pettedAt.set(mascot.id, ts);
+      setNowMs(Date.now());
     }
-  }, [mascot.id, mascot.lastPettedAt]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mascot.id]); // roda só na montagem — localStorage é lido uma vez por componente
 
   // Cooldowns independentes — lidos do Map de módulo (sobrevive a remounts)
   const playEndMs = (_playedAt.get(mascot.id) ?? 0) + PLAY_CD_MS;
