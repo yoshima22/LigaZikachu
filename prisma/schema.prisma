@@ -1180,10 +1180,10 @@ model ShopItem {
   theme           TitleTheme           @default(NEUTRAL)
   flavorText      String?              @db.Text
   entranceEffect  TitleEntranceEffect  @default(NONE)
-  createdById String
+  createdById String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
-  createdBy   User            @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy   User?           @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   ownerships  PlayerInventory[]
   @@map("shop_items")
 }
