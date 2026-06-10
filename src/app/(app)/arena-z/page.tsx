@@ -166,7 +166,7 @@ export default async function ArenaZPage() {
     prisma.mascot.findMany({
       where: { playerId: player.id },
       include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } },
-      orderBy: [{ arenaState: "asc" }, { level: "desc" }],
+      orderBy: [{ level: "desc" }],
     }),
     prisma.arenaTeam.findMany({
       where: { playerId: player.id, status: { in: ["ACTIVE", "DEFEATED"] } }, // RETIRED nunca aparece na lista
@@ -387,16 +387,21 @@ export default async function ArenaZPage() {
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <section className="rounded-2xl border border-border bg-slate-950/60 p-5">
           <h2 className="font-semibold text-slate-200">Criar equipe</h2>
-          <p className="mt-1 text-xs text-slate-500">Apenas mascotes livres aparecem. Máximo de 6 por equipe.</p>
+          <p className="mt-1 text-xs text-slate-500">Máximo de 6 por equipe. Mascotes com cooldown ficam visíveis mas bloqueados.</p>
           {lastRetiredTeam?.retiredAt && (
             <div className="mt-3">
               <RetirePenaltyBadge retiredAt={lastRetiredTeam.retiredAt} />
             </div>
           )}
-          <CreateTeamForm mascots={availableMascots.map(m => ({
+          <CreateTeamForm mascots={mascots.filter(m =>
+            !mascotIdsInActiveTeams.has(m.id) && !m.bazarListed && m.expeditions.length === 0 && m.arenaState !== "INJURED"
+          ).map(m => ({
             id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
             level: m.level, statForce: m.statForce, statAgility: m.statAgility,
-            statVitality: m.statVitality, arenaState: m.arenaState,
+            statVitality: m.statVitality, statInstinct: m.statInstinct,
+            arenaState: m.arenaState,
+            restingUntil: m.restingUntil?.toISOString() ?? null,
+            arenaEntryCooldownUntil: (m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil?.toISOString() ?? null,
           }))} />
         </section>
 
@@ -508,7 +513,10 @@ export default async function ArenaZPage() {
                       mascots={availableMascots.map(m => ({
                         id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
                         level: m.level, statForce: m.statForce, statAgility: m.statAgility,
-                        statVitality: m.statVitality, arenaState: m.arenaState,
+                        statVitality: m.statVitality, statInstinct: m.statInstinct,
+                        arenaState: m.arenaState,
+                        restingUntil: m.restingUntil?.toISOString() ?? null,
+                        arenaEntryCooldownUntil: (m as { arenaEntryCooldownUntil?: Date | null }).arenaEntryCooldownUntil?.toISOString() ?? null,
                       }))}
                       slotsUsed={team.members.length}
                     />

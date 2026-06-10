@@ -58,6 +58,7 @@ interface MascotData {
   bazarListed: boolean;
   injuredAt: Date | null;
   restingUntil: Date | null;
+  arenaEntryCooldownUntil?: Date | null;
   hatchedAt: Date;
   lastInteractedAt: Date | null;
   lastPlayedAt?: Date | null;  // presente após migração SQL
@@ -205,6 +206,17 @@ function arenaStatus(mascot: MascotData) {
       tone: "border-green-500/30 bg-green-500/10 text-green-200",
       label: "Repouso concluido",
       detail: "Mascote ja pode voltar para atividades.",
+    };
+  }
+  // Cooldown individual de re-entrada na arena
+  const cooldownUntil = mascot.arenaEntryCooldownUntil ? new Date(mascot.arenaEntryCooldownUntil) : null;
+  if (cooldownUntil && cooldownUntil > new Date()) {
+    const remMin = Math.ceil((cooldownUntil.getTime() - Date.now()) / 60_000);
+    return {
+      locked: false,
+      tone: "border-orange-500/30 bg-orange-500/10 text-orange-200",
+      label: `⏳ Cooldown Arena (${remMin}min)`,
+      detail: `Pode voltar à Arena em ${cooldownUntil.toLocaleString("pt-BR")}. Livre para todas as outras atividades.`,
     };
   }
   return null;

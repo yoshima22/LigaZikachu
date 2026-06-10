@@ -22,7 +22,7 @@ interface MascotData {
   evolutionLocked: boolean;
   isShiny: boolean;
   activeBuffs: { type: string; expiresAt: Date }[];
-  arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
+  arenaState: string; injuredAt: Date | null; restingUntil: Date | null; arenaEntryCooldownUntil?: Date | null;
   relations?: Array<{ type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }>;
   hatchedAt: Date; lastInteractedAt: Date | null; lastPlayedAt?: Date | null; lastPettedAt?: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string; mode?: string }[];

@@ -59,7 +59,7 @@ export default async function MascotesPage() {
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
-        injuredAt: true, restingUntil: true,
+        injuredAt: true, restingUntil: true, arenaEntryCooldownUntil: true,
         hatchedAt: true, lastInteractedAt: true, lastFedAt: true, socialCooldownUntil: true,
         expeditions: {
           where: { status: "ACTIVE" },
@@ -93,7 +93,7 @@ export default async function MascotesPage() {
       where: { playerId: player.id, isFavorite: false, isEquipped: false },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
-        arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
+        arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true, arenaEntryCooldownUntil: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         expeditions: {
           where: { status: "ACTIVE" }, take: 1,
@@ -188,6 +188,7 @@ export default async function MascotesPage() {
     bazarListed: m.bazarListed,
     injuredAt: m.injuredAt,
     restingUntil: m.restingUntil,
+    arenaEntryCooldownUntil: m.arenaEntryCooldownUntil ?? null,
     hatchedAt: m.hatchedAt,
     lastInteractedAt: m.lastInteractedAt,
     lastPlayedAt: null,

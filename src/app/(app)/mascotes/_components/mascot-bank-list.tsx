@@ -17,6 +17,7 @@ export type BankMascot = {
   bazarListed: boolean;
   injuredAt: Date | null;
   restingUntil: Date | null;
+  arenaEntryCooldownUntil?: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
   buffs: { id: string }[];
   statForce: number;
@@ -97,6 +98,11 @@ function getOccupationChips(mascot: BankMascot): { label: string; cls: string }[
     chips.push({ label: "💤 Repouso", cls: "bg-sky-500/15 text-sky-300 border-sky-500/20" });
   if (mascot.arenaState === "INJURED")
     chips.push({ label: "🩹 Ferido", cls: "bg-orange-500/15 text-orange-300 border-orange-500/20" });
+  const cooldownUntil = mascot.arenaEntryCooldownUntil ? new Date(mascot.arenaEntryCooldownUntil) : null;
+  if (cooldownUntil && cooldownUntil > new Date()) {
+    const remMin = Math.ceil((cooldownUntil.getTime() - Date.now()) / 60_000);
+    chips.push({ label: `⏳ Cooldown Arena (${remMin}min)`, cls: "bg-amber-500/15 text-amber-300 border-amber-500/20" });
+  }
   if (mascot.buffs.length > 0)
     chips.push({ label: "✨ Bônus", cls: "bg-purple-500/15 text-purple-300 border-purple-500/20" });
   return chips;
