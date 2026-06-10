@@ -25,7 +25,7 @@ export const ARENA_Z_CONFIG = {
 // Por hora por mascote na equipe
 export const PASSIVE_COINS_PER_MASCOT_PER_H = 5;
 export const PASSIVE_EXP_PER_MASCOT_PER_H   = 10;
-export const PVE_REWARD_MULT = 0.85; // redução global de 15% nos ganhos PvE
+export const PVE_REWARD_MULT = 0.30; // redução de 70% nos ganhos PvE (vitória vale ~30% do original)
 
 // ── Debuff de estamina da Arena ───────────────────────────────────────────────
 // A cada hora na arena, time perde 2% dos stats em combate, máx 72% em 36h+

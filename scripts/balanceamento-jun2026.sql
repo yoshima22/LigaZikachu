@@ -12,8 +12,7 @@ SELECT
   si.type                                 AS item,
   si.name                                 AS nome_item,
   pi.quantity                             AS quantidade,
-  pi.equipped                             AS equipado,
-  pi."createdAt"                          AS adquirido_em
+  pi.equipped                             AS equipado
 FROM player_inventory pi
 JOIN players p  ON p.id  = pi."playerId"
 JOIN shop_items si ON si.id = pi."itemId"
