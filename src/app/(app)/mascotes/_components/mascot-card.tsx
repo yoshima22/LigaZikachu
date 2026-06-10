@@ -490,36 +490,76 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           <div className="space-y-3">
             {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, dur]) => {
               if (key === "7d") return null;
-              const luck = mascot.statInstinct + Math.floor(mascot.level / 10);
-              const eggChance   = Math.min(35, 5 + luck * 0.3 + dur.rewardBonus * 0.3).toFixed(0);
-              const sweetChance = Math.min(25, 12 + dur.rewardBonus * 0.3).toFixed(0);
-              const coinMin = 50 + dur.rewardBonus * 5;
-              const coinMax = coinMin + 150 + dur.rewardBonus * 10;
-              const eggQuality = key === "6h" ? "🥚 Especial/Raro" : key === "3h" ? "🥚 Raro/Comum" : "🥚 Comum";
-              // EXP de treinamento: base × mult × levelMult (sem aliados/lucky egg = mínimo; com 3 aliados + lucky egg = máximo)
+              const luck        = mascot.statInstinct + Math.floor(mascot.level / 5);
+              const levelFloor  = Math.floor(mascot.level / 5);
+              const rb          = dur.rewardBonus;
+
+              // ── Modo Padrão (espelha rollExpeditionReward) ──
+              const stdEgg   = 15 + Math.min(28, luck * 0.9) + rb * 1.0;
+              const stdSweet = 14 + rb * 0.4;
+              const stdFood  = 32 + levelFloor * 0.4 + rb * 0.15;
+              const stdCoin  = 38 + levelFloor * 0.5;
+              const stdBuff  = key === "6h" ? 4 : 0;
+              const stdTotal = stdEgg + stdSweet + stdFood + stdCoin + stdBuff;
+              const pStd = (w: number) => ((w / stdTotal) * 100).toFixed(0);
+
+              // ── Modo Itens (espelha rollItemExpeditionReward) ──
+              const itmEgg   = 12 + Math.min(30, luck * 1.0) + rb * 1.5;
+              const itmSweet = 22 + rb * 0.4;
+              const itmFood  = 38 + rb * 0.3 + Math.min(10, mascot.level);
+              const itmBuff  = key === "6h" ? 14 : key === "3h" ? 8 : key === "1h" ? 4 : 2;
+              const itmTotal = itmEgg + itmSweet + itmFood + itmBuff;
+              const pItm = (w: number) => ((w / itmTotal) * 100).toFixed(0);
+
+              const coinMin    = 50 + rb * 5;
+              const coinMax    = coinMin + 150 + rb * 10;
+              const eggQuality = key === "6h" ? "Esp/Raro" : key === "3h" ? "Raro/Com" : "Comum";
+
               const levelMult = 1 + Math.floor(mascot.level / 20) * 0.25;
-              const expMult = TRAINING_EXP_MULT[key as ExpeditionDuration] ?? 0;
-              const expMin = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult);
-              const expMax = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * 1.3 * 1.2); // +3 aliados (+30%) + lucky egg (+20%)
+              const expMult   = TRAINING_EXP_MULT[key as ExpeditionDuration] ?? 0;
+              const expMin    = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult);
+              const expMax    = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * 1.3 * 1.2);
+
               return (
-                <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-1.5">
+                <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
                   <p className="text-xs font-semibold text-blue-400">{dur.label}</p>
-                  <div className="mb-1 rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1 text-[10px]">
+
+                  {/* Treinamento */}
+                  <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1 text-[10px]">
                     <span className="text-green-400">⚔️ Treinamento: </span>
                     <strong className="text-green-200">{expMin.toLocaleString("pt-BR")}–{expMax.toLocaleString("pt-BR")} EXP</strong>
                     <span className="ml-1 text-slate-500">(max com aliados + Lucky Egg)</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-400">
-                    <span>🥚 Ovo: <strong className="text-slate-200">~{eggChance}%</strong> ({eggQuality.split(" ")[1]})</span>
-                    <span>🍬 Doce: <strong className="text-slate-200">~{sweetChance}%</strong></span>
-                    <span>🍖 Comida: <strong className="text-slate-200">~30%</strong></span>
-                    <span>🪙 Moedas: <strong className="text-slate-200">{coinMin}–{coinMax} ZC</strong></span>
+
+                  {/* Padrão */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">🗺 Padrão</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
+                      <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">~{pStd(stdEgg)}%</strong></span>
+                      <span>🍬 Doce <strong className="text-slate-200">~{pStd(stdSweet)}%</strong></span>
+                      <span>🍖 Comida <strong className="text-slate-200">~{pStd(stdFood)}%</strong></span>
+                      <span>🪙 Moedas <strong className="text-slate-200">{coinMin}–{coinMax} ZC</strong></span>
+                      {stdBuff > 0 && (
+                        <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">~{pStd(stdBuff)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto…)</span></span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Itens */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">📦 Itens</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
+                      <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">~{pItm(itmEgg)}%</strong></span>
+                      <span>🍬 Doce <strong className="text-slate-200">~{pItm(itmSweet)}%</strong></span>
+                      <span>🍖 Comida <strong className="text-slate-200">~{pItm(itmFood)}%</strong></span>
+                      <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">~{pItm(itmBuff)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto, Piquenique…)</span></span>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
-          <p className="text-[10px] text-slate-600">Amuleto da Sorte dobra todas as chances de loot.</p>
+          <p className="text-[10px] text-slate-600">Amuleto da Sorte dobra as chances de loot. Aliados aumentam drops de ovos.</p>
         </div>
       </div>
     )}
