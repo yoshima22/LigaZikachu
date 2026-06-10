@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Star, UserPlus, UserMinus, Clock, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { Star, UserPlus, UserMinus, Clock, CheckCircle2, ChevronDown, ChevronUp, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { adminGrantVip, adminRevokeVip } from "@/app/(app)/passe-apoiador/actions";
@@ -16,6 +16,7 @@ interface ActiveVip {
   passId: string;
   playerId: string;
   displayName: string;
+  passLabel: string;
   startsAt: Date;
   expiresAt: Date;
   daysRemaining: number;
@@ -27,15 +28,41 @@ interface Props {
   activeVips: ActiveVip[];
 }
 
+const PASS_TIERS = [
+  { value: "Passe Apoiador",  label: "⭐ Passe Apoiador",  color: "text-yellow-400" },
+  { value: "Passe Gold",      label: "🥇 Passe Gold",      color: "text-amber-400" },
+  { value: "Passe Diamante",  label: "💎 Passe Diamante",  color: "text-cyan-400" },
+  { value: "Passe Especial",  label: "🌟 Passe Especial",  color: "text-purple-400" },
+  { value: "custom",          label: "✏️ Personalizado...", color: "text-slate-400" },
+] as const;
+
+function TierBadge({ label }: { label: string }) {
+  const tier = PASS_TIERS.find(t => t.value === label);
+  if (!tier || tier.value === "custom") return (
+    <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-xs text-slate-300 font-semibold">{label}</span>
+  );
+  return (
+    <span className={`rounded-full bg-slate-700/50 px-2 py-0.5 text-xs font-semibold ${tier.color}`}>{tier.label}</span>
+  );
+}
+
 export function VipPassPanel({ players, activeVips }: Props) {
   const [open, setOpen] = useState(false);
   const [grantPending, startGrant] = useTransition();
   const [revokePending, startRevoke] = useTransition();
+
+  // Grant form
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [durationDays, setDurationDays] = useState(30);
   const [startDay, setStartDay] = useState(1);
+  const [tierSelect, setTierSelect] = useState<string>("Passe Apoiador");
+  const [customLabel, setCustomLabel] = useState("");
+
+  // Revoke
   const [revokeReason, setRevokeReason] = useState("");
   const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const passLabel = tierSelect === "custom" ? (customLabel.trim() || "Passe Apoiador") : tierSelect;
 
   const handleGrant = () => {
     if (!selectedPlayerId) { toast.error("Selecione um jogador."); return; }
@@ -44,11 +71,14 @@ export function VipPassPanel({ players, activeVips }: Props) {
         playerId: selectedPlayerId,
         days: durationDays,
         startDay: startDay > 1 ? startDay : undefined,
+        passLabel,
       });
       if (result.ok) {
-        toast.success(`Passe VIP concedido! ${startDay > 1 ? `Iniciado no dia ${startDay}.` : ""}`);
+        toast.success(`${passLabel} concedido! ${startDay > 1 ? `Iniciado no dia ${startDay}.` : ""}`);
         setSelectedPlayerId("");
         setStartDay(1);
+        setTierSelect("Passe Apoiador");
+        setCustomLabel("");
       } else {
         toast.error(result.error ?? "Erro ao conceder VIP.");
       }
@@ -88,9 +118,11 @@ export function VipPassPanel({ players, activeVips }: Props) {
 
       {open && (
         <div className="mt-6 space-y-6">
-          {/* Grant VIP */}
-          <div className="space-y-3">
+          {/* ── Conceder VIP ── */}
+          <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Conceder Passe VIP</p>
+
+            {/* Linha 1: jogador + duração + dia */}
             <div className="flex flex-wrap gap-3">
               <select
                 value={selectedPlayerId}
@@ -102,13 +134,10 @@ export function VipPassPanel({ players, activeVips }: Props) {
                   <option key={p.id} value={p.id}>{p.displayName}</option>
                 ))}
               </select>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400 whitespace-nowrap">Duração (dias):</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={durationDays}
+                  type="number" min={1} max={365} value={durationDays}
                   onChange={e => setDurationDays(Number(e.target.value))}
                   className="w-20 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50"
                 />
@@ -116,14 +145,44 @@ export function VipPassPanel({ players, activeVips }: Props) {
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400 whitespace-nowrap">Iniciar no dia:</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={startDay}
+                  type="number" min={1} max={30} value={startDay}
                   onChange={e => setStartDay(Math.max(1, Math.min(30, Number(e.target.value))))}
                   className="w-16 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50"
                 />
               </div>
+            </div>
+
+            {/* Linha 2: tipo de passe */}
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5 flex-1 min-w-48">
+                <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+                  <Tag size={10} /> Tipo de passe
+                </label>
+                <select
+                  value={tierSelect}
+                  onChange={e => setTierSelect(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50"
+                >
+                  {PASS_TIERS.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {tierSelect === "custom" && (
+                <div className="space-y-1.5 flex-1 min-w-48">
+                  <label className="text-xs font-medium text-slate-400">Nome personalizado</label>
+                  <input
+                    type="text"
+                    value={customLabel}
+                    onChange={e => setCustomLabel(e.target.value)}
+                    placeholder="Ex: Passe Fundador"
+                    className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50"
+                    maxLength={50}
+                  />
+                </div>
+              )}
+
               <Button
                 onClick={handleGrant}
                 disabled={grantPending || !selectedPlayerId}
@@ -133,16 +192,20 @@ export function VipPassPanel({ players, activeVips }: Props) {
                 {grantPending ? "Concedendo..." : "Conceder VIP"}
               </Button>
             </div>
-            <p className="text-xs text-slate-500">
-              Cria um passe de <strong className="text-slate-400">{durationDays} dias</strong>, adiciona o título &quot;Pilar da Comunidade&quot; e registra no log.
+
+            {/* Preview do que será concedido */}
+            <div className="rounded-xl border border-yellow-400/10 bg-yellow-950/5 px-4 py-2.5 text-xs text-slate-400">
+              Cria um <TierBadge label={passLabel} /> de{" "}
+              <strong className="text-slate-300">{durationDays} dias</strong>, adiciona o título
+              &quot;Pilar da Comunidade&quot; e registra no log.
               {startDay > 1 && (
-                <> Os dias <strong className="text-orange-400">1–{startDay - 1}</strong> serão marcados como já resgatados <em>(sem duplicar recompensas)</em> — use para corrigir passes sem histórico.</>
-              )}
-              {" "}Passes anteriores do jogador permanecem ativos.
-            </p>
+                <> Os dias <strong className="text-orange-400">1–{startDay - 1}</strong> serão marcados como resgatados sem entregar recompensas.</>
+              )}{" "}
+              Passes anteriores do jogador permanecem ativos.
+            </div>
           </div>
 
-          {/* Active VIPs list */}
+          {/* ── Passes ativos ── */}
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Passes ativos</p>
             {activeVips.length === 0 ? (
@@ -157,7 +220,10 @@ export function VipPassPanel({ players, activeVips }: Props) {
                     <div className="flex items-center gap-3">
                       <Star size={14} className="text-yellow-400 shrink-0" />
                       <div>
-                        <p className="font-semibold text-sm text-white">{vip.displayName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-sm text-white">{vip.displayName}</p>
+                          <TierBadge label={vip.passLabel} />
+                        </div>
                         <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
                           <span className="flex items-center gap-1">
                             <Clock size={10} />

@@ -1731,6 +1731,7 @@ model SupporterPass {
   id               String               @id @default(cuid())
   playerId         String
   active           Boolean              @default(true)
+  passLabel        String               @default("Passe Apoiador")
   startsAt         DateTime             @default(now())
   expiresAt        DateTime
   // VIP title ShopItem id granted to the player

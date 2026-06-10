@@ -318,6 +318,8 @@ export async function adminGrantVip(opts: {
   days: number;
   /** Iniciar o passe a partir deste dia (1–30). Dias anteriores serão marcados como resgatados sem entregar recompensas. */
   startDay?: number;
+  /** Rótulo/tier do passe (ex: "Passe Gold"). Default: "Passe Apoiador". */
+  passLabel?: string;
 }): Promise<{ ok: boolean; passId?: string; error?: string }> {
   try {
     const admin = await getSessionUser();
@@ -377,6 +379,7 @@ export async function adminGrantVip(opts: {
     const pass = await prisma.supporterPass.create({
       data: {
         playerId: opts.playerId,
+        passLabel: opts.passLabel?.trim() || "Passe Apoiador",
         startsAt,
         expiresAt,
         titleItemId: titleItem.id,
@@ -474,7 +477,7 @@ export async function adminRevokeVip(passId: string, reason?: string): Promise<{
 // ── Admin: listar VIPs ativos ─────────────────────────────────────────────────
 
 export async function adminListActiveVips(): Promise<{
-  passes: { id: string; player: { id: string; displayName: string }; startsAt: Date; expiresAt: Date; claimsCount: number }[];
+  passes: { id: string; player: { id: string; displayName: string }; passLabel: string; startsAt: Date; expiresAt: Date; claimsCount: number }[];
   error?: string;
 }> {
   try {
@@ -491,6 +494,7 @@ export async function adminListActiveVips(): Promise<{
       passes: passes.map(p => ({
         id: p.id,
         player: p.player,
+        passLabel: p.passLabel ?? "Passe Apoiador",
         startsAt: p.startsAt,
         expiresAt: p.expiresAt,
         claimsCount: p._count.claims,

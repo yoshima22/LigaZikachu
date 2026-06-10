@@ -250,6 +250,7 @@ export default async function AdminPage() {
           passId: p.id,
           playerId: p.player.id,
           displayName: p.player.displayName,
+          passLabel: p.passLabel ?? "Passe Apoiador",
           startsAt: p.startsAt,
           expiresAt: p.expiresAt,
           daysRemaining: Math.max(0, Math.ceil((new Date(p.expiresAt).getTime() - Date.now()) / 86400000)),
