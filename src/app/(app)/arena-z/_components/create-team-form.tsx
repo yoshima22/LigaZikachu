@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Search, X, ArrowUpDown, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 
@@ -16,146 +17,216 @@ export interface ValidMascot {
   statVitality: number;
   statInstinct: number;
   arenaState: string;
-  restingUntil: string | null;          // ISO string
-  arenaEntryCooldownUntil: string | null; // ISO string
+  restingUntil: string | null;
+  arenaEntryCooldownUntil: string | null;
 }
 
 const MAX_MASCOTS = 6;
 
 const TEAM_TYPE_OPTIONS = [
-  { value: "PVE"  as const, label: "Somente PvE",  desc: "Apenas batalhas contra bots" },
-  { value: "PVP"  as const, label: "Somente PvP",  desc: "Apenas desafios contra jogadores" },
-  { value: "BOTH" as const, label: "PvE + PvP", desc: "Pode fazer bots e desafiar jogadores" },
+  { value: "PVE"  as const, label: "PvE",     desc: "Apenas bots", icon: "🤖" },
+  { value: "PVP"  as const, label: "PvP",     desc: "Apenas jogadores", icon: "⚔️" },
+  { value: "BOTH" as const, label: "PvE+PvP", desc: "Ambos", icon: "🏆" },
 ];
 
-type FilterTab = "available" | "all";
+type SortKey = "level_desc" | "level_asc" | "stats_desc" | "name_asc";
+type FilterKey = "available" | "cooldown" | "all";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "level_desc", label: "Nível ↓" },
+  { value: "level_asc",  label: "Nível ↑" },
+  { value: "stats_desc", label: "Stats ↓" },
+  { value: "name_asc",   label: "Nome A→Z" },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function fmtCountdown(ms: number): string {
   if (ms <= 0) return "0s";
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}min`;
+  if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}min`;
+  return `${h}h${m % 60 > 0 ? ` ${m % 60}m` : ""}`;
 }
 
-/** Returns null if available, or a { label, until } if blocked.
- * FREE + restingUntil no futuro = cooldown de re-entrada na arena (sem migration extra). */
-function getMascotBlock(m: ValidMascot, now: number): { label: string; until?: number } | null {
-  if (m.arenaState === "ARENA") return { label: "Na arena" };
-  if (m.arenaState === "INJURED") return { label: "Ferido" };
-  const resting = m.restingUntil ? new Date(m.restingUntil).getTime() : 0;
-  if (m.arenaState === "RESTING" && resting > now) return { label: "Repouso", until: resting };
-  // FREE + restingUntil = cooldown de re-entrada na arena
-  if (m.arenaState === "FREE" && resting > now) return { label: "Cooldown arena", until: resting };
+function totalStats(m: ValidMascot) {
+  return m.statForce + m.statAgility + m.statVitality + m.statInstinct;
+}
+
+function displayName(m: ValidMascot) {
+  return m.nickname ?? getPokemonName(m.pokemonId);
+}
+
+type BlockInfo = { type: "arena" | "injured" | "resting" | "cooldown"; until?: number };
+
+function getBlock(m: ValidMascot, now: number): BlockInfo | null {
+  if (m.arenaState === "ARENA")   return { type: "arena" };
+  if (m.arenaState === "INJURED") return { type: "injured" };
+  const t = m.restingUntil ? new Date(m.restingUntil).getTime() : 0;
+  if (m.arenaState === "RESTING" && t > now) return { type: "resting", until: t };
+  if (m.arenaState === "FREE"    && t > now) return { type: "cooldown", until: t };
   return null;
 }
 
-/** Live countdown that ticks every second */
-function LiveCountdown({ until }: { until: number }) {
-  const [remaining, setRemaining] = useState(() => until - Date.now());
+const BLOCK_STYLE: Record<string, { icon: string; label: string; cls: string }> = {
+  arena:    { icon: "⚔️", label: "Na arena",        cls: "bg-yellow-500/10 text-yellow-300 border-yellow-500/20" },
+  injured:  { icon: "🩹", label: "Ferido",           cls: "bg-red-500/10 text-red-300 border-red-500/20" },
+  resting:  { icon: "💤", label: "Recuperando",      cls: "bg-blue-500/10 text-blue-300 border-blue-500/20" },
+  cooldown: { icon: "⏳", label: "Cooldown Arena",   cls: "bg-orange-500/10 text-orange-300 border-orange-500/20" },
+};
+
+// ── LiveCountdown (ticks every second) ────────────────────────────────────
+
+function LiveCountdown({ until, className = "" }: { until: number; className?: string }) {
+  const [rem, setRem] = useState(() => until - Date.now());
   useEffect(() => {
-    const tick = () => setRemaining(until - Date.now());
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => setRem(until - Date.now()), 1000);
     return () => clearInterval(id);
   }, [until]);
-  if (remaining <= 0) return <span className="text-green-400">Pronto!</span>;
-  return <span>{fmtCountdown(remaining)}</span>;
+  if (rem <= 0) return <span className={`text-green-400 ${className}`}>Pronto!</span>;
+  return <span className={className}>{fmtCountdown(rem)}</span>;
 }
 
-function MascotCard({
-  m, selected, disabled, onToggle, now,
+// ── MascotCard (grid item) ─────────────────────────────────────────────────
+
+function MascotPick({
+  m, selected, maxReached, onToggle, now, compact,
 }: {
-  m: ValidMascot; selected: boolean; disabled: boolean; onToggle: () => void; now: number;
+  m: ValidMascot; selected: boolean; maxReached: boolean; onToggle: () => void; now: number; compact: boolean;
 }) {
-  const block = getMascotBlock(m, now);
-  const isBlocked = block !== null;
-  const isClickable = !isBlocked && !disabled;
-
-  const borderCls = selected
-    ? "border-[#FFCB05]/50 bg-[#FFCB05]/8 shadow-[0_0_12px_rgba(255,203,5,0.15)]"
-    : isBlocked
-      ? "border-slate-700/40 bg-slate-900/30 opacity-60"
-      : disabled
-        ? "border-slate-700/40 opacity-40 cursor-not-allowed"
-        : "border-slate-700/60 bg-slate-900/50 hover:border-[#FFCB05]/30 hover:bg-slate-900/80";
-
-  const totalStat = m.statForce + m.statAgility + m.statVitality + m.statInstinct;
+  const block = getBlock(m, now);
+  const blocked = block !== null;
+  const clickable = !blocked && (!maxReached || selected);
+  const bs = block ? BLOCK_STYLE[block.type] : null;
 
   return (
     <button
       type="button"
-      disabled={!isClickable && !selected}
-      onClick={() => isClickable || selected ? onToggle() : null}
-      className={`w-full text-left rounded-xl border p-2.5 transition-all duration-150 ${borderCls}`}
+      disabled={!clickable}
+      onClick={clickable ? onToggle : undefined}
+      title={blocked ? (bs?.label ?? "") : displayName(m)}
+      className={[
+        "relative flex flex-col rounded-xl border transition-all duration-150 text-left overflow-hidden",
+        selected
+          ? "border-[#FFCB05]/60 bg-[#FFCB05]/8 ring-1 ring-[#FFCB05]/30 shadow-[0_0_14px_rgba(255,203,5,0.18)]"
+          : blocked
+            ? "border-slate-700/40 bg-slate-900/30 opacity-55 cursor-not-allowed"
+            : maxReached
+              ? "border-slate-700/40 bg-slate-900/30 opacity-40 cursor-not-allowed"
+              : "border-slate-700/60 bg-slate-900/50 hover:border-[#FFCB05]/30 hover:bg-slate-900/80 cursor-pointer",
+      ].join(" ")}
     >
-      <div className="flex items-center gap-2.5">
-        {/* Sprite */}
-        <div className="relative shrink-0">
+      {/* Selected check */}
+      {selected && (
+        <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#FFCB05] text-[8px] font-black text-[#1A1A2E]">✓</span>
+      )}
+
+      <div className={compact ? "p-2" : "p-2.5"}>
+        {/* Sprite + name row */}
+        <div className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={getSpriteUrl(m.pokemonId, true)}
             alt=""
-            className={`h-11 w-11 object-contain ${isBlocked ? "grayscale" : ""}`}
+            className={`shrink-0 object-contain ${compact ? "h-10 w-10" : "h-12 w-12"} ${blocked ? "grayscale" : ""}`}
             style={{ imageRendering: "pixelated" }}
             onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
           />
-          {selected && (
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#FFCB05] text-[8px] font-black text-[#1A1A2E]">✓</span>
-          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold leading-tight text-slate-100">
+              {displayName(m)}
+            </p>
+            <p className="text-[10px] text-slate-500">Nv.{m.level}</p>
+            {!compact && (
+              <p className="text-[9px] text-slate-600 mt-0.5">
+                Σ<span className="text-slate-400 font-semibold">{totalStats(m)}</span>
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Info */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="truncate text-xs font-semibold text-slate-200">
-              {m.nickname ?? getPokemonName(m.pokemonId)}
-            </p>
-            <span className="shrink-0 rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] text-slate-400">Nv.{m.level}</span>
-          </div>
-
-          {/* Stats bar */}
-          <div className="mt-1 flex items-center gap-1">
+        {/* Stats */}
+        {!compact && (
+          <div className="mt-2 grid grid-cols-4 gap-0.5 text-center text-[9px]">
             {[
-              { label: "For", val: m.statForce,    color: "bg-red-500" },
-              { label: "Vel", val: m.statAgility,  color: "bg-yellow-400" },
-              { label: "Ins", val: m.statInstinct, color: "bg-blue-400" },
-              { label: "Vit", val: m.statVitality, color: "bg-green-400" },
+              { k: "For", v: m.statForce,    c: "text-red-400" },
+              { k: "Vel", v: m.statAgility,  c: "text-yellow-400" },
+              { k: "Ins", v: m.statInstinct, c: "text-blue-400" },
+              { k: "Vit", v: m.statVitality, c: "text-green-400" },
             ].map(s => (
-              <div key={s.label} className="flex-1">
-                <div className="mb-0.5 text-center text-[8px] text-slate-500">{s.label}</div>
-                <div className="h-1 rounded-full bg-slate-700/60">
-                  <div
-                    className={`h-full rounded-full ${s.color}`}
-                    style={{ width: `${Math.min(100, (s.val / 30) * 100)}%` }}
-                  />
-                </div>
-                <div className="text-center text-[8px] text-slate-400">{s.val}</div>
+              <div key={s.k} className="rounded bg-slate-800/60 py-0.5">
+                <div className="text-slate-600">{s.k}</div>
+                <div className={`font-bold ${s.c}`}>{s.v}</div>
               </div>
             ))}
-            <div className="ml-1 text-[9px] text-slate-500 shrink-0">Σ{totalStat}</div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Block reason */}
-      {block && (
-        <div className={`mt-1.5 flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-medium ${
-          block.label === "Cooldown arena"
-            ? "bg-orange-500/10 text-orange-300 border border-orange-500/20"
-            : block.label === "Repouso"
-              ? "bg-blue-500/10 text-blue-300 border border-blue-500/20"
-              : "bg-slate-700/40 text-slate-400"
-        }`}>
-          <span>{block.label === "Cooldown arena" ? "⏳" : block.label === "Repouso" ? "💤" : "🚫"}</span>
-          <span>{block.label}</span>
-          {block.until && <span className="ml-auto font-mono"><LiveCountdown until={block.until} /></span>}
+      {/* Block banner */}
+      {block && bs && (
+        <div className={`flex items-center justify-between gap-1 border-t px-2 py-1 text-[9px] font-medium ${bs.cls}`}>
+          <span>{bs.icon} {bs.label}</span>
+          {block.until && <LiveCountdown until={block.until} className="font-mono tabular-nums" />}
         </div>
       )}
     </button>
   );
 }
+
+// ── SelectedBar (shows 6 slots with selected sprites) ─────────────────────
+
+function SelectedBar({
+  mascots, selected, onRemove,
+}: {
+  mascots: ValidMascot[]; selected: Set<string>; onRemove: (id: string) => void;
+}) {
+  const selList = mascots.filter(m => selected.has(m.id));
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-2">
+      <span className="text-[9px] font-bold uppercase tracking-widest text-[#FFCB05]/70 shrink-0">
+        Time
+      </span>
+      <div className="flex flex-1 gap-1.5">
+        {Array.from({ length: MAX_MASCOTS }).map((_, i) => {
+          const m = selList[i];
+          return m ? (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onRemove(m.id)}
+              title={`Remover ${displayName(m)}`}
+              className="relative group shrink-0"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={getSpriteUrl(m.pokemonId, true)}
+                alt={displayName(m)}
+                className="h-9 w-9 object-contain rounded-lg bg-slate-800/60 ring-1 ring-[#FFCB05]/30 group-hover:ring-red-400/60 transition-all"
+                style={{ imageRendering: "pixelated" }}
+                onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
+              />
+              <span className="absolute -right-1 -top-1 hidden group-hover:flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-black text-white">×</span>
+            </button>
+          ) : (
+            <div
+              key={i}
+              className="h-9 w-9 shrink-0 rounded-lg border border-dashed border-slate-700/50 bg-slate-900/30"
+            />
+          );
+        })}
+      </div>
+      <span className={`text-[10px] font-bold shrink-0 ${selected.size >= MAX_MASCOTS ? "text-[#FFCB05]" : "text-slate-500"}`}>
+        {selected.size}/{MAX_MASCOTS}
+      </span>
+    </div>
+  );
+}
+
+// ── CreateTeamForm ─────────────────────────────────────────────────────────
 
 export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const router = useRouter();
@@ -163,38 +234,54 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
   const [teamType, setTeamType] = useState<"PVE" | "PVP" | "BOTH">("PVE");
-  const [filter, setFilter] = useState<FilterTab>("available");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("level_desc");
+  const [filter, setFilter] = useState<FilterKey>("available");
+  const [compact, setCompact] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [showConfig, setShowConfig] = useState(false);
 
-  // Update "now" every 5 seconds so block status refreshes
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 5000);
+    const id = setInterval(() => setNow(Date.now()), 3000);
     return () => clearInterval(id);
   }, []);
 
   const toggle = useCallback((id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); }
-      else {
-        if (next.size >= MAX_MASCOTS) { toast.error(`Máximo de ${MAX_MASCOTS} mascotes por equipe.`); return prev; }
-        next.add(id);
-      }
+      if (next.has(id)) { next.delete(id); return next; }
+      if (next.size >= MAX_MASCOTS) { toast.error(`Máximo ${MAX_MASCOTS} mascotes.`); return prev; }
+      next.add(id);
       return next;
     });
   }, []);
 
-  const available = mascots.filter(m => getMascotBlock(m, now) === null);
-  const blocked   = mascots.filter(m => getMascotBlock(m, now) !== null);
-  const displayed = filter === "available" ? available : mascots;
+  const counts = useMemo(() => ({
+    available: mascots.filter(m => getBlock(m, now) === null).length,
+    cooldown:  mascots.filter(m => { const b = getBlock(m, now); return b?.type === "cooldown" || b?.type === "resting"; }).length,
+    all: mascots.length,
+  }), [mascots, now]);
 
-  // Sort: selected first, then by level desc
-  const sorted = [...displayed].sort((a, b) => {
-    const aSel = selected.has(a.id) ? 1 : 0;
-    const bSel = selected.has(b.id) ? 1 : 0;
-    if (bSel !== aSel) return bSel - aSel;
-    return b.level - a.level;
-  });
+  const displayed = useMemo(() => {
+    let list = mascots.filter(m => {
+      if (filter === "available") return getBlock(m, now) === null;
+      if (filter === "cooldown")  { const b = getBlock(m, now); return b?.type === "cooldown" || b?.type === "resting"; }
+      return true;
+    });
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter(m => displayName(m).toLowerCase().includes(q));
+    list = [...list].sort((a, b) => {
+      // selected always first
+      const as = selected.has(a.id) ? 1 : 0;
+      const bs = selected.has(b.id) ? 1 : 0;
+      if (bs !== as) return bs - as;
+      if (sort === "level_desc") return b.level - a.level;
+      if (sort === "level_asc")  return a.level - b.level;
+      if (sort === "stats_desc") return totalStats(b) - totalStats(a);
+      return displayName(a).localeCompare(displayName(b));
+    });
+    return list;
+  }, [mascots, filter, search, sort, selected, now]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,156 +294,328 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-      <input
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Nome da equipe"
-        className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
-      />
+    <form onSubmit={handleSubmit} className="mt-3 space-y-3">
 
-      {/* Tipo de equipe */}
-      <div className="space-y-1.5">
-        <p className="text-xs text-slate-500">Tipo de equipe</p>
-        <div className="grid gap-1.5">
-          {TEAM_TYPE_OPTIONS.map(opt => (
-            <button key={opt.value} type="button" onClick={() => setTeamType(opt.value)}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
-                teamType === opt.value
-                  ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white"
-                  : "border-border text-slate-400 hover:border-slate-600"
-              }`}>
-              <span className="font-semibold">{opt.label}</span>
-              <span className="text-slate-500 text-[10px]">— {opt.desc}</span>
-            </button>
-          ))}
-        </div>
+      {/* ── Barra de seleção ── */}
+      {selected.size > 0 && (
+        <SelectedBar mascots={mascots} selected={selected} onRemove={toggle} />
+      )}
+
+      {/* ── Configurações (nome, tipo) colapsável ── */}
+      <div className="rounded-xl border border-border bg-slate-900/40">
+        <button
+          type="button"
+          onClick={() => setShowConfig(v => !v)}
+          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-xs text-slate-400 hover:text-slate-200"
+        >
+          <span className="flex items-center gap-1.5 font-semibold">
+            <Users size={12} />
+            {name || "Equipe Arena Z"}
+            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+              teamType === "PVE" ? "border-green-500/40 text-green-300" :
+              teamType === "PVP" ? "border-red-500/40 text-red-300" :
+              "border-[#FFCB05]/40 text-[#FFCB05]"
+            }`}>{TEAM_TYPE_OPTIONS.find(o => o.value === teamType)?.label}</span>
+          </span>
+          {showConfig ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+        {showConfig && (
+          <div className="border-t border-border px-3 pb-3 pt-2 space-y-2">
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Nome da equipe"
+              className="w-full rounded-lg border border-border bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
+            />
+            <div className="flex gap-1.5">
+              {TEAM_TYPE_OPTIONS.map(opt => (
+                <button key={opt.value} type="button" onClick={() => setTeamType(opt.value)}
+                  className={`flex flex-1 flex-col items-center rounded-lg border px-2 py-2 text-center text-[10px] transition-colors ${
+                    teamType === opt.value
+                      ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white"
+                      : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                  }`}>
+                  <span className="text-base leading-none">{opt.icon}</span>
+                  <span className="mt-1 font-bold">{opt.label}</span>
+                  <span className="text-slate-500 text-[9px]">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Seletor de mascotes com filtro */}
+      {/* ── Controles de busca/filtro ── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          {/* Filtro tabs */}
-          <div className="flex rounded-lg border border-border overflow-hidden text-[10px]">
-            <button type="button" onClick={() => setFilter("available")}
-              className={`px-3 py-1.5 font-semibold transition-colors ${filter === "available" ? "bg-[#FFCB05]/15 text-[#FFCB05]" : "text-slate-500 hover:text-slate-300"}`}>
-              ✅ Disponíveis ({available.length})
+        {/* Busca */}
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nome…"
+            className="w-full rounded-lg border border-border bg-slate-900 pl-7 pr-8 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+              <X size={12} />
             </button>
-            <button type="button" onClick={() => setFilter("all")}
-              className={`px-3 py-1.5 font-semibold transition-colors border-l border-border ${filter === "all" ? "bg-[#FFCB05]/15 text-[#FFCB05]" : "text-slate-500 hover:text-slate-300"}`}>
-              Todos ({mascots.length})
+          )}
+        </div>
+
+        {/* Filtros + Sort + Compact toggle */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Filter pills */}
+          {(["available","cooldown","all"] as FilterKey[]).map(f => {
+            const labels = {
+              available: `✅ Livres (${counts.available})`,
+              cooldown:  `⏳ Cooldown (${counts.cooldown})`,
+              all:       `Todos (${counts.all})`,
+            };
+            return (
+              <button key={f} type="button" onClick={() => setFilter(f)}
+                className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                  filter === f
+                    ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
+                    : "border-border text-slate-500 hover:text-slate-300"
+                }`}>
+                {labels[f]}
+              </button>
+            );
+          })}
+
+          <div className="ml-auto flex items-center gap-1.5">
+            {/* Sort */}
+            <div className="relative flex items-center gap-1 rounded-lg border border-border bg-slate-900 px-2 py-1">
+              <ArrowUpDown size={10} className="text-slate-500 shrink-0" />
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value as SortKey)}
+                className="bg-transparent text-[10px] text-slate-400 outline-none cursor-pointer appearance-none pr-0.5"
+              >
+                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            {/* Compact toggle */}
+            <button type="button" onClick={() => setCompact(v => !v)}
+              className={`rounded-lg border px-2 py-1 text-[10px] transition-colors ${compact ? "border-[#FFCB05]/40 text-[#FFCB05]" : "border-border text-slate-500"}`}
+              title={compact ? "Modo detalhado" : "Modo compacto"}
+            >
+              {compact ? "⊞" : "⊟"}
             </button>
           </div>
-          <span className={`text-[10px] font-semibold ${selected.size >= MAX_MASCOTS ? "text-[#FFCB05]" : "text-slate-500"}`}>
-            {selected.size}/{MAX_MASCOTS}
-          </span>
-        </div>
-
-        {filter === "all" && blocked.length > 0 && (
-          <p className="text-[9px] text-slate-600">
-            {blocked.length} mascote(s) com cooldown — clique em &quot;Disponíveis&quot; para escondê-los.
-          </p>
-        )}
-
-        <div className="max-h-[420px] space-y-1.5 overflow-y-auto pr-0.5">
-          {sorted.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-slate-500">
-              {filter === "available"
-                ? "Nenhum mascote disponível agora. Veja a aba \"Todos\" para ver os cooldowns."
-                : "Nenhum mascote encontrado."}
-            </p>
-          ) : sorted.map(m => (
-            <MascotCard
-              key={m.id}
-              m={m}
-              selected={selected.has(m.id)}
-              disabled={!selected.has(m.id) && selected.size >= MAX_MASCOTS}
-              onToggle={() => toggle(m.id)}
-              now={now}
-            />
-          ))}
         </div>
       </div>
 
+      {/* ── Grade de mascotes ── */}
+      <div className="max-h-[440px] overflow-y-auto rounded-xl">
+        {displayed.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-slate-500">
+            {search ? `Nenhum resultado para "${search}"` :
+              filter === "available" ? "Nenhum mascote livre agora — veja \"Cooldown\" ou \"Todos\"." :
+              filter === "cooldown"  ? "Nenhum mascote em cooldown." :
+              "Nenhum mascote disponível."}
+          </div>
+        ) : (
+          <div className={`grid gap-1.5 ${compact ? "grid-cols-3 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}>
+            {displayed.map(m => (
+              <MascotPick
+                key={m.id}
+                m={m}
+                selected={selected.has(m.id)}
+                maxReached={!selected.has(m.id) && selected.size >= MAX_MASCOTS}
+                onToggle={() => toggle(m.id)}
+                now={now}
+                compact={compact}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Submit ── */}
       <button
         type="submit"
         disabled={pending || selected.size === 0}
-        className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
       >
-        {pending ? "Criando equipe…" : `Criar equipe Arena Z (${selected.size} mascote${selected.size !== 1 ? "s" : ""})`}
+        {pending
+          ? "Criando equipe…"
+          : selected.size === 0
+            ? "Selecione ao menos 1 mascote"
+            : `✅ Criar equipe "${name || "Arena Z"}" com ${selected.size} mascote${selected.size !== 1 ? "s" : ""}`}
       </button>
     </form>
   );
 }
 
+// ── AddMascotToTeamForm ────────────────────────────────────────────────────
+
 export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: string; mascots: ValidMascot[]; slotsUsed: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [mascotId, setMascotId] = useState("");
+  const [search, setSearch] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [open, setOpen] = useState(false);
   const slotsLeft = Math.max(0, MAX_MASCOTS - slotsUsed);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 5000);
+    const id = setInterval(() => setNow(Date.now()), 3000);
     return () => clearInterval(id);
   }, []);
 
   if (slotsLeft === 0) return null;
 
-  const available = mascots.filter(m => getMascotBlock(m, now) === null);
-  const blocked   = mascots.filter(m => getMascotBlock(m, now) !== null);
+  const available = mascots.filter(m => getBlock(m, now) === null);
+  const cooling   = mascots.filter(m => { const b = getBlock(m, now); return !!b && b.type !== "arena" && b.type !== "injured"; });
+  const selected  = mascots.find(m => m.id === mascotId);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return available.filter(m => !q || displayName(m).toLowerCase().includes(q))
+      .sort((a, b) => b.level - a.level);
+  }, [available, search]);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!mascotId) { toast.error("Escolha um mascote para repor a equipe."); return; }
+    if (!mascotId) { toast.error("Escolha um mascote."); return; }
     startTransition(async () => {
       const result = await addMascotToArenaTeamAction(teamId, mascotId);
       if (result.error) toast.error(result.error);
-      else { toast.success("Mascote adicionado ao time!"); setMascotId(""); router.refresh(); }
+      else { toast.success("Mascote adicionado!"); setMascotId(""); setOpen(false); router.refresh(); }
     });
   };
 
   return (
-    <form onSubmit={submit} className="mt-3 rounded-xl border border-slate-700/70 bg-slate-950/50 p-3 space-y-2">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-        Repor equipe ({slotsLeft} slot{slotsLeft > 1 ? "s" : ""})
-      </p>
-      <div className="flex gap-2">
-        <select
-          value={mascotId}
-          onChange={event => setMascotId(event.target.value)}
-          disabled={pending || available.length === 0}
-          className="flex-1 min-w-0 rounded-lg border border-border bg-slate-900 px-2 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60 disabled:opacity-50"
-        >
-          <option value="">{available.length === 0 ? "Nenhum mascote livre" : "Escolha um mascote…"}</option>
-          {available.map(m => (
-            <option key={m.id} value={m.id}>
-              {(m.nickname ?? getPokemonName(m.pokemonId))} Nv.{m.level} (For {m.statForce} / Vel {m.statAgility} / Vit {m.statVitality})
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          disabled={pending || !mascotId}
-          className="rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-[#1A1A2E] disabled:opacity-40 shrink-0"
-        >
-          {pending ? "…" : "Adicionar"}
-        </button>
-      </div>
-      {blocked.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[9px] text-slate-600">{blocked.length} mascote(s) em cooldown:</p>
-          {blocked.map(m => {
-            const blk = getMascotBlock(m, now)!;
-            return (
-              <div key={m.id} className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-900/30 px-2 py-1 text-[9px]">
-                <span className="text-slate-400">{m.nickname ?? getPokemonName(m.pokemonId)} Nv.{m.level}</span>
-                <span className="text-orange-400 font-mono">
-                  {blk.label}{blk.until ? ` – ${fmtCountdown(blk.until - now)}` : ""}
-                </span>
+    <form onSubmit={submit} className="mt-3 rounded-xl border border-slate-700/50 bg-slate-950/60">
+      {/* Header / toggle */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-xs"
+      >
+        <span className="font-semibold text-slate-300">
+          ➕ Repor equipe
+          <span className="ml-1.5 text-slate-500">({slotsLeft} slot{slotsLeft > 1 ? "s" : ""} livre{slotsLeft > 1 ? "s" : ""})</span>
+        </span>
+        <span className="flex items-center gap-1 text-slate-500">
+          {available.length > 0
+            ? <span className="text-green-400 font-semibold">{available.length} disponíve{available.length !== 1 ? "is" : "l"}</span>
+            : <span className="text-orange-400">Nenhum livre agora</span>}
+          {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </span>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-700/50 p-3 space-y-2">
+          {/* Search */}
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar mascote…"
+              className="w-full rounded-lg border border-border bg-slate-900 pl-7 pr-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
+            />
+          </div>
+
+          {/* Grid de disponíveis */}
+          {filtered.length === 0 && available.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-700 p-3 text-center text-[11px] text-slate-500">
+              Nenhum mascote livre agora.
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="text-center text-[11px] text-slate-500 py-2">Nenhum resultado.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5 max-h-[280px] overflow-y-auto">
+              {filtered.map(m => {
+                const sel = mascotId === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMascotId(sel ? "" : m.id)}
+                    className={[
+                      "relative flex items-center gap-2 rounded-lg border p-2 text-left transition-all",
+                      sel
+                        ? "border-[#FFCB05]/50 bg-[#FFCB05]/8 ring-1 ring-[#FFCB05]/30"
+                        : "border-slate-700/50 bg-slate-900/40 hover:border-[#FFCB05]/25",
+                    ].join(" ")}
+                  >
+                    {sel && (
+                      <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#FFCB05] text-[7px] font-black text-[#1A1A2E]">✓</span>
+                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={getSpriteUrl(m.pokemonId, true)}
+                      alt=""
+                      className="h-9 w-9 object-contain shrink-0"
+                      style={{ imageRendering: "pixelated" }}
+                      onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-[10px] font-semibold text-slate-200">{displayName(m)}</p>
+                      <p className="text-[9px] text-slate-500">Nv.{m.level} · Σ{totalStats(m)}</p>
+                      <p className="text-[9px] text-slate-600">
+                        <span className="text-red-400">{m.statForce}</span>/
+                        <span className="text-yellow-400">{m.statAgility}</span>/
+                        <span className="text-blue-400">{m.statInstinct}</span>/
+                        <span className="text-green-400">{m.statVitality}</span>
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Em cooldown */}
+          {cooling.length > 0 && (
+            <details className="group">
+              <summary className="cursor-pointer list-none text-[9px] text-slate-600 hover:text-slate-400 flex items-center gap-1">
+                <ChevronDown size={10} className="group-open:rotate-180 transition-transform" />
+                {cooling.length} mascote{cooling.length > 1 ? "s" : ""} em cooldown/repouso
+              </summary>
+              <div className="mt-1.5 space-y-1">
+                {cooling.map(m => {
+                  const blk = getBlock(m, now)!;
+                  const bs = BLOCK_STYLE[blk.type];
+                  return (
+                    <div key={m.id} className={`flex items-center justify-between rounded-lg border px-2 py-1.5 ${bs.cls}`}>
+                      <div className="flex items-center gap-1.5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-6 w-6 object-contain grayscale" style={{ imageRendering: "pixelated" }} onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }} />
+                        <span className="text-[10px] font-medium">{displayName(m)} Nv.{m.level}</span>
+                      </div>
+                      <div className="text-right text-[9px] font-mono">
+                        {bs.icon} {blk.until ? <LiveCountdown until={blk.until} /> : bs.label}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </details>
+          )}
+
+          {/* Preview do selecionado + botão submit */}
+          {selected && (
+            <div className="flex items-center gap-2 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={getSpriteUrl(selected.pokemonId, true)} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(selected.pokemonId); }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-semibold text-[#FFCB05] truncate">{displayName(selected)}</p>
+                <p className="text-[9px] text-slate-400">Nv.{selected.level} · For {selected.statForce} Vel {selected.statAgility} Vit {selected.statVitality}</p>
+              </div>
+              <button
+                type="submit"
+                disabled={pending}
+                className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 shrink-0"
+              >
+                {pending ? "…" : "Adicionar"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </form>
