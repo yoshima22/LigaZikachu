@@ -7,19 +7,24 @@ import type { ArenaBattleResult } from "@prisma/client";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
-  restAfterSusHours: 3,
+  restAfterSusHours: 1.5,      // 90 min base; reduzível por vitality+happiness+amigos
   restAfterWinMinutes: 30,
   defeatedLootPreservedPct: 0.6,
   defeatedLootStolenPct: 0.3,
   defeatedLootBurnPct: 0.1,
-  botCooldownMinutes: 3,
-  pvpCooldownMinutes: 10,
+  botCooldownMinutes: 5,       // cooldown PvE separado por equipe
+  pvpCooldownMinutes: 5,
   // Multiplicador de tempo: +8.3% por hora, cap 4x após 36h
   multPerHour: 1 / 12,  // 1 unidade de mult a cada 12h
   multCap: 4.0,
   // Penalidade PvP: retirada rápida após última batalha (<2h) reduz mult em 50%
   pvpQuickExitPenaltyHours: 2,
 };
+
+export const ARENA_MAX_TEAMS = 3;
+export const PVE_DAILY_COINS_CAP = 2000; // ZC PvE por jogador por dia (meia-noite BRT)
+export const ARENA_ROOMS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
+export type ArenaRoom = typeof ARENA_ROOMS[number];
 
 // ── Renda Passiva ─────────────────────────────────────────────────────────────
 // Por hora por mascote na equipe
@@ -42,8 +47,7 @@ export async function applyPassiveIncome(teamId: string): Promise<{ coins: numbe
     include: { members: { select: { id: true } } },
   });
   if (!team || team.status !== "ACTIVE" || team.members.length === 0) return null;
-  // Renda passiva é exclusiva de equipes PvP ou BOTH — PvE só ganha pelo combate
-  if (team.teamType === "PVE") return null;
+  // Renda passiva é para todas as equipes (PvP passivo)
 
   const lastAt = team.lastPassiveIncomeAt ?? team.enteredAt;
   const hoursElapsed = (Date.now() - new Date(lastAt).getTime()) / 3_600_000;
@@ -443,6 +447,89 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
   };
 }
 
+/** Retorna dados das salas para o painel de inspeção (grid de salas) */
+export async function getRoomsData(viewerPlayerId?: string) {
+  const teams = await prisma.arenaTeam.findMany({
+    where: { status: "ACTIVE" },
+    include: {
+      members: {
+        include: { mascot: { select: { pokemonId: true, nickname: true, level: true } } },
+        orderBy: { slot: "asc" },
+      },
+      player: { select: { id: true, displayName: true } },
+    },
+    orderBy: { enteredAt: "asc" },
+  });
+
+  // Times que o viewer já lutou (para revelar nomes dos pokémons)
+  const revealedTeamIds = new Set<string>();
+  if (viewerPlayerId) {
+    const foughtBattles = await prisma.arenaBattle.findMany({
+      where: { attackerPlayerId: viewerPlayerId, type: { in: ["PVP"] } },
+      select: { defenseTeamId: true },
+    });
+    foughtBattles.forEach(b => { if (b.defenseTeamId) revealedTeamIds.add(b.defenseTeamId); });
+  }
+
+  const rooms = ARENA_ROOMS.map(roomLevel => {
+    const roomTeams = teams.filter(t => t.roomLevel === roomLevel);
+    return {
+      roomLevel,
+      teamCount: roomTeams.length,
+      teams: roomTeams.map(t => {
+        const isOwn = viewerPlayerId ? t.playerId === viewerPlayerId : false;
+        const revealed = isOwn || revealedTeamIds.has(t.id);
+        return {
+          id: t.id,
+          name: t.name,
+          playerName: t.player.displayName,
+          playerId: t.player.id,
+          isOwn,
+          vaultCoins: isOwn ? t.vaultCoins : null,
+          enteredAt: t.enteredAt,
+          members: t.members.map(m => ({
+            slot: m.slot,
+            pokemonId: m.mascot.pokemonId,
+            level: m.mascot.level,
+            name: revealed ? (m.mascot.nickname ?? getPokemonName(m.mascot.pokemonId)) : null,
+          })),
+        };
+      }),
+    };
+  });
+
+  return rooms;
+}
+
+/** Top 2 jogadores: mais tempo + mais vitórias, ou mais salas simultâneas */
+export async function getTopArenaPlayers() {
+  const teams = await prisma.arenaTeam.findMany({
+    where: { status: "ACTIVE" },
+    include: { player: { select: { id: true, displayName: true } } },
+    orderBy: { enteredAt: "asc" },
+  });
+
+  const playerStats = new Map<string, { displayName: string; teamCount: number; totalHours: number }>();
+  for (const t of teams) {
+    const hours = (Date.now() - new Date(t.enteredAt).getTime()) / 3_600_000;
+    const prev = playerStats.get(t.player.id);
+    if (prev) {
+      prev.teamCount++;
+      prev.totalHours += hours;
+    } else {
+      playerStats.set(t.player.id, { displayName: t.player.displayName, teamCount: 1, totalHours: hours });
+    }
+  }
+
+  // Score: equipes simultâneas * 100 + horas totais
+  const sorted = [...playerStats.entries()]
+    .map(([id, s]) => ({ id, ...s, score: s.teamCount * 100 + s.totalHours }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+
+  return sorted;
+}
+
 function remainingLoot(loot: ArenaLoot, stolen: ArenaLoot, burned: ArenaLoot): ArenaLoot {
   return {
     coins: Math.max(0, loot.coins - stolen.coins - burned.coins),
@@ -691,10 +778,29 @@ async function checkRetireCooldown(mascotIds: string[]): Promise<void> {
   throw new Error(`${name} precisa esperar ${remaining} min antes de entrar em nova equipe (saiu com recompensas recentemente).`);
 }
 
-export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], teamType: "PVE" | "PVP" | "BOTH" = "BOTH") {
+export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], roomLevel: ArenaRoom = 100) {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
+  if (!ARENA_ROOMS.includes(roomLevel as ArenaRoom)) throw new Error("Sala inválida.");
+
   const mascots = await validateArenaMascots(playerId, mascotIds);
-  const teamName = name.trim() || "Equipe Arena Z";
+
+  // Valida que todos os mascotes têm nível <= roomLevel
+  for (const m of mascots) {
+    if (m.level > roomLevel) {
+      throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} (nível ${m.level}) está acima do máximo da sala (nível ${roomLevel}).`);
+    }
+  }
+
+  // Limite de 3 equipes simultâneas por jogador
+  const activeCount = await prisma.arenaTeam.count({ where: { playerId, status: "ACTIVE" } });
+  if (activeCount >= ARENA_MAX_TEAMS) {
+    throw new Error(`Você já tem ${ARENA_MAX_TEAMS} equipes ativas na Arena. Retire uma antes de criar nova.`);
+  }
+
+  // Nome padrão: "Time do [primeiro pokemon] de [player]"
+  const player = await prisma.player.findUnique({ where: { id: playerId }, select: { displayName: true } });
+  const firstName = mascots[0].nickname ?? getPokemonName(mascots[0].pokemonId);
+  const teamName = name.trim() || `Time do ${firstName} de ${player?.displayName ?? "Jogador"}`;
 
   // Bloqueia mascotes em cooldown pós-retirada (10 min)
   await checkRetireCooldown(mascots.map(m => m.id));
@@ -718,6 +824,10 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
       throw new Error(`Mascote ja esta na equipe "${activeLinks[0].team.name}". Atualize a pagina e tente novamente.`);
     }
 
+    // Reconfirma limite 3 dentro da transação
+    const activeNow = await tx.arenaTeam.count({ where: { playerId, status: "ACTIVE" } });
+    if (activeNow >= ARENA_MAX_TEAMS) throw new Error("Limite de equipes atingido.");
+
     const lockedMascots = await tx.mascot.updateMany({
       where: {
         id: { in: mascots.map(m => m.id) },
@@ -735,7 +845,7 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
       data: {
         playerId,
         name: teamName,
-        teamType,
+        roomLevel,
         members: {
           create: mascots.map((m, index) => ({ mascotId: m.id, slot: index + 1 })),
         },
@@ -876,35 +986,38 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
     ? (Date.now() - lastBattleAt.getTime()) < ARENA_Z_CONFIG.pvpQuickExitPenaltyHours * 3_600_000
     : false;
 
-  let vaultFinal: ReturnType<typeof applyMultiplierToVault>;
-  if (team.teamType === "BOTH") {
-    // Para equipes BOTH: o multiplicador de tempo se aplica apenas à renda passiva PvP estimada.
-    // A parcela de ZC/EXP ganhos em batalhas PvE é paga sem multiplicador extra.
-    const hoursActive = (Date.now() - new Date(team.enteredAt).getTime()) / 3_600_000;
-    const cappedHours = Math.min(hoursActive, PASSIVE_MAX_HOURS);
-    const memberCount = team.members.length;
-    const estimatedPvpCoins = Math.floor(cappedHours * memberCount * PASSIVE_COINS_PER_MASCOT_PER_H);
-    const estimatedPvpExp   = Math.floor(cappedHours * memberCount * PASSIVE_EXP_PER_MASCOT_PER_H);
-    // Porção PvP (renda passiva): limitada ao que existe no cofre
-    const pvpCoins = Math.min(team.vaultCoins, estimatedPvpCoins);
-    const pvpExp   = Math.min(team.vaultExp, estimatedPvpExp);
-    const pveCoins = Math.max(0, team.vaultCoins - pvpCoins);
-    const pveExp   = Math.max(0, team.vaultExp - pvpExp);
-    // Aplica multiplicador apenas à porção PvP
-    const pvpPart = applyMultiplierToVault({ coins: pvpCoins, exp: pvpExp, food: 0, sweet: 0 }, mult, hadRecentBattle);
-    vaultFinal = {
-      coins: pveCoins + pvpPart.coins,
-      exp:   pveExp   + pvpPart.exp,
-      food:  team.vaultFood,
-      sweet: team.vaultSweet,
-      effectiveMult: pvpPart.effectiveMult,
-    };
-  } else {
-    vaultFinal = applyMultiplierToVault(
-      { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
-      mult, hadRecentBattle
-    );
-  }
+  // Todas as equipes são BOTH — multiplicador de tempo aplica apenas à renda passiva PvP estimada
+  const hoursActive = (Date.now() - new Date(team.enteredAt).getTime()) / 3_600_000;
+  const cappedHours = Math.min(hoursActive, PASSIVE_MAX_HOURS);
+  const memberCount = team.members.length;
+  const estimatedPvpCoins = Math.floor(cappedHours * memberCount * PASSIVE_COINS_PER_MASCOT_PER_H);
+  const estimatedPvpExp   = Math.floor(cappedHours * memberCount * PASSIVE_EXP_PER_MASCOT_PER_H);
+  const pvpCoins = Math.min(team.vaultCoins, estimatedPvpCoins);
+  const pvpExp   = Math.min(team.vaultExp, estimatedPvpExp);
+  const pveCoins = Math.max(0, team.vaultCoins - pvpCoins);
+  const pveExp   = Math.max(0, team.vaultExp - pvpExp);
+  const pvpPart = applyMultiplierToVault({ coins: pvpCoins, exp: pvpExp, food: 0, sweet: 0 }, mult, hadRecentBattle);
+
+  // Cap diário PvE: calcula quanto do PvE pode ser creditado hoje
+  const player = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true },
+  });
+  const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const earnedToday = player?.arenaPveCoinsDate === todayBRT ? (player.arenaPveCoinsEarned ?? 0) : 0;
+  const pveAvailable = Math.max(0, PVE_DAILY_COINS_CAP - earnedToday);
+  const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
+
+  const vaultFinal = {
+    coins: pveCoinsCapped + pvpPart.coins,
+    exp:   pveExp   + pvpPart.exp,
+    food:  team.vaultFood,
+    sweet: team.vaultSweet,
+    effectiveMult: pvpPart.effectiveMult,
+    pveCapReached: pveCoins > 0 && pveCoinsCapped < pveCoins,
+    pveCoinsCapped,
+    pveCoinsBeyondCap: pveCoins - pveCoinsCapped,
+  };
   const expMascotIds = await getArenaExpMascotIds(team.id, playerId, team.enteredAt);
   if (vaultFinal.exp > 0 && expMascotIds.length === 0) {
     throw new Error("Nao foi possivel identificar quais mascotes devem receber a EXP do cofre. A equipe nao foi retirada.");
@@ -933,17 +1046,32 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
         create: { playerId, type: "SWEET", quantity: vaultFinal.sweet },
       });
     }
-    // restingUntil em mascote FREE = cooldown de re-entrada na arena (10 min)
-    const entryCooldownUntil = new Date(Date.now() + RETIRE_COOLDOWN_MS);
+    // Cooldown de re-entrada só se cofre tinha ≥ 1 ZC resgatado (retiredAt marca isso)
+    const hadCoins = team.vaultCoins > 0;
+    const entryCooldownUntil = hadCoins ? new Date(Date.now() + RETIRE_COOLDOWN_MS) : null;
     for (const member of team.members) {
       await tx.mascot.updateMany({
         where: { id: member.mascotId, arenaState: { not: "INJURED" } },
         data: { arenaState: "FREE", restingUntil: entryCooldownUntil },
       });
     }
+    // Atualiza contador PvE diário do jogador
+    if (pveCoinsCapped > 0) {
+      await tx.player.update({
+        where: { id: playerId },
+        data: {
+          arenaPveCoinsDate: todayBRT,
+          arenaPveCoinsEarned: earnedToday + pveCoinsCapped,
+        },
+      });
+    }
     await tx.arenaTeam.update({
       where: { id: team.id },
-      data: { status: "RETIRED", vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0, retiredAt: new Date() },
+      data: {
+        status: "RETIRED",
+        vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0,
+        retiredAt: hadCoins ? new Date() : null,
+      },
     });
   });
 
@@ -1055,7 +1183,6 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
   if (team.members.length === 0) throw new Error("Equipe vazia.");
-  if (team.teamType === "PVP") throw new Error("Equipe Somente PvP nao pode enfrentar bots.");
 
   // Admin: força debug mode automaticamente (sem cooldown, sem efeito no ranking/loot)
   const ownerUser = await prisma.player.findUnique({ where: { id: playerId }, include: { user: { select: { role: true } } } });
@@ -1118,19 +1245,25 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   // Aplica renda passiva acumulada antes da batalha
   await applyPassiveIncome(teamId).catch(() => null);
 
-  // Cooldown: impede spam de bot battles
-  const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackTeamId: teamId, type: "BOT" },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  });
-  if (lastBattle) {
-    const elapsed = Date.now() - lastBattle.createdAt.getTime();
+  // Cooldown PvE separado por equipe (usa lastPveBattleAt)
+  if (team.lastPveBattleAt) {
+    const elapsed = Date.now() - new Date(team.lastPveBattleAt).getTime();
     const cooldownMs = ARENA_Z_CONFIG.botCooldownMinutes * 60_000;
     if (elapsed < cooldownMs) {
       const remaining = Math.ceil((cooldownMs - elapsed) / 1000);
-      throw new Error(`Aguarde ${remaining}s antes do proximo combate.`);
+      throw new Error(`Aguarde ${remaining}s antes do proximo combate PvE.`);
     }
+  }
+
+  // Cap diário PvE
+  const pvePlayerData = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true },
+  });
+  const pveTodayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const pveEarnedToday = pvePlayerData?.arenaPveCoinsDate === pveTodayBRT ? (pvePlayerData.arenaPveCoinsEarned ?? 0) : 0;
+  if (pveEarnedToday >= PVE_DAILY_COINS_CAP) {
+    throw new Error(`Você atingiu o limite diário de ${PVE_DAILY_COINS_CAP} ZC PvE. O limite reseta à meia-noite (horário de Brasília).`);
   }
 
   const teamDebuffPct = getArenaDebuffPct(team.enteredAt);
@@ -1221,6 +1354,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
           vaultFood: { increment: reward.food },
           vaultSweet: { increment: reward.sweet },
           lastBattleAt: new Date(),
+          lastPveBattleAt: new Date(),
           pendingBotJson: Prisma.JsonNull,
           pendingBotDifficulty: null,
         },
@@ -1354,7 +1488,6 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
-  if (team.teamType === "PVP") throw new Error("Equipe Somente PvP nao pode gerar bot.");
 
   // Bloqueia lock de bot se há PvP não-visto (mesmo mecanismo de runBotBattle)
   const unseenPvp = await getUnseenPvpAttack(teamId);
@@ -1656,8 +1789,6 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (isAdminBattle) throw new Error("Contas admin nao participam de PvP real. Use o modo debug para testes.");
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE") throw new Error("As duas equipes precisam estar ativas.");
   if (attackTeam.members.length === 0 || defenseTeam.members.length === 0) throw new Error("As equipes precisam ter mascotes.");
-  if (attackTeam.teamType === "PVE") throw new Error("Equipe Somente PvE nao pode atacar jogadores.");
-  if (defenseTeam.teamType === "PVE") throw new Error("Equipe Somente PvE nao fica disponivel para PvP.");
 
   // Cooldown PvP: 10 min entre ataques PvP da mesma equipe atacante
   const lastPvp = await prisma.arenaBattle.findFirst({
@@ -1959,13 +2090,33 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 }
 
 export async function healMascotSus(playerId: string, mascotId: string) {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId },
+    include: {
+      relationsAsA: { where: { type: "FRIEND" }, include: { mascotB: { select: { playerId: true, statVitality: true, happiness: true } } } },
+      relationsAsB: { where: { type: "FRIEND" }, include: { mascotA: { select: { playerId: true, statVitality: true, happiness: true } } } },
+    },
+  });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote nao encontrado.");
   if (mascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
-  // Aplica bônus acumulado por Super Amigos (visita SUS)
+
+  // Base: 90 min (1.5h)
   const baseRestMs = ARENA_Z_CONFIG.restAfterSusHours * 3_600_000;
+
+  // Redução por vitality+happiness do mascote ferido (até 20 min)
+  const vitalFactor = Math.min(20 * 60_000, Math.floor((mascot.statVitality + mascot.happiness) / 5) * 60_000);
+
+  // Redução por Super Amigos acumulados (visitas anteriores)
   const bonusReductionMs = (mascot.susRestBonusMinutes ?? 0) * 60_000;
-  const effectiveRestMs = Math.max(30 * 60_000, baseRestMs - bonusReductionMs); // mínimo 30min
+
+  // Redução por amigos online que têm mascotes com alta felicidade
+  const friends = [
+    ...mascot.relationsAsA.map(r => r.mascotB),
+    ...mascot.relationsAsB.map(r => r.mascotA),
+  ];
+  const friendReductionMs = Math.min(15 * 60_000, friends.length * 3 * 60_000); // até 15 min (5 amigos)
+
+  const effectiveRestMs = Math.max(30 * 60_000, baseRestMs - bonusReductionMs - vitalFactor - friendReductionMs);
   const restingUntil = new Date(Date.now() + effectiveRestMs);
 
   await prisma.$transaction(async (tx) => {
@@ -1979,17 +2130,87 @@ export async function healMascotSus(playerId: string, mascotId: string) {
       where: { id: mascot.id },
       data: { arenaState: "RESTING", injuredAt: null, restingUntil, susRestBonusMinutes: 0 },
     });
-    const bonusNote = bonusReductionMs > 0
-      ? ` (repouso reduzido ${mascot.susRestBonusMinutes}min por Super Amigos!)`
-      : "";
+    const reductions: string[] = [];
+    if (bonusReductionMs > 0) reductions.push(`${mascot.susRestBonusMinutes}min por Super Amigos`);
+    if (vitalFactor > 0) reductions.push(`${Math.floor(vitalFactor / 60_000)}min por vitalidade/felicidade`);
+    if (friendReductionMs > 0) reductions.push(`${Math.floor(friendReductionMs / 60_000)}min por ${friends.length} amigo(s)`);
+    const bonusNote = reductions.length > 0 ? ` (reduzido: ${reductions.join(", ")})` : "";
     await tx.mascotEvent.create({
       data: {
         mascotId: mascot.id,
         emoji: "🏥",
-        description: `Recebeu Atendimento SUS e entrou em repouso ate ${restingUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.${bonusNote}`,
+        description: `Recebeu Atendimento SUS. Repouso até ${restingUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.${bonusNote}`,
+      },
+    });
+
+    // Gera evento social: amigos que ajudaram
+    if (friends.length > 0) {
+      await tx.mascotEvent.create({
+        data: {
+          mascotId: mascot.id,
+          emoji: "🤝",
+          description: `${friends.length} amigo(s) ajudaram na recuperação, reduzindo o tempo de repouso.`,
+        },
+      });
+    }
+  });
+}
+
+/** Usa o escudo diário para proteger mascote de um amigo no SUS */
+export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: string) {
+  const targetMascot = await prisma.mascot.findUnique({
+    where: { id: targetMascotId },
+    include: { player: { select: { displayName: true } } },
+  });
+  if (!targetMascot) throw new Error("Mascote nao encontrado.");
+  if (targetMascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
+  if (targetMascot.playerId === shieldOwnerPlayerId) throw new Error("Nao pode usar o escudo em si mesmo.");
+
+  // Verifica amizade entre os dois jogadores
+  const friendship = await prisma.mascotRelation.findFirst({
+    where: {
+      type: "FRIEND",
+      OR: [
+        { mascotA: { playerId: shieldOwnerPlayerId }, mascotB: { playerId: targetMascot.playerId } },
+        { mascotB: { playerId: shieldOwnerPlayerId }, mascotA: { playerId: targetMascot.playerId } },
+      ],
+    },
+  });
+  if (!friendship) throw new Error("Voce nao tem amizade com o dono deste mascote.");
+
+  // Verifica se ainda tem escudo hoje
+  const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const shieldPlayer = await prisma.player.findUnique({
+    where: { id: shieldOwnerPlayerId },
+    select: { susShieldDate: true, displayName: true },
+  });
+  if (shieldPlayer?.susShieldDate === todayBRT) {
+    throw new Error("Voce ja usou seu escudo diario. O escudo reseta a meia-noite (horario de Brasilia).");
+  }
+
+  // Aplica: reduz tempo de repouso em 20 min + bloqueia proximo ataque oportunista
+  const currentRest = targetMascot.restingUntil ?? new Date(Date.now() + ARENA_Z_CONFIG.restAfterSusHours * 3_600_000);
+  const newRest = new Date(Math.max(Date.now() + 30 * 60_000, currentRest.getTime() - 20 * 60_000));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.player.update({
+      where: { id: shieldOwnerPlayerId },
+      data: { susShieldDate: todayBRT },
+    });
+    await tx.mascot.update({
+      where: { id: targetMascotId },
+      data: { restingUntil: newRest, susRestBonusMinutes: { increment: 20 } },
+    });
+    await tx.mascotEvent.create({
+      data: {
+        mascotId: targetMascotId,
+        emoji: "🛡️",
+        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Tempo de repouso reduzido em 20 min.`,
       },
     });
   });
+
+  return { newRestingUntil: newRest };
 }
 
 // ── Tutorial bonus ────────────────────────────────────────────────────────────

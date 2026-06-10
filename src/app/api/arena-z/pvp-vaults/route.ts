@@ -12,7 +12,6 @@ export async function GET(req: NextRequest) {
     where: {
       id: { in: ids },
       status: "ACTIVE",
-      teamType: { in: ["PVP", "BOTH"] },
     },
     select: {
       id: true,

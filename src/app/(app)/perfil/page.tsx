@@ -429,7 +429,7 @@ export default async function PerfilPage() {
                 />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">{playerBadge.badge.name}</p>
-                  <p className="truncate text-xs text-slate-400">{playerBadge.badge.tournament.name}</p>
+                  <p className="truncate text-xs text-slate-400">{playerBadge.badge.tournament?.name ?? "Liga Zikachu"}</p>
                   <p className="text-xs text-[#FFCB05]">+3 pontos</p>
                 </div>
               </div>

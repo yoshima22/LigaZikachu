@@ -255,6 +255,9 @@ model Player {
   bazarFavorites          BazarFavorite[]
   shellGameSessions       ShellGameSession[]
   arenaTutorialClaimed    Boolean              @default(false)
+  arenaPveCoinsDate       String               @default("")  // "YYYY-MM-DD" BRT — data do contador diário PvE
+  arenaPveCoinsEarned     Int                  @default(0)   // ZC PvE resgatados hoje
+  susShieldDate           String               @default("")  // "YYYY-MM-DD" BRT — escudo SUS usado hoje
   supporterPasses         SupporterPass[]
 
   @@map("players")
@@ -1478,13 +1481,14 @@ model ArenaTeam {
   vaultFood      Int             @default(0)
   vaultSweet     Int             @default(0)
   multiplier     Decimal         @default(1) @db.Decimal(5, 2)
-  teamType       String          @default("BOTH") // PVE | PVP | BOTH
+  roomLevel      Int             @default(0)       // sala: 10, 20, ..., 100 (max nível permitido)
   pendingBotJson Json?
   pendingBotDifficulty String?
-  lastPassiveIncomeAt DateTime    @default(now())  // última vez que renda passiva foi aplicada
+  lastPassiveIncomeAt DateTime    @default(now())
   enteredAt      DateTime        @default(now())
-  lastBattleAt   DateTime?
-  retiredAt      DateTime?       // set quando retirou COM recompensas (gera cooldown de 10 min nos mascotes)
+  lastBattleAt   DateTime?       // última batalha PvP
+  lastPveBattleAt DateTime?      // última batalha PvE (cooldown separado)
+  retiredAt      DateTime?       // set quando retirou COM recompensas ≥ 1 ZC (gera cooldown de 10 min)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 

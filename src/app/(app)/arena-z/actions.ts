@@ -82,10 +82,12 @@ async function checkTeamStaleFromIncomingAttack(
   };
 }
 
-export async function createArenaTeamAction(mascotIds: string[], name: string, teamType: "PVE" | "PVP" | "BOTH"): Promise<{ error?: string }> {
+export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number): Promise<{ error?: string }> {
   try {
     const playerId = await getCurrentPlayerId();
-    await createArenaTeam(playerId, name, mascotIds, teamType);
+    const { ARENA_ROOMS } = await import("@/lib/arena-z");
+    if (!ARENA_ROOMS.includes(roomLevel as typeof ARENA_ROOMS[number])) return { error: "Sala inválida." };
+    await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number]);
     revalidatePath("/arena-z");
     revalidatePath("/mascotes");
     return {};

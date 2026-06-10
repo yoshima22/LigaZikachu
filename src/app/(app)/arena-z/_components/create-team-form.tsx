@@ -23,11 +23,8 @@ export interface ValidMascot {
 
 const MAX_MASCOTS = 6;
 
-const TEAM_TYPE_OPTIONS = [
-  { value: "PVE"  as const, label: "PvE",     desc: "Apenas bots", icon: "🤖" },
-  { value: "PVP"  as const, label: "PvP",     desc: "Apenas jogadores", icon: "⚔️" },
-  { value: "BOTH" as const, label: "PvE+PvP", desc: "Ambos", icon: "🏆" },
-];
+const ARENA_ROOM_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
+type ArenaRoomLevel = typeof ARENA_ROOM_OPTIONS[number];
 
 type SortKey = "level_desc" | "level_asc" | "stats_desc" | "name_asc";
 type FilterKey = "available" | "cooldown" | "all";
@@ -232,7 +229,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
-  const [teamType, setTeamType] = useState<"PVE" | "PVP" | "BOTH">("PVE");
+  const [roomLevel, setRoomLevel] = useState<ArenaRoomLevel>(100);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("level_desc");
   const [filter, setFilter] = useState<FilterKey>("available");
@@ -283,8 +280,14 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selected.size === 0) { toast.error("Selecione ao menos 1 mascote."); return; }
+    // Valida nível máximo da sala selecionada
+    const overLevel = mascots.filter(m => selected.has(m.id) && m.level > roomLevel);
+    if (overLevel.length > 0) {
+      toast.error(`${overLevel[0].nickname ?? getPokemonName(overLevel[0].pokemonId)} (Nv.${overLevel[0].level}) está acima do máximo da sala (Nv.${roomLevel}).`);
+      return;
+    }
     startTransition(async () => {
-      const r = await createArenaTeamAction([...selected], name.trim() || "Equipe Arena Z", teamType);
+      const r = await createArenaTeamAction([...selected], name.trim(), roomLevel);
       if (r.error) toast.error(r.error);
       else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setName(""); }
     });
@@ -298,7 +301,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         <SelectedBar mascots={mascots} selected={selected} onRemove={toggle} />
       )}
 
-      {/* ── Configurações (nome, tipo) colapsável ── */}
+      {/* ── Configurações (nome, sala) colapsável ── */}
       <div className="rounded-xl border border-border bg-slate-900/40">
         <button
           type="button"
@@ -307,12 +310,10 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         >
           <span className="flex items-center gap-1.5 font-semibold">
             <Users size={12} />
-            {name || "Equipe Arena Z"}
-            <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
-              teamType === "PVE" ? "border-green-500/40 text-green-300" :
-              teamType === "PVP" ? "border-red-500/40 text-red-300" :
-              "border-[#FFCB05]/40 text-[#FFCB05]"
-            }`}>{TEAM_TYPE_OPTIONS.find(o => o.value === teamType)?.label}</span>
+            {name || "Nome automático"}
+            <span className="rounded-full border border-[#FFCB05]/40 text-[#FFCB05] px-1.5 py-0.5 text-[9px] font-bold">
+              Sala Nv.{roomLevel}
+            </span>
           </span>
           {showConfig ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </button>
@@ -321,22 +322,24 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Nome da equipe"
+              placeholder="Nome da equipe (vazio = automático)"
               className="w-full rounded-lg border border-border bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
             />
-            <div className="flex gap-1.5">
-              {TEAM_TYPE_OPTIONS.map(opt => (
-                <button key={opt.value} type="button" onClick={() => setTeamType(opt.value)}
-                  className={`flex flex-1 flex-col items-center rounded-lg border px-2 py-2 text-center text-[10px] transition-colors ${
-                    teamType === opt.value
-                      ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white"
-                      : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
-                  }`}>
-                  <span className="text-base leading-none">{opt.icon}</span>
-                  <span className="mt-1 font-bold">{opt.label}</span>
-                  <span className="text-slate-500 text-[9px]">{opt.desc}</span>
-                </button>
-              ))}
+            <div>
+              <p className="mb-1.5 text-[10px] text-slate-500 font-semibold">Sala (nível máximo dos mascotes):</p>
+              <div className="flex flex-wrap gap-1.5">
+                {ARENA_ROOM_OPTIONS.map(lvl => (
+                  <button key={lvl} type="button" onClick={() => setRoomLevel(lvl)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
+                      roomLevel === lvl
+                        ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
+                        : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                    }`}>
+                    Nv.{lvl}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
             </div>
           </div>
         )}
