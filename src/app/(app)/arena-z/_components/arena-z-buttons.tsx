@@ -388,7 +388,7 @@ function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; on
           {" "}· {battle.rounds} turnos
         </p>
         <p className="mt-0.5 text-[11px] text-slate-600">
-          {new Date(battle.happenedAt).toLocaleString("pt-BR")}
+          {new Date(battle.happenedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
         </p>
 
         {/* Resultado do cofre (loot roubado/perdido) */}
@@ -494,7 +494,7 @@ function ArenaStaleModal({ notice, onClose }: { notice: ArenaStaleNotice; onClos
         <h3 className="mt-2 text-xl font-black text-white">Você foi atacado!</h3>
         <p className="mt-2 text-sm text-slate-300">{notice.message}</p>
         {notice.happenedAt && (
-          <p className="mt-2 text-[11px] text-slate-500">Ocorrido em {new Date(notice.happenedAt).toLocaleString("pt-BR")}</p>
+          <p className="mt-2 text-[11px] text-slate-500">Ocorrido em {new Date(notice.happenedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
         )}
         <div className={`mt-4 grid gap-2 ${notice.battleId ? "sm:grid-cols-2" : ""}`}>
           {notice.battleId && (

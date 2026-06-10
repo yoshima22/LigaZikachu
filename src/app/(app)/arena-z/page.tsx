@@ -31,7 +31,7 @@ type Tab = typeof TABS[number];
 function stateLabel(state: string, restingUntil?: Date | null) {
   if (state === "INJURED") return "Ferido";
   if (state === "RESTING") return restingUntil && restingUntil > new Date()
-    ? `Repouso até ${restingUntil.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+    ? `Repouso até ${restingUntil.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`
     : "Repouso concluído";
   if (state === "ARENA") return "Na Arena";
   return "Livre";
@@ -90,7 +90,7 @@ function getTeamBlockedReason(team: TeamReadiness): string | null {
     const name = member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId);
     if (member.mascot.arenaState === "INJURED") return `${name} está ferido e precisa de Atendimento SUS.`;
     if (member.mascot.restingUntil && member.mascot.restingUntil > now)
-      return `${name} está em repouso até ${member.mascot.restingUntil.toLocaleString("pt-BR")}.`;
+      return `${name} está em repouso até ${member.mascot.restingUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.`;
   }
   return null;
 }
@@ -332,7 +332,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
         <div className="rounded-2xl border border-red-400/50 bg-red-500/10 p-4">
           <p className="text-xs font-bold uppercase tracking-widest text-red-300">⚠️ Você foi atacado!</p>
           <p className="mt-1 text-sm text-red-50">
-            {recentIncomingName} atacou uma das suas equipes em {recentIncomingBattle.createdAt.toLocaleString("pt-BR")}.
+            {recentIncomingName} atacou uma das suas equipes em {recentIncomingBattle.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.
           </p>
         </div>
       )}
@@ -700,7 +700,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {team.members.length} mascote(s) · entrou {team.enteredAt.toLocaleDateString("pt-BR")}
+                      {team.members.length} mascote(s) · entrou {team.enteredAt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </p>
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -894,7 +894,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     <span>
                       <span className="block text-xs font-semibold text-red-200">{m.nickname ?? getPokemonName(m.pokemonId)}</span>
                       <span className="text-[10px] text-slate-500">
-                        Nv.{m.level} · Ferido {m.injuredAt ? m.injuredAt.toLocaleString("pt-BR") : "agora"}
+                        Nv.{m.level} · Ferido {m.injuredAt ? m.injuredAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "agora"}
                       </span>
                     </span>
                   </div>
@@ -959,7 +959,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 <details key={battle.id} className="rounded-xl border border-border bg-slate-900/40 p-3">
                   <summary className="cursor-pointer text-sm font-semibold text-slate-200">
                     <span className="inline-flex flex-wrap items-center gap-2">
-                      <span className="text-slate-400 text-xs">{battle.createdAt.toLocaleString("pt-BR")}</span>
+                      <span className="text-slate-400 text-xs">{battle.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] ${battle.type === "PVP" ? "border-red-500/30 text-red-200" : "border-green-500/30 text-green-200"}`}>{battle.type}</span>
                       <span className="text-slate-400 text-xs">{attackerName} vs {defenderName}</span>
                       <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">{resultLabel}</span>

@@ -1780,6 +1780,13 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (!defenseTeam) throw new Error("Equipe defensora nao encontrada.");
   if (defenseTeam.playerId === playerId) throw new Error("PvP precisa desafiar uma equipe de outro jogador.");
 
+  // Regra de sala: só pode atacar salas iguais ou superiores (mais altas)
+  const atkRoom = attackTeam.roomLevel ?? 0;
+  const defRoom = defenseTeam.roomLevel ?? 0;
+  if (atkRoom > defRoom) {
+    throw new Error(`Sua equipe está na Sala ${atkRoom} e não pode atacar a Sala ${defRoom}. Equipes de salas mais altas só podem ser atacadas por salas iguais ou inferiores.`);
+  }
+
   // Bloqueia admins de participar de PvP real (para não contaminar rankings/loot)
   const [attackUser, defenseUser] = await Promise.all([
     prisma.player.findUnique({ where: { id: attackTeam.playerId }, include: { user: { select: { role: true } } } }),
