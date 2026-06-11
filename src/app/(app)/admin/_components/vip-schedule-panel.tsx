@@ -157,7 +157,7 @@ export function VipSchedulePanel({ initialSchedule, isCustom }: Props) {
   const editingReward = editingDay !== null ? schedule.find(r => r.day === editingDay) ?? null : null;
 
   return (
-    <Card>
+    <Card className="relative z-10">
       <button className="flex w-full items-center justify-between text-left" onClick={() => setOpen(v => !v)}>
         <div className="flex items-center gap-3">
           <Calendar size={18} className="text-purple-400" />
