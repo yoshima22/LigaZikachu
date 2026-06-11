@@ -233,3 +233,37 @@ export async function getUnreadCountAction() {
   if (!player) return 0;
   return prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } });
 }
+
+export async function pollNewMessagesAction(otherPlayerId: string, afterIso: string) {
+  const me = await requirePlayer();
+  const after = new Date(afterIso);
+
+  const messages = await prisma.directMessage.findMany({
+    where: {
+      createdAt: { gt: after },
+      OR: [
+        { senderId: me.id, receiverId: otherPlayerId },
+        { senderId: otherPlayerId, receiverId: me.id },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true, content: true, createdAt: true, senderId: true,
+      attachmentType: true, attachmentData: true,
+      sender: { select: { displayName: true, avatarUrl: true } },
+    },
+  });
+
+  // Mark received messages as read
+  const unreadIds = messages
+    .filter((m) => m.senderId === otherPlayerId)
+    .map((m) => m.id);
+  if (unreadIds.length > 0) {
+    await prisma.directMessage.updateMany({
+      where: { id: { in: unreadIds } },
+      data: { readAt: new Date() },
+    });
+  }
+
+  return { ok: true as const, messages };
+}

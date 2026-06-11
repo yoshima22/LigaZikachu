@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { getUnreadCountAction } from "../mensagens/actions";
 import Link from "next/link";
 import {
   BarChart3,
@@ -94,8 +96,26 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [liveUnreadDms, setLiveUnreadDms] = useState(unreadDms);
   const rootRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => { setLiveUnreadDms(unreadDms); }, [unreadDms]);
+
+  // Refresh unread count whenever user navigates to/from a DM conversation
+  useEffect(() => {
+    if (!playerId) return;
+    getUnreadCountAction().then(setLiveUnreadDms).catch(() => {});
+  }, [pathname, playerId]);
+
+  // Poll for unread count every 30 seconds as reliable fallback
+  useEffect(() => {
+    if (!playerId) return;
+    const poll = async () => {
+      const count = await getUnreadCountAction();
+      setLiveUnreadDms(count);
+    };
+    const id = setInterval(poll, 30000);
+    return () => clearInterval(id);
+  }, [playerId]);
 
   useEffect(() => {
     if (!playerId) return;

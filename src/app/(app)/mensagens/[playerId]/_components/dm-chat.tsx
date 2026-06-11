@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
-import { sendMessageAction, type AttachmentData } from "../../actions";
+import { sendMessageAction, pollNewMessagesAction, type AttachmentData } from "../../actions";
 import { ArrowLeft, Paperclip, Send, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -107,6 +107,37 @@ export function DmChat({ me, other, initialMessages }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const messagesRef = useRef<Message[]>(initialMessages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  // Polling fallback: fetch new messages every 5 seconds
+  useEffect(() => {
+    const poll = async () => {
+      const cur = messagesRef.current;
+      const latest = cur[cur.length - 1];
+      const afterIso = latest ? latest.createdAt : new Date(0).toISOString();
+      const res = await pollNewMessagesAction(other.id, afterIso);
+      if (!res.ok || res.messages.length === 0) return;
+      const ids = new Set(messagesRef.current.map((m) => m.id));
+      const newOnes = res.messages
+        .filter((m) => !ids.has(m.id))
+        .map((m) => ({
+          id: m.id,
+          content: m.content,
+          senderId: m.senderId,
+          senderName: m.sender.displayName,
+          senderAvatar: m.sender.avatarUrl ?? null,
+          createdAt: m.createdAt.toISOString(),
+          attachmentType: m.attachmentType,
+          attachmentData: (m.attachmentData as AttachmentData) ?? null,
+        }));
+      if (newOnes.length > 0) setMessages((prev) => [...prev, ...newOnes]);
+    };
+
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, [other.id]);
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
