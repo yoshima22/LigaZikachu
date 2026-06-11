@@ -59,7 +59,7 @@ export async function getLabDataAction() {
       where: { playerId: me.id },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
-        isFavorite: true, arenaState: true,
+        isFavorite: true, arenaState: true, bazarListed: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -77,7 +77,7 @@ export async function getLabDataAction() {
     const extras = copies - 1;
     const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
     const dust = Math.ceil(baseDust * multiplier);
-    const recyclable = !m.isFavorite && (!m.arenaState || m.arenaState === "FREE");
+    const recyclable = !m.isFavorite && !m.bazarListed && (!m.arenaState || m.arenaState === "FREE");
 
     return {
       id: m.id,
@@ -91,6 +91,7 @@ export async function getLabDataAction() {
       dust,
       recyclable,
       isFavorite: m.isFavorite ?? false,
+      bazarListed: m.bazarListed ?? false,
     };
   });
 
@@ -115,10 +116,11 @@ export async function recycleMascotAction(mascotId: string) {
 
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
-    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true },
+    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
   if (mascot.isFavorite) return { ok: false as const, error: "Não é possível reciclar mascotes favoritos." };
+  if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes de reciclar." };
   if (mascot.arenaState && mascot.arenaState !== "FREE") {
     return { ok: false as const, error: "Mascote está em batalha ou descansando." };
   }

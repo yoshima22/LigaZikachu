@@ -17,6 +17,7 @@ type LabMascot = {
   dust: number;
   recyclable: boolean;
   isFavorite: boolean;
+  bazarListed: boolean;
 };
 
 type WeeklyUsage = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
