@@ -418,16 +418,16 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
           <p className="mb-4 text-xs text-slate-500">
             Troque Pó de Criação por ZikaCoins ou ovos. Limites reiniciam toda segunda-feira.
           </p>
-          <ShopItem emoji="🪙" title="400 ZikaCoins" description="Adicionados diretamente à sua carteira."
+          <ShopItem title="400 ZikaCoins" description="Adicionados diretamente à sua carteira."
             cost={costs.coins} dust={dust} used={weeklyUsage.coinsTraded} limit={limits.coinsTraded}
             isPending={isPending} onBuy={handleTradeCoins} />
-          <ShopItem emoji="🥚" title="Ovo Comum" description="Mascote do pool geral de pokémons."
+          <ShopItem title="Ovo Comum" description="Mascote do pool geral de pokémons."
             cost={costs.commonEgg} dust={dust} used={weeklyUsage.commonEggs} limit={limits.commonEggs}
             isPending={isPending} onBuy={() => handleTradeEgg("COMMON")} />
-          <ShopItem emoji="💙" title="Ovo Raro" description="Starters, fan-favorites e pokémons especiais."
+          <ShopItem title="Ovo Raro" description="Starters, fan-favorites e pokémons especiais."
             cost={costs.rareEgg} dust={dust} used={weeklyUsage.rareEggs} limit={limits.rareEggs}
             isPending={isPending} onBuy={() => handleTradeEgg("RARE")} />
-          <ShopItem emoji="⭐" title="Ovo Especial" description="Pool exclusivo dos pokémons mais raros e cobiçados."
+          <ShopItem title="Ovo Especial" description="Pool exclusivo dos pokémons mais raros e cobiçados."
             cost={costs.specialEgg} dust={dust} used={weeklyUsage.specialEggs} limit={limits.specialEggs}
             isPending={isPending} onBuy={() => handleTradeEgg("SPECIAL")} />
         </div>
@@ -478,15 +478,14 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
   );
 }
 
-function ShopItem({ emoji, title, description, cost, dust, used, limit, isPending, onBuy }: {
-  emoji: string; title: string; description: string; cost: number;
+function ShopItem({ title, description, cost, dust, used, limit, isPending, onBuy }: {
+  title: string; description: string; cost: number;
   dust: number; used: number; limit: number; isPending: boolean; onBuy: () => void;
 }) {
   const atLimit = used >= limit;
   const canAfford = dust >= cost;
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-border bg-slate-900 px-4 py-3">
-      <span className="text-2xl">{emoji}</span>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-white">{title}</p>
         <p className="text-xs text-slate-400">{description}</p>
