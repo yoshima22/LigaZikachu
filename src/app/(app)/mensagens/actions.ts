@@ -25,7 +25,7 @@ export type AttachmentData =
       statForce: number; statAgility: number; statCharisma: number;
       statInstinct: number; statVitality: number;
     }
-  | { type: "ITEM"; id: string; name: string; imageUrl: string | null; itemType: string; rarity: string };
+  | { type: "ITEM"; id: string; name: string; imageUrl: string | null; itemType: string; rarity: string; description: string | null };
 
 export async function getConversationAction(otherPlayerId: string) {
   const me = await requirePlayer();
@@ -187,13 +187,11 @@ export async function getMyAttachablesAction() {
         statInstinct: true, statVitality: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
-      take: 30,
     }),
     prisma.playerInventory.findMany({
       where: { playerId: me.id, quantity: { gt: 0 } },
-      include: { item: { select: { id: true, name: true, imageUrl: true, type: true, rarity: true } } },
+      include: { item: { select: { id: true, name: true, imageUrl: true, type: true, rarity: true, description: true } } },
       orderBy: { purchasedAt: "desc" },
-      take: 30,
     }),
   ]);
 
@@ -221,6 +219,7 @@ export async function getMyAttachablesAction() {
     imageUrl: inv.item.imageUrl,
     itemType: inv.item.type,
     rarity: inv.item.rarity,
+    description: inv.item.description ?? null,
   }));
 
   return { ok: true as const, mascots: mascotAttachments, items: itemAttachments };

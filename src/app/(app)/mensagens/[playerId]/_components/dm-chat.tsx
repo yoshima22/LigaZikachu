@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
 import { sendMessageAction, pollNewMessagesAction, type AttachmentData } from "../../actions";
 import { ArrowLeft, Paperclip, Send, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -102,7 +103,61 @@ export function DmChat({ me, other, initialMessages }: Props) {
   const messagesRef = useRef<Message[]>(initialMessages);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  // Polling fallback: fetch new messages every 5 seconds
+  const addNewMessages = (raw: { id: string; content: string; senderId: string; senderName: string; senderAvatar: string | null; createdAt: string; attachmentType: string | null; attachmentData: AttachmentData | null }[]) => {
+    if (raw.length === 0) return;
+    setMessages((prev) => {
+      const ids = new Set(prev.map((m) => m.id));
+      const deduped = raw.filter((m) => !ids.has(m.id));
+      return deduped.length > 0 ? [...prev, ...deduped] : prev;
+    });
+  };
+
+  // Realtime: postgres_changes com filtro receiver_id para entrega imediata
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+
+    const supabase = createClient(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      realtime: { params: { eventsPerSecond: 2 } },
+    });
+
+    const channel = supabase
+      .channel(`dm-inbox-${me.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "direct_messages",
+          filter: `receiver_id=eq.${me.id}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            id: string; content: string; sender_id: string; receiver_id: string;
+            created_at: string; attachment_type: string | null; attachment_data: AttachmentData | null;
+          };
+          // só processa mensagens desta conversa
+          if (row.sender_id !== other.id) return;
+          addNewMessages([{
+            id: row.id,
+            content: row.content,
+            senderId: row.sender_id,
+            senderName: other.displayName,
+            senderAvatar: other.avatarUrl,
+            createdAt: row.created_at,
+            attachmentType: row.attachment_type,
+            attachmentData: row.attachment_data,
+          }]);
+        },
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [me.id, other.id, other.displayName, other.avatarUrl]);
+
+  // Polling fallback: garante entrega mesmo se o WebSocket cair
   useEffect(() => {
     const poll = async () => {
       const cur = messagesRef.current;
@@ -110,20 +165,16 @@ export function DmChat({ me, other, initialMessages }: Props) {
       const afterIso = latest ? latest.createdAt : new Date(0).toISOString();
       const res = await pollNewMessagesAction(other.id, afterIso);
       if (!res.ok || res.messages.length === 0) return;
-      const ids = new Set(messagesRef.current.map((m) => m.id));
-      const newOnes = res.messages
-        .filter((m) => !ids.has(m.id))
-        .map((m) => ({
-          id: m.id,
-          content: m.content,
-          senderId: m.senderId,
-          senderName: m.sender.displayName,
-          senderAvatar: m.sender.avatarUrl ?? null,
-          createdAt: m.createdAt.toISOString(),
-          attachmentType: m.attachmentType,
-          attachmentData: (m.attachmentData as AttachmentData) ?? null,
-        }));
-      if (newOnes.length > 0) setMessages((prev) => [...prev, ...newOnes]);
+      addNewMessages(res.messages.map((m) => ({
+        id: m.id,
+        content: m.content,
+        senderId: m.senderId,
+        senderName: m.sender.displayName,
+        senderAvatar: m.sender.avatarUrl ?? null,
+        createdAt: m.createdAt.toISOString(),
+        attachmentType: m.attachmentType,
+        attachmentData: (m.attachmentData as AttachmentData) ?? null,
+      })));
     };
 
     const id = setInterval(poll, 5000);
