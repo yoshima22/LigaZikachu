@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   Calendar, ChevronDown, ChevronUp, RotateCcw, Save,
@@ -140,9 +140,31 @@ export function VipSchedulePanel({ allSchedules }: Props) {
   );
   const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
   const [editingDay, setEditingDay] = useState<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [loadPending, startLoad] = useTransition();
   const [savePending, startSave] = useTransition();
   const [resetPending, startReset] = useTransition();
+  const dirtyRef = useRef(dirtyMap);
+  dirtyRef.current = dirtyMap;
+
+  // Sincroniza props → state quando o servidor retorna dados atualizados,
+  // mas só para labels que não têm edições locais pendentes.
+  useEffect(() => {
+    setScheduleMap(prev => {
+      const next = { ...prev };
+      for (const s of allSchedules) {
+        if (!dirtyRef.current[s.label]) next[s.label] = s.schedule;
+      }
+      return next;
+    });
+    setCustomMap(prev => {
+      const next = { ...prev };
+      for (const s of allSchedules) {
+        if (!dirtyRef.current[s.label]) next[s.label] = s.isCustom;
+      }
+      return next;
+    });
+  }, [allSchedules]);
 
   const schedule = scheduleMap[activeLabel] ?? allSchedules[0]?.schedule ?? [];
   const isCustom = customMap[activeLabel] ?? false;
@@ -170,14 +192,24 @@ export function VipSchedulePanel({ allSchedules }: Props) {
   };
 
   const handleSave = () => {
+    setSaveError(null);
     startSave(async () => {
-      const result = await adminSaveSchedule(schedule, activeLabel);
-      if (result.ok) {
-        toast.success(`Calendário "${activeLabel}" salvo!`);
-        setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
-        setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
-      } else {
-        toast.error(result.error ?? "Erro ao salvar.");
+      try {
+        const result = await adminSaveSchedule(schedule, activeLabel);
+        if (result.ok) {
+          toast.success(`Calendário "${activeLabel}" salvo!`);
+          setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
+          setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
+          setSaveError(null);
+        } else {
+          const msg = result.error ?? "Erro ao salvar.";
+          toast.error(msg);
+          setSaveError(msg);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erro inesperado ao salvar.";
+        toast.error(msg);
+        setSaveError(msg);
       }
     });
   };
@@ -245,24 +277,33 @@ export function VipSchedulePanel({ allSchedules }: Props) {
           </div>
 
           {/* Toolbar */}
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <p className="text-xs text-slate-400">
-              Editando: <strong className="text-purple-300">{activeLabel}</strong>. Clique em um dia para editar os slots. Salve para ativar.
-            </p>
-            <div className="flex items-center gap-2">
-              {isCustom && (
-                <Button onClick={handleReset} disabled={resetPending} variant="ghost"
-                  className="gap-2 text-xs text-slate-400 hover:text-red-400 h-8">
-                  <RotateCcw size={12} />
-                  {resetPending ? "Resetando..." : "Resetar padrão"}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <p className="text-xs text-slate-400">
+                Editando: <strong className="text-purple-300">{activeLabel}</strong>. Clique em um dia para editar os slots. Salve para ativar.
+              </p>
+              <div className="flex items-center gap-2">
+                {isCustom && (
+                  <Button onClick={handleReset} disabled={resetPending} variant="ghost"
+                    className="gap-2 text-xs text-slate-400 hover:text-red-400 h-8">
+                    <RotateCcw size={12} />
+                    {resetPending ? "Resetando..." : "Resetar padrão"}
+                  </Button>
+                )}
+                <Button onClick={handleSave} disabled={savePending || !dirty}
+                  className="gap-2 text-xs h-8 bg-purple-600 hover:bg-purple-500 text-white">
+                  <Save size={12} />
+                  {savePending ? "Salvando..." : "Salvar alterações"}
                 </Button>
-              )}
-              <Button onClick={handleSave} disabled={savePending || !dirty}
-                className="gap-2 text-xs h-8 bg-purple-600 hover:bg-purple-500 text-white">
-                <Save size={12} />
-                {savePending ? "Salvando..." : "Salvar alterações"}
-              </Button>
+              </div>
             </div>
+            {saveError && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                <AlertTriangle size={12} className="shrink-0" />
+                <span>Erro ao salvar: {saveError}</span>
+                <button onClick={() => setSaveError(null)} className="ml-auto text-red-400/60 hover:text-red-400"><X size={12} /></button>
+              </div>
+            )}
           </div>
 
           {/* Grid de dias */}

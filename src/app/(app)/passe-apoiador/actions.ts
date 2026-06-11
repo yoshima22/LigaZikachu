@@ -71,7 +71,6 @@ export async function adminSaveSchedule(
       create: { id, schedule: schedule as object[], updatedBy: user?.id },
       update: { schedule: schedule as object[], updatedBy: user?.id },
     });
-    revalidatePath("/admin");
     revalidatePath("/passe-apoiador");
     return { ok: true };
   } catch (err) {
