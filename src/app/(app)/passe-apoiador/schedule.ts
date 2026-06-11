@@ -16,6 +16,9 @@ export type DayReward = {
   isMilestone?: boolean;
 };
 
+// Schedules padrão por label. Cada label pode ser sobrescrito via PassScheduleConfig no DB.
+export const PASS_SCHEDULE_DEFAULTS: Record<string, DayReward[]> = {};
+
 export const PASS_SCHEDULE: DayReward[] = [
   { day:  1, label: "200 ZikaCoins + Ovo Especial",                  type: "EGG",          eggType: "SPECIAL",  coins: 200,  emoji: "🥚" },
   { day:  2, label: "150 ZikaCoins",                                  type: "COINS",        coins: 150,          emoji: "🪙" },
@@ -48,3 +51,16 @@ export const PASS_SCHEDULE: DayReward[] = [
   { day: 29, label: "1.200 ZikaCoins",                               type: "COINS",        coins: 1200,         emoji: "🪙" },
   { day: 30, label: "1.000 ZikaCoins + Recompensa Premium Rotativa", type: "SHOP_ITEM",    shopItemName: "[Rotativo Premium]", coins: 1000, emoji: "🌟", isMilestone: true },
 ];
+
+// Segundo schedule — dias 1-2 diferentes, resto igual ao PASS_SCHEDULE
+export const PASS_SCHEDULE_VIP: DayReward[] = [
+  { day:  1, label: "500 ZikaCoins + 1 Ovo Comum",                   type: "EGG",          eggType: "COMMON",   coins: 500,  foodQty: 1, emoji: "🥚" },
+  { day:  2, label: "400 ZikaCoins + 2 Comidas de Mascote",          type: "FOOD",         foodType: "FOOD",    foodQty: 2,  coins: 400, emoji: "🍖" },
+  ...PASS_SCHEDULE.slice(2), // dias 3-30 idênticos
+];
+
+// Mapa de schedules padrão por label (usado como fallback se DB não tiver)
+PASS_SCHEDULE_DEFAULTS["Passe Apoiador"] = PASS_SCHEDULE;
+PASS_SCHEDULE_DEFAULTS["Passe Gold"]     = PASS_SCHEDULE_VIP;
+PASS_SCHEDULE_DEFAULTS["Passe Diamante"] = PASS_SCHEDULE_VIP;
+PASS_SCHEDULE_DEFAULTS["Passe Especial"] = PASS_SCHEDULE_VIP;

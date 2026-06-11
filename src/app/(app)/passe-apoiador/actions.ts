@@ -8,45 +8,69 @@ import { creditCoins } from "@/lib/zikacoins";
 import { ZikaCoinTxType } from "@prisma/client";
 import type { DayReward } from "./schedule";
 export type { DayReward } from "./schedule";
-import { PASS_SCHEDULE } from "./schedule";
+import { PASS_SCHEDULE, PASS_SCHEDULE_DEFAULTS } from "./schedule";
 
 // ── Calendário: leitura com fallback para o hardcoded ─────────────────────────
+// scheduleKey = passLabel do passe (ex: "Passe Apoiador", "Passe Gold").
+// Fallback chain: DB[key] → DB["singleton"] → hardcoded default → PASS_SCHEDULE
 
-export async function getActiveSchedule(): Promise<DayReward[]> {
+export async function getActiveSchedule(scheduleKey?: string): Promise<DayReward[]> {
   try {
-    const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: "singleton" } });
-    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30) {
-      return cfg.schedule as DayReward[];
+    // Tenta buscar pelo key específico primeiro
+    const ids = scheduleKey && scheduleKey !== "Passe Apoiador"
+      ? [scheduleKey, "singleton"]
+      : ["singleton"];
+    for (const id of ids) {
+      const cfg = await prisma.passScheduleConfig.findUnique({ where: { id } });
+      if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30)
+        return cfg.schedule as DayReward[];
     }
   } catch { /* tabela ainda não existe — usa fallback */ }
+  // Fallback para hardcoded por label, depois PASS_SCHEDULE
+  if (scheduleKey && PASS_SCHEDULE_DEFAULTS[scheduleKey])
+    return PASS_SCHEDULE_DEFAULTS[scheduleKey];
   return PASS_SCHEDULE;
 }
 
-export async function adminGetSchedule(): Promise<{ schedule: DayReward[]; isCustom: boolean }> {
+export async function adminGetSchedule(
+  scheduleKey?: string
+): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string }> {
+  await requireAdmin();
+  const label = scheduleKey ?? "Passe Apoiador";
+  try {
+    const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: label === "Passe Apoiador" ? "singleton" : label } });
+    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30)
+      return { schedule: cfg.schedule as DayReward[], isCustom: true, label };
+  } catch { /* fallback */ }
+  const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
+  return { schedule: fallback, isCustom: false, label };
+}
+
+export async function adminListScheduleLabels(): Promise<string[]> {
   await requireAdmin();
   try {
-    const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: "singleton" } });
-    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30) {
-      return { schedule: cfg.schedule as DayReward[], isCustom: true };
-    }
-  } catch { /* fallback */ }
-  return { schedule: PASS_SCHEDULE, isCustom: false };
+    const configs = await prisma.passScheduleConfig.findMany({ select: { id: true } });
+    const dbLabels = configs.map(c => c.id === "singleton" ? "Passe Apoiador" : c.id);
+    const allLabels = new Set([...Object.keys(PASS_SCHEDULE_DEFAULTS), ...dbLabels]);
+    return [...allLabels];
+  } catch { return Object.keys(PASS_SCHEDULE_DEFAULTS); }
 }
 
 export async function adminSaveSchedule(
-  schedule: DayReward[]
+  schedule: DayReward[],
+  scheduleKey?: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin();
     const user = await getSessionUser();
     if (schedule.length !== 30) return { ok: false, error: "O calendário precisa ter exatamente 30 dias." };
-
+    // "Passe Apoiador" usa id="singleton" para compatibilidade com passes antigos
+    const id = (!scheduleKey || scheduleKey === "Passe Apoiador") ? "singleton" : scheduleKey;
     await prisma.passScheduleConfig.upsert({
-      where: { id: "singleton" },
-      create: { id: "singleton", schedule: schedule as object[], updatedBy: user?.id },
+      where: { id },
+      create: { id, schedule: schedule as object[], updatedBy: user?.id },
       update: { schedule: schedule as object[], updatedBy: user?.id },
     });
-
     revalidatePath("/admin");
     revalidatePath("/passe-apoiador");
     return { ok: true };
@@ -55,10 +79,11 @@ export async function adminSaveSchedule(
   }
 }
 
-export async function adminResetSchedule(): Promise<{ ok: boolean; error?: string }> {
+export async function adminResetSchedule(scheduleKey?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin();
-    await prisma.passScheduleConfig.deleteMany({ where: { id: "singleton" } });
+    const id = (!scheduleKey || scheduleKey === "Passe Apoiador") ? "singleton" : scheduleKey;
+    await prisma.passScheduleConfig.deleteMany({ where: { id } });
     revalidatePath("/admin");
     revalidatePath("/passe-apoiador");
     return { ok: true };
@@ -206,7 +231,7 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
     if (dayNumber < 1 || dayNumber > 30) return { ok: false, error: "Dia inválido." };
 
-    const activeSchedule = await getActiveSchedule();
+    const activeSchedule = await getActiveSchedule(pass.passLabel ?? undefined);
     const reward = activeSchedule.find(r => r.day === dayNumber);
     if (!reward) return { ok: false, error: "Recompensa não configurada." };
 

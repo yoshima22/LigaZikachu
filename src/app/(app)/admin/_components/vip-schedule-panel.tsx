@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
-import { adminSaveSchedule, adminResetSchedule } from "@/app/(app)/passe-apoiador/actions";
+import { adminSaveSchedule, adminResetSchedule, adminGetSchedule } from "@/app/(app)/passe-apoiador/actions";
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
 
@@ -122,39 +122,86 @@ function dayStateToReward(day: number, ds: DayState): DayReward {
 
 // ── Panel principal ───────────────────────────────────────────────────────────
 
-interface Props { initialSchedule: DayReward[]; isCustom: boolean; }
+interface ScheduleEntry { label: string; schedule: DayReward[]; isCustom: boolean; }
 
-export function VipSchedulePanel({ initialSchedule, isCustom }: Props) {
+interface Props {
+  // Todos os schedules conhecidos (label → {schedule, isCustom})
+  allSchedules: ScheduleEntry[];
+}
+
+export function VipSchedulePanel({ allSchedules }: Props) {
   const [open, setOpen] = useState(false);
-  const [schedule, setSchedule] = useState<DayReward[]>(initialSchedule);
+  const [activeLabel, setActiveLabel] = useState(allSchedules[0]?.label ?? "Passe Apoiador");
+  const [scheduleMap, setScheduleMap] = useState<Record<string, DayReward[]>>(
+    () => Object.fromEntries(allSchedules.map(s => [s.label, s.schedule]))
+  );
+  const [customMap, setCustomMap] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(allSchedules.map(s => [s.label, s.isCustom]))
+  );
+  const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
   const [editingDay, setEditingDay] = useState<number | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [loadPending, startLoad] = useTransition();
   const [savePending, startSave] = useTransition();
   const [resetPending, startReset] = useTransition();
 
+  const schedule = scheduleMap[activeLabel] ?? allSchedules[0]?.schedule ?? [];
+  const isCustom = customMap[activeLabel] ?? false;
+  const dirty = dirtyMap[activeLabel] ?? false;
+
+  const switchLabel = (label: string) => {
+    setEditingDay(null);
+    setActiveLabel(label);
+    // Se o schedule para esse label ainda não foi carregado, busca do servidor
+    if (!scheduleMap[label]) {
+      startLoad(async () => {
+        const result = await adminGetSchedule(label);
+        setScheduleMap(prev => ({ ...prev, [label]: result.schedule }));
+        setCustomMap(prev => ({ ...prev, [label]: result.isCustom }));
+      });
+    }
+  };
+
   const updateDay = (day: number, ds: DayState) => {
-    setSchedule(prev => prev.map(r => r.day === day ? dayStateToReward(day, ds) : r));
-    setDirty(true);
+    setScheduleMap(prev => ({
+      ...prev,
+      [activeLabel]: (prev[activeLabel] ?? []).map(r => r.day === day ? dayStateToReward(day, ds) : r),
+    }));
+    setDirtyMap(prev => ({ ...prev, [activeLabel]: true }));
   };
 
   const handleSave = () => {
     startSave(async () => {
-      const result = await adminSaveSchedule(schedule);
-      if (result.ok) { toast.success("Calendário salvo!"); setDirty(false); }
-      else toast.error(result.error ?? "Erro ao salvar.");
+      const result = await adminSaveSchedule(schedule, activeLabel);
+      if (result.ok) {
+        toast.success(`Calendário "${activeLabel}" salvo!`);
+        setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
+        setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
+      } else {
+        toast.error(result.error ?? "Erro ao salvar.");
+      }
     });
   };
 
   const handleReset = () => {
-    if (!confirm("Resetar para os prêmios padrão? Isso apaga a configuração customizada.")) return;
+    if (!confirm(`Resetar "${activeLabel}" para os prêmios padrão?`)) return;
     startReset(async () => {
-      const result = await adminResetSchedule();
-      if (result.ok) { toast.success("Resetado para o padrão."); setDirty(false); window.location.reload(); }
-      else toast.error(result.error ?? "Erro ao resetar.");
+      const result = await adminResetSchedule(activeLabel);
+      if (result.ok) {
+        toast.success("Resetado para o padrão.");
+        setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
+        setCustomMap(prev => ({ ...prev, [activeLabel]: false }));
+        // Recarrega o schedule padrão desse label
+        const fresh = await adminGetSchedule(activeLabel);
+        setScheduleMap(prev => ({ ...prev, [activeLabel]: fresh.schedule }));
+      } else {
+        toast.error(result.error ?? "Erro ao resetar.");
+      }
     });
   };
 
   const editingReward = editingDay !== null ? schedule.find(r => r.day === editingDay) ?? null : null;
+
+  const anyDirty = Object.values(dirtyMap).some(Boolean);
 
   return (
     <Card className="relative z-10">
@@ -167,7 +214,7 @@ export function VipSchedulePanel({ initialSchedule, isCustom }: Props) {
               Customizado
             </span>
           )}
-          {dirty && (
+          {anyDirty && (
             <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-xs text-amber-300 font-semibold flex items-center gap-1">
               <AlertTriangle size={10} /> Não salvo
             </span>
@@ -178,10 +225,29 @@ export function VipSchedulePanel({ initialSchedule, isCustom }: Props) {
 
       {open && (
         <div className="mt-6 space-y-5">
+          {/* Seletor de tipo de passe */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500 uppercase tracking-widest">Tipo de passe:</span>
+            {allSchedules.map(s => (
+              <button
+                key={s.label}
+                onClick={() => switchLabel(s.label)}
+                disabled={loadPending}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors
+                  ${activeLabel === s.label
+                    ? "bg-purple-600 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"}`}
+              >
+                {s.label}
+                {dirtyMap[s.label] && <span className="ml-1 text-amber-400">•</span>}
+              </button>
+            ))}
+          </div>
+
           {/* Toolbar */}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-xs text-slate-400">
-              Clique em um dia para editar. Adicione ou remova itens por slot. Salve para ativar.
+              Editando: <strong className="text-purple-300">{activeLabel}</strong>. Clique em um dia para editar os slots. Salve para ativar.
             </p>
             <div className="flex items-center gap-2">
               {isCustom && (

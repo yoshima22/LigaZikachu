@@ -24,7 +24,7 @@ import {
 import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { adminListActiveVips, adminGetSchedule } from "@/app/(app)/passe-apoiador/actions";
+import { adminListActiveVips, adminGetSchedule, adminListScheduleLabels } from "@/app/(app)/passe-apoiador/actions";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,11 @@ export default async function AdminPage() {
   ]);
 
   const vipsResult = await adminListActiveVips();
-  const scheduleResult = await adminGetSchedule();
+  // Carrega todos os schedules de todos os tipos de passe conhecidos
+  const scheduleLabels = await adminListScheduleLabels();
+  const allSchedules = await Promise.all(
+    scheduleLabels.map(label => adminGetSchedule(label).then(r => ({ label: r.label, schedule: r.schedule, isCustom: r.isCustom })))
+  );
 
   const allUsers = await prisma.user.findMany({
     orderBy: { name: "asc" },
@@ -240,10 +244,7 @@ export default async function AdminPage() {
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
-      <VipSchedulePanel
-        initialSchedule={scheduleResult.schedule}
-        isCustom={scheduleResult.isCustom}
-      />
+      <VipSchedulePanel allSchedules={allSchedules} />
       <VipPassPanel
         players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))}
         activeVips={(vipsResult.passes ?? []).map(p => ({
