@@ -115,7 +115,7 @@ export default async function ArenaZPage({
   // Colunas novas (adicionadas na reformulação Jun/2026) — lidas separadamente para não quebrar se migration ainda não rodou
   const playerArenaData = await prisma.player.findUnique({
     where: { id: player.id },
-    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true },
+    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true, arenaTutorialClaimed: true },
   }).catch(() => null);
 
   syncDefeatedArenaTeams(player.id).catch(() => null);
@@ -295,7 +295,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
 
   return (
     <div className="space-y-5">
-      <ArenaTutorial />
+      <ArenaTutorial tutorialClaimed={playerArenaData?.arenaTutorialClaimed ?? false} />
 
       {/* Header */}
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-5">

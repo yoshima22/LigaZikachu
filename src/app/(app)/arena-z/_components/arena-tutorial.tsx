@@ -47,7 +47,7 @@ const STEPS = [
   },
 ];
 
-export function ArenaTutorial() {
+export function ArenaTutorial({ tutorialClaimed }: { tutorialClaimed: boolean }) {
   const [show, setShow] = useState(false);
   const [step, setStep] = useState(0);
   const [showBonus, setShowBonus] = useState(false);
@@ -57,11 +57,21 @@ export function ArenaTutorial() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!localStorage.getItem(TUTORIAL_KEY)) setShow(true);
-  }, []);
+    // Já resgatou no banco → nunca mostra
+    if (tutorialClaimed) return;
+    const seen = localStorage.getItem(TUTORIAL_KEY);
+    if (!seen) {
+      // Primeira visita: mostra o tutorial completo
+      setShow(true);
+    } else {
+      // Já viu o tutorial mas fechou sem resgatar o bônus → pula direto para o bônus
+      setShow(true);
+      setShowBonus(true);
+    }
+  }, [tutorialClaimed]);
 
   const handleComplete = () => {
-    localStorage.setItem(TUTORIAL_KEY, "1");
+    // NÃO grava localStorage aqui — só grava depois que o bônus for resgatado no banco
     setShowBonus(true);
   };
 
@@ -71,6 +81,8 @@ export function ArenaTutorial() {
       if (r.error) {
         toast.error(r.error);
       } else {
+        // Só grava o localStorage após confirmação do servidor
+        localStorage.setItem(TUTORIAL_KEY, "1");
         setBonusClaimed(true);
         toast.success("Bônus resgatado! Boa sorte na Arena Z! 🎉");
         setTimeout(() => { setShowBonus(false); setShow(false); router.refresh(); }, 1500);
@@ -109,7 +121,7 @@ export function ArenaTutorial() {
               <Gift size={16} /> {bonusClaimed ? "Resgatado! 🎉" : pending ? "Resgatando…" : "Resgatar presente"}
             </button>
             <button onClick={() => { setShowBonus(false); setShow(false); }} className="text-[10px] text-slate-600 hover:text-slate-400">
-              Fechar sem resgatar
+              Fechar por agora (lembraremos ao voltar)
             </button>
           </div>
         </div>
