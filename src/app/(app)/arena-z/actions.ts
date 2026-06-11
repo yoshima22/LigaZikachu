@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
@@ -88,8 +88,7 @@ export async function createArenaTeamAction(mascotIds: string[], name: string, r
     const { ARENA_ROOMS } = await import("@/lib/arena-z");
     if (!ARENA_ROOMS.includes(roomLevel as typeof ARENA_ROOMS[number])) return { error: "Sala inválida." };
     await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number]);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    revalidateTag("arena-active-teams");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao criar equipe." };
@@ -100,8 +99,7 @@ export async function addMascotToArenaTeamAction(teamId: string, mascotId: strin
   try {
     const playerId = await getCurrentPlayerId();
     await addMascotToArenaTeam(playerId, teamId, mascotId);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    revalidateTag("arena-active-teams");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao adicionar mascote." };
@@ -157,8 +155,7 @@ export async function retireArenaTeamAction(teamId: string): Promise<{ error?: s
     // muda updatedAt e causaria falso positivo. O bloqueio por PvP não-visto é tratado
     // dentro de retireArenaTeam via getUnseenPvpAttack (throw com unseenPvp).
     await retireArenaTeam(playerId, teamId);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    revalidateTag("arena-active-teams");
     return {};
   } catch (err) {
     // Se a função lançou com unseenPvp, converte em stale notice
@@ -265,7 +262,6 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
 export async function markPvpDefenseSeenAction(teamId: string): Promise<void> {
   try {
     await markPvpDefenseSeenForTeam(teamId);
-    revalidatePath("/arena-z");
   } catch { /* silencioso */ }
 }
 
@@ -273,8 +269,6 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
   try {
     const playerId = await getCurrentPlayerId();
     await healMascotSus(playerId, mascotId);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
@@ -288,7 +282,6 @@ export async function applyPassiveIncomeAction(): Promise<void> {
     const player = await getSessionPlayer(user.id);
     if (!player) return;
     await applyPassiveIncomeForPlayer(player.id);
-    revalidatePath("/arena-z");
   } catch { /* silencioso */ }
 }
 
@@ -300,8 +293,7 @@ export async function deleteArenaTeamAction(teamId: string): Promise<{ error?: s
     if (!player) return { error: "Perfil nao encontrado." };
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     await deleteArenaTeam(player.id, teamId, isAdminUser);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    revalidateTag("arena-active-teams");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao remover equipe." };
@@ -312,7 +304,8 @@ export async function purgeAdminArenaDataAction(): Promise<{ error?: string; tea
   try {
     await requireAdmin();
     const result = await purgeAdminArenaData();
-    revalidatePath("/arena-z");
+    revalidateTag("arena-active-teams");
+    revalidateTag("arena-ranking");
     return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro na limpeza." };
@@ -326,7 +319,6 @@ export async function lockBotAction(teamId: string, difficulty: ArenaDifficulty 
     // muda updatedAt causando falso positivo. Bloqueio real por PvP não-visto é
     // tratado dentro de runBotBattle via getUnseenPvpAttack (throw blockedByUnseenPvp).
     const result = await lockBotForTeam(playerId, teamId, difficulty);
-    revalidatePath("/arena-z");
     return { result };
   } catch (err) {
     // blockedByUnseenPvp: retorna como stale notice com battleId para abrir modal correto
@@ -342,8 +334,6 @@ export async function runOpportunisticAttackAction(targetMascotId: string): Prom
   try {
     const playerId = await getCurrentPlayerId();
     const result = await runOpportunisticAttack(playerId, targetMascotId);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
     return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao atacar." };
@@ -354,8 +344,6 @@ export async function adminSetMascotStateAction(mascotId: string, state: "FREE" 
   try {
     await requireAdmin();
     await adminSetMascotArenaState(mascotId, state);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao alterar estado." };
@@ -373,8 +361,7 @@ export async function adminRepairArenaAction(targetPlayerId?: string): Promise<{
   try {
     await requireAdmin();
     const result = await adminRepairArenaStates(targetPlayerId);
-    revalidatePath("/arena-z");
-    revalidatePath("/mascotes");
+    revalidateTag("arena-active-teams");
     return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao reparar arena." };

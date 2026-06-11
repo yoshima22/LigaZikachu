@@ -470,7 +470,7 @@ const getActiveArenaTeams = unstable_cache(
     });
   },
   ["arena-active-teams"],
-  { revalidate: 60 },
+  { revalidate: 60, tags: ["arena-active-teams"] },
 );
 
 /** Retorna dados das salas para o painel de inspeção (grid de salas) */
@@ -1608,7 +1608,7 @@ async function _getArenaRanking(limit: number) {
 export const getArenaRanking = unstable_cache(
   (limit = 20) => _getArenaRanking(limit),
   ["arena-ranking"],
-  { revalidate: 120 }, // 2 min — ranking muda raramente
+  { revalidate: 120, tags: ["arena-ranking"] }, // 2 min — ranking muda raramente
 );
 
 // ── Ataque oportunista de rival ───────────────────────────────────────────────

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
@@ -16,7 +16,10 @@ import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 
 function revalidate() {
   revalidatePath("/mascotes");
-  revalidatePath("/arena-z");
+  // arena-z: só invalida o cache de times se o estado do mascote mudou de forma
+  // que afeta os times (equipar/desequipar). Usar revalidateTag para não invalidar
+  // queries pesadas que não dependem do estado de mascotes individuais.
+  revalidateTag("arena-active-teams");
 }
 
 export async function putEggInIncubator(eggId: string, genOverride?: string): Promise<{ error?: string }> {
