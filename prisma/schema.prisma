@@ -273,6 +273,9 @@ model DirectMessage {
   createdAt  DateTime  @default(now())
   readAt     DateTime?
 
+  attachmentType String? // "MASCOT" | "ITEM"
+  attachmentData Json?   // snapshot dos dados do item/mascote no momento do envio
+
   sender   Player @relation("SentMessages",   fields: [senderId],   references: [id], onDelete: Cascade)
   receiver Player @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 

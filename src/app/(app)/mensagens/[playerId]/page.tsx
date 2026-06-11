@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getConversationAction } from "../actions";
+import { getConversationAction, type AttachmentData } from "../actions";
 import { DmChat } from "./_components/dm-chat";
 
 interface Props { params: Promise<{ playerId: string }> }
@@ -21,6 +21,8 @@ export default async function ConversationPage({ params }: Props) {
         senderName: m.sender.displayName,
         senderAvatar: m.sender.avatarUrl ?? null,
         createdAt: m.createdAt.toISOString(),
+        attachmentType: m.attachmentType,
+        attachmentData: (m.attachmentData as AttachmentData) ?? null,
       }))}
     />
   );
