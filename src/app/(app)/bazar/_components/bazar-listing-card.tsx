@@ -64,14 +64,9 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         ) : (payload.itemType as string)?.startsWith("EGG_") || ["COMMON","RARE","SPECIAL","EVENT"].includes(payload.itemType as string) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={
-              (payload.itemType as string) === "RARE" || (payload.itemType as string) === "EGG_RARE" ? "/mascot/egg-rare.png" :
-              (payload.itemType as string) === "SPECIAL" || (payload.itemType as string) === "EGG_SPECIAL" ? "/mascot/egg-special.png" :
-              "/mascot/egg-common.png"
-            }
+            src="/mascot/egg-common.png"
             alt={(payload.displayName as string) ?? "Ovo"}
             className="h-20 object-contain"
-            onError={e => { (e.target as HTMLImageElement).src = "/mascot/egg-common.png"; }}
           />
         ) : (
           <span className="text-5xl">

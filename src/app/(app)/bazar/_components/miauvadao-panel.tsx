@@ -46,8 +46,8 @@ function ItemDisplay({ itemType, imageUrl }: { itemType: string; imageUrl?: stri
   }
 
   // 2. Ovos — mesmos arquivos estáticos da ZikaShop
-  if (itemType === "EGG_RARE"    || itemType === "RARE")    return <EggImg src="/mascot/egg-rare.png" />;
-  if (itemType === "EGG_SPECIAL" || itemType === "SPECIAL") return <EggImg src="/mascot/egg-special.png" />;
+  if (itemType === "EGG_RARE"    || itemType === "RARE")    return <EggImg src="/mascot/egg-common.png" />;
+  if (itemType === "EGG_SPECIAL" || itemType === "SPECIAL") return <EggImg src="/mascot/egg-common.png" />;
   if (itemType.startsWith("EGG_") || itemType === "COMMON" || itemType === "EVENT")
     return <EggImg src="/mascot/egg-common.png" />;
 
