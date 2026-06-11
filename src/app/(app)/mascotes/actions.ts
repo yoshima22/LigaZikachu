@@ -600,6 +600,15 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     await removeXpShare(player.id, mascotId);
+    // Devolve o item ao inventário do jogador
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "XP_SHARE", active: true }, select: { id: true } });
+    if (shopItem) {
+      await prisma.playerInventory.upsert({
+        where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } },
+        update: { quantity: { increment: 1 } },
+        create: { playerId: player.id, itemId: shopItem.id, quantity: 1 },
+      });
+    }
     revalidate(); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
