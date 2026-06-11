@@ -158,12 +158,21 @@ export default async function ZikaLootPage() {
                             </div>
                           );
                         }
+                        const label =
+                          item.type === "COINS"        ? `🪙 ${item.amount} ZikaCoins`
+                          : item.type === "TICKET"     ? "🎟️ Ticket ZikaLoot"
+                          : item.type === "COSMETIC"   ? `🎨 ${item.itemName}`
+                          : item.type === "CUSTOM"     ? `🎁 ${item.description}`
+                          : item.type === "EGG"        ? `🥚 Ovo${item.qty && item.qty > 1 ? ` x${item.qty}` : ""}`
+                          : item.type === "FOOD"       ? `🍖 Comida x${item.qty}`
+                          : item.type === "SWEET"      ? `🍬 Doce x${item.qty}`
+                          : item.type === "SHOP_ITEM"  ? `🛒 ${item.shopItemName}`
+                          : item.type === "STICKER_PACK" ? `📦 ${item.packName}`
+                          : null;
+                        if (!label) return null;
                         return (
                           <span key={i} className="flex items-center gap-1 rounded-full border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-2 py-1 text-xs font-semibold text-[#7AC74C]">
-                            {item.type === "COINS"    && <>🪙 {item.amount} ZikaCoins</>}
-                            {item.type === "TICKET"   && <>🎟️ Ticket ZikaLoot</>}
-                            {item.type === "COSMETIC" && <>🎨 {item.itemName}</>}
-                            {item.type === "CUSTOM"   && <>🎁 {item.description}</>}
+                            {label}
                           </span>
                         );
                       })}
@@ -174,7 +183,7 @@ export default async function ZikaLootPage() {
               <div>
                 <p className="text-[10px] text-slate-500">Sorteio em</p>
                 <p className="text-sm text-slate-300">
-                  {new Date(activeLoot.drawAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                  {new Date(activeLoot.drawAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
                 </p>
               </div>
               <div>
