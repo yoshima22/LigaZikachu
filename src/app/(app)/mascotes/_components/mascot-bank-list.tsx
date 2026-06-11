@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useCallback } from "react";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
-import { getPokemonElement, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getPokemonElement, getPokemonTypes, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getMascotDetailAction } from "../actions";
 import { MascotCard } from "./mascot-card";
 
@@ -164,10 +164,9 @@ function BankRow({
     fetchFull();
   }, [open, fullData, fetchFull]);
 
-  const name      = mascot.nickname ?? getPokemonName(mascot.pokemonId);
-  const element   = getPokemonElement(mascot.pokemonId);
+  const name  = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const types = getPokemonTypes(mascot.pokemonId);
   const chips     = getOccupationChips(mascot);
-  const typeColor = TYPE_COLORS[element] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20";
   const nameColor = statNameColor(mascot);
 
   return (
@@ -197,10 +196,12 @@ function BankRow({
           <span className="flex items-center gap-1.5 flex-wrap">
             {/* Nível */}
             <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
-            {/* Tipo — badge colorido */}
-            <span className={`rounded border px-1.5 py-px text-[9px] font-bold ${typeColor}`}>
-              {TYPE_LABELS[element] ?? element}
-            </span>
+            {/* Tipos — badge(s) colorido(s) */}
+            {types.map(t => (
+              <span key={t} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[t] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
+                {TYPE_LABELS[t] ?? t}
+              </span>
+            ))}
             {/* Humor */}
             <span className="text-[10px] text-slate-600">
               {MOOD_EMOJI[mascot.mood] ?? "•"} {mascot.mood}

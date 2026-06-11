@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star } from "lucide-react";
 import {
-  getSpriteUrl, getStaticSpriteUrl, getPokemonName, expToNextLevel as expToNext,
+  getSpriteUrl, getStaticSpriteUrl, getPokemonName, getPokemonTypes, expToNextLevel as expToNext,
   MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL,
   getHungerStatus, getHappinessStatus, getChallengeStatus,
   HUNGER_LABEL, HAPPINESS_LABEL, CHALLENGE_LABEL,
@@ -78,6 +78,24 @@ interface MascotData {
 }
 
 interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; onRefresh?: () => void }
+
+const TYPE_COLORS: Record<string, string> = {
+  normal:"bg-slate-500/25 text-slate-300 border-slate-500/30", fire:"bg-orange-500/20 text-orange-300 border-orange-500/30",
+  water:"bg-blue-500/20 text-blue-300 border-blue-500/30", grass:"bg-green-500/20 text-green-300 border-green-500/30",
+  electric:"bg-yellow-400/20 text-yellow-300 border-yellow-400/30", psychic:"bg-pink-500/20 text-pink-300 border-pink-500/30",
+  fighting:"bg-red-600/20 text-red-300 border-red-600/30", dark:"bg-slate-700/40 text-slate-400 border-slate-600/30",
+  steel:"bg-slate-400/20 text-slate-300 border-slate-400/30", dragon:"bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  fairy:"bg-pink-400/20 text-pink-200 border-pink-400/30", ghost:"bg-purple-600/20 text-purple-300 border-purple-600/30",
+  poison:"bg-purple-500/20 text-purple-300 border-purple-500/30", ground:"bg-amber-600/20 text-amber-300 border-amber-600/30",
+  rock:"bg-stone-500/20 text-stone-300 border-stone-500/30", flying:"bg-sky-500/20 text-sky-300 border-sky-500/30",
+  bug:"bg-lime-500/20 text-lime-300 border-lime-500/30", ice:"bg-cyan-400/20 text-cyan-300 border-cyan-400/30",
+};
+const TYPE_LABELS: Record<string, string> = {
+  normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama", electric:"Elétrico",
+  psychic:"Psíquico", fighting:"Lutador", dark:"Noturno", steel:"Metal",
+  dragon:"Dragão", fairy:"Fada", ghost:"Fantasma", poison:"Venenoso",
+  ground:"Terra", rock:"Pedra", flying:"Voador", bug:"Inseto", ice:"Gelo",
+};
 
 // Map de módulo — persiste mesmo que o componente remonte (ex: router.refresh em Next.js App Router)
 const _playedAt = new Map<string, number>(); // mascotId → timestamp ms
@@ -657,7 +675,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 <button onClick={() => setEditingName(true)} className="text-slate-600 hover:text-slate-400"><Edit2 size={11}/></button>
               </div>
             )}
-            <div className="text-[10px] text-slate-500 flex items-center gap-1">
+            <div className="text-[10px] text-slate-500 flex items-center gap-1 flex-wrap">
               #{mascot.pokemonId} ·{" "}
               <Tip text={PERSONALITY_DESCRIPTION[mascot.personality] ?? ""}>
                 <span className="underline decoration-dotted cursor-help">
@@ -665,6 +683,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 </span>
               </Tip>
               {" "}· Nv. {localLevel}
+              {getPokemonTypes(mascot.pokemonId).map(t => (
+                <span key={t} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[t] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
+                  {TYPE_LABELS[t] ?? t}
+                </span>
+              ))}
             </div>
             {/* Battle record */}
             {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (

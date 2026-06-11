@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MapPin, Search, Star } from "lucide-react";
-import { getPokemonElement, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonElement, getPokemonTypes, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
 import { MascotBankList, type BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
@@ -86,7 +86,7 @@ function MiniMascot({ mascot }: { mascot: MascotData }) {
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-slate-200">{mascot.nickname ?? getPokemonName(mascot.pokemonId)}</span>
         <span className="text-[10px] text-slate-500">
-          Nv.{mascot.level} | {TYPE_LABELS[getPokemonElement(mascot.pokemonId)] ?? getPokemonElement(mascot.pokemonId)}
+          Nv.{mascot.level} | {getPokemonTypes(mascot.pokemonId).map(t => TYPE_LABELS[t] ?? t).join(" / ")}
         </span>
         <span className="block text-[10px] text-slate-600">{mascot.isEquipped ? "Companheiro" : mascot.mood}</span>
       </span>
