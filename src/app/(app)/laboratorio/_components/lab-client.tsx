@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X } from "lucide-react";
-import { recycleMascotAction, tradeDustForCoinsAction, tradeDustForEggAction, type MascotRarity } from "../actions";
+import { recycleMascotAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
+import type { MascotRarity } from "../rarity";
 
 type LabMascot = {
   id: string;

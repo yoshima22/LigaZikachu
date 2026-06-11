@@ -6,46 +6,9 @@ import { redirect } from "next/navigation";
 import { EggType } from "@prisma/client";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
+import { getMascotRarity, getMascotBaseDust, type MascotRarity } from "./rarity";
 
-// ── Rarity pools (mirrors mascot-data.ts RARE / SPECIAL sets) ────────────────
-
-const SPECIAL_IDS = new Set([
-  129, 131, 132, 133, 137, 138, 140, 143, 147, 215, 227, 233, 236, 241,
-  246, 280, 302, 303, 349, 352, 359, 371, 374, 408, 410, 425, 442, 443,
-  446, 447, 448, 479, 531, 570, 587, 610, 621, 624, 633, 636, 674, 679,
-  696, 698, 700, 701, 704, 707, 714, 744, 746, 747, 757, 769, 778, 782,
-  808, 840, 848, 854, 856, 859, 870, 871, 872, 874, 875, 877, 878, 885,
-  984, 985, 986, 987, 988, 989, 990, 991, 992, 993, 994, 995, 1005, 1006,
-  935, 942, 963, 967, 971, 974, 977, 996, 999, 1011, 1012,
-]);
-
-const RARE_IDS = new Set([
-  25, 37, 58, 63, 66, 92, 95, 123, 124, 125, 126, 127, 128, 129, 131,
-  132, 133, 147, 172, 175, 179, 196, 197, 200, 207, 215, 216, 227, 246,
-  280, 302, 303, 304, 311, 312, 315, 333, 349, 359, 361, 371, 374, 403,
-  408, 410, 425, 427, 433, 443, 446, 447, 448, 459, 479, 517, 529, 531,
-  551, 570, 587, 595, 607, 610, 613, 624, 633, 636, 661, 667, 674, 677,
-  679, 696, 698, 700, 701, 702, 704, 708, 714, 744, 747, 757, 759, 769,
-  778, 782, 810, 813, 816, 821, 827, 835, 840, 848, 854, 856, 859, 868,
-  872, 877, 878, 885, 921, 924, 926, 928, 935, 938, 942, 944, 957, 963,
-  971, 974, 996, 999, 1011, 1012,
-  // Starters (all gen)
-  1, 4, 7, 152, 155, 158, 252, 255, 258, 387, 390, 393, 495, 498, 501,
-  650, 653, 656, 722, 725, 728, 810, 813, 816, 906, 909, 912,
-]);
-
-export type MascotRarity = "COMMON" | "RARE" | "SPECIAL";
-
-export function getMascotRarity(pokemonId: number): MascotRarity {
-  if (SPECIAL_IDS.has(pokemonId)) return "SPECIAL";
-  if (RARE_IDS.has(pokemonId)) return "RARE";
-  return "COMMON";
-}
-
-function getMascotBaseDust(pokemonId: number): number {
-  const r = getMascotRarity(pokemonId);
-  return r === "SPECIAL" ? 3 : r === "RARE" ? 2 : 1;
-}
+export type { MascotRarity };
 
 // weekKey = "YYYY-Www" using ISO week number
 function getWeekKey(): string {
