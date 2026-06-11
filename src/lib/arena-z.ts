@@ -1908,6 +1908,10 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (loserTeam && injuredMascotIds.length === 0) {
     injuredMascotIds.push(pick(loserTeam.members).mascotId);
   }
+  // Mascotes do time VENCEDOR que também caíram em combate ficam feridos (mas o time não é dissolvido)
+  const winnerInjuredIds = winnerTeam
+    ? combat.defeatedMascotIds.filter(id => winnerTeam.members.some(member => member.mascotId === id))
+    : [];
   const loserTeamDefeated = !!loserTeam && injuredMascotIds.length >= loserTeam.members.length;
   const losingLootWithMultiplier = loserTeam
     ? applyMultiplierToVault(
@@ -2020,8 +2024,16 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
         where: { teamId: loserTeam.id, mascotId: { in: injuredMascotIds } },
       });
     }
+    // Feridos do time vencedor também saem da equipe (mas o time continua ativo)
+    if (winnerTeam && winnerInjuredIds.length > 0) {
+      await tx.arenaTeamMember.deleteMany({
+        where: { teamId: winnerTeam.id, mascotId: { in: winnerInjuredIds } },
+      });
+    }
     for (const member of allMembers) {
-      const injured = injuredMascotIds.includes(member.mascotId);
+      const isLoserInjured = injuredMascotIds.includes(member.mascotId);
+      const isWinnerInjured = winnerInjuredIds.includes(member.mascotId);
+      const injured = isLoserInjured || isWinnerInjured;
       const won = winnerTeam?.id === member.teamId;
       await tx.mascot.update({
         where: { id: member.mascotId },
@@ -2034,7 +2046,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
           mascotId: member.mascotId,
           emoji: injured ? "PVP!" : "PVP",
           description: injured
-            ? "Saiu ferido de um combate PvP da Arena Z."
+            ? "Saiu ferido de um combate PvP da Arena Z e precisa de Atendimento SUS."
             : `Participou de um combate PvP da Arena Z${won ? " e protegeu/roubou loot." : "."}`,
         },
       });
