@@ -12,6 +12,13 @@ const nextConfig = {
         protocol: "https",
         hostname: "raw.githubusercontent.com",
         pathname: "/PokeAPI/sprites/**"
+      },
+      {
+        // Supabase Storage — avatars, itens de shop, badges, sticker packs
+        // Vercel baixa 1x, otimiza e serve via CDN próprio, reduzindo egress do Supabase
+        protocol: "https",
+        hostname: "fwxqywivezsixamietps.supabase.co",
+        pathname: "/storage/v1/object/public/**"
       }
     ]
   },

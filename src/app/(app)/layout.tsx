@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { getAppSession } from "@/lib/session";
@@ -102,8 +103,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                 {/* Avatar à direita */}
                 <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
                   {player?.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={player.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                    <Image src={player.avatarUrl} alt="avatar" width={32} height={32} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
                       {(user.name ?? user.email ?? "?")[0].toUpperCase()}

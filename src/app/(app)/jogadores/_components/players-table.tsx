@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { User, Pencil, ShieldOff, ShieldCheck, CheckCircle, Trash2, X } from "lucide-react";
 import { Role, UserStatus } from "@prisma/client";
 import { toast } from "sonner";
@@ -216,8 +217,7 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-white">
                       {p.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image} alt={p.displayName} className="h-8 w-8 rounded-full object-cover" />
+                        <Image src={p.image} alt={p.displayName} width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
                       ) : (
                         p.displayName.slice(0, 2).toUpperCase()
                       )}
