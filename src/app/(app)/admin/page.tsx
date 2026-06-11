@@ -259,6 +259,49 @@ export default async function AdminPage() {
         }))}
       />
       <MigrateImagesPanel />
+
+      {/* ── Referência: IDs especiais de Pokémon ── */}
+      <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <BookOpen size={16} className="text-[#FFCB05]" />
+          <h3 className="font-semibold text-slate-200">Referência — IDs especiais de Pokémon</h3>
+        </div>
+        <p className="text-xs text-slate-500">
+          IDs fora do range 1–1025 usados no sistema de mascotes. Use-os no painel "Adicionar Mascote" ou nos pools de ovo.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-left text-slate-500">
+                <th className="pb-2 pr-6 font-semibold">ID</th>
+                <th className="pb-2 pr-6 font-semibold">Nome</th>
+                <th className="pb-2 pr-6 font-semibold">Tipos</th>
+                <th className="pb-2 font-semibold">Observação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {[
+                { id: 10008, name: "Rotom-Calor",      types: "Electric / Fire",    note: "Forma do forno micro-ondas" },
+                { id: 10009, name: "Rotom-Lavagem",    types: "Electric / Water",   note: "Forma da lavadora" },
+                { id: 10010, name: "Rotom-Gelo",       types: "Electric / Ice",     note: "Forma da geladeira" },
+                { id: 10011, name: "Rotom-Ventilador", types: "Electric / Flying",  note: "Forma do ventilador" },
+                { id: 10012, name: "Rotom-Corte",      types: "Electric / Grass",   note: "Forma do cortador de grama" },
+              ].map(row => (
+                <tr key={row.id} className="text-slate-300">
+                  <td className="py-2 pr-6 font-mono text-[#FFCB05]">{row.id}</td>
+                  <td className="py-2 pr-6 font-medium">{row.name}</td>
+                  <td className="py-2 pr-6 text-slate-400">{row.types}</td>
+                  <td className="py-2 text-slate-500">{row.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-slate-600">
+          SQL de referência para inserção direta: <code className="bg-slate-800 px-1 rounded">SELECT id, &quot;displayName&quot; FROM players WHERE &quot;displayName&quot; ILIKE &apos;%nome%&apos;;</code> para obter o playerId.
+        </p>
+      </div>
+
       <GlobalResetPanel />
     </div>
   );
