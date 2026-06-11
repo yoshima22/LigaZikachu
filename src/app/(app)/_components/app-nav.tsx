@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 import { getUnreadCountAction } from "../mensagens/actions";
 import Link from "next/link";
 import {
@@ -117,24 +116,6 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
     return () => clearInterval(id);
   }, [playerId]);
 
-  useEffect(() => {
-    if (!playerId) return;
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return;
-
-    const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-    const ch = supabase.channel(`inbox:${playerId}`)
-      .on("broadcast", { event: "new_message" }, () => {
-        setLiveUnreadDms((n) => n + 1);
-      })
-      .on("broadcast", { event: "read_all" }, () => {
-        setLiveUnreadDms(0);
-      })
-      .subscribe();
-
-    return () => { void supabase.removeChannel(ch); };
-  }, [playerId]);
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {

@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { RefreshCw } from "lucide-react";
 
+// IMPORTANTE: "mascots" foi removido intencionalmente.
+// postgres_changes sem filtro envia a row completa de CADA update de mascote
+// para todos os assinantes do canal — com batalhas PvE frequentes e 20+ usuários
+// isso gera centenas de MB de egress Realtime por dia.
 const WATCHED_TABLES = [
   "arena_teams",
   "arena_team_members",
   "arena_battles",
   "arena_ground_spoils",
-  "mascots",
 ] as const;
 
 /**
@@ -32,25 +35,43 @@ export function ArenaLiveRefresh() {
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
-      realtime: { params: { eventsPerSecond: 2 } },
+      realtime: { params: { eventsPerSecond: 1 } },
     });
 
-    const scheduleFlag = () => {
-      if (document.visibilityState !== "visible") return;
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      // Apenas sinaliza que há atualizações, NÃO dispara router.refresh() automaticamente
-      debounceTimer.current = setTimeout(() => setHasUpdates(true), 1500);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const subscribe = () => {
+      if (channel) return;
+      const scheduleFlag = () => {
+        if (document.visibilityState !== "visible") return;
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setHasUpdates(true), 1500);
+      };
+      channel = WATCHED_TABLES.reduce(
+        (ch, table) => ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
+        supabase.channel("arena-z-live-badge"),
+      );
+      channel.subscribe();
     };
 
-    const channel = WATCHED_TABLES.reduce(
-      (ch, table) => ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
-      supabase.channel("arena-z-live-badge"),
-    );
-
-    channel.subscribe();
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    const unsubscribe = () => {
+      if (!channel) return;
       void supabase.removeChannel(channel);
+      channel = null;
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") subscribe();
+      else unsubscribe();
+    };
+
+    if (document.visibilityState === "visible") subscribe();
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      unsubscribe();
     };
   }, []);
 

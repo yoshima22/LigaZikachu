@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
 import { sendMessageAction, pollNewMessagesAction, type AttachmentData } from "../../actions";
 import { ArrowLeft, Paperclip, Send, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,10 +24,6 @@ interface Props {
   me: { id: string; displayName: string };
   other: { id: string; displayName: string; avatarUrl: string | null };
   initialMessages: Message[];
-}
-
-function channelName(a: string, b: string) {
-  return `dm:${[a, b].sort().join("-")}`;
 }
 
 const RARITY_COLOR: Record<string, string> = {
@@ -99,10 +94,6 @@ export function DmChat({ me, other, initialMessages }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channelRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inboxChannelRef = useRef<any>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -139,36 +130,6 @@ export function DmChat({ me, other, initialMessages }: Props) {
     return () => clearInterval(id);
   }, [other.id]);
 
-  useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return;
-
-    const supabase = createClient(url, key, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const dmChannel = supabase.channel(channelName(me.id, other.id));
-    dmChannel
-      .on("broadcast", { event: "new_message" }, ({ payload }) => {
-        const msg = payload as Message;
-        setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
-      })
-      .subscribe();
-    channelRef.current = dmChannel;
-
-    // Notify my own inbox that messages were read
-    const myInboxChannel = supabase.channel(`inbox:${me.id}`);
-    myInboxChannel.subscribe(() => {
-      void myInboxChannel.send({ type: "broadcast", event: "read_all", payload: { from: other.id } });
-    });
-    inboxChannelRef.current = myInboxChannel;
-
-    return () => {
-      void supabase.removeChannel(dmChannel);
-      void supabase.removeChannel(myInboxChannel);
-    };
-  }, [me.id, other.id]);
 
   const handleSend = () => {
     const val = text.trim();
@@ -193,24 +154,6 @@ export function DmChat({ me, other, initialMessages }: Props) {
       };
 
       setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
-
-      if (channelRef.current) {
-        await channelRef.current.send({
-          type: "broadcast", event: "new_message", payload: msg,
-        });
-      }
-
-      // Notify receiver's inbox for badge update
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (url && key) {
-        const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-        const receiverInbox = supabase.channel(`inbox:${other.id}`);
-        receiverInbox.subscribe(async () => {
-          await receiverInbox.send({ type: "broadcast", event: "new_message", payload: { from: me.id } });
-          void supabase.removeChannel(receiverInbox);
-        });
-      }
     });
   };
 

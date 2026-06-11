@@ -30,27 +30,43 @@ export function BazarLiveRefresh() {
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
-      realtime: { params: { eventsPerSecond: 2 } },
+      realtime: { params: { eventsPerSecond: 1 } },
     });
 
-    const scheduleFlag = () => {
-      if (document.visibilityState !== "visible") return;
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      // Apenas sinaliza novidades, NÃO dispara router.refresh() automaticamente
-      debounceTimer.current = setTimeout(() => setHasUpdates(true), 2000);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const subscribe = () => {
+      if (channel) return;
+      const scheduleFlag = () => {
+        if (document.visibilityState !== "visible") return;
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setHasUpdates(true), 2000);
+      };
+      channel = WATCHED_TABLES.reduce(
+        (ch, table) => ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
+        supabase.channel("bazar-live-badge"),
+      );
+      channel.subscribe();
     };
 
-    const channel = WATCHED_TABLES.reduce(
-      (ch, table) =>
-        ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
-      supabase.channel("bazar-live-badge"),
-    );
+    const unsubscribe = () => {
+      if (!channel) return;
+      void supabase.removeChannel(channel);
+      channel = null;
+    };
 
-    channel.subscribe();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") subscribe();
+      else unsubscribe();
+    };
+
+    if (document.visibilityState === "visible") subscribe();
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      void supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, []);
 
