@@ -591,8 +591,8 @@ export async function computeProceduralStatsAction(opts: {
 }): Promise<{ ok: boolean; stats?: { statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number }; error?: string }> {
   try {
     await requireAdmin();
-    const ROTOM_FORM_IDS = new Set([10008, 10009, 10010, 10011, 10012]);
-    const validPokemonId = (id: number) => (id >= 1 && id <= 1025) || ROTOM_FORM_IDS.has(id);
+    const SPECIAL_FORM_IDS = new Set([10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012]);
+    const validPokemonId = (id: number) => (id >= 1 && id <= 1025) || SPECIAL_FORM_IDS.has(id);
     if (!validPokemonId(opts.pokemonId)) return { ok: false, error: "pokemonId inválido." };
     if (opts.level < 1 || opts.level > 100) return { ok: false, error: "Nível inválido." };
     const { computeProceduralStats } = await import("@/lib/mascot");
@@ -625,8 +625,8 @@ export async function createMascotForPlayerAction(opts: {
     const player = await prisma.player.findUnique({ where: { id: opts.playerId }, select: { id: true } });
     if (!player) return { ok: false, error: "Jogador não encontrado." };
 
-    const ROTOM_FORM_IDS2 = new Set([10008, 10009, 10010, 10011, 10012]);
-    if (!((opts.pokemonId >= 1 && opts.pokemonId <= 1025) || ROTOM_FORM_IDS2.has(opts.pokemonId)))
+    const SPECIAL_FORM_IDS2 = new Set([10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012]);
+    if (!((opts.pokemonId >= 1 && opts.pokemonId <= 1025) || SPECIAL_FORM_IDS2.has(opts.pokemonId)))
       return { ok: false, error: "pokemonId inválido." };
     if (opts.level < 1 || opts.level > 100)
       return { ok: false, error: "Nível inválido (1–100)." };

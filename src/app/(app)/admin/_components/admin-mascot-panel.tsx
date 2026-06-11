@@ -183,8 +183,8 @@ function CreateSection({ players }: Props) {
   const clampStat = (base: number, bonus: number) => Math.max(1, Math.min(999, base + bonus));
 
   const pokeIdNum = parseInt(pokemonId);
-  const ROTOM_FORM_IDS = new Set([10008, 10009, 10010, 10011, 10012]);
-  const isValidPokemonId = (id: number) => (id >= 1 && id <= 1025) || ROTOM_FORM_IDS.has(id);
+  const SPECIAL_FORM_IDS = new Set([10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012]);
+  const isValidPokemonId = (id: number) => (id >= 1 && id <= 1025) || SPECIAL_FORM_IDS.has(id);
   const previewName = !isNaN(pokeIdNum) && isValidPokemonId(pokeIdNum)
     ? getPokemonName(pokeIdNum)
     : null;

@@ -268,29 +268,36 @@ export default async function AdminPage() {
         </div>
         <p className="text-xs text-slate-500">
           IDs fora do range 1–1025 usados no sistema de mascotes. Use-os no painel "Adicionar Mascote" ou nos pools de ovo.
+          Lendários (marcados ★) entram no pool lendário e ganham +30% de pontos de stat por nível.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-left text-slate-500">
-                <th className="pb-2 pr-6 font-semibold">ID</th>
-                <th className="pb-2 pr-6 font-semibold">Nome</th>
-                <th className="pb-2 pr-6 font-semibold">Tipos</th>
+                <th className="pb-2 pr-4 font-semibold">ID</th>
+                <th className="pb-2 pr-4 font-semibold">Nome</th>
+                <th className="pb-2 pr-4 font-semibold">Tipos</th>
+                <th className="pb-2 pr-4 font-semibold">Lendário</th>
                 <th className="pb-2 font-semibold">Observação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {[
-                { id: 10008, name: "Rotom-Calor",      types: "Electric / Fire",    note: "Forma do forno micro-ondas" },
-                { id: 10009, name: "Rotom-Lavagem",    types: "Electric / Water",   note: "Forma da lavadora" },
-                { id: 10010, name: "Rotom-Gelo",       types: "Electric / Ice",     note: "Forma da geladeira" },
-                { id: 10011, name: "Rotom-Ventilador", types: "Electric / Flying",  note: "Forma do ventilador" },
-                { id: 10012, name: "Rotom-Corte",      types: "Electric / Grass",   note: "Forma do cortador de grama" },
+                { id: 10004, name: "Wormadam-Arenosa",  types: "Bug / Ground",       legendary: false, note: "Wormadam capa de areia" },
+                { id: 10005, name: "Wormadam-Lata",     types: "Bug / Steel",        legendary: false, note: "Wormadam capa de lata" },
+                { id: 10006, name: "Shaymin-Céu",       types: "Grass / Flying",     legendary: true,  note: "Forma celeste do Shaymin" },
+                { id: 10007, name: "Giratina-Origem",   types: "Ghost / Dragon",     legendary: true,  note: "Forma de origem do Giratina" },
+                { id: 10008, name: "Rotom-Calor",       types: "Electric / Fire",    legendary: false, note: "Forma do forno micro-ondas" },
+                { id: 10009, name: "Rotom-Lavagem",     types: "Electric / Water",   legendary: false, note: "Forma da lavadora" },
+                { id: 10010, name: "Rotom-Gelo",        types: "Electric / Ice",     legendary: false, note: "Forma da geladeira" },
+                { id: 10011, name: "Rotom-Ventilador",  types: "Electric / Flying",  legendary: false, note: "Forma do ventilador" },
+                { id: 10012, name: "Rotom-Corte",       types: "Electric / Grass",   legendary: false, note: "Forma do cortador de grama" },
               ].map(row => (
                 <tr key={row.id} className="text-slate-300">
-                  <td className="py-2 pr-6 font-mono text-[#FFCB05]">{row.id}</td>
-                  <td className="py-2 pr-6 font-medium">{row.name}</td>
-                  <td className="py-2 pr-6 text-slate-400">{row.types}</td>
+                  <td className="py-2 pr-4 font-mono text-[#FFCB05]">{row.id}</td>
+                  <td className="py-2 pr-4 font-medium">{row.name}</td>
+                  <td className="py-2 pr-4 text-slate-400">{row.types}</td>
+                  <td className="py-2 pr-4 text-center">{row.legendary ? <span className="text-yellow-400">★</span> : <span className="text-slate-600">—</span>}</td>
                   <td className="py-2 text-slate-500">{row.note}</td>
                 </tr>
               ))}
@@ -298,7 +305,7 @@ export default async function AdminPage() {
           </table>
         </div>
         <p className="text-[10px] text-slate-600">
-          SQL de referência para inserção direta: <code className="bg-slate-800 px-1 rounded">SELECT id, &quot;displayName&quot; FROM players WHERE &quot;displayName&quot; ILIKE &apos;%nome%&apos;;</code> para obter o playerId.
+          SQL de referência: <code className="bg-slate-800 px-1 rounded">SELECT id, &quot;displayName&quot; FROM players WHERE &quot;displayName&quot; ILIKE &apos;%nome%&apos;;</code>
         </p>
       </div>
 

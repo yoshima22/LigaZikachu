@@ -247,7 +247,8 @@ function levelStatBonuses(
     levelsGained * (mascot.personality === "LOYAL" ? 2 : 1) +
     levelsGained +
     levelsGained * (mascot.personality === "DRAMATIC" ? 0 : 1);
-  const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER)) : 0;
+  const legendaryBonus = LEGENDARY_POOL.includes(mascot.pokemonId) ? 1.3 : 1.0;
+  const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER * legendaryBonus)) : 0;
 
   const weights: Record<MascotStatKey, number> = {
     statForce: mascot.statForce * 3,
