@@ -29,6 +29,7 @@ import {
   User,
   Users,
   ShoppingCart,
+  FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -59,7 +60,8 @@ const mercadoLinks = [
   { href: "/bazar",    label: "Bazar",     icon: Store,       adminOnly: false },
   { href: "/shop",     label: "ZikaShop",  icon: ShoppingBag, adminOnly: false },
   { href: "/zikabet",  label: "ZikaBet",   icon: Swords,      adminOnly: false },
-  { href: "/zikaloot", label: "ZikaLoot",  icon: Ticket,      adminOnly: false },
+  { href: "/zikaloot",    label: "ZikaLoot",    icon: Ticket,        adminOnly: false },
+  { href: "/laboratorio", label: "Laboratório", icon: FlaskConical,  adminOnly: false },
 ];
 
 // profileLinks é dinâmico — usa playerId para o link do perfil público

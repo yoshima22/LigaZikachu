@@ -261,8 +261,26 @@ model Player {
   supporterPasses         SupporterPass[]
   sentMessages            DirectMessage[]  @relation("SentMessages")
   receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
+  creationDust            Int                  @default(0)
+  labWeeklyUsage          LabWeeklyUsage[]
 
   @@map("players")
+}
+
+model LabWeeklyUsage {
+  id            String   @id @default(cuid())
+  playerId      String
+  weekKey       String   // e.g. "2026-W24"
+  coinsTraded   Int      @default(0)
+  commonEggs    Int      @default(0)
+  rareEggs      Int      @default(0)
+  specialEggs   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, weekKey])
+  @@map("lab_weekly_usage")
 }
 
 model DirectMessage {
@@ -1066,6 +1084,7 @@ enum ZikaCoinTxType {
   DUPLICATE_STICKER_CONVERSION
   ADMIN_ADJUSTMENT
   VIP_PASS_REWARD
+  LAB_TRADE
 }
 
 enum ZikaCoinTxStatus {
