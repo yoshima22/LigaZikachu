@@ -154,6 +154,8 @@ export const EGG_POOLS: Record<string, number[]> = {
 export interface Evolution {
   from: number;
   to: number;
+  /** Se presente, sorteia aleatoriamente entre essas opções ao evoluir (ignora `to`) */
+  toOptions?: number[];
   level: number;
 }
 
@@ -211,7 +213,8 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 118, to: 119, level: 33 },
   { from: 120, to: 121, level: 36 },
   { from: 129, to: 130, level: 20 }, // Magikarp → Gyarados
-  { from: 133, to: 134, level: 30 }, // Eevee → Vaporeon (simplificado por nível)
+  // Eevee → sorteio aleatório entre as 8 eeveelutions ao atingir nível 30
+  { from: 133, to: 134, toOptions: [134, 135, 136, 196, 197, 470, 471, 700], level: 30 },
   { from: 138, to: 139, level: 40 },
   { from: 140, to: 141, level: 40 },
   { from: 147, to: 148, level: 30 }, { from: 148, to: 149, level: 55 },
@@ -1151,6 +1154,9 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   1017:"Ogerpon",1020:"Gouging Fire",1021:"Raging Bolt",
   1022:"Iron Boulder",1023:"Iron Crown",
   1024:"Terapagos",1025:"Pecharunt",
+  // Rotom formas (IDs PokeAPI de forma, não National Dex)
+  10008:"Rotom-Calor",10009:"Rotom-Lavagem",10010:"Rotom-Gelo",
+  10011:"Rotom-Ventilador",10012:"Rotom-Corte",
 };
 
 export function getPokemonName(id: number): string {

@@ -350,7 +350,8 @@ export async function addExp(
     // Verifica evolução (respeitando evolutionLocked)
     const evo = EVOLUTION_MAP.get(pokemonId);
     if (evo && level >= evo.level && !mascot.evolutionLocked) {
-      pokemonId = evo.to;
+      const opts = evo.toOptions;
+      pokemonId = opts ? opts[Math.floor(Math.random() * opts.length)] : evo.to;
       evolved = true;
       newPokemonId = pokemonId;
     }
