@@ -157,7 +157,13 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
-      include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
+        arenaState: true, restingUntil: true, injuredAt: true,
+        bazarListed: true, happiness: true,
+        statForce: true, statAgility: true, statInstinct: true, statVitality: true,
+        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
+      },
       orderBy: [{ level: "desc" }],
     }),
     prisma.arenaTeam.findMany({

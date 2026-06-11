@@ -105,7 +105,7 @@ async function getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary: 
     const mascots = await prisma.mascot.findMany({
       where: PLAYER_FILTER, select: MASCOT_SELECT,
       orderBy: [{ level: "desc" }, { exp: "desc" }, { id: "asc" }],
-      take: 200,
+      take: 50,
     });
     return {
       ranking: mascots

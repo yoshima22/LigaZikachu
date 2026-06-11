@@ -4,6 +4,7 @@ import { addExp } from "@/lib/mascot";
 import { getPokemonElement, getPokemonName, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -447,19 +448,34 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
   };
 }
 
+/** Dados partilhados da arena (times ativos) — cacheado 60s para todos os usuários */
+const getActiveArenaTeams = unstable_cache(
+  async () => {
+    return prisma.arenaTeam.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true, name: true, roomLevel: true, vaultCoins: true, enteredAt: true,
+        playerId: true,
+        player: { select: { id: true, displayName: true } },
+        members: {
+          select: {
+            slot: true,
+            mascot: { select: { pokemonId: true, nickname: true, level: true } },
+          },
+          orderBy: { slot: "asc" },
+        },
+      },
+      orderBy: { enteredAt: "asc" },
+      take: 200,
+    });
+  },
+  ["arena-active-teams"],
+  { revalidate: 60 },
+);
+
 /** Retorna dados das salas para o painel de inspeção (grid de salas) */
 export async function getRoomsData(viewerPlayerId?: string) {
-  const teams = await prisma.arenaTeam.findMany({
-    where: { status: "ACTIVE" },
-    include: {
-      members: {
-        include: { mascot: { select: { pokemonId: true, nickname: true, level: true } } },
-        orderBy: { slot: "asc" },
-      },
-      player: { select: { id: true, displayName: true } },
-    },
-    orderBy: { enteredAt: "asc" },
-  });
+  const teams = await getActiveArenaTeams();
 
   // Times que o viewer já lutou (para revelar nomes dos pokémons)
   const revealedTeamIds = new Set<string>();
@@ -467,6 +483,7 @@ export async function getRoomsData(viewerPlayerId?: string) {
     const foughtBattles = await prisma.arenaBattle.findMany({
       where: { attackerPlayerId: viewerPlayerId, type: { in: ["PVP"] } },
       select: { defenseTeamId: true },
+      take: 500,
     });
     foughtBattles.forEach(b => { if (b.defenseTeamId) revealedTeamIds.add(b.defenseTeamId); });
   }
@@ -501,13 +518,9 @@ export async function getRoomsData(viewerPlayerId?: string) {
   return rooms;
 }
 
-/** Top 2 jogadores: mais tempo + mais vitórias, ou mais salas simultâneas */
+/** Top 2 jogadores — reutiliza o cache de times ativos, sem query extra */
 export async function getTopArenaPlayers() {
-  const teams = await prisma.arenaTeam.findMany({
-    where: { status: "ACTIVE" },
-    include: { player: { select: { id: true, displayName: true } } },
-    orderBy: { enteredAt: "asc" },
-  });
+  const teams = await getActiveArenaTeams();
 
   const playerStats = new Map<string, { displayName: string; teamCount: number; totalHours: number }>();
   for (const t of teams) {
@@ -521,13 +534,10 @@ export async function getTopArenaPlayers() {
     }
   }
 
-  // Score: equipes simultâneas * 100 + horas totais
-  const sorted = [...playerStats.entries()]
+  return [...playerStats.entries()]
     .map(([id, s]) => ({ id, ...s, score: s.teamCount * 100 + s.totalHours }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 2);
-
-  return sorted;
 }
 
 function remainingLoot(loot: ArenaLoot, stolen: ArenaLoot, burned: ArenaLoot): ArenaLoot {
@@ -1535,7 +1545,7 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
 
 // ── Ranking público ───────────────────────────────────────────────────────────
 
-export async function getArenaRanking(limit = 20) {
+async function _getArenaRanking(limit: number) {
   // Busca IDs de admins para excluir do ranking
   const adminUsers = await prisma.user.findMany({
     where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
@@ -1594,6 +1604,12 @@ export async function getArenaRanking(limit = 20) {
     .sort((a, b) => b.wins - a.wins || b.stolenCoins - a.stolenCoins || a.losses - b.losses)
     .slice(0, limit);
 }
+
+export const getArenaRanking = unstable_cache(
+  (limit = 20) => _getArenaRanking(limit),
+  ["arena-ranking"],
+  { revalidate: 120 }, // 2 min — ranking muda raramente
+);
 
 // ── Ataque oportunista de rival ───────────────────────────────────────────────
 
