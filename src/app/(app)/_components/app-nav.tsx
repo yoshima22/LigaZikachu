@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import {
   BarChart3,
@@ -91,7 +92,29 @@ type NavLink = {
 export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; playerId?: string }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [liveUnreadDms, setLiveUnreadDms] = useState(unreadDms);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setLiveUnreadDms(unreadDms); }, [unreadDms]);
+
+  useEffect(() => {
+    if (!playerId) return;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+
+    const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+    const ch = supabase.channel(`inbox:${playerId}`)
+      .on("broadcast", { event: "new_message" }, () => {
+        setLiveUnreadDms((n) => n + 1);
+      })
+      .on("broadcast", { event: "read_all" }, () => {
+        setLiveUnreadDms(0);
+      })
+      .subscribe();
+
+    return () => { void supabase.removeChannel(ch); };
+  }, [playerId]);
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -157,7 +180,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
           admin={admin}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
-          badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": unreadDms }}
+          badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": liveUnreadDms }}
           tutorialId="nav-perfil"
         />
         {adminLinks

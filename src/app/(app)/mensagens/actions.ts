@@ -17,7 +17,14 @@ async function requirePlayer() {
 }
 
 export type AttachmentData =
-  | { type: "MASCOT"; id: string; pokemonId: number; displayName: string; nickname: string | null; level: number; isShiny: boolean; spriteUrl: string }
+  | {
+      type: "MASCOT";
+      id: string; pokemonId: number; displayName: string; nickname: string | null;
+      level: number; isShiny: boolean; spriteUrl: string;
+      personality: string;
+      statForce: number; statAgility: number; statCharisma: number;
+      statInstinct: number; statVitality: number;
+    }
   | { type: "ITEM"; id: string; name: string; imageUrl: string | null; itemType: string; rarity: string };
 
 export async function getConversationAction(otherPlayerId: string) {
@@ -173,7 +180,12 @@ export async function getMyAttachablesAction() {
   const [mascots, inventoryItems] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId: me.id },
-      select: { id: true, pokemonId: true, nickname: true, level: true, isShiny: true },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
+        personality: true,
+        statForce: true, statAgility: true, statCharisma: true,
+        statInstinct: true, statVitality: true,
+      },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
       take: 30,
     }),
@@ -194,6 +206,12 @@ export async function getMyAttachablesAction() {
     level: m.level,
     isShiny: m.isShiny ?? false,
     spriteUrl: m.isShiny ? getShinySprite(m.pokemonId) : getStaticSpriteUrl(m.pokemonId),
+    personality: m.personality,
+    statForce: m.statForce,
+    statAgility: m.statAgility,
+    statCharisma: m.statCharisma,
+    statInstinct: m.statInstinct,
+    statVitality: m.statVitality,
   }));
 
   const itemAttachments: AttachmentData[] = inventoryItems.map((inv) => ({

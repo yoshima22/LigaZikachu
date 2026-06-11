@@ -43,12 +43,29 @@ function AttachmentCard({ data, mine }: { data: AttachmentData; mine: boolean })
 
   if (data.type === "MASCOT") {
     return (
-      <div className={`mt-1.5 flex items-center gap-2 rounded-xl border ${base} px-3 py-2`}>
-        <img src={data.spriteUrl} alt="" className="h-12 w-12 object-contain" />
-        <div>
-          <p className="text-xs font-bold text-white">{data.nickname || data.displayName}</p>
-          <p className="text-[10px] text-slate-400">{data.displayName} · Lv.{data.level}</p>
-          {data.isShiny && <p className="text-[10px] text-yellow-400">✨ Shiny</p>}
+      <div className={`mt-1.5 rounded-xl border ${base} px-3 py-2`}>
+        <div className="flex items-center gap-2">
+          <img src={data.spriteUrl} alt="" className="h-12 w-12 object-contain" />
+          <div>
+            <p className="text-xs font-bold text-white">{data.nickname || data.displayName}</p>
+            <p className="text-[10px] text-slate-400">{data.displayName} · Lv.{data.level}</p>
+            {data.isShiny && <p className="text-[10px] text-yellow-400">✨ Shiny</p>}
+            <p className="text-[10px] text-slate-500 italic">{data.personality}</p>
+          </div>
+        </div>
+        <div className="mt-1.5 grid grid-cols-5 gap-1 text-center">
+          {([
+            ["Força", data.statForce],
+            ["Agil.", data.statAgility],
+            ["Car.", data.statCharisma],
+            ["Inst.", data.statInstinct],
+            ["Vit.", data.statVitality],
+          ] as [string, number][]).map(([label, val]) => (
+            <div key={label} className="flex flex-col rounded-lg bg-slate-800/60 px-1 py-0.5">
+              <span className="text-[8px] text-slate-500">{label}</span>
+              <span className="text-[10px] font-bold text-slate-200">{val}</span>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -83,7 +100,9 @@ export function DmChat({ me, other, initialMessages }: Props) {
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabaseRef = useRef<any>(null);
+  const channelRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inboxChannelRef = useRef<any>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -97,17 +116,27 @@ export function DmChat({ me, other, initialMessages }: Props) {
     const supabase = createClient(url, key, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    supabaseRef.current = supabase;
 
-    const channel = supabase.channel(channelName(me.id, other.id));
-    channel
+    const dmChannel = supabase.channel(channelName(me.id, other.id));
+    dmChannel
       .on("broadcast", { event: "new_message" }, ({ payload }) => {
         const msg = payload as Message;
         setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
       })
       .subscribe();
+    channelRef.current = dmChannel;
 
-    return () => { void supabase.removeChannel(channel); };
+    // Notify my own inbox that messages were read
+    const myInboxChannel = supabase.channel(`inbox:${me.id}`);
+    myInboxChannel.subscribe(() => {
+      void myInboxChannel.send({ type: "broadcast", event: "read_all", payload: { from: other.id } });
+    });
+    inboxChannelRef.current = myInboxChannel;
+
+    return () => {
+      void supabase.removeChannel(dmChannel);
+      void supabase.removeChannel(myInboxChannel);
+    };
   }, [me.id, other.id]);
 
   const handleSend = () => {
@@ -134,11 +163,23 @@ export function DmChat({ me, other, initialMessages }: Props) {
 
       setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
 
-      const supabase = supabaseRef.current;
-      if (!supabase) return;
-      await supabase.channel(channelName(me.id, other.id)).send({
-        type: "broadcast", event: "new_message", payload: msg,
-      });
+      if (channelRef.current) {
+        await channelRef.current.send({
+          type: "broadcast", event: "new_message", payload: msg,
+        });
+      }
+
+      // Notify receiver's inbox for badge update
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (url && key) {
+        const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+        const receiverInbox = supabase.channel(`inbox:${other.id}`);
+        receiverInbox.subscribe(async () => {
+          await receiverInbox.send({ type: "broadcast", event: "new_message", payload: { from: me.id } });
+          void supabase.removeChannel(receiverInbox);
+        });
+      }
     });
   };
 

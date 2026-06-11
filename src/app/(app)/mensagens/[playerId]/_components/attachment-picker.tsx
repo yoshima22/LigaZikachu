@@ -75,6 +75,9 @@ export function AttachmentPicker({ onSelect, onClose }: Props) {
                       {m.nickname || m.displayName}
                     </span>
                     <span className="text-[10px] text-slate-500">Lv.{m.level}</span>
+                    {m.personality && (
+                      <span className="line-clamp-1 text-[9px] italic text-slate-600">{m.personality}</span>
+                    )}
                   </button>
                 );
               })}
