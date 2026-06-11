@@ -113,7 +113,7 @@ export default async function MascotesPage() {
     }),
     // Ovos — apenas campos usados pelo IncubatorPanel
     prisma.mascotEgg.findMany({
-      where: { playerId: player.id, incubation: null },
+      where: { playerId: player.id, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },
       select: { id: true, type: true, obtainedAt: true, origin: true },
       orderBy: { obtainedAt: "asc" }
     }),
