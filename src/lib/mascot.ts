@@ -969,8 +969,8 @@ async function claimExpeditionLegacy(
       });
     }
 
-    // EXP pela expedição
-    await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION);
+    // EXP pela expedição — sem bench penalty (expedição é trabalho do mascote, não interação)
+    await addExp(expedition.mascotId, EXP_REWARDS.EXPEDITION, { ignoreBenchPenalty: true });
   });
 
   return { reward, mascotId: expedition.mascotId };
@@ -1026,13 +1026,27 @@ export async function claimExpedition(
     ? TRAINING_EXP_MULT[durationKey]
     : mode === "ITEMS" ? 0 : dur.expMultiplier;
 
-  // Ovo da Sorte: +20% EXP se mascote tem buff LUCKY_EGG ativo
+  // Ovo da Sorte: +EXP% na próxima expedição de TRAINING (apenas modo TRAINING)
   const luckyEggBuff = mode === "TRAINING" ? await prisma.mascotBuff.findFirst({
     where: { mascotId: expedition.mascotId, type: "LUCKY_EGG", expiresAt: { gt: new Date() } }
   }) : null;
-  const luckyEggMult = luckyEggBuff ? 1.20 : 1.0;
 
-  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult);
+  // Vitamina Elétrica e Cesta de Piquenique: incluídas no cálculo para que o log/modal reflita o valor real
+  const [expBoostBuff, picnicBuff] = await Promise.all([
+    prisma.mascotBuff.findFirst({ where: { mascotId: expedition.mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } }),
+    prisma.mascotBuff.findFirst({ where: { mascotId: expedition.mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } } }),
+  ]);
+  const [luckyEggMeta, expBoostMeta, picnicShopMeta] = await Promise.all([
+    luckyEggBuff  ? prisma.shopItem.findFirst({ where: { type: "LUCKY_EGG" },        select: { metadata: true } }) : null,
+    expBoostBuff  ? prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_EXP" },  select: { metadata: true } }) : null,
+    picnicBuff    ? prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" },     select: { metadata: true } }) : null,
+  ]);
+
+  const luckyEggMult  = luckyEggBuff  ? 1 + ((luckyEggMeta?.metadata  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 20) / 100 : 1.0;
+  const expBoostMult  = expBoostBuff  ? 1 + ((expBoostMeta?.metadata   as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
+  const picnicExpMult = picnicBuff    ? 1 + ((picnicShopMeta?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 1.0;
+
+  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult);
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
@@ -1082,9 +1096,9 @@ export async function claimExpedition(
       const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
       const allyPlayerId = rel.mascotB.playerId;
 
-      // EXP para o mascote aliado também (participação remota)
+      // EXP para o mascote aliado também (participação remota) — sem bench penalty
       if (mode !== "ITEMS") {
-        await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3)).catch(() => {});
+        await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3), { ignoreBenchPenalty: true }).catch(() => {});
       }
 
       // Presente para o dono do aliado: moedas ou comida dependendo do carisma
@@ -1131,7 +1145,9 @@ export async function claimExpedition(
   });
 
   if (expeditionExp > 0) {
-    await addExp(expedition.mascotId, expeditionExp).catch(() => {});
+    // ignoreBenchPenalty: expedição é esforço do mascote, não interação presencial
+    // ignoreExpBoost: buffs já incluídos no cálculo de expeditionExp acima (para log correto)
+    await addExp(expedition.mascotId, expeditionExp, { ignoreBenchPenalty: true, ignoreExpBoost: true }).catch(() => {});
   }
 
   // Ovo da Sorte: consome o buff após uso (1x por dia)
@@ -1153,7 +1169,7 @@ export async function claimExpedition(
         select: { mascotId: true },
       }).catch(() => []);
       for (const xb of xpShareBuffs) {
-        await addExp(xb.mascotId, sharedExp).catch(() => {});
+        await addExp(xb.mascotId, sharedExp, { ignoreBenchPenalty: true }).catch(() => {});
         await prisma.mascotEvent.create({
           data: { mascotId: xb.mascotId, emoji: "📡", description: `Compartilhou ${sharedExp} EXP via Compartilhador de XP!` }
         }).catch(() => {});
