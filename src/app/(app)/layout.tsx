@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     where: { userId: user.id },
     select: { id: true, ptcglNick: true, avatarUrl: true }
   });
-  const [giftCount, wallet] = await Promise.all([
+  const [giftCount, wallet, unreadDms] = await Promise.all([
     player
       ? prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch((error) => {
           console.error("[AppLayout] gift count failed", { userId: user.id, playerId: player.id, error });
@@ -39,6 +39,9 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           return null;
         })
       : null,
+    player
+      ? prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0)
+      : 0,
   ]);
 
   return (
@@ -77,7 +80,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" giftCount={giftCount} playerId={player?.id} />
+            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} playerId={player?.id} />
 
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
@@ -135,7 +138,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" giftCount={giftCount} playerId={player?.id} />
+            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} playerId={player?.id} />
           </div>
         </header>
 

@@ -36,7 +36,7 @@ export const getActiveShopItems = unstable_cache(
   async () => {
     return prisma.shopItem.findMany({
       where: { active: true },
-      orderBy: [{ type: "asc" }, { rarity: "asc" }, { price: "asc" }],
+      orderBy: [{ sortOrder: "asc" }, { type: "asc" }, { price: "asc" }],
       select: {
         id: true, type: true, name: true, description: true, imageUrl: true,
         rarity: true, price: true, sortOrder: true, theme: true,

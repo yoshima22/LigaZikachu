@@ -259,8 +259,26 @@ model Player {
   arenaPveCoinsEarned     Int                  @default(0)   // ZC PvE resgatados hoje
   susShieldDate           String               @default("")  // "YYYY-MM-DD" BRT — escudo SUS usado hoje
   supporterPasses         SupporterPass[]
+  sentMessages            DirectMessage[]  @relation("SentMessages")
+  receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
 
   @@map("players")
+}
+
+model DirectMessage {
+  id         String    @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?
+
+  sender   Player @relation("SentMessages",   fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver Player @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, readAt])
+  @@map("direct_messages")
 }
 
 // Torneio independente — pode existir em paralelo a seasons legadas

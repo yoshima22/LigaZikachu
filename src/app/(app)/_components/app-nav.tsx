@@ -13,6 +13,7 @@ import {
   Heart,
   LayoutDashboard,
   Medal,
+  MessageSquare,
   Package,
   Search,
   ShieldCheck,
@@ -63,6 +64,7 @@ const mercadoLinks = [
 function buildProfileLinks(playerId?: string) {
   return [
     { href: playerId ? `/jogadores/${playerId}` : "/perfil", label: "Meu Perfil", icon: User, adminOnly: false },
+    { href: "/mensagens", label: "Mensagens", icon: MessageSquare, adminOnly: false },
     { href: "/perfil", label: "Configurações", icon: User, adminOnly: false },
     { href: "/perfil/meus-decks", label: "Meus Decks", icon: BookOpen, adminOnly: false },
     { href: "/conquistas", label: "Conquistas", icon: Trophy, adminOnly: false },
@@ -86,7 +88,7 @@ type NavLink = {
   tutorialId?: string;
 };
 
-export function AppNav({ admin, variant = "desktop", giftCount = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; playerId?: string }) {
+export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; playerId?: string }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -155,7 +157,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, playerId }: 
           admin={admin}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
-          badgeHrefs={{ "/caixa-de-presentes": giftCount }}
+          badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": unreadDms }}
           tutorialId="nav-perfil"
         />
         {adminLinks
