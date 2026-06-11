@@ -44,6 +44,7 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [qty, setQty] = useState(1);
 
   const filtered = shopItems.filter((i) => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase());
@@ -53,15 +54,15 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
 
   const handleGrant = (item: ShopItem) => {
     if (ownedItemIds.has(item.id)) {
-      if (!confirm(`Este jogador já possui "${item.name}". Conceder mesmo assim (vai incrementar quantidade)?`)) return;
+      if (!confirm(`Este jogador já possui "${item.name}". Conceder ${qty}x mesmo assim (vai incrementar quantidade)?`)) return;
     } else {
-      if (!confirm(`Conceder "${item.name}" (${RARITY_LABEL[item.rarity]} ${TYPE_LABEL[item.type]}) para este jogador gratuitamente?`)) return;
+      if (!confirm(`Conceder ${qty}x "${item.name}" (${RARITY_LABEL[item.rarity] ?? item.rarity} · ${TYPE_LABEL[item.type] ?? item.type}) para este jogador gratuitamente?`)) return;
     }
     startTransition(async () => {
       try {
-        const result = await grantItemToPlayer(playerId, item.id);
+        const result = await grantItemToPlayer(playerId, item.id, qty);
         if (result.error) { toast.error(result.error); return; }
-        toast.success(`"${item.name}" concedido com sucesso!`);
+        toast.success(`${qty}x "${item.name}" concedido com sucesso!`);
       } catch { toast.error("Erro ao conceder item."); }
     });
   };
@@ -88,6 +89,17 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar item..."
             className="w-full rounded-lg border border-border bg-slate-900 pl-8 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-500 whitespace-nowrap">Quantidade:</label>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={qty}
+            onChange={(e) => setQty(Math.max(1, Math.min(99, Number(e.target.value))))}
+            className="w-16 rounded-lg border border-border bg-slate-900 px-2 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] text-center"
           />
         </div>
         <div className="flex flex-wrap gap-1">
@@ -132,7 +144,7 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
                   <p className="text-[10px] text-slate-500 mt-0.5">
                     {TYPE_LABEL[item.type] ?? item.type}
                     <span className={`ml-2 font-semibold ${RARITY_COLOR[item.rarity]}`}>
-                      {RARITY_LABEL[item.rarity]}
+                      {RARITY_LABEL[item.rarity] ?? item.rarity}
                     </span>
                     {owned && (
                       <span className="ml-2 rounded bg-green-500/10 px-1 py-0.5 text-[9px] text-green-400 border border-green-500/20">
@@ -148,7 +160,7 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
                   onClick={() => handleGrant(item)}
                   className="shrink-0 h-7 gap-1 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700] text-xs px-2"
                 >
-                  <Plus size={11} /> Conceder
+                  <Plus size={11} /> Conceder {qty > 1 ? `×${qty}` : ""}
                 </Button>
               </div>
             );

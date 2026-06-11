@@ -27,7 +27,8 @@ const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MA
  */
 export async function grantItemToPlayer(
   playerId: string,
-  itemId: string
+  itemId: string,
+  quantity = 1
 ): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -43,50 +44,56 @@ export async function grantItemToPlayer(
     const foodType = FOOD_TYPE_MAP[item.type];
     const isBuff = BUFF_TYPES.includes(item.type);
 
+    const safeQty = Math.max(1, Math.min(quantity, 99));
+
     if (eggType) {
-      // Ovo → Caixa de Presentes (jogador coleta e vai para MascotEgg)
-      await prisma.playerGift.create({
-        data: {
-          playerId,
-          type: "CUSTOM",
-          title: item.name,
-          description: `${item.name} concedido pelo admin.`,
-          payload: {
-            rewardKind: "MASCOT_EGG",
-            eggType: eggType.toString(),
-            origin: "Concedido pelo Admin",
-            rewardLabel: item.name,
+      // Ovo → Caixa de Presentes (um gift por unidade)
+      for (let q = 0; q < safeQty; q++) {
+        await prisma.playerGift.create({
+          data: {
+            playerId,
+            type: "CUSTOM",
+            title: item.name,
+            description: `${item.name} concedido pelo admin.`,
+            payload: {
+              rewardKind: "MASCOT_EGG",
+              eggType: eggType.toString(),
+              origin: "Concedido pelo Admin",
+              rewardLabel: item.name,
+            }
           }
-        }
-      });
+        });
+      }
     } else if (foodType) {
-      // Comida/Doce → Caixa de Presentes
+      // Comida/Doce → Caixa de Presentes (com quantity)
       await prisma.playerGift.create({
         data: {
           playerId,
           type: "CUSTOM",
           title: item.name,
-          description: `${item.name} concedido pelo admin.`,
-          payload: { rewardKind: "MASCOT_FOOD", foodType: foodType.toString(), quantity: 1, rewardLabel: item.name }
+          description: `${item.name} x${safeQty} concedido pelo admin.`,
+          payload: { rewardKind: "MASCOT_FOOD", foodType: foodType.toString(), quantity: safeQty, rewardLabel: item.name }
         }
       });
     } else if (isBuff) {
       // Buff → Caixa de Presentes
-      await prisma.playerGift.create({
-        data: {
-          playerId,
-          type: "CUSTOM",
-          title: item.name,
-          description: `${item.name} concedido pelo admin.`,
-          payload: { rewardKind: "MASCOT_BUFF", buffType: item.type, rewardLabel: item.name }
-        }
-      });
+      for (let q = 0; q < safeQty; q++) {
+        await prisma.playerGift.create({
+          data: {
+            playerId,
+            type: "CUSTOM",
+            title: item.name,
+            description: `${item.name} concedido pelo admin.`,
+            payload: { rewardKind: "MASCOT_BUFF", buffType: item.type, rewardLabel: item.name }
+          }
+        });
+      }
     } else {
       // Item cosmético → PlayerInventory (título, banner, moldura, ticket)
       await prisma.playerInventory.upsert({
         where: { playerId_itemId: { playerId, itemId } },
-        update: { quantity: { increment: 1 } },
-        create: { playerId, itemId, quantity: 1, equipped: false }
+        update: { quantity: { increment: safeQty } },
+        create: { playerId, itemId, quantity: safeQty, equipped: false }
       });
     }
 

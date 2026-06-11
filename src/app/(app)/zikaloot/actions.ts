@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { ZikaLootStatus, ZikaCoinTxType, ShopItemType, Prisma } from "@prisma/client";
+import { ZikaLootStatus, ZikaCoinTxType, ShopItemType, Prisma, EggType, FoodType } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { onLootWon } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
@@ -49,7 +49,9 @@ export async function pickLootNumber(
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Não autenticado." };
-    if (number < 1 || number > 200) return { error: "Número deve ser entre 1 e 200." };
+    const lootForValidation = await prisma.zikaLoot.findUnique({ where: { id: lootId }, select: { prizeConfig: true } });
+    const maxPicksForValidation = (lootForValidation?.prizeConfig as PrizeConfig | null)?.maxPicks ?? 200;
+    if (number < 1 || number > maxPicksForValidation) return { error: `Número deve ser entre 1 e ${maxPicksForValidation}.` };
 
     const player = await getSessionPlayer(actor.id);
     if (!player) return { error: "Jogador não encontrado." };
@@ -112,8 +114,8 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
     if (loot.status !== ZikaLootStatus.SCHEDULED)
       return { drawnNumber: 0, winner: null, error: "Loteria já foi executada." };
 
-    // Sortear número de 1 a 200
-    const drawnNumber = Math.floor(Math.random() * 200) + 1;
+    const maxPicks = (loot.prizeConfig as PrizeConfig | null)?.maxPicks ?? 200;
+    const drawnNumber = Math.floor(Math.random() * maxPicks) + 1;
     const winningPick = loot.picks.find((p) => p.number === drawnNumber);
 
     if (winningPick) {
@@ -173,6 +175,49 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
               title: `🎉 ZikaLoot: ${loot.name}`,
               description: prize.description || `Você ganhou! Prêmio: ${loot.prize}`,
               payload: { lootId, drawnNumber }
+            }});
+          } else if (prize.type === "EGG") {
+            const eggEnumMap: Record<string, EggType> = {
+              COMMON: EggType.COMMON, RARE: EggType.RARE, SPECIAL: EggType.SPECIAL,
+              EVENT: EggType.EVENT, EGG_GEN1: EggType.EGG_GEN1, EGG_GEN2: EggType.EGG_GEN2
+            };
+            const qty = prize.qty ?? 1;
+            for (let q = 0; q < qty; q++) {
+              await tx.playerGift.create({ data: {
+                playerId: winningPick.playerId, type: "CUSTOM",
+                title: `🎉 ZikaLoot: ${loot.name}`,
+                description: `Você ganhou um Ovo ${prize.eggType}! Verifique a Caixa de Presentes.`,
+                payload: { lootId, drawnNumber, rewardKind: "MASCOT_EGG", eggType: eggEnumMap[prize.eggType]?.toString() ?? prize.eggType, rewardLabel: `Ovo ${prize.eggType}` }
+              }});
+            }
+          } else if (prize.type === "FOOD" || prize.type === "SWEET") {
+            await tx.playerGift.create({ data: {
+              playerId: winningPick.playerId, type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Você ganhou ${prize.qty}x ${prize.type === "FOOD" ? "Comida" : "Doce"} de Mascote!`,
+              payload: { lootId, drawnNumber, rewardKind: "MASCOT_FOOD", foodType: prize.type === "FOOD" ? FoodType.FOOD.toString() : FoodType.SWEET.toString(), quantity: prize.qty, rewardLabel: prize.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote" }
+            }});
+          } else if (prize.type === "SHOP_ITEM") {
+            const shopItem = await tx.shopItem.findFirst({ where: { name: { contains: prize.shopItemName, mode: "insensitive" }, active: true } });
+            if (shopItem) {
+              await tx.playerInventory.upsert({
+                where: { playerId_itemId: { playerId: winningPick.playerId, itemId: shopItem.id } },
+                update: { quantity: { increment: prize.qty ?? 1 } },
+                create: { playerId: winningPick.playerId, itemId: shopItem.id, quantity: prize.qty ?? 1 }
+              });
+            }
+            await tx.playerGift.create({ data: {
+              playerId: winningPick.playerId, type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Você ganhou: ${prize.shopItemName}! Verifique seu inventário.`,
+              payload: { lootId, drawnNumber, shopItemName: prize.shopItemName }
+            }});
+          } else if (prize.type === "STICKER_PACK") {
+            await tx.playerGift.create({ data: {
+              playerId: winningPick.playerId, type: "CUSTOM",
+              title: `🎉 ZikaLoot: ${loot.name}`,
+              description: `Você ganhou o Pacote de Figurinhas: ${prize.packName}!`,
+              payload: { lootId, drawnNumber, rewardKind: "STICKER_PACK", packName: prize.packName, rewardLabel: prize.packName }
             }});
           }
         }

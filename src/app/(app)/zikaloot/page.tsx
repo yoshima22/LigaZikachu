@@ -103,7 +103,7 @@ export default async function ZikaLootPage() {
             <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
             <h1 className="font-pixel text-base text-[#FFCB05]">ZikaLoot</h1>
             <p className="mt-1 text-sm text-slate-400">
-              200 números. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
+              {activeLoot ? ((activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200) : 200} números. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -179,7 +179,7 @@ export default async function ZikaLootPage() {
               </div>
               <div>
                 <p className="text-[10px] text-slate-500">Números escolhidos</p>
-                <p className="text-sm text-slate-300">{activeLoot.picks.length}/200</p>
+                <p className="text-sm text-slate-300">{activeLoot.picks.length}/{(activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200}</p>
               </div>
             </div>
             {(myPickMap.get(activeLoot.id)??[]).length > 0 && (
@@ -202,6 +202,7 @@ export default async function ZikaLootPage() {
           isLoggedIn={!!player}
           drawAt={activeLoot.drawAt.toISOString()}
           previousDraws={activeLoot.drawnNumbers}
+          maxPicks={(activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200}
         />
       )}
 

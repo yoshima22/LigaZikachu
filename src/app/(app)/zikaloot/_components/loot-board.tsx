@@ -15,9 +15,10 @@ interface Props {
   isLoggedIn: boolean;
   drawAt: string;
   previousDraws?: number[];
+  maxPicks?: number;
 }
 
-export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTicket, isLoggedIn, drawAt, previousDraws = [] }: Props) {
+export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTicket, isLoggedIn, drawAt, previousDraws = [], maxPicks = 200 }: Props) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -88,7 +89,7 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-semibold text-slate-200">Escolha seu número (1–200)</h2>
+        <h2 className="font-semibold text-slate-200">Escolha seu número (1–{maxPicks})</h2>
         {myNumbers.length > 0 && (
           <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-1 text-xs font-bold text-[#FFCB05]">
             {myNumbers.length > 1 ? `Seus números: ${myNumbers.join(", ")}` : `Seu número: ${myNumbers[0]}`}
@@ -113,7 +114,7 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
       {isExpired && <p className="text-sm text-red-400">O prazo para escolher números encerrou.</p>}
 
       <div className="grid grid-cols-10 gap-1 sm:grid-cols-20">
-        {Array.from({ length: 200 }, (_, i) => i + 1).map((n) => {
+        {Array.from({ length: maxPicks }, (_, i) => i + 1).map((n) => {
           const takenInfo = takenMap.get(n);
           const taken    = takenInfo?.name;
           const takenPlayerId = takenInfo?.playerId;
