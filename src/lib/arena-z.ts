@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
-import { getPokemonElement, getPokemonName, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
+import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
 import { unstable_cache } from "next/cache";
@@ -268,7 +268,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const target = pick(opponents);
       const attackerType = getPokemonElement(actor.pokemonId);
       const defenderType = getPokemonElement(target.pokemonId);
-      const multiplier = getTypeAdvantageMultiplier(attackerType, defenderType);
+      const multiplier = getTypeAdvantageMultiplier(getPokemonTypes(actor.pokemonId), getPokemonTypes(target.pokemonId));
       const defend = Math.random() < 0.12;
 
       if (defend) {

@@ -1552,9 +1552,14 @@ export const TYPE_ADVANTAGE: Record<string, string[]> = {
   normal:   [],
 };
 
-export function getTypeAdvantageMultiplier(attackerType: string, defenderType: string): number {
-  const strong = TYPE_ADVANTAGE[attackerType] ?? [];
-  return strong.includes(defenderType) ? 1.3 : 1.0;
+export function getTypeAdvantageMultiplier(attackerTypes: string | string[], defenderTypes: string | string[]): number {
+  const atk = Array.isArray(attackerTypes) ? attackerTypes : [attackerTypes];
+  const def = Array.isArray(defenderTypes) ? defenderTypes : [defenderTypes];
+  for (const a of atk) {
+    const strong = TYPE_ADVANTAGE[a] ?? [];
+    if (def.some((d) => strong.includes(d))) return 1.3;
+  }
+  return 1.0;
 }
 
 // ── Explicações das personalidades ────────────────────────────────────────────
