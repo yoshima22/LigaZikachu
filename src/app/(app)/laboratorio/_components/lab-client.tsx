@@ -183,7 +183,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
         <div className="ml-auto flex items-center gap-2 rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-4 py-2">
           <span className="text-lg">🧫</span>
           <span className="text-base font-bold text-[#FFCB05]">{dust}</span>
-          <span className="text-xs text-slate-400">Pó</span>
+          <span className="text-xs text-slate-400">Pó de Criação</span>
         </div>
       </div>
 
@@ -194,10 +194,10 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
             Ao reciclar um mascote, você recebe <strong className="text-slate-200">Pó de Criação</strong> — uma moeda secundária usada para trocar por ZikaCoins ou ovos na Loja de Pó.
           </p>
           <div className="rounded-lg border border-border/40 bg-slate-900/60 p-3 space-y-1">
-            <p className="font-semibold text-slate-300">Pó base por raridade:</p>
-            <p>⚪ <strong className="text-slate-300">Comum</strong> — 1 pó por mascote</p>
-            <p>🔵 <strong className="text-blue-300">Raro</strong> — 2 pó por mascote</p>
-            <p>⭐ <strong className="text-[#FFCB05]">Especial</strong> — 3 pó por mascote</p>
+            <p className="font-semibold text-slate-300">Pó de Criação base por raridade:</p>
+            <p>⚪ <strong className="text-slate-300">Comum</strong> — 1 Pó de Criação por mascote</p>
+            <p>🔵 <strong className="text-blue-300">Raro</strong> — 2 Pó de Criação por mascote</p>
+            <p>⭐ <strong className="text-[#FFCB05]">Especial</strong> — 3 Pó de Criação por mascote</p>
           </div>
           <p>Mascotes favoritos ou em batalha/expedição não podem ser reciclados.</p>
         </GuideSection>
@@ -211,16 +211,16 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
             <p>2 cópias → <strong className="text-yellow-300">×1,5</strong> em cada uma</p>
             <p>3+ cópias → <strong className="text-[#FFCB05]">×3,0</strong> em cada uma</p>
           </div>
-          <p>Exemplo: 3× Pikachu (Raro) = 3 × (2 pó × 3,0) = <strong className="text-[#FFCB05]">18 pó</strong> no total.</p>
+          <p>Exemplo: 3× Pikachu (Raro) = 3 × (2 Pó de Criação × 3,0) = <strong className="text-[#FFCB05]">18 Pó de Criação</strong> no total.</p>
           <p>Use os <strong className="text-slate-200">6 slots</strong> para montar seu combo antes de confirmar — o preview mostra o cálculo em tempo real.</p>
         </GuideSection>
 
-        <GuideSection icon="🛒" title="O que posso comprar com Pó?">
+        <GuideSection icon="🛒" title="O que posso comprar com Pó de Criação?">
           <div className="rounded-lg border border-border/40 bg-slate-900/60 p-3 space-y-1">
-            <p>🪙 <strong className="text-slate-200">400 ZikaCoins</strong> — 10 pó · limite 5×/semana</p>
-            <p>🥚 <strong className="text-slate-200">Ovo Comum</strong> — 15 pó · limite 10×/semana</p>
-            <p>💙 <strong className="text-blue-300">Ovo Raro</strong> — 25 pó · limite 4×/semana</p>
-            <p>⭐ <strong className="text-[#FFCB05]">Ovo Especial</strong> — 40 pó · limite 1×/semana</p>
+            <p>🪙 <strong className="text-slate-200">400 ZikaCoins</strong> — 10 Pó de Criação · limite 5×/semana</p>
+            <p>🥚 <strong className="text-slate-200">Ovo Comum</strong> — 15 Pó de Criação · limite 10×/semana</p>
+            <p>💙 <strong className="text-blue-300">Ovo Raro</strong> — 25 Pó de Criação · limite 4×/semana</p>
+            <p>⭐ <strong className="text-[#FFCB05]">Ovo Especial</strong> — 40 Pó de Criação · limite 1×/semana</p>
           </div>
           <p>Os limites reiniciam toda segunda-feira.</p>
         </GuideSection>
@@ -243,7 +243,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
               tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : "border border-border text-slate-400 hover:text-white"
             }`}
           >
-            {t === "recycle" ? <><FlaskConical size={15} /> Reciclar Mascotes</> : <><ShoppingBag size={15} /> Loja de Pó</>}
+            {t === "recycle" ? <><FlaskConical size={15} /> Reciclar Mascotes</> : <><ShoppingBag size={15} /> Loja de Pó de Criação</>}
           </button>
         ))}
       </div>
@@ -310,21 +310,21 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
                         <span className="text-slate-300 truncate min-w-0 flex-1">
                           {b.mascot.nickname || b.mascot.name}
                         </span>
-                        <span className="shrink-0 text-slate-500">{b.base} pó base</span>
+                        <span className="shrink-0 text-slate-500">{b.base} Pó de Criação base</span>
                         {b.mult > 1 && (
                           <span className="shrink-0 font-bold text-yellow-400">×{b.mult.toFixed(1)}</span>
                         )}
                         {sameGroup && b.mult === 1 && (
                           <span className="shrink-0 text-slate-600">×1,0</span>
                         )}
-                        <span className="shrink-0 font-bold text-[#FFCB05]">= {b.dust} pó</span>
+                        <span className="shrink-0 font-bold text-[#FFCB05]">= {b.dust} Pó de Criação</span>
                       </div>
                     );
                   })}
                 </div>
                 <div className="mt-2 flex items-center justify-between border-t border-[#FFCB05]/20 pt-2">
                   <span className="text-xs font-semibold text-slate-300">Total:</span>
-                  <span className="text-sm font-bold text-[#FFCB05]">🧫 {previewTotal} pó de criação</span>
+                  <span className="text-sm font-bold text-[#FFCB05]">🧫 {previewTotal} Pó de Criação</span>
                 </div>
               </div>
             )}
@@ -344,7 +344,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
                   disabled={isPending}
                   className="flex-1 rounded-xl bg-[#FFCB05] py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors disabled:opacity-40"
                 >
-                  Reciclar {filledSlots.length} mascote{filledSlots.length > 1 ? "s" : ""} → +{previewTotal} pó
+                  Reciclar {filledSlots.length} mascote{filledSlots.length > 1 ? "s" : ""} → +{previewTotal} Pó de Criação
                 </button>
               </div>
             )}
@@ -392,7 +392,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
                       <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[m.rarity]}`}>
                         {RARITY_LABEL[m.rarity]}
                       </span>
-                      <span className="text-[9px] text-slate-500">🧫 {m.dust} pó</span>
+                      <span className="text-[9px] text-slate-500">🧫 {m.dust} Pó de Criação</span>
                     </button>
                   );
                 })}
@@ -458,7 +458,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
 
             <div className="mb-5 flex items-center justify-between rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-4 py-3">
               <span className="text-sm font-semibold text-slate-300">Total que você receberá:</span>
-              <span className="text-lg font-bold text-[#FFCB05]">🧫 {previewTotal} pó</span>
+              <span className="text-lg font-bold text-[#FFCB05]">🧫 {previewTotal} Pó de Criação</span>
             </div>
 
             <div className="flex gap-3">
@@ -490,7 +490,7 @@ function ShopItem({ title, description, cost, dust, used, limit, isPending, onBu
         <p className="font-semibold text-white">{title}</p>
         <p className="text-xs text-slate-400">{description}</p>
         <div className="mt-1 flex items-center gap-3">
-          <span className="text-xs font-bold text-[#FFCB05]">🧫 {cost} pó</span>
+          <span className="text-xs font-bold text-[#FFCB05]">🧫 {cost} Pó de Criação</span>
           <span className={`text-[10px] ${atLimit ? "text-red-400" : "text-slate-500"}`}>{used}/{limit} esta semana</span>
         </div>
       </div>
