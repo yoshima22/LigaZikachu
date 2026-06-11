@@ -183,13 +183,15 @@ function CreateSection({ players }: Props) {
   const clampStat = (base: number, bonus: number) => Math.max(1, Math.min(999, base + bonus));
 
   const pokeIdNum = parseInt(pokemonId);
-  const previewName = !isNaN(pokeIdNum) && pokeIdNum >= 1 && pokeIdNum <= 1025
+  const ROTOM_FORM_IDS = new Set([10008, 10009, 10010, 10011, 10012]);
+  const isValidPokemonId = (id: number) => (id >= 1 && id <= 1025) || ROTOM_FORM_IDS.has(id);
+  const previewName = !isNaN(pokeIdNum) && isValidPokemonId(pokeIdNum)
     ? getPokemonName(pokeIdNum)
     : null;
 
   // Calcula proceduralmente
   const handleCompute = () => {
-    if (!pokeIdNum || pokeIdNum < 1 || pokeIdNum > 1025) { toast.error("Pokémon ID inválido."); return; }
+    if (!pokeIdNum || !isValidPokemonId(pokeIdNum)) { toast.error("Pokémon ID inválido."); return; }
     const lvl = parseInt(level);
     if (isNaN(lvl) || lvl < 1 || lvl > 100) { toast.error("Nível inválido."); return; }
     startCalc(async () => {
@@ -207,7 +209,7 @@ function CreateSection({ players }: Props) {
 
   const handleCreate = () => {
     if (!playerId) { toast.error("Selecione um jogador."); return; }
-    if (!pokeIdNum || pokeIdNum < 1 || pokeIdNum > 1025) { toast.error("Pokémon ID inválido (1–1025)."); return; }
+    if (!pokeIdNum || !isValidPokemonId(pokeIdNum)) { toast.error("Pokémon ID inválido."); return; }
     const lvl = parseInt(level);
     if (isNaN(lvl) || lvl < 1 || lvl > 100) { toast.error("Nível inválido (1–100)."); return; }
 
@@ -281,10 +283,10 @@ function CreateSection({ players }: Props) {
         {/* Pokémon ID */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">
-            Pokémon ID (1–1025)
+            Pokémon ID (1–1025 ou 10008–10012 para formas Rotom)
             {previewName && <span className="ml-1.5 font-normal text-[#FFCB05]">→ {previewName}</span>}
           </label>
-          <input type="number" min={1} max={1025} value={pokemonId}
+          <input type="number" min={1} value={pokemonId}
             onChange={e => setPokemonId(e.target.value)}
             placeholder="ex: 172 (Pichu)"
             className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05] placeholder:text-slate-600" />
