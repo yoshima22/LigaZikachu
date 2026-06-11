@@ -403,7 +403,7 @@ function splitDefeatedLoot(loot: ArenaLoot) {
 export async function getArenaBotPreview(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: true }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId || team.status !== "ACTIVE" || team.members.length === 0) return null;
   const attackers = team.members.map(m => toArenaMascot(m.mascot));
@@ -1098,7 +1098,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
 export async function syncDefeatedArenaTeams(playerId: string) {
   const teams = await prisma.arenaTeam.findMany({
     where: { playerId, status: "ACTIVE" },
-    include: { members: { include: { mascot: true } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } } } },
   });
 
   const activeMascotIds = new Set(teams.flatMap(team => team.members.map(member => member.mascotId)));
@@ -1191,7 +1191,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
     include: {
-      members: { include: { mascot: true }, orderBy: { slot: "asc" } },
+      members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } },
       player: { select: { displayName: true } },
     },
   });
@@ -1499,7 +1499,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
 export async function lockBotForTeam(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: true }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
@@ -1780,18 +1780,19 @@ function teamTotalLevel(members: { mascot: { level: number } }[]): number {
 export async function runPvpBattle(playerId: string, attackTeamId: string, defenseTeamId: string) {
   if (attackTeamId === defenseTeamId) throw new Error("Escolha duas equipes diferentes.");
 
+  const mascotBattleSelect = { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } as const;
   const [attackTeam, defenseTeam] = await Promise.all([
     prisma.arenaTeam.findUnique({
       where: { id: attackTeamId },
       include: {
-        members: { include: { mascot: true }, orderBy: { slot: "asc" } },
+        members: { include: { mascot: { select: mascotBattleSelect } }, orderBy: { slot: "asc" } },
         player: { select: { id: true, displayName: true } },
       },
     }),
     prisma.arenaTeam.findUnique({
       where: { id: defenseTeamId },
       include: {
-        members: { include: { mascot: true }, orderBy: { slot: "asc" } },
+        members: { include: { mascot: { select: mascotBattleSelect } }, orderBy: { slot: "asc" } },
         player: { select: { id: true, displayName: true } },
       },
     }),
