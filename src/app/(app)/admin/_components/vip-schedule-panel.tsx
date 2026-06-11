@@ -288,7 +288,7 @@ function DayEditor({ reward, onChange, onClose }: {
   const presentKinds = new Set(state.slots.map(s => s.kind));
 
   return (
-    <div className="rounded-2xl border border-purple-400/20 bg-purple-950/10 p-5 space-y-5">
+    <div className="relative z-20 rounded-2xl border border-purple-400/20 bg-purple-950/10 p-5 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -356,7 +356,7 @@ function DayEditor({ reward, onChange, onClose }: {
         </Button>
 
         {showAdd && (
-          <div className="absolute top-10 left-0 z-10 rounded-xl border border-border bg-slate-900 shadow-xl p-2 grid grid-cols-2 gap-1 w-64">
+          <div className="absolute top-10 left-0 z-50 rounded-xl border border-border bg-slate-900 shadow-2xl p-2 grid grid-cols-2 gap-1 w-64">
             {(Object.entries(SLOT_META) as [SlotKind, typeof SLOT_META[SlotKind]][]).map(([kind, meta]) => {
               const alreadyHas = presentKinds.has(kind);
               const blockedByEgg = kind === "FOOD" && (presentKinds.has("EGG"));
