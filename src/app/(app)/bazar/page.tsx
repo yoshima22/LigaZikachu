@@ -11,7 +11,8 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { getCachedListings, getCachedRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
+import { getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
+import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
