@@ -3,6 +3,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getShopItemMeta } from "@/lib/shop-cache";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expForLevel, expToNextLevel, EXP_REWARDS,
@@ -323,15 +324,15 @@ export async function addExp(
     const [expBoostBuff, picnicBuff, expBoostItem, picnicItem] = await Promise.all([
       prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } }),
       prisma.mascotBuff.findFirst({ where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } } }),
-      prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_EXP" }, select: { metadata: true } }),
-      prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" }, select: { metadata: true } }),
+      getShopItemMeta("MASCOT_BUFF_EXP"),
+      getShopItemMeta("PICNIC_BASKET"),
     ]);
     if (expBoostBuff) {
-      const pct = (expBoostItem?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25;
+      const pct = (expBoostItem as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25;
       amount = Math.floor(amount * (1 + pct / 100));
     }
     if (picnicBuff) {
-      const pct = (picnicItem?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15;
+      const pct = (picnicItem as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15;
       amount = Math.floor(amount * (1 + pct / 100));
     }
   }
@@ -486,11 +487,11 @@ export async function interactWithMascot(
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
   ]);
   const [picnicItemMeta, expBoostItemMeta] = await Promise.all([
-    picnicBuff   ? prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" },    select: { metadata: true } }) : Promise.resolve(null),
-    expBoostBuff ? prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_EXP" }, select: { metadata: true } }) : Promise.resolve(null),
+    picnicBuff   ? getShopItemMeta("PICNIC_BASKET")    : Promise.resolve(null),
+    expBoostBuff ? getShopItemMeta("MASCOT_BUFF_EXP") : Promise.resolve(null),
   ]);
-  const picnicExpBonus   = picnicBuff ? ((picnicItemMeta?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 0;
-  const picnicHappyBonus = picnicBuff ? ((picnicItemMeta?.metadata as { happinessBonus?: number } | null)?.happinessBonus ?? 5) : 0;
+  const picnicExpBonus   = picnicBuff ? ((picnicItemMeta as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 0;
+  const picnicHappyBonus = picnicBuff ? ((picnicItemMeta as { happinessBonus?: number } | null)?.happinessBonus ?? 5) : 0;
 
   // Bônus social escalado por tier (§12 do doc social)
   const friendRels     = relations.filter(r => r.type === "FRIEND");
@@ -1037,14 +1038,14 @@ export async function claimExpedition(
     prisma.mascotBuff.findFirst({ where: { mascotId: expedition.mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } } }),
   ]);
   const [luckyEggMeta, expBoostMeta, picnicShopMeta] = await Promise.all([
-    luckyEggBuff  ? prisma.shopItem.findFirst({ where: { type: "LUCKY_EGG" },        select: { metadata: true } }) : null,
-    expBoostBuff  ? prisma.shopItem.findFirst({ where: { type: "MASCOT_BUFF_EXP" },  select: { metadata: true } }) : null,
-    picnicBuff    ? prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" },     select: { metadata: true } }) : null,
+    luckyEggBuff  ? getShopItemMeta("LUCKY_EGG")       : null,
+    expBoostBuff  ? getShopItemMeta("MASCOT_BUFF_EXP") : null,
+    picnicBuff    ? getShopItemMeta("PICNIC_BASKET")   : null,
   ]);
 
-  const luckyEggMult  = luckyEggBuff  ? 1 + ((luckyEggMeta?.metadata  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 20) / 100 : 1.0;
-  const expBoostMult  = expBoostBuff  ? 1 + ((expBoostMeta?.metadata   as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
-  const picnicExpMult = picnicBuff    ? 1 + ((picnicShopMeta?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 1.0;
+  const luckyEggMult  = luckyEggBuff  ? 1 + ((luckyEggMeta  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 20) / 100 : 1.0;
+  const expBoostMult  = expBoostBuff  ? 1 + ((expBoostMeta  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
+  const picnicExpMult = picnicBuff    ? 1 + ((picnicShopMeta as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 1.0;
 
   const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult);
 
@@ -2173,10 +2174,10 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
 export async function applyPicnicBasket(playerId: string) {
   const [favoriteMascots, picnicShopItem] = await Promise.all([
     prisma.mascot.findMany({ where: { playerId, isFavorite: true, arenaState: "FREE" }, take: 6 }),
-    prisma.shopItem.findFirst({ where: { type: "PICNIC_BASKET" }, select: { metadata: true } }),
+    getShopItemMeta("PICNIC_BASKET"),
   ]);
   if (favoriteMascots.length === 0) throw new Error("Nenhum mascote favorito livre encontrado. Marque até 6 mascotes como favorito.");
-  const picnicMeta = picnicShopItem?.metadata as { buffHours?: number; expMultiplierPct?: number; happinessBonus?: number } | null;
+  const picnicMeta = picnicShopItem as { buffHours?: number; expMultiplierPct?: number; happinessBonus?: number } | null;
   const hours  = picnicMeta?.buffHours        ?? 2;
   const expPct = picnicMeta?.expMultiplierPct ?? 15;
   const happy  = picnicMeta?.happinessBonus   ?? 5;

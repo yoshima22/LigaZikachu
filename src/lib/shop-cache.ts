@@ -60,9 +60,26 @@ export const getActiveStickerPacks = unstable_cache(
   { revalidate: 600, tags: ["sticker-packs-active"] },
 );
 
+/**
+ * Retorna o metadata de um shopItem por type. Cache de 1h.
+ * Usado em hot paths como addExp para evitar N queries por EXP ganho.
+ */
+export const getShopItemMeta = unstable_cache(
+  async (type: string): Promise<Record<string, unknown> | null> => {
+    const item = await prisma.shopItem.findFirst({
+      where: { type: type as ShopItemType },
+      select: { metadata: true },
+    });
+    return (item?.metadata as Record<string, unknown> | null) ?? null;
+  },
+  ["shop-item-meta"],
+  { revalidate: 3600, tags: ["shop-item-meta"] },
+);
+
 /** Chame após qualquer mutação de shop_items no admin para invalidar o cache. */
 export async function invalidateShopCache() {
   revalidateTag("shop-items-active");
   revalidateTag("shop-item-images");
   revalidateTag("sticker-packs-active");
+  revalidateTag("shop-item-meta");
 }
