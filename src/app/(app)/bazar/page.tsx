@@ -56,6 +56,12 @@ export default async function BazarPage({
 
   const dailyOffers = (miauvadao.dailyOffers as unknown[]) ?? [];
 
+  const REFRESH_DAILY_LIMIT = 3;
+  const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const refreshData = (miauvadao.playerRefreshData ?? {}) as Record<string, { date?: string; count?: number }>;
+  const globalRefreshCount = refreshData["__global__"]?.date === todayBRT ? (refreshData["__global__"]?.count ?? 0) : 0;
+  const refreshesRemaining = Math.max(0, REFRESH_DAILY_LIMIT - globalRefreshCount);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -168,6 +174,8 @@ export default async function BazarPage({
         balance={wallet?.balance ?? 0}
         playerId={playerId}
         lastNpcMessage={miauvadao.lastNpcMessage ?? miauvadao.lastWinnerMessage ?? null}
+        refreshesRemaining={refreshesRemaining}
+        refreshDailyLimit={REFRESH_DAILY_LIMIT}
       />
 
       {/* Shell Game */}

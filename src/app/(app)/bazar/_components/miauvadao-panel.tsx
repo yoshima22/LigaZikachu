@@ -74,25 +74,35 @@ function EggImg({ src }: { src: string }) {
 
 // ── RefreshShopButton ─────────────────────────────────────────────────────────
 
-function RefreshShopButton({ playerId }: { playerId: string | null }) {
+function RefreshShopButton({ playerId, refreshesRemaining, refreshDailyLimit }: { playerId: string | null; refreshesRemaining: number; refreshDailyLimit: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   if (!playerId) return null;
+  const limitReached = refreshesRemaining <= 0;
   return (
-    <button type="button" disabled={pending}
-      onClick={() => {
-        if (!confirm("Pagar 100 ZC para atualizar as ofertas agora com descontos melhores? (limite: 3 atualizações compartilhadas por dia, cooldown 15 min)")) return;
-        startTransition(async () => {
-          const r = await refreshMiauvadaoShopNow();
-          if (r.error) { toast.error(r.error); return; }
-          toast.success("Ofertas atualizadas! Descontos melhorados. 🛍️");
-          router.refresh();
-        });
-      }}
-      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all disabled:opacity-50"
-      style={{ background: "#2a1a03", border: "1px solid #c9a800", color: "#c9a800" }}>
-      🔄 Atualizar ofertas (100 ZC · 3x compartilhadas/dia)
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-1.5 text-[10px]" style={{ color: limitReached ? "#7a4a00" : "#8b6c00" }}>
+        <RefreshCw size={9} />
+        {limitReached
+          ? "Limite atingido para hoje"
+          : <><strong style={{ color: "#FFCB05" }}>{refreshesRemaining}</strong>/{refreshDailyLimit} atualizações restantes hoje</>
+        }
+      </div>
+      <button type="button" disabled={pending || limitReached}
+        onClick={() => {
+          if (!confirm(`Pagar 100 ZC para atualizar as ofertas agora com descontos melhores? (${refreshesRemaining} de ${refreshDailyLimit} restantes, cooldown 15 min)`)) return;
+          startTransition(async () => {
+            const r = await refreshMiauvadaoShopNow();
+            if (r.error) { toast.error(r.error); return; }
+            toast.success("Ofertas atualizadas! Descontos melhorados. 🛍️");
+            router.refresh();
+          });
+        }}
+        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ background: "#2a1a03", border: "1px solid #c9a800", color: limitReached ? "#5a4700" : "#c9a800" }}>
+        🔄 Atualizar ofertas (100 ZC · {refreshDailyLimit}x compartilhadas/dia)
+      </button>
+    </div>
   );
 }
 
@@ -233,9 +243,11 @@ interface Props {
   balance: number;
   playerId: string | null;
   lastNpcMessage?: string | null;
+  refreshesRemaining?: number;
+  refreshDailyLimit?: number;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, refreshesRemaining = 3, refreshDailyLimit = 3 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -406,7 +418,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
             <p className="text-[10px]" style={{ color: "#3a2c00" }}>
               As taxas do Bazar alimentam o cofre do Miauvadão e financiam os descontos.
             </p>
-            <RefreshShopButton playerId={playerId} />
+            <RefreshShopButton playerId={playerId} refreshesRemaining={refreshesRemaining} refreshDailyLimit={refreshDailyLimit} />
           </div>
       </div>
     </div>
