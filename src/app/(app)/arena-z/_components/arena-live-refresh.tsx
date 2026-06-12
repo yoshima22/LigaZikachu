@@ -5,16 +5,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { RefreshCw } from "lucide-react";
 
-// IMPORTANTE: "mascots" foi removido intencionalmente.
-// postgres_changes sem filtro envia a row completa de CADA update de mascote
-// para todos os assinantes do canal — com batalhas PvE frequentes e 20+ usuários
-// isso gera centenas de MB de egress Realtime por dia.
-const WATCHED_TABLES = [
-  "arena_teams",
-  "arena_team_members",
-  "arena_battles",
-  "arena_ground_spoils",
-] as const;
+// "mascots" removido: update por batalha × 20+ usuários = centenas de MB/dia de egress.
+// "arena_battles": só INSERT (cada batalha = 1 insert com turnLog JSON grande; updates não interessam).
+// "arena_ground_spoils": só INSERT (item novo no chão).
+const WATCHED_ALL: ReadonlyArray<string> = ["arena_teams", "arena_team_members"];
+const WATCHED_INSERTS: ReadonlyArray<string> = ["arena_battles", "arena_ground_spoils"];
 
 /**
  * Substitui o router.refresh() automático por um badge manual.
@@ -47,9 +42,14 @@ export function ArenaLiveRefresh() {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
         debounceTimer.current = setTimeout(() => setHasUpdates(true), 1500);
       };
-      channel = WATCHED_TABLES.reduce(
+      const base = supabase.channel("arena-z-live-badge");
+      const withAll = WATCHED_ALL.reduce(
         (ch, table) => ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
-        supabase.channel("arena-z-live-badge"),
+        base,
+      );
+      channel = WATCHED_INSERTS.reduce(
+        (ch, table) => ch.on("postgres_changes", { event: "INSERT", schema: "public", table }, scheduleFlag),
+        withAll,
       );
       channel.subscribe();
     };

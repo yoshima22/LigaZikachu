@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { RefreshCw } from "lucide-react";
 
-const WATCHED_TABLES = [
-  "bazar_listings",
-  "bazar_proposals",
-  "bazar_transactions",
-  "miauvadao_config",
-] as const;
+// miauvadao_config removida: linha de 272 kB, ~350 updates/dia — broadcast caro demais.
+// bazar_listings: apenas INSERT/DELETE (não UPDATE) — increments de `views` não importam pro badge.
+const WATCHED_INSERTS: ReadonlyArray<string> = ["bazar_listings", "bazar_transactions"];
+const WATCHED_ALL: ReadonlyArray<string> = ["bazar_proposals"];
 
 /**
  * Substitui o router.refresh() automático por badge manual.
@@ -42,9 +40,14 @@ export function BazarLiveRefresh() {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
         debounceTimer.current = setTimeout(() => setHasUpdates(true), 2000);
       };
-      channel = WATCHED_TABLES.reduce(
+      const base = supabase.channel("bazar-live-badge");
+      const withInserts = WATCHED_INSERTS.reduce(
+        (ch, table) => ch.on("postgres_changes", { event: "INSERT", schema: "public", table }, scheduleFlag),
+        base,
+      );
+      channel = WATCHED_ALL.reduce(
         (ch, table) => ch.on("postgres_changes", { event: "*", schema: "public", table }, scheduleFlag),
-        supabase.channel("bazar-live-badge"),
+        withInserts,
       );
       channel.subscribe();
     };
