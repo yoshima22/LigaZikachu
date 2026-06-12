@@ -26,12 +26,22 @@ const getNavData = (userId: string) =>
         select: { id: true, ptcglNick: true, avatarUrl: true },
       });
       if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0 };
-      const [giftCount, wallet, unreadDms] = await Promise.all([
+      const [giftCount, wallet, unreadDms, bazarAlerts] = await Promise.all([
         prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch(() => 0),
         prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null),
         prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0),
+        prisma.bazarProposal.count({
+          where: {
+            OR: [
+              // Propostas recebidas que ainda não respondi (sou o vendedor)
+              { listing: { playerId: player.id }, status: "PENDING" },
+              // Minhas propostas que foram respondidas nas últimas 48h
+              { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, updatedAt: { gt: new Date(Date.now() - 48 * 3600_000) } },
+            ],
+          },
+        }).catch(() => 0),
       ]);
-      return { player, giftCount, wallet, unreadDms };
+      return { player, giftCount, wallet, unreadDms, bazarAlerts };
     },
     [`nav-data-${userId}`],
     { revalidate: 30, tags: [`nav-${userId}`] },
@@ -44,7 +54,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   const admin = isAdmin(user.role);
 
-  const { player, giftCount, wallet, unreadDms } = await getNavData(user.id);
+  const { player, giftCount, wallet, unreadDms, bazarAlerts } = await getNavData(user.id);
 
   return (
     <>
@@ -82,7 +92,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} playerId={player?.id} />
+            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} playerId={player?.id} />
 
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
@@ -140,7 +150,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} playerId={player?.id} />
+            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} playerId={player?.id} />
           </div>
         </header>
 

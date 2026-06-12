@@ -573,7 +573,10 @@ export async function createProposal(
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
-    const listing = await prisma.bazarListing.findUnique({ where: { id: listingId } });
+    const listing = await prisma.bazarListing.findUnique({
+      where: { id: listingId },
+      include: { player: { select: { userId: true } } },
+    });
     if (!listing || listing.status !== "ACTIVE") return { error: "Anúncio indisponível." };
     if (listing.playerId === player.id) return { error: "Você não pode propor no seu próprio anúncio." };
 
@@ -625,6 +628,8 @@ export async function createProposal(
     });
 
     revalidateBazar();
+    // Notifica o vendedor que recebeu uma nova proposta
+    revalidateTag(`nav-${listing.player.userId}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -643,7 +648,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       where: { id: proposalId },
       include: {
         listing: { include: { player: { select: { id: true, displayName: true } } } },
-        proposer: { select: { id: true, displayName: true } },
+        proposer: { select: { id: true, displayName: true, userId: true } },
       },
     });
     if (!proposal) return { error: "Proposta não encontrada." };
@@ -775,6 +780,8 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     });
 
     revalidateBazar();
+    // Notifica o proponente que sua proposta foi aceita
+    revalidateTag(`nav-${proposal.proposer.userId}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -791,7 +798,10 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
 
     const proposal = await prisma.bazarProposal.findUnique({
       where: { id: proposalId },
-      include: { listing: { select: { playerId: true } } },
+      include: {
+        listing: { select: { playerId: true } },
+        proposer: { select: { userId: true } },
+      },
     });
     if (!proposal) return { error: "Proposta não encontrada." };
     if (proposal.listing.playerId !== player.id && proposal.proposerId !== player.id) {
@@ -799,13 +809,16 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     }
     if (proposal.status !== "PENDING") return { error: "Proposta não está pendente." };
 
-    const newStatus = proposal.listing.playerId === player.id ? "REJECTED" : "CANCELLED";
+    const sellerIsRejecting = proposal.listing.playerId === player.id;
+    const newStatus = sellerIsRejecting ? "REJECTED" : "CANCELLED";
     await prisma.$transaction(async (tx) => {
       await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
       await tx.bazarProposal.update({ where: { id: proposalId }, data: { status: newStatus } });
     });
 
     revalidateBazar();
+    // Se o vendedor rejeitou, notifica o proponente
+    if (sellerIsRejecting) revalidateTag(`nav-${proposal.proposer.userId}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };

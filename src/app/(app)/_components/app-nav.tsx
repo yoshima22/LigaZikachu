@@ -92,7 +92,7 @@ type NavLink = {
   tutorialId?: string;
 };
 
-export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; playerId?: string }) {
+export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, bazarAlerts = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; bazarAlerts?: number; playerId?: string }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [liveUnreadDms, setLiveUnreadDms] = useState(unreadDms);
@@ -165,6 +165,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
           admin={admin}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
+          badgeHrefs={{ "/bazar": bazarAlerts }}
         />
         <NavDropdown
           id="colecao"
@@ -237,6 +238,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
+            badgeHrefs={{ "/bazar": bazarAlerts }}
           />
           <MobileNavGroup
             id="mobile-colecao"
