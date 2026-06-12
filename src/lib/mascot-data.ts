@@ -97,20 +97,40 @@ export const EGG_POOLS: Record<string, number[]> = {
     688, 690, 692, 694, 696, 698, 701, 703, 704, 707, 708, 710, 712,
   ],
 
-  // Gen 7 (Alola)
+  // Gen 7 (Alola) — inclui formas Alolan como variantes da geração
   EGG_GEN7: [
     722, 725, 728,  // Starters Alola
     731, 734, 736, 739, 742, 744, 746, 747, 749, 751, 753, 755, 757,
     759, 761, 767, 769, 777, 781, 782,
+    // Formas Alolan — bases (evoluídas filtradas por isBaseForm)
+    10091, // Rattata-Alola
+    10101, // Sandshrew-Alola
+    10103, // Vulpix-Alola
+    10105, // Diglett-Alola
+    10107, // Meowth-Alola
+    10109, // Geodude-Alola
+    10112, // Grimer-Alola
   ],
 
-  // Gen 8 (Galar)
+  // Gen 8 (Galar) — inclui formas Galarianas como variantes da geração
   EGG_GEN8: [
     810, 813, 816,  // Starters Galar
     819, 821, 824, 827, 829, 831, 833, 835, 837, 840, 843, 845, 846,
     848, 850, 852, 854, 856, 868, 870, 871, 872, 874, 875, 877,
     878, 885,
     // Removidos: 861 Grimmsnarl (evolução da linha 856→857→861)
+    // Formas Galarianas — bases (evoluídas filtradas por isBaseForm)
+    10158, // Meowth-Galar
+    10159, // Ponyta-Galar
+    10161, // Slowpoke-Galar
+    10163, // Farfetch'd-Galar
+    10164, // Weezing-Galar
+    10165, // Mr. Mime-Galar
+    10170, // Corsola-Galar
+    10171, // Zigzagoon-Galar
+    10173, // Darumaka-Galar
+    10175, // Yamask-Galar
+    10176, // Stunfisk-Galar
   ],
 
   // Gen 9 (Paldea)
