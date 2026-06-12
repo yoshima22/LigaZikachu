@@ -124,38 +124,110 @@ const PARADOX_IDS = [
   1020, 1021, 1022, 1023,
 ];
 
-export const EGG_RATE_PROFILES: Record<"COMMON" | "RARE" | "SPECIAL", EggRateProfile> = {
+// ── Formas regionais separadas por raridade ───────────────────────────────────
+// Alolan
+const ALOLAN_COMMON_IDS  = [10091, 10101, 10105, 10109, 10112]; // Rattata, Sandshrew, Diglett, Geodude, Grimer
+const ALOLAN_RARE_IDS    = [10107];                              // Meowth-Alola
+const ALOLAN_SPECIAL_IDS = [10103];                              // Vulpix-Alola
+
+// Galar
+const GALAR_COMMON_IDS  = [10158, 10171, 10173, 10176];              // Meowth-G, Zigzagoon-G, Darumaka-G, Stunfisk-G
+const GALAR_RARE_IDS    = [10161, 10163, 10165];                     // Slowpoke-G, Farfetch'd-G, Mr. Mime-G
+const GALAR_SPECIAL_IDS = [10159, 10164, 10170, 10175];              // Ponyta-G, Weezing-G, Corsola-G, Yamask-G
+
+// Hisui
+const HISUI_COMMON_IDS  = [10231, 10234];        // Voltorb-H, Qwilfish-H
+const HISUI_RARE_IDS    = [10229, 10235];        // Growlithe-H, Sneasel-H
+const HISUI_SPECIAL_IDS = [10238];               // Zorua-H
+
+// Nativos Gen 7 (sem as formas Alolan)
+const GEN7_NATIVE_IDS = [
+  722, 725, 728,
+  731, 734, 736, 739, 742, 744, 746, 747, 749, 751, 753, 755, 757,
+  759, 761, 767, 769, 777, 781, 782,
+];
+
+// Nativos Gen 8 (sem as formas Galarianas)
+const GEN8_NATIVE_IDS = [
+  810, 813, 816,
+  819, 821, 824, 827, 829, 831, 833, 835, 837, 840, 843, 845, 846,
+  848, 850, 852, 854, 856, 868, 870, 871, 872, 874, 875, 877, 878, 885,
+];
+
+export const EGG_RATE_PROFILES: Record<string, EggRateProfile> = {
   COMMON: {
     legendaryChance: 0.01,
     buckets: [
-      { label: "common_base", weight: 72, pokemonIds: EGG_POOLS.COMMON },
-      { label: "common_good", weight: 15, pokemonIds: COMMON_GOOD_IDS },
-      { label: "starter_cameo", weight: 8, pokemonIds: STARTER_IDS },
-      { label: "rare_cameo", weight: 4, pokemonIds: [133, 147, 172, 175, 236, 280, 349, 447, 570, 704, 744, 778, 885, 996] },
+      { label: "common_base",    weight: 72, pokemonIds: EGG_POOLS.COMMON },
+      { label: "common_good",    weight: 15, pokemonIds: COMMON_GOOD_IDS },
+      { label: "starter_cameo",  weight: 8,  pokemonIds: STARTER_IDS },
+      { label: "rare_cameo",     weight: 4,  pokemonIds: [133, 147, 172, 175, 236, 280, 349, 447, 570, 704, 744, 778, 885, 996] },
     ],
   },
   RARE: {
-    // Legendary chance: ~3.5% (+0.5% vs anterior)
     legendaryChance: 0.035,
     buckets: [
-      // Peso total: 97 (mesmo de antes). "Melhor loot" (pseudo + special_cameo):
-      //   Antes: (15+17)/97 = 33%  →  Agora: (18+19)/97 = 38.1%  (+5.1%)
-      { label: "starter",              weight: 27, pokemonIds: STARTER_IDS },
-      { label: "rare_favorite",        weight: 33, pokemonIds: RARE_FAN_FAVORITES },
+      { label: "starter",               weight: 27, pokemonIds: STARTER_IDS },
+      { label: "rare_favorite",         weight: 33, pokemonIds: RARE_FAN_FAVORITES },
       { label: "pseudo_legendary_base", weight: 18, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_cameo",        weight: 19, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
+      { label: "special_cameo",         weight: 19, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
     ],
   },
   SPECIAL: {
-    // Legendary chance: ~6.5% (+0.5% vs anterior)
     legendaryChance: 0.065,
     buckets: [
-      // Peso total: 94 (mesmo de antes). "Melhor loot" (pseudo + paradox):
-      //   Antes: (25+18)/94 = 45.7%  →  Agora: (27+19)/94 = 48.9%  (+3.2%)
       { label: "pseudo_legendary_base", weight: 27, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
       { label: "special_coveted",       weight: 34, pokemonIds: SPECIAL_COVETED_IDS },
       { label: "paradox",               weight: 19, pokemonIds: PARADOX_IDS },
       { label: "fossil_and_ancient",    weight: 14, pokemonIds: FOSSIL_AND_ANCIENT_IDS },
+    ],
+  },
+
+  // ── Ovos de geração com pesos: nativos > regionais comuns > regionais raros ──
+  // Peso total: 100. Regional: ~20% do pool (forma rara ~5%)
+  EGG_GEN7: {
+    legendaryChance: 0.01,
+    buckets: [
+      { label: "gen7_native",       weight: 80, pokemonIds: GEN7_NATIVE_IDS },
+      { label: "gen7_alolan_common",weight: 12, pokemonIds: ALOLAN_COMMON_IDS },
+      { label: "gen7_alolan_rare",  weight: 5,  pokemonIds: ALOLAN_RARE_IDS },
+      { label: "gen7_alolan_ultra", weight: 3,  pokemonIds: ALOLAN_SPECIAL_IDS },
+    ],
+  },
+  EGG_GEN8: {
+    legendaryChance: 0.01,
+    buckets: [
+      { label: "gen8_native",       weight: 80, pokemonIds: GEN8_NATIVE_IDS },
+      { label: "gen8_galar_common", weight: 12, pokemonIds: GALAR_COMMON_IDS },
+      { label: "gen8_galar_rare",   weight: 5,  pokemonIds: GALAR_RARE_IDS },
+      { label: "gen8_galar_ultra",  weight: 3,  pokemonIds: GALAR_SPECIAL_IDS },
+    ],
+  },
+
+  // ── Ovos temáticos regionais: probabilidade interna ponderada ─────────────
+  // Mais comuns têm ~60-65%, raras ~25-30%, ultra-raras ~10-15%
+  EGG_ALOLA: {
+    legendaryChance: 0.005,
+    buckets: [
+      { label: "alolan_common",  weight: 60, pokemonIds: ALOLAN_COMMON_IDS },
+      { label: "alolan_rare",    weight: 25, pokemonIds: ALOLAN_RARE_IDS },
+      { label: "alolan_special", weight: 15, pokemonIds: ALOLAN_SPECIAL_IDS },
+    ],
+  },
+  EGG_GALAR: {
+    legendaryChance: 0.01,
+    buckets: [
+      { label: "galar_common",  weight: 55, pokemonIds: GALAR_COMMON_IDS },
+      { label: "galar_rare",    weight: 30, pokemonIds: GALAR_RARE_IDS },
+      { label: "galar_special", weight: 15, pokemonIds: GALAR_SPECIAL_IDS },
+    ],
+  },
+  EGG_HISUI: {
+    legendaryChance: 0.01,
+    buckets: [
+      { label: "hisui_common",  weight: 50, pokemonIds: HISUI_COMMON_IDS },
+      { label: "hisui_rare",    weight: 35, pokemonIds: HISUI_RARE_IDS },
+      { label: "hisui_special", weight: 15, pokemonIds: HISUI_SPECIAL_IDS },
     ],
   },
 };
@@ -202,9 +274,8 @@ function pickFromWeightedBuckets(buckets: WeightedEggBucket[]): number {
 }
 
 function legendaryChanceForEgg(eggType: string): number {
-  if (eggType === "SPECIAL") return EGG_RATE_PROFILES.SPECIAL.legendaryChance;
-  if (eggType === "RARE") return EGG_RATE_PROFILES.RARE.legendaryChance;
-  if (eggType === "COMMON") return EGG_RATE_PROFILES.COMMON.legendaryChance;
+  const profile = EGG_RATE_PROFILES[eggType];
+  if (profile) return profile.legendaryChance;
   if (eggType.startsWith("EGG_GEN")) return 0.01;
   if (eggType === "EVENT") return 0.003;
   return 0.003;
@@ -224,17 +295,18 @@ function fallbackPoolForEgg(eggType: string): number[] {
 /**
  * Roll a Pokémon from an egg type.
  *
- * COMMON, RARE and SPECIAL use weighted internal buckets.
- * Generation and event eggs keep their configured pools, but still remove evolved
- * forms and still use the same legendary side-roll rules.
+ * COMMON, RARE, SPECIAL e ovos regionais (EGG_GEN7, EGG_GEN8, EGG_ALOLA,
+ * EGG_GALAR, EGG_HISUI) usam buckets ponderados.
+ * Demais ovos de geração mantêm pool flat com filtro de evoluídos/lendários.
  */
 export function rollPokemonIdFromEgg(eggType: string): number {
   if (Math.random() < legendaryChanceForEgg(eggType)) {
     return randomFrom(LEGENDARY_POOL);
   }
 
-  if (eggType === "COMMON" || eggType === "RARE" || eggType === "SPECIAL") {
-    return pickFromWeightedBuckets(EGG_RATE_PROFILES[eggType].buckets);
+  const profile = EGG_RATE_PROFILES[eggType];
+  if (profile) {
+    return pickFromWeightedBuckets(profile.buckets);
   }
 
   const pool = fallbackPoolForEgg(eggType);
@@ -242,13 +314,11 @@ export function rollPokemonIdFromEgg(eggType: string): number {
 }
 
 /**
- * Preview helper for future UI/admin use.
- * It returns the configured rates without affecting the actual random roll.
+ * Preview helper for admin UI.
+ * Returns configured rates without affecting actual random rolls.
  */
 export function getEggRatePreview(eggType: string) {
-  const profile = eggType === "COMMON" || eggType === "RARE" || eggType === "SPECIAL"
-    ? EGG_RATE_PROFILES[eggType]
-    : null;
+  const profile = EGG_RATE_PROFILES[eggType];
 
   if (!profile) {
     return {
