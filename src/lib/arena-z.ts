@@ -1611,6 +1611,49 @@ export const getArenaRanking = unstable_cache(
   { revalidate: 120, tags: ["arena-ranking"] }, // 2 min — ranking muda raramente
 );
 
+/** Verifica se as colunas da reformulação Jun/2026 existem — cacheado 5 min */
+export const getCachedDbReady = unstable_cache(
+  () =>
+    prisma
+      .$queryRaw<[{ exists: boolean }]>`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'arena_teams' AND column_name = 'roomLevel'
+        ) AS exists
+      `
+      .then((r) => r[0]?.exists ?? false)
+      .catch(() => false),
+  ["arena-db-ready"],
+  { revalidate: 300, tags: ["arena-db-ready"] },
+);
+
+/** Todos os times ACTIVE com stats completos de mascotes para PvP — cacheado 60s */
+export const getCachedOpponentTeams = unstable_cache(
+  () =>
+    prisma.arenaTeam.findMany({
+      where: { status: "ACTIVE" },
+      include: {
+        player: { select: { displayName: true, ptcglNick: true } },
+        members: {
+          include: {
+            mascot: {
+              select: {
+                id: true, pokemonId: true, nickname: true, level: true,
+                arenaState: true, restingUntil: true, isShiny: true,
+                statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true,
+              },
+            },
+          },
+          orderBy: { slot: "asc" },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+    }),
+  ["arena-opponent-teams"],
+  { revalidate: 60, tags: ["arena-active-teams"] },
+);
+
 // ── Ataque oportunista de rival ───────────────────────────────────────────────
 
 export async function runOpportunisticAttack(attackerPlayerId: string, targetMascotId: string) {

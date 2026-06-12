@@ -13,6 +13,8 @@ import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@p
 function revalidateBazar() {
   revalidatePath("/bazar");
   revalidatePath("/bazar/meu-bazar");
+  revalidateTag("bazar-listings");
+  revalidateTag("bazar-transactions");
 }
 
 type ProposalOfferItem = {
@@ -230,6 +232,25 @@ export async function getRecentTransactions(take = 10) {
     take,
   });
 }
+
+// ── Versões cacheadas para uso na page (dados globais, iguais para todos os usuários) ──
+
+/** Listagens do bazar — 45s de cache por combinação de filtros. Invalidado por tag. */
+export function getCachedListings(filters?: Parameters<typeof getListings>[0]) {
+  const key = JSON.stringify(filters ?? {});
+  return unstable_cache(
+    () => getListings(filters),
+    ["bazar-listings", key],
+    { revalidate: 45, tags: ["bazar-listings"] },
+  )();
+}
+
+/** Transações recentes — 60s de cache global. Invalidado por tag. */
+export const getCachedRecentTransactions = unstable_cache(
+  (take = 6) => getRecentTransactions(take),
+  ["bazar-transactions"],
+  { revalidate: 60, tags: ["bazar-transactions"] },
+);
 
 const _getMiauvadaoConfigCached = unstable_cache(
   async () => {

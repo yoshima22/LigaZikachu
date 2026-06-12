@@ -11,7 +11,7 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { getListings, getRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
+import { getCachedListings, getCachedRecentTransactions, getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
@@ -40,7 +40,7 @@ export default async function BazarPage({
   ]).catch(() => null);
 
   const [listingsResult, transactions, miauvadao] = await Promise.all([
-    getListings({
+    getCachedListings({
       category: searchParams.cat as BazarItemCategory | undefined,
       type: searchParams.type as BazarListingType | undefined,
       maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
@@ -48,7 +48,7 @@ export default async function BazarPage({
       search: searchParams.q || undefined,
       page: searchParams.page ? parseInt(searchParams.page) : 1,
     }),
-    getRecentTransactions(6),
+    getCachedRecentTransactions(6),
     getMiauvadaoConfig(),
   ]);
   const { listings, total, page, totalPages } = listingsResult;

@@ -11,6 +11,7 @@ import {
   RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog,
   getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams,
   getArenaDebuffPct, getRoomsData, getTopArenaPlayers,
+  getCachedDbReady, getCachedOpponentTeams,
 } from "@/lib/arena-z";
 import {
   AdminMascotStateButton, BotBattleButton, DeleteTeamButton,
@@ -129,13 +130,8 @@ export default async function ArenaZPage({
   const pveCapRemaining = Math.max(0, PVE_DAILY_COINS_CAP - pveEarnedToday);
   const shieldUsedToday = playerArenaData?.susShieldDate === todayBRT;
 
-  // Verifica se colunas da reformulação Jun/2026 já existem no DB
-  const dbReady = await prisma.$queryRaw<[{exists: boolean}]>`
-    SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'arena_teams' AND column_name = 'roomLevel'
-    ) AS exists
-  `.then(r => r[0]?.exists ?? false).catch(() => false);
+  // Verifica se colunas da reformulação Jun/2026 já existem no DB (cacheado 5 min)
+  const dbReady = await getCachedDbReady();
 
   if (!dbReady) {
     return (
@@ -153,7 +149,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     );
   }
 
-  const [wallet, mascots, teams, opponentTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
+  const [wallet, mascots, teams, allActiveTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -184,26 +180,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.arenaTeam.findMany({
-      where: { playerId: { not: player.id }, status: "ACTIVE" },
-      include: {
-        player: { select: { displayName: true, ptcglNick: true } },
-        members: {
-          include: {
-            mascot: {
-              select: {
-                id: true, pokemonId: true, nickname: true, level: true,
-                arenaState: true, restingUntil: true, isShiny: true,
-                statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true,
-              },
-            },
-          },
-          orderBy: { slot: "asc" },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 30,
-    }),
+    getCachedOpponentTeams(),
     prisma.arenaBattle.findMany({
       where: { OR: [{ attackerPlayerId: player.id }, { defenderPlayerId: player.id }] },
       include: {
@@ -231,6 +208,8 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     getRoomsData(player.id).catch(() => ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] }))),
     getTopArenaPlayers().catch(() => [] as never[]),
   ]);
+
+  const opponentTeams = allActiveTeams.filter(t => t.playerId !== player.id);
 
   const now = new Date();
   const mascotIdsInActiveTeams = new Set(
