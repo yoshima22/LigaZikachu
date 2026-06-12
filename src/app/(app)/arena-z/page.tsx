@@ -181,15 +181,30 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       orderBy: { createdAt: "desc" },
     }),
     getCachedOpponentTeams(),
-    prisma.arenaBattle.findMany({
-      where: { OR: [{ attackerPlayerId: player.id }, { defenderPlayerId: player.id }] },
-      include: {
-        attackerPlayer: { select: { displayName: true, ptcglNick: true } },
-        defenderPlayer: { select: { displayName: true, ptcglNick: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 15,
-    }),
+    Promise.all([
+      prisma.arenaBattle.findMany({
+        where: { attackerPlayerId: player.id },
+        include: {
+          attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+          defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 15,
+      }),
+      prisma.arenaBattle.findMany({
+        where: { defenderPlayerId: player.id },
+        include: {
+          attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+          defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 15,
+      }),
+    ]).then(([asAttacker, asDefender]) =>
+      [...asAttacker, ...asDefender]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 15)
+    ),
     getArenaRanking(20),
     prisma.arenaTeam.findFirst({
       where: { playerId: player.id, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
