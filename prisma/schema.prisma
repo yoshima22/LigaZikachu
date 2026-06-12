@@ -1703,6 +1703,7 @@ model BazarProposal {
   message     String?
 
   status      BazarProposalStatus @default(PENDING)
+  viewedByProposerAt DateTime?
 
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt

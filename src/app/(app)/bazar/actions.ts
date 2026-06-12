@@ -1524,3 +1524,20 @@ export async function adminCleanupStaleBazarListings(): Promise<{ error?: string
     return { error: err instanceof Error ? err.message : "Erro.", cancelled: 0, details: [] };
   }
 }
+
+
+export async function markBazarProposalsViewed(): Promise<void> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return;
+    const player = await getSessionPlayer(user.id);
+    if (!player) return;
+    await prisma.bazarProposal.updateMany({
+      where: { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
+      data: { viewedByProposerAt: new Date() },
+    });
+    revalidateTag(`nav-${user.id}`);
+  } catch {
+    // fire-and-forget — não bloqueia a página
+  }
+}

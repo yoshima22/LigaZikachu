@@ -35,8 +35,8 @@ const getNavData = (userId: string) =>
             OR: [
               // Propostas recebidas que ainda não respondi (sou o vendedor)
               { listing: { playerId: player.id }, status: "PENDING" },
-              // Minhas propostas que foram respondidas nas últimas 48h
-              { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, updatedAt: { gt: new Date(Date.now() - 48 * 3600_000) } },
+              // Minhas propostas respondidas que ainda não vi no bazar
+              { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
             ],
           },
         }).catch(() => 0),
