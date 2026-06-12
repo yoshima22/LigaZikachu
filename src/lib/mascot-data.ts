@@ -833,8 +833,8 @@ export const EGG_STAT_RANGES: Record<string, [number, number]> = {
   EGG_GEN8:     [11, 17],
   EGG_GEN9:     [11, 17],
   EGG_GEN6PLUS: [10, 16],
-  RARE:         [10, 16],
-  SPECIAL:      [12, 18],
+  RARE:         [11, 17],
+  SPECIAL:      [13, 20],
 };
 
 // Chance de nascer shiny (brilhante) por tipo de ovo
