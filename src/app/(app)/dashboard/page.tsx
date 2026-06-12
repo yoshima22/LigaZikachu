@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -18,6 +19,27 @@ import { formatDateBRT } from "@/lib/date-brt";
 
 export const dynamic = "force-dynamic";
 
+// Lista de temporadas — muda só quando admin cria/encerra temporada (tag: seasons-list)
+const getCachedSeasons = unstable_cache(
+  () => prisma.season.findMany({ orderBy: { startDate: "desc" }, select: { id: true, name: true, status: true } }),
+  ["all-seasons"],
+  { revalidate: 300, tags: ["seasons-list"] },
+);
+
+// Temporada ativa — atualizada com tag ao mudar status (revalidate: 60s de fallback)
+const getCachedActiveSeason = unstable_cache(
+  () => prisma.season.findFirst({
+    where: { status: SeasonStatus.ACTIVE },
+    orderBy: { createdAt: "desc" },
+    include: {
+      seasonPlayers: { where: { isActive: true } },
+      weeks: { where: { status: { in: ["OPEN", "LOCKED"] } }, orderBy: { number: "desc" }, take: 1 },
+    },
+  }),
+  ["active-season"],
+  { revalidate: 60, tags: ["active-season"] },
+);
+
 export default async function DashboardPage() {
   const session = await getAppSession().catch(() => null);
   const user = session?.user ?? await getManualSessionUser();
@@ -25,25 +47,10 @@ export default async function DashboardPage() {
 
   const admin = isAdmin(user.role);
 
-  // Todas as temporadas (para seletor)
-  const allSeasons = await prisma.season.findMany({
-    orderBy: { startDate: "desc" },
-    select: { id: true, name: true, status: true }
-  });
-
-  // Temporada ativa
-  const activeSeason = await prisma.season.findFirst({
-    where: { status: SeasonStatus.ACTIVE },
-    orderBy: { createdAt: "desc" },
-    include: {
-      seasonPlayers: { where: { isActive: true } },
-      weeks: {
-        where: { status: { in: ["OPEN", "LOCKED"] } },
-        orderBy: { number: "desc" },
-        take: 1
-      }
-    }
-  });
+  const [allSeasons, activeSeason] = await Promise.all([
+    getCachedSeasons(),
+    getCachedActiveSeason(),
+  ]);
 
   // ===== ADMIN =====
   if (admin) {

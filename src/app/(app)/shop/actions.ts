@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
 import { z } from "zod";
@@ -374,6 +374,7 @@ export async function purchaseItem(
           });
           revalidatePath("/carteira");
           revalidatePath("/", "layout");
+          revalidateTag(`nav-${actor.id}`);
           return { autoSold: { itemName: item.name, coins: halfPrice } };
         }
         return { error: "Você já possui este item." };
@@ -452,8 +453,8 @@ export async function purchaseItem(
     revalidatePath("/inventario");
     revalidatePath("/mascotes");
     revalidatePath("/carteira");
-    revalidatePath("/", "layout"); // atualiza ZikaCoins no nav
     revalidatePath("/", "layout");
+    revalidateTag(`nav-${actor.id}`);
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)
     void onShopPurchase(player.id).catch(() => {});

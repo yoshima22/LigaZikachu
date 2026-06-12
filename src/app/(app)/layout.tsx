@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { signOut } from "@/auth";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -14,6 +15,28 @@ import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
 import { AchievementNotifier } from "@/components/achievement-notifier";
 import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 
+// Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
+// que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
+// no nav, o que é aceitável para evitar 4 queries a cada navegação de página.
+const getNavData = (userId: string) =>
+  unstable_cache(
+    async () => {
+      const player = await prisma.player.findUnique({
+        where: { userId },
+        select: { id: true, ptcglNick: true, avatarUrl: true },
+      });
+      if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0 };
+      const [giftCount, wallet, unreadDms] = await Promise.all([
+        prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch(() => 0),
+        prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null),
+        prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0),
+      ]);
+      return { player, giftCount, wallet, unreadDms };
+    },
+    [`nav-data-${userId}`],
+    { revalidate: 30, tags: [`nav-${userId}`] },
+  )();
+
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
   const session = await getAppSession().catch(() => null);
   const user = session?.user ?? await getManualSessionUser();
@@ -21,28 +44,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   const admin = isAdmin(user.role);
 
-  // Dados do jogador para o nav
-  const player = await prisma.player.findUnique({
-    where: { userId: user.id },
-    select: { id: true, ptcglNick: true, avatarUrl: true }
-  });
-  const [giftCount, wallet, unreadDms] = await Promise.all([
-    player
-      ? prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch((error) => {
-          console.error("[AppLayout] gift count failed", { userId: user.id, playerId: player.id, error });
-          return 0;
-        })
-      : 0,
-    player
-      ? prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch((error) => {
-          console.error("[AppLayout] wallet lookup failed", { userId: user.id, playerId: player.id, error });
-          return null;
-        })
-      : null,
-    player
-      ? prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0)
-      : 0,
-  ]);
+  const { player, giftCount, wallet, unreadDms } = await getNavData(user.id);
 
   return (
     <>

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { EggType, FoodType, GiftStatus, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
@@ -140,13 +140,14 @@ async function applyGiftReward(
   return {};
 }
 
-function revalidateGiftTargets() {
+function revalidateGiftTargets(userId?: string) {
   revalidatePath("/caixa-de-presentes");
   revalidatePath("/dashboard");
   revalidatePath("/codigos");
   revalidatePath("/mascotes");
   revalidatePath("/carteira");
   revalidatePath("/", "layout");
+  if (userId) revalidateTag(`nav-${userId}`);
 }
 
 export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
@@ -196,7 +197,7 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
       });
     });
 
-    revalidateGiftTargets();
+    revalidateGiftTargets(user.id);
     return { success: true, autoSold };
   } catch (err) {
     console.error("[claimGift] Erro ao resgatar presente:", err);
@@ -268,7 +269,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
       }
     }
 
-    revalidateGiftTargets();
+    revalidateGiftTargets(user.id);
     return { success: true, claimed: claimedIds.length, autoSolds: autoSolds.length > 0 ? autoSolds : undefined };
   } catch (err) {
     console.error("[claimAllGifts] Erro geral:", err);
