@@ -989,7 +989,7 @@ export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBa
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
     if (!wallet || wallet.balance < REFRESH_COST) return { error: `Saldo insuficiente (precisa de ${REFRESH_COST} ZC).` };
 
-    const configBefore = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+    const configBefore = await getMiauvadaoConfig();
     const vaultBeforeRefresh = configBefore?.vaultBalance ?? 0;
 
     // Verificar cooldown (por jogador) e limite diário compartilhado (global)
