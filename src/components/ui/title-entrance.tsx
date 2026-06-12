@@ -1298,7 +1298,16 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(true);
   const hasPlayed  = useRef(false);
+  const tFadeRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tDoneRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stableDone = useCallback(onComplete, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const skip = useCallback(() => {
+    if (tFadeRef.current) clearTimeout(tFadeRef.current);
+    if (tDoneRef.current) clearTimeout(tDoneRef.current);
+    setVisible(false);
+    setTimeout(() => stableDone(), FADE_MS);
+  }, [stableDone]);
 
   useEffect(() => {
     if (hasPlayed.current || effect === "NONE") return;
@@ -1308,9 +1317,12 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
     const total  = DURATION[effect] ?? 2400;
     const fadeAt = total - FADE_MS;
 
-    const tFade = setTimeout(() => setVisible(false), fadeAt);
-    const tDone = setTimeout(() => stableDone(), total);
-    return () => { clearTimeout(tFade); clearTimeout(tDone); };
+    tFadeRef.current = setTimeout(() => setVisible(false), fadeAt);
+    tDoneRef.current = setTimeout(() => stableDone(), total);
+    return () => {
+      if (tFadeRef.current) clearTimeout(tFadeRef.current);
+      if (tDoneRef.current) clearTimeout(tDoneRef.current);
+    };
   }, [effect, stableDone]);
 
   if (!mounted || typeof document === "undefined") return null;
@@ -1318,11 +1330,15 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
   const props: EffectProps = { name, color, glowColor, flavorText, theme, rarity };
 
   const content = (
-    <div className="fixed inset-0 overflow-hidden" style={{
-      zIndex: 99999, pointerEvents: "none",
-      opacity: visible ? 1 : 0,
-      transition: `opacity ${FADE_MS}ms ease`,
-    }}>
+    <div
+      className="fixed inset-0 overflow-hidden"
+      style={{
+        zIndex: 99999, cursor: "pointer",
+        opacity: visible ? 1 : 0,
+        transition: `opacity ${FADE_MS}ms ease`,
+      }}
+      onClick={skip}
+    >
       {effect === "LIGHTNING_STRIKE"  && <LightningStrikeEffect  {...props}/>}
       {effect === "BOSS_ALERT"        && <BossAlertEffect        {...props}/>}
       {effect === "CHAMPION_ARENA"    && <ChampionArenaEffect    {...props}/>}
