@@ -11,10 +11,11 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings, markBazarProposalsViewed } from "./actions";
+import { getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
 import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
+import { revalidateTag } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,13 @@ export default async function BazarPage({
     autoCleanupStaleBazarListings(),
   ]).catch(() => null);
 
-  // Aguardado para garantir que o revalidateTag rode dentro do contexto da requisição
-  await markBazarProposalsViewed().catch(() => null);
+  // Marcar propostas respondidas como vistas — invalida o badge do nav
+  if (playerId && session?.user?.id) {
+    prisma.bazarProposal.updateMany({
+      where: { proposerId: playerId, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
+      data: { viewedByProposerAt: new Date() },
+    }).then(() => revalidateTag(`nav-${session.user!.id}`)).catch(() => null);
+  }
 
   const [listingsResult, transactions, miauvadao] = await Promise.all([
     getCachedListings({
