@@ -38,8 +38,10 @@ export default async function BazarPage({
   Promise.all([
     autoRefreshMiauvadaoIfNeeded(),
     autoCleanupStaleBazarListings(),
-    markBazarProposalsViewed(),
   ]).catch(() => null);
+
+  // Aguardado para garantir que o revalidateTag rode dentro do contexto da requisição
+  await markBazarProposalsViewed().catch(() => null);
 
   const [listingsResult, transactions, miauvadao] = await Promise.all([
     getCachedListings({
