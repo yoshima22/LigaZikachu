@@ -1689,9 +1689,9 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   if (weaknessPolicy) {
     await prisma.mascotBuff.delete({ where: { id: weaknessPolicy.id } });
     await prisma.mascotEvent.create({
-      data: { mascotId: targetMascotId, emoji: "🛡️", description: "Política de Fraqueza ativou! Ataque oportunista bloqueado. (buff consumido)" }
+      data: { mascotId: targetMascotId, emoji: "🛡️", description: "Escudo ativado! Ataque oportunista bloqueado. (proteção consumida)" }
     });
-    throw new Error("Este mascote está protegido pela Política de Fraqueza! O item foi consumido ao bloquear o ataque.");
+    throw new Error("Este mascote está protegido por um escudo! A proteção foi consumida ao bloquear o ataque.");
   }
 
   const attackerPlayer = await prisma.player.findUnique({
@@ -2276,6 +2276,11 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
   const currentRest = targetMascot.restingUntil ?? new Date(Date.now() + ARENA_Z_CONFIG.restAfterSusHours * 3_600_000);
   const newRest = new Date(Math.max(Date.now() + 30 * 60_000, currentRest.getTime() - 20 * 60_000));
 
+  // Verifica se já existe um escudo ativo (para não duplicar)
+  const existingShield = await prisma.mascotBuff.findFirst({
+    where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } },
+  });
+
   await prisma.$transaction(async (tx) => {
     await tx.player.update({
       where: { id: shieldOwnerPlayerId },
@@ -2285,11 +2290,21 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
       where: { id: targetMascotId },
       data: { restingUntil: newRest, susRestBonusMinutes: { increment: 20 } },
     });
+    // Cria escudo contra ataque oportunista (consumido automaticamente se atacado)
+    if (!existingShield) {
+      await tx.mascotBuff.create({
+        data: {
+          mascotId: targetMascotId,
+          type: "WEAKNESS_POLICY",
+          expiresAt: new Date("2099-01-01"),
+        },
+      });
+    }
     await tx.mascotEvent.create({
       data: {
         mascotId: targetMascotId,
         emoji: "🛡️",
-        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Tempo de repouso reduzido em 20 min.`,
+        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Repouso reduzido em 20 min + protegido contra o próximo ataque oportunista.`,
       },
     });
   });
