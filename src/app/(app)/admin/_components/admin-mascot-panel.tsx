@@ -186,6 +186,7 @@ function CreateSection({ players }: Props) {
   const isValidPokemonId = (id: number) =>
     (id >= 1 && id <= 1025) ||
     (id >= 10004 && id <= 10012) ||
+    (id === 10152 || id === 10155) ||
     (id >= 10091 && id <= 10115) ||
     (id >= 10158 && id <= 10176) ||
     (id >= 10229 && id <= 10244);
@@ -287,7 +288,7 @@ function CreateSection({ players }: Props) {
         {/* Pokémon ID */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">
-            Pokémon ID (1–1025 ou formas regionais: 10004–10012 · 10091–10115 · 10158–10176 · 10229–10244)
+            Pokémon ID (1–1025 ou formas regionais: 10004–10012 · 10091–10115 · 10152 · 10155 · 10158–10176 · 10229–10244)
             {previewName && <span className="ml-1.5 font-normal text-[#FFCB05]">→ {previewName}</span>}
           </label>
           <input type="number" min={1} value={pokemonId}

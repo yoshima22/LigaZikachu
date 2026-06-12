@@ -966,12 +966,13 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
         {/* ── Cadeia de evolução ── */}
         {(() => {
-          const chain: { to: number; level: number; name: string }[] = [];
+          const chain: { names: string[]; level: number; primary: number }[] = [];
           let cur = mascot.pokemonId;
           while (true) {
             const evo = EVOLUTION_MAP.get(cur);
             if (!evo) break;
-            chain.push({ to: evo.to, level: evo.level, name: getEvoName(evo.to) });
+            const targets = evo.toOptions ?? [evo.to];
+            chain.push({ names: targets.map(id => getEvoName(id)), level: evo.level, primary: evo.to });
             cur = evo.to;
           }
           if (chain.length === 0) return null;
@@ -989,7 +990,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       i === 0 && canEvolveNow ? "text-[#FFCB05]" :
                       i === 0 ? "text-slate-300" : "text-slate-500"
                     }`}>
-                      {evo.name}
+                      {evo.names.length > 1
+                        ? evo.names.join(" / ")
+                        : evo.names[0]}
+                      {evo.names.length > 1 && (
+                        <span className="ml-1 text-[9px] font-normal opacity-70">(sorteio)</span>
+                      )}
                     </span>
                     <span className={`text-[9px] rounded-full px-1.5 py-0.5 ${
                       i === 0 && canEvolveNow

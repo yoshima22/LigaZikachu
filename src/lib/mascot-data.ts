@@ -432,7 +432,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 734, to: 735, level: 20 },
   { from: 736, to: 737, level: 20 }, { from: 737, to: 738, level: 30 },
   { from: 742, to: 743, level: 25 },
-  { from: 744, to: 745, level: 25 },
+  { from: 744, to: 745, toOptions: [745, 10152, 10155], level: 25 }, // Rockruff → Lycanroc Midday/Midnight/Dusk
   { from: 747, to: 748, level: 38 },
   { from: 749, to: 750, level: 30 },
   { from: 751, to: 752, level: 22 },
@@ -442,6 +442,9 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 759, to: 760, level: 27 },
   { from: 761, to: 762, level: 18 }, { from: 762, to: 763, level: 29 },
   { from: 782, to: 783, level: 35 }, { from: 783, to: 784, level: 45 },
+  { from: 789, to: 790, level: 30 }, // Cosmog → Cosmoem
+  { from: 790, to: 791, toOptions: [791, 792], level: 50 }, // Cosmoem → Solgaleo/Lunala (sorteio)
+  { from: 891, to: 892, level: 40 }, // Kubfu → Urshifu
   // Gen 8
   { from: 810, to: 811, level: 16 }, { from: 811, to: 812, level: 35 },
   { from: 813, to: 814, level: 16 }, { from: 814, to: 815, level: 35 },
@@ -577,6 +580,10 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   865,  // Sirfetch'd (Farfetch'd-Galar + moveset)
   866,  // Mr. Rime (Mr. Mime-Galar + level)
   867,  // Runerigus (Yamask-Galar + local)
+  // Ramificações não mapeadas via `to` (apenas em `toOptions`)
+  792,  // Lunala (Cosmoem → toOptions, `to` é Solgaleo 791)
+  10152, // Lycanroc-Midnight (Rockruff → toOptions, `to` é Lycanroc-Midday 745)
+  10155, // Lycanroc-Dusk (Rockruff → toOptions)
   // Gen 9 — evoluções não mapeadas
   983,  // Annihilape (Primeape + Rage Fist)
   // Formas Alolan — finais sem base própria ou pré-evolução externa
@@ -1262,6 +1269,10 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   10008:"Rotom-Calor",10009:"Rotom-Lavagem",10010:"Rotom-Gelo",
   10011:"Rotom-Ventilador",10012:"Rotom-Corte",
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
+  // ── Formas de Lycanroc (Gen 7) ───────────────────────────────────────────────
+  10152:"Lycanroc-Midnight",
+  10155:"Lycanroc-Dusk",
+  // ── Formas Alolan ────────────────────────────────────────────────────────────
   10091:"Rattata-Alola",10092:"Raticate-Alola",
   10100:"Raichu-Alola",
   10101:"Sandshrew-Alola",10102:"Sandslash-Alola",
@@ -1617,7 +1628,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   884:"steel/dragon",885:"dragon/ghost",886:"dragon/ghost",887:"dragon/ghost",
   // Gen 8 legendaries
   888:"fairy/steel",889:"dark/steel",890:"poison/dragon",
-  891:"fighting",892:"fighting/water",893:"grass/dark",
+  891:"fighting",892:"fighting/dark",893:"grass/dark",  // 892 = Urshifu Single Strike
   894:"electric",895:"ice",896:"ice",897:"ghost",898:"psychic",
   // ── Gen 9 ──────────────────────────────────────────────────────────────────
   906:"grass",907:"grass",908:"grass/dark",
@@ -1661,6 +1672,10 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   10011:"electric/flying",// Rotom-Ventilador
   10012:"electric/grass", // Rotom-Corte
   // ── Formas Alolan ──────────────────────────────────────────────────────────
+  // Formas de Lycanroc (Gen 7)
+  10152:"rock",  // Lycanroc-Midnight
+  10155:"rock",  // Lycanroc-Dusk
+  // Formas Alolan
   10091:"dark/normal", 10092:"dark/normal",   // Rattata/Raticate-Alola
   10100:"electric/psychic",                    // Raichu-Alola
   10101:"ice/steel",   10102:"ice/steel",      // Sandshrew/Sandslash-Alola
