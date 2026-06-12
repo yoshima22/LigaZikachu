@@ -57,6 +57,12 @@ const RARE_FAN_FAVORITES = [
   917, 924, 926, 932, 935, 938, 940, 944, 948, 956, 963, 971, 996, 999,
   // Formas especiais (IDs PokeAPI: 10004-10005 Wormadam, 10006 Shaymin-Sky, 10007 Giratina-Origem, 10008-10012 Rotom)
   10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012,
+  // Formas Alolan — bases
+  10091, 10101, 10103, 10105, 10107, 10109, 10112,
+  // Formas Galar — bases + weezing/stunfisk (sem evolução)
+  10158, 10159, 10161, 10163, 10164, 10165, 10170, 10171, 10173, 10175, 10176,
+  // Formas Hisui — bases
+  10229, 10231, 10234, 10235, 10238,
 ];
 
 const PSEUDO_LEGENDARY_BASE_IDS = [
@@ -92,6 +98,22 @@ const SPECIAL_COVETED_IDS = [
   746, 747, 749, 757, 769, 777, 778, 781, 782,
   840, 848, 854, 868, 870, 871, 874, 875, 877, 880, 881, 882, 883, 884, 885,
   932, 935, 938, 940, 942, 944, 948, 950, 952, 954, 956, 958, 963, 967, 968, 971, 973, 977, 978, 996, 999,
+  // Formas Alolan mais cobiçadas (bases)
+  10103, // Vulpix-Alola
+  10107, // Meowth-Alola
+  10112, // Grimer-Alola
+  // Formas Galar mais cobiçadas (bases)
+  10159, // Ponyta-Galar
+  10161, // Slowpoke-Galar
+  10163, // Farfetch'd-Galar
+  10164, // Weezing-Galar
+  10170, // Corsola-Galar
+  10175, // Yamask-Galar
+  10176, // Stunfisk-Galar
+  // Formas Hisui mais cobiçadas (bases)
+  10229, // Growlithe-Hisui
+  10235, // Sneasel-Hisui
+  10238, // Zorua-Hisui
 ];
 
 const PARADOX_IDS = [

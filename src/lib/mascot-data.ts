@@ -121,6 +121,40 @@ export const EGG_POOLS: Record<string, number[]> = {
     967, 968, 969, 971, 973, 977, 978, 996,
   ],
 
+  // ── Formas Regionais ──────────────────────────────────────────────────────────
+  // Apenas formas BASE (sem evolução interna) — filtradas por isBaseForm abaixo
+  EGG_ALOLA: [
+    10091, // Rattata-Alola
+    10101, // Sandshrew-Alola
+    10103, // Vulpix-Alola
+    10105, // Diglett-Alola
+    10107, // Meowth-Alola
+    10109, // Geodude-Alola
+    10112, // Grimer-Alola
+  ],
+
+  EGG_GALAR: [
+    10158, // Meowth-Galar
+    10159, // Ponyta-Galar
+    10161, // Slowpoke-Galar
+    10163, // Farfetch'd-Galar
+    10164, // Weezing-Galar (sem evolução — forma final única)
+    10165, // Mr. Mime-Galar
+    10170, // Corsola-Galar
+    10171, // Zigzagoon-Galar
+    10173, // Darumaka-Galar
+    10175, // Yamask-Galar
+    10176, // Stunfisk-Galar (sem evolução — forma final única)
+  ],
+
+  EGG_HISUI: [
+    10229, // Growlithe-Hisui
+    10231, // Voltorb-Hisui
+    10234, // Qwilfish-Hisui
+    10235, // Sneasel-Hisui
+    10238, // Zorua-Hisui
+  ],
+
   // Pool aleatório — inclui todos os gens, garante diversidade
   RANDOM: [] as number[], // preenchido abaixo após todas as definições
 
@@ -295,6 +329,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 399, to: 400, level: 15 },
   { from: 403, to: 404, level: 15 }, { from: 404, to: 405, level: 30 },
   { from: 406, to: 315, level: 20 },
+  { from: 315, to: 407, level: 30 }, // Roselia → Roserade (Shiny Stone)
   { from: 408, to: 409, level: 30 },
   { from: 410, to: 411, level: 30 },
   { from: 418, to: 419, level: 26 },
@@ -468,6 +503,32 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 971, to: 972, level: 30 },
   { from: 974, to: 975, level: 30 },
   { from: 996, to: 997, level: 35 }, { from: 997, to: 998, level: 54 },
+  // ── Formas Alolan ─────────────────────────────────────────────────────────────
+  { from: 10091, to: 10092, level: 20 }, // Rattata-Alola → Raticate-Alola
+  { from: 10101, to: 10102, level: 22 }, // Sandshrew-Alola → Sandslash-Alola (Ice Stone)
+  { from: 10103, to: 10104, level: 36 }, // Vulpix-Alola → Ninetales-Alola (Ice Stone)
+  { from: 10105, to: 10106, level: 26 }, // Diglett-Alola → Dugtrio-Alola
+  { from: 10107, to: 10108, level: 28 }, // Meowth-Alola → Persian-Alola (amizade)
+  { from: 10109, to: 10110, level: 25 }, // Geodude-Alola → Graveler-Alola
+  { from: 10110, to: 10111, level: 36 }, // Graveler-Alola → Golem-Alola (troca)
+  { from: 10112, to: 10113, level: 38 }, // Grimer-Alola → Muk-Alola
+  // ── Formas Galar ─────────────────────────────────────────────────────────────
+  { from: 10158, to: 863,   level: 28 }, // Meowth-Galar → Perrserker
+  { from: 10159, to: 10160, level: 40 }, // Ponyta-Galar → Rapidash-Galar
+  { from: 10161, to: 10162, level: 37 }, // Slowpoke-Galar → Slowbro-Galar
+  { from: 10163, to: 865,   level: 30 }, // Farfetch'd-Galar → Sirfetch'd
+  { from: 10165, to: 866,   level: 42 }, // Mr. Mime-Galar → Mr. Rime
+  { from: 10170, to: 864,   level: 38 }, // Corsola-Galar → Cursola
+  { from: 10171, to: 10172, level: 20 }, // Zigzagoon-Galar → Linoone-Galar
+  { from: 10172, to: 862,   level: 35 }, // Linoone-Galar → Obstagoon
+  { from: 10173, to: 10174, level: 38 }, // Darumaka-Galar → Darmanitan-Galar (Ice Stone)
+  { from: 10175, to: 867,   level: 34 }, // Yamask-Galar → Runerigus
+  // ── Formas Hisui ─────────────────────────────────────────────────────────────
+  { from: 10229, to: 10230, level: 38 }, // Growlithe-Hisui → Arcanine-Hisui (Fire Stone)
+  { from: 10231, to: 10232, level: 30 }, // Voltorb-Hisui → Electrode-Hisui (Leaf Stone)
+  { from: 10234, to: 904,   level: 40 }, // Qwilfish-Hisui → Overqwil (Barb Barrage)
+  { from: 10235, to: 903,   level: 40 }, // Sneasel-Hisui → Sneasler (Razor Claw)
+  { from: 10238, to: 10239, level: 30 }, // Zorua-Hisui → Zoroark-Hisui
 ];
 
 // Mapa de acesso rápido: pokemonId → evolução
@@ -498,6 +559,27 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   867,  // Runerigus (Yamask-Galar + local)
   // Gen 9 — evoluções não mapeadas
   983,  // Annihilape (Primeape + Rage Fist)
+  // Formas Alolan — finais sem base própria ou pré-evolução externa
+  10100, // Raichu-Alola (evolui de Pikachu, não de Raichu base)
+  10114, // Exeggutor-Alola (evolui de Exeggcute com Leaf Stone)
+  10115, // Marowak-Alola (evolui de Cubone, nível 28)
+  // Formas Galar — finais sem cadeia interna no sistema
+  10160, // Rapidash-Galar (evolui de Ponyta-Galar → já mapeado)
+  10162, // Slowbro-Galar (evolui de Slowpoke-Galar → já mapeado)
+  10169, // Slowking-Galar (evolui de Slowpoke-Galar, via item — sem mapeamento split)
+  10174, // Darmanitan-Galar (evolui de Darumaka-Galar → já mapeado)
+  // Formas Hisui — finais
+  10230, // Arcanine-Hisui → já mapeado via 10229
+  10232, // Electrode-Hisui → já mapeado via 10231
+  10233, // Typhlosion-Hisui (evolui de Quilava, forma especial)
+  10236, // Samurott-Hisui (evolui de Dewott, forma especial)
+  10237, // Lilligant-Hisui (evolui de Petilil com Sun Stone)
+  10239, // Zoroark-Hisui → já mapeado via 10238
+  10240, // Braviary-Hisui (evolui de Rufflet, forma especial)
+  10241, // Sliggoo-Hisui (evolui de Goomy)
+  10242, // Goodra-Hisui (evolui de Sliggoo-Hisui)
+  10243, // Avalugg-Hisui (evolui de Bergmite)
+  10244, // Decidueye-Hisui (evolui de Dartrix, forma especial)
 ]);
 
 // Conjunto unificado: tudo que não deve aparecer em ovos
@@ -1159,6 +1241,42 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   10006:"Shaymin-Céu",10007:"Giratina-Origem",
   10008:"Rotom-Calor",10009:"Rotom-Lavagem",10010:"Rotom-Gelo",
   10011:"Rotom-Ventilador",10012:"Rotom-Corte",
+  // ── Formas Alolan ─────────────────────────────────────────────────────────────
+  10091:"Rattata-Alola",10092:"Raticate-Alola",
+  10100:"Raichu-Alola",
+  10101:"Sandshrew-Alola",10102:"Sandslash-Alola",
+  10103:"Vulpix-Alola",10104:"Ninetales-Alola",
+  10105:"Diglett-Alola",10106:"Dugtrio-Alola",
+  10107:"Meowth-Alola",10108:"Persian-Alola",
+  10109:"Geodude-Alola",10110:"Graveler-Alola",10111:"Golem-Alola",
+  10112:"Grimer-Alola",10113:"Muk-Alola",
+  10114:"Exeggutor-Alola",10115:"Marowak-Alola",
+  // ── Formas Galar ─────────────────────────────────────────────────────────────
+  10158:"Meowth-Galar",
+  10159:"Ponyta-Galar",10160:"Rapidash-Galar",
+  10161:"Slowpoke-Galar",10162:"Slowbro-Galar",10169:"Slowking-Galar",
+  10163:"Farfetch'd-Galar",
+  10164:"Weezing-Galar",
+  10165:"Mr. Mime-Galar",
+  10166:"Articuno-Galar",10167:"Zapdos-Galar",10168:"Moltres-Galar",
+  10170:"Corsola-Galar",
+  10171:"Zigzagoon-Galar",10172:"Linoone-Galar",
+  10173:"Darumaka-Galar",10174:"Darmanitan-Galar",
+  10175:"Yamask-Galar",
+  10176:"Stunfisk-Galar",
+  // ── Formas Hisui ─────────────────────────────────────────────────────────────
+  10229:"Growlithe-Hisui",10230:"Arcanine-Hisui",
+  10231:"Voltorb-Hisui",10232:"Electrode-Hisui",
+  10233:"Typhlosion-Hisui",
+  10234:"Qwilfish-Hisui",
+  10235:"Sneasel-Hisui",
+  10236:"Samurott-Hisui",
+  10237:"Lilligant-Hisui",
+  10238:"Zorua-Hisui",10239:"Zoroark-Hisui",
+  10240:"Braviary-Hisui",
+  10241:"Sliggoo-Hisui",10242:"Goodra-Hisui",
+  10243:"Avalugg-Hisui",
+  10244:"Decidueye-Hisui",
 };
 
 export function getPokemonName(id: number): string {
@@ -1522,6 +1640,45 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   10010:"electric/ice",   // Rotom-Gelo
   10011:"electric/flying",// Rotom-Ventilador
   10012:"electric/grass", // Rotom-Corte
+  // ── Formas Alolan ──────────────────────────────────────────────────────────
+  10091:"dark/normal", 10092:"dark/normal",   // Rattata/Raticate-Alola
+  10100:"electric/psychic",                    // Raichu-Alola
+  10101:"ice/steel",   10102:"ice/steel",      // Sandshrew/Sandslash-Alola
+  10103:"ice",         10104:"ice/fairy",       // Vulpix/Ninetales-Alola
+  10105:"ground/steel",10106:"ground/steel",   // Diglett/Dugtrio-Alola
+  10107:"dark",        10108:"dark",            // Meowth/Persian-Alola
+  10109:"rock/electric",10110:"rock/electric",10111:"rock/electric", // Geodude/Graveler/Golem-Alola
+  10112:"poison/dark", 10113:"poison/dark",    // Grimer/Muk-Alola
+  10114:"grass/dragon",                        // Exeggutor-Alola
+  10115:"fire/ghost",                          // Marowak-Alola
+  // ── Formas Galar ───────────────────────────────────────────────────────────
+  10158:"steel",                               // Meowth-Galar
+  10159:"psychic",     10160:"psychic/fairy",  // Ponyta/Rapidash-Galar
+  10161:"psychic",     10162:"poison/psychic", 10169:"poison/psychic", // Slowpoke/Slowbro/Slowking-Galar
+  10163:"fighting",                            // Farfetch'd-Galar
+  10164:"poison/fairy",                        // Weezing-Galar
+  10165:"ice/psychic",                         // Mr. Mime-Galar
+  10166:"psychic/flying",                      // Articuno-Galar
+  10167:"fighting/flying",                     // Zapdos-Galar
+  10168:"dark/flying",                         // Moltres-Galar
+  10170:"ghost",                               // Corsola-Galar
+  10171:"dark/normal", 10172:"dark/normal",   // Zigzagoon/Linoone-Galar
+  10173:"ice",         10174:"ice",            // Darumaka/Darmanitan-Galar
+  10175:"ground/ghost",                        // Yamask-Galar
+  10176:"ground/steel",                        // Stunfisk-Galar
+  // ── Formas Hisui ───────────────────────────────────────────────────────────
+  10229:"fire/rock",   10230:"fire/rock",      // Growlithe/Arcanine-Hisui
+  10231:"electric/grass",10232:"electric/grass",// Voltorb/Electrode-Hisui
+  10233:"fire/ghost",                          // Typhlosion-Hisui
+  10234:"dark/poison",                         // Qwilfish-Hisui
+  10235:"fighting/poison",                     // Sneasel-Hisui
+  10236:"water/dark",                          // Samurott-Hisui
+  10237:"grass/fighting",                      // Lilligant-Hisui
+  10238:"normal/ghost",10239:"normal/ghost",   // Zorua/Zoroark-Hisui
+  10240:"psychic/flying",                      // Braviary-Hisui
+  10241:"steel/dragon",10242:"steel/dragon",   // Sliggoo/Goodra-Hisui
+  10243:"ice/rock",                            // Avalugg-Hisui
+  10244:"grass/fighting",                      // Decidueye-Hisui
 };
 
 export function getPokemonElement(pokemonId: number): string {
@@ -1652,6 +1809,7 @@ export const LEGENDARY_POOL: number[] = [
   1001, 1002, 1003, 1004, 1007, 1008,
   // Formas especiais lendárias (IDs PokeAPI)
   10006, 10007,  // Shaymin-Sky, Giratina-Origin
+  10166, 10167, 10168, // Articuno/Zapdos/Moltres-Galar
 ];
 
 const EXTRA_LEGENDARY_AND_MYTHICAL_IDS = [
@@ -1723,4 +1881,5 @@ EGG_POOLS.RANDOM = [
   ...EGG_POOLS.EGG_GEN1, ...EGG_POOLS.EGG_GEN2,
   ...EGG_POOLS.EGG_GEN3, ...EGG_POOLS.EGG_GEN4, ...EGG_POOLS.EGG_GEN5,
   ...EGG_POOLS.EGG_GEN6, ...EGG_POOLS.EGG_GEN7, ...EGG_POOLS.EGG_GEN8, ...EGG_POOLS.EGG_GEN9,
+  ...EGG_POOLS.EGG_ALOLA, ...EGG_POOLS.EGG_GALAR, ...EGG_POOLS.EGG_HISUI,
 ];
