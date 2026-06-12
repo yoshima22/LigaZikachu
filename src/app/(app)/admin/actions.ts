@@ -582,6 +582,68 @@ export async function deleteMascotAction(mascotId: string): Promise<{
   }
 }
 
+// ── Transferir mascote entre contas ──────────────────────────────────────────
+export async function transferMascotAction(
+  mascotId: string,
+  targetPlayerId: string,
+): Promise<{ ok: boolean; summary?: string; error?: string }> {
+  try {
+    await requireAdmin();
+
+    const mascot = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
+        playerId: true, arenaState: true, bazarListed: true,
+        expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 },
+        arenaTeamMembers: { select: { id: true }, take: 1 },
+      },
+    });
+    if (!mascot) return { ok: false, error: "Mascote não encontrado." };
+    if (mascot.playerId === targetPlayerId) return { ok: false, error: "Origem e destino são a mesma conta." };
+    if (mascot.arenaState === "ARENA") return { ok: false, error: "Mascote está em batalha na Arena. Aguarde terminar." };
+    if (mascot.bazarListed) return { ok: false, error: "Mascote está no Bazar. Remova a listagem antes de transferir." };
+
+    const target = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { displayName: true } });
+    if (!target) return { ok: false, error: "Jogador de destino não encontrado." };
+
+    const { getPokemonName } = await import("@/lib/mascot-data");
+    const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+
+    await prisma.$transaction(async tx => {
+      // Remove do time de arena se estiver em algum, libera estado
+      if (mascot.arenaTeamMembers.length > 0) {
+        await tx.arenaTeamMember.deleteMany({ where: { mascotId } });
+      }
+
+      // Deleta expedições ativas (sem recompensa)
+      if (mascot.expeditions.length > 0) {
+        await tx.mascotExpedition.deleteMany({ where: { mascotId, status: "ACTIVE" } });
+      }
+
+      // Transfere: nova conta, limpa flags de equip/favorito/arena
+      await tx.mascot.update({
+        where: { id: mascotId },
+        data: {
+          playerId: targetPlayerId,
+          isEquipped: false,
+          isFavorite: false,
+          arenaState: "FREE",
+          restingUntil: null,
+        },
+      });
+
+      await tx.mascotEvent.create({
+        data: { mascotId, emoji: "🔀", description: `Transferido para ${target.displayName} pelo admin.` },
+      });
+    });
+
+    return { ok: true, summary: `${name}${mascot.isShiny ? " ✦" : ""} (Nv.${mascot.level}) transferido para ${target.displayName}.` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 // ── Criar mascote manualmente para um jogador ─────────────────────────────────
 /** Calcula stats procedurais para o painel admin (botão "Calcular") */
 export async function computeProceduralStatsAction(opts: {

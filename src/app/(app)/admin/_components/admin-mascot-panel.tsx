@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Copy, Plus, RefreshCw, Sparkles, Trash2, Wand2, Shuffle, Info } from "lucide-react";
+import { ArrowRightLeft, Copy, Plus, RefreshCw, Sparkles, Trash2, Wand2, Shuffle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPokemonName } from "@/lib/mascot-data";
 import { MascotPersonality } from "@prisma/client";
@@ -12,6 +12,7 @@ import {
   createMascotForPlayerAction,
   computeProceduralStatsAction,
   deleteMascotAction,
+  transferMascotAction,
 } from "../actions";
 
 type Mascot = {
@@ -451,6 +452,132 @@ function CreateSection({ players }: Props) {
   );
 }
 
+// ── Seção Transferir Mascote ──────────────────────────────────────────────────
+function TransferSection({ players }: Props) {
+  const [pending, start] = useTransition();
+  const [fromPlayerId,   setFromPlayerId]   = useState("");
+  const [toPlayerId,     setToPlayerId]     = useState("");
+  const [mascots,        setMascots]        = useState<Mascot[]>([]);
+  const [mascotId,       setMascotId]       = useState("");
+  const [result,         setResult]         = useState<string | null>(null);
+
+  const loadMascots = (id: string) => {
+    setFromPlayerId(id); setMascotId(""); setMascots([]); setResult(null);
+    if (!id) return;
+    start(async () => {
+      const r = await getPlayerMascotsAdmin(id);
+      if (r.error) { toast.error(r.error); return; }
+      setMascots(r.mascots);
+    });
+  };
+
+  const handleTransfer = () => {
+    const m = mascots.find(x => x.id === mascotId);
+    if (!m) { toast.error("Selecione um mascote."); return; }
+    if (!toPlayerId) { toast.error("Selecione o jogador de destino."); return; }
+    if (fromPlayerId === toPlayerId) { toast.error("Origem e destino são o mesmo jogador."); return; }
+    const fromName = players.find(p => p.id === fromPlayerId)?.displayName;
+    const toName   = players.find(p => p.id === toPlayerId)?.displayName;
+    const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
+    if (!confirm(
+      `Transferir ${mascotName} (Nv.${m.level}) de ${fromName} para ${toName}?\n\n` +
+      `• Expedições ativas serão deletadas sem recompensa.\n` +
+      `• Será removido do time de Arena se necessário.\n` +
+      `• Flags de companheiro e favorito serão resetadas.\n` +
+      `• Amigos/rivais e stats são preservados.`
+    )) return;
+
+    start(async () => {
+      const r = await transferMascotAction(mascotId, toPlayerId);
+      if (!r.ok) { toast.error(r.error ?? "Erro ao transferir."); return; }
+      toast.success(r.summary ?? "Transferido!");
+      setResult(`✅ ${r.summary}`);
+      setMascotId("");
+      const upd = await getPlayerMascotsAdmin(fromPlayerId);
+      if (!upd.error) setMascots(upd.mascots);
+    });
+  };
+
+  const selected = mascots.find(x => x.id === mascotId);
+
+  return (
+    <div className="space-y-4 rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
+      <div className="flex items-center gap-2">
+        <ArrowRightLeft size={14} className="text-orange-400" />
+        <p className="text-sm font-semibold text-slate-200">Transferir Mascote</p>
+        <span className="text-xs text-slate-500">— move o pokémon de uma conta para outra</span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">De (origem)</label>
+          <select value={fromPlayerId} onChange={e => loadMascots(e.target.value)}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500">
+            <option value="">Selecione o jogador de origem</option>
+            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">Para (destino)</label>
+          <select value={toPlayerId} onChange={e => setToPlayerId(e.target.value)}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500">
+            <option value="">Selecione o jogador de destino</option>
+            {players.filter(p => p.id !== fromPlayerId).map(p => (
+              <option key={p.id} value={p.id}>{p.displayName}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-semibold text-slate-400">
+          Mascote {mascots.length > 0 && <span className="text-slate-600 font-normal">({mascots.length} disponíveis)</span>}
+        </label>
+        <select value={mascotId} onChange={e => setMascotId(e.target.value)}
+          disabled={mascots.length === 0}
+          className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500 disabled:opacity-50">
+          <option value="">{pending ? "Carregando…" : fromPlayerId ? "Selecione o mascote" : "Selecione a origem primeiro"}</option>
+          {mascots.map(m => (
+            <option key={m.id} value={m.id} disabled={m.arenaState === "ARENA"}>
+              {m.nickname ?? getPokemonName(m.pokemonId)} — Nv.{m.level}
+              {m.isEquipped ? " 🎯" : ""}{m.isFavorite ? " ⭐" : ""}
+              {m.activeExpedition ? " 🗺" : ""}
+              {m.arenaState === "ARENA" ? " ⚔️ (em batalha)" : m.arenaState === "INJURED" ? " 🤕" : ""}
+              {m.bazarListed ? " 🏪" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selected && (
+        <div className="rounded-lg border border-orange-500/20 bg-orange-950/20 px-3 py-2 text-xs text-orange-200 space-y-0.5">
+          <p className="font-semibold">
+            {selected.nickname ?? getPokemonName(selected.pokemonId)} — Nv.{selected.level}
+            {selected.isShiny ? " ✦" : ""}
+          </p>
+          {selected.activeExpedition && <p className="text-orange-400/70">⚠️ Expedição ativa será deletada sem recompensa.</p>}
+          {selected.bazarListed && <p className="text-red-400">🚫 Remova do Bazar antes de transferir.</p>}
+          {selected.arenaState === "INJURED" && <p className="text-orange-400/70">Mascote lesionado — será transferido assim mesmo.</p>}
+          <p className="text-slate-500">Stats, nível, personalidade, amigos e rivais são preservados.</p>
+        </div>
+      )}
+
+      <Button type="button" disabled={pending || !mascotId || !toPlayerId || selected?.arenaState === "ARENA" || selected?.bazarListed} onClick={handleTransfer}
+        className="gap-2 bg-orange-600 hover:bg-orange-500 text-white disabled:opacity-40">
+        <ArrowRightLeft size={13} className={pending ? "animate-spin" : ""} />
+        {pending ? "Transferindo…" : "Transferir mascote"}
+      </Button>
+
+      {result && (
+        <p className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-4 py-2.5 text-xs text-orange-300">
+          {result}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Seção Remover Mascote ─────────────────────────────────────────────────────
 function DeleteSection({ players }: Props) {
   const [pending, start] = useTransition();
@@ -565,6 +692,7 @@ export function AdminMascotPanel({ players }: Props) {
         <RefreshCw size={16} className="text-[#FFCB05]" />
         <h3 className="font-semibold text-slate-200">Gerenciamento de Mascotes</h3>
       </div>
+      <TransferSection players={players} />
       <CloneSection players={players} />
       <CreateSection players={players} />
       <DeleteSection players={players} />
