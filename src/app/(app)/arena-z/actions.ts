@@ -22,6 +22,7 @@ import {
   runOpportunisticAttack,
   runPvpBattle,
   markPvpDefenseSeenForTeam,
+  useSusShield,
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 
@@ -272,6 +273,16 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
+  }
+}
+
+export async function useSusShieldAction(targetMascotId: string): Promise<{ error?: string; newRestingUntil?: string }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    const result = await useSusShield(playerId, targetMascotId);
+    return { newRestingUntil: result.newRestingUntil.toISOString() };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao usar escudo." };
   }
 }
 

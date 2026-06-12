@@ -17,7 +17,7 @@ import {
   AdminMascotStateButton, BotBattleButton, DeleteTeamButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge,
-  RetireTeamButton, SusButton,
+  RetireTeamButton, SusButton, SusShieldButton,
 } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
@@ -208,6 +208,34 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     getRoomsData(player.id).catch(() => ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] }))),
     getTopArenaPlayers().catch(() => [] as never[]),
   ]);
+
+  // Mascotes feridos de jogadores aliados (amizade entre mascotes)
+  const friendPlayerIds = await prisma.mascotRelation.findMany({
+    where: {
+      type: "FRIEND",
+      OR: [
+        { mascotA: { playerId: player.id } },
+        { mascotB: { playerId: player.id } },
+      ],
+    },
+    select: { mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } },
+    take: 100,
+  }).then(rels => {
+    const ids = new Set<string>();
+    for (const r of rels) {
+      if (r.mascotA.playerId !== player.id) ids.add(r.mascotA.playerId);
+      if (r.mascotB.playerId !== player.id) ids.add(r.mascotB.playerId);
+    }
+    return [...ids];
+  }).catch(() => [] as string[]);
+
+  const injuredFriends = friendPlayerIds.length > 0
+    ? await prisma.mascot.findMany({
+        where: { arenaState: "INJURED", playerId: { in: friendPlayerIds } },
+        include: { player: { select: { displayName: true } } },
+        take: 15,
+      }).catch(() => [] as never[])
+    : [] as { id: string; pokemonId: number; nickname: string | null; level: number; restingUntil: Date | null; player: { displayName: string } }[];
 
   const opponentTeams = allActiveTeams.filter(t => t.playerId !== player.id);
 
@@ -890,6 +918,35 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           </div>
 
           {/* Rivais feridos */}
+          {/* Aliados feridos — usar escudo */}
+          {injuredFriends.length > 0 && (
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
+              <h2 className="font-semibold text-blue-200 mb-1">🛡️ Aliados Feridos</h2>
+              <p className="text-xs text-slate-500 mb-3">
+                Use seu escudo diário para reduzir o repouso de um aliado em 20 min.
+                {shieldUsedToday && <span className="ml-1 text-slate-600">(Escudo já usado hoje — reseta à meia-noite BRT)</span>}
+              </p>
+              <div className="space-y-2">
+                {injuredFriends.map(m => (
+                  <div key={m.id} className="flex items-center justify-between gap-3 rounded-xl border border-blue-500/15 bg-slate-950/50 p-3">
+                    <span>
+                      <span className="block text-xs font-semibold text-slate-200">
+                        {m.nickname ?? getPokemonName(m.pokemonId)} (Nv.{m.level})
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        de {m.player.displayName}
+                        {m.restingUntil && m.restingUntil > new Date()
+                          ? ` · em repouso até ${m.restingUntil.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`
+                          : " · ferido"}
+                      </span>
+                    </span>
+                    <SusShieldButton mascotId={m.id} shieldUsedToday={shieldUsedToday} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {injuredRivals.length > 0 && (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
               <h2 className="font-semibold text-red-200 mb-1">😈 Rivais Feridos</h2>
