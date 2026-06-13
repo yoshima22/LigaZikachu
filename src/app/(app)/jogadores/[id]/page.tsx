@@ -20,6 +20,7 @@ import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI } from "@/lib/mascot-data";
+import { isEggShopItemType } from "@/lib/shop-config";
 
 export default async function PlayerDetailPage({
   params
@@ -746,7 +747,14 @@ export default async function PlayerDetailPage({
           <GrantItemPanel
             playerId={playerId}
             shopItems={shopItems as { id: string; name: string; type: string; rarity: string; active: boolean }[]}
-            ownedItemIds={new Set((ownedInventory as { itemId: string }[]).map((i) => i.itemId))}
+            ownedItemIds={new Set(
+              (ownedInventory as { itemId: string }[])
+                .filter((i) => {
+                  const it = (shopItems as { id: string; type: string }[]).find((s) => s.id === i.itemId);
+                  return it && !isEggShopItemType(it.type);
+                })
+                .map((i) => i.itemId)
+            )}
           />
           <AdminResetPanel playerId={playerId} userId={player.user.id} />
         </div>

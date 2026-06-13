@@ -6,12 +6,21 @@ import { requireAdmin } from "@/lib/auth/permissions";
 import { EggType, FoodType } from "@prisma/client";
 
 const EGG_TYPE_MAP: Record<string, EggType> = {
-  EGG_COMMON:  EggType.COMMON,
-  EGG_RARE:    EggType.RARE,
-  EGG_SPECIAL: EggType.SPECIAL,
-  EGG_EVENT:   EggType.EVENT,
-  EGG_GEN1:    EggType.EGG_GEN1,
-  EGG_GEN2:    EggType.EGG_GEN2,
+  EGG_COMMON:   EggType.COMMON,
+  EGG_RARE:     EggType.RARE,
+  EGG_SPECIAL:  EggType.SPECIAL,
+  EGG_LAB:      EggType.LAB,
+  EGG_EVENT:    EggType.EVENT,
+  EGG_GEN1:     EggType.EGG_GEN1,
+  EGG_GEN2:     EggType.EGG_GEN2,
+  EGG_GEN3:     EggType.EGG_GEN3,
+  EGG_GEN4:     EggType.EGG_GEN4,
+  EGG_GEN5:     EggType.EGG_GEN5,
+  EGG_GEN6:     EggType.EGG_GEN6,
+  EGG_GEN7:     EggType.EGG_GEN7,
+  EGG_GEN8:     EggType.EGG_GEN8,
+  EGG_GEN9:     EggType.EGG_GEN9,
+  EGG_GEN6PLUS: EggType.EGG_GEN6PLUS,
 };
 
 const FOOD_TYPE_MAP: Record<string, FoodType> = {
@@ -47,6 +56,8 @@ export async function grantItemToPlayer(
     const safeQty = Math.max(1, Math.min(quantity, 99));
 
     if (eggType) {
+      // Limpa entradas incorretas em PlayerInventory (ovos nunca devem ficar lá)
+      await prisma.playerInventory.deleteMany({ where: { playerId, itemId } });
       // Ovo → Caixa de Presentes (um gift por unidade)
       for (let q = 0; q < safeQty; q++) {
         await prisma.playerGift.create({
