@@ -28,6 +28,17 @@ function randomPersonality(): MascotPersonality {
 }
 
 /** Sorteio de pokemonId a partir do tipo de ovo */
+/**
+ * Rola uma opção para o ovo de laboratório.
+ * Pool = SPECIAL (pokémon cobiçados) com 10% de chance lendária —
+ * acima do ovo SPECIAL normal (6%), recompensando o custo em pó de criação.
+ */
+export function rollLabEggChoice(): number {
+  if (Math.random() < 0.10) return randomFrom(LEGENDARY_POOL);
+  const pool = EGG_POOLS.SPECIAL?.length ? EGG_POOLS.SPECIAL : EGG_POOLS.RARE;
+  return randomFrom(pool);
+}
+
 export function rollPokemonFromEgg(eggType: string): number {
   // Pool aleatório (COMMON sem gen específica) = todas as 9 gerações
   const pool = eggType === "COMMON" || eggType === "EVENT"

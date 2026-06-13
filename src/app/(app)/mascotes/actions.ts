@@ -71,12 +71,11 @@ export async function hatchEggAction(): Promise<{
     });
     if (!incubator) return { error: "Sem ovo na incubadora." };
     if (incubator.egg.origin === "LAB") {
-      const { rollPokemonFromEgg } = await import("@/lib/mascot");
-      const eggType = incubator.egg.type;
+      const { rollLabEggChoice } = await import("@/lib/mascot");
       const seen = new Set<number>();
       const choices: number[] = [];
       while (choices.length < 3) {
-        const id = rollPokemonFromEgg(eggType);
+        const id = rollLabEggChoice();
         if (!seen.has(id)) { seen.add(id); choices.push(id); }
       }
       return { labChoices: choices };
