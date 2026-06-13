@@ -14,7 +14,7 @@ export default function ManutencaoPage() {
         </div>
         <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-4 py-3">
           <p className="text-xs text-[#FFCB05]/80">
-            Acompanhe as novidades pelo Discord da Liga.
+            Acompanhe as novidades pelo grupo da Liga.
           </p>
         </div>
       </div>
