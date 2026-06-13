@@ -398,6 +398,7 @@ export async function purchaseItem(
         // Compra de ovo → cria MascotEgg no inventário
         const eggTypeMap: Record<string, EggType> = {
           [ShopItemType.EGG_COMMON]:   EggType.COMMON,
+          [ShopItemType.EGG_LAB]:      EggType.LAB,
           [ShopItemType.EGG_RARE]:     EggType.RARE,
           [ShopItemType.EGG_SPECIAL]:  EggType.SPECIAL,
           [ShopItemType.EGG_GEN1]:     EggType.EGG_GEN1,
@@ -414,8 +415,8 @@ export async function purchaseItem(
         await tx.mascotEgg.createMany({
           data: Array.from({ length: quantity }, () => ({
             playerId: player.id,
-            type: EGG_SHOP_TO_EGG_TYPE[item.type] as EggType,
-            origin: "Comprado na ZikaShop"
+            type: eggTypeMap[item.type] ?? EggType.COMMON,
+            origin: "Comprado na ZikaShop",
           }))
         });
       } else if ((["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"] as string[]).includes(item.type)) {

@@ -32,21 +32,22 @@ const EGG_COLORS: Record<string, string> = {
   COMMON:  "border-slate-500/40 bg-slate-800/40",
   RARE:    "border-blue-500/40 bg-blue-900/20",
   SPECIAL: "border-purple-500/40 bg-purple-900/20",
+  LAB:     "border-teal-500/40 bg-teal-900/20",
   EVENT:   "border-[#FFCB05]/40 bg-[#FFCB05]/10",
 };
 const EGG_LABEL: Record<string, string> = {
-  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", EVENT: "Ovo de Evento"
+  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "🧪 Ovo de Laboratório", EVENT: "Ovo de Evento"
 };
 function getEggLabel(type: string, origin?: string) {
-  if (origin === "LAB") return "🧪 Ovo de Laboratório";
-  return EGG_LABEL[type] ?? "Ovo";
+  return EGG_LABEL[type] ?? (origin === "LAB" ? "🧪 Ovo de Laboratório" : "Ovo");
 }
 // Imagem específica por raridade (coloque os arquivos em /public/mascot/)
 const EGG_IMAGE: Record<string, string> = {
   COMMON:  "/mascot/egg-common.png",
   RARE:    "/mascot/egg-rare.png",
   SPECIAL: "/mascot/egg-special.png",
-  EVENT:   "/mascot/egg-common.png", // fallback até ter imagem própria
+  LAB:     "/mascot/egg-special.png",
+  EVENT:   "/mascot/egg-common.png",
 };
 
 function Countdown({ finishAt }: { finishAt: Date }) {

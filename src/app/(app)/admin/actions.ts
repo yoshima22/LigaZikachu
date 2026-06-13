@@ -205,7 +205,7 @@ export async function sendItemToAllPlayers(
 
     const EGG_MAP: Record<string, string> = {
       EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL",
-      EGG_LAB: "SPECIAL", // usa SPECIAL como tipo base; origin="LAB" abaixo
+      EGG_LAB: "LAB",
       EGG_GEN1: "EGG_GEN1", EGG_GEN2: "EGG_GEN2"
     };
     const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
@@ -213,7 +213,7 @@ export async function sendItemToAllPlayers(
     const itemName = item.name;
     // Monta o payload do gift baseado no tipo do item
     function buildGiftPayload(type: string): Record<string, unknown> | null {
-      if (EGG_MAP[type]) return { rewardKind: "MASCOT_EGG", eggType: EGG_MAP[type], origin: type === "EGG_LAB" ? "LAB" : "Enviado pelo Admin", rewardLabel: itemName };
+      if (EGG_MAP[type]) return { rewardKind: "MASCOT_EGG", eggType: EGG_MAP[type], origin: "Enviado pelo Admin", rewardLabel: itemName };
       if (type === "MASCOT_FOOD")  return { rewardKind: "MASCOT_FOOD", foodType: "FOOD",  quantity: 1, rewardLabel: itemName };
       if (type === "MASCOT_SWEET") return { rewardKind: "MASCOT_FOOD", foodType: "SWEET", quantity: 1, rewardLabel: itemName };
       if (BUFF_TYPES.includes(type)) return { rewardKind: "MASCOT_BUFF", buffType: type, rewardLabel: itemName };

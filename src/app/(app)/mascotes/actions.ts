@@ -70,7 +70,7 @@ export async function hatchEggAction(): Promise<{
       include: { egg: { select: { origin: true, type: true } } },
     });
     if (!incubator) return { error: "Sem ovo na incubadora." };
-    if (incubator.egg.origin === "LAB") {
+    if (incubator.egg.type === "LAB") {
       const { rollLabEggChoice } = await import("@/lib/mascot");
       const seen = new Set<number>();
       const choices: number[] = [];
@@ -696,7 +696,14 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
   try {
     const user = await getSessionUser();
     if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) return { error: "Sem permissão." };
-    await prisma.mascotEgg.create({ data: { playerId, type: eggType as import("@prisma/client").EggType, origin: "Admin" } });
+    const mappedType = eggType === "EGG_LAB" ? "LAB" : eggType;
+    await prisma.mascotEgg.create({
+      data: {
+        playerId,
+        type: mappedType as import("@prisma/client").EggType,
+        origin: "Admin",
+      },
+    });
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
