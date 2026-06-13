@@ -37,6 +37,10 @@ const EGG_COLORS: Record<string, string> = {
 const EGG_LABEL: Record<string, string> = {
   COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", EVENT: "Ovo de Evento"
 };
+function getEggLabel(type: string, origin?: string) {
+  if (origin === "LAB") return "🧪 Ovo de Laboratório";
+  return EGG_LABEL[type] ?? "Ovo";
+}
 // Imagem específica por raridade (coloque os arquivos em /public/mascot/)
 const EGG_IMAGE: Record<string, string> = {
   COMMON:  "/mascot/egg-common.png",
@@ -286,7 +290,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               {isReady && <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-400 animate-ping" />}
             </div>
             <div className="text-center">
-              <p className="font-semibold text-white">{EGG_LABEL[incubator.eggType]}</p>
+              <p className="font-semibold text-white">{getEggLabel(incubator.eggType, incubator.eggOrigin)}</p>
               <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
                 <Clock size={12} />
                 <Countdown finishAt={new Date(incubator.finishAt)} />
@@ -344,7 +348,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                   <img src={resolveEggImg(egg.type)} alt={EGG_LABEL[egg.type]} className="h-full w-full object-contain" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white">{EGG_LABEL[egg.type]}</p>
+                  <p className="text-sm font-semibold text-white">{getEggLabel(egg.type, egg.origin ?? undefined)}</p>
                   {egg.origin && <p className="text-[10px] text-slate-500">{egg.origin}</p>}
                 </div>
                 <button type="button" disabled={pending || !!incubator} onClick={() => { setSelectedGen(""); setGenPickEggId(egg.id); }}
