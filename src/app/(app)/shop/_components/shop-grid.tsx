@@ -206,7 +206,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                 <div className="flex h-24 items-center justify-center bg-slate-900">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={item.imageUrl ?? (item.type === "EGG_RARE" ? "/mascot/egg-rare.png" : item.type === "EGG_SPECIAL" ? "/mascot/egg-special.png" : "/mascot/egg-common.png")}
+                    src={item.imageUrl ?? (item.type === "EGG_RARE" ? "/mascot/egg-rare.png" : item.type === "EGG_SPECIAL" || item.type === "EGG_LAB" ? "/mascot/egg-special.png" : "/mascot/egg-common.png")}
                     alt={item.name} className="h-16 w-16 object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).src = "/mascot/egg-common.png"; }}
                   />

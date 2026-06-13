@@ -14,6 +14,7 @@ import {
   deleteMascotAction,
   transferMascotAction,
 } from "../actions";
+import { grantEggToPlayer } from "@/app/(app)/mascotes/actions";
 
 type Mascot = {
   id: string; pokemonId: number; nickname: string | null; level: number;
@@ -684,6 +685,75 @@ function DeleteSection({ players }: Props) {
   );
 }
 
+// ── Seção Dar Ovo ─────────────────────────────────────────────────────────────
+const EGG_OPTIONS = [
+  { value: "EGG_COMMON",  label: "🥚 Ovo Comum" },
+  { value: "EGG_RARE",    label: "🩵 Ovo Raro" },
+  { value: "EGG_SPECIAL", label: "💜 Ovo Especial" },
+  { value: "EGG_LAB",     label: "🧪 Ovo de Laboratório" },
+  { value: "EGG_GEN1",    label: "1️⃣ Ovo Gen 1" },
+  { value: "EGG_GEN2",    label: "2️⃣ Ovo Gen 2" },
+  { value: "EGG_GEN3",    label: "3️⃣ Ovo Gen 3" },
+  { value: "EGG_GEN4",    label: "4️⃣ Ovo Gen 4" },
+  { value: "EGG_GEN5",    label: "5️⃣ Ovo Gen 5" },
+  { value: "EGG_GEN6",    label: "6️⃣ Ovo Gen 6" },
+  { value: "EGG_GEN7",    label: "7️⃣ Ovo Gen 7" },
+  { value: "EGG_GEN8",    label: "8️⃣ Ovo Gen 8" },
+  { value: "EGG_GEN9",    label: "9️⃣ Ovo Gen 9" },
+];
+
+function GrantEggSection({ players }: Props) {
+  const [pending, start] = useTransition();
+  const [playerId, setPlayerId] = useState("");
+  const [eggType, setEggType]   = useState("EGG_LAB");
+  const [result, setResult]     = useState<string | null>(null);
+
+  const handleGrant = () => {
+    if (!playerId) { toast.error("Selecione um jogador."); return; }
+    start(async () => {
+      const r = await grantEggToPlayer(playerId, eggType);
+      if (r.error) { toast.error(r.error); return; }
+      const label = EGG_OPTIONS.find(o => o.value === eggType)?.label ?? eggType;
+      toast.success(`${label} adicionado ao inventário!`);
+      setResult(`✅ ${label} adicionado para ${players.find(p => p.id === playerId)?.displayName ?? playerId}`);
+    });
+  };
+
+  return (
+    <div className="space-y-4 rounded-xl border border-border/50 bg-slate-900/40 p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-base">🥚</span>
+        <p className="text-sm font-semibold text-slate-200">Dar Ovo a Jogador</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">Jogador</label>
+          <select value={playerId} onChange={e => { setPlayerId(e.target.value); setResult(null); }}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+            <option value="">Selecione o jogador</option>
+            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">Tipo de Ovo</label>
+          <select value={eggType} onChange={e => setEggType(e.target.value)}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+            {EGG_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <Button type="button" disabled={pending || !playerId} onClick={handleGrant}
+        className="gap-2 bg-teal-600 hover:bg-teal-500 text-white disabled:opacity-40">
+        <Plus size={13} />
+        {pending ? "Adicionando…" : "Dar ovo"}
+      </Button>
+      {result && (
+        <p className="rounded-xl border border-teal-500/20 bg-teal-500/5 px-4 py-2.5 text-xs text-teal-300">{result}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Export principal ──────────────────────────────────────────────────────────
 export function AdminMascotPanel({ players }: Props) {
   return (
@@ -693,6 +763,7 @@ export function AdminMascotPanel({ players }: Props) {
         <h3 className="font-semibold text-slate-200">Gerenciamento de Mascotes</h3>
       </div>
       <TransferSection players={players} />
+      <GrantEggSection players={players} />
       <CloneSection players={players} />
       <CreateSection players={players} />
       <DeleteSection players={players} />
