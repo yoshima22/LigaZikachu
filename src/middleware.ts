@@ -59,6 +59,13 @@ export default auth((request) => {
     return NextResponse.next();
   }
 
+  // Manutenção de emergência: redireciona todo o site exceto /manutencao e /api/auth
+  if (process.env.EMERGENCY_MAINTENANCE === "true") {
+    const url = request.nextUrl.clone();
+    url.pathname = DISABLED_REDIRECT_PATH;
+    return NextResponse.redirect(url);
+  }
+
   const disabledPages = getDisabledPages();
   const isDisabledPage = disabledPages.some((disabledPath) =>
     matchesPath(pathname, disabledPath)
