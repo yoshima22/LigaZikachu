@@ -53,13 +53,51 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function hatchEggAction(): Promise<{ error?: string; result?: Awaited<ReturnType<typeof hatchEgg>> }> {
+export async function hatchEggAction(): Promise<{
+  error?: string;
+  result?: Awaited<ReturnType<typeof hatchEgg>>;
+  labChoices?: number[];
+}> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
+
+    // Ovo do laboratório: apresenta 3 opções ao jogador antes de criar o mascote
+    const incubator = await prisma.mascotIncubator.findUnique({
+      where: { playerId: player.id },
+      include: { egg: { select: { origin: true, type: true } } },
+    });
+    if (!incubator) return { error: "Sem ovo na incubadora." };
+    if (incubator.egg.origin === "LAB") {
+      const { rollPokemonFromEgg } = await import("@/lib/mascot");
+      const eggType = incubator.egg.type;
+      const seen = new Set<number>();
+      const choices: number[] = [];
+      while (choices.length < 3) {
+        const id = rollPokemonFromEgg(eggType);
+        if (!seen.has(id)) { seen.add(id); choices.push(id); }
+      }
+      return { labChoices: choices };
+    }
+
     const result = await hatchEgg(player.id);
+    revalidate();
+    return { result };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function confirmLabChoiceAction(chosenPokemonId: number): Promise<{
+  error?: string;
+  result?: Awaited<ReturnType<typeof hatchEgg>>;
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const result = await hatchEgg(player.id, chosenPokemonId);
     revalidate();
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }

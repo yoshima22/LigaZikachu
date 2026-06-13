@@ -5,11 +5,13 @@ import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
 import { Clock, Egg } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
-import { putEggInIncubator, hatchEggAction, skipIncubationAction } from "../actions";
+import { putEggInIncubator, hatchEggAction, confirmLabChoiceAction, skipIncubationAction } from "../actions";
+import { getPokemonName } from "@/lib/mascot-data";
 
 interface IncubatorData {
   id: string;
   eggType: string;
+  eggOrigin?: string;
   startedAt: Date;
   finishAt: Date;
   hatched: boolean;
@@ -89,6 +91,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
     statRange?: [number, number];
   } | null>(null);
+  const [labChoices, setLabChoices] = useState<number[] | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
   // Modal de seleção de geração
   const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
@@ -112,21 +115,33 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     setSelectedGen("");
   };
 
+  const applyHatchResult = (result: NonNullable<Awaited<ReturnType<typeof hatchEggAction>>["result"]>) => {
+    setHatchResult({
+      pokemonId: result.pokemonId,
+      name: result.name,
+      isShiny: result.isShiny,
+      isStatBuffed: result.isStatBuffed,
+      stats: result.stats,
+      statRange: result.statRange,
+    });
+    onHatched?.(result.pokemonId, result.name);
+  };
+
   const handleHatch = () => {
     startTransition(async () => {
       const r = await hatchEggAction();
       if (r.error) { toast.error(r.error); return; }
-      if (r.result) {
-        setHatchResult({
-          pokemonId: r.result.pokemonId,
-          name: r.result.name,
-          isShiny: r.result.isShiny,
-          isStatBuffed: r.result.isStatBuffed,
-          stats: r.result.stats,
-          statRange: r.result.statRange,
-        });
-        onHatched?.(r.result.pokemonId, r.result.name);
-      }
+      if (r.labChoices) { setLabChoices(r.labChoices); return; }
+      if (r.result) applyHatchResult(r.result);
+    });
+  };
+
+  const handleLabChoice = (pokemonId: number) => {
+    startTransition(async () => {
+      const r = await confirmLabChoiceAction(pokemonId);
+      if (r.error) { toast.error(r.error); return; }
+      setLabChoices(null);
+      if (r.result) applyHatchResult(r.result);
     });
   };
 
@@ -162,6 +177,30 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               Incubar
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal de escolha do ovo de laboratório */}
+    {labChoices && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-5 shadow-2xl space-y-4">
+          <div className="text-center space-y-1">
+            <p className="text-lg font-bold text-white">🧪 Ovo de Laboratório</p>
+            <p className="text-xs text-slate-400">Escolha um dos 3 Pokémon para nascer do ovo:</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {labChoices.map(id => (
+              <button key={id} type="button" disabled={pending} onClick={() => handleLabChoice(id)}
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-slate-900 p-3 hover:border-[#FFCB05]/60 hover:bg-slate-800 transition-colors disabled:opacity-50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={getSpriteUrl(id)} alt={getPokemonName(id)} width={64} height={64}
+                  className="object-contain" style={{ imageRendering: "pixelated" }} />
+                <span className="text-[10px] text-slate-300 text-center leading-tight">{getPokemonName(id)}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-600 text-center">O Pokémon não escolhido não é perdido — apenas o escolhido nasce.</p>
         </div>
       </div>
     )}

@@ -65,7 +65,7 @@ export async function startIncubation(playerId: string, eggId: string) {
   });
 }
 
-export async function hatchEgg(playerId: string): Promise<{
+export async function hatchEgg(playerId: string, forcedPokemonId?: number): Promise<{
   mascotId: string; pokemonId: number; name: string; isNew: boolean; isShiny: boolean; isStatBuffed: boolean;
   stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
   statRange: [number, number];
@@ -78,7 +78,7 @@ export async function hatchEgg(playerId: string): Promise<{
   if (incubator.hatched) throw new Error("Ovo já chocado.");
   if (new Date() < incubator.finishAt) throw new Error("O ovo ainda não está pronto.");
 
-  const pokemonId = rollPokemonFromEgg(incubator.egg.type);
+  const pokemonId = forcedPokemonId ?? rollPokemonFromEgg(incubator.egg.type);
   const personality = randomPersonality();
 
   const mascot = await prisma.$transaction(async (tx) => {

@@ -122,7 +122,7 @@ export default async function MascotesPage() {
       where: { playerId: player.id },
       select: {
         id: true, startedAt: true, finishAt: true, hatched: true,
-        egg: { select: { type: true } }
+        egg: { select: { type: true, origin: true } }
       },
     }),
     // Comida — apenas type e quantity
@@ -380,6 +380,7 @@ export default async function MascotesPage() {
         incubator={incubator ? {
           id: incubator.id,
           eggType: incubator.egg.type,
+          eggOrigin: incubator.egg.origin ?? undefined,
           startedAt: incubator.startedAt,
           finishAt: incubator.finishAt,
           hatched: incubator.hatched,
