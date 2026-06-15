@@ -9,7 +9,7 @@ import { getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL } f
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import {
   getListing, buyListing, createProposal, acceptProposal,
-  rejectProposal, toggleFavorite,
+  rejectProposal, toggleFavorite, editListing,
 } from "../actions";
 
 // ── Tipos explícitos para evitar inferência unknown do Prisma ─────────────────
@@ -98,6 +98,10 @@ export default function BazarListingPage(): React.JSX.Element {
   const [proposalMsg, setProposalMsg] = useState("");
   const [favorited, setFavorited] = useState(false);
   const [offeredItems, setOfferedItems] = useState<ProposalOfferedItem[]>([]);
+  const [editMode, setEditMode] = useState(false);
+  const [editPrice, setEditPrice] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editWanted, setEditWanted] = useState("");
 
   const reloadListing = useCallback(() => {
     getListing(id).then(raw => {
@@ -178,6 +182,30 @@ export default function BazarListingPage(): React.JSX.Element {
     });
   };
 
+  const handleOpenEdit = () => {
+    if (!listing) return;
+    setEditPrice(listing.priceCoins != null ? String(listing.priceCoins) : "");
+    setEditDesc(listing.description ?? "");
+    setEditWanted(listing.wantedDesc ?? "");
+    setEditMode(true);
+  };
+
+  const handleSaveEdit = () => {
+    startTransition(async () => {
+      const priceRaw = editPrice.trim();
+      const priceCoins = priceRaw === "" ? null : parseInt(priceRaw);
+      const r = await editListing(id, {
+        priceCoins,
+        description: editDesc,
+        wantedDesc: editWanted,
+      });
+      if (r.error) { toast.error(r.error); return; }
+      toast.success("Anúncio atualizado!");
+      setEditMode(false);
+      reloadListing();
+    });
+  };
+
   const handleReject = (proposalId: string) => {
     startTransition(async () => {
       const r = await rejectProposal(proposalId);
@@ -214,6 +242,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const itemType = payload.itemType as string | undefined;
   const displayName = payload.displayName as string | undefined;
 
+  const quantity = payload.quantity as number | undefined;
   const pendingProposals = listing.proposals.filter(p => p.status === "PENDING");
 
   return (
@@ -251,8 +280,11 @@ export default function BazarListingPage(): React.JSX.Element {
           {/* Title + favorite */}
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 {isMascot ? (nickname ?? pokemonName) : (displayName ?? "Item")}
+                {!isMascot && quantity && quantity > 1 && (
+                  <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">×{quantity}</span>
+                )}
               </h2>
               {isMascot && pokemonId && (
                 <p className="text-sm text-slate-400">
@@ -423,12 +455,77 @@ export default function BazarListingPage(): React.JSX.Element {
             </div>
           )}
 
-          {/* Owner: manage link */}
+          {/* Owner: edit + manage */}
           {isOwner && listing.status === "ACTIVE" && (
-            <div className="border-t border-border/40 pt-3 text-center">
-              <Link href="/bazar/meu-bazar" className="text-xs text-slate-500 hover:text-slate-300 underline">
-                Gerenciar no Meus Anúncios
-              </Link>
+            <div className="border-t border-border/40 pt-3 space-y-3">
+              {!editMode ? (
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleOpenEdit}
+                    className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-1.5 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20"
+                  >
+                    ✏️ Editar anúncio
+                  </button>
+                  <Link href="/bazar/meu-bazar" className="text-xs text-slate-500 hover:text-slate-300 underline">
+                    Meus anúncios →
+                  </Link>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-[#FFCB05]">✏️ Editar anúncio</p>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wide">Preço (ZC) — deixe vazio para troca</label>
+                    <input
+                      type="number" min={0} value={editPrice}
+                      onChange={e => setEditPrice(e.target.value)}
+                      placeholder="Sem preço (somente troca)"
+                      className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wide">Descrição</label>
+                    <textarea
+                      value={editDesc}
+                      onChange={e => setEditDesc(e.target.value)}
+                      rows={2}
+                      placeholder="Descreva seu anúncio…"
+                      className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 resize-none outline-none focus:border-[#FFCB05]/60 placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wide">Procuro (troca)</label>
+                    <textarea
+                      value={editWanted}
+                      onChange={e => setEditWanted(e.target.value)}
+                      rows={2}
+                      placeholder="O que você aceita em troca…"
+                      className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 resize-none outline-none focus:border-[#FFCB05]/60 placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={handleSaveEdit}
+                      className="flex-1 rounded-lg bg-[#FFCB05] py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50"
+                    >
+                      Salvar alterações
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditMode(false)}
+                      className="rounded-lg border border-border px-4 py-2 text-xs text-slate-400 hover:text-slate-200"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

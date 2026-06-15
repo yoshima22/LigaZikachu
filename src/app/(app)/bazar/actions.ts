@@ -472,6 +472,43 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
   }
 }
 
+// ── Editar anúncio (dono pode alterar preço, descrição e procuro) ─────────────
+
+export async function editListing(
+  listingId: string,
+  fields: { priceCoins?: number | null; description?: string; wantedDesc?: string },
+): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const listing = await prisma.bazarListing.findUnique({ where: { id: listingId } });
+    if (!listing || listing.playerId !== player.id) return { error: "Anúncio não encontrado." };
+    if (listing.status !== "ACTIVE") return { error: "Só é possível editar anúncios ativos." };
+
+    if (fields.priceCoins !== undefined && fields.priceCoins !== null && fields.priceCoins < 0) {
+      return { error: "Preço não pode ser negativo." };
+    }
+
+    await prisma.bazarListing.update({
+      where: { id: listingId },
+      data: {
+        priceCoins: fields.priceCoins,
+        description: fields.description?.trim() || null,
+        wantedDesc: fields.wantedDesc?.trim() || null,
+      },
+    });
+
+    revalidateBazar();
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
+  }
+}
+
 // ── Comprar direto (SALE) ─────────────────────────────────────────────────────
 
 export async function buyListing(listingId: string): Promise<{ error?: string }> {

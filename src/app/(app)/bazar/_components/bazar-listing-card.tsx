@@ -73,6 +73,12 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             {getShopItemEmoji(payload.itemType as string)}
           </span>
         )}
+        {/* Quantidade — apenas para itens com qty > 1 */}
+        {listing.category !== "MASCOT" && (payload.quantity as number) > 1 && (
+          <div className="absolute bottom-1 right-1 rounded-full bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-slate-200">
+            ×{payload.quantity as number}
+          </div>
+        )}
         {/* Type badge */}
         <div className={`absolute top-1.5 left-1.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold ${type.color}`}>
           {type.label}
