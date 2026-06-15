@@ -23,8 +23,48 @@ const BUFF_TYPES_LIST = [
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
 ] as const;
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientMascotLoadError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return [
+    "Can't reach database server",
+    "Timed out",
+    "timeout",
+    "Connection terminated",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "P1001",
+    "P2024",
+  ].some((needle) => message.toLowerCase().includes(needle.toLowerCase()));
+}
+
+async function retryMascotLoad<T>(load: () => Promise<T>, attempts = 2): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await load();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientMascotLoadError(error) || attempt === attempts - 1) break;
+      await wait(250 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 async function fetchMascotPageData(playerId: string) {
-  const [featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory] = await Promise.all([
+  const [
+    featuredMascots,
+    bankMascots,
+    eggs,
+    incubator,
+    foods,
+    lastRetiredTeam,
+    buffInventory,
+  ] = await retryMascotLoad(() => Promise.all([
     prisma.mascot.findMany({
       where: { playerId, OR: [{ isFavorite: true }, { isEquipped: true }] },
       select: {
@@ -91,12 +131,12 @@ async function fetchMascotPageData(playerId: string) {
         item: { select: { id: true, name: true, type: true, description: true, imageUrl: true } }
       },
     }),
-  ]);
+  ]));
 
   const featuredIds = featuredMascots.map(m => m.id);
 
   // Queries separadas por mascote para evitar o bug Prisma IN-without-LIMIT
-  const [featuredEventsAll, featuredRelationsAll] = featuredIds.length > 0 ? await Promise.all([
+  const [featuredEventsAll, featuredRelationsAll] = featuredIds.length > 0 ? await retryMascotLoad(() => Promise.all([
     prisma.mascotEvent.findMany({
       where: { mascotId: { in: featuredIds } },
       orderBy: { createdAt: "desc" },
@@ -117,17 +157,20 @@ async function fetchMascotPageData(playerId: string) {
       },
       take: featuredIds.length * 5,
     }),
-  ]) : [[], []];
+  ])).catch((error) => {
+    console.error("[Mascotes] Falha ao carregar eventos/relacoes; usando fallback.", error);
+    return [[], []] as const;
+  }) : [[], []];
 
   // Agrupa por mascoteId e limita a 4 events / 5 relations por mascote
   const eventsByMascot = new Map<string, typeof featuredEventsAll>();
   for (const e of featuredEventsAll) {
-    const list = eventsByMascot.get(e.mascotId) ?? [];
+    const list = [...(eventsByMascot.get(e.mascotId) ?? [])];
     if (list.length < 4) { list.push(e); eventsByMascot.set(e.mascotId, list); }
   }
   const relationsByMascot = new Map<string, typeof featuredRelationsAll>();
   for (const r of featuredRelationsAll) {
-    const list = relationsByMascot.get(r.mascotAId) ?? [];
+    const list = [...(relationsByMascot.get(r.mascotAId) ?? [])];
     if (list.length < 5) { list.push(r); relationsByMascot.set(r.mascotAId, list); }
   }
 
@@ -140,14 +183,20 @@ async function fetchMascotPageData(playerId: string) {
     })),
   }));
 
-  const activeMascotBuffs = featuredIds.length > 0 ? await prisma.mascotBuff.findMany({
+  const activeMascotBuffs = featuredIds.length > 0 ? await retryMascotLoad(() => prisma.mascotBuff.findMany({
     where: { mascotId: { in: featuredIds }, expiresAt: { gt: new Date() } },
     select: { mascotId: true, type: true, expiresAt: true },
+  })).catch((error) => {
+    console.error("[Mascotes] Falha ao carregar buffs ativos; usando fallback.", error);
+    return [];
   }) : [];
-  const proteinBoostedMascots = featuredIds.length > 0 ? await prisma.mascotBuff.groupBy({
+  const proteinBoostedMascots = featuredIds.length > 0 ? await retryMascotLoad(() => prisma.mascotBuff.groupBy({
     by: ["mascotId"],
     where: { type: "STAT_BOOST", mascotId: { in: featuredIds }, expiresAt: { gt: new Date("2090-01-01") } },
     _count: { id: true },
+  })).catch((error) => {
+    console.error("[Mascotes] Falha ao carregar doses de proteina; usando fallback.", error);
+    return [];
   }) : [];
 
   return { featuredMascots: featuredMascotsEnriched, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
@@ -159,6 +208,32 @@ const getCachedMascotPageData = (playerId: string) =>
     ["player-mascots", playerId],
     { revalidate: 60, tags: [`player-mascots-${playerId}`] },
   )();
+
+function MascotLoadError({ message }: { message?: string }) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-6">
+        <p className="text-xs uppercase tracking-widest text-red-300">Mascotes indisponiveis no momento</p>
+        <h1 className="mt-2 font-pixel text-base text-[#FFCB05]">Falha temporaria ao carregar</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300">
+          A tela de mascotes tentou carregar seus dados, mas o banco oscilou ou demorou demais para responder.
+          Aguarde alguns segundos e atualize a pagina. Suas recompensas e mascotes nao foram perdidos.
+        </p>
+        {message && (
+          <p className="mt-3 rounded-xl border border-red-500/20 bg-slate-950/60 px-3 py-2 text-xs text-red-200">
+            Detalhe tecnico: {message}
+          </p>
+        )}
+        <a
+          href="/mascotes"
+          className="mt-5 inline-flex rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700]"
+        >
+          Tentar novamente
+        </a>
+      </div>
+    </div>
+  );
+}
 
 export default async function MascotesPage() {
   const session = await getAppSession();
@@ -181,10 +256,24 @@ export default async function MascotesPage() {
     data: { restingUntil: null },
   }).catch(() => null);
 
-  const [{ featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots }, rawEggImages] = await Promise.all([
-    getCachedMascotPageData(player.id),
-    getShopItemImages([...EGG_SHOP_ITEM_TYPES]),
-  ]);
+  const pageData = await getCachedMascotPageData(player.id).catch(async (error) => {
+    console.error("[Mascotes] Cache/load falhou; tentando carga direta.", error);
+    return retryMascotLoad(() => fetchMascotPageData(player.id), 2);
+  }).catch((error) => {
+    console.error("[Mascotes] Falha final ao carregar pagina.", error);
+    return null;
+  });
+
+  if (!pageData) {
+    return <MascotLoadError message="carregamento de dados dos mascotes falhou" />;
+  }
+
+  const rawEggImages = await getShopItemImages([...EGG_SHOP_ITEM_TYPES]).catch((error) => {
+    console.error("[Mascotes] Falha ao carregar imagens de ovos; usando fallback.", error);
+    return {} as Record<string, string>;
+  });
+
+  const { featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots } = pageData;
 
   const eggImageByType: Record<string, string> = {};
   for (const [type, url] of Object.entries(rawEggImages)) {
