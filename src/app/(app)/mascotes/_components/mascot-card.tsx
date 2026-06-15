@@ -20,6 +20,7 @@ import {
   healMascotSusAction,
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
+  toggleExpLockAction,
   removeXpShareAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
@@ -66,6 +67,7 @@ interface MascotData {
   lastFedAt: Date | null;
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
+  expLocked: boolean;
   isShiny: boolean;
   activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
@@ -1039,6 +1041,29 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           {!mascot.evolutionLocked && (
             <span className="text-[9px] text-slate-600">⚠️ irreversível</span>
           )}
+        </div>
+
+        {/* ── Travar EXP ── */}
+        <div className="flex items-center justify-between rounded-xl border border-border/40 bg-slate-900/30 px-3 py-2">
+          <Tip text={mascot.expLocked
+            ? "EXP bloqueada. Este mascote não ganha experiência de nenhuma fonte."
+            : "Marque para impedir que este mascote ganhe EXP. Pode ser desativado a qualquer momento."}>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={mascot.expLocked}
+                disabled={pending}
+                onChange={() => {
+                  act(() => toggleExpLockAction(mascot.id, !mascot.expLocked),
+                    mascot.expLocked ? "EXP desbloqueada." : "EXP travada.");
+                }}
+                className="h-3.5 w-3.5 accent-yellow-500"
+              />
+              <span className={`text-[11px] font-semibold ${mascot.expLocked ? "text-yellow-400" : "text-slate-400"}`}>
+                {mascot.expLocked ? "🔒 EXP bloqueada" : "Travar EXP"}
+              </span>
+            </label>
+          </Tip>
         </div>
 
         {/* ── Amigos e Rivais ── */}

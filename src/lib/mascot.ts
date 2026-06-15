@@ -326,6 +326,7 @@ export async function addExp(
 ): Promise<LevelUpResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
+  if (mascot.expLocked) return { leveled: false, newLevel: mascot.level, evolved: false };
   // EXP agora é dado a qualquer mascote (equipado ou no banco)
   // Mascotes no banco recebem 50% do EXP (interações presenciais são menos intensas)
   if (!options.ignoreBenchPenalty && !mascot.isEquipped) amount = Math.max(1, Math.floor(amount * 0.5));

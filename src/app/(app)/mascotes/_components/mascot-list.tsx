@@ -20,6 +20,7 @@ interface MascotData {
   bazarListed: boolean;
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
+  expLocked: boolean;
   isShiny: boolean;
   activeBuffs: { type: string; expiresAt: Date }[];
   arenaState: string; injuredAt: Date | null; restingUntil: Date | null;

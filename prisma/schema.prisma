@@ -1447,6 +1447,7 @@ model Mascot {
   socialCooldownUntil  DateTime?         // rival travou interações temporariamente
   susRestBonusMinutes  Int               @default(0)
   evolutionLocked      Boolean           @default(false)
+  expLocked            Boolean           @default(false)
   isShiny              Boolean           @default(false) // variante shiny — sprite diferente e marcador visual
   arenaState           MascotArenaState  @default(FREE)
   injuredAt            DateTime?

@@ -70,7 +70,7 @@ async function fetchMascotPageData(playerId: string) {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
         happiness: true, mood: true, personality: true,
-        isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true,
+        isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
@@ -300,6 +300,7 @@ export default async function MascotesPage() {
     lastFedAt: m.lastFedAt,
     socialCooldownUntil: m.socialCooldownUntil,
     evolutionLocked: m.evolutionLocked,
+    expLocked: m.expLocked,
     isShiny: m.isShiny,
     activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({

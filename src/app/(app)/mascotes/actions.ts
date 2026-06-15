@@ -720,7 +720,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     arenaState: string; bazarListed: boolean;
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
-    evolutionLocked: boolean; isShiny: boolean;
+    evolutionLocked: boolean; expLocked: boolean; isShiny: boolean;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
@@ -764,7 +764,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         lastPlayedAt: null,
         lastPettedAt:  null,
         lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
-        evolutionLocked: m.evolutionLocked, isShiny: m.isShiny,
+        evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, isShiny: m.isShiny,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,
@@ -777,6 +777,20 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         events: [],
       },
     };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function toggleExpLockAction(mascotId: string, lock: boolean): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    await prisma.mascot.update({ where: { id: mascotId }, data: { expLocked: lock } });
+    revalidate(player.id);
+    return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
