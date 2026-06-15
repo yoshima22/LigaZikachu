@@ -60,21 +60,25 @@ export default async function LacosPage({
 
   await autoResolveExpiredBondEvents(player.id);
 
-  // Auto-criar evento cadenciado: min 4h entre criações, burst ocasional após 8h
-  const lastEvent = await prisma.mascotSocialEvent.findFirst({
-    where: { ownerId: player.id },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  }).catch(() => null);
+  // Auto-criar eventos cadenciados: min 4h entre criações, preenche até 5 pendentes
+  const [lastEvent, currentPending] = await Promise.all([
+    prisma.mascotSocialEvent.findFirst({
+      where: { ownerId: player.id },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }).catch(() => null),
+    prisma.mascotSocialEvent.count({
+      where: { ownerId: player.id, status: "PENDING" },
+    }).catch(() => 5),
+  ]);
 
   const hoursSinceLast = lastEvent
     ? (Date.now() - lastEvent.createdAt.getTime()) / 3_600_000
     : 999;
 
-  if (hoursSinceLast >= 4) {
-    await createBondEventForPlayer(player.id).catch(() => {});
-    // Burst: 40% de chance de gerar um segundo evento após 8h sem atividade
-    if (hoursSinceLast >= 8 && Math.random() < 0.4) {
+  if (hoursSinceLast >= 4 && currentPending < 5) {
+    const toCreate = Math.min(5 - currentPending, hoursSinceLast >= 8 ? 2 : 1);
+    for (let i = 0; i < toCreate; i++) {
       await createBondEventForPlayer(player.id).catch(() => {});
     }
   }
@@ -83,7 +87,7 @@ export default async function LacosPage({
   const relPage = Math.max(1, Number(params.relPage ?? "1") || 1);
   const relSearch = params.relSearch?.trim() ?? "";
   const relSort = params.relSort ?? "";
-  const relationsPerPage = 8;
+  const relationsPerPage = 10;
 
   const relationsWhere = {
     mascotA: { playerId: player.id },
@@ -108,7 +112,7 @@ export default async function LacosPage({
     prisma.mascotSocialEvent.findMany({
       where: { ownerId: player.id, status: "PENDING" },
       orderBy: { createdAt: "desc" },
-      take: 6,
+      take: 5,
       include: {
         mascotA: { select: { id: true, pokemonId: true, nickname: true } },
         mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
