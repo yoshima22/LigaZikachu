@@ -1,5 +1,4 @@
-export const dynamic = "force-dynamic";
-
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import Link from "next/link";
@@ -51,7 +50,14 @@ function statRanking(
   });
 }
 
-async function getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary: DiaryEntry[] }> {
+const getCachedRanking = (tab: RankTab) =>
+  unstable_cache(
+    () => _getRanking(tab),
+    ["mascot-ranking", tab],
+    { revalidate: 300, tags: ["mascot-ranking"] },
+  )();
+
+async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary: DiaryEntry[] }> {
   const empty: RankEntry[] = [];
 
   // ── Diário ─────────────────────────────────────────────────────────────────
@@ -186,7 +192,7 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
   const rawTab = params.tab ?? "level";
   const validTabs: RankTab[] = ["level", "force", "agility", "charisma", "instinct", "vitality", "battles", "diary"];
   const tab: RankTab = validTabs.includes(rawTab as RankTab) ? (rawTab as RankTab) : "level";
-  const { ranking, diary } = await getRanking(tab);
+  const { ranking, diary } = await getCachedRanking(tab);
 
   const isDiary = tab === "diary";
 
