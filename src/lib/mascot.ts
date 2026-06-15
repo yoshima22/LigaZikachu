@@ -351,6 +351,8 @@ export async function addExp(
 
   let { level, exp, pokemonId } = mascot;
   exp += amount;
+  // Nível máximo — não acumula EXP além do cap
+  if (level >= 100) { exp = 0; }
   let levelsGained = 0;
   let evolved = false;
   let newPokemonId: number | undefined;
@@ -525,8 +527,10 @@ export async function interactWithMascot(
   const expBoostMult = expBoostBuff ? 1 + ((expBoostItemMeta?.metadata as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
 
   // Calcula EXP real que será aplicado (mesmo cálculo do addExp, mas exposto aqui para a mensagem)
+  // Zero quando EXP travada ou mascote já no nível máximo — para mensagem refletir o real
+  const expIsBlocked = mascot.expLocked || mascot.level >= 100;
   const calcFinalExp = (base: number) =>
-    Math.max(1, Math.round(base * socialMult * benchMult * expBoostMult));
+    expIsBlocked ? 0 : Math.max(1, Math.round(base * socialMult * benchMult * expBoostMult));
 
   let happinessChange = 0;
   let expGained = 0;       // EXP real aplicado (após todos os multiplicadores)
