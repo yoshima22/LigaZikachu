@@ -110,7 +110,12 @@ export default async function AdminPage() {
   // Carrega todos os schedules de todos os tipos de passe conhecidos
   const scheduleLabels = await adminListScheduleLabels();
   const allSchedules = await Promise.all(
-    scheduleLabels.map(label => adminGetSchedule(label).then(r => ({ label: r.label, schedule: r.schedule, isCustom: r.isCustom })))
+    scheduleLabels.map(label => adminGetSchedule(label).then(r => ({
+      label: r.label,
+      schedule: r.schedule,
+      isCustom: r.isCustom,
+      allowRetroactiveClaims: r.allowRetroactiveClaims,
+    })))
   );
 
   const allUsers = await prisma.user.findMany({

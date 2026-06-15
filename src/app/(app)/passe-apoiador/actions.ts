@@ -34,16 +34,21 @@ export async function getActiveSchedule(scheduleKey?: string): Promise<DayReward
 
 export async function adminGetSchedule(
   scheduleKey?: string
-): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string }> {
+): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string; allowRetroactiveClaims: boolean }> {
   await requireAdmin();
   const label = scheduleKey ?? "Passe Apoiador";
   try {
     const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: label === "Passe Apoiador" ? "singleton" : label } });
     if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30)
-      return { schedule: cfg.schedule as DayReward[], isCustom: true, label };
+      return {
+        schedule: cfg.schedule as DayReward[],
+        isCustom: true,
+        label,
+        allowRetroactiveClaims: cfg.allowRetroactiveClaims,
+      };
   } catch { /* fallback */ }
   const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
-  return { schedule: fallback, isCustom: false, label };
+  return { schedule: fallback, isCustom: false, label, allowRetroactiveClaims: false };
 }
 
 export async function adminListScheduleLabels(): Promise<string[]> {
@@ -66,15 +71,59 @@ export async function adminSaveSchedule(
     if (schedule.length !== 30) return { ok: false, error: "O calendário precisa ter exatamente 30 dias." };
     // "Passe Apoiador" usa id="singleton" para compatibilidade com passes antigos
     const id = (!scheduleKey || scheduleKey === "Passe Apoiador") ? "singleton" : scheduleKey;
+    const current = await prisma.passScheduleConfig.findUnique({
+      where: { id },
+      select: { allowRetroactiveClaims: true },
+    });
     await prisma.passScheduleConfig.upsert({
       where: { id },
-      create: { id, schedule: schedule as object[], updatedBy: user?.id },
+      create: { id, schedule: schedule as object[], allowRetroactiveClaims: current?.allowRetroactiveClaims ?? false, updatedBy: user?.id },
       update: { schedule: schedule as object[], updatedBy: user?.id },
     });
     revalidatePath("/passe-apoiador");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro ao salvar." };
+  }
+}
+
+export async function adminCreatePassSchedule(
+  label: string,
+  baseLabel = "Passe Apoiador"
+): Promise<{ ok: boolean; label?: string; schedule?: DayReward[]; allowRetroactiveClaims?: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const user = await getSessionUser();
+    const cleanLabel = label.trim().replace(/\s+/g, " ");
+    if (cleanLabel.length < 3) return { ok: false, error: "Nome do passe muito curto." };
+    if (cleanLabel.length > 40) return { ok: false, error: "Nome do passe muito longo." };
+    if (cleanLabel.toLowerCase() === "custom") return { ok: false, error: "Escolha outro nome para o passe." };
+
+    const id = cleanLabel === "Passe Apoiador" ? "singleton" : cleanLabel;
+    const existing = await prisma.passScheduleConfig.findUnique({ where: { id }, select: { id: true } });
+    if (existing || PASS_SCHEDULE_DEFAULTS[cleanLabel]) {
+      return { ok: false, error: "Esse tipo de passe ja existe." };
+    }
+
+    const base = await adminGetSchedule(baseLabel);
+    await prisma.passScheduleConfig.create({
+      data: {
+        id,
+        schedule: base.schedule as object[],
+        allowRetroactiveClaims: base.allowRetroactiveClaims,
+        updatedBy: user?.id,
+      },
+    });
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+      label: cleanLabel,
+      schedule: base.schedule,
+      allowRetroactiveClaims: base.allowRetroactiveClaims,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro ao criar passe." };
   }
 }
 
@@ -401,12 +450,19 @@ export async function adminGrantVip(opts: {
       });
     }
 
+    const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
+    const passSchedule = await prisma.passScheduleConfig.findUnique({
+      where: { id: passLabel === "Passe Apoiador" ? "singleton" : passLabel },
+      select: { allowRetroactiveClaims: true },
+    }).catch(() => null);
+
     const pass = await prisma.supporterPass.create({
       data: {
         playerId: opts.playerId,
-        passLabel: opts.passLabel?.trim() || "Passe Apoiador",
+        passLabel,
         startsAt,
         expiresAt,
+        allowRetroactiveClaims: passSchedule?.allowRetroactiveClaims ?? false,
         titleItemId: titleItem.id,
         createdByAdminId: admin?.id,
       },
@@ -546,14 +602,61 @@ export async function adminSetRetroactiveClaims(passId: string, allow: boolean):
 
 export async function adminSetRetroactiveClaimsByLabel(label: string, allow: boolean): Promise<{ ok: boolean; updated: number; error?: string }> {
   try {
+    const admin = await getSessionUser();
     await requireAdmin();
-    const result = await prisma.supporterPass.updateMany({
-      where: { active: true, passLabel: label },
-      data: { allowRetroactiveClaims: allow },
-    });
+    const id = label === "Passe Apoiador" ? "singleton" : label;
+    const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
+    const [result] = await prisma.$transaction([
+      prisma.supporterPass.updateMany({
+        where: { active: true, passLabel: label },
+        data: { allowRetroactiveClaims: allow },
+      }),
+      prisma.passScheduleConfig.upsert({
+        where: { id },
+        create: {
+          id,
+          schedule: fallback as object[],
+          allowRetroactiveClaims: allow,
+          updatedBy: admin?.id,
+        },
+        update: {
+          allowRetroactiveClaims: allow,
+          updatedBy: admin?.id,
+        },
+      }),
+    ]);
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
     return { ok: true, updated: result.count };
   } catch (err) {
     return { ok: false, updated: 0, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+export async function adminSetPassScheduleRetroactive(label: string, allow: boolean): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const admin = await getSessionUser();
+    await requireAdmin();
+    const id = label === "Passe Apoiador" ? "singleton" : label;
+    const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
+    await prisma.passScheduleConfig.upsert({
+      where: { id },
+      create: {
+        id,
+        schedule: fallback as object[],
+        allowRetroactiveClaims: allow,
+        updatedBy: admin?.id,
+      },
+      update: {
+        allowRetroactiveClaims: allow,
+        updatedBy: admin?.id,
+      },
+    });
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
   }
 }
 

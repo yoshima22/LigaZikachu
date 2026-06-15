@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -11,10 +11,11 @@ import { Card, CardTitle } from "@/components/ui/card";
 import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
 import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
-  adminGrantVip, adminSetRetroactiveClaimsByLabel,
+  adminGrantVip, adminSetRetroactiveClaims,
+  adminSetPassScheduleRetroactive, adminCreatePassSchedule,
 } from "@/app/(app)/passe-apoiador/actions";
 
-// ── Tipos de slot ─────────────────────────────────────────────────────────────
+// â”€â”€ Tipos de slot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type SlotKind = "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
 
@@ -28,19 +29,19 @@ type Slot =
   | { id: string; kind: "ZIKALOOT"; special: boolean };
 
 const SLOT_META: Record<SlotKind, { label: string; emoji: string; color: string }> = {
-  COINS:       { label: "ZikaCoins",        emoji: "🪙", color: "border-yellow-500/30 bg-yellow-950/10" },
-  EGG:         { label: "Ovo de Mascote",   emoji: "🥚", color: "border-teal-500/30 bg-teal-950/10" },
-  FOOD:        { label: "Comida de Mascote",emoji: "🍖", color: "border-orange-500/30 bg-orange-950/10" },
-  SWEET:       { label: "Doce de Mascote",  emoji: "🍬", color: "border-pink-500/30 bg-pink-950/10" },
-  STICKER_PACK:{ label: "Pacote Figurinha", emoji: "🃏", color: "border-blue-500/30 bg-blue-950/10" },
-  SHOP_ITEM:   { label: "Item do Shop",     emoji: "📦", color: "border-purple-500/30 bg-purple-950/10" },
-  ZIKALOOT:    { label: "Ticket ZikaLoot",  emoji: "🎟️", color: "border-green-500/30 bg-green-950/10" },
+  COINS:       { label: "ZikaCoins",        emoji: "ðŸª™", color: "border-yellow-500/30 bg-yellow-950/10" },
+  EGG:         { label: "Ovo de Mascote",   emoji: "ðŸ¥š", color: "border-teal-500/30 bg-teal-950/10" },
+  FOOD:        { label: "Comida de Mascote",emoji: "ðŸ–", color: "border-orange-500/30 bg-orange-950/10" },
+  SWEET:       { label: "Doce de Mascote",  emoji: "ðŸ¬", color: "border-pink-500/30 bg-pink-950/10" },
+  STICKER_PACK:{ label: "Pacote Figurinha", emoji: "ðŸƒ", color: "border-blue-500/30 bg-blue-950/10" },
+  SHOP_ITEM:   { label: "Item do Shop",     emoji: "ðŸ“¦", color: "border-purple-500/30 bg-purple-950/10" },
+  ZIKALOOT:    { label: "Ticket ZikaLoot",  emoji: "ðŸŽŸï¸", color: "border-green-500/30 bg-green-950/10" },
 };
 
 let _slotCounter = 0;
 function uid() { return `slot-${++_slotCounter}-${Math.random().toString(36).slice(2)}`; }
 
-// ── Conversão DayReward ↔ Slots ───────────────────────────────────────────────
+// â”€â”€ ConversÃ£o DayReward â†” Slots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function rewardToSlots(reward: DayReward): Slot[] {
   const slots: Slot[] = [];
@@ -78,7 +79,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
   const shop   = slots.find(s => s.kind === "SHOP_ITEM") as Extract<Slot, { kind: "SHOP_ITEM" }> | undefined;
   const loot   = slots.find(s => s.kind === "ZIKALOOT") as Extract<Slot, { kind: "ZIKALOOT" }> | undefined;
 
-  // Tipo primário por prioridade
+  // Tipo primÃ¡rio por prioridade
   const type: DayReward["type"] =
     pack  ? "STICKER_PACK" :
     loot  ? "ZIKALOOT" :
@@ -106,7 +107,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
   };
 }
 
-// ── Estado local para um dia (slots + meta) ───────────────────────────────────
+// â”€â”€ Estado local para um dia (slots + meta) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type DayState = {
   emoji: string;
@@ -123,9 +124,14 @@ function dayStateToReward(day: number, ds: DayState): DayReward {
   return slotsToReward(day, ds.emoji, ds.label, ds.isMilestone, ds.slots);
 }
 
-// ── Panel principal ───────────────────────────────────────────────────────────
+// â”€â”€ Panel principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-interface ScheduleEntry { label: string; schedule: DayReward[]; isCustom: boolean; }
+interface ScheduleEntry {
+  label: string;
+  schedule: DayReward[];
+  isCustom: boolean;
+  allowRetroactiveClaims: boolean;
+}
 
 interface ActiveVip {
   passId: string;
@@ -154,6 +160,9 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [customMap, setCustomMap] = useState<Record<string, boolean>>(
     () => Object.fromEntries(allSchedules.map(s => [s.label, s.isCustom]))
   );
+  const [retroConfigMap, setRetroConfigMap] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(allSchedules.map(s => [s.label, s.allowRetroactiveClaims]))
+  );
   const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -161,18 +170,27 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [savePending, startSave] = useTransition();
   const [resetPending, startReset] = useTransition();
   const [grantPending, startGrant] = useTransition();
-  const [retroLabelPending, startRetroLabel] = useTransition();
+  const [retroConfigPending, startRetroConfig] = useTransition();
+  const [retroPassPending, startRetroPass] = useTransition();
+  const [retroPassLoadingId, setRetroPassLoadingId] = useState<string | null>(null);
+  const [vipRetroMap, setVipRetroMap] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(activeVips.map(v => [v.passId, v.allowRetroactiveClaims]))
+  );
+  const [createTypePending, startCreateType] = useTransition();
   const dirtyRef = useRef(dirtyMap);
   dirtyRef.current = dirtyMap;
 
-  // Form de criação de passe
+  const [showCreateTypeForm, setShowCreateTypeForm] = useState(false);
+  const [newPassLabel, setNewPassLabel] = useState("");
+
+  // Form de criaÃ§Ã£o de passe
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [durationDays, setDurationDays] = useState(30);
   const [startDay, setStartDay] = useState(1);
   const [showGrantForm, setShowGrantForm] = useState(false);
 
-  // Sincroniza props → state quando o servidor retorna dados atualizados,
-  // mas só para labels que não têm edições locais pendentes.
+  // Sincroniza props â†’ state quando o servidor retorna dados atualizados,
+  // mas sÃ³ para labels que nÃ£o tÃªm ediÃ§Ãµes locais pendentes.
   useEffect(() => {
     setScheduleMap(prev => {
       const next = { ...prev };
@@ -188,21 +206,31 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       }
       return next;
     });
-  }, [allSchedules]);
+    setRetroConfigMap(prev => {
+      const next = { ...prev };
+      for (const s of allSchedules) {
+        if (!dirtyRef.current[s.label]) next[s.label] = s.allowRetroactiveClaims;
+      }
+      return next;
+    });
+    setVipRetroMap(prev => ({ ...Object.fromEntries(activeVips.map(v => [v.passId, v.allowRetroactiveClaims])), ...prev }));
+  }, [allSchedules, activeVips]);
 
   const schedule = scheduleMap[activeLabel] ?? allSchedules[0]?.schedule ?? [];
   const isCustom = customMap[activeLabel] ?? false;
+  const passRetroDefault = retroConfigMap[activeLabel] ?? false;
   const dirty = dirtyMap[activeLabel] ?? false;
 
   const switchLabel = (label: string) => {
     setEditingDay(null);
     setActiveLabel(label);
-    // Se o schedule para esse label ainda não foi carregado, busca do servidor
+    // Se o schedule para esse label ainda nÃ£o foi carregado, busca do servidor
     if (!scheduleMap[label]) {
       startLoad(async () => {
         const result = await adminGetSchedule(label);
         setScheduleMap(prev => ({ ...prev, [label]: result.schedule }));
         setCustomMap(prev => ({ ...prev, [label]: result.isCustom }));
+        setRetroConfigMap(prev => ({ ...prev, [label]: result.allowRetroactiveClaims }));
       });
     }
   };
@@ -221,7 +249,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       try {
         const result = await adminSaveSchedule(schedule, activeLabel);
         if (result.ok) {
-          toast.success(`Calendário "${activeLabel}" salvo!`);
+          toast.success(`CalendÃ¡rio "${activeLabel}" salvo!`);
           setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
           setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
           setSaveError(null);
@@ -238,8 +266,28 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
     });
   };
 
-  const labelVips = activeVips.filter(v => v.passLabel === activeLabel);
-  const labelRetroActive = labelVips.length > 0 && labelVips.every(v => v.allowRetroactiveClaims);
+  const labelVips = activeVips
+    .filter(v => v.passLabel === activeLabel)
+    .map(v => ({ ...v, allowRetroactiveClaims: vipRetroMap[v.passId] ?? v.allowRetroactiveClaims }));
+
+  const handleCreatePassType = () => {
+    const label = newPassLabel.trim();
+    if (!label) { toast.error("Digite o nome do novo passe."); return; }
+    startCreateType(async () => {
+      const result = await adminCreatePassSchedule(label, activeLabel);
+      if (result.ok && result.label && result.schedule) {
+        setScheduleMap(prev => ({ ...prev, [result.label!]: result.schedule! }));
+        setCustomMap(prev => ({ ...prev, [result.label!]: true }));
+        setRetroConfigMap(prev => ({ ...prev, [result.label!]: result.allowRetroactiveClaims ?? false }));
+        setActiveLabel(result.label);
+        setNewPassLabel("");
+        setShowCreateTypeForm(false);
+        toast.success(`Tipo de passe "${result.label}" criado.`);
+      } else {
+        toast.error(result.error ?? "Erro ao criar tipo de passe.");
+      }
+    });
+  };
 
   const handleGrantForLabel = () => {
     if (!selectedPlayerId) { toast.error("Selecione um jogador."); return; }
@@ -261,32 +309,46 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
     });
   };
 
-  const handleToggleRetroLabel = () => {
-    const next = !labelRetroActive;
-    startRetroLabel(async () => {
-      const result = await adminSetRetroactiveClaimsByLabel(activeLabel, next);
+  const handleToggleRetroDefault = () => {
+    const next = !passRetroDefault;
+    startRetroConfig(async () => {
+      const result = await adminSetPassScheduleRetroactive(activeLabel, next);
       if (result.ok) {
-        toast.success(next
-          ? `Retroativo ativado para ${result.updated} passe(s) de "${activeLabel}".`
-          : `Retroativo desativado para ${result.updated} passe(s) de "${activeLabel}".`
-        );
+        setRetroConfigMap(prev => ({ ...prev, [activeLabel]: next }));
+        setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
+        toast.success(next ? `Novos passes "${activeLabel}" serao retroativos.` : `Novos passes "${activeLabel}" nao serao retroativos.`);
       } else {
         toast.error(result.error ?? "Erro ao alterar.");
       }
     });
   };
 
+  const handleToggleRetroPass = (passId: string, allow: boolean) => {
+    setRetroPassLoadingId(passId);
+    startRetroPass(async () => {
+      const result = await adminSetRetroactiveClaims(passId, allow);
+      setRetroPassLoadingId(null);
+      if (result.ok) {
+        setVipRetroMap(prev => ({ ...prev, [passId]: allow }));
+        toast.success(allow ? "Retroativo ativado para este passe." : "Retroativo desativado para este passe.");
+      } else {
+        toast.error(result.error ?? "Erro ao alterar passe.");
+      }
+    });
+  };
+
   const handleReset = () => {
-    if (!confirm(`Resetar "${activeLabel}" para os prêmios padrão?`)) return;
+    if (!confirm(`Resetar "${activeLabel}" para os prÃªmios padrÃ£o?`)) return;
     startReset(async () => {
       const result = await adminResetSchedule(activeLabel);
       if (result.ok) {
-        toast.success("Resetado para o padrão.");
+        toast.success("Resetado para o padrÃ£o.");
         setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
         setCustomMap(prev => ({ ...prev, [activeLabel]: false }));
-        // Recarrega o schedule padrão desse label
+        // Recarrega o schedule padrÃ£o desse label
         const fresh = await adminGetSchedule(activeLabel);
         setScheduleMap(prev => ({ ...prev, [activeLabel]: fresh.schedule }));
+        setRetroConfigMap(prev => ({ ...prev, [activeLabel]: fresh.allowRetroactiveClaims }));
       } else {
         toast.error(result.error ?? "Erro ao resetar.");
       }
@@ -302,7 +364,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       <button className="flex w-full items-center justify-between text-left" onClick={() => setOpen(v => !v)}>
         <div className="flex items-center gap-3">
           <Calendar size={18} className="text-purple-400" />
-          <CardTitle className="text-base">Calendário de Prêmios VIP</CardTitle>
+          <CardTitle className="text-base">CalendÃ¡rio de PrÃªmios VIP</CardTitle>
           {isCustom && (
             <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 text-xs text-purple-300 font-semibold">
               Customizado
@@ -310,7 +372,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
           )}
           {anyDirty && (
             <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-xs text-amber-300 font-semibold flex items-center gap-1">
-              <AlertTriangle size={10} /> Não salvo
+              <AlertTriangle size={10} /> NÃ£o salvo
             </span>
           )}
         </div>
@@ -322,27 +384,63 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
           {/* Seletor de tipo de passe */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-slate-500 uppercase tracking-widest">Tipo de passe:</span>
-            {allSchedules.map(s => (
+            {Object.keys(scheduleMap).map(label => (
               <button
-                key={s.label}
-                onClick={() => switchLabel(s.label)}
+                key={label}
+                onClick={() => switchLabel(label)}
                 disabled={loadPending}
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors
-                  ${activeLabel === s.label
+                  ${activeLabel === label
                     ? "bg-purple-600 text-white"
                     : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"}`}
               >
-                {s.label}
-                {dirtyMap[s.label] && <span className="ml-1 text-amber-400">•</span>}
+                {label}
+                {dirtyMap[label] && <span className="ml-1 text-amber-400">*</span>}
               </button>
             ))}
+            <Button
+              onClick={() => setShowCreateTypeForm(v => !v)}
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 rounded-full border border-purple-500/30 px-3 text-xs text-purple-300 hover:bg-purple-500/10"
+            >
+              <Plus size={11} />
+              Novo tipo
+            </Button>
           </div>
 
-          {/* ── Gestão de passes deste tipo ── */}
+          {showCreateTypeForm && (
+            <div className="rounded-xl border border-purple-500/20 bg-slate-950/60 p-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-56 flex-1 space-y-1">
+                  <label className="text-xs font-medium uppercase tracking-widest text-slate-500">Nome do novo passe</label>
+                  <input
+                    value={newPassLabel}
+                    onChange={e => setNewPassLabel(e.target.value)}
+                    placeholder="Ex: Passe Mestre"
+                    className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-purple-400/50 focus:outline-none"
+                  />
+                </div>
+                <Button
+                  onClick={handleCreatePassType}
+                  disabled={createTypePending || !newPassLabel.trim()}
+                  className="h-9 gap-2 bg-purple-600 text-xs text-white hover:bg-purple-500"
+                >
+                  <Plus size={13} />
+                  {createTypePending ? "Criando..." : `Criar copiando ${activeLabel}`}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                O novo tipo copia o calendario e a regra de retroativo do passe selecionado.
+              </p>
+            </div>
+          )}
+
+          {/* â”€â”€ GestÃ£o de passes deste tipo â”€â”€ */}
           <div className="rounded-xl border border-purple-500/10 bg-purple-950/10 p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs font-semibold text-purple-300 uppercase tracking-widest">
-                Passes ativos — {activeLabel}
+                Passes ativos â€” {activeLabel}
                 {labelVips.length > 0 && (
                   <span className="ml-2 rounded-full bg-purple-500/20 px-2 py-0.5 text-purple-200 normal-case font-normal">
                     {labelVips.length} ativo{labelVips.length > 1 ? "s" : ""}
@@ -350,18 +448,17 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                 )}
               </p>
               <div className="flex items-center gap-2">
-                {labelVips.length > 0 && (
-                  <Button
-                    onClick={handleToggleRetroLabel}
-                    disabled={retroLabelPending}
-                    variant="ghost"
-                    size="sm"
-                    className={`gap-1.5 text-xs h-8 px-3 border ${labelRetroActive ? "text-green-400 border-green-500/30 hover:bg-green-500/10" : "text-slate-400 border-border hover:text-slate-200 hover:bg-slate-700/50"}`}
-                  >
-                    <RotateCcw size={11} />
-                    {retroLabelPending ? "..." : labelRetroActive ? "Retroativo: todos ON" : "Retroativo: todos OFF"}
-                  </Button>
-                )}
+                <Button
+                  onClick={handleToggleRetroDefault}
+                  disabled={retroConfigPending}
+                  variant="ghost"
+                  size="sm"
+                  className={`gap-1.5 text-xs h-8 px-3 border ${passRetroDefault ? "text-green-400 border-green-500/30 hover:bg-green-500/10" : "text-slate-400 border-border hover:text-slate-200 hover:bg-slate-700/50"}`}
+                  title="Define se os novos passes deste tipo permitem resgatar dias anteriores automaticamente."
+                >
+                  <RotateCcw size={11} />
+                  {retroConfigPending ? "..." : passRetroDefault ? "Novos retroativos: ON" : "Novos retroativos: OFF"}
+                </Button>
                 <Button
                   onClick={() => setShowGrantForm(v => !v)}
                   variant="ghost"
@@ -369,12 +466,12 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                   className="gap-1.5 text-xs h-8 px-3 border border-purple-500/30 text-purple-300 hover:bg-purple-500/10"
                 >
                   <UserPlus size={11} />
-                  Criar passe
+                  Conceder passe
                 </Button>
               </div>
             </div>
 
-            {/* Form de criação */}
+            {/* Form de criaÃ§Ã£o */}
             {showGrantForm && (
               <div className="space-y-3 pt-2 border-t border-purple-500/10">
                 <div className="flex flex-wrap gap-3">
@@ -420,9 +517,20 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                       <span className="flex items-center gap-1 text-slate-500"><Clock size={9} />{vip.daysRemaining}d</span>
                       <span className="flex items-center gap-1 text-slate-500"><CheckCircle2 size={9} />{vip.claimedDays}/30</span>
                       {vip.allowRetroactiveClaims && (
-                        <span className="rounded-full bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 text-[9px] text-green-400">↩ retroativo</span>
+                        <span className="rounded-full bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 text-[9px] text-green-400">â†© retroativo</span>
                       )}
                     </div>
+                    <Button
+                      onClick={() => handleToggleRetroPass(vip.passId, !vip.allowRetroactiveClaims)}
+                      disabled={retroPassPending && retroPassLoadingId === vip.passId}
+                      variant="ghost"
+                      size="sm"
+                      className={`h-7 gap-1.5 border px-2 text-[10px] ${vip.allowRetroactiveClaims ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : "border-border text-slate-400 hover:bg-slate-800 hover:text-slate-200"}`}
+                      title="Altera retroatividade apenas deste passe ativo."
+                    >
+                      <RotateCcw size={10} />
+                      {retroPassPending && retroPassLoadingId === vip.passId ? "..." : vip.allowRetroactiveClaims ? "Retroativo ON" : "Retroativo OFF"}
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -443,13 +551,13 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                   <Button onClick={handleReset} disabled={resetPending} variant="ghost"
                     className="gap-2 text-xs text-slate-400 hover:text-red-400 h-8">
                     <RotateCcw size={12} />
-                    {resetPending ? "Resetando..." : "Resetar padrão"}
+                    {resetPending ? "Resetando..." : "Resetar padrÃ£o"}
                   </Button>
                 )}
                 <Button onClick={handleSave} disabled={savePending || !dirty}
                   className="gap-2 text-xs h-8 bg-purple-600 hover:bg-purple-500 text-white">
                   <Save size={12} />
-                  {savePending ? "Salvando..." : "Salvar alterações"}
+                  {savePending ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
                 </Button>
               </div>
             </div>
@@ -484,7 +592,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                     <Star size={6} className="text-white" fill="white" />
                   </div>
                 )}
-                <span className="text-[8px] text-slate-600">{reward.type === "COINS" ? "🪙" : reward.type === "EGG" ? "🥚" : reward.type === "STICKER_PACK" ? "🃏" : reward.type === "ZIKALOOT" ? "🎟️" : reward.type === "SHOP_ITEM" ? "📦" : reward.type === "FOOD" ? "🍖" : "🍬"}</span>
+                <span className="text-[8px] text-slate-600">{reward.type === "COINS" ? "ðŸª™" : reward.type === "EGG" ? "ðŸ¥š" : reward.type === "STICKER_PACK" ? "ðŸƒ" : reward.type === "ZIKALOOT" ? "ðŸŽŸï¸" : reward.type === "SHOP_ITEM" ? "ðŸ“¦" : reward.type === "FOOD" ? "ðŸ–" : "ðŸ¬"}</span>
               </button>
             ))}
           </div>
@@ -503,7 +611,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   );
 }
 
-// ── Editor de um dia ──────────────────────────────────────────────────────────
+// â”€â”€ Editor de um dia â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function DayEditor({ reward, onChange, onClose }: {
   reward: DayReward;
@@ -547,7 +655,7 @@ function DayEditor({ reward, onChange, onClose }: {
     onChange(next);
   };
 
-  // Kinds já presentes (para desabilitar duplicatas onde faz sentido)
+  // Kinds jÃ¡ presentes (para desabilitar duplicatas onde faz sentido)
   const presentKinds = new Set(state.slots.map(s => s.kind));
 
   return (
@@ -573,7 +681,7 @@ function DayEditor({ reward, onChange, onClose }: {
             className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-widest">Descrição (label)</label>
+          <label className="text-xs font-medium text-slate-400 uppercase tracking-widest">DescriÃ§Ã£o (label)</label>
           <input type="text" value={state.label}
             onChange={e => update({ label: e.target.value })}
             className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50"
@@ -586,7 +694,7 @@ function DayEditor({ reward, onChange, onClose }: {
               className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${state.isMilestone ? "bg-purple-500" : "bg-slate-700"}`}>
               <div className={`w-4 h-4 rounded-full bg-white transition-transform ${state.isMilestone ? "translate-x-5" : ""}`} />
             </div>
-            <span className="text-sm text-slate-300">{state.isMilestone ? "⭐ Marco" : "Normal"}</span>
+            <span className="text-sm text-slate-300">{state.isMilestone ? "â­ Marco" : "Normal"}</span>
           </label>
         </div>
       </div>
@@ -632,7 +740,7 @@ function DayEditor({ reward, onChange, onClose }: {
                       ? "opacity-30 cursor-not-allowed text-slate-500"
                       : "hover:bg-slate-800 text-slate-200"}`}>
                   <span className="mr-1">{meta.emoji}</span>{meta.label}
-                  {alreadyHas && <span className="ml-1 text-slate-600">✓</span>}
+                  {alreadyHas && <span className="ml-1 text-slate-600">âœ“</span>}
                 </button>
               );
             })}
@@ -650,7 +758,7 @@ function DayEditor({ reward, onChange, onClose }: {
         <span className="text-slate-400">Preview:</span>
         <span className="text-lg">{state.emoji}</span>
         <span className="text-slate-200 font-medium">{state.label}</span>
-        {state.isMilestone && <span className="text-purple-400 text-xs">⭐ Marco</span>}
+        {state.isMilestone && <span className="text-purple-400 text-xs">â­ Marco</span>}
         <span className="text-slate-500 text-xs">
           [{state.slots.map(s => `${SLOT_META[s.kind].emoji} ${s.kind}`).join(", ")}]
         </span>
@@ -659,7 +767,7 @@ function DayEditor({ reward, onChange, onClose }: {
   );
 }
 
-// ── Editor de um slot individual ──────────────────────────────────────────────
+// â”€â”€ Editor de um slot individual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
   slot: Slot;
@@ -742,7 +850,7 @@ function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
             <input type="text" value={slot.itemName}
               onChange={e => onUpdate({ itemName: e.target.value })}
               className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50"
-              placeholder="Ex: Política de Fraqueza" />
+              placeholder="Ex: PolÃ­tica de Fraqueza" />
           </div>
         )}
 
@@ -754,7 +862,7 @@ function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
                 className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${slot.special ? "bg-yellow-500" : "bg-slate-700"}`}>
                 <div className={`w-4 h-4 rounded-full bg-white transition-transform ${slot.special ? "translate-x-5" : ""}`} />
               </div>
-              <span className="text-sm text-slate-300">{slot.special ? "⭐ Especial" : "Normal"}</span>
+              <span className="text-sm text-slate-300">{slot.special ? "â­ Especial" : "Normal"}</span>
             </label>
           </div>
         )}

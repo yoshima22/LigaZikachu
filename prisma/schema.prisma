@@ -1855,6 +1855,7 @@ model ShellGameSession {
 model PassScheduleConfig {
   id        String   @id @default("singleton")
   schedule  Json     // DayReward[] — 30 itens
+  allowRetroactiveClaims Boolean  @default(false)
   updatedAt DateTime @updatedAt
   updatedBy String?  // userId do admin que salvou por último
 
