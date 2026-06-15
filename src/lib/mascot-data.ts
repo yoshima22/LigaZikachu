@@ -510,7 +510,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 926, to: 927, level: 26 },
   { from: 928, to: 929, level: 25 }, { from: 929, to: 930, level: 35 },
   { from: 932, to: 933, level: 24 }, { from: 933, to: 934, level: 38 },
-  { from: 935, to: 936, level: 30 },
+  { from: 935, toOptions: [936, 937], level: 30 },
   { from: 938, to: 939, level: 30 },
   { from: 940, to: 941, level: 25 },
   { from: 942, to: 943, level: 30 },
