@@ -6,7 +6,7 @@ import { sendDeckReminderEmail } from "@/lib/email";
 import { creditCoins } from "@/lib/zikacoins";
 import { GLOBAL_NOTICE_KEY, revalidateGlobalNotice } from "@/lib/app-settings";
 import { revalidateTag } from "next/cache";
-import { Prisma } from "@prisma/client";
+import { EggType, FoodType, Prisma } from "@prisma/client";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
@@ -249,79 +249,62 @@ export async function sendItemToAllPlayers(
 
     const qty = Math.max(1, Math.floor(quantity));
     const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
-    if (!item) return { sent: 0, skipped: 0, error: "Item não encontrado." };
+    if (!item) return { sent: 0, skipped: 0, error: "Item nao encontrado." };
 
     const players = await prisma.player.findMany({
       where: { user: { status: "ACTIVE" } },
       select: { id: true }
     });
 
-    const EGG_MAP: Record<string, string> = {
-      EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL",
-      EGG_LAB: "LAB",
-      EGG_GEN1: "EGG_GEN1", EGG_GEN2: "EGG_GEN2"
+    const EGG_MAP: Record<string, EggType> = {
+      EGG_COMMON: EggType.COMMON,
+      EGG_RARE: EggType.RARE,
+      EGG_SPECIAL: EggType.SPECIAL,
+      EGG_LAB: EggType.LAB,
+      EGG_EVENT: EggType.EVENT,
+      EGG_GEN1: EggType.EGG_GEN1,
+      EGG_GEN2: EggType.EGG_GEN2,
+      EGG_GEN3: EggType.EGG_GEN3,
+      EGG_GEN4: EggType.EGG_GEN4,
+      EGG_GEN5: EggType.EGG_GEN5,
+      EGG_GEN6: EggType.EGG_GEN6,
+      EGG_GEN7: EggType.EGG_GEN7,
+      EGG_GEN8: EggType.EGG_GEN8,
+      EGG_GEN9: EggType.EGG_GEN9,
+      EGG_GEN6PLUS: EggType.EGG_GEN6PLUS,
     };
-    const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
-
-    const itemName = item.name;
-    function buildGiftPayload(type: string): Record<string, unknown> | null {
-      if (EGG_MAP[type]) return { rewardKind: "MASCOT_EGG", eggType: EGG_MAP[type], origin: "Enviado pelo Admin", rewardLabel: itemName };
-      if (type === "MASCOT_FOOD")  return { rewardKind: "MASCOT_FOOD", foodType: "FOOD",  quantity: qty, rewardLabel: itemName };
-      if (type === "MASCOT_SWEET") return { rewardKind: "MASCOT_FOOD", foodType: "SWEET", quantity: qty, rewardLabel: itemName };
-      if (BUFF_TYPES.includes(type)) return { rewardKind: "MASCOT_BUFF", buffType: type, quantity: qty, rewardLabel: itemName };
-      return null;
-    }
-
-    const giftPayload = buildGiftPayload(item.type);
-    const isConsumable = !!giftPayload;
-    // Para ovos, qty > 1 gera um gift por unidade
-    const isEgg = !!EGG_MAP[item.type];
+    const FOOD_MAP: Record<string, FoodType> = {
+      MASCOT_FOOD: FoodType.FOOD,
+      MASCOT_SWEET: FoodType.SWEET,
+    };
 
     let sent = 0, skipped = 0;
 
     for (const player of players) {
       try {
-        if (isConsumable) {
-          if (isEgg && qty > 1) {
-            // Ovos não têm quantidade — cria um gift por unidade
-            for (let i = 0; i < qty; i++) {
-              await prisma.playerGift.create({
-                data: {
-                  playerId: player.id,
-                  type: "CUSTOM",
-                  title: item.name,
-                  description: `${item.name} enviado pelo admin para todos os jogadores.`,
-                  payload: giftPayload as import("@prisma/client").Prisma.InputJsonValue,
-                }
-              });
-            }
-          } else {
-            await prisma.playerGift.create({
-              data: {
-                playerId: player.id,
-                type: "CUSTOM",
-                title: qty > 1 ? `${item.name} ×${qty}` : item.name,
-                description: `${item.name} enviado pelo admin para todos os jogadores.`,
-                payload: giftPayload as import("@prisma/client").Prisma.InputJsonValue,
-              }
+        const eggType = EGG_MAP[item.type];
+        const foodType = FOOD_MAP[item.type];
+        if (eggType) {
+          await prisma.playerInventory.deleteMany({ where: { playerId: player.id, itemId } });
+          for (let i = 0; i < qty; i++) {
+            await prisma.mascotEgg.create({
+              data: { playerId: player.id, type: eggType, origin: `Enviado pelo Admin: ${item.name}` }
             });
           }
-          sent++;
-        } else {
-          // Cosméticos → PlayerInventory (upsert com quantidade)
-          const existing = await prisma.playerInventory.findUnique({
-            where: { playerId_itemId: { playerId: player.id, itemId } }
+        } else if (foodType) {
+          await prisma.mascotFoodItem.upsert({
+            where: { playerId_type: { playerId: player.id, type: foodType } },
+            update: { quantity: { increment: qty } },
+            create: { playerId: player.id, type: foodType, quantity: qty },
           });
-          if (existing) {
-            await prisma.playerInventory.update({
-              where: { playerId_itemId: { playerId: player.id, itemId } },
-              data: { quantity: { increment: qty } },
-            });
-          } else {
-            await prisma.playerInventory.create({ data: { playerId: player.id, itemId, quantity: qty } });
-          }
-          sent++;
+        } else {
+          await prisma.playerInventory.upsert({
+            where: { playerId_itemId: { playerId: player.id, itemId } },
+            update: { quantity: { increment: qty } },
+            create: { playerId: player.id, itemId, quantity: qty, source: "ADMIN_GRANT" },
+          });
         }
+        sent++;
       } catch { skipped++; }
     }
 

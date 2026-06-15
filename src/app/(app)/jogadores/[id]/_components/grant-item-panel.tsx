@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Gift, Plus, Search, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const RARITY_LABEL: Record<string, string> = {
 };
 
 export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -63,6 +65,7 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
         const result = await grantItemToPlayer(playerId, item.id, qty);
         if (result.error) { toast.error(result.error); return; }
         toast.success(`${qty}x "${item.name}" concedido com sucesso!`);
+        router.refresh();
       } catch { toast.error("Erro ao conceder item."); }
     });
   };
