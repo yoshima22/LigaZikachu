@@ -147,7 +147,7 @@ export async function createBondEventForPlayer(playerId: string) {
     where: { playerId, arenaState: { not: "INJURED" } },
     select: { id: true, pokemonId: true, nickname: true, level: true },
     orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
-    take: 12,
+    take: 20,
   });
   if (mascots.length < 2) throw new Error("Voce precisa de pelo menos 2 mascotes para gerar um evento de lacos.");
 
