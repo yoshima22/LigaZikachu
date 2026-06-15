@@ -4,6 +4,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export const MANUAL_SESSION_COOKIE = "lz_session";
+export const ADMIN_MAINTENANCE_BYPASS_COOKIE = "lz_admin_maintenance";
 export const MANUAL_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export type ManualSessionUser = {

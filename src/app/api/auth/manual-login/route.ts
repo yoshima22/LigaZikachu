@@ -3,10 +3,37 @@ import { UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import {
+  ADMIN_MAINTENANCE_BYPASS_COOKIE,
   MANUAL_SESSION_COOKIE,
   MANUAL_SESSION_MAX_AGE_SECONDS,
   manualSessionCookieOptions
 } from "@/lib/manual-session";
+
+const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
+
+function base64Url(bytes: ArrayBuffer) {
+  return Buffer.from(bytes)
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+async function signAdminMaintenanceBypass(userId: string, expires: Date) {
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+
+  const payload = `${userId}.${expires.getTime()}`;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return `${payload}.${base64Url(signature)}`;
+}
 
 export async function POST(request: Request) {
   try {
@@ -67,6 +94,17 @@ export async function POST(request: Request) {
       sessionToken,
       manualSessionCookieOptions(secure)
     );
+
+    if (ADMIN_ROLES.has(user.role)) {
+      const bypassToken = await signAdminMaintenanceBypass(user.id, expires);
+      if (bypassToken) {
+        response.cookies.set(ADMIN_MAINTENANCE_BYPASS_COOKIE, bypassToken, {
+          ...manualSessionCookieOptions(secure),
+          maxAge: MANUAL_SESSION_MAX_AGE_SECONDS,
+        });
+      }
+    }
+
     return response;
   } catch (error) {
     console.error("[ManualLogin] erro inesperado", error);

@@ -7,6 +7,14 @@ const { auth } = NextAuth(authConfig);
 const PUBLIC_FILE = /\.(.*)$/;
 
 const DISABLED_REDIRECT_PATH = "/manutencao";
+const ADMIN_MAINTENANCE_BYPASS_COOKIE = "lz_admin_maintenance";
+const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
+const MAINTENANCE_PUBLIC_PATHS = new Set([
+  "/login",
+  "/recuperar-senha",
+  "/redefinir-senha",
+  "/criar-conta",
+]);
 
 const PROTECTED_PATHS = [
   "/dashboard",
@@ -52,6 +60,51 @@ function appendMaintenanceParams(
   if (state.until) url.searchParams.set("until", state.until.toISOString());
   if (state.message) url.searchParams.set("message", state.message);
   if (state.reason) url.searchParams.set("reason", state.reason);
+}
+
+function constantTimeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+function base64Url(bytes: ArrayBuffer) {
+  const binary = String.fromCharCode(...new Uint8Array(bytes));
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+async function signMaintenanceBypassPayload(payload: string) {
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return base64Url(signature);
+}
+
+async function hasValidManualAdminBypass(token: string | undefined) {
+  if (!token) return false;
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+
+  const [userId, expiresRaw, signature] = parts;
+  if (!userId || !expiresRaw || !signature) return false;
+
+  const expires = Number(expiresRaw);
+  if (!Number.isFinite(expires) || expires <= Date.now()) return false;
+
+  const expected = await signMaintenanceBypassPayload(`${userId}.${expiresRaw}`);
+  return Boolean(expected && constantTimeEqual(signature, expected));
 }
 
 function getMaintenanceState(now = new Date()) {
@@ -106,7 +159,11 @@ function shouldSkipMiddleware(pathname: string) {
   );
 }
 
-export default auth((request) => {
+function isMaintenancePublicPath(pathname: string) {
+  return MAINTENANCE_PUBLIC_PATHS.has(pathname) || pathname.startsWith("/recuperar-senha/");
+}
+
+export default auth(async (request) => {
   const { pathname } = request.nextUrl;
 
   if (shouldSkipMiddleware(pathname)) {
@@ -116,6 +173,16 @@ export default auth((request) => {
   // Manutencao: suporta emergencia, autoabertura e janelas agendadas.
   const maintenance = getMaintenanceState();
   if (maintenance.active) {
+    const role = request.auth?.user?.role;
+    const isNextAuthAdmin = typeof role === "string" && ADMIN_ROLES.has(role);
+    const isManualAdmin = await hasValidManualAdminBypass(
+      request.cookies.get(ADMIN_MAINTENANCE_BYPASS_COOKIE)?.value,
+    );
+
+    if (isNextAuthAdmin || isManualAdmin || isMaintenancePublicPath(pathname)) {
+      return NextResponse.next();
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = DISABLED_REDIRECT_PATH;
     appendMaintenanceParams(url, maintenance);

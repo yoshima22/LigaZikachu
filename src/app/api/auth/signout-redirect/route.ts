@@ -5,6 +5,10 @@
  */
 import { NextResponse } from "next/server";
 import { signOut } from "@/auth";
+import {
+  ADMIN_MAINTENANCE_BYPASS_COOKIE,
+  MANUAL_SESSION_COOKIE,
+} from "@/lib/manual-session";
 
 export async function GET() {
   try {
@@ -21,5 +25,7 @@ export async function GET() {
   res.cookies.delete("__Secure-next-auth.session-token");
   res.cookies.delete("next-auth.csrf-token");
   res.cookies.delete("__Host-next-auth.csrf-token");
+  res.cookies.delete(MANUAL_SESSION_COOKIE);
+  res.cookies.delete(ADMIN_MAINTENANCE_BYPASS_COOKIE);
   return res;
 }
