@@ -244,6 +244,9 @@ model Player {
   zikalootPicks           ZikaLootPick[]
   savedDecks              SavedDeck[]
   mascots                 Mascot[]
+  ownedMascotSocialEvents MascotSocialEvent[]  @relation("MascotSocialEventOwner")
+  resolvedMascotSocialEvents MascotSocialEvent[] @relation("MascotSocialEventResolver")
+  mascotSocialDecisionLogs MascotSocialDecisionLog[]
   mascotEggs              MascotEgg[]
   mascotIncubator         MascotIncubator?
   mascotFoods             MascotFoodItem[]
@@ -258,6 +261,7 @@ model Player {
   arenaPveCoinsDate       String               @default("")  // "YYYY-MM-DD" BRT — data do contador diário PvE
   arenaPveCoinsEarned     Int                  @default(0)   // ZC PvE resgatados hoje
   susShieldDate           String               @default("")  // "YYYY-MM-DD" BRT — escudo SUS usado hoje
+  mascotBondBehavior      String               @default("FREE")
   supporterPasses         SupporterPass[]
   sentMessages            DirectMessage[]  @relation("SentMessages")
   receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
@@ -1452,6 +1456,10 @@ model Mascot {
   arenaTeamMembers ArenaTeamMember[]
   relationsAsA     MascotRelation[]  @relation("MascotRelationA")
   relationsAsB     MascotRelation[]  @relation("MascotRelationB")
+  socialEventsAsA  MascotSocialEvent[] @relation("MascotSocialEventMascotA")
+  socialEventsAsB  MascotSocialEvent[] @relation("MascotSocialEventMascotB")
+  socialDecisionLogsAsA MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
+  socialDecisionLogsAsB MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
   events           MascotEvent[]
   buffs            MascotBuff[]
   @@index([playerId])
@@ -1468,15 +1476,103 @@ model MascotRelation {
   mascotAId        String
   mascotBId        String
   type             MascotRelationType @default(RIVAL)
+  relationshipScore Int               @default(0)
+  specialBondType   String?
   wins             Int                @default(0)
   losses           Int                @default(0)
   interactionCount Int                @default(1)  // sobe com eventos; determina tier
+  lastInteractionAt DateTime?
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   mascotA   Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
   mascotB   Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
   @@unique([mascotAId, mascotBId])
+  @@index([mascotAId, relationshipScore])
+  @@index([mascotBId, relationshipScore])
   @@map("mascot_relations")
+}
+
+enum MascotSocialEventStatus {
+  PENDING
+  RESOLVED
+  AUTO_RESOLVED
+  EXPIRED
+  CANCELLED
+}
+
+enum MascotSocialVisibility {
+  PRIVATE
+  INVOLVED_PLAYERS
+  PUBLIC
+}
+
+model MascotSocialEvent {
+  id                  String                  @id @default(cuid())
+  ownerId             String
+  mascotAId           String
+  mascotBId           String?
+  eventType           String
+  title               String
+  description         String
+  status              MascotSocialEventStatus @default(PENDING)
+  optionsJson         Json?
+  resultJson          Json?
+  visibility          MascotSocialVisibility  @default(PRIVATE)
+  affectedPlayerIds   Json?
+  publicEligible      Boolean                 @default(false)
+  resolvedByPlayerId  String?
+  resolvedOptionId    String?
+  resolvedBy          String?
+  autoResolveStrategy String?
+  parentEventId       String?
+  isFollowUp          Boolean                 @default(false)
+  followUpCount       Int                     @default(0)
+  maxFollowUps        Int                     @default(1)
+  expiresAt           DateTime?
+  resolvedAt          DateTime?
+  autoResolvedAt      DateTime?
+  createdAt           DateTime                @default(now())
+
+  owner            Player  @relation("MascotSocialEventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  resolvedByPlayer Player? @relation("MascotSocialEventResolver", fields: [resolvedByPlayerId], references: [id], onDelete: SetNull)
+  mascotA          Mascot  @relation("MascotSocialEventMascotA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB          Mascot? @relation("MascotSocialEventMascotB", fields: [mascotBId], references: [id], onDelete: Cascade)
+  decisions        MascotSocialDecisionLog[]
+
+  @@index([ownerId, status, createdAt])
+  @@index([mascotAId])
+  @@index([mascotBId])
+  @@index([eventType])
+  @@index([expiresAt])
+  @@map("mascot_social_events")
+}
+
+model MascotSocialDecisionLog {
+  id                String                 @id @default(cuid())
+  eventId           String
+  actorPlayerId     String?
+  affectedPlayerIds Json?
+  mascotAId         String
+  mascotBId         String?
+  optionId          String?
+  optionLabel       String?
+  optionType        String
+  resolvedBy        String
+  costJson          Json?
+  resultJson        Json?
+  visibility        MascotSocialVisibility @default(PRIVATE)
+  createdAt         DateTime               @default(now())
+
+  event       MascotSocialEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  actorPlayer Player?           @relation(fields: [actorPlayerId], references: [id], onDelete: SetNull)
+  mascotA     Mascot            @relation("MascotSocialDecisionMascotA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB     Mascot?           @relation("MascotSocialDecisionMascotB", fields: [mascotBId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([actorPlayerId, createdAt])
+  @@index([mascotAId, createdAt])
+  @@index([mascotBId, createdAt])
+  @@map("mascot_social_decision_logs")
 }
 
 model MascotEvent {

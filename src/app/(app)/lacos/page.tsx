@@ -1,0 +1,233 @@
+import { redirect } from "next/navigation";
+import { Clock, Heart, ScrollText, Swords, Users } from "lucide-react";
+import { getAppSession } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+import {
+  BOND_BEHAVIOR_LABEL,
+  autoResolveExpiredBondEvents,
+  normalizeBondOptions,
+  relationTier,
+  type BondBehavior,
+  type BondOption,
+} from "@/lib/mascot-bonds";
+import { BehaviorSelect, CreateBondEventButton, ResolveBondOptionButton } from "./_components/bond-actions";
+
+export const dynamic = "force-dynamic";
+
+function timeLeft(date: Date | null) {
+  if (!date) return "Sem prazo";
+  const diff = date.getTime() - Date.now();
+  if (diff <= 0) return "Expirando";
+  const hours = Math.floor(diff / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+  return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
+}
+
+function withAvailability(option: BondOption, counts: { food: number; sweet: number; coins: number }) {
+  if (!option.cost) return option;
+  const available =
+    option.cost.kind === "FOOD" ? counts.food :
+    option.cost.kind === "SWEET" ? counts.sweet :
+    counts.coins;
+  if (available >= option.cost.quantity) return option;
+  return {
+    ...option,
+    blockedReason: option.cost.kind === "FOOD"
+      ? "Voce precisa de Comida de Mascote."
+      : option.cost.kind === "SWEET"
+        ? "Voce precisa de Doce de Mascote."
+        : "ZikaCoins insuficientes.",
+  };
+}
+
+export default async function LacosPage() {
+  const session = await getAppSession();
+  if (!session?.user) redirect("/login");
+
+  const player = await prisma.player.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true, displayName: true, mascotBondBehavior: true },
+  });
+  if (!player) redirect("/dashboard");
+
+  await autoResolveExpiredBondEvents(player.id);
+
+  const [pendingEvents, relations, logs, foods, wallet] = await Promise.all([
+    prisma.mascotSocialEvent.findMany({
+      where: { ownerId: player.id, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      include: {
+        mascotA: { select: { id: true, pokemonId: true, nickname: true } },
+        mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
+      },
+    }).catch(() => []),
+    prisma.mascotRelation.findMany({
+      where: { mascotA: { playerId: player.id } },
+      orderBy: [{ relationshipScore: "desc" }, { updatedAt: "desc" }],
+      take: 20,
+      select: {
+        id: true,
+        relationshipScore: true,
+        specialBondType: true,
+        type: true,
+        interactionCount: true,
+        mascotA: { select: { id: true, pokemonId: true, nickname: true } },
+        mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
+      },
+    }).catch(() => []),
+    prisma.mascotSocialDecisionLog.findMany({
+      where: {
+        OR: [
+          { actorPlayerId: player.id },
+          { mascotA: { playerId: player.id } },
+          { mascotB: { playerId: player.id } },
+          { visibility: "PUBLIC" },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: {
+        mascotA: { select: { pokemonId: true, nickname: true } },
+        mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
+        actorPlayer: { select: { displayName: true } },
+      },
+    }).catch(() => []),
+    prisma.mascotFoodItem.findMany({ where: { playerId: player.id }, select: { type: true, quantity: true } }).catch(() => []),
+    prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null),
+  ]);
+
+  const counts = {
+    food: foods.find((f) => f.type === "FOOD")?.quantity ?? 0,
+    sweet: foods.find((f) => f.type === "SWEET")?.quantity ?? 0,
+    coins: wallet?.balance ?? 0,
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-[#FFCB05]/20 bg-slate-950/70 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#FFCB05]">
+              <Heart size={14} /> Laços de Mascote
+            </p>
+            <h1 className="mt-2 font-pixel text-base text-white">Escolhas que mudam relações</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-400">
+              Resolva eventos sociais, fortaleça amizades ou assuma riscos de rivalidade. Opções positivas podem custar recursos; se voce ignorar, o mascote decide sozinho sem gastar seus itens.
+            </p>
+          </div>
+          <CreateBondEventButton />
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p className="mb-1 text-xs font-semibold text-slate-400">Comportamento automatico quando voce nao responde</p>
+            <BehaviorSelect value={(player.mascotBondBehavior as BondBehavior) ?? "FREE"} />
+          </div>
+          <div className="rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+            <span className="text-slate-500">Atual:</span> {BOND_BEHAVIOR_LABEL[(player.mascotBondBehavior as BondBehavior) ?? "FREE"]}
+          </div>
+        </div>
+      </div>
+
+      <section className="space-y-3">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Clock size={16} /> Eventos Pendentes</h2>
+        {pendingEvents.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-slate-500">
+            Nenhum evento pendente. Procure um evento de laço quando quiser criar uma nova historia entre seus mascotes.
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {pendingEvents.map((event) => {
+              const nameA = event.mascotA.nickname ?? getPokemonName(event.mascotA.pokemonId);
+              const nameB = event.mascotB ? event.mascotB.nickname ?? getPokemonName(event.mascotB.pokemonId) : "Outro mascote";
+              const options = normalizeBondOptions(event.optionsJson).map((option) => withAvailability(option, counts));
+              return (
+                <article key={event.id} className="rounded-2xl border border-border bg-slate-950/60 p-4">
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getSpriteUrl(event.mascotA.pokemonId)} alt={nameA} className="h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-widest text-[#FFCB05]">{event.title}</p>
+                      <h3 className="font-semibold text-white">{nameA} e {nameB}</h3>
+                      <p className="text-[11px] text-slate-500">Tempo para responder: {timeLeft(event.expiresAt)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-300">{event.description}</p>
+                  <p className="mt-2 text-[11px] text-slate-500">Se expirar, seu mascote decide sozinho. Ele nunca gastara comida, doce, moedas ou itens sem sua permissao.</p>
+                  <div className="mt-4 grid gap-2">
+                    {options.map((option) => (
+                      <ResolveBondOptionButton key={option.id} eventId={event.id} option={option} disabled={!!option.blockedReason} />
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <div className="space-y-3">
+          <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Users size={16} /> Relações Atuais</h2>
+          <div className="rounded-2xl border border-border bg-slate-950/50 divide-y divide-border/50">
+            {relations.length === 0 ? (
+              <p className="p-5 text-sm text-slate-500">Seus mascotes ainda nao possuem laços registrados.</p>
+            ) : relations.map((rel) => {
+              const a = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
+              const b = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+              return (
+                <div key={rel.id} className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0 text-sm">
+                    <p className="font-semibold text-white">{a} {"->"} {b}</p>
+                    <p className="text-xs text-slate-500">Dono: {rel.mascotB.player.displayName} | {rel.interactionCount} interacoes</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={rel.relationshipScore >= 15 ? "text-green-300" : rel.relationshipScore <= -15 ? "text-red-300" : "text-slate-300"}>
+                      {relationTier(rel.relationshipScore)}
+                    </p>
+                    <p className="text-xs text-slate-500">{rel.relationshipScore}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="flex items-center gap-2 font-semibold text-slate-100"><ScrollText size={16} /> Historico Social</h2>
+          <div className="rounded-2xl border border-border bg-slate-950/50 divide-y divide-border/50">
+            {logs.length === 0 ? (
+              <p className="p-5 text-sm text-slate-500">Nenhuma decisao social registrada ainda.</p>
+            ) : logs.map((log) => {
+              const a = log.mascotA.nickname ?? getPokemonName(log.mascotA.pokemonId);
+              const b = log.mascotB ? log.mascotB.nickname ?? getPokemonName(log.mascotB.pokemonId) : null;
+              return (
+                <div key={log.id} className="p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-slate-100">{log.optionLabel ?? "Decisao automatica"}</p>
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-slate-400">{log.resolvedBy}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {a}{b ? ` com ${b}` : ""} | {new Date(log.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Tipo: {log.optionType === "POSITIVE" ? "positiva" : log.optionType === "AGGRESSIVE" ? "rivalidade" : "neutra"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 text-xs leading-relaxed text-blue-100">
+        <p className="flex items-center gap-2 font-semibold text-blue-200"><Swords size={14} /> Efeito em combate</p>
+        <p className="mt-1 text-blue-100/80">
+          Laços fortes dentro da mesma equipe dão bonus leve de desempenho na Arena Z. Rivalidades muito negativas dentro da equipe geram penalidade pequena. A regra e intencionalmente baixa para criar consequencia sem quebrar balanceamento.
+        </p>
+      </div>
+    </div>
+  );
+}

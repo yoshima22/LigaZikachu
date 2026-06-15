@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
+import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
@@ -789,6 +790,21 @@ async function checkRetireCooldown(mascotIds: string[]): Promise<void> {
   throw new Error(`${name} precisa esperar ${remaining} min antes de entrar em nova equipe (saiu com recompensas recentemente).`);
 }
 
+function applyBondModifiersToArenaMascots(team: ArenaMascot[], modifiers: Map<string, number>) {
+  return team.map((mascot) => {
+    const mult = modifiers.get(mascot.id) ?? 1;
+    if (mult === 1) return mascot;
+    return {
+      ...mascot,
+      force: Math.max(1, Math.round(mascot.force * mult)),
+      agility: Math.max(1, Math.round(mascot.agility * mult)),
+      instinct: Math.max(1, Math.round(mascot.instinct * mult)),
+      vitality: Math.max(1, Math.round(mascot.vitality * mult)),
+      hp: Math.max(10, Math.round(mascot.hp * mult)),
+    };
+  });
+}
+
 async function assertPvpExitUnlocked(teamId: string): Promise<void> {
   const since = new Date(Date.now() - ARENA_Z_CONFIG.pvpExitLockMinutes * 60_000);
   const recentAttack = await prisma.arenaBattle.findFirst({
@@ -1305,7 +1321,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   }
 
   const teamDebuffPct = getArenaDebuffPct(team.enteredAt);
-  const attackers = team.members.map(m => toArenaMascot(m.mascot, teamDebuffPct));
+  let attackers = team.members.map(m => toArenaMascot(m.mascot, teamDebuffPct));
+  attackers = applyBondModifiersToArenaMascots(attackers, await getBondCombatModifier(attackers.map(m => m.id)));
 
   // Bot determinístico: usa pendingBotJson se disponível
   const useDifficulty = (team.pendingBotDifficulty as ArenaDifficulty | null) ?? difficulty;
@@ -1927,8 +1944,10 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
   const attackDebuffPct = getArenaDebuffPct(attackTeam.enteredAt);
   const defenseDebuffPct = getArenaDebuffPct(defenseTeam.enteredAt);
-  const attackers = attackTeam.members.map(m => toArenaMascot(m.mascot, attackDebuffPct));
-  const defenders = defenseTeam.members.map(m => toArenaMascot(m.mascot, defenseDebuffPct));
+  let attackers = attackTeam.members.map(m => toArenaMascot(m.mascot, attackDebuffPct));
+  let defenders = defenseTeam.members.map(m => toArenaMascot(m.mascot, defenseDebuffPct));
+  attackers = applyBondModifiersToArenaMascots(attackers, await getBondCombatModifier(attackers.map(m => m.id)));
+  defenders = applyBondModifiersToArenaMascots(defenders, await getBondCombatModifier(defenders.map(m => m.id)));
   const combat = runCombat(attackers, defenders);
   const attackerWon = combat.result === "ATTACKER_WIN";
   const defenderWon = combat.result === "DEFENDER_WIN";

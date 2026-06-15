@@ -37,8 +37,12 @@ const UNREAD_POLL_MS = 300000;
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },
-  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" },
-  { href: "/arena-z", label: "Arena Z", icon: Swords, adminOnly: false, tutorialId: undefined }
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" }
+];
+
+const combatLinks = [
+  { href: "/arena-z", label: "Arena Z", icon: Swords, adminOnly: false },
+  { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false }
 ];
 
 const rankingLinks = [
@@ -166,6 +170,15 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
             </Link>
           ))}
         <NavDropdown
+          id="combates"
+          label="Combates"
+          icon={Swords}
+          links={combatLinks}
+          admin={admin}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+        />
+        <NavDropdown
           id="ranking"
           label="Ranking"
           icon={BarChart3}
@@ -238,6 +251,15 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
                 </Button>
               </Link>
             ))}
+          <MobileNavGroup
+            id="mobile-combates"
+            label="Combates"
+            icon={Swords}
+            links={combatLinks}
+            admin={admin}
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+          />
           <MobileNavGroup
             id="mobile-ranking"
             label="Ranking"

@@ -135,18 +135,6 @@ async function fetchMascotPageData(playerId: string) {
 
   const featuredIds = featuredMascots.map(m => m.id);
 
-  const featuredEventGroups = featuredIds.length > 0 ? await retryMascotLoad(() =>
-    Promise.all(featuredIds.map((mascotId) => prisma.mascotEvent.findMany({
-      where: { mascotId },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, mascotId: true, emoji: true, description: true, createdAt: true },
-      take: 4,
-    })))
-  ).catch((error) => {
-    console.error("[Mascotes] Falha ao carregar eventos; usando fallback.", error);
-    return [];
-  }) : [];
-
   const featuredRelationsAll = featuredIds.length > 0 ? await retryMascotLoad(() =>
     prisma.mascotRelation.findMany({
       where: { mascotAId: { in: featuredIds } },
@@ -166,14 +154,7 @@ async function fetchMascotPageData(playerId: string) {
     return [];
   }) : [];
 
-  const featuredEventsAll = featuredEventGroups.flat();
-
-  // Agrupa por mascoteId e limita a 4 events / 5 relations por mascote
-  const eventsByMascot = new Map<string, typeof featuredEventsAll>();
-  for (const e of featuredEventsAll) {
-    const list = [...(eventsByMascot.get(e.mascotId) ?? [])];
-    if (list.length < 4) { list.push(e); eventsByMascot.set(e.mascotId, list); }
-  }
+  // Mascotes nao carrega mais log de eventos; historico social fica em /lacos.
   const relationsByMascot = new Map<string, typeof featuredRelationsAll>();
   for (const r of featuredRelationsAll) {
     const list = [...(relationsByMascot.get(r.mascotAId) ?? [])];
@@ -183,7 +164,7 @@ async function fetchMascotPageData(playerId: string) {
   // Injeta nos mascotes para manter compatibilidade com componentes existentes
   const featuredMascotsEnriched = featuredMascots.map(m => ({
     ...m,
-    events: eventsByMascot.get(m.id) ?? [],
+    events: [],
     relationsAsA: (relationsByMascot.get(m.id) ?? []).map(r => ({
       type: r.type, interactionCount: r.interactionCount, mascotB: r.mascotB,
     })),
@@ -336,7 +317,7 @@ export default async function MascotesPage() {
         ownerId: r.mascotB.player.id,
       }
     })),
-    events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
+    events: [],
     hasFood, hasSweet,
     // Admin: lista de outros mascotes para trigger de batalha/amizade
     otherMascots: admin ? featuredMascots.filter(o => o.id !== m.id).map(o => ({
