@@ -42,24 +42,6 @@ async function fetchMascotPageData(playerId: string) {
           take: 1,
           select: { id: true, finishAt: true, status: true, rewardJson: true }
         },
-        events: {
-          orderBy: { createdAt: "desc" },
-          take: 4,
-          select: { id: true, emoji: true, description: true, createdAt: true }
-        },
-        relationsAsA: {
-          select: {
-            type: true,
-            interactionCount: true,
-            mascotB: {
-              select: {
-                id: true, pokemonId: true, nickname: true,
-                player: { select: { id: true, displayName: true } }
-              }
-            }
-          },
-          take: 5
-        }
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
     }),
@@ -112,6 +94,52 @@ async function fetchMascotPageData(playerId: string) {
   ]);
 
   const featuredIds = featuredMascots.map(m => m.id);
+
+  // Queries separadas por mascote para evitar o bug Prisma IN-without-LIMIT
+  const [featuredEventsAll, featuredRelationsAll] = featuredIds.length > 0 ? await Promise.all([
+    prisma.mascotEvent.findMany({
+      where: { mascotId: { in: featuredIds } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, mascotId: true, emoji: true, description: true, createdAt: true },
+      // busca 4 por mascote: limita total para não expoldir em caso extremo
+      take: featuredIds.length * 4,
+    }),
+    prisma.mascotRelation.findMany({
+      where: { mascotAId: { in: featuredIds } },
+      select: {
+        mascotAId: true, type: true, interactionCount: true,
+        mascotB: {
+          select: {
+            id: true, pokemonId: true, nickname: true,
+            player: { select: { id: true, displayName: true } }
+          }
+        }
+      },
+      take: featuredIds.length * 5,
+    }),
+  ]) : [[], []];
+
+  // Agrupa por mascoteId e limita a 4 events / 5 relations por mascote
+  const eventsByMascot = new Map<string, typeof featuredEventsAll>();
+  for (const e of featuredEventsAll) {
+    const list = eventsByMascot.get(e.mascotId) ?? [];
+    if (list.length < 4) { list.push(e); eventsByMascot.set(e.mascotId, list); }
+  }
+  const relationsByMascot = new Map<string, typeof featuredRelationsAll>();
+  for (const r of featuredRelationsAll) {
+    const list = relationsByMascot.get(r.mascotAId) ?? [];
+    if (list.length < 5) { list.push(r); relationsByMascot.set(r.mascotAId, list); }
+  }
+
+  // Injeta nos mascotes para manter compatibilidade com componentes existentes
+  const featuredMascotsEnriched = featuredMascots.map(m => ({
+    ...m,
+    events: eventsByMascot.get(m.id) ?? [],
+    relationsAsA: (relationsByMascot.get(m.id) ?? []).map(r => ({
+      type: r.type, interactionCount: r.interactionCount, mascotB: r.mascotB,
+    })),
+  }));
+
   const activeMascotBuffs = featuredIds.length > 0 ? await prisma.mascotBuff.findMany({
     where: { mascotId: { in: featuredIds }, expiresAt: { gt: new Date() } },
     select: { mascotId: true, type: true, expiresAt: true },
@@ -122,7 +150,7 @@ async function fetchMascotPageData(playerId: string) {
     _count: { id: true },
   }) : [];
 
-  return { featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
+  return { featuredMascots: featuredMascotsEnriched, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
 }
 
 const getCachedMascotPageData = (playerId: string) =>

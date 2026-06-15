@@ -184,7 +184,14 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     Promise.all([
       prisma.arenaBattle.findMany({
         where: { attackerPlayerId: player.id },
-        include: {
+        select: {
+          id: true, type: true, status: true, result: true,
+          attackerPlayerId: true, defenderPlayerId: true,
+          attackTeamId: true, defenseTeamId: true,
+          botName: true, levelBandMin: true, levelBandMax: true,
+          winnerPlayerId: true, loserPlayerId: true,
+          lootResult: true, injuredMascotIds: true,
+          seenByDefender: true, createdAt: true,
           attackerPlayer: { select: { displayName: true, ptcglNick: true } },
           defenderPlayer: { select: { displayName: true, ptcglNick: true } },
         },
@@ -193,7 +200,14 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       }),
       prisma.arenaBattle.findMany({
         where: { defenderPlayerId: player.id },
-        include: {
+        select: {
+          id: true, type: true, status: true, result: true,
+          attackerPlayerId: true, defenderPlayerId: true,
+          attackTeamId: true, defenseTeamId: true,
+          botName: true, levelBandMin: true, levelBandMax: true,
+          winnerPlayerId: true, loserPlayerId: true,
+          lootResult: true, injuredMascotIds: true,
+          seenByDefender: true, createdAt: true,
           attackerPlayer: { select: { displayName: true, ptcglNick: true } },
           defenderPlayer: { select: { displayName: true, ptcglNick: true } },
         },
@@ -1003,7 +1017,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             {battles.length === 0 ? (
               <p className="text-sm text-slate-500">Nenhum combate registrado.</p>
             ) : battles.map(battle => {
-              const log = Array.isArray(battle.turnLog) ? battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; action: string }> : [];
+              const log: Array<{ turn: number; actorName: string; targetName: string; damage: number; action: string }> = [];
               const loot = readBattleLoot(battle.lootResult);
               const preservedLoot = readArenaLootSection(battle.lootResult, "preserved");
               const burnedLoot = readArenaLootSection(battle.lootResult, "burned");

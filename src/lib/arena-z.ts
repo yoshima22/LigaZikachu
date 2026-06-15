@@ -1563,7 +1563,11 @@ async function _getArenaRanking(limit: number) {
       attackerPlayerId: { notIn: [...adminPlayerIds] },
       NOT: { defenderPlayerId: { in: [...adminPlayerIds] } },
     },
-    include: {
+    select: {
+      id: true, type: true, status: true, result: true,
+      attackerPlayerId: true, defenderPlayerId: true,
+      winnerPlayerId: true, loserPlayerId: true,
+      botName: true, lootResult: true,
       attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
       defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
     },
