@@ -12,7 +12,6 @@ import {
   grantDebugSyncHalfAction,
   grantValidSyncTicketForMeAction,
   joinOpenSyncTeamAction,
-  reserveSyncTicketAction,
   transferSyncTicketHalfAction,
   updateSyncChallengeConfigAction,
 } from "./actions";
@@ -299,14 +298,15 @@ export default async function DesafioSincronizadoPage() {
                     </p>
                   </div>
                 </div>
-                <form action={async () => {
-                  "use server";
-                  await reserveSyncTicketAction(ticket.id);
-                }} className="mt-3">
-                  <button disabled={ticket.status !== "AVAILABLE"} className="w-full rounded-lg border border-[#FFCB05]/40 px-3 py-2 text-xs font-bold text-[#FFCB05] disabled:cursor-not-allowed disabled:opacity-40">
-                    Reservar para entrada futura
-                  </button>
-                </form>
+                {ticket.status === "AVAILABLE" ? (
+                  <p className="mt-3 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/10 px-3 py-2 text-xs text-[#FFCB05]">
+                    Disponivel para criar ou entrar em uma dupla na secao Janelas e duplas.
+                  </p>
+                ) : (
+                  <p className="mt-3 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+                    Ticket ja reservado por uma dupla ativa.
+                  </p>
+                )}
               </div>
             ))}
           </div>

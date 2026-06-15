@@ -72,20 +72,6 @@ export async function combineSyncTicketsAction(formData: FormData): Promise<{ er
   }
 }
 
-export async function reserveSyncTicketAction(ticketId: string): Promise<{ error?: string; success?: string }> {
-  try {
-    const { player } = await requireCurrentPlayer();
-    await prisma.syncTicket.updateMany({
-      where: { id: ticketId, ownerId: player.id, status: "AVAILABLE" },
-      data: { status: "RESERVED" },
-    });
-    revalidatePath("/desafio-sincronizado");
-    return { success: "Ticket reservado para entrada. A arena futura consumira o ticket apenas quando iniciar." };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Erro ao reservar ticket." };
-  }
-}
-
 export async function createOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
     const { user, player } = await requireCurrentPlayer();
