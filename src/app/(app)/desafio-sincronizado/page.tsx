@@ -6,6 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
 import {
+  cancelSyncTeamAdminAction,
   combineSyncTicketsAction,
   createAdminSyncSimulationTeamAction,
   createOpenSyncTeamAction,
@@ -232,6 +233,17 @@ export default async function DesafioSincronizadoPage() {
                       </select>
                       <button disabled={availableTickets.length < 1 || !windowState.isOpen} className="rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">
                         Entrar nesta dupla
+                      </button>
+                    </form>
+                  )}
+                  {admin && (
+                    <form action={async (formData) => {
+                      "use server";
+                      await cancelSyncTeamAdminAction(formData);
+                    }} className="mt-3">
+                      <input type="hidden" name="teamId" value={team.id} />
+                      <button className="w-full rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200">
+                        Cancelar dupla e liberar tickets
                       </button>
                     </form>
                   )}

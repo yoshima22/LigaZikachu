@@ -176,6 +176,45 @@ export async function createAdminSyncSimulationTeamAction(): Promise<{ error?: s
   }
 }
 
+export async function cancelSyncTeamAdminAction(formData: FormData): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const teamId = z.string().min(1).parse(formData.get("teamId"));
+    await prisma.$transaction(async (tx) => {
+      const team = await tx.syncEventTeam.findUnique({
+        where: { id: teamId },
+        select: { id: true, status: true, ticketAId: true, ticketBId: true },
+      });
+      if (!team || !["OPEN", "COMPLETE"].includes(team.status)) {
+        throw new Error("Dupla ativa nao encontrada.");
+      }
+      const ticketIds = [team.ticketAId, team.ticketBId].filter(Boolean) as string[];
+      await tx.syncEventTeam.update({
+        where: { id: team.id },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      });
+      if (ticketIds.length > 0) {
+        await tx.syncTicket.updateMany({
+          where: { id: { in: ticketIds }, status: "RESERVED" },
+          data: { status: "AVAILABLE" },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          entityType: "SyncEventTeam",
+          entityId: team.id,
+          action: "ADMIN_TEAM_CANCELLED",
+          after: { releasedTicketIds: ticketIds },
+        },
+      }).catch(() => null);
+    });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao cancelar dupla." };
+  }
+}
+
 const configSchema = z.object({
   ticketsEnabled: z.coerce.boolean().default(false),
   adminSimulationEnabled: z.coerce.boolean().default(false),
