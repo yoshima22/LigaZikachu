@@ -125,6 +125,7 @@ export type PassStatus = {
     daysElapsed: number;
     daysRemaining: number;
     isExpired: boolean;
+    allowRetroactiveClaims: boolean;
   } | null;
   claims: { dayNumber: number; claimedAt: Date }[];
   todayDay: number | null; // null = não tem passe ativo
@@ -185,7 +186,7 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     const canClaimToday = !isExpired && !alreadyClaimed && todayDay >= 1 && todayDay <= 30;
 
     return {
-      pass: { id: pass.id, active: pass.active, startsAt: pass.startsAt, expiresAt: pass.expiresAt, daysElapsed, daysRemaining, isExpired },
+      pass: { id: pass.id, active: pass.active, startsAt: pass.startsAt, expiresAt: pass.expiresAt, daysElapsed, daysRemaining, isExpired, allowRetroactiveClaims: pass.allowRetroactiveClaims },
       claims: pass.claims,
       todayDay: isExpired ? null : todayDay,
       canClaimToday,
@@ -227,7 +228,7 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
 
     // Verificar que o dia já chegou (calendário BRT, não 24h corridas)
     const currentDay = Math.min(30, calendarDaysBRT(pass.startsAt, new Date()) + 1);
-    if (dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
+    if (!pass.allowRetroactiveClaims && dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
     if (dayNumber < 1 || dayNumber > 30) return { ok: false, error: "Dia inválido." };
 
     const activeSchedule = await getActiveSchedule(pass.passLabel ?? undefined);
@@ -501,7 +502,7 @@ export async function adminRevokeVip(passId: string, reason?: string): Promise<{
 // ── Admin: listar VIPs ativos ─────────────────────────────────────────────────
 
 export async function adminListActiveVips(): Promise<{
-  passes: { id: string; player: { id: string; displayName: string }; passLabel: string; startsAt: Date; expiresAt: Date; claimsCount: number }[];
+  passes: { id: string; player: { id: string; displayName: string }; passLabel: string; startsAt: Date; expiresAt: Date; claimsCount: number; allowRetroactiveClaims: boolean }[];
   error?: string;
 }> {
   try {
@@ -522,9 +523,23 @@ export async function adminListActiveVips(): Promise<{
         startsAt: p.startsAt,
         expiresAt: p.expiresAt,
         claimsCount: p._count.claims,
+        allowRetroactiveClaims: p.allowRetroactiveClaims,
       })),
     };
   } catch (err) {
     return { passes: [], error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+export async function adminSetRetroactiveClaims(passId: string, allow: boolean): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.supporterPass.update({
+      where: { id: passId },
+      data: { allowRetroactiveClaims: allow },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
   }
 }

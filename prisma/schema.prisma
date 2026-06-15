@@ -1804,10 +1804,11 @@ model SupporterPass {
   titleItemId      String?
   createdByAdminId String?
   revokedByAdminId String?
-  revokedAt        DateTime?
-  revokeReason     String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  revokedAt              DateTime?
+  revokeReason           String?
+  allowRetroactiveClaims Boolean              @default(false)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
   player           Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
   claims           SupporterPassClaim[]

@@ -261,6 +261,7 @@ export default async function AdminPage() {
           expiresAt: p.expiresAt,
           daysRemaining: Math.max(0, Math.ceil((new Date(p.expiresAt).getTime() - Date.now()) / 86400000)),
           claimedDays: p.claimsCount,
+          allowRetroactiveClaims: p.allowRetroactiveClaims,
         }))}
       />
       <MigrateImagesPanel />

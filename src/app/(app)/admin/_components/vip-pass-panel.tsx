@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Star, UserPlus, UserMinus, Clock, CheckCircle2, ChevronDown, ChevronUp, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { adminGrantVip, adminRevokeVip } from "@/app/(app)/passe-apoiador/actions";
+import { adminGrantVip, adminRevokeVip, adminSetRetroactiveClaims } from "@/app/(app)/passe-apoiador/actions";
 
 interface Player {
   id: string;
@@ -21,6 +21,7 @@ interface ActiveVip {
   expiresAt: Date;
   daysRemaining: number;
   claimedDays: number;
+  allowRetroactiveClaims: boolean;
 }
 
 interface Props {
@@ -61,6 +62,23 @@ export function VipPassPanel({ players, activeVips }: Props) {
   // Revoke
   const [revokeReason, setRevokeReason] = useState("");
   const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  // Retroativo
+  const [retroPending, startRetro] = useTransition();
+  const [retroLoadingId, setRetroLoadingId] = useState<string | null>(null);
+
+  const handleToggleRetro = (passId: string, currentValue: boolean) => {
+    setRetroLoadingId(passId);
+    startRetro(async () => {
+      const result = await adminSetRetroactiveClaims(passId, !currentValue);
+      if (result.ok) {
+        toast.success(!currentValue ? "Resgates retroativos ativados." : "Resgates retroativos desativados.");
+      } else {
+        toast.error(result.error ?? "Erro ao alterar configuração.");
+      }
+      setRetroLoadingId(null);
+    });
+  };
 
   const passLabel = tierSelect === "custom" ? (customLabel.trim() || "Passe Apoiador") : tierSelect;
 
@@ -237,6 +255,16 @@ export function VipPassPanel({ players, activeVips }: Props) {
                         </div>
                       </div>
                     </div>
+
+                    <Button
+                      onClick={() => handleToggleRetro(vip.passId, vip.allowRetroactiveClaims)}
+                      disabled={(retroPending && retroLoadingId === vip.passId) || !!revokingId}
+                      variant="ghost"
+                      className={`gap-1.5 text-xs h-8 px-3 ${vip.allowRetroactiveClaims ? "text-green-400 hover:text-green-300 hover:bg-green-500/10" : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"}`}
+                      title={vip.allowRetroactiveClaims ? "Desativar resgates retroativos" : "Permitir resgates de dias passados"}
+                    >
+                      {retroPending && retroLoadingId === vip.passId ? "..." : vip.allowRetroactiveClaims ? "↩ Retroativo ON" : "↩ Retroativo"}
+                    </Button>
 
                     {revokingId === vip.passId ? (
                       <div className="flex items-center gap-2 flex-wrap">

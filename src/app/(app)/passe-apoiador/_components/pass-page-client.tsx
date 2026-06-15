@@ -190,12 +190,20 @@ export function PassPageClient({ status, schedule }: Props) {
           <h2 className="text-sm font-semibold text-slate-300">Calendário de 30 dias</h2>
         </div>
 
+        {status.pass?.allowRetroactiveClaims && today !== null && today > 1 && (
+          <div className="mb-3 rounded-xl border border-orange-500/30 bg-orange-950/20 px-3 py-2 text-xs text-orange-300 flex items-center gap-2">
+            <span>↩</span>
+            <span>Resgates retroativos ativados — você pode resgatar dias anteriores que ficaram pendentes.</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-10 gap-2">
           {schedule.map((reward) => {
             const isClaimed = claimedDays.has(reward.day);
             const isToday = reward.day === today;
             const isFuture = today !== null && reward.day > today;
             const isPast = today !== null && reward.day < today && !isClaimed;
+            const canClaimRetro = !!status.pass?.allowRetroactiveClaims && isPast && !isExpired;
 
             return (
               <DayCard
@@ -204,9 +212,9 @@ export function PassPageClient({ status, schedule }: Props) {
                 isClaimed={isClaimed}
                 isToday={isToday}
                 isFuture={isFuture}
-                isPast={isPast}
+                isPast={isPast && !canClaimRetro}
                 isExpired={isExpired}
-                canClaim={status.canClaimToday && isToday}
+                canClaim={(status.canClaimToday && isToday) || canClaimRetro}
                 pending={pending}
                 onClaim={() => handleClaim(reward.day)}
               />
