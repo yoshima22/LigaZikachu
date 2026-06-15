@@ -543,3 +543,16 @@ export async function adminSetRetroactiveClaims(passId: string, allow: boolean):
     return { ok: false, error: err instanceof Error ? err.message : "Erro" };
   }
 }
+
+export async function adminSetRetroactiveClaimsAll(allow: boolean): Promise<{ ok: boolean; updated: number; error?: string }> {
+  try {
+    await requireAdmin();
+    const result = await prisma.supporterPass.updateMany({
+      where: { active: true },
+      data: { allowRetroactiveClaims: allow },
+    });
+    return { ok: true, updated: result.count };
+  } catch (err) {
+    return { ok: false, updated: 0, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
