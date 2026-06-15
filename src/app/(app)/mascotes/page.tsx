@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -17,44 +18,15 @@ import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 
 export const dynamic = "force-dynamic";
 
-export default async function MascotesPage() {
-  const session = await getAppSession();
-  if (!session?.user) return null;
-  const admin = isAdmin(session.user.role);
+const BUFF_TYPES_LIST = [
+  "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
+  "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
+] as const;
 
-  const player = await prisma.player.findUnique({
-    where: { userId: session.user.id },
-    select: { id: true }
-  });
-  if (!player) return notFound();
-
-  // Limpa repouso expirado — fire-and-forget para não bloquear o carregamento da página
-  prisma.mascot.updateMany({
-    where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lte: new Date() } },
-    data: { arenaState: "FREE", restingUntil: null },
-  }).catch(() => null);
-  // Limpa cooldown de re-entrada expirado (FREE + restingUntil no passado)
-  prisma.mascot.updateMany({
-    where: { playerId: player.id, arenaState: "FREE", restingUntil: { lte: new Date() } },
-    data: { restingUntil: null },
-  }).catch(() => null);
-
-  const BUFF_TYPES = [
-    "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
-    "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
-  ];
-
-  const rawEggImages = await getShopItemImages([...EGG_SHOP_ITEM_TYPES]);
-  const eggImageByType: Record<string, string> = {};
-  for (const [type, url] of Object.entries(rawEggImages)) {
-    const key = type.replace("EGG_", ""); // EGG_RARE → RARE, EGG_GEN1 → GEN1
-    eggImageByType[key] = url;
-  }
-
+async function fetchMascotPageData(playerId: string) {
   const [featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory] = await Promise.all([
-    // Equipe Favorita + Companheiro — select explícito para não buscar colunas desnecessárias
     prisma.mascot.findMany({
-      where: { playerId: player.id, OR: [{ isFavorite: true }, { isEquipped: true }] },
+      where: { playerId, OR: [{ isFavorite: true }, { isEquipped: true }] },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
         happiness: true, mood: true, personality: true,
@@ -91,9 +63,8 @@ export default async function MascotesPage() {
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
     }),
-    // Banco — apenas campos mínimos para exibir a lista leve (detalhes carregados ao clicar)
     prisma.mascot.findMany({
-      where: { playerId: player.id, isFavorite: false, isEquipped: false },
+      where: { playerId, isFavorite: false, isEquipped: false },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
         arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
@@ -102,7 +73,6 @@ export default async function MascotesPage() {
           where: { status: "ACTIVE" }, take: 1,
           select: { id: true, finishAt: true, status: true }
         },
-        // Bônus ativos — take:1 só para saber se existe algum
         buffs: {
           where: { expiresAt: { gt: new Date() } },
           select: { id: true },
@@ -111,34 +81,29 @@ export default async function MascotesPage() {
       },
       orderBy: [{ level: "desc" }, { id: "asc" }],
     }),
-    // Ovos — apenas campos usados pelo IncubatorPanel
     prisma.mascotEgg.findMany({
-      where: { playerId: player.id, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },
+      where: { playerId, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },
       select: { id: true, type: true, obtainedAt: true, origin: true },
       orderBy: { obtainedAt: "asc" }
     }),
-    // Incubadora — egg só precisa do type
     prisma.mascotIncubator.findUnique({
-      where: { playerId: player.id },
+      where: { playerId },
       select: {
         id: true, startedAt: true, finishAt: true, hatched: true,
         egg: { select: { type: true, origin: true } }
       },
     }),
-    // Comida — apenas type e quantity
     prisma.mascotFoodItem.findMany({
-      where: { playerId: player.id },
+      where: { playerId },
       select: { type: true, quantity: true },
     }),
-    // Penalidade de retirada da Arena — time mais recente retirado nos últimos 10 min
     prisma.arenaTeam.findFirst({
-      where: { playerId: player.id, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
+      where: { playerId, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
       orderBy: { retiredAt: "desc" },
       select: { retiredAt: true },
     }).catch(() => null),
-    // Buffs do inventário — select explícito na linha de junction
     prisma.playerInventory.findMany({
-      where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES as unknown as import("@prisma/client").ShopItemType[] } } },
+      where: { playerId, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES_LIST as unknown as import("@prisma/client").ShopItemType[] } } },
       select: {
         quantity: true,
         item: { select: { id: true, name: true, type: true, description: true, imageUrl: true } }
@@ -146,26 +111,59 @@ export default async function MascotesPage() {
     }),
   ]);
 
-  // NÃO rodar recalculateMood no carregamento da página — causa race condition
-  // com interações do usuário (sobrescreve ganhos de felicidade).
-  // recalculateMood é chamado apenas dentro de interactAction (exceto para feed).
-
-  // Buffs ativos — apenas para mascotes da Equipe Favorita (banco carrega ao clicar)
   const featuredIds = featuredMascots.map(m => m.id);
   const activeMascotBuffs = featuredIds.length > 0 ? await prisma.mascotBuff.findMany({
     where: { mascotId: { in: featuredIds }, expiresAt: { gt: new Date() } },
     select: { mascotId: true, type: true, expiresAt: true },
   }) : [];
-
   const proteinBoostedMascots = featuredIds.length > 0 ? await prisma.mascotBuff.groupBy({
     by: ["mascotId"],
-    where: {
-      type: "STAT_BOOST",
-      mascotId: { in: featuredIds },
-      expiresAt: { gt: new Date("2090-01-01") },
-    },
+    where: { type: "STAT_BOOST", mascotId: { in: featuredIds }, expiresAt: { gt: new Date("2090-01-01") } },
     _count: { id: true },
   }) : [];
+
+  return { featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
+}
+
+const getCachedMascotPageData = (playerId: string) =>
+  unstable_cache(
+    () => fetchMascotPageData(playerId),
+    ["player-mascots", playerId],
+    { revalidate: 60, tags: [`player-mascots-${playerId}`] },
+  )();
+
+export default async function MascotesPage() {
+  const session = await getAppSession();
+  if (!session?.user) return null;
+  const admin = isAdmin(session.user.role);
+
+  const player = await prisma.player.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true }
+  });
+  if (!player) return notFound();
+
+  // Limpa repouso expirado — fire-and-forget, fora do cache pois é uma mutação
+  prisma.mascot.updateMany({
+    where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lte: new Date() } },
+    data: { arenaState: "FREE", restingUntil: null },
+  }).catch(() => null);
+  prisma.mascot.updateMany({
+    where: { playerId: player.id, arenaState: "FREE", restingUntil: { lte: new Date() } },
+    data: { restingUntil: null },
+  }).catch(() => null);
+
+  const [{ featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots }, rawEggImages] = await Promise.all([
+    getCachedMascotPageData(player.id),
+    getShopItemImages([...EGG_SHOP_ITEM_TYPES]),
+  ]);
+
+  const eggImageByType: Record<string, string> = {};
+  for (const [type, url] of Object.entries(rawEggImages)) {
+    const key = type.replace("EGG_", "");
+    eggImageByType[key] = url;
+  }
+
   const buffsByMascotId = new Map<string, { type: string; expiresAt: Date }[]>();
   for (const b of activeMascotBuffs) {
     const arr = buffsByMascotId.get(b.mascotId) ?? [];

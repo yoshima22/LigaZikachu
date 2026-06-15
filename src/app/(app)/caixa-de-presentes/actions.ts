@@ -140,7 +140,7 @@ async function applyGiftReward(
   return {};
 }
 
-function revalidateGiftTargets(userId?: string) {
+function revalidateGiftTargets(userId?: string, playerId?: string) {
   revalidatePath("/caixa-de-presentes");
   revalidatePath("/dashboard");
   revalidatePath("/codigos");
@@ -148,6 +148,7 @@ function revalidateGiftTargets(userId?: string) {
   revalidatePath("/carteira");
   revalidatePath("/", "layout");
   if (userId) revalidateTag(`nav-${userId}`);
+  if (playerId) revalidateTag(`player-mascots-${playerId}`);
 }
 
 export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
@@ -197,7 +198,7 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
       });
     });
 
-    revalidateGiftTargets(user.id);
+    revalidateGiftTargets(user.id, player.id);
     return { success: true, autoSold };
   } catch (err) {
     console.error("[claimGift] Erro ao resgatar presente:", err);

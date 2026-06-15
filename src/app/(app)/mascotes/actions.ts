@@ -14,12 +14,10 @@ import {
 import { healMascotSus } from "@/lib/arena-z";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 
-function revalidate() {
+function revalidate(playerId?: string) {
   revalidatePath("/mascotes");
-  // arena-z: só invalida o cache de times se o estado do mascote mudou de forma
-  // que afeta os times (equipar/desequipar). Usar revalidateTag para não invalidar
-  // queries pesadas que não dependem do estado de mascotes individuais.
   revalidateTag("arena-active-teams");
+  if (playerId) revalidateTag(`player-mascots-${playerId}`);
 }
 
 export async function putEggInIncubator(eggId: string, genOverride?: string): Promise<{ error?: string }> {
@@ -48,7 +46,7 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
     }
 
     await startIncubation(player.id, eggId);
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -82,7 +80,7 @@ export async function hatchEggAction(): Promise<{
     }
 
     const result = await hatchEgg(player.id);
-    revalidate();
+    revalidate(player.id);
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -97,7 +95,7 @@ export async function confirmLabChoiceAction(chosenPokemonId: number): Promise<{
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const result = await hatchEgg(player.id, chosenPokemonId);
-    revalidate();
+    revalidate(player.id);
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -119,7 +117,7 @@ export async function skipIncubationAction(): Promise<{ error?: string }> {
       data: { finishAt: new Date() }
     });
 
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -131,7 +129,7 @@ export async function equipMascotAction(mascotId: string): Promise<{ error?: str
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await equipMascot(player.id, mascotId);
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -145,7 +143,7 @@ export async function renameMascotAction(mascotId: string, nickname: string): Pr
     const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
     await prisma.mascot.update({ where: { id: mascotId }, data: { nickname: nickname.trim().slice(0, 20) || null } });
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -172,7 +170,7 @@ export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ er
       where: { id: mascotId },
       data: { isFavorite: !mascot.isFavorite },
     });
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao favoritar." };
@@ -202,7 +200,7 @@ export async function interactAction(
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);
 
-    revalidate();
+    revalidate(player.id);
     return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -275,7 +273,7 @@ export async function interactAllAction(
       }
     }
 
-    revalidate();
+    revalidate(player.id);
     return { results };
   } catch (err) {
     return {
@@ -292,7 +290,7 @@ export async function startExpeditionAction(mascotId: string, duration: Expediti
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await startExpedition(player.id, mascotId, duration, mode);
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -304,7 +302,7 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     await healMascotSus(player.id, mascotId);
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
@@ -318,7 +316,7 @@ export async function claimExpeditionAction(expeditionId: string): Promise<{ err
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const result = await claimExpedition(player.id, expeditionId);
-    revalidate();
+    revalidate(player.id);
     revalidatePath("/caixa-de-presentes");
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -331,7 +329,7 @@ export async function unequipMascotAction(mascotId: string): Promise<{ error?: s
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await unequipMascot(player.id, mascotId);
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -343,7 +341,7 @@ export async function cancelExpeditionAction(expeditionId: string): Promise<{ er
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     await cancelExpedition(player.id, expeditionId);
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -367,7 +365,7 @@ export async function adminStartExpeditionAction(
     const mascot = await prisma.mascot.findUnique({ where: { id: mascotId }, select: { playerId: true } });
     if (!mascot) return { error: "Mascote nao encontrado." };
     await startExpedition(mascot.playerId, mascotId, duration, mode);
-    revalidate();
+    revalidate(mascot.playerId);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -381,7 +379,7 @@ export async function adminCancelExpeditionAction(expeditionId: string): Promise
     });
     if (!expedition) return { error: "Expedicao nao encontrada." };
     await cancelExpedition(expedition.mascot.playerId, expeditionId);
-    revalidate();
+    revalidate(expedition.mascot.playerId);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -396,7 +394,7 @@ export async function adminClaimExpeditionAction(expeditionId: string): Promise<
     if (!expedition) return { error: "Expedicao nao encontrada." };
     if (new Date() < expedition.finishAt) await skipExpedition(expeditionId);
     const result = await claimExpedition(expedition.mascot.playerId, expeditionId);
-    revalidate();
+    revalidate(expedition.mascot.playerId);
     revalidatePath("/caixa-de-presentes");
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -418,7 +416,7 @@ export async function addExpAdminAction(mascotId: string, amount: number): Promi
         description: `Ajuste admin: +${cleanAmount} EXP${result.leveled ? `, nivel ${result.newLevel}` : ""}${result.evolved ? " e evolucao aplicada" : ""}.`,
       },
     });
-    revalidate();
+    revalidate(mascot.playerId);
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -541,7 +539,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       await tx.mascotEvent.create({ data: { mascotId, emoji: "✨", description: `Usou ${config.label}!` } });
     });
 
-    revalidate();
+    revalidate(player.id);
     return { replacedExistingBuff };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -560,7 +558,7 @@ export async function useLuckyEggAction(mascotId: string): Promise<{ error?: str
     if (!inv || inv.quantity < 1) return { error: "Você não tem Ovo da Sorte no inventário." };
     await applyLuckyEgg(player.id, mascotId);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(); return {};
+    revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -575,7 +573,7 @@ export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error
     if (!inv || inv.quantity < 1) return { error: "Você não tem Política de Fraqueza no inventário." };
     await applyWeaknessPolicy(player.id, mascotId);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(); return {};
+    revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -590,7 +588,7 @@ export async function usePicnicBasketAction(): Promise<{ error?: string; mascotC
     if (!inv || inv.quantity < 1) return { error: "Você não tem Cesta de Piquenique no inventário." };
     const count = await applyPicnicBasket(player.id);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(); return { mascotCount: count };
+    revalidate(player.id); return { mascotCount: count };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -605,7 +603,7 @@ export async function useVacationTicketAction(mascotId: string): Promise<{ error
     if (!inv || inv.quantity < 1) return { error: "Você não tem Ticket de Férias no inventário." };
     await applyVacationTicket(player.id, mascotId);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(); return {};
+    revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -615,7 +613,7 @@ export async function claimVacationAction(expeditionId: string): Promise<{ error
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const reward = await claimVacation(player.id, expeditionId);
-    revalidate(); return { reward };
+    revalidate(player.id); return { reward };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -630,7 +628,7 @@ export async function useXpShareAction(mascotId: string): Promise<{ error?: stri
     if (!inv || inv.quantity < 1) return { error: "Você não tem Compartilhador de XP no inventário." };
     await applyXpShare(player.id, mascotId);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(); return {};
+    revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -649,7 +647,7 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
         create: { playerId: player.id, itemId: shopItem.id, quantity: 1 },
       });
     }
-    revalidate(); return {};
+    revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -664,7 +662,7 @@ export async function useRainbowFeatherAction(mascotId: string): Promise<{ error
     if (!inv || inv.quantity < 1) return { error: "Você não tem Pena Arco-Íris no inventário." };
     await applyRainbowFeather(player.id, mascotId);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(); return {};
+    revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -676,7 +674,7 @@ export async function adminClearExpeditionsAction(playerId: string): Promise<{ e
       where: { mascot: { playerId }, status: "ACTIVE" },
       data: { status: "CLAIMED", rewardJson: { type: "NOTHING" } }
     });
-    revalidate();
+    revalidate(playerId);
     return { cleared: result.count };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro.", cleared: 0 }; }
 }
@@ -704,6 +702,7 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
         origin: "Admin",
       },
     });
+    revalidate(playerId);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -791,7 +790,7 @@ export async function toggleEvolutionLockAction(mascotId: string, lock: boolean)
     const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
     await prisma.mascot.update({ where: { id: mascotId }, data: { evolutionLocked: lock } });
-    revalidate();
+    revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -850,7 +849,7 @@ export async function feedAllAction(): Promise<{
       ));
     });
 
-    revalidate();
+    revalidate(player.id);
     return { fed: toFeed.length, skipped: mascots.length - toFeed.length, noFood: false };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro.", fed: 0, skipped: 0, noFood: false };
