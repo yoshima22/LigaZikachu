@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const UNREAD_POLL_MS = 120000;
+const UNREAD_POLL_MS = 300000;
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },

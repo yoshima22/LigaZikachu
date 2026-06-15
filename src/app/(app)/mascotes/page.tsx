@@ -135,15 +135,19 @@ async function fetchMascotPageData(playerId: string) {
 
   const featuredIds = featuredMascots.map(m => m.id);
 
-  // Queries separadas por mascote para evitar o bug Prisma IN-without-LIMIT
-  const [featuredEventsAll, featuredRelationsAll] = featuredIds.length > 0 ? await retryMascotLoad(() => Promise.all([
-    prisma.mascotEvent.findMany({
-      where: { mascotId: { in: featuredIds } },
+  const featuredEventGroups = featuredIds.length > 0 ? await retryMascotLoad(() =>
+    Promise.all(featuredIds.map((mascotId) => prisma.mascotEvent.findMany({
+      where: { mascotId },
       orderBy: { createdAt: "desc" },
       select: { id: true, mascotId: true, emoji: true, description: true, createdAt: true },
-      // busca 4 por mascote: limita total para não expoldir em caso extremo
-      take: featuredIds.length * 4,
-    }),
+      take: 4,
+    })))
+  ).catch((error) => {
+    console.error("[Mascotes] Falha ao carregar eventos; usando fallback.", error);
+    return [];
+  }) : [];
+
+  const featuredRelationsAll = featuredIds.length > 0 ? await retryMascotLoad(() =>
     prisma.mascotRelation.findMany({
       where: { mascotAId: { in: featuredIds } },
       select: {
@@ -156,11 +160,13 @@ async function fetchMascotPageData(playerId: string) {
         }
       },
       take: featuredIds.length * 5,
-    }),
-  ])).catch((error) => {
-    console.error("[Mascotes] Falha ao carregar eventos/relacoes; usando fallback.", error);
-    return [[], []] as const;
-  }) : [[], []];
+    })
+  ).catch((error) => {
+    console.error("[Mascotes] Falha ao carregar relacoes; usando fallback.", error);
+    return [];
+  }) : [];
+
+  const featuredEventsAll = featuredEventGroups.flat();
 
   // Agrupa por mascoteId e limita a 4 events / 5 relations por mascote
   const eventsByMascot = new Map<string, typeof featuredEventsAll>();
