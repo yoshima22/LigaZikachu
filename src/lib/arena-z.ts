@@ -25,7 +25,7 @@ export const ARENA_Z_CONFIG = {
 };
 
 export const ARENA_MAX_TEAMS = 3;
-export const PVE_DAILY_COINS_CAP = 2500; // ZC PvE por jogador por dia (meia-noite BRT)
+export const PVE_DAILY_COINS_CAP = 2000; // ZC PvE por jogador por dia (meia-noite BRT)
 export const ARENA_ROOMS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 export type ArenaRoom = typeof ARENA_ROOMS[number];
 
@@ -108,7 +108,7 @@ export function applyMultiplierToVault(
 
 // Dificuldades: modificam a faixa de nível do bot
 export const DIFFICULTY_CONFIG = {
-  easy:   { levelOffset: -6, rewardMult: 0.8, injuryChanceMult: 0.6, label: "Facil",  color: "green", desc: "Bot abaixo da forca real do time. Menos loot e risco menor." },
+  easy:   { levelOffset: -3, rewardMult: 0.8, injuryChanceMult: 0.6, label: "Facil",  color: "green", desc: "Bot abaixo da forca real do time. Menos loot e risco menor." },
   normal: { levelOffset: +3, rewardMult: 1.2, injuryChanceMult: 1.2, label: "Normal", color: "yellow", desc: "Bot acima da forca real do time, evitando abuso de media baixa." },
   hard:   { levelOffset: +8, rewardMult: 2.0, injuryChanceMult: 2.8, label: "Dificil", color: "red",   desc: "Bot bem acima da forca real. Loot maior, risco alto de ferimento." },
 } as const;
