@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const UNREAD_POLL_MS = 120000;
+
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },
   { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" },
@@ -107,15 +109,30 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
     getUnreadCountAction().then(setLiveUnreadDms).catch(() => {});
   }, [pathname, playerId]);
 
-  // Poll for unread count every 30 seconds as reliable fallback
+  // Polling leve para o badge de mensagens. O chat em si tem realtime/fallback
+  // próprio; aqui basta manter o menu razoavelmente fresco sem gastar egress
+  // em abas escondidas.
   useEffect(() => {
     if (!playerId) return;
+    let disposed = false;
+
     const poll = async () => {
+      if (document.visibilityState !== "visible") return;
       const count = await getUnreadCountAction();
-      setLiveUnreadDms(count);
+      if (!disposed) setLiveUnreadDms(count);
     };
-    const id = setInterval(poll, 30000);
-    return () => clearInterval(id);
+
+    const onVisible = () => { void poll(); };
+    const id = setInterval(poll, UNREAD_POLL_MS);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      disposed = true;
+      clearInterval(id);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [playerId]);
 
 

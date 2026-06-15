@@ -21,6 +21,8 @@ type Message = {
   attachmentData: AttachmentData | null;
 };
 
+const DM_POLL_MS = 30000;
+
 interface Props {
   me: { id: string; displayName: string };
   other: { id: string; displayName: string; avatarUrl: string | null };
@@ -157,13 +159,18 @@ export function DmChat({ me, other, initialMessages }: Props) {
     return () => { void supabase.removeChannel(channel); };
   }, [me.id, other.id, other.displayName, other.avatarUrl]);
 
-  // Polling fallback: garante entrega mesmo se o WebSocket cair
+  // Polling fallback: garante entrega mesmo se o WebSocket cair, mas sem
+  // martelar o banco quando a aba está em segundo plano.
   useEffect(() => {
+    let disposed = false;
+
     const poll = async () => {
+      if (document.visibilityState !== "visible") return;
       const cur = messagesRef.current;
       const latest = cur[cur.length - 1];
       const afterIso = latest ? latest.createdAt : new Date(0).toISOString();
       const res = await pollNewMessagesAction(other.id, afterIso);
+      if (disposed) return;
       if (!res.ok || res.messages.length === 0) return;
       addNewMessages(res.messages.map((m) => ({
         id: m.id,
@@ -177,8 +184,17 @@ export function DmChat({ me, other, initialMessages }: Props) {
       })));
     };
 
-    const id = setInterval(poll, 5000);
-    return () => clearInterval(id);
+    const onVisible = () => { void poll(); };
+    const id = setInterval(poll, DM_POLL_MS);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      disposed = true;
+      clearInterval(id);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [other.id]);
 
 

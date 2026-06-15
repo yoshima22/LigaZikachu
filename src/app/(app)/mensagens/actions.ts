@@ -2,18 +2,16 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
+import { getSessionPlayer } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
 
 async function requirePlayer() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  const player = await prisma.player.findUnique({
-    where: { userId: user.id },
-    select: { id: true, displayName: true },
-  });
+  const player = await getSessionPlayer(user.id);
   if (!player) redirect("/dashboard");
-  return player;
+  return { id: player.id, displayName: player.displayName };
 }
 
 export type AttachmentData =
@@ -228,7 +226,7 @@ export async function getMyAttachablesAction() {
 export async function getUnreadCountAction() {
   const user = await getSessionUser();
   if (!user) return 0;
-  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  const player = await getSessionPlayer(user.id);
   if (!player) return 0;
   return prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } });
 }

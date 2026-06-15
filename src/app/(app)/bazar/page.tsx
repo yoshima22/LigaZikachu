@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { getAppSession } from "@/lib/session";
+import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-react";
@@ -28,9 +28,8 @@ export default async function BazarPage({
 
   const session = await getAppSession();
   const admin = session?.user ? isAdmin(session.user.role) : false;
-  const playerId = session?.user
-    ? (await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } }))?.id ?? null
-    : null;
+  const currentPlayer = session?.user ? await getSessionPlayer(session.user.id) : null;
+  const playerId = currentPlayer?.id ?? null;
 
   const wallet = playerId ? await getOrCreateWallet(playerId) : null;
 

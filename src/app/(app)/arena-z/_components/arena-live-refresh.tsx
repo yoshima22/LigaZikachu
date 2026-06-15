@@ -6,10 +6,11 @@ import { createClient } from "@supabase/supabase-js";
 import { RefreshCw } from "lucide-react";
 
 // "mascots" removido: update por batalha × 20+ usuários = centenas de MB/dia de egress.
-// "arena_battles": só INSERT (cada batalha = 1 insert com turnLog JSON grande; updates não interessam).
+// "arena_battles" removido: cada insert pode carregar turnLog JSON grande pelo Realtime.
+// As alterações relevantes de estado passam por arena_teams/arena_team_members.
 // "arena_ground_spoils": só INSERT (item novo no chão).
 const WATCHED_ALL: ReadonlyArray<string> = ["arena_teams", "arena_team_members"];
-const WATCHED_INSERTS: ReadonlyArray<string> = ["arena_battles", "arena_ground_spoils"];
+const WATCHED_INSERTS: ReadonlyArray<string> = ["arena_ground_spoils"];
 
 /**
  * Substitui o router.refresh() automático por um badge manual.

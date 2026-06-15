@@ -241,7 +241,7 @@ const _getMiauvadaoConfigCached = unstable_cache(
     return prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
   },
   ["miauvadao-config"],
-  { revalidate: 60, tags: ["miauvadao-config"] },
+  { revalidate: 300, tags: ["miauvadao-config"] },
 );
 
 export async function getMiauvadaoConfig() {
@@ -926,6 +926,7 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
       }
     });
 
+    revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
     return {};
   } catch (err) {

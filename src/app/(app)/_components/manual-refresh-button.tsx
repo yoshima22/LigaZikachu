@@ -16,13 +16,13 @@ export function ManualRefreshButton({ label = "Atualizar multiplayer" }: { label
     setCooldownMs(COOLDOWN_MS);
     intervalRef.current = setInterval(() => {
       setCooldownMs(prev => {
-        if (prev <= 100) {
+        if (prev <= 1000) {
           clearInterval(intervalRef.current!);
           return 0;
         }
-        return prev - 100;
+        return prev - 1000;
       });
-    }, 100);
+    }, 1000);
   };
 
   useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);

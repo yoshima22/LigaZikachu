@@ -23,7 +23,7 @@ export interface AppSession {
   };
 }
 
-export async function getAppSession(): Promise<AppSession | null> {
+async function resolveAppSession(): Promise<AppSession | null> {
   try {
     const nextAuthSession = await auth();
     if (nextAuthSession?.user?.id) {
@@ -47,6 +47,8 @@ export async function getAppSession(): Promise<AppSession | null> {
 
   return null;
 }
+
+export const getAppSession = cache(resolveAppSession);
 
 /**
  * getSessionPlayer() — busca o Player associado ao usuário logado.
