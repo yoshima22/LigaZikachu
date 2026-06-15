@@ -441,6 +441,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 757, to: 758, level: 33 },
   { from: 759, to: 760, level: 27 },
   { from: 761, to: 762, level: 18 }, { from: 762, to: 763, level: 29 },
+  { from: 769, to: 770, level: 42 }, // Sandygast → Palossand
   { from: 782, to: 783, level: 35 }, { from: 783, to: 784, level: 45 },
   { from: 789, to: 790, level: 30 }, // Cosmog → Cosmoem
   { from: 790, to: 791, toOptions: [791, 792], level: 50 }, // Cosmoem → Solgaleo/Lunala (sorteio)
