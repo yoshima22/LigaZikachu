@@ -112,3 +112,63 @@ export async function grantItemToPlayer(
     return { error: err instanceof Error ? err.message : "Erro desconhecido." };
   }
 }
+
+export async function revokeItemFromPlayer(
+  playerId: string,
+  itemType: string,
+  quantity = 1,
+  itemId?: string,
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+
+    if (!playerId) return { error: "Jogador nao encontrado." };
+    const safeQty = Math.max(1, Math.min(Math.floor(quantity), 99));
+
+    if (itemType === SYNC_TICKET_TYPES.fireLeft || itemType === SYNC_TICKET_TYPES.waterRight) {
+      const side = itemType === SYNC_TICKET_TYPES.fireLeft ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT;
+      const halves = await prisma.syncTicketHalf.findMany({
+        where: { ownerId: playerId, side, status: { in: ["AVAILABLE", "SENT"] } },
+        select: { id: true },
+        take: safeQty,
+      });
+      if (halves.length === 0) return { error: "Jogador nao possui esta metade de ticket." };
+      await prisma.syncTicketHalf.deleteMany({ where: { id: { in: halves.map((h) => h.id) } } });
+    } else if (itemType === SYNC_TICKET_TYPES.complete) {
+      const tickets = await prisma.syncTicket.findMany({
+        where: { ownerId: playerId, status: { in: ["AVAILABLE", "RESERVED"] } },
+        select: { id: true, leftHalfId: true, rightHalfId: true },
+        take: safeQty,
+      });
+      if (tickets.length === 0) return { error: "Jogador nao possui ticket completo." };
+      for (const t of tickets) {
+        await prisma.syncTicket.delete({ where: { id: t.id } });
+        await prisma.syncTicketHalf.deleteMany({ where: { id: { in: [t.leftHalfId, t.rightHalfId] } } });
+      }
+    } else if (itemId) {
+      const inv = await prisma.playerInventory.findUnique({
+        where: { playerId_itemId: { playerId, itemId } },
+        select: { quantity: true },
+      });
+      if (!inv || inv.quantity <= 0) return { error: "Jogador nao possui este item." };
+      const newQty = inv.quantity - safeQty;
+      if (newQty <= 0) {
+        await prisma.playerInventory.delete({ where: { playerId_itemId: { playerId, itemId } } });
+      } else {
+        await prisma.playerInventory.update({
+          where: { playerId_itemId: { playerId, itemId } },
+          data: { quantity: newQty },
+        });
+      }
+    } else {
+      return { error: "Tipo de item nao suportado para retirada." };
+    }
+
+    revalidatePath(`/jogadores/${playerId}`);
+    revalidatePath("/inventario");
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido." };
+  }
+}

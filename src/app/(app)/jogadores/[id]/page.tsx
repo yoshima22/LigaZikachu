@@ -141,11 +141,24 @@ export default async function PlayerDetailPage({
       : [],
     isAdminUser
       ? prisma.playerInventory.findMany({
-          where: { playerId },
-          select: { itemId: true }
+          where: { playerId, quantity: { gt: 0 } },
+          select: { itemId: true, quantity: true, item: { select: { name: true, type: true, rarity: true } } },
         })
       : [],
   ]);
+
+  // Sync tickets (admin only) — busca em tabelas dedicadas
+  const syncOwnedItems: { id: string; name: string; type: string; rarity: string; quantity: number }[] = [];
+  if (isAdminUser) {
+    const [halfLeftCount, halfRightCount, completeCount] = await Promise.all([
+      prisma.syncTicketHalf.count({ where: { ownerId: playerId, side: "LEFT", status: { in: ["AVAILABLE", "SENT"] } } }),
+      prisma.syncTicketHalf.count({ where: { ownerId: playerId, side: "RIGHT", status: { in: ["AVAILABLE", "SENT"] } } }),
+      prisma.syncTicket.count({ where: { ownerId: playerId, status: { in: ["AVAILABLE", "RESERVED"] } } }),
+    ]);
+    if (halfLeftCount > 0)   syncOwnedItems.push({ id: "SYNC_TICKET_FIRE_LEFT",   name: "Metade Esquerda (Fogo)",  type: "SYNC_TICKET_FIRE_LEFT",   rarity: "EPIC",      quantity: halfLeftCount });
+    if (halfRightCount > 0)  syncOwnedItems.push({ id: "SYNC_TICKET_WATER_RIGHT", name: "Metade Direita (Água)",  type: "SYNC_TICKET_WATER_RIGHT", rarity: "EPIC",      quantity: halfRightCount });
+    if (completeCount > 0)   syncOwnedItems.push({ id: "SYNC_TICKET_COMPLETE",    name: "Ticket Completo",        type: "SYNC_TICKET_COMPLETE",    rarity: "LEGENDARY", quantity: completeCount });
+  }
 
   // Time principal — apenas os 6 favoritos, campos mínimos para o grid simplificado
   const favoriteMascots = await prisma.mascot.findMany({
@@ -748,13 +761,16 @@ export default async function PlayerDetailPage({
             playerId={playerId}
             shopItems={shopItems as { id: string; name: string; type: string; rarity: string; active: boolean }[]}
             ownedItemIds={new Set(
-              (ownedInventory as { itemId: string }[])
-                .filter((i) => {
-                  const it = (shopItems as { id: string; type: string }[]).find((s) => s.id === i.itemId);
-                  return it && !isEggShopItemType(it.type);
-                })
+              (ownedInventory as { itemId: string; item: { type: string } }[])
+                .filter((i) => !isEggShopItemType(i.item.type))
                 .map((i) => i.itemId)
             )}
+            ownedItems={[
+              ...(ownedInventory as { itemId: string; quantity: number; item: { name: string; type: string; rarity: string } }[])
+                .filter((i) => !isEggShopItemType(i.item.type))
+                .map((i) => ({ id: i.itemId, name: i.item.name, type: i.item.type, rarity: i.item.rarity, quantity: i.quantity })),
+              ...syncOwnedItems,
+            ]}
           />
           <AdminResetPanel playerId={playerId} userId={player.user.id} />
         </div>
