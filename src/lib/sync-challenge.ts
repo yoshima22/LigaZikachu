@@ -103,12 +103,13 @@ export async function grantSyncTicketHalf(
   playerId: string,
   sourceAction: SyncTicketDropSource | string,
   side: SyncTicketSide = Math.random() < 0.5 ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT,
+  generatedByPlayerId = playerId,
 ) {
   const half = await tx.syncTicketHalf.create({
     data: {
       side,
       ownerId: playerId,
-      generatedByPlayerId: playerId,
+      generatedByPlayerId,
       sourceAction,
       status: "AVAILABLE",
     },
@@ -122,7 +123,7 @@ export async function grantSyncTicketHalf(
       entityType: "SyncTicketHalf",
       entityId: half.id,
       action: "GENERATED",
-      after: { side, playerId, sourceAction },
+      after: { side, playerId, generatedByPlayerId, sourceAction },
     },
   }).catch(() => null);
   return half;
@@ -233,3 +234,92 @@ export async function combineSyncTicketHalves(
   return ticket;
 }
 
+export async function grantValidSyncTicketForPlayer(tx: Prisma.TransactionClient, playerId: string) {
+  const generators = await tx.player.findMany({
+    where: { id: { not: playerId }, active: true, user: { status: "ACTIVE" } },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+    take: 2,
+  });
+  if (generators.length < 2) {
+    throw new Error("E preciso ter pelo menos 2 outros jogadores ativos para gerar um ticket valido.");
+  }
+  const left = await grantSyncTicketHalf(tx, playerId, "admin-valid-ticket", SyncTicketSide.LEFT, generators[0].id);
+  const right = await grantSyncTicketHalf(tx, playerId, "admin-valid-ticket", SyncTicketSide.RIGHT, generators[1].id);
+  return combineSyncTicketHalves(tx, { playerId, leftHalfId: left.id, rightHalfId: right.id });
+}
+
+export function getSyncWindowState(now = new Date()) {
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+  const [hour, minute] = time.split(":").map(Number);
+  const total = hour * 60 + minute;
+  const opens = 14 * 60;
+  const closes = 17 * 60;
+  return {
+    isOpen: total >= opens && total <= closes,
+    label: total < opens ? "Abre hoje as 14:00 BRT" : total <= closes ? "Aberta ate 17:00 BRT" : "Fechada por hoje",
+    currentTime: time,
+  };
+}
+
+async function assertPlayerCanUseTicket(tx: Prisma.TransactionClient, playerId: string, ticketId: string) {
+  const ticket = await tx.syncTicket.findUnique({
+    where: { id: ticketId },
+    select: { id: true, ownerId: true, status: true, bannedUserAId: true, bannedUserBId: true },
+  });
+  if (!ticket || ticket.ownerId !== playerId) throw new Error("Ticket nao encontrado.");
+  if (ticket.status !== "AVAILABLE") throw new Error("Ticket precisa estar disponivel.");
+  if (ticket.bannedUserAId === playerId || ticket.bannedUserBId === playerId) {
+    throw new Error("Voce esta banido pela origem deste ticket.");
+  }
+  const activeTeam = await tx.syncEventTeam.findFirst({
+    where: {
+      status: { in: ["OPEN", "COMPLETE"] },
+      OR: [{ playerAId: playerId }, { playerBId: playerId }],
+    },
+    select: { id: true },
+  });
+  if (activeTeam) throw new Error("Voce ja esta em uma dupla ativa.");
+  return ticket;
+}
+
+export async function createOpenSyncTeam(tx: Prisma.TransactionClient, playerId: string, ticketId: string) {
+  if (!getSyncWindowState().isOpen) throw new Error("A janela do Desafio Sincronizado fica aberta das 14:00 as 17:00 BRT.");
+  await assertPlayerCanUseTicket(tx, playerId, ticketId);
+  await tx.syncTicket.update({ where: { id: ticketId }, data: { status: "RESERVED" } });
+  const team = await tx.syncEventTeam.create({
+    data: { playerAId: playerId, ticketAId: ticketId, status: "OPEN" },
+  });
+  await tx.auditLog.create({
+    data: { entityType: "SyncEventTeam", entityId: team.id, action: "OPEN_CREATED", after: { playerId, ticketId } },
+  }).catch(() => null);
+  return team;
+}
+
+export async function joinOpenSyncTeam(tx: Prisma.TransactionClient, playerId: string, teamId: string, ticketId: string) {
+  if (!getSyncWindowState().isOpen) throw new Error("A janela do Desafio Sincronizado fica aberta das 14:00 as 17:00 BRT.");
+  await assertPlayerCanUseTicket(tx, playerId, ticketId);
+  const team = await tx.syncEventTeam.findUnique({
+    where: { id: teamId },
+    include: { ticketA: { select: { bannedUserAId: true, bannedUserBId: true } } },
+  });
+  if (!team || team.status !== "OPEN" || team.playerBId) throw new Error("Dupla aberta nao encontrada.");
+  if (team.playerAId === playerId) throw new Error("Voce ja e o criador desta dupla.");
+  if (team.ticketA.bannedUserAId === playerId || team.ticketA.bannedUserBId === playerId) {
+    throw new Error("Voce esta banido pela origem do ticket desta sala.");
+  }
+  await tx.syncTicket.update({ where: { id: ticketId }, data: { status: "RESERVED" } });
+  const updated = await tx.syncEventTeam.update({
+    where: { id: team.id },
+    data: { playerBId: playerId, ticketBId: ticketId, status: "COMPLETE", completedAt: new Date() },
+  });
+  await tx.auditLog.create({
+    data: { entityType: "SyncEventTeam", entityId: team.id, action: "JOINED", after: { playerId, ticketId } },
+  }).catch(() => null);
+  return updated;
+}

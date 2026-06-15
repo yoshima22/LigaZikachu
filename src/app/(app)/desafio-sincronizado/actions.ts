@@ -8,7 +8,10 @@ import { getSessionPlayer } from "@/lib/session";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import {
   combineSyncTicketHalves,
+  createOpenSyncTeam,
+  grantValidSyncTicketForPlayer,
   grantSyncTicketHalf,
+  joinOpenSyncTeam,
   transferSyncTicketHalf,
 } from "@/lib/sync-challenge";
 
@@ -83,6 +86,36 @@ export async function reserveSyncTicketAction(ticketId: string): Promise<{ error
   }
 }
 
+export async function createOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const ticketId = z.string().min(1).parse(formData.get("ticketId"));
+    await prisma.$transaction((tx) => createOpenSyncTeam(tx, player.id, ticketId));
+    revalidatePath("/desafio-sincronizado");
+    return { success: "Dupla aberta criada." };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao criar dupla." };
+  }
+}
+
+export async function joinOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const data = z.object({
+      teamId: z.string().min(1),
+      ticketId: z.string().min(1),
+    }).parse({
+      teamId: formData.get("teamId"),
+      ticketId: formData.get("ticketId"),
+    });
+    await prisma.$transaction((tx) => joinOpenSyncTeam(tx, player.id, data.teamId, data.ticketId));
+    revalidatePath("/desafio-sincronizado");
+    return { success: "Voce entrou na dupla." };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao entrar na dupla." };
+  }
+}
+
 export async function grantDebugSyncHalfAction(side: "LEFT" | "RIGHT"): Promise<{ error?: string }> {
   try {
     const { player } = await requireCurrentPlayer();
@@ -96,6 +129,18 @@ export async function grantDebugSyncHalfAction(side: "LEFT" | "RIGHT"): Promise<
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao gerar metade." };
+  }
+}
+
+export async function grantValidSyncTicketForMeAction(): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const { player } = await requireCurrentPlayer();
+    await prisma.$transaction((tx) => grantValidSyncTicketForPlayer(tx, player.id));
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao gerar ticket valido." };
   }
 }
 

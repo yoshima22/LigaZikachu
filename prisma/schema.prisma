@@ -272,6 +272,8 @@ model Player {
   ownedSyncTickets          SyncTicket[]     @relation("SyncTicketOwner")
   syncTicketsBannedByLeft   SyncTicket[]     @relation("SyncTicketBannedA")
   syncTicketsBannedByRight  SyncTicket[]     @relation("SyncTicketBannedB")
+  syncTeamsAsA              SyncEventTeam[]  @relation("SyncEventTeamPlayerA")
+  syncTeamsAsB              SyncEventTeam[]  @relation("SyncEventTeamPlayerB")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
 
@@ -1229,6 +1231,12 @@ enum SyncTicketStatus {
   CANCELLED
 }
 
+enum SyncEventTeamStatus {
+  OPEN
+  COMPLETE
+  CANCELLED
+}
+
 enum ZikaLootStatus {
   SCHEDULED
   DRAWN
@@ -1384,9 +1392,32 @@ model SyncTicket {
   rightHalf       SyncTicketHalf    @relation("SyncTicketRightHalf", fields: [rightHalfId], references: [id], onDelete: Restrict)
   bannedUserA     Player           @relation("SyncTicketBannedA", fields: [bannedUserAId], references: [id], onDelete: Restrict)
   bannedUserB     Player           @relation("SyncTicketBannedB", fields: [bannedUserBId], references: [id], onDelete: Restrict)
+  syncTeamAsA     SyncEventTeam?   @relation("SyncEventTeamTicketA")
+  syncTeamAsB     SyncEventTeam?   @relation("SyncEventTeamTicketB")
 
   @@index([ownerId, status, createdAt])
   @@map("sync_tickets")
+}
+
+model SyncEventTeam {
+  id          String              @id @default(cuid())
+  playerAId   String
+  playerBId   String?
+  ticketAId   String              @unique
+  ticketBId   String?             @unique
+  status      SyncEventTeamStatus @default(OPEN)
+  createdAt   DateTime            @default(now())
+  completedAt DateTime?
+  cancelledAt DateTime?
+  playerA     Player              @relation("SyncEventTeamPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB     Player?             @relation("SyncEventTeamPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  ticketA     SyncTicket          @relation("SyncEventTeamTicketA", fields: [ticketAId], references: [id], onDelete: Restrict)
+  ticketB     SyncTicket?         @relation("SyncEventTeamTicketB", fields: [ticketBId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([playerAId, status])
+  @@index([playerBId, status])
+  @@map("sync_event_teams")
 }
 
 model UserFcmToken {

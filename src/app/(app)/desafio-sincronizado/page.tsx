@@ -4,10 +4,13 @@ import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { ensureSyncChallengeItems, getSideImage, getSideLabel } from "@/lib/sync-challenge";
+import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
 import {
   combineSyncTicketsAction,
+  createOpenSyncTeamAction,
   grantDebugSyncHalfAction,
+  grantValidSyncTicketForMeAction,
+  joinOpenSyncTeamAction,
   reserveSyncTicketAction,
   transferSyncTicketHalfAction,
   updateSyncChallengeConfigAction,
@@ -27,7 +30,7 @@ export default async function DesafioSincronizadoPage() {
   const admin = isAdmin(session.user.role);
   await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
-  const [halves, tickets, players, entries, config] = await Promise.all([
+  const [halves, tickets, players, entries, config, openTeams] = await Promise.all([
     prisma.syncTicketHalf.findMany({
       where: { ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
       include: { generatedByPlayer: { select: { id: true, displayName: true, ptcglNick: true } } },
@@ -62,12 +65,25 @@ export default async function DesafioSincronizadoPage() {
       update: {},
       create: { id: "singleton" },
     }),
+    prisma.syncEventTeam.findMany({
+      where: { status: { in: ["OPEN", "COMPLETE"] } },
+      include: {
+        playerA: { select: { id: true, displayName: true } },
+        playerB: { select: { id: true, displayName: true } },
+        ticketA: { include: { bannedUserA: { select: { displayName: true } }, bannedUserB: { select: { displayName: true } } } },
+        ticketB: { include: { bannedUserA: { select: { displayName: true } }, bannedUserB: { select: { displayName: true } } } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 24,
+    }),
   ]);
 
   const leftHalves = halves.filter((half) => half.side === SyncTicketSide.LEFT);
   const rightHalves = halves.filter((half) => half.side === SyncTicketSide.RIGHT);
   const usableLeft = leftHalves.filter((half) => half.generatedByPlayerId !== player.id);
   const usableRight = rightHalves.filter((half) => half.generatedByPlayerId !== player.id);
+  const availableTickets = tickets.filter((ticket) => ticket.status === "AVAILABLE");
+  const windowState = getSyncWindowState();
 
   return (
     <div className="space-y-8">
@@ -152,6 +168,69 @@ export default async function DesafioSincronizadoPage() {
                 </form>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-100">Janelas e duplas</h2>
+            <p className="mt-1 text-xs text-slate-500">Criação/entrada: 14:00 até 17:00 BRT. Agora: {windowState.currentTime} BRT · {windowState.label}</p>
+          </div>
+          <span className={`rounded-full border px-3 py-1 text-xs font-bold ${windowState.isOpen ? "border-green-400/40 bg-green-500/10 text-green-200" : "border-slate-600 bg-slate-900 text-slate-400"}`}>
+            {windowState.isOpen ? "Janela aberta" : "Janela fechada"}
+          </span>
+        </div>
+
+        <form action={async (formData) => {
+          "use server";
+          await createOpenSyncTeamAction(formData);
+        }} className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]">
+          <select name="ticketId" className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            {availableTickets.map((ticket) => (
+              <option key={ticket.id} value={ticket.id}>
+                Ticket com bans: {ticket.bannedUserA.displayName} / {ticket.bannedUserB.displayName}
+              </option>
+            ))}
+          </select>
+          <button disabled={availableTickets.length < 1 || !windowState.isOpen} className="rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
+            Criar dupla aberta
+          </button>
+        </form>
+
+        {openTeams.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-slate-500">Nenhuma dupla aberta ou completa no momento.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {openTeams.map((team) => {
+              const bannedByA = [team.ticketA.bannedUserA.displayName, team.ticketA.bannedUserB.displayName].join(" / ");
+              return (
+                <div key={team.id} className="rounded-xl border border-border bg-slate-950/60 p-4">
+                  <p className="font-semibold text-slate-100">{team.playerA.displayName} {team.playerB ? `+ ${team.playerB.displayName}` : "+ aguardando parceiro"}</p>
+                  <p className="mt-1 text-xs text-slate-500">Status: {team.status}</p>
+                  <p className="mt-1 text-xs text-red-200">Bans do criador: {bannedByA}</p>
+                  {team.status === "OPEN" && team.playerAId !== player.id && (
+                    <form action={async (formData) => {
+                      "use server";
+                      await joinOpenSyncTeamAction(formData);
+                    }} className="mt-3 grid gap-2">
+                      <input type="hidden" name="teamId" value={team.id} />
+                      <select name="ticketId" className="rounded-lg border border-border bg-slate-950 px-2 py-2 text-xs text-slate-100">
+                        {availableTickets.map((ticket) => (
+                          <option key={ticket.id} value={ticket.id}>
+                            Meu ticket: bans {ticket.bannedUserA.displayName} / {ticket.bannedUserB.displayName}
+                          </option>
+                        ))}
+                      </select>
+                      <button disabled={availableTickets.length < 1 || !windowState.isOpen} className="rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">
+                        Entrar nesta dupla
+                      </button>
+                    </form>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -256,6 +335,12 @@ export default async function DesafioSincronizadoPage() {
               await grantDebugSyncHalfAction("RIGHT");
             }}>
               <button className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-bold text-cyan-100"><Waves size={14} /> Gerar direita</button>
+            </form>
+            <form action={async () => {
+              "use server";
+              await grantValidSyncTicketForMeAction();
+            }}>
+              <button className="inline-flex items-center gap-2 rounded-lg border border-[#FFCB05]/60 px-3 py-2 text-xs font-bold text-[#FFCB05]"><Ticket size={14} /> Gerar ticket válido</button>
             </form>
           </div>
         </section>
