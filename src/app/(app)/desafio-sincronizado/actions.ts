@@ -5,7 +5,7 @@ import { z } from "zod";
 import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
-import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import {
   combineSyncTicketHalves,
   createOpenSyncTeam,
@@ -88,9 +88,9 @@ export async function reserveSyncTicketAction(ticketId: string): Promise<{ error
 
 export async function createOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
-    const { player } = await requireCurrentPlayer();
+    const { user, player } = await requireCurrentPlayer();
     const ticketId = z.string().min(1).parse(formData.get("ticketId"));
-    await prisma.$transaction((tx) => createOpenSyncTeam(tx, player.id, ticketId));
+    await prisma.$transaction((tx) => createOpenSyncTeam(tx, player.id, ticketId, { adminBypass: isAdmin(user.role) }));
     revalidatePath("/desafio-sincronizado");
     return { success: "Dupla aberta criada." };
   } catch (err) {
@@ -100,7 +100,7 @@ export async function createOpenSyncTeamAction(formData: FormData): Promise<{ er
 
 export async function joinOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
-    const { player } = await requireCurrentPlayer();
+    const { user, player } = await requireCurrentPlayer();
     const data = z.object({
       teamId: z.string().min(1),
       ticketId: z.string().min(1),
@@ -108,7 +108,7 @@ export async function joinOpenSyncTeamAction(formData: FormData): Promise<{ erro
       teamId: formData.get("teamId"),
       ticketId: formData.get("ticketId"),
     });
-    await prisma.$transaction((tx) => joinOpenSyncTeam(tx, player.id, data.teamId, data.ticketId));
+    await prisma.$transaction((tx) => joinOpenSyncTeam(tx, player.id, data.teamId, data.ticketId, { adminBypass: isAdmin(user.role) }));
     revalidatePath("/desafio-sincronizado");
     return { success: "Voce entrou na dupla." };
   } catch (err) {
@@ -144,8 +144,55 @@ export async function grantValidSyncTicketForMeAction(): Promise<{ error?: strin
   }
 }
 
+export async function createAdminSyncSimulationTeamAction(): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const { player } = await requireCurrentPlayer();
+    await prisma.$transaction(async (tx) => {
+      const partner = await tx.player.findFirst({
+        where: { id: { not: player.id }, active: true, user: { status: "ACTIVE" } },
+        select: { id: true },
+        orderBy: { displayName: "asc" },
+      });
+      if (!partner) throw new Error("E preciso ter outro jogador ativo para simular uma dupla completa.");
+
+      const [ticketA, ticketB] = await Promise.all([
+        grantValidSyncTicketForPlayer(tx, player.id),
+        grantValidSyncTicketForPlayer(tx, partner.id),
+      ]);
+      await tx.syncTicket.updateMany({
+        where: { id: { in: [ticketA.id, ticketB.id] } },
+        data: { status: "RESERVED" },
+      });
+      const team = await tx.syncEventTeam.create({
+        data: {
+          playerAId: player.id,
+          playerBId: partner.id,
+          ticketAId: ticketA.id,
+          ticketBId: ticketB.id,
+          status: "COMPLETE",
+          completedAt: new Date(),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          entityType: "SyncEventTeam",
+          entityId: team.id,
+          action: "ADMIN_SIMULATION_TEAM_CREATED",
+          after: { playerAId: player.id, playerBId: partner.id, ticketAId: ticketA.id, ticketBId: ticketB.id },
+        },
+      }).catch(() => null);
+    });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao simular dupla." };
+  }
+}
+
 const configSchema = z.object({
   ticketsEnabled: z.coerce.boolean().default(false),
+  adminSimulationEnabled: z.coerce.boolean().default(false),
   dropFromPve: z.coerce.boolean().default(false),
   dropFromPvp: z.coerce.boolean().default(false),
   dropFromExpedition: z.coerce.boolean().default(false),
@@ -159,14 +206,34 @@ const configSchema = z.object({
   tcgWinDropChance: z.coerce.number().min(0).max(100),
 });
 
+function parseBrtDateTime(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = raw.length === 16 ? `${raw}:00-03:00` : `${raw}-03:00`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
 export async function updateSyncChallengeConfigAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const raw = Object.fromEntries(formData.entries());
   const data = configSchema.parse(raw);
+  const schedule = {
+    registrationOpensAt: parseBrtDateTime(formData.get("registrationOpensAt")),
+    registrationClosesAt: parseBrtDateTime(formData.get("registrationClosesAt")),
+    round1At: parseBrtDateTime(formData.get("round1At")),
+    round2At: parseBrtDateTime(formData.get("round2At")),
+    round3At: parseBrtDateTime(formData.get("round3At")),
+    tiebreakAt: parseBrtDateTime(formData.get("tiebreakAt")),
+    rewardsAt: parseBrtDateTime(formData.get("rewardsAt")),
+  };
   await prisma.syncChallengeConfig.upsert({
     where: { id: "singleton" },
     update: {
       ticketsEnabled: data.ticketsEnabled,
+      adminSimulationEnabled: data.adminSimulationEnabled,
+      ...schedule,
       dropFromPve: data.dropFromPve,
       dropFromPvp: data.dropFromPvp,
       dropFromExpedition: data.dropFromExpedition,
@@ -182,6 +249,8 @@ export async function updateSyncChallengeConfigAction(formData: FormData): Promi
     create: {
       id: "singleton",
       ticketsEnabled: data.ticketsEnabled,
+      adminSimulationEnabled: data.adminSimulationEnabled,
+      ...schedule,
       dropFromPve: data.dropFromPve,
       dropFromPvp: data.dropFromPvp,
       dropFromExpedition: data.dropFromExpedition,

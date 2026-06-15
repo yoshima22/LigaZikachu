@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
 import {
   combineSyncTicketsAction,
+  createAdminSyncSimulationTeamAction,
   createOpenSyncTeamAction,
   grantDebugSyncHalfAction,
   grantValidSyncTicketForMeAction,
@@ -83,7 +84,7 @@ export default async function DesafioSincronizadoPage() {
   const usableLeft = leftHalves.filter((half) => half.generatedByPlayerId !== player.id);
   const usableRight = rightHalves.filter((half) => half.generatedByPlayerId !== player.id);
   const availableTickets = tickets.filter((ticket) => ticket.status === "AVAILABLE");
-  const windowState = getSyncWindowState();
+  const windowState = getSyncWindowState(config, new Date(), { admin });
 
   return (
     <div className="space-y-8">
@@ -176,7 +177,14 @@ export default async function DesafioSincronizadoPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold text-slate-100">Janelas e duplas</h2>
-            <p className="mt-1 text-xs text-slate-500">Criação/entrada: 14:00 até 17:00 BRT. Agora: {windowState.currentTime} BRT · {windowState.label}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Criacao/entrada: {describeRegistrationWindow(config)}. Agora: {windowState.currentTime} BRT - {windowState.label}
+            </p>
+            {windowState.simulation && (
+              <p className="mt-1 text-xs font-semibold text-amber-200">
+                Simulacao admin ativa: voce pode testar a janela como se o evento estivesse acontecendo.
+              </p>
+            )}
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs font-bold ${windowState.isOpen ? "border-green-400/40 bg-green-500/10 text-green-200" : "border-slate-600 bg-slate-900 text-slate-400"}`}>
             {windowState.isOpen ? "Janela aberta" : "Janela fechada"}
@@ -342,14 +350,44 @@ export default async function DesafioSincronizadoPage() {
             }}>
               <button className="inline-flex items-center gap-2 rounded-lg border border-[#FFCB05]/60 px-3 py-2 text-xs font-bold text-[#FFCB05]"><Ticket size={14} /> Gerar ticket válido</button>
             </form>
+            <form action={async () => {
+              "use server";
+              await createAdminSyncSimulationTeamAction();
+            }}>
+              <button className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 px-3 py-2 text-xs font-bold text-emerald-100"><Sparkles size={14} /> Simular dupla completa</button>
+            </form>
           </div>
         </section>
       )}
 
       {admin && (
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-semibold text-slate-100">Configuração de drops</h2>
+          <h2 className="font-semibold text-slate-100">Configuracao do evento</h2>
           <form action={updateSyncChallengeConfigAction} className="mt-4 space-y-4">
+            <div className="rounded-2xl border border-[#FFCB05]/20 bg-slate-950/50 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-[#FFCB05]">Agenda do proximo evento</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Datas em horario de Brasilia. A janela de inscricao controla quando jogadores podem criar/entrar em duplas.
+                  </p>
+                </div>
+                <label className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
+                  <input name="adminSimulationEnabled" type="checkbox" defaultChecked={config.adminSimulationEnabled} className="mr-2" />
+                  Simulacao admin ativa
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <DateTimeInput name="registrationOpensAt" label="Abre inscricoes" value={config.registrationOpensAt} />
+                <DateTimeInput name="registrationClosesAt" label="Fecha inscricoes" value={config.registrationClosesAt} />
+                <DateTimeInput name="round1At" label="Rodada 1" value={config.round1At} />
+                <DateTimeInput name="round2At" label="Rodada 2" value={config.round2At} />
+                <DateTimeInput name="round3At" label="Rodada 3" value={config.round3At} />
+                <DateTimeInput name="tiebreakAt" label="Desempate" value={config.tiebreakAt} />
+                <DateTimeInput name="rewardsAt" label="Premiacao" value={config.rewardsAt} />
+              </div>
+            </div>
+
             <div className="grid gap-2 md:grid-cols-3">
               <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
                 <input name="ticketsEnabled" type="checkbox" defaultChecked={config.ticketsEnabled} className="mr-2" />
@@ -403,6 +441,57 @@ function TicketCounter({ label, count, tone }: { label: string; count: number; t
       <p className="text-xs uppercase tracking-widest opacity-70">{label}</p>
       <p className="mt-1 text-2xl font-black">{count}</p>
     </div>
+  );
+}
+
+function toDatetimeLocal(value?: Date | string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date).replace(" ", "T");
+}
+
+function formatBrt(value?: Date | string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function describeRegistrationWindow(config: { registrationOpensAt?: Date | string | null; registrationClosesAt?: Date | string | null }) {
+  const opens = formatBrt(config.registrationOpensAt);
+  const closes = formatBrt(config.registrationClosesAt);
+  if (opens && closes) return `${opens} ate ${closes} BRT`;
+  if (opens) return `a partir de ${opens} BRT`;
+  if (closes) return `ate ${closes} BRT`;
+  return "14:00 ate 17:00 BRT";
+}
+
+function DateTimeInput({ name, label, value }: { name: string; label: string; value?: Date | string | null }) {
+  return (
+    <label className="text-xs text-slate-400">
+      {label}
+      <input
+        name={name}
+        type="datetime-local"
+        defaultValue={toDatetimeLocal(value)}
+        className="mt-1 w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100"
+      />
+    </label>
   );
 }
 

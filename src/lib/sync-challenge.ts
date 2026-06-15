@@ -249,13 +249,59 @@ export async function grantValidSyncTicketForPlayer(tx: Prisma.TransactionClient
   return combineSyncTicketHalves(tx, { playerId, leftHalfId: left.id, rightHalfId: right.id });
 }
 
-export function getSyncWindowState(now = new Date()) {
+type SyncWindowConfig = {
+  registrationOpensAt?: Date | string | null;
+  registrationClosesAt?: Date | string | null;
+  adminSimulationEnabled?: boolean | null;
+};
+
+function formatBrtDateTime(date: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export function getSyncWindowState(
+  configOrNow?: SyncWindowConfig | Date,
+  nowOrOptions?: Date | { admin?: boolean },
+  maybeOptions?: { admin?: boolean },
+) {
+  const config = configOrNow instanceof Date ? undefined : configOrNow;
+  const now = configOrNow instanceof Date ? configOrNow : nowOrOptions instanceof Date ? nowOrOptions : new Date();
+  const options = configOrNow instanceof Date
+    ? (nowOrOptions && !(nowOrOptions instanceof Date) ? nowOrOptions : maybeOptions)
+    : maybeOptions;
   const time = new Intl.DateTimeFormat("en-GB", {
     timeZone: "America/Sao_Paulo",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).format(now);
+  if (options?.admin && config?.adminSimulationEnabled) {
+    return {
+      isOpen: true,
+      label: "Simulacao admin ativa",
+      currentTime: time,
+      simulation: true,
+    };
+  }
+  const opensAt = config?.registrationOpensAt ? new Date(config.registrationOpensAt) : null;
+  const closesAt = config?.registrationClosesAt ? new Date(config.registrationClosesAt) : null;
+  if (opensAt || closesAt) {
+    const opensOk = !opensAt || now >= opensAt;
+    const closesOk = !closesAt || now <= closesAt;
+    const isOpen = opensOk && closesOk;
+    const label = !opensOk && opensAt
+      ? `Abre em ${formatBrtDateTime(opensAt)} BRT`
+      : closesOk && closesAt
+        ? `Aberta ate ${formatBrtDateTime(closesAt)} BRT`
+        : "Janela encerrada";
+    return { isOpen, label, currentTime: time, simulation: false };
+  }
   const [hour, minute] = time.split(":").map(Number);
   const total = hour * 60 + minute;
   const opens = 14 * 60;
@@ -264,6 +310,7 @@ export function getSyncWindowState(now = new Date()) {
     isOpen: total >= opens && total <= closes,
     label: total < opens ? "Abre hoje as 14:00 BRT" : total <= closes ? "Aberta ate 17:00 BRT" : "Fechada por hoje",
     currentTime: time,
+    simulation: false,
   };
 }
 
@@ -288,8 +335,16 @@ async function assertPlayerCanUseTicket(tx: Prisma.TransactionClient, playerId: 
   return ticket;
 }
 
-export async function createOpenSyncTeam(tx: Prisma.TransactionClient, playerId: string, ticketId: string) {
-  if (!getSyncWindowState().isOpen) throw new Error("A janela do Desafio Sincronizado fica aberta das 14:00 as 17:00 BRT.");
+export async function createOpenSyncTeam(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  ticketId: string,
+  options: { adminBypass?: boolean } = {},
+) {
+  const config = await getSyncChallengeConfig(tx);
+  if (!getSyncWindowState(config, new Date(), { admin: options.adminBypass }).isOpen) {
+    throw new Error("A janela do Desafio Sincronizado nao esta aberta.");
+  }
   await assertPlayerCanUseTicket(tx, playerId, ticketId);
   await tx.syncTicket.update({ where: { id: ticketId }, data: { status: "RESERVED" } });
   const team = await tx.syncEventTeam.create({
@@ -301,8 +356,17 @@ export async function createOpenSyncTeam(tx: Prisma.TransactionClient, playerId:
   return team;
 }
 
-export async function joinOpenSyncTeam(tx: Prisma.TransactionClient, playerId: string, teamId: string, ticketId: string) {
-  if (!getSyncWindowState().isOpen) throw new Error("A janela do Desafio Sincronizado fica aberta das 14:00 as 17:00 BRT.");
+export async function joinOpenSyncTeam(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  teamId: string,
+  ticketId: string,
+  options: { adminBypass?: boolean } = {},
+) {
+  const config = await getSyncChallengeConfig(tx);
+  if (!getSyncWindowState(config, new Date(), { admin: options.adminBypass }).isOpen) {
+    throw new Error("A janela do Desafio Sincronizado nao esta aberta.");
+  }
   await assertPlayerCanUseTicket(tx, playerId, ticketId);
   const team = await tx.syncEventTeam.findUnique({
     where: { id: teamId },

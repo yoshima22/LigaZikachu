@@ -1339,6 +1339,14 @@ model SyncChallengeEntry {
 model SyncChallengeConfig {
   id                                   String   @id @default("singleton")
   ticketsEnabled                       Boolean  @default(true)
+  registrationOpensAt                  DateTime?
+  registrationClosesAt                 DateTime?
+  round1At                             DateTime?
+  round2At                             DateTime?
+  round3At                             DateTime?
+  tiebreakAt                           DateTime?
+  rewardsAt                            DateTime?
+  adminSimulationEnabled               Boolean  @default(false)
   dropFromPve                          Boolean  @default(true)
   dropFromPvp                          Boolean  @default(true)
   dropFromExpedition                   Boolean  @default(true)
