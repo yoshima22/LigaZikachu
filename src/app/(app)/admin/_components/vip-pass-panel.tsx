@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Star, UserPlus, Clock, CheckCircle2, Tag, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { adminGrantVip, adminSetRetroactiveClaimsAll } from "@/app/(app)/passe-apoiador/actions";
+import { adminGrantVip, adminSetRetroactiveClaims, adminSetRetroactiveClaimsAll } from "@/app/(app)/passe-apoiador/actions";
 
 interface Player {
   id: string;
@@ -50,6 +50,8 @@ function TierBadge({ label }: { label: string }) {
 export function VipPassPanel({ players, activeVips }: Props) {
   const [grantPending, startGrant] = useTransition();
   const [retroAllPending, startRetroAll] = useTransition();
+  const [retroPending, startRetro] = useTransition();
+  const [retroLoadingId, setRetroLoadingId] = useState<string | null>(null);
 
   // Grant form
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
@@ -80,6 +82,19 @@ export function VipPassPanel({ players, activeVips }: Props) {
       } else {
         toast.error(result.error ?? "Erro ao conceder VIP.");
       }
+    });
+  };
+
+  const handleToggleRetro = (passId: string, current: boolean) => {
+    setRetroLoadingId(passId);
+    startRetro(async () => {
+      const result = await adminSetRetroactiveClaims(passId, !current);
+      if (result.ok) {
+        toast.success(!current ? "Retroativo ativado." : "Retroativo desativado.");
+      } else {
+        toast.error(result.error ?? "Erro ao alterar.");
+      }
+      setRetroLoadingId(null);
     });
   };
 
@@ -227,9 +242,6 @@ export function VipPassPanel({ players, activeVips }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-sm text-white">{vip.displayName}</p>
                         <TierBadge label={vip.passLabel} />
-                        {vip.allowRetroactiveClaims && (
-                          <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-[10px] text-green-400 font-semibold">↩ retroativo</span>
-                        )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
                         <span className="flex items-center gap-1">
@@ -244,6 +256,17 @@ export function VipPassPanel({ players, activeVips }: Props) {
                       </div>
                     </div>
                   </div>
+
+                  <Button
+                    onClick={() => handleToggleRetro(vip.passId, vip.allowRetroactiveClaims)}
+                    disabled={retroPending && retroLoadingId === vip.passId}
+                    variant="ghost"
+                    size="sm"
+                    className={`gap-1.5 text-xs h-8 px-3 border ${vip.allowRetroactiveClaims ? "text-green-400 border-green-500/30 hover:bg-green-500/10" : "text-slate-500 border-border hover:text-slate-200 hover:bg-slate-700/50"}`}
+                  >
+                    <RotateCcw size={11} />
+                    {retroPending && retroLoadingId === vip.passId ? "..." : vip.allowRetroactiveClaims ? "Retroativo ON" : "Retroativo OFF"}
+                  </Button>
                 </div>
               ))}
             </div>
