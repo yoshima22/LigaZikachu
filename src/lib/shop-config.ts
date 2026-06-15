@@ -100,7 +100,6 @@ export const MASCOT_SHOP_ITEM_TYPES = [
 export const CONSUMABLE_SHOP_ITEM_TYPES = [
   "ZIKALOOT_TICKET",
   ...MASCOT_SHOP_ITEM_TYPES,
-  ...EVENT_SHOP_ITEM_TYPES,
 ] as const;
 
 export const SHOP_ITEM_EMOJI: Record<string, string> = {

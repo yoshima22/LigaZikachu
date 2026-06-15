@@ -46,7 +46,11 @@ export async function GET() {
       // TODOS os itens do PlayerInventory com dados completos do shop
       // (buffs, tickets, cosméticos, etc.)
       prisma.playerInventory.findMany({
-        where: { playerId: player.id, quantity: { gt: 0 } },
+        where: {
+          playerId: player.id,
+          quantity: { gt: 0 },
+          item: { type: { notIn: ["SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"] as never[] } },
+        },
         include: {
           item: {
             select: {

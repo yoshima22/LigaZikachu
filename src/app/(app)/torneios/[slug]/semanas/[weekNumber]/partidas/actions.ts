@@ -11,6 +11,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
 import { applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
 import { rewardEquippedMascot } from "@/lib/mascot";
+import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 
 const MATCH_WIN_COINS  = 180;
 const MATCH_LOSS_COINS = 120;
@@ -40,6 +41,7 @@ async function awardMatchCoins(
       description: `Participação na partida — +${MATCH_LOSS_COINS} ZC`
     })
   ]);
+  await maybeDropSyncTicket(tx, match.winnerPlayerId, "tcg-match-win").catch(() => null);
 }
 
 async function rewardMascotsForConfirmedMatch(match: {

@@ -3,6 +3,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { getShopItemMeta } from "@/lib/shop-cache";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
@@ -1161,6 +1162,18 @@ export async function claimExpedition(
       // Log de evento nos dois mascotes
       await logEvent(rel.mascotB.id, "🤝", `Apoiou ${expeditorName} em expedição de ${dur.label} e ganhou recompensa!`).catch(() => {});
       await logEvent(expedition.mascotId, "💚", `${friendName} apoiou e turbinou a expedição! (+${Math.round(allyExpBonus * 100 - 100)}% EXP)`).catch(() => {});
+    }
+    if (durationKey === "3h" || durationKey === "6h") {
+      const syncDrop = await maybeDropSyncTicket(tx, playerId, durationKey === "3h" ? "expedition-3h" : "expedition-6h");
+      if (syncDrop) {
+        await tx.mascotEvent.create({
+          data: {
+            mascotId: expedition.mascotId,
+            emoji: "DS",
+            description: `Encontrou uma metade de ticket do Desafio Sincronizado na expedição de ${dur.label}.`,
+          },
+        }).catch(() => null);
+      }
     }
   });
 

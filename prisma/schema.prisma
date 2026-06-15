@@ -267,6 +267,11 @@ model Player {
   receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
   generalMessages         GeneralChatMessage[]
   syncChallengeEntries    SyncChallengeEntry[]
+  generatedSyncTicketHalves SyncTicketHalf[] @relation("SyncTicketHalfGeneratedBy")
+  ownedSyncTicketHalves     SyncTicketHalf[] @relation("SyncTicketHalfOwner")
+  ownedSyncTickets          SyncTicket[]     @relation("SyncTicketOwner")
+  syncTicketsBannedByLeft   SyncTicket[]     @relation("SyncTicketBannedA")
+  syncTicketsBannedByRight  SyncTicket[]     @relation("SyncTicketBannedB")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
 
@@ -1203,6 +1208,27 @@ enum SyncChallengeStatus {
   CANCELLED
 }
 
+enum SyncTicketSide {
+  LEFT
+  RIGHT
+}
+
+enum SyncTicketHalfStatus {
+  AVAILABLE
+  SENT
+  COMBINED
+  EXPIRED
+  CONSUMED
+}
+
+enum SyncTicketStatus {
+  AVAILABLE
+  RESERVED
+  CONSUMED
+  REFUNDED
+  CANCELLED
+}
+
 enum ZikaLootStatus {
   SCHEDULED
   DRAWN
@@ -1300,6 +1326,67 @@ model SyncChallengeEntry {
 
   @@index([playerId, createdAt])
   @@map("sync_challenge_entries")
+}
+
+model SyncChallengeConfig {
+  id                                   String   @id @default("singleton")
+  ticketsEnabled                       Boolean  @default(true)
+  dropFromPve                          Boolean  @default(true)
+  dropFromPvp                          Boolean  @default(true)
+  dropFromExpedition                   Boolean  @default(true)
+  dropFromCraftingDustRecycle          Boolean  @default(true)
+  dropFromTcgMatch                     Boolean  @default(true)
+  pveDropChance                        Float    @default(0.05)
+  pvpDropChance                        Float    @default(0.30)
+  expedition3hDropChance               Float    @default(0.04)
+  expedition6hDropChance               Float    @default(0.08)
+  recycleDropChance                    Float    @default(0.70)
+  tcgWinDropChance                     Float    @default(1.00)
+  updatedAt                            DateTime @updatedAt
+
+  @@map("sync_challenge_config")
+}
+
+model SyncTicketHalf {
+  id                  String               @id @default(cuid())
+  side                SyncTicketSide
+  ownerId             String
+  generatedByPlayerId String
+  sourceAction        String
+  status              SyncTicketHalfStatus @default(AVAILABLE)
+  createdAt           DateTime             @default(now())
+  sentAt              DateTime?
+  combinedAt          DateTime?
+  expiresAt           DateTime?
+  owner               Player               @relation("SyncTicketHalfOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  generatedByPlayer   Player               @relation("SyncTicketHalfGeneratedBy", fields: [generatedByPlayerId], references: [id], onDelete: Cascade)
+  leftTicket          SyncTicket?          @relation("SyncTicketLeftHalf")
+  rightTicket         SyncTicket?          @relation("SyncTicketRightHalf")
+
+  @@index([ownerId, status, side])
+  @@index([generatedByPlayerId, createdAt])
+  @@map("sync_ticket_halves")
+}
+
+model SyncTicket {
+  id              String           @id @default(cuid())
+  ownerId         String
+  leftHalfId      String           @unique
+  rightHalfId     String           @unique
+  bannedUserAId   String
+  bannedUserBId   String
+  status          SyncTicketStatus @default(AVAILABLE)
+  createdAt       DateTime         @default(now())
+  consumedAt      DateTime?
+  refundedAt      DateTime?
+  owner           Player           @relation("SyncTicketOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  leftHalf        SyncTicketHalf    @relation("SyncTicketLeftHalf", fields: [leftHalfId], references: [id], onDelete: Restrict)
+  rightHalf       SyncTicketHalf    @relation("SyncTicketRightHalf", fields: [rightHalfId], references: [id], onDelete: Restrict)
+  bannedUserA     Player           @relation("SyncTicketBannedA", fields: [bannedUserAId], references: [id], onDelete: Restrict)
+  bannedUserB     Player           @relation("SyncTicketBannedB", fields: [bannedUserBId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, status, createdAt])
+  @@map("sync_tickets")
 }
 
 model UserFcmToken {

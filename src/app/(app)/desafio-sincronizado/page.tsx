@@ -1,14 +1,16 @@
 import Image from "next/image";
-import { Flame, Send, ShieldBan, Sparkles, Waves } from "lucide-react";
+import { Flame, Send, ShieldBan, Sparkles, Ticket, Waves } from "lucide-react";
+import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { SYNC_TICKET_ITEMS, SYNC_TICKET_TYPES, ensureSyncChallengeItems } from "@/lib/sync-challenge";
+import { ensureSyncChallengeItems, getSideImage, getSideLabel } from "@/lib/sync-challenge";
 import {
   combineSyncTicketsAction,
-  consumeSyncTicketAction,
-  grantDebugSyncTicketAction,
-  transferSyncTicketAction,
+  grantDebugSyncHalfAction,
+  reserveSyncTicketAction,
+  transferSyncTicketHalfAction,
+  updateSyncChallengeConfigAction,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -25,16 +27,23 @@ export default async function DesafioSincronizadoPage() {
   const admin = isAdmin(session.user.role);
   await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
-  const [inventory, players, entries] = await Promise.all([
-    prisma.playerInventory.findMany({
-      where: {
-        playerId: player.id,
-        item: { type: { in: Object.values(SYNC_TICKET_TYPES) as never[] } },
+  const [halves, tickets, players, entries, config] = await Promise.all([
+    prisma.syncTicketHalf.findMany({
+      where: { ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
+      include: { generatedByPlayer: { select: { id: true, displayName: true, ptcglNick: true } } },
+      orderBy: [{ side: "asc" }, { createdAt: "desc" }],
+      take: 80,
+    }),
+    prisma.syncTicket.findMany({
+      where: { ownerId: player.id, status: { in: ["AVAILABLE", "RESERVED"] } },
+      include: {
+        bannedUserA: { select: { id: true, displayName: true } },
+        bannedUserB: { select: { id: true, displayName: true } },
+        leftHalf: { include: { generatedByPlayer: { select: { displayName: true } } } },
+        rightHalf: { include: { generatedByPlayer: { select: { displayName: true } } } },
       },
-      select: {
-        quantity: true,
-        item: { select: { id: true, type: true, name: true, imageUrl: true, description: true } },
-      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
     }),
     prisma.player.findMany({
       where: { id: { not: player.id }, active: true, user: { status: "ACTIVE" } },
@@ -45,15 +54,20 @@ export default async function DesafioSincronizadoPage() {
     prisma.syncChallengeEntry.findMany({
       where: { playerId: player.id },
       orderBy: { createdAt: "desc" },
-      take: 8,
+      take: 6,
       select: { id: true, status: true, bansJson: true, consumedAt: true },
+    }),
+    prisma.syncChallengeConfig.upsert({
+      where: { id: "singleton" },
+      update: {},
+      create: { id: "singleton" },
     }),
   ]);
 
-  const counts = new Map(inventory.map((row) => [row.item.type, row.quantity]));
-  const fireCount = counts.get(SYNC_TICKET_TYPES.fireLeft) ?? 0;
-  const waterCount = counts.get(SYNC_TICKET_TYPES.waterRight) ?? 0;
-  const completeCount = counts.get(SYNC_TICKET_TYPES.complete) ?? 0;
+  const leftHalves = halves.filter((half) => half.side === SyncTicketSide.LEFT);
+  const rightHalves = halves.filter((half) => half.side === SyncTicketSide.RIGHT);
+  const usableLeft = leftHalves.filter((half) => half.generatedByPlayerId !== player.id);
+  const usableRight = rightHalves.filter((half) => half.generatedByPlayerId !== player.id);
 
   return (
     <div className="space-y-8">
@@ -61,19 +75,19 @@ export default async function DesafioSincronizadoPage() {
         <div className="grid gap-6 p-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[#FFCB05]">
-              <Sparkles size={14} /> Evento de Combate
+              <Sparkles size={14} /> Arena Sincronizada
             </div>
             <div>
               <h1 className="font-pixel text-lg text-[#FFCB05]">Desafio Sincronizado</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Colete a metade esquerda de fogo e a metade direita de agua, envie metades para outros jogadores quando precisar sincronizar,
-                junte as duas partes e consuma o ticket completo ao confirmar seus bans.
+                Monte tickets com outros jogadores, forme uma dupla e enfrente combates com regras surpresa. Metades geradas por voce
+                precisam circular: voce nao pode usa-las no seu proprio ticket.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <TicketCounter label="Fogo esquerda" count={fireCount} tone="fire" />
-              <TicketCounter label="Agua direita" count={waterCount} tone="water" />
-              <TicketCounter label="Completo" count={completeCount} tone="complete" />
+              <TicketCounter label="Esquerda" count={leftHalves.length} tone="fire" />
+              <TicketCounter label="Direita" count={rightHalves.length} tone="water" />
+              <TicketCounter label="Completos" count={tickets.length} tone="complete" />
             </div>
           </div>
           <div className="relative min-h-[240px]">
@@ -89,126 +103,204 @@ export default async function DesafioSincronizadoPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        {SYNC_TICKET_ITEMS.map((item) => (
-          <div key={item.type} className="rounded-2xl border border-border bg-card p-4">
-            <div className="relative h-56 rounded-xl bg-slate-950/60">
-              <Image src={item.imageUrl} alt={item.name} fill sizes="320px" className="object-contain p-3" />
-            </div>
-            <div className="mt-4">
-              <p className="text-sm font-bold text-slate-100">{item.name}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-400">{item.description}</p>
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Sparkles size={18} className="text-[#FFCB05]" />
-            <h2 className="font-semibold text-slate-100">Juntar ticket completo</h2>
-          </div>
-          <p className="text-sm text-slate-400">
-            Consome 1 metade de fogo e 1 metade de agua para criar 1 ticket completo. O ticket completo e o item consumido para entrar no evento.
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <Ticket size={18} className="text-[#FFCB05]" />
+          <h2 className="font-semibold text-slate-100">Minhas metades</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-400">
+          Metades nao podem ser vendidas. Elas so circulam por presente/envio direto. A origem sempre fica gravada.
+        </p>
+        {halves.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-slate-500">
+            Voce ainda nao possui metades. Elas podem cair em Arena, expedicoes, reciclagem e vitorias TCG validadas.
           </p>
-          <form action={async () => {
-            "use server";
-            await combineSyncTicketsAction();
-          }} className="mt-4">
-            <button
-              disabled={fireCount < 1 || waterCount < 1}
-              className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Juntar fogo + agua
-            </button>
-          </form>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Send size={18} className="text-cyan-300" />
-            <h2 className="font-semibold text-slate-100">Enviar para jogador</h2>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {halves.map((half) => (
+              <div key={half.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
+                <div className="flex gap-3">
+                  <Image src={getSideImage(half.side)} alt={getSideLabel(half.side)} width={72} height={96} className="h-24 w-16 object-contain" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-100">{getSideLabel(half.side)}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Gerada por: <span className="text-slate-200">{half.generatedByPlayer.displayName}</span>
+                    </p>
+                    <p className="text-xs text-slate-500">Origem: {half.sourceAction}</p>
+                    {half.generatedByPlayerId === player.id && (
+                      <p className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 px-2 py-1 text-xs text-red-200">
+                        Voce gerou esta metade. Envie para outro jogador; voce nao pode usa-la.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <form action={async (formData) => {
+                  "use server";
+                  await transferSyncTicketHalfAction(formData);
+                }} className="mt-3 flex gap-2">
+                  <input type="hidden" name="halfId" value={half.id} />
+                  <select name="targetPlayerId" className="min-w-0 flex-1 rounded-lg border border-border bg-slate-950 px-2 py-2 text-xs text-slate-100">
+                    {players.map((target) => (
+                      <option key={target.id} value={target.id}>
+                        {target.displayName}{target.ptcglNick ? ` (${target.ptcglNick})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100">
+                    <Send size={13} /> Enviar
+                  </button>
+                </form>
+              </div>
+            ))}
           </div>
-          <form action={async (formData) => {
-            "use server";
-            await transferSyncTicketAction(formData);
-          }} className="space-y-3">
-            <select name="ticketType" className="w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100">
-              <option value={SYNC_TICKET_TYPES.fireLeft}>Ticket Esquerda de Fogo</option>
-              <option value={SYNC_TICKET_TYPES.waterRight}>Ticket Direita de Agua</option>
-              <option value={SYNC_TICKET_TYPES.complete}>Ticket Completo</option>
-            </select>
-            <select name="targetPlayerId" className="w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100">
-              {players.map((target) => (
-                <option key={target.id} value={target.id}>
-                  {target.displayName}{target.ptcglNick ? ` (${target.ptcglNick})` : ""}
-                </option>
-              ))}
-            </select>
-            <input name="quantity" type="number" min={1} max={20} defaultValue={1} className="w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-            <button className="w-full rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-100">
-              Enviar ticket
-            </button>
-          </form>
-        </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
-          <ShieldBan size={18} className="text-red-300" />
-          <h2 className="font-semibold text-slate-100">Confirmar bans e consumir ticket</h2>
+          <Sparkles size={18} className="text-[#FFCB05]" />
+          <h2 className="font-semibold text-slate-100">Montar ticket completo</h2>
         </div>
         <p className="text-sm text-slate-400">
-          Preencha os 3 bans antes de iniciar. Ao confirmar, 1 ticket completo e consumido e a entrada fica registrada no seu historico do evento.
+          Escolha uma metade esquerda e uma direita. As duas precisam ter sido geradas por jogadores diferentes e nenhuma pode ter sido gerada por voce.
         </p>
         <form action={async (formData) => {
           "use server";
-          await consumeSyncTicketAction(formData);
-        }} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-          <input name="ban1" placeholder="Ban 1" className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          <input name="ban2" placeholder="Ban 2" className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          <input name="ban3" placeholder="Ban 3" className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          <button disabled={completeCount < 1} className="rounded-xl bg-red-400 px-4 py-2 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
-            Consumir
+          await combineSyncTicketsAction(formData);
+        }} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+          <select name="leftHalfId" className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            {usableLeft.map((half) => (
+              <option key={half.id} value={half.id}>
+                Esquerda - gerada por {half.generatedByPlayer.displayName}
+              </option>
+            ))}
+          </select>
+          <select name="rightHalfId" className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            {usableRight.map((half) => (
+              <option key={half.id} value={half.id}>
+                Direita - gerada por {half.generatedByPlayer.displayName}
+              </option>
+            ))}
+          </select>
+          <button disabled={usableLeft.length < 1 || usableRight.length < 1} className="rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
+            Montar
           </button>
         </form>
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="font-semibold text-slate-100">Historico recente</h2>
+        <div className="mb-4 flex items-center gap-2">
+          <ShieldBan size={18} className="text-red-300" />
+          <h2 className="font-semibold text-slate-100">Meus tickets completos</h2>
+        </div>
+        {tickets.length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhum ticket completo montado ainda.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {tickets.map((ticket) => (
+              <div key={ticket.id} className="rounded-xl border border-[#FFCB05]/20 bg-slate-950/60 p-4">
+                <div className="flex gap-3">
+                  <Image src="/events/desafio-sincronizado/ticket-completo-agua-fogo.png" alt="Ticket completo" width={88} height={120} className="h-28 w-20 object-contain" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[#FFCB05]">Ticket completo</p>
+                    <p className="mt-1 text-xs text-slate-400">Status: {ticket.status}</p>
+                    <p className="mt-2 text-xs text-red-200">
+                      Bans da sala: {ticket.bannedUserA.displayName} e {ticket.bannedUserB.displayName}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Metades: {ticket.leftHalf.generatedByPlayer.displayName} + {ticket.rightHalf.generatedByPlayer.displayName}
+                    </p>
+                  </div>
+                </div>
+                <form action={async () => {
+                  "use server";
+                  await reserveSyncTicketAction(ticket.id);
+                }} className="mt-3">
+                  <button disabled={ticket.status !== "AVAILABLE"} className="w-full rounded-lg border border-[#FFCB05]/40 px-3 py-2 text-xs font-bold text-[#FFCB05] disabled:cursor-not-allowed disabled:opacity-40">
+                    Reservar para entrada futura
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="font-semibold text-slate-100">Entradas consumidas antigas</h2>
+        <p className="mt-1 text-xs text-slate-500">Mantido apenas para compatibilidade com registros criados antes da regra completa do PDF.</p>
         <div className="mt-4 space-y-2">
           {entries.length === 0 ? (
-            <p className="text-sm text-slate-500">Nenhuma entrada consumida ainda.</p>
-          ) : entries.map((entry) => {
-            const payload = entry.bansJson as { bans?: string[] } | null;
-            return (
-              <div key={entry.id} className="rounded-xl border border-border bg-slate-950/60 p-3 text-sm">
-                <p className="font-semibold text-slate-200">{new Date(entry.consumedAt).toLocaleString("pt-BR")} · {entry.status}</p>
-                <p className="mt-1 text-xs text-slate-400">Bans: {(payload?.bans ?? []).join(", ") || "sem registro"}</p>
-              </div>
-            );
-          })}
+            <p className="text-sm text-slate-500">Nenhuma entrada antiga.</p>
+          ) : entries.map((entry) => (
+            <div key={entry.id} className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-400">
+              {new Date(entry.consumedAt).toLocaleString("pt-BR")} - {entry.status}
+            </div>
+          ))}
         </div>
       </section>
 
       {admin && (
         <section className="rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-5">
           <h2 className="font-semibold text-[#FFCB05]">Ferramentas admin de teste</h2>
+          <p className="mt-1 text-xs text-slate-400">Gera metade com voce como criador. Pela regra oficial, voce precisara enviar essa metade para outro jogador.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <form action={async () => {
               "use server";
-              await grantDebugSyncTicketAction(SYNC_TICKET_TYPES.fireLeft);
+              await grantDebugSyncHalfAction("LEFT");
             }}>
-              <button className="inline-flex items-center gap-2 rounded-lg border border-orange-400/50 px-3 py-2 text-xs font-bold text-orange-200"><Flame size={14} /> Gerar fogo</button>
+              <button className="inline-flex items-center gap-2 rounded-lg border border-orange-400/50 px-3 py-2 text-xs font-bold text-orange-200"><Flame size={14} /> Gerar esquerda</button>
             </form>
             <form action={async () => {
               "use server";
-              await grantDebugSyncTicketAction(SYNC_TICKET_TYPES.waterRight);
+              await grantDebugSyncHalfAction("RIGHT");
             }}>
-              <button className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-bold text-cyan-100"><Waves size={14} /> Gerar agua</button>
+              <button className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-bold text-cyan-100"><Waves size={14} /> Gerar direita</button>
             </form>
           </div>
+        </section>
+      )}
+
+      {admin && (
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-semibold text-slate-100">Configuração de drops</h2>
+          <form action={updateSyncChallengeConfigAction} className="mt-4 space-y-4">
+            <div className="grid gap-2 md:grid-cols-3">
+              <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
+                <input name="ticketsEnabled" type="checkbox" defaultChecked={config.ticketsEnabled} className="mr-2" />
+                Sistema ativo
+              </label>
+              <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
+                <input name="dropFromPve" type="checkbox" defaultChecked={config.dropFromPve} className="mr-2" />
+                Drop PvE
+              </label>
+              <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
+                <input name="dropFromPvp" type="checkbox" defaultChecked={config.dropFromPvp} className="mr-2" />
+                Drop PvP
+              </label>
+              <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
+                <input name="dropFromExpedition" type="checkbox" defaultChecked={config.dropFromExpedition} className="mr-2" />
+                Drop expedição
+              </label>
+              <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
+                <input name="dropFromCraftingDustRecycle" type="checkbox" defaultChecked={config.dropFromCraftingDustRecycle} className="mr-2" />
+                Drop reciclagem
+              </label>
+              <label className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-300">
+                <input name="dropFromTcgMatch" type="checkbox" defaultChecked={config.dropFromTcgMatch} className="mr-2" />
+                Drop vitória TCG
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <ChanceInput name="pveDropChance" label="PvE (%)" value={config.pveDropChance} />
+              <ChanceInput name="pvpDropChance" label="PvP (%)" value={config.pvpDropChance} />
+              <ChanceInput name="expedition3hDropChance" label="Expedição 3h (%)" value={config.expedition3hDropChance} />
+              <ChanceInput name="expedition6hDropChance" label="Expedição 6h (%)" value={config.expedition6hDropChance} />
+              <ChanceInput name="recycleDropChance" label="Reciclagem 6 mascotes (%)" value={config.recycleDropChance} />
+              <ChanceInput name="tcgWinDropChance" label="Vitória TCG validada (%)" value={config.tcgWinDropChance} />
+            </div>
+            <button className="rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-950">Salvar configuração</button>
+          </form>
         </section>
       )}
     </div>
@@ -226,5 +318,22 @@ function TicketCounter({ label, count, tone }: { label: string; count: number; t
       <p className="text-xs uppercase tracking-widest opacity-70">{label}</p>
       <p className="mt-1 text-2xl font-black">{count}</p>
     </div>
+  );
+}
+
+function ChanceInput({ name, label, value }: { name: string; label: string; value: number }) {
+  return (
+    <label className="text-xs text-slate-400">
+      {label}
+      <input
+        name={name}
+        type="number"
+        min={0}
+        max={100}
+        step={0.1}
+        defaultValue={Math.round(value * 1000) / 10}
+        className="mt-1 w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100"
+      />
+    </label>
   );
 }

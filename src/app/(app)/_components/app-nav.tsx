@@ -39,7 +39,7 @@ const mainLinks = [
 const combatLinks = [
   { href: "/arena-z", label: "Arena Z", icon: Swords, adminOnly: false },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
-  { href: "/desafio-sincronizado", label: "Desafio Sincronizado", icon: Ticket, adminOnly: false }
+  { href: "/desafio-sincronizado", label: "Arena Sincronizada", icon: Ticket, adminOnly: false }
 ];
 
 const rankingLinks = [

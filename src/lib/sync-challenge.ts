@@ -1,4 +1,4 @@
-import { Prisma, ShopItemRarity } from "@prisma/client";
+import { Prisma, ShopItemRarity, SyncTicketSide } from "@prisma/client";
 
 export const SYNC_TICKET_TYPES = {
   fireLeft: "SYNC_TICKET_FIRE_LEFT",
@@ -6,13 +6,20 @@ export const SYNC_TICKET_TYPES = {
   complete: "SYNC_TICKET_COMPLETE",
 } as const;
 
-export type SyncTicketType = typeof SYNC_TICKET_TYPES[keyof typeof SYNC_TICKET_TYPES];
+export type SyncTicketDropSource =
+  | "arena-pve"
+  | "arena-pvp"
+  | "expedition-3h"
+  | "expedition-6h"
+  | "crafting-dust-recycle"
+  | "tcg-match-win";
 
 export const SYNC_TICKET_ITEMS = [
   {
     type: SYNC_TICKET_TYPES.fireLeft,
-    name: "Ticket Esquerda de Fogo",
-    description: "Metade esquerda do Desafio Sincronizado. Junte com a metade direita de agua para formar um ticket VIP completo.",
+    side: SyncTicketSide.LEFT,
+    name: "Metade Ticket de Desafio - Esquerda",
+    description: "Metade esquerda de fogo. Nao pode ser usada por quem gerou; envie para outro jogador.",
     imageUrl: "/events/desafio-sincronizado/ticket-esquerda-fogo.png",
     rarity: ShopItemRarity.EPIC,
     price: 0,
@@ -20,8 +27,9 @@ export const SYNC_TICKET_ITEMS = [
   },
   {
     type: SYNC_TICKET_TYPES.waterRight,
-    name: "Ticket Direita de Agua",
-    description: "Metade direita do Desafio Sincronizado. Junte com a metade esquerda de fogo para formar um ticket VIP completo.",
+    side: SyncTicketSide.RIGHT,
+    name: "Metade Ticket de Desafio - Direita",
+    description: "Metade direita de agua. Nao pode ser usada por quem gerou; envie para outro jogador.",
     imageUrl: "/events/desafio-sincronizado/ticket-direita-agua.png",
     rarity: ShopItemRarity.EPIC,
     price: 0,
@@ -29,14 +37,24 @@ export const SYNC_TICKET_ITEMS = [
   },
   {
     type: SYNC_TICKET_TYPES.complete,
-    name: "Ticket Completo Agua e Fogo",
-    description: "Entrada completa do Desafio Sincronizado. Consumido ao confirmar os bans e iniciar uma tentativa do evento.",
+    name: "Ticket Completo de Desafio",
+    description: "Ticket completo formado por uma metade esquerda e uma direita. Bane automaticamente os dois geradores da sala criada.",
     imageUrl: "/events/desafio-sincronizado/ticket-completo-agua-fogo.png",
     rarity: ShopItemRarity.LEGENDARY,
     price: 0,
     sortOrder: 912,
   },
 ] as const;
+
+export function getSideImage(side: SyncTicketSide) {
+  return side === SyncTicketSide.LEFT
+    ? "/events/desafio-sincronizado/ticket-esquerda-fogo.png"
+    : "/events/desafio-sincronizado/ticket-direita-agua.png";
+}
+
+export function getSideLabel(side: SyncTicketSide) {
+  return side === SyncTicketSide.LEFT ? "Esquerda de Fogo" : "Direita de Agua";
+}
 
 export async function ensureSyncChallengeItems(tx: Prisma.TransactionClient) {
   const items = [];
@@ -62,37 +80,156 @@ export async function ensureSyncChallengeItems(tx: Prisma.TransactionClient) {
   return items;
 }
 
-export async function getSyncTicketItem(tx: Prisma.TransactionClient, type: SyncTicketType) {
-  const items = await ensureSyncChallengeItems(tx);
-  return items.find((item) => item.type === type);
+export async function getSyncChallengeConfig(tx: Prisma.TransactionClient) {
+  const existing = await tx.syncChallengeConfig.findUnique({ where: { id: "singleton" } });
+  if (existing) return existing;
+  return tx.syncChallengeConfig.create({ data: { id: "singleton" } });
 }
 
-export async function grantSyncTicket(
+function chanceForSource(config: Awaited<ReturnType<typeof getSyncChallengeConfig>>, source: SyncTicketDropSource) {
+  if (!config.ticketsEnabled) return 0;
+  switch (source) {
+    case "arena-pve": return config.dropFromPve ? config.pveDropChance : 0;
+    case "arena-pvp": return config.dropFromPvp ? config.pvpDropChance : 0;
+    case "expedition-3h": return config.dropFromExpedition ? config.expedition3hDropChance : 0;
+    case "expedition-6h": return config.dropFromExpedition ? config.expedition6hDropChance : 0;
+    case "crafting-dust-recycle": return config.dropFromCraftingDustRecycle ? config.recycleDropChance : 0;
+    case "tcg-match-win": return config.dropFromTcgMatch ? config.tcgWinDropChance : 0;
+  }
+}
+
+export async function grantSyncTicketHalf(
   tx: Prisma.TransactionClient,
   playerId: string,
-  type: SyncTicketType,
-  quantity = 1,
+  sourceAction: SyncTicketDropSource | string,
+  side: SyncTicketSide = Math.random() < 0.5 ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT,
 ) {
-  if (quantity < 1) return;
-  const item = await getSyncTicketItem(tx, type);
-  if (!item) throw new Error("Item do Desafio Sincronizado nao encontrado.");
-  await tx.playerInventory.upsert({
-    where: { playerId_itemId: { playerId, itemId: item.id } },
-    update: { quantity: { increment: quantity } },
-    create: { playerId, itemId: item.id, quantity },
+  const half = await tx.syncTicketHalf.create({
+    data: {
+      side,
+      ownerId: playerId,
+      generatedByPlayerId: playerId,
+      sourceAction,
+      status: "AVAILABLE",
+    },
+    include: {
+      owner: { select: { displayName: true } },
+      generatedByPlayer: { select: { displayName: true } },
+    },
   });
+  await tx.auditLog.create({
+    data: {
+      entityType: "SyncTicketHalf",
+      entityId: half.id,
+      action: "GENERATED",
+      after: { side, playerId, sourceAction },
+    },
+  }).catch(() => null);
+  return half;
 }
 
 export async function maybeDropSyncTicket(
   tx: Prisma.TransactionClient,
   playerId: string,
-  source: "arena-pve" | "arena-pvp",
+  source: SyncTicketDropSource,
 ) {
-  const roll = Math.random();
-  const chance = source === "arena-pvp" ? 0.12 : 0.08;
-  if (roll >= chance) return null;
-
-  const type = Math.random() < 0.5 ? SYNC_TICKET_TYPES.fireLeft : SYNC_TICKET_TYPES.waterRight;
-  await grantSyncTicket(tx, playerId, type, 1);
-  return type;
+  const config = await getSyncChallengeConfig(tx);
+  const chance = chanceForSource(config, source);
+  if (chance <= 0 || Math.random() >= chance) return null;
+  return grantSyncTicketHalf(tx, playerId, source);
 }
+
+export async function transferSyncTicketHalf(
+  tx: Prisma.TransactionClient,
+  input: { halfId: string; fromPlayerId: string; toPlayerId: string },
+) {
+  if (input.fromPlayerId === input.toPlayerId) throw new Error("Escolha outro jogador.");
+  const half = await tx.syncTicketHalf.findUnique({
+    where: { id: input.halfId },
+    include: { generatedByPlayer: { select: { displayName: true } } },
+  });
+  if (!half || half.ownerId !== input.fromPlayerId) throw new Error("Metade nao encontrada.");
+  if (half.status !== "AVAILABLE" && half.status !== "SENT") throw new Error("Esta metade nao pode ser enviada.");
+
+  const target = await tx.player.findUnique({ where: { id: input.toPlayerId }, select: { id: true, displayName: true } });
+  if (!target) throw new Error("Jogador de destino nao encontrado.");
+
+  const updated = await tx.syncTicketHalf.update({
+    where: { id: half.id },
+    data: { ownerId: target.id, status: "SENT", sentAt: new Date() },
+    include: { generatedByPlayer: { select: { displayName: true } } },
+  });
+  await tx.playerGift.create({
+    data: {
+      playerId: target.id,
+      type: "CUSTOM",
+      title: "Metade de ticket recebida",
+      description: `Voce recebeu uma metade ${getSideLabel(updated.side)} gerada por ${updated.generatedByPlayer.displayName}.`,
+      payload: { rewardKind: "SYNC_TICKET_HALF", halfId: updated.id, side: updated.side },
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      entityType: "SyncTicketHalf",
+      entityId: half.id,
+      action: "SENT",
+      before: { ownerId: input.fromPlayerId },
+      after: { ownerId: target.id },
+    },
+  }).catch(() => null);
+  return updated;
+}
+
+export async function combineSyncTicketHalves(
+  tx: Prisma.TransactionClient,
+  input: { playerId: string; leftHalfId: string; rightHalfId: string },
+) {
+  if (input.leftHalfId === input.rightHalfId) throw new Error("Escolha duas metades diferentes.");
+  const [left, right] = await Promise.all([
+    tx.syncTicketHalf.findUnique({ where: { id: input.leftHalfId } }),
+    tx.syncTicketHalf.findUnique({ where: { id: input.rightHalfId } }),
+  ]);
+  if (!left || !right) throw new Error("Metades nao encontradas.");
+  if (left.ownerId !== input.playerId || right.ownerId !== input.playerId) throw new Error("Voce precisa possuir as duas metades.");
+  if (left.status !== "AVAILABLE" && left.status !== "SENT") throw new Error("A metade esquerda nao esta disponivel.");
+  if (right.status !== "AVAILABLE" && right.status !== "SENT") throw new Error("A metade direita nao esta disponivel.");
+  if (left.side !== SyncTicketSide.LEFT || right.side !== SyncTicketSide.RIGHT) throw new Error("O ticket precisa de uma metade esquerda e uma direita.");
+  if (left.generatedByPlayerId === input.playerId || right.generatedByPlayerId === input.playerId) {
+    throw new Error("Voce nao pode usar metades geradas por voce mesmo.");
+  }
+  if (left.generatedByPlayerId === right.generatedByPlayerId) {
+    throw new Error("As duas metades precisam ter geradores diferentes.");
+  }
+
+  const now = new Date();
+  const ticket = await tx.syncTicket.create({
+    data: {
+      ownerId: input.playerId,
+      leftHalfId: left.id,
+      rightHalfId: right.id,
+      bannedUserAId: left.generatedByPlayerId,
+      bannedUserBId: right.generatedByPlayerId,
+      status: "AVAILABLE",
+    },
+  });
+  await tx.syncTicketHalf.updateMany({
+    where: { id: { in: [left.id, right.id] } },
+    data: { status: "COMBINED", combinedAt: now },
+  });
+  await tx.auditLog.create({
+    data: {
+      entityType: "SyncTicket",
+      entityId: ticket.id,
+      action: "COMBINED",
+      after: {
+        ownerId: input.playerId,
+        leftHalfId: left.id,
+        rightHalfId: right.id,
+        bannedUserAId: left.generatedByPlayerId,
+        bannedUserBId: right.generatedByPlayerId,
+      },
+    },
+  }).catch(() => null);
+  return ticket;
+}
+
