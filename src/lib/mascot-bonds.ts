@@ -56,6 +56,18 @@ export function relationTier(score: number) {
   return "Quase Irmaos";
 }
 
+export function legacyRelationScore(type: "FRIEND" | "RIVAL", interactionCount: number) {
+  if (type === "FRIEND") return Math.min(94, 15 + Math.max(1, interactionCount) * 5);
+  return Math.max(-79, -15 - Math.max(1, interactionCount) * 8);
+}
+
+export function effectiveRelationScore(relation: { relationshipScore?: number | null; type: "FRIEND" | "RIVAL"; interactionCount: number }) {
+  if (typeof relation.relationshipScore === "number" && relation.relationshipScore !== 0) {
+    return relation.relationshipScore;
+  }
+  return legacyRelationScore(relation.type, relation.interactionCount);
+}
+
 export function relationTypeFromScore(score: number): "FRIEND" | "RIVAL" {
   return score >= 15 ? "FRIEND" : "RIVAL";
 }
@@ -293,13 +305,13 @@ export async function getBondCombatModifier(mascotIds: string[]) {
   if (mascotIds.length < 2) return new Map<string, number>();
   const relations = await prisma.mascotRelation.findMany({
     where: { mascotAId: { in: mascotIds }, mascotBId: { in: mascotIds } },
-    select: { mascotAId: true, mascotBId: true, relationshipScore: true, specialBondType: true },
+    select: { mascotAId: true, mascotBId: true, relationshipScore: true, specialBondType: true, type: true, interactionCount: true },
     take: mascotIds.length * 8,
   }).catch(() => []);
   const modifier = new Map<string, number>();
   for (const id of mascotIds) modifier.set(id, 1);
   for (const rel of relations) {
-    const score = rel.relationshipScore ?? (rel.specialBondType === "NEMESIS" ? -80 : 0);
+    const score = effectiveRelationScore(rel);
     const delta = score >= 80 ? 0.05 : score >= 60 ? 0.035 : score >= 35 ? 0.02 : score <= -80 ? -0.04 : score <= -60 ? -0.025 : 0;
     if (delta !== 0) modifier.set(rel.mascotAId, Math.max(0.9, Math.min(1.08, (modifier.get(rel.mascotAId) ?? 1) + delta)));
   }

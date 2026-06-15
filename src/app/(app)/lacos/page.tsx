@@ -1,11 +1,13 @@
 import { redirect } from "next/navigation";
-import { Clock, Heart, ScrollText, Swords, Users } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, Clock, Heart, ScrollText, Swords, Users } from "lucide-react";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import {
   BOND_BEHAVIOR_LABEL,
   autoResolveExpiredBondEvents,
+  effectiveRelationScore,
   normalizeBondOptions,
   relationTier,
   type BondBehavior,
@@ -41,7 +43,11 @@ function withAvailability(option: BondOption, counts: { food: number; sweet: num
   };
 }
 
-export default async function LacosPage() {
+export default async function LacosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ relPage?: string }>;
+}) {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
 
@@ -52,8 +58,11 @@ export default async function LacosPage() {
   if (!player) redirect("/dashboard");
 
   await autoResolveExpiredBondEvents(player.id);
+  const params = await searchParams;
+  const relPage = Math.max(1, Number(params.relPage ?? "1") || 1);
+  const relationsPerPage = 8;
 
-  const [pendingEvents, relations, logs, foods, wallet] = await Promise.all([
+  const [pendingEvents, relations, relationCount, logs, foods, wallet] = await Promise.all([
     prisma.mascotSocialEvent.findMany({
       where: { ownerId: player.id, status: "PENDING" },
       orderBy: { createdAt: "desc" },
@@ -66,7 +75,8 @@ export default async function LacosPage() {
     prisma.mascotRelation.findMany({
       where: { mascotA: { playerId: player.id } },
       orderBy: [{ relationshipScore: "desc" }, { updatedAt: "desc" }],
-      take: 20,
+      skip: (relPage - 1) * relationsPerPage,
+      take: relationsPerPage,
       select: {
         id: true,
         relationshipScore: true,
@@ -77,6 +87,7 @@ export default async function LacosPage() {
         mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
       },
     }).catch(() => []),
+    prisma.mascotRelation.count({ where: { mascotA: { playerId: player.id } } }).catch(() => 0),
     prisma.mascotSocialDecisionLog.findMany({
       where: {
         OR: [
@@ -170,28 +181,58 @@ export default async function LacosPage() {
 
       <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <div className="space-y-3">
-          <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Users size={16} /> Relações Atuais</h2>
-          <div className="rounded-2xl border border-border bg-slate-950/50 divide-y divide-border/50">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Users size={16} /> Relações Atuais</h2>
+            <span className="rounded-full border border-border bg-slate-950 px-2.5 py-1 text-[11px] text-slate-400">{relationCount} laços</span>
+          </div>
+          <div className="rounded-2xl border border-border bg-slate-950/50 p-3">
             {relations.length === 0 ? (
               <p className="p-5 text-sm text-slate-500">Seus mascotes ainda nao possuem laços registrados.</p>
-            ) : relations.map((rel) => {
-              const a = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
-              const b = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
-              return (
-                <div key={rel.id} className="flex items-center justify-between gap-3 p-3">
-                  <div className="min-w-0 text-sm">
-                    <p className="font-semibold text-white">{a} {"->"} {b}</p>
-                    <p className="text-xs text-slate-500">Dono: {rel.mascotB.player.displayName} | {rel.interactionCount} interacoes</p>
-                  </div>
-                  <div className="text-right">
-                    <p className={rel.relationshipScore >= 15 ? "text-green-300" : rel.relationshipScore <= -15 ? "text-red-300" : "text-slate-300"}>
-                      {relationTier(rel.relationshipScore)}
-                    </p>
-                    <p className="text-xs text-slate-500">{rel.relationshipScore}</p>
-                  </div>
-                </div>
-              );
-            })}
+            ) : (
+              <div className="grid gap-2">
+                {relations.map((rel) => {
+                  const a = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
+                  const b = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+                  const score = effectiveRelationScore(rel);
+                  const friendly = score >= 15;
+                  const hostile = score <= -15;
+                  return (
+                    <div key={rel.id} className={`rounded-xl border p-3 ${friendly ? "border-green-500/25 bg-green-500/5" : hostile ? "border-red-500/25 bg-red-500/5" : "border-border bg-slate-900/40"}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="flex -space-x-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={getSpriteUrl(rel.mascotA.pokemonId)} alt={a} className="h-10 w-10 rounded-full border border-slate-700 bg-slate-950 object-contain" style={{ imageRendering: "pixelated" }} />
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={getSpriteUrl(rel.mascotB.pokemonId)} alt={b} className="h-10 w-10 rounded-full border border-slate-700 bg-slate-950 object-contain" style={{ imageRendering: "pixelated" }} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">{a} <span className="text-slate-500">com</span> {b}</p>
+                          <p className="truncate text-[11px] text-slate-500">Dono: {rel.mascotB.player.displayName} | {rel.interactionCount} interações</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={friendly ? "text-green-300" : hostile ? "text-red-300" : "text-slate-300"}>{relationTier(score)}</p>
+                          <p className="text-xs text-slate-500">{score > 0 ? "+" : ""}{score}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                        <div className={`h-full ${friendly ? "bg-green-400" : hostile ? "bg-red-400" : "bg-slate-500"}`} style={{ width: `${Math.min(100, Math.max(0, score + 100) / 2)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {relationCount > relationsPerPage && (
+              <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3 text-xs text-slate-400">
+                <Link href={`/lacos?relPage=${Math.max(1, relPage - 1)}`} className={`inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 ${relPage <= 1 ? "pointer-events-none opacity-40" : "hover:border-[#FFCB05]/40 hover:text-[#FFCB05]"}`}>
+                  <ChevronLeft size={12} /> Anterior
+                </Link>
+                <span>Página {relPage} de {Math.max(1, Math.ceil(relationCount / relationsPerPage))}</span>
+                <Link href={`/lacos?relPage=${Math.min(Math.max(1, Math.ceil(relationCount / relationsPerPage)), relPage + 1)}`} className={`inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 ${relPage >= Math.ceil(relationCount / relationsPerPage) ? "pointer-events-none opacity-40" : "hover:border-[#FFCB05]/40 hover:text-[#FFCB05]"}`}>
+                  Próxima <ChevronRight size={12} />
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
