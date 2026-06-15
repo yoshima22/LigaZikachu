@@ -62,8 +62,9 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
 
   // ── Diário ─────────────────────────────────────────────────────────────────
   if (tab === "diary") {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const events = await prisma.mascotEvent.findMany({
-      where: { mascot: PLAYER_FILTER },
+      where: { mascot: PLAYER_FILTER, createdAt: { gte: sevenDaysAgo } },
       orderBy: { createdAt: "desc" },
       take: 25,
       select: {

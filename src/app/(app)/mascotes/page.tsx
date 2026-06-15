@@ -102,6 +102,7 @@ async function fetchMascotPageData(playerId: string) {
         },
       },
       orderBy: [{ level: "desc" }, { id: "asc" }],
+      take: 200,
     }),
     prisma.mascotEgg.findMany({
       where: { playerId, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },

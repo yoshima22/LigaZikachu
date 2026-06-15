@@ -191,7 +191,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           botName: true, levelBandMin: true, levelBandMax: true,
           winnerPlayerId: true, loserPlayerId: true,
           lootResult: true, injuredMascotIds: true,
-          seenByDefender: true, createdAt: true,
+          createdAt: true,
           attackerPlayer: { select: { displayName: true, ptcglNick: true } },
           defenderPlayer: { select: { displayName: true, ptcglNick: true } },
         },
@@ -207,7 +207,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           botName: true, levelBandMin: true, levelBandMax: true,
           winnerPlayerId: true, loserPlayerId: true,
           lootResult: true, injuredMascotIds: true,
-          seenByDefender: true, createdAt: true,
+          createdAt: true,
           attackerPlayer: { select: { displayName: true, ptcglNick: true } },
           defenderPlayer: { select: { displayName: true, ptcglNick: true } },
         },
@@ -239,22 +239,21 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   ]);
 
   // Mascotes feridos de jogadores aliados (amizade entre mascotes)
-  const friendPlayerIds = await prisma.mascotRelation.findMany({
-    where: {
-      type: "FRIEND",
-      OR: [
-        { mascotA: { playerId: player.id } },
-        { mascotB: { playerId: player.id } },
-      ],
-    },
-    select: { mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } },
-    take: 100,
-  }).then(rels => {
+  const friendPlayerIds = await Promise.all([
+    prisma.mascotRelation.findMany({
+      where: { type: "FRIEND", mascotA: { playerId: player.id } },
+      select: { mascotB: { select: { playerId: true } } },
+      take: 50,
+    }),
+    prisma.mascotRelation.findMany({
+      where: { type: "FRIEND", mascotB: { playerId: player.id } },
+      select: { mascotA: { select: { playerId: true } } },
+      take: 50,
+    }),
+  ]).then(([asA, asB]) => {
     const ids = new Set<string>();
-    for (const r of rels) {
-      if (r.mascotA.playerId !== player.id) ids.add(r.mascotA.playerId);
-      if (r.mascotB.playerId !== player.id) ids.add(r.mascotB.playerId);
-    }
+    for (const r of asA) if (r.mascotB.playerId !== player.id) ids.add(r.mascotB.playerId);
+    for (const r of asB) if (r.mascotA.playerId !== player.id) ids.add(r.mascotA.playerId);
     return [...ids];
   }).catch(() => [] as string[]);
 
