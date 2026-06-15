@@ -737,7 +737,6 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
       where: { id: mascotId },
       include: {
         expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
-        events: { orderBy: { createdAt: "desc" }, take: 4 },
         relationsAsA: {
           take: 5,
           include: { mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { id: true, displayName: true } } } } },
@@ -775,7 +774,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
           id: e.id, finishAt: e.finishAt, status: e.status,
           mode: (e.rewardJson as Record<string, unknown> | null)?.mode as string ?? "STANDARD",
         })),
-        events: m.events.map(ev => ({ id: ev.id, emoji: ev.emoji, description: ev.description, createdAt: ev.createdAt })),
+        events: [],
       },
     };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }

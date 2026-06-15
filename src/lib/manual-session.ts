@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { unstable_cache } from "next/cache";
 import { UserStatus } from "@prisma/client";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -16,24 +17,33 @@ export type ManualSessionUser = {
   status: UserStatus;
 };
 
+const getCachedManualSessionByToken = (sessionToken: string) =>
+  unstable_cache(
+    async () => {
+      const session = await prisma.session.findUnique({
+        where: { sessionToken },
+        include: {
+          user: {
+            select: { id: true, email: true, name: true, image: true, role: true, status: true }
+          }
+        }
+      });
+
+      if (!session || session.expires <= new Date()) return null;
+      if (session.user.status === UserStatus.SUSPENDED || session.user.status === UserStatus.REJECTED) return null;
+
+      return session.user;
+    },
+    ["manual-session", sessionToken],
+    { revalidate: 10 },
+  )();
+
 export async function getManualSessionUser(): Promise<ManualSessionUser | null> {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(MANUAL_SESSION_COOKIE)?.value;
   if (!sessionToken) return null;
 
-  const session = await prisma.session.findUnique({
-    where: { sessionToken },
-    include: {
-      user: {
-        select: { id: true, email: true, name: true, image: true, role: true, status: true }
-      }
-    }
-  });
-
-  if (!session || session.expires <= new Date()) return null;
-  if (session.user.status === UserStatus.SUSPENDED || session.user.status === UserStatus.REJECTED) return null;
-
-  return session.user;
+  return getCachedManualSessionByToken(sessionToken);
 }
 
 export function manualSessionCookieOptions(secure: boolean) {

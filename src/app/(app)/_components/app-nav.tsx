@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { getUnreadCountAction } from "../mensagens/actions";
 import Link from "next/link";
 import {
   BarChart3,
@@ -32,8 +30,6 @@ import {
   FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const UNREAD_POLL_MS = 300000;
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },
@@ -101,44 +97,7 @@ type NavLink = {
 export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, bazarAlerts = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; bazarAlerts?: number; playerId?: string }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [liveUnreadDms, setLiveUnreadDms] = useState(unreadDms);
   const rootRef = useRef<HTMLDivElement>(null);
-  const pathname = usePathname();
-
-  useEffect(() => { setLiveUnreadDms(unreadDms); }, [unreadDms]);
-
-  // Refresh unread count whenever user navigates to/from a DM conversation
-  useEffect(() => {
-    if (!playerId) return;
-    getUnreadCountAction().then(setLiveUnreadDms).catch(() => {});
-  }, [pathname, playerId]);
-
-  // Polling leve para o badge de mensagens. O chat em si tem realtime/fallback
-  // próprio; aqui basta manter o menu razoavelmente fresco sem gastar egress
-  // em abas escondidas.
-  useEffect(() => {
-    if (!playerId) return;
-    let disposed = false;
-
-    const poll = async () => {
-      if (document.visibilityState !== "visible") return;
-      const count = await getUnreadCountAction();
-      if (!disposed) setLiveUnreadDms(count);
-    };
-
-    const onVisible = () => { void poll(); };
-    const id = setInterval(poll, UNREAD_POLL_MS);
-    window.addEventListener("focus", onVisible);
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      disposed = true;
-      clearInterval(id);
-      window.removeEventListener("focus", onVisible);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [playerId]);
-
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -214,7 +173,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
           admin={admin}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
-          badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": liveUnreadDms }}
+          badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": unreadDms }}
           tutorialId="nav-perfil"
         />
         {adminLinks
