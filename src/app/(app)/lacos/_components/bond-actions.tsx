@@ -1,9 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useRef } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { createBondEventAction, resolveBondEventAction, updateBondBehaviorAction } from "../actions";
+import { resolveBondEventAction, updateBondBehaviorAction } from "../actions";
 import { BOND_BEHAVIOR_LABEL, type BondBehavior, type BondOption } from "@/lib/mascot-bonds";
 
 export function BehaviorSelect({ value }: { value: BondBehavior }) {
@@ -33,25 +33,57 @@ export function BehaviorSelect({ value }: { value: BondBehavior }) {
   );
 }
 
-export function CreateBondEventButton() {
-  const [pending, startTransition] = useTransition();
+export function RelationsFilter({ defaultSearch, defaultSort }: { defaultSearch: string; defaultSort: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function navigate(search: string, sort: string) {
+    const params = new URLSearchParams();
+    if (search) params.set("relSearch", search);
+    if (sort) params.set("relSort", sort);
+    startTransition(() => router.push(`/lacos?${params.toString()}`));
+  }
+
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => startTransition(async () => {
-        const result = await createBondEventAction();
-        if (result.error) toast.error(result.error);
-        else {
-          toast.success("Um novo evento de laco apareceu.");
-          router.refresh();
-        }
-      })}
-      className="rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-950 hover:bg-[#FFD700] disabled:opacity-50"
-    >
-      {pending ? "Criando..." : "Procurar evento de laco"}
-    </button>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-1 min-w-[180px] items-center gap-1 rounded-xl border border-border bg-slate-950 px-3 py-1.5">
+        <input
+          ref={inputRef}
+          type="text"
+          defaultValue={defaultSearch}
+          placeholder="Filtrar por nome ou dono..."
+          className="flex-1 bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-600"
+          onKeyDown={(e) => e.key === "Enter" && navigate(inputRef.current?.value ?? "", defaultSort)}
+        />
+        <button
+          type="button"
+          onClick={() => navigate(inputRef.current?.value ?? "", defaultSort)}
+          className="text-[10px] text-slate-500 hover:text-[#FFCB05]"
+        >Buscar</button>
+      </div>
+      <button
+        type="button"
+        onClick={() => navigate(defaultSearch, defaultSort === "rival" ? "" : "rival")}
+        className={`rounded-xl border px-3 py-1.5 text-[11px] transition ${defaultSort === "rival" ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-border bg-slate-950 text-slate-400 hover:border-slate-500"}`}
+      >
+        {defaultSort === "rival" ? "↑ Maior rivalidade" : "Rivalidade ↓"}
+      </button>
+      <button
+        type="button"
+        onClick={() => navigate(defaultSearch, defaultSort === "friend" ? "" : "friend")}
+        className={`rounded-xl border px-3 py-1.5 text-[11px] transition ${defaultSort === "friend" ? "border-green-500/40 bg-green-500/10 text-green-300" : "border-border bg-slate-950 text-slate-400 hover:border-slate-500"}`}
+      >
+        {defaultSort === "friend" ? "↑ Maior amizade" : "Amizade ↓"}
+      </button>
+      {(defaultSearch || defaultSort) && (
+        <button
+          type="button"
+          onClick={() => navigate("", "")}
+          className="text-[11px] text-slate-500 hover:text-slate-300"
+        >Limpar</button>
+      )}
+    </div>
   );
 }
 

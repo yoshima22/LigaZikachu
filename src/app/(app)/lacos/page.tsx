@@ -7,13 +7,14 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import {
   BOND_BEHAVIOR_LABEL,
   autoResolveExpiredBondEvents,
+  createBondEventForPlayer,
   effectiveRelationScore,
   normalizeBondOptions,
   relationTier,
   type BondBehavior,
   type BondOption,
 } from "@/lib/mascot-bonds";
-import { BehaviorSelect, CreateBondEventButton, ResolveBondOptionButton } from "./_components/bond-actions";
+import { BehaviorSelect, RelationsFilter, ResolveBondOptionButton } from "./_components/bond-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ function withAvailability(option: BondOption, counts: { food: number; sweet: num
 export default async function LacosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ relPage?: string }>;
+  searchParams: Promise<{ relPage?: string; relSearch?: string; relSort?: string }>;
 }) {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
@@ -58,9 +59,39 @@ export default async function LacosPage({
   if (!player) redirect("/dashboard");
 
   await autoResolveExpiredBondEvents(player.id);
+
+  // Auto-criar evento se inbox estiver vazio
+  const pendingCount = await prisma.mascotSocialEvent.count({
+    where: { ownerId: player.id, status: "PENDING" },
+  }).catch(() => 1);
+  if (pendingCount === 0) {
+    await createBondEventForPlayer(player.id).catch(() => {});
+  }
+
   const params = await searchParams;
   const relPage = Math.max(1, Number(params.relPage ?? "1") || 1);
+  const relSearch = params.relSearch?.trim() ?? "";
+  const relSort = params.relSort ?? "";
   const relationsPerPage = 8;
+
+  const relationsWhere = {
+    mascotA: { playerId: player.id },
+    ...(relSearch ? {
+      OR: [
+        { mascotA: { nickname: { contains: relSearch, mode: "insensitive" as const } } },
+        { mascotB: { nickname: { contains: relSearch, mode: "insensitive" as const } } },
+        { mascotB: { player: { displayName: { contains: relSearch, mode: "insensitive" as const } } } },
+      ],
+    } : {}),
+  };
+
+  const relationsOrderBy =
+    relSort === "rival" ? [{ relationshipScore: "asc" as const }, { updatedAt: "desc" as const }] :
+    relSort === "friend" ? [{ relationshipScore: "desc" as const }, { updatedAt: "desc" as const }] :
+    [{ relationshipScore: "desc" as const }, { updatedAt: "desc" as const }];
+
+  // Egress: logs restritos ao próprio jogador + últimos 7 dias de logs públicos
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60_000);
 
   const [pendingEvents, relations, relationCount, logs, foods, wallet] = await Promise.all([
     prisma.mascotSocialEvent.findMany({
@@ -73,8 +104,8 @@ export default async function LacosPage({
       },
     }).catch(() => []),
     prisma.mascotRelation.findMany({
-      where: { mascotA: { playerId: player.id } },
-      orderBy: [{ relationshipScore: "desc" }, { updatedAt: "desc" }],
+      where: relationsWhere,
+      orderBy: relationsOrderBy,
       skip: (relPage - 1) * relationsPerPage,
       take: relationsPerPage,
       select: {
@@ -87,19 +118,24 @@ export default async function LacosPage({
         mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
       },
     }).catch(() => []),
-    prisma.mascotRelation.count({ where: { mascotA: { playerId: player.id } } }).catch(() => 0),
+    prisma.mascotRelation.count({ where: relationsWhere }).catch(() => 0),
     prisma.mascotSocialDecisionLog.findMany({
       where: {
         OR: [
           { actorPlayerId: player.id },
           { mascotA: { playerId: player.id } },
           { mascotB: { playerId: player.id } },
-          { visibility: "PUBLIC" },
+          { visibility: "PUBLIC", createdAt: { gte: sevenDaysAgo } },
         ],
       },
       orderBy: { createdAt: "desc" },
       take: 20,
-      include: {
+      select: {
+        id: true,
+        optionLabel: true,
+        optionType: true,
+        resolvedBy: true,
+        createdAt: true,
         mascotA: { select: { pokemonId: true, nickname: true } },
         mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
         actorPlayer: { select: { displayName: true } },
@@ -128,7 +164,9 @@ export default async function LacosPage({
               Resolva eventos sociais, fortaleça amizades ou assuma riscos de rivalidade. Opções positivas podem custar recursos; se voce ignorar, o mascote decide sozinho sem gastar seus itens.
             </p>
           </div>
-          <CreateBondEventButton />
+          <div className="rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
+            Eventos aparecem automaticamente
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
@@ -146,13 +184,14 @@ export default async function LacosPage({
         <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Clock size={16} /> Eventos Pendentes</h2>
         {pendingEvents.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-slate-500">
-            Nenhum evento pendente. Procure um evento de laço quando quiser criar uma nova historia entre seus mascotes.
+            Nenhum evento pendente. Novos eventos aparecem automaticamente quando voce visita esta pagina.
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {pendingEvents.map((event) => {
               const nameA = event.mascotA.nickname ?? getPokemonName(event.mascotA.pokemonId);
               const nameB = event.mascotB ? event.mascotB.nickname ?? getPokemonName(event.mascotB.pokemonId) : "Outro mascote";
+              const ownerB = event.mascotB?.player?.displayName;
               const options = normalizeBondOptions(event.optionsJson).map((option) => withAvailability(option, counts));
               return (
                 <article key={event.id} className="rounded-2xl border border-border bg-slate-950/60 p-4">
@@ -161,7 +200,12 @@ export default async function LacosPage({
                     <img src={getSpriteUrl(event.mascotA.pokemonId)} alt={nameA} className="h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
                     <div className="min-w-0">
                       <p className="text-xs uppercase tracking-widest text-[#FFCB05]">{event.title}</p>
-                      <h3 className="font-semibold text-white">{nameA} e {nameB}</h3>
+                      <h3 className="font-semibold text-white">
+                        {nameA} e {nameB}
+                        {ownerB && ownerB !== player.displayName && (
+                          <span className="ml-1 text-xs font-normal text-slate-500">({ownerB})</span>
+                        )}
+                      </h3>
                       <p className="text-[11px] text-slate-500">Tempo para responder: {timeLeft(event.expiresAt)}</p>
                     </div>
                   </div>
@@ -185,6 +229,7 @@ export default async function LacosPage({
             <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Users size={16} /> Relações Atuais</h2>
             <span className="rounded-full border border-border bg-slate-950 px-2.5 py-1 text-[11px] text-slate-400">{relationCount} laços</span>
           </div>
+          <RelationsFilter defaultSearch={relSearch} defaultSort={relSort} />
           <div className="rounded-2xl border border-border bg-slate-950/50 p-3">
             {relations.length === 0 ? (
               <p className="p-5 text-sm text-slate-500">Seus mascotes ainda nao possuem laços registrados.</p>
