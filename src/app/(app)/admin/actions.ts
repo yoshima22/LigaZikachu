@@ -241,11 +241,13 @@ export async function sendTestDeckReminder(
 
 // ── Envio de item para TODOS os jogadores ─────────────────────────────────────
 export async function sendItemToAllPlayers(
-  itemId: string
+  itemId: string,
+  quantity = 1,
 ): Promise<{ sent: number; skipped: number; error?: string }> {
   try {
     await requireAdmin();
 
+    const qty = Math.max(1, Math.floor(quantity));
     const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
     if (!item) return { sent: 0, skipped: 0, error: "Item não encontrado." };
 
@@ -262,41 +264,62 @@ export async function sendItemToAllPlayers(
     const BUFF_TYPES = ["MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"];
 
     const itemName = item.name;
-    // Monta o payload do gift baseado no tipo do item
     function buildGiftPayload(type: string): Record<string, unknown> | null {
       if (EGG_MAP[type]) return { rewardKind: "MASCOT_EGG", eggType: EGG_MAP[type], origin: "Enviado pelo Admin", rewardLabel: itemName };
-      if (type === "MASCOT_FOOD")  return { rewardKind: "MASCOT_FOOD", foodType: "FOOD",  quantity: 1, rewardLabel: itemName };
-      if (type === "MASCOT_SWEET") return { rewardKind: "MASCOT_FOOD", foodType: "SWEET", quantity: 1, rewardLabel: itemName };
-      if (BUFF_TYPES.includes(type)) return { rewardKind: "MASCOT_BUFF", buffType: type, rewardLabel: itemName };
+      if (type === "MASCOT_FOOD")  return { rewardKind: "MASCOT_FOOD", foodType: "FOOD",  quantity: qty, rewardLabel: itemName };
+      if (type === "MASCOT_SWEET") return { rewardKind: "MASCOT_FOOD", foodType: "SWEET", quantity: qty, rewardLabel: itemName };
+      if (BUFF_TYPES.includes(type)) return { rewardKind: "MASCOT_BUFF", buffType: type, quantity: qty, rewardLabel: itemName };
       return null;
     }
 
     const giftPayload = buildGiftPayload(item.type);
     const isConsumable = !!giftPayload;
+    // Para ovos, qty > 1 gera um gift por unidade
+    const isEgg = !!EGG_MAP[item.type];
 
     let sent = 0, skipped = 0;
 
     for (const player of players) {
       try {
         if (isConsumable) {
-          // Consumíveis → Caixa de Presentes
-          await prisma.playerGift.create({
-            data: {
-              playerId: player.id,
-              type: "CUSTOM",
-              title: item.name,
-              description: `${item.name} enviado pelo admin para todos os jogadores.`,
-              payload: giftPayload as import("@prisma/client").Prisma.InputJsonValue
+          if (isEgg && qty > 1) {
+            // Ovos não têm quantidade — cria um gift por unidade
+            for (let i = 0; i < qty; i++) {
+              await prisma.playerGift.create({
+                data: {
+                  playerId: player.id,
+                  type: "CUSTOM",
+                  title: item.name,
+                  description: `${item.name} enviado pelo admin para todos os jogadores.`,
+                  payload: giftPayload as import("@prisma/client").Prisma.InputJsonValue,
+                }
+              });
             }
-          });
+          } else {
+            await prisma.playerGift.create({
+              data: {
+                playerId: player.id,
+                type: "CUSTOM",
+                title: qty > 1 ? `${item.name} ×${qty}` : item.name,
+                description: `${item.name} enviado pelo admin para todos os jogadores.`,
+                payload: giftPayload as import("@prisma/client").Prisma.InputJsonValue,
+              }
+            });
+          }
           sent++;
         } else {
-          // Cosméticos → PlayerInventory (pula se já possui)
+          // Cosméticos → PlayerInventory (upsert com quantidade)
           const existing = await prisma.playerInventory.findUnique({
             where: { playerId_itemId: { playerId: player.id, itemId } }
           });
-          if (existing) { skipped++; continue; }
-          await prisma.playerInventory.create({ data: { playerId: player.id, itemId } });
+          if (existing) {
+            await prisma.playerInventory.update({
+              where: { playerId_itemId: { playerId: player.id, itemId } },
+              data: { quantity: { increment: qty } },
+            });
+          } else {
+            await prisma.playerInventory.create({ data: { playerId: player.id, itemId, quantity: qty } });
+          }
           sent++;
         }
       } catch { skipped++; }

@@ -20,6 +20,7 @@ export function BulkSendPanel({ items }: { items: ShopItem[] }) {
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [result, setResult] = useState<{ sent: number; skipped: number } | null>(null);
 
   const filtered = items.filter(i =>
@@ -31,10 +32,12 @@ export function BulkSendPanel({ items }: { items: ShopItem[] }) {
 
   const handleSend = () => {
     if (!selectedId || !selected) { toast.error("Selecione um item."); return; }
-    if (!confirm(`Enviar "${selected.name}" para TODOS os jogadores ativos? Esta ação não pode ser desfeita.`)) return;
+    const qty = Math.max(1, Math.floor(quantity));
+    const label = qty > 1 ? `${qty}× "${selected.name}"` : `"${selected.name}"`;
+    if (!confirm(`Enviar ${label} para TODOS os jogadores ativos? Esta ação não pode ser desfeita.`)) return;
 
     startTransition(async () => {
-      const r = await sendItemToAllPlayers(selectedId);
+      const r = await sendItemToAllPlayers(selectedId, qty);
       if (r.error) { toast.error(r.error); return; }
       setResult({ sent: r.sent, skipped: r.skipped });
       toast.success(`${r.sent} jogador(es) receberam o item!`);
@@ -91,11 +94,24 @@ export function BulkSendPanel({ items }: { items: ShopItem[] }) {
         </div>
       )}
 
+      {/* Quantidade */}
+      <div className="flex items-center gap-3">
+        <label className="text-xs text-slate-400 shrink-0">Quantidade por jogador:</label>
+        <input
+          type="number"
+          min={1}
+          max={999}
+          value={quantity}
+          onChange={e => setQuantity(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+          className="w-20 rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05] text-center"
+        />
+      </div>
+
       <Button type="button" disabled={pending || !selectedId}
         onClick={handleSend}
         className="gap-2 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">
         <Send size={13} />
-        {pending ? "Enviando…" : "Enviar para todos"}
+        {pending ? "Enviando…" : `Enviar${quantity > 1 ? ` ×${quantity}` : ""} para todos`}
       </Button>
 
       {result && (
