@@ -733,8 +733,9 @@ async function rollExpeditionReward(
   if (Math.random() * 100 < nothingChance) return { type: "NOTHING" };
 
   // ── Distribuição ponderada dos tipos de recompensa ───────────────────────────
-  // Ovos escalam fortemente com duração — em 6h padrão, competem com moedas/comida
-  const eggWeight   = 15 + Math.min(28, luck * 0.9) + rewardBonus * 1.0 + allyBonus;
+  // Ovos escalam com instinto de forma contínua até max stat=250.
+  // min(40, luck*0.18): instinct=0→0, instinct=50→~9, instinct=125→~20, instinct=250→40
+  const eggWeight   = 10 + Math.min(40, luck * 0.18) + rewardBonus * 0.8 + allyBonus;
   const sweetWeight = 14 + rewardBonus * 0.4 + (hasLuckBuff ? 10 : 0);
   const foodWeight  = 32 + levelFloor * 0.4 + rewardBonus * 0.15;
   const coinWeight  = 38 + levelFloor * 0.5;
@@ -743,11 +744,12 @@ async function rollExpeditionReward(
   const total       = eggWeight + sweetWeight + foodWeight + coinWeight + buffWeight;
   const roll        = Math.random() * total;
 
-  // Ovo: qualidade cresce com duração e nível
+  // Ovo: qualidade requer instinto significativo com stat max=250
+  // 6h SPECIAL: luck>100 (~instinct 80 com nv100), 3h RARE: luck>70, 1h/30min RARE: luck>100
   let eggType = "COMMON";
-  if (durationKey === "6h")                            eggType = luck > 10 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h" && luck > 12)          eggType = "RARE";
-  else if ((durationKey === "1h" || durationKey === "30min") && luck > 20) eggType = "RARE";
+  if (durationKey === "6h")                            eggType = luck > 100 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h" && luck > 70)          eggType = "RARE";
+  else if ((durationKey === "1h" || durationKey === "30min") && luck > 100) eggType = "RARE";
 
   // Quantidade de comida melhora com duração
   const foodQtyMin =
@@ -789,8 +791,8 @@ async function rollItemExpeditionReward(
   const luck = (mascot.statInstinct + Math.floor(mascot.level / 5)) * (luckBuff ? 2 : 1);
   const allyBonus = Math.min(20, allyCount * 4);
 
-  // Em modo ITENS: ovos são o drop dominante em expedições longas (6h)
-  const eggWeight   = 12 + Math.min(30, luck * 1.0) + rewardBonus * 1.5 + allyBonus;
+  // Em modo ITENS: ovos competem com buffs, escalam com instinto (max stat=250)
+  const eggWeight   = 10 + Math.min(40, luck * 0.18) + rewardBonus * 1.2 + allyBonus;
   const sweetWeight = 22 + rewardBonus * 0.4 + (luckBuff ? 8 : 0);
   const foodWeight  = 38 + rewardBonus * 0.3 + Math.min(10, mascot.level);
   // Item especial (buff): mais comum no modo ITENS, escala com duração
@@ -803,9 +805,9 @@ async function rollItemExpeditionReward(
   const roll = Math.random() * total;
 
   let eggType = "COMMON";
-  if (durationKey === "6h")       eggType = luck > 9 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h")  eggType = luck > 10 ? "RARE" : "COMMON";
-  else if (luck > 22)             eggType = "RARE";
+  if (durationKey === "6h")       eggType = luck > 100 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h")  eggType = luck > 70 ? "RARE" : "COMMON";
+  else if (luck > 100)            eggType = "RARE";
 
   const quantityBase =
     durationKey === "6h" ? 4 :
