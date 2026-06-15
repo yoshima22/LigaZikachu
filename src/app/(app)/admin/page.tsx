@@ -7,7 +7,6 @@ import { AdminExpeditionPanel } from "./_components/admin-expedition-panel";
 import { AdminMascotPanel } from "./_components/admin-mascot-panel";
 import { UserAccountPanel } from "./_components/user-account-panel";
 import { MigrateImagesPanel } from "./_components/migrate-images-panel";
-import { VipPassPanel } from "./_components/vip-pass-panel";
 import { VipSchedulePanel } from "./_components/vip-schedule-panel";
 import { AdminCommunicationPanel } from "./_components/admin-communication-panel";
 import {
@@ -249,15 +248,13 @@ export default async function AdminPage() {
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
-      <VipSchedulePanel allSchedules={allSchedules} />
-      <VipPassPanel
+      <VipSchedulePanel
+        allSchedules={allSchedules}
         players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))}
         activeVips={(vipsResult.passes ?? []).map(p => ({
           passId: p.id,
-          playerId: p.player.id,
           displayName: p.player.displayName,
           passLabel: p.passLabel ?? "Passe Apoiador",
-          startsAt: p.startsAt,
           expiresAt: p.expiresAt,
           daysRemaining: Math.max(0, Math.ceil((new Date(p.expiresAt).getTime() - Date.now()) / 86400000)),
           claimedDays: p.claimsCount,

@@ -4,12 +4,15 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   Calendar, ChevronDown, ChevronUp, RotateCcw, Save,
-  Star, X, Check, AlertTriangle, Plus, Trash2
+  Star, X, Check, AlertTriangle, Plus, Trash2, UserPlus, Clock, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
-import { adminSaveSchedule, adminResetSchedule, adminGetSchedule } from "@/app/(app)/passe-apoiador/actions";
+import {
+  adminSaveSchedule, adminResetSchedule, adminGetSchedule,
+  adminGrantVip, adminSetRetroactiveClaimsByLabel,
+} from "@/app/(app)/passe-apoiador/actions";
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
 
@@ -124,12 +127,25 @@ function dayStateToReward(day: number, ds: DayState): DayReward {
 
 interface ScheduleEntry { label: string; schedule: DayReward[]; isCustom: boolean; }
 
-interface Props {
-  // Todos os schedules conhecidos (label → {schedule, isCustom})
-  allSchedules: ScheduleEntry[];
+interface ActiveVip {
+  passId: string;
+  displayName: string;
+  passLabel: string;
+  daysRemaining: number;
+  claimedDays: number;
+  expiresAt: Date;
+  allowRetroactiveClaims: boolean;
 }
 
-export function VipSchedulePanel({ allSchedules }: Props) {
+interface Player { id: string; displayName: string; }
+
+interface Props {
+  allSchedules: ScheduleEntry[];
+  players: Player[];
+  activeVips: ActiveVip[];
+}
+
+export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [open, setOpen] = useState(false);
   const [activeLabel, setActiveLabel] = useState(allSchedules[0]?.label ?? "Passe Apoiador");
   const [scheduleMap, setScheduleMap] = useState<Record<string, DayReward[]>>(
@@ -144,8 +160,16 @@ export function VipSchedulePanel({ allSchedules }: Props) {
   const [loadPending, startLoad] = useTransition();
   const [savePending, startSave] = useTransition();
   const [resetPending, startReset] = useTransition();
+  const [grantPending, startGrant] = useTransition();
+  const [retroLabelPending, startRetroLabel] = useTransition();
   const dirtyRef = useRef(dirtyMap);
   dirtyRef.current = dirtyMap;
+
+  // Form de criação de passe
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [durationDays, setDurationDays] = useState(30);
+  const [startDay, setStartDay] = useState(1);
+  const [showGrantForm, setShowGrantForm] = useState(false);
 
   // Sincroniza props → state quando o servidor retorna dados atualizados,
   // mas só para labels que não têm edições locais pendentes.
@@ -214,6 +238,44 @@ export function VipSchedulePanel({ allSchedules }: Props) {
     });
   };
 
+  const labelVips = activeVips.filter(v => v.passLabel === activeLabel);
+  const labelRetroActive = labelVips.length > 0 && labelVips.every(v => v.allowRetroactiveClaims);
+
+  const handleGrantForLabel = () => {
+    if (!selectedPlayerId) { toast.error("Selecione um jogador."); return; }
+    startGrant(async () => {
+      const result = await adminGrantVip({
+        playerId: selectedPlayerId,
+        days: durationDays,
+        startDay: startDay > 1 ? startDay : undefined,
+        passLabel: activeLabel,
+      });
+      if (result.ok) {
+        toast.success(`${activeLabel} concedido!${startDay > 1 ? ` Iniciado no dia ${startDay}.` : ""}`);
+        setSelectedPlayerId("");
+        setStartDay(1);
+        setShowGrantForm(false);
+      } else {
+        toast.error(result.error ?? "Erro ao conceder passe.");
+      }
+    });
+  };
+
+  const handleToggleRetroLabel = () => {
+    const next = !labelRetroActive;
+    startRetroLabel(async () => {
+      const result = await adminSetRetroactiveClaimsByLabel(activeLabel, next);
+      if (result.ok) {
+        toast.success(next
+          ? `Retroativo ativado para ${result.updated} passe(s) de "${activeLabel}".`
+          : `Retroativo desativado para ${result.updated} passe(s) de "${activeLabel}".`
+        );
+      } else {
+        toast.error(result.error ?? "Erro ao alterar.");
+      }
+    });
+  };
+
   const handleReset = () => {
     if (!confirm(`Resetar "${activeLabel}" para os prêmios padrão?`)) return;
     startReset(async () => {
@@ -274,6 +336,100 @@ export function VipSchedulePanel({ allSchedules }: Props) {
                 {dirtyMap[s.label] && <span className="ml-1 text-amber-400">•</span>}
               </button>
             ))}
+          </div>
+
+          {/* ── Gestão de passes deste tipo ── */}
+          <div className="rounded-xl border border-purple-500/10 bg-purple-950/10 p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-xs font-semibold text-purple-300 uppercase tracking-widest">
+                Passes ativos — {activeLabel}
+                {labelVips.length > 0 && (
+                  <span className="ml-2 rounded-full bg-purple-500/20 px-2 py-0.5 text-purple-200 normal-case font-normal">
+                    {labelVips.length} ativo{labelVips.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </p>
+              <div className="flex items-center gap-2">
+                {labelVips.length > 0 && (
+                  <Button
+                    onClick={handleToggleRetroLabel}
+                    disabled={retroLabelPending}
+                    variant="ghost"
+                    size="sm"
+                    className={`gap-1.5 text-xs h-8 px-3 border ${labelRetroActive ? "text-green-400 border-green-500/30 hover:bg-green-500/10" : "text-slate-400 border-border hover:text-slate-200 hover:bg-slate-700/50"}`}
+                  >
+                    <RotateCcw size={11} />
+                    {retroLabelPending ? "..." : labelRetroActive ? "Retroativo: todos ON" : "Retroativo: todos OFF"}
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setShowGrantForm(v => !v)}
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs h-8 px-3 border border-purple-500/30 text-purple-300 hover:bg-purple-500/10"
+                >
+                  <UserPlus size={11} />
+                  Criar passe
+                </Button>
+              </div>
+            </div>
+
+            {/* Form de criação */}
+            {showGrantForm && (
+              <div className="space-y-3 pt-2 border-t border-purple-500/10">
+                <div className="flex flex-wrap gap-3">
+                  <select
+                    value={selectedPlayerId}
+                    onChange={e => setSelectedPlayerId(e.target.value)}
+                    className="rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50 flex-1 min-w-48"
+                  >
+                    <option value="">Selecionar jogador...</option>
+                    {players.map(p => (
+                      <option key={p.id} value={p.id}>{p.displayName}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400 whitespace-nowrap">Dias:</label>
+                    <input type="number" min={1} max={365} value={durationDays}
+                      onChange={e => setDurationDays(Number(e.target.value))}
+                      className="w-20 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400 whitespace-nowrap">Iniciar dia:</label>
+                    <input type="number" min={1} max={30} value={startDay}
+                      onChange={e => setStartDay(Math.max(1, Math.min(30, Number(e.target.value))))}
+                      className="w-16 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
+                  </div>
+                  <Button onClick={handleGrantForLabel} disabled={grantPending || !selectedPlayerId}
+                    className="gap-2 bg-purple-600 hover:bg-purple-500 text-white text-xs h-9">
+                    <UserPlus size={13} />
+                    {grantPending ? "Criando..." : "Confirmar"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Lista de passes ativos deste tipo */}
+            {labelVips.length > 0 && (
+              <div className="space-y-1.5">
+                {labelVips.map(vip => (
+                  <div key={vip.passId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-slate-900/50 px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Star size={11} className="text-yellow-400 shrink-0" />
+                      <span className="font-semibold text-slate-200">{vip.displayName}</span>
+                      <span className="flex items-center gap-1 text-slate-500"><Clock size={9} />{vip.daysRemaining}d</span>
+                      <span className="flex items-center gap-1 text-slate-500"><CheckCircle2 size={9} />{vip.claimedDays}/30</span>
+                      {vip.allowRetroactiveClaims && (
+                        <span className="rounded-full bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 text-[9px] text-green-400">↩ retroativo</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {labelVips.length === 0 && (
+              <p className="text-xs text-slate-600">Nenhum jogador com este passe ativo.</p>
+            )}
           </div>
 
           {/* Toolbar */}
