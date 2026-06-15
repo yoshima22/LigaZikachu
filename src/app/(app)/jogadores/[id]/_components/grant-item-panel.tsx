@@ -26,6 +26,9 @@ const TYPE_LABEL: Record<string, string> = {
   BANNER: "🖼 Banner",
   FRAME: "🔵 Moldura",
   ZIKALOOT_TICKET: "🎟 Ticket",
+  SYNC_TICKET_FIRE_LEFT: "🔥 Metade Esq.",
+  SYNC_TICKET_WATER_RIGHT: "💧 Metade Dir.",
+  SYNC_TICKET_COMPLETE: "🎫 Ticket Sync",
 };
 const RARITY_COLOR: Record<string, string> = {
   COMMON: "text-slate-400",
@@ -70,7 +73,7 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds }: Props) {
     });
   };
 
-  const typeOpts = ["ALL", "TITLE", "BANNER", "FRAME", "ZIKALOOT_TICKET"];
+  const typeOpts = ["ALL", "TITLE", "BANNER", "FRAME", "ZIKALOOT_TICKET", "SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"];
 
   return (
     <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
