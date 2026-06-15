@@ -60,12 +60,23 @@ export default async function LacosPage({
 
   await autoResolveExpiredBondEvents(player.id);
 
-  // Auto-criar evento se inbox estiver vazio
-  const pendingCount = await prisma.mascotSocialEvent.count({
-    where: { ownerId: player.id, status: "PENDING" },
-  }).catch(() => 1);
-  if (pendingCount === 0) {
+  // Auto-criar evento cadenciado: min 4h entre criações, burst ocasional após 8h
+  const lastEvent = await prisma.mascotSocialEvent.findFirst({
+    where: { ownerId: player.id },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  }).catch(() => null);
+
+  const hoursSinceLast = lastEvent
+    ? (Date.now() - lastEvent.createdAt.getTime()) / 3_600_000
+    : 999;
+
+  if (hoursSinceLast >= 4) {
     await createBondEventForPlayer(player.id).catch(() => {});
+    // Burst: 40% de chance de gerar um segundo evento após 8h sem atividade
+    if (hoursSinceLast >= 8 && Math.random() < 0.4) {
+      await createBondEventForPlayer(player.id).catch(() => {});
+    }
   }
 
   const params = await searchParams;
