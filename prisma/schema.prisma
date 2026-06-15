@@ -266,6 +266,7 @@ model Player {
   sentMessages            DirectMessage[]  @relation("SentMessages")
   receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
   generalMessages         GeneralChatMessage[]
+  syncChallengeEntries    SyncChallengeEntry[]
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
 
@@ -1192,6 +1193,14 @@ enum ShopItemType {
   VACATION_TICKET
   XP_SHARE
   RAINBOW_FEATHER
+  SYNC_TICKET_FIRE_LEFT
+  SYNC_TICKET_WATER_RIGHT
+  SYNC_TICKET_COMPLETE
+}
+
+enum SyncChallengeStatus {
+  CONSUMED
+  CANCELLED
 }
 
 enum ZikaLootStatus {
@@ -1257,6 +1266,7 @@ model ShopItem {
   updatedAt   DateTime        @updatedAt
   createdBy   User?           @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   ownerships  PlayerInventory[]
+  syncChallengeConsumptions SyncChallengeEntry[]
   @@map("shop_items")
 }
 
@@ -1274,6 +1284,22 @@ model PlayerInventory {
   @@unique([playerId, itemId])
   @@index([playerId])
   @@map("player_inventory")
+}
+
+model SyncChallengeEntry {
+  id             String              @id @default(cuid())
+  playerId       String
+  status         SyncChallengeStatus @default(CONSUMED)
+  bansJson       Json
+  consumedItemId String?
+  consumedAt     DateTime            @default(now())
+  cancelledAt    DateTime?
+  createdAt      DateTime            @default(now())
+  player         Player              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  consumedItem   ShopItem?           @relation(fields: [consumedItemId], references: [id], onDelete: SetNull)
+
+  @@index([playerId, createdAt])
+  @@map("sync_challenge_entries")
 }
 
 model UserFcmToken {

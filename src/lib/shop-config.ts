@@ -36,6 +36,9 @@ export const SUGGESTED_PRICES: Record<string, Record<string, number>> = {
   VACATION_TICKET: { COMMON: 2000, UNCOMMON: 2000, RARE: 2000, EPIC: 2000, LEGENDARY: 2000 },
   XP_SHARE:        { COMMON: 8000, UNCOMMON: 8000, RARE: 8000, EPIC: 8000, LEGENDARY: 8000 },
   RAINBOW_FEATHER: { COMMON: 10000, UNCOMMON: 10000, RARE: 10000, EPIC: 10000, LEGENDARY: 10000 },
+  SYNC_TICKET_FIRE_LEFT:   { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+  SYNC_TICKET_WATER_RIGHT: { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+  SYNC_TICKET_COMPLETE:    { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
 };
 
 export const EGG_SHOP_ITEM_TYPES = [
@@ -77,6 +80,12 @@ export const SPECIAL_MASCOT_SHOP_ITEM_TYPES = [
   "RAINBOW_FEATHER",
 ] as const;
 
+export const EVENT_SHOP_ITEM_TYPES = [
+  "SYNC_TICKET_FIRE_LEFT",
+  "SYNC_TICKET_WATER_RIGHT",
+  "SYNC_TICKET_COMPLETE",
+] as const;
+
 // Itens que só podem existir uma vez no inventário do jogador.
 // Ao tentar ganhar/comprar um segundo exemplar, ele é automaticamente vendido pela metade do preço.
 export const UNIQUE_ITEM_TYPES: ReadonlySet<string> = new Set(["XP_SHARE"]);
@@ -91,6 +100,7 @@ export const MASCOT_SHOP_ITEM_TYPES = [
 export const CONSUMABLE_SHOP_ITEM_TYPES = [
   "ZIKALOOT_TICKET",
   ...MASCOT_SHOP_ITEM_TYPES,
+  ...EVENT_SHOP_ITEM_TYPES,
 ] as const;
 
 export const SHOP_ITEM_EMOJI: Record<string, string> = {

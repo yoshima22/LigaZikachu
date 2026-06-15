@@ -3,6 +3,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
+import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
 import { unstable_cache } from "next/cache";
@@ -1444,6 +1445,18 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       }
     }
     // Se o time não foi deletado (teamDefeated já cuida via cascade), remove membros feridos
+    if (won) {
+      const syncTicketDrop = await maybeDropSyncTicket(tx, playerId, "arena-pve");
+      if (syncTicketDrop && team.members[0]?.mascotId) {
+        await tx.mascotEvent.create({
+          data: {
+            mascotId: team.members[0].mascotId,
+            emoji: "DS",
+            description: "Encontrou uma metade de ticket do Desafio Sincronizado na Arena Z.",
+          }
+        }).catch(() => null);
+      }
+    }
     if (!teamDefeated && injuredMascotIds.length > 0) {
       await tx.arenaTeamMember.deleteMany({
         where: { teamId: team.id, mascotId: { in: injuredMascotIds } },
@@ -2097,6 +2110,9 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       await tx.mascotEgg.create({
         data: { playerId: defenseTeam.playerId, type: defenderEgg, origin: `Defesa PvP contra ${attackTeam.player.displayName}` },
       });
+    }
+    if (winnerTeam) {
+      await maybeDropSyncTicket(tx, winnerTeam.playerId, "arena-pvp");
     }
 
     if (loserTeam && preserved) {
