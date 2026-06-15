@@ -354,11 +354,12 @@ export async function addExp(
   let evolved = false;
   let newPokemonId: number | undefined;
 
-  // Verifica level ups em cadeia
-  while (exp >= expToNextLevel(level)) {
+  // Verifica level ups em cadeia (cap: nível 100)
+  while (level < 100 && exp >= expToNextLevel(level)) {
     exp -= expToNextLevel(level);
     level++;
     levelsGained++;
+    if (level >= 100) { exp = 0; break; }
 
     // Verifica evolução (respeitando evolutionLocked)
     const evo = EVOLUTION_MAP.get(pokemonId);
@@ -734,8 +735,8 @@ async function rollExpeditionReward(
 
   // ── Distribuição ponderada dos tipos de recompensa ───────────────────────────
   // Ovos escalam com instinto de forma contínua até max stat=250.
-  // min(40, luck*0.18): instinct=0→0, instinct=50→~9, instinct=125→~20, instinct=250→40
-  const eggWeight   = 10 + Math.min(40, luck * 0.18) + rewardBonus * 0.8 + allyBonus;
+  // min(46, luck*0.20): instinct=0→~15%, instinct=50→~21%, instinct=125→~29%, instinct=250→~36%
+  const eggWeight   = 16 + Math.min(46, luck * 0.20) + rewardBonus * 0.8 + allyBonus;
   const sweetWeight = 14 + rewardBonus * 0.4 + (hasLuckBuff ? 10 : 0);
   const foodWeight  = 32 + levelFloor * 0.4 + rewardBonus * 0.15;
   const coinWeight  = 38 + levelFloor * 0.5;
@@ -792,7 +793,7 @@ async function rollItemExpeditionReward(
   const allyBonus = Math.min(20, allyCount * 4);
 
   // Em modo ITENS: ovos competem com buffs, escalam com instinto (max stat=250)
-  const eggWeight   = 10 + Math.min(40, luck * 0.18) + rewardBonus * 1.2 + allyBonus;
+  const eggWeight   = 16 + Math.min(46, luck * 0.20) + rewardBonus * 1.2 + allyBonus;
   const sweetWeight = 22 + rewardBonus * 0.4 + (luckBuff ? 8 : 0);
   const foodWeight  = 38 + rewardBonus * 0.3 + Math.min(10, mascot.level);
   // Item especial (buff): mais comum no modo ITENS, escala com duração
