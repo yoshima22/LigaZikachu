@@ -13,6 +13,7 @@ import {
   grantSyncTicketHalf,
   joinOpenSyncTeam,
   transferSyncTicketHalf,
+  SYNC_TICKET_TYPES,
 } from "@/lib/sync-challenge";
 
 async function requireCurrentPlayer() {
@@ -212,6 +213,97 @@ export async function cancelSyncTeamAdminAction(formData: FormData): Promise<{ e
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao cancelar dupla." };
+  }
+}
+
+export async function adminGrantSyncTicketAction(
+  targetPlayerId: string,
+  type: "LEFT" | "RIGHT" | "COMPLETE",
+  quantity: number,
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const safeQty = Math.max(1, Math.min(Math.floor(quantity), 20));
+    const player = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { id: true } });
+    if (!player) return { error: "Jogador não encontrado." };
+
+    await prisma.$transaction(async (tx) => {
+      for (let q = 0; q < safeQty; q++) {
+        if (type === "LEFT" || type === "RIGHT") {
+          await grantSyncTicketHalf(
+            tx,
+            targetPlayerId,
+            "admin-grant",
+            type === "LEFT" ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT,
+            targetPlayerId, // gerado pelo próprio jogador
+          );
+        } else {
+          // Ticket completo: cria duas metades sintéticas + syncTicket
+          // As metades ficam como geradas pelo jogador.
+          // bannedUserA/B apontam para o próprio jogador — o admin aceita essa limitação
+          // (ticket concedido, o jogador não pode banir outros, apenas usar a sala sem ban externo)
+          const [left, right] = await Promise.all([
+            tx.syncTicketHalf.create({
+              data: { side: SyncTicketSide.LEFT, ownerId: targetPlayerId, generatedByPlayerId: targetPlayerId, sourceAction: "admin-grant", status: "COMBINED" },
+            }),
+            tx.syncTicketHalf.create({
+              data: { side: SyncTicketSide.RIGHT, ownerId: targetPlayerId, generatedByPlayerId: targetPlayerId, sourceAction: "admin-grant", status: "COMBINED" },
+            }),
+          ]);
+          await tx.syncTicket.create({
+            data: {
+              ownerId: targetPlayerId,
+              leftHalfId: left.id,
+              rightHalfId: right.id,
+              bannedUserAId: targetPlayerId,
+              bannedUserBId: targetPlayerId,
+              status: "AVAILABLE",
+            },
+          });
+        }
+      }
+    });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao conceder ticket." };
+  }
+}
+
+export async function adminRevokeSyncTicketAction(
+  targetPlayerId: string,
+  type: "LEFT" | "RIGHT" | "COMPLETE",
+  quantity: number,
+): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const safeQty = Math.max(1, Math.min(Math.floor(quantity), 20));
+
+    if (type === "LEFT" || type === "RIGHT") {
+      const side = type === "LEFT" ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT;
+      const halves = await prisma.syncTicketHalf.findMany({
+        where: { ownerId: targetPlayerId, side, status: { in: ["AVAILABLE", "SENT"] } },
+        select: { id: true },
+        take: safeQty,
+      });
+      if (halves.length === 0) return { error: "Jogador não possui esta metade de ticket." };
+      await prisma.syncTicketHalf.deleteMany({ where: { id: { in: halves.map((h) => h.id) } } });
+    } else {
+      const tickets = await prisma.syncTicket.findMany({
+        where: { ownerId: targetPlayerId, status: { in: ["AVAILABLE", "RESERVED"] } },
+        select: { id: true, leftHalfId: true, rightHalfId: true },
+        take: safeQty,
+      });
+      if (tickets.length === 0) return { error: "Jogador não possui ticket completo." };
+      for (const t of tickets) {
+        await prisma.syncTicket.delete({ where: { id: t.id } });
+        await prisma.syncTicketHalf.deleteMany({ where: { id: { in: [t.leftHalfId, t.rightHalfId] } } });
+      }
+    }
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao retirar ticket." };
   }
 }
 

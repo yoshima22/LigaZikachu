@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
+import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import {
   cancelSyncTeamAdminAction,
   combineSyncTicketsAction,
@@ -343,7 +344,10 @@ export default async function DesafioSincronizadoPage() {
         <section className="rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-5">
           <h2 className="font-semibold text-[#FFCB05]">Ferramentas admin de teste</h2>
           <p className="mt-1 text-xs text-slate-400">Gera metade com voce como criador. Pela regra oficial, voce precisara enviar essa metade para outro jogador.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+
+          <AdminTicketPanel players={players} />
+
+          <div className="mt-4 flex flex-wrap gap-2">
             <form action={async () => {
               "use server";
               await grantDebugSyncHalfAction("LEFT");
