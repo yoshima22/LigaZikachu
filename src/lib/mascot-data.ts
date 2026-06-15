@@ -527,6 +527,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 971, to: 972, level: 30 },
   { from: 974, to: 975, level: 30 },
   { from: 996, to: 997, level: 35 }, { from: 997, to: 998, level: 54 },
+  { from: 999, to: 1000, level: 45 }, // Gimmighoul (Chest) → Gholdengo
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
   { from: 10091, to: 10092, level: 20 }, // Rattata-Alola → Raticate-Alola
   { from: 10101, to: 10102, level: 22 }, // Sandshrew-Alola → Sandslash-Alola (Ice Stone)
