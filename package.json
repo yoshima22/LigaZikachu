@@ -11,6 +11,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
+    "db:push:local": "node scripts/run-with-env-local.mjs prisma db push",
+    "db:validate:local": "node scripts/run-with-env-local.mjs prisma validate",
     "db:seed": "tsx prisma/seed.ts",
     "db:validate": "prisma validate",
     "mascots:repair-stats": "tsx scripts/repair-mascot-level-stats.ts",
