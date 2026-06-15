@@ -261,6 +261,7 @@ model Player {
   supporterPasses         SupporterPass[]
   sentMessages            DirectMessage[]  @relation("SentMessages")
   receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
+  generalMessages         GeneralChatMessage[]
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
 
@@ -300,6 +301,30 @@ model DirectMessage {
   @@index([senderId, receiverId])
   @@index([receiverId, readAt])
   @@map("direct_messages")
+}
+
+model GeneralChatMessage {
+  id         String    @id @default(cuid())
+  senderId   String
+  content    String
+  createdAt  DateTime  @default(now())
+
+  attachmentType String?
+  attachmentData Json?
+
+  sender Player @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([senderId, createdAt])
+  @@map("general_chat_messages")
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
 }
 
 // Torneio independente — pode existir em paralelo a seasons legadas

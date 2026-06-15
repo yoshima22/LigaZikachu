@@ -15,6 +15,7 @@ export const ARENA_Z_CONFIG = {
   defeatedLootBurnPct: 0.1,
   botCooldownMinutes: 5,       // cooldown PvE separado por equipe
   pvpCooldownMinutes: 5,
+  pvpExitLockMinutes: 5,
   // Multiplicador de tempo: +8.3% por hora, cap 4x após 36h
   multPerHour: 1 / 12,  // 1 unidade de mult a cada 12h
   multCap: 4.0,
@@ -788,6 +789,26 @@ async function checkRetireCooldown(mascotIds: string[]): Promise<void> {
   throw new Error(`${name} precisa esperar ${remaining} min antes de entrar em nova equipe (saiu com recompensas recentemente).`);
 }
 
+async function assertPvpExitUnlocked(teamId: string): Promise<void> {
+  const since = new Date(Date.now() - ARENA_Z_CONFIG.pvpExitLockMinutes * 60_000);
+  const recentAttack = await prisma.arenaBattle.findFirst({
+    where: {
+      type: "PVP",
+      attackTeamId: teamId,
+      createdAt: { gt: since },
+    },
+    select: { createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!recentAttack) return;
+  const unlockAt = recentAttack.createdAt.getTime() + ARENA_Z_CONFIG.pvpExitLockMinutes * 60_000;
+  const remaining = Math.max(1, Math.ceil((unlockAt - Date.now()) / 1000));
+  const min = Math.floor(remaining / 60);
+  const sec = remaining % 60;
+  throw new Error(`Esta equipe atacou outro jogador recentemente. Aguarde ${min}:${sec.toString().padStart(2, "0")} para abandonar ou coletar recompensas.`);
+}
+
 export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], roomLevel: ArenaRoom = 100) {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
   if (!ARENA_ROOMS.includes(roomLevel as ArenaRoom)) throw new Error("Sala inválida.");
@@ -920,6 +941,7 @@ export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin 
   });
   if (!team) throw new Error("Equipe nao encontrada.");
   if (!isAdmin && team.playerId !== playerId) throw new Error("Sem permissao.");
+  if (!isAdmin && team.status === "ACTIVE") await assertPvpExitUnlocked(teamId);
 
   await prisma.$transaction(async (tx) => {
     // Libera todos os mascotes (feridos permanecem feridos, apenas sai do ARENA)
@@ -978,6 +1000,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (!["ACTIVE", "DEFEATED"].includes(team.status)) throw new Error("Equipe ja retirada.");
+  if (team.status === "ACTIVE") await assertPvpExitUnlocked(teamId);
 
   // Bloqueia saída se há ataque PvP não visto — defensor precisa visualizar primeiro
   const unseenPvp = await getUnseenPvpAttack(teamId);

@@ -3,8 +3,59 @@
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { sendDeckReminderEmail } from "@/lib/email";
+import { creditCoins } from "@/lib/zikacoins";
+import { GLOBAL_NOTICE_KEY, revalidateGlobalNotice } from "@/lib/app-settings";
+import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
+
+export async function updateGlobalNotice(message: string): Promise<{ error?: string; message?: string }> {
+  try {
+    await requireAdmin();
+    const clean = message.trim().slice(0, 1000);
+    await prisma.appSetting.upsert({
+      where: { key: GLOBAL_NOTICE_KEY },
+      update: { value: { message: clean, updatedAt: new Date().toISOString() } as Prisma.InputJsonValue },
+      create: { key: GLOBAL_NOTICE_KEY, value: { message: clean, updatedAt: new Date().toISOString() } as Prisma.InputJsonValue },
+    });
+    revalidateGlobalNotice();
+    return { message: clean };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao atualizar aviso." };
+  }
+}
+
+export async function sendZikaCoinsToAllPlayers(amount: number, description: string): Promise<{ sent: number; total: number; error?: string }> {
+  try {
+    const admin = await requireAdmin();
+    const value = Math.floor(amount);
+    if (!Number.isFinite(value) || value <= 0) return { sent: 0, total: 0, error: "Informe um valor positivo de ZikaCoins." };
+    if (value > 100000) return { sent: 0, total: 0, error: "Valor alto demais para envio em massa." };
+
+    const players = await prisma.player.findMany({
+      where: { user: { status: "ACTIVE" } },
+      select: { id: true, userId: true },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      for (const player of players) {
+        await creditCoins(tx, {
+          playerId: player.id,
+          type: "ADMIN_ADJUSTMENT",
+          amount: value,
+          description: description.trim() || `Envio em massa do admin: ${value} ZC`,
+          adminId: admin.id,
+        });
+      }
+    });
+
+    for (const player of players) revalidateTag(`nav-${player.userId}`);
+    return { sent: players.length, total: players.length * value };
+  } catch (err) {
+    return { sent: 0, total: 0, error: err instanceof Error ? err.message : "Erro ao enviar ZikaCoins." };
+  }
+}
 
 export async function triggerDeckReminder(dryRun = false): Promise<
   | { weeksChecked: number; emailsSent: number; simulated: number; errors: number; details: Array<{ email: string; week: string; status: string }>; dryRun: boolean }

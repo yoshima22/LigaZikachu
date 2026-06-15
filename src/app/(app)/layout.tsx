@@ -7,8 +7,9 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getManualSessionUser, MANUAL_SESSION_COOKIE } from "@/lib/manual-session";
+import { getGlobalNotice } from "@/lib/app-settings";
 import { Button } from "@/components/ui/button";
-import { LogOut, Zap } from "lucide-react";
+import { LogOut, Megaphone, Zap } from "lucide-react";
 import { Toaster } from "sonner";
 import { AppNav } from "./_components/app-nav";
 import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
@@ -54,7 +55,10 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   const admin = isAdmin(user.role);
 
-  const { player, giftCount, wallet, unreadDms, bazarAlerts } = await getNavData(user.id);
+  const [{ player, giftCount, wallet, unreadDms, bazarAlerts }, globalNotice] = await Promise.all([
+    getNavData(user.id),
+    getGlobalNotice(),
+  ]);
 
   return (
     <>
@@ -152,6 +156,19 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           <div className="mx-auto max-w-7xl">
             <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} playerId={player?.id} />
           </div>
+          {globalNotice.message && (
+            <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">
+              <summary className="mx-auto flex max-w-7xl cursor-pointer list-none items-center gap-2 px-4 py-2 text-xs font-semibold text-[#FFCB05] sm:px-6">
+                <Megaphone size={14} />
+                <span className="truncate">Aviso da Liga: {globalNotice.message}</span>
+                <span className="ml-auto text-[10px] text-[#FFCB05]/70 group-open:hidden">abrir</span>
+                <span className="ml-auto hidden text-[10px] text-[#FFCB05]/70 group-open:inline">fechar</span>
+              </summary>
+              <div className="mx-auto max-w-7xl px-4 pb-3 text-sm leading-relaxed text-yellow-50 sm:px-6">
+                {globalNotice.message}
+              </div>
+            </details>
+          )}
         </header>
 
         {/* Main content */}

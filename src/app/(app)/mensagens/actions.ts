@@ -25,6 +25,44 @@ export type AttachmentData =
     }
   | { type: "ITEM"; id: string; name: string; imageUrl: string | null; itemType: string; rarity: string; description: string | null };
 
+type ChatMessageRow = {
+  attachmentType: string | null;
+  attachmentData: unknown;
+};
+
+async function hydrateItemAttachments<T extends ChatMessageRow>(messages: T[]): Promise<T[]> {
+  const itemIds = Array.from(new Set(messages.flatMap((m) => {
+    const data = m.attachmentData as Partial<AttachmentData> | null;
+    return data?.type === "ITEM" && data.id ? [data.id] : [];
+  })));
+  if (itemIds.length === 0) return messages;
+
+  const items = await prisma.shopItem.findMany({
+    where: { id: { in: itemIds } },
+    select: { id: true, name: true, imageUrl: true, type: true, rarity: true, description: true },
+  });
+  const byId = new Map(items.map((item) => [item.id, item]));
+
+  return messages.map((message) => {
+    const data = message.attachmentData as Partial<AttachmentData> | null;
+    if (data?.type !== "ITEM" || !data.id) return message;
+    const current = byId.get(data.id);
+    if (!current) return message;
+    return {
+      ...message,
+      attachmentData: {
+        type: "ITEM",
+        id: current.id,
+        name: current.name,
+        imageUrl: current.imageUrl,
+        itemType: current.type,
+        rarity: current.rarity,
+        description: current.description ?? null,
+      } satisfies AttachmentData,
+    };
+  });
+}
+
 export async function getConversationAction(otherPlayerId: string) {
   const me = await requirePlayer();
 
@@ -62,7 +100,7 @@ export async function getConversationAction(otherPlayerId: string) {
     });
   }
 
-  return { ok: true as const, me, other, messages };
+  return { ok: true as const, me, other, messages: await hydrateItemAttachments(messages) };
 }
 
 export async function sendMessageAction(
@@ -95,7 +133,55 @@ export async function sendMessageAction(
     },
   });
 
-  return { ok: true as const, message: msg };
+  const [message] = await hydrateItemAttachments([msg]);
+  return { ok: true as const, message };
+}
+
+export async function getGeneralChatAction() {
+  const me = await requirePlayer();
+  try {
+    const messages = await prisma.generalChatMessage.findMany({
+      orderBy: { createdAt: "asc" },
+      take: 80,
+      select: {
+        id: true, content: true, createdAt: true, senderId: true,
+        attachmentType: true, attachmentData: true,
+        sender: { select: { displayName: true, avatarUrl: true } },
+      },
+    });
+
+    return { ok: true as const, me, messages: await hydrateItemAttachments(messages) };
+  } catch {
+    return { ok: true as const, me, messages: [] };
+  }
+}
+
+export async function sendGeneralMessageAction(content: string, attachment?: AttachmentData) {
+  try {
+    const trimmed = content.trim();
+    if (!trimmed && !attachment) return { ok: false as const, error: "Mensagem ou anexo obrigatorio." };
+    if (trimmed.length > 500) return { ok: false as const, error: "Mensagem muito longa." };
+
+    const me = await requirePlayer();
+    const msg = await prisma.generalChatMessage.create({
+      data: {
+        senderId: me.id,
+        content: trimmed,
+        attachmentType: attachment?.type ?? null,
+        attachmentData: attachment ?? undefined,
+      },
+      select: {
+        id: true, content: true, createdAt: true, senderId: true,
+        attachmentType: true, attachmentData: true,
+        sender: { select: { displayName: true, avatarUrl: true } },
+      },
+    });
+
+    const [message] = await hydrateItemAttachments([msg]);
+    return { ok: true as const, message };
+  } catch {
+    return { ok: false as const, error: "Chat geral ainda nao esta disponivel. Aplique o schema do banco e tente novamente." };
+  }
 }
 
 export async function getInboxAction() {
@@ -262,5 +348,26 @@ export async function pollNewMessagesAction(otherPlayerId: string, afterIso: str
     });
   }
 
-  return { ok: true as const, messages };
+  return { ok: true as const, messages: await hydrateItemAttachments(messages) };
+}
+
+export async function pollGeneralMessagesAction(afterIso: string) {
+  await requirePlayer();
+  const after = new Date(afterIso);
+  try {
+    const messages = await prisma.generalChatMessage.findMany({
+      where: { createdAt: { gt: after } },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+      select: {
+        id: true, content: true, createdAt: true, senderId: true,
+        attachmentType: true, attachmentData: true,
+        sender: { select: { displayName: true, avatarUrl: true } },
+      },
+    });
+
+    return { ok: true as const, messages: await hydrateItemAttachments(messages) };
+  } catch {
+    return { ok: true as const, messages: [] };
+  }
 }

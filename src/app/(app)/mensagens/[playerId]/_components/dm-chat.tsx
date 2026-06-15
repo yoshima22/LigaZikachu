@@ -34,7 +34,7 @@ const RARITY_COLOR: Record<string, string> = {
   EPIC: "text-purple-400", LEGENDARY: "text-[#FFCB05]",
 };
 
-function AttachmentCard({ data, mine }: { data: AttachmentData; mine: boolean }) {
+export function AttachmentCard({ data, mine }: { data: AttachmentData; mine: boolean }) {
   const base = mine
     ? "border-[#e6b800]/40 bg-[#e6b800]/10"
     : "border-slate-600 bg-slate-700/50";

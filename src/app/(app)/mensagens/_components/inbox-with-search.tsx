@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MessageSquare, Search, User } from "lucide-react";
+import { MessageSquare, Search, User, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -55,6 +55,18 @@ export function InboxWithSearch({ conversations, allPlayers }: Props) {
         <MessageSquare size={22} className="text-[#FFCB05]" />
         <h1 className="font-pixel text-base text-[#FFCB05]">Mensagens</h1>
       </div>
+
+      <Link href="/mensagens/geral">
+        <div className="flex items-center gap-3 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-3 transition-colors hover:bg-[#FFCB05]/15">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFCB05] text-[#1A1A2E]">
+            <Users size={16} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[#FFCB05]">Chat Geral da Liga</p>
+            <p className="text-xs text-slate-400">Converse com todos os jogadores ativos e compartilhe itens ou mascotes.</p>
+          </div>
+        </div>
+      </Link>
 
       {/* Busca */}
       <div className="relative">

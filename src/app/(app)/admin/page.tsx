@@ -9,6 +9,7 @@ import { UserAccountPanel } from "./_components/user-account-panel";
 import { MigrateImagesPanel } from "./_components/migrate-images-panel";
 import { VipPassPanel } from "./_components/vip-pass-panel";
 import { VipSchedulePanel } from "./_components/vip-schedule-panel";
+import { AdminCommunicationPanel } from "./_components/admin-communication-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -24,6 +25,7 @@ import {
 import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { getGlobalNotice } from "@/lib/app-settings";
 import { adminListActiveVips, adminGetSchedule, adminListScheduleLabels } from "@/app/(app)/passe-apoiador/actions";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -82,6 +84,7 @@ export default async function AdminPage() {
     pendingDecks,
     recentAuditLogs,
     allPlayers,
+    globalNotice,
   ] = await Promise.all([
     prisma.user.count({ where: { status: UserStatus.PENDING_APPROVAL } }),
     prisma.tournament.count({ where: { status: { in: [TournamentStatus.REGISTRATION_OPEN, TournamentStatus.IN_PROGRESS] } } }),
@@ -101,6 +104,7 @@ export default async function AdminPage() {
       select: { id: true, displayName: true, user: { select: { email: true } } },
       orderBy: { displayName: "asc" },
     }),
+    getGlobalNotice(),
   ]);
 
   const vipsResult = await adminListActiveVips();
@@ -239,6 +243,7 @@ export default async function AdminPage() {
       </Card>
 
       <UserAccountPanel users={allUsers} />
+      <AdminCommunicationPanel initialNotice={globalNotice.message} />
       <MascotSocialPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <AdminExpeditionPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
