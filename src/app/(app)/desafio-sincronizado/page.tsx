@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Flame, Send, ShieldBan, Sparkles, Ticket, Waves } from "lucide-react";
+import { Flame, Send, ShieldBan, Sparkles, Swords, Ticket, Waves } from "lucide-react";
 import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
@@ -8,6 +8,7 @@ import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowStat
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
 import { TeamConfirmPanel } from "./_components/team-confirm-panel";
+import { SyncRoomPanel } from "./_components/sync-room-panel";
 import {
   leaveTeamAction,
   confirmTeamAction,
@@ -21,6 +22,7 @@ import {
   transferSyncTicketHalfAction,
   updateSyncChallengeConfigAction,
 } from "./actions";
+import { adminFormRoomsAction } from "./combat-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +108,35 @@ export default async function DesafioSincronizadoPage() {
     orderBy: [{ level: "desc" }, { id: "asc" }],
     take: 200,
   }) : [];
+
+  // Sala ativa — dupla já foi atribuída a uma arena
+  const activeRoom = await prisma.syncEventRoom.findFirst({
+    where: {
+      status: { notIn: ["CANCELLED", "FINISHED"] },
+      teams: { some: { OR: [{ playerAId: player.id }, { playerBId: player.id }] } },
+    },
+    include: {
+      teams: {
+        include: {
+          playerA: { select: { id: true, displayName: true } },
+          playerB: { select: { id: true, displayName: true } },
+          lineups: { include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true } } } },
+        },
+      },
+      rounds: {
+        include: {
+          modifier: { select: { name: true, description: true } },
+          selections: true,
+          matches: true,
+        },
+        orderBy: { roundNumber: "asc" },
+      },
+      scores: {
+        include: { player: { select: { displayName: true } } },
+        orderBy: [{ wins: "desc" }, { damageDone: "desc" }],
+      },
+    },
+  });
 
   const leftHalves = halves.filter((half) => half.side === SyncTicketSide.LEFT);
   const rightHalves = halves.filter((half) => half.side === SyncTicketSide.RIGHT);
@@ -345,6 +376,37 @@ export default async function DesafioSincronizadoPage() {
           </section>
         );
       })()}
+
+      {/* ── Sala/Arena ativa ──────────────────────────────────────────── */}
+      {activeRoom && (
+        <section className="rounded-2xl border border-[#FFCB05]/20 bg-card p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Swords size={18} className="text-[#FFCB05]" />
+            <h2 className="font-semibold text-slate-100">Evento em andamento</h2>
+          </div>
+          <SyncRoomPanel
+            room={activeRoom as unknown as Parameters<typeof SyncRoomPanel>[0]["room"]}
+            playerId={player.id}
+            isAdmin={admin}
+            myLineupMascots={myMascots}
+          />
+        </section>
+      )}
+
+      {/* ── Admin: todas as salas do dia / formar salas ──────────────── */}
+      {admin && (
+        <section className="rounded-2xl border border-border bg-card p-5 space-y-4">
+          <h2 className="font-semibold text-slate-100">Admin — Gerenciar salas</h2>
+          <form action={async () => {
+            "use server";
+            await adminFormRoomsAction();
+          }}>
+            <button className="rounded-lg border border-[#FFCB05]/40 px-4 py-2 text-sm font-bold text-[#FFCB05]">
+              Fechar inscrições e formar salas agora
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">

@@ -275,6 +275,8 @@ model Player {
   syncTeamsAsA              SyncEventTeam[]  @relation("SyncEventTeamPlayerA")
   syncTeamsAsB              SyncEventTeam[]  @relation("SyncEventTeamPlayerB")
   syncLineups               SyncEventLineup[] @relation("SyncEventLineupPlayer")
+  syncRoundSelections       SyncRoundSelection[] @relation("SyncRoundSelectionPlayer")
+  syncEventScores           SyncEventScore[] @relation("SyncEventScorePlayer")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
 
@@ -1245,6 +1247,32 @@ enum SyncLineupStatus {
   LOCKED
 }
 
+enum SyncRoomStatus {
+  FORMING
+  VALIDATING
+  READY
+  ROUND_1
+  ROUND_2
+  ROUND_3
+  TIEBREAK
+  FINISHED
+  CANCELLED
+}
+
+enum SyncRoundStatus {
+  PENDING
+  SELECTING
+  MODIFIER_DRAWN
+  EXECUTING
+  DONE
+}
+
+enum SyncMatchResult {
+  TEAM_A_WIN
+  TEAM_B_WIN
+  DRAW
+}
+
 enum ZikaLootStatus {
   SCHEDULED
   DRAWN
@@ -1426,6 +1454,8 @@ model SyncEventTeam {
   confirmedB      Boolean             @default(false)
   lineupStatusA   SyncLineupStatus    @default(OPEN)
   lineupStatusB   SyncLineupStatus    @default(OPEN)
+  roomId          String?
+  roomSlot        Int?                // 1–4 dentro da sala
   createdAt       DateTime            @default(now())
   completedAt     DateTime?
   confirmedAt     DateTime?
@@ -1435,11 +1465,17 @@ model SyncEventTeam {
   playerB         Player?             @relation("SyncEventTeamPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
   ticketA         SyncTicket          @relation("SyncEventTeamTicketA", fields: [ticketAId], references: [id], onDelete: Restrict)
   ticketB         SyncTicket?         @relation("SyncEventTeamTicketB", fields: [ticketBId], references: [id], onDelete: Restrict)
+  room            SyncEventRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
   lineups         SyncEventLineup[]
+  roundSelections SyncRoundSelection[]
+  matchesAsA      SyncRoundMatch[]    @relation("SyncRoundMatchTeamA")
+  matchesAsB      SyncRoundMatch[]    @relation("SyncRoundMatchTeamB")
+  scores          SyncEventScore[]
 
   @@index([status, createdAt])
   @@index([playerAId, status])
   @@index([playerBId, status])
+  @@index([roomId])
   @@map("sync_event_teams")
 }
 
@@ -1459,6 +1495,120 @@ model SyncEventLineup {
   @@unique([teamId, mascotId])
   @@index([teamId, playerId])
   @@map("sync_event_lineups")
+}
+
+model SyncEventRoom {
+  id          String         @id @default(cuid())
+  roomIndex   Int            // 1, 2, 3 (até 3 arenas simultâneas)
+  date        String         // "YYYY-MM-DD" BRT
+  status      SyncRoomStatus @default(FORMING)
+  formedAt    DateTime       @default(now())
+  validatedAt DateTime?
+  finishedAt  DateTime?
+  cancelledAt DateTime?
+
+  teams   SyncEventTeam[]
+  rounds  SyncEventRound[]
+  scores  SyncEventScore[]
+
+  @@unique([date, roomIndex])
+  @@index([date, status])
+  @@map("sync_event_rooms")
+}
+
+model SyncEventRound {
+  id                  String          @id @default(cuid())
+  roomId              String
+  roundNumber         Int             // 1, 2, 3; 0 = desempate
+  status              SyncRoundStatus @default(PENDING)
+  modifierId          String?
+  scheduledAt         DateTime
+  selectionsClosedAt  DateTime?
+  executedAt          DateTime?
+
+  room       SyncEventRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  modifier   SyncEventModifier? @relation(fields: [modifierId], references: [id], onDelete: SetNull)
+  selections SyncRoundSelection[]
+  matches    SyncRoundMatch[]
+
+  @@unique([roomId, roundNumber])
+  @@map("sync_event_rounds")
+}
+
+model SyncEventModifier {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String   @db.Text
+  effectJson  Json?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  rounds SyncEventRound[]
+
+  @@map("sync_event_modifiers")
+}
+
+model SyncRoundSelection {
+  id         String   @id @default(cuid())
+  roundId    String
+  teamId     String
+  playerId   String
+  mascotIds  String[] // 3 mascotes escolhidos dos 9
+  isAuto     Boolean  @default(false)
+  selectedAt DateTime @default(now())
+
+  round  SyncEventRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   SyncEventTeam  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player         @relation("SyncRoundSelectionPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, playerId])
+  @@map("sync_round_selections")
+}
+
+model SyncRoundMatch {
+  id          String           @id @default(cuid())
+  roundId     String
+  teamAId     String
+  teamBId     String
+  result      SyncMatchResult?
+  teamADamage Int              @default(0)
+  teamBDamage Int              @default(0)
+  survivingA  Int              @default(0)
+  survivingB  Int              @default(0)
+  replayJson  Json?
+  executedAt  DateTime?
+
+  round SyncEventRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  teamA SyncEventTeam  @relation("SyncRoundMatchTeamA", fields: [teamAId], references: [id], onDelete: Cascade)
+  teamB SyncEventTeam  @relation("SyncRoundMatchTeamB", fields: [teamBId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, teamAId, teamBId])
+  @@map("sync_round_matches")
+}
+
+model SyncEventScore {
+  id             String  @id @default(cuid())
+  roomId         String
+  teamId         String
+  playerId       String
+  wins           Int     @default(0)
+  losses         Int     @default(0)
+  draws          Int     @default(0)
+  damageDone     Int     @default(0)
+  damageTaken    Int     @default(0)
+  survivingTotal Int     @default(0)
+  finalPosition  Int?
+  rewardGranted  Boolean @default(false)
+  updatedAt      DateTime @updatedAt @default(now())
+
+  room   SyncEventRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  team   SyncEventTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player        @relation("SyncEventScorePlayer", fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, playerId])
+  @@index([roomId, wins, damageDone])
+  @@map("sync_event_scores")
 }
 
 model UserFcmToken {
