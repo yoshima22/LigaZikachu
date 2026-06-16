@@ -276,7 +276,17 @@ export async function adminStartRoundSelectionAction(roundId: string): Promise<{
     if (round.status !== "PENDING") return { error: "Esta rodada não está pendente." };
 
     await prisma.$transaction(async (tx) => {
-      await tx.syncEventRound.update({ where: { id: roundId }, data: { status: "SELECTING" } });
+      // Sorteia o modificador já na abertura da seleção para que os jogadores
+      // possam ver as regras especiais ao escolher os mascotes
+      const modifiers = await tx.syncEventModifier.findMany({ where: { active: true }, select: { id: true } });
+      const modifierId = modifiers.length > 0
+        ? modifiers[Math.floor(Math.random() * modifiers.length)].id
+        : null;
+
+      await tx.syncEventRound.update({
+        where: { id: roundId },
+        data: { status: "SELECTING", modifierId },
+      });
       const roomStatusMap: Record<number, "ROUND_1" | "ROUND_2" | "ROUND_3"> = { 1: "ROUND_1", 2: "ROUND_2", 3: "ROUND_3" };
       await tx.syncEventRoom.update({
         where: { id: round.roomId },
@@ -423,16 +433,13 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
         }
       }
 
-      // Sorteia modificador e pré-carrega o effect (1 query, reutilizada em todos os confrontos)
-      const modifiers = await tx.syncEventModifier.findMany({ where: { active: true }, select: { id: true } });
-      const modifierId = modifiers.length > 0
-        ? modifiers[Math.floor(Math.random() * modifiers.length)].id
-        : null;
+      // Usa o modificador já sorteado na abertura da seleção
+      const modifierId = round.modifierId ?? null;
       const modEffect = await loadModEffect(modifierId);
 
       await tx.syncEventRound.update({
         where: { id: roundId },
-        data: { status: "EXECUTING", modifierId, selectionsClosedAt: new Date() },
+        data: { status: "EXECUTING", selectionsClosedAt: new Date() },
       });
 
       // Busca todas as seleções da rodada de uma vez
