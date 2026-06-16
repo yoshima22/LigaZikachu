@@ -1263,6 +1263,7 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   1007:"Koraidon",1008:"Miraidon",
   1009:"Walking Wake",1010:"Iron Leaves",
   1011:"Dipplin",1012:"Poltchageist",1013:"Sinistcha",
+  1014:"Okidogi",1015:"Munkidori",1016:"Fezandipiti",
   1017:"Ogerpon",1020:"Gouging Fire",1021:"Raging Bolt",
   1022:"Iron Boulder",1023:"Iron Crown",
   1024:"Terapagos",1025:"Pecharunt",
@@ -1661,9 +1662,15 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   996:"dragon/ice",997:"dragon/ice",998:"dragon/ice",
   999:"ghost",1000:"steel/ghost",
   1011:"grass/dragon",1012:"grass/ghost",1013:"grass/ghost",
-  // Gen 9 legendaries
+  // Gen 9 legendaries / DLC
   1001:"dark/grass",1002:"dark/ice",1003:"dark/rock",1004:"dark/fire",
+  1005:"dragon/dark",1006:"fairy/fighting",
   1007:"dragon/fighting",1008:"dragon/electric",
+  1009:"water/dragon",1010:"grass/psychic",
+  1014:"poison/fighting",1015:"poison/psychic",1016:"poison/fairy",
+  1017:"grass",
+  1020:"fire/dragon",1021:"electric/dragon",1022:"rock/psychic",1023:"steel/psychic",
+  1024:"normal",1025:"poison/ghost",
   // ── Formas especiais (IDs PokeAPI 10000+) ────────────────────────────────────
   10004:"bug/ground",  // Wormadam-Sandy
   10005:"bug/steel",   // Wormadam-Trash
