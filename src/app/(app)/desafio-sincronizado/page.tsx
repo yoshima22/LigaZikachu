@@ -43,6 +43,35 @@ export default async function DesafioSincronizadoPage() {
   const admin = isAdmin(session.user.role);
   await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
+  // Jogadores sem ticket completo disponível — para exibir publicamente
+  const playersWithAvailableTicket = await prisma.syncTicket.findMany({
+    where: { status: { in: ["AVAILABLE", "RESERVED"] } },
+    select: { ownerId: true },
+    distinct: ["ownerId"],
+  });
+  const playerIdsWithTicket = new Set(playersWithAvailableTicket.map((t) => t.ownerId));
+
+  const allActivePlayers = await prisma.player.findMany({
+    where: { active: true, user: { status: "ACTIVE" } },
+    select: {
+      id: true, displayName: true,
+      ownedSyncTicketHalves: {
+        where: { status: { in: ["AVAILABLE", "SENT"] } },
+        select: { side: true },
+      },
+    },
+    orderBy: { displayName: "asc" },
+  });
+
+  const playersNeedingTicket = allActivePlayers
+    .filter((p) => !playerIdsWithTicket.has(p.id))
+    .map((p) => ({
+      id: p.id,
+      displayName: p.displayName,
+      leftHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.LEFT).length,
+      rightHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.RIGHT).length,
+    }));
+
   const [halves, tickets, players, entries, config, openTeams] = await Promise.all([
     prisma.syncTicketHalf.findMany({
       where: { ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
@@ -221,6 +250,41 @@ export default async function DesafioSincronizadoPage() {
         </div>
         <EventPreview modifiers={activeModifiers} />
       </section>
+
+      {/* ── Quem ainda precisa de ticket ─────────────────────────────── */}
+      {playersNeedingTicket.length > 0 && (
+        <section className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Ticket size={18} className="text-amber-300" />
+            <div>
+              <h2 className="font-semibold text-slate-100">Quem ainda precisa de ticket</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Jogadores sem ticket completo disponível — envie metades para ajudá-los a montar a entrada.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {playersNeedingTicket.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-900/60 px-3 py-2">
+                <span className="text-xs font-semibold text-slate-200">{p.displayName}</span>
+                <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                  {p.leftHalves > 0 && (
+                    <span className="rounded-full border border-orange-400/40 bg-orange-500/10 px-1.5 py-0.5 text-orange-300 font-bold">
+                      🔥{p.leftHalves}
+                    </span>
+                  )}
+                  {p.rightHalves > 0 && (
+                    <span className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-1.5 py-0.5 text-cyan-300 font-bold">
+                      💧{p.rightHalves}
+                    </span>
+                  )}
+                  {p.leftHalves === 0 && p.rightHalves === 0 && (
+                    <span className="text-slate-600">sem metades</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
