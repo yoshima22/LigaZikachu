@@ -69,6 +69,7 @@ type ArenaStaleNotice = NonNullable<Awaited<ReturnType<typeof lockBotAction>>["s
 
 type AnimTurn = {
   turn: number;
+  action?: "ATTACK" | "DEFEND";
   attackerId: string;
   attackerName: string;
   attackerPokemonId: number;
@@ -78,6 +79,9 @@ type AnimTurn = {
   damage: number;
   advantageApplied: boolean;
   isPlayerAttacker: boolean;
+  actorRole?: string;
+  targetRole?: string;
+  effect?: string;
 };
 
 type MascotInfo = { id: string; pokemonId: number; name: string; level: number; maxHp: number };
@@ -188,10 +192,12 @@ function BattleAnimationModal({
     // t2: hit flash + damage
     const t2 = setTimeout(() => {
       setPhase("hit");
-      setHpMap(prev => ({
-        ...prev,
-        [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
-      }));
+      if ((turn.action ?? "ATTACK") === "ATTACK") {
+        setHpMap(prev => ({
+          ...prev,
+          [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
+        }));
+      }
     }, 600);
     // t3: back to idle
     const t3 = setTimeout(() => setPhase("wait"), 950);
@@ -264,11 +270,13 @@ function BattleAnimationModal({
               <div className="flex h-12 min-w-[74px] items-center justify-center rounded-2xl border border-border bg-slate-900/70 sm:h-20 sm:min-w-0 sm:w-full xl:h-24">
                 {showDamage && turn ? (
                   <div className="text-center">
-                    <div className={`text-2xl font-black sm:text-3xl ${turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
+                    <div className={`text-2xl font-black sm:text-3xl ${(turn.action ?? "ATTACK") === "DEFEND" ? "text-blue-300" : turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
                       style={{ textShadow: "0 0 10px currentColor" }}>
-                      -{turn.damage}
+                      {(turn.action ?? "ATTACK") === "DEFEND" ? "DEF" : `-${turn.damage}`}
                     </div>
-                    {turn.advantageApplied && <div className="text-[8px] text-yellow-400 font-bold">SUPER EF.!</div>}
+                    {(turn.action ?? "ATTACK") === "DEFEND" ? (
+                      <div className="text-[8px] text-blue-300 font-bold">POSTURA</div>
+                    ) : turn.advantageApplied && <div className="text-[8px] text-yellow-400 font-bold">SUPER EF.!</div>}
                   </div>
                 ) : (
                   <ChevronRight size={16} className="text-slate-700" />
@@ -299,17 +307,25 @@ function BattleAnimationModal({
           <div className="mx-3 mt-3 rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center sm:mx-5">
             {turn ? (
               <p className="text-[11px] text-slate-300">
-                {turn.isPlayerAttacker
-                  ? <><span className="text-blue-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-red-300 font-semibold">{turn.defenderName}</span></>
-                  : <><span className="text-red-300 font-semibold">{turn.attackerName}</span> atacou <span className="text-blue-300 font-semibold">{turn.defenderName}</span></>}
-                {showDamage && (
-                  <span className={turn.advantageApplied ? " text-yellow-300" : " text-slate-400"}>
-                    {" "}— {turn.damage} dano{turn.advantageApplied ? " ⚡" : ""}
-                  </span>
+                <span className={turn.isPlayerAttacker ? "text-blue-300 font-semibold" : "text-red-300 font-semibold"}>{turn.attackerName}</span>
+                {turn.actorRole && <span className="ml-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">{turn.actorRole}</span>}
+                {(turn.action ?? "ATTACK") === "DEFEND" ? (
+                  <span className="text-blue-200"> preparou defesa.</span>
+                ) : (
+                  <>
+                    {" "}atacou <span className={turn.isPlayerAttacker ? "text-red-300 font-semibold" : "text-blue-300 font-semibold"}>{turn.defenderName}</span>
+                    {turn.targetRole && <span className="ml-1 rounded-full border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">{turn.targetRole}</span>}
+                    {showDamage && (
+                      <span className={turn.advantageApplied ? " text-yellow-300" : " text-slate-400"}>
+                        {" "}- {turn.damage} dano{turn.advantageApplied ? " ?" : ""}
+                      </span>
+                    )}
+                  </>
                 )}
+                {turn.effect && <span className="block pt-1 text-[10px] text-slate-500">{turn.effect}</span>}
               </p>
             ) : (
-              <p className="text-[11px] text-slate-500">Calculando resultado…</p>
+              <p className="text-[11px] text-slate-500">Calculando resultado...</p>
             )}
           </div>
 

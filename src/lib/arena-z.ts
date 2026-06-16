@@ -1392,10 +1392,11 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       botMascots: bot.defenders.map(m => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp, type: getPokemonElement(m.pokemonId) })),
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
       battleAnimation: combat.log
-        .filter(t => t.action === "ATTACK")
+        .filter(t => t.action === "ATTACK" || t.action === "DEFEND")
         .slice(0, 28)
         .map(t => ({
           turn: t.turn,
+          action: t.action,
           attackerId: t.actorId,
           attackerName: t.actorName,
           attackerPokemonId: allMascotsAdmin.get(t.actorId)?.pokemonId ?? 0,
@@ -1404,6 +1405,9 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
           defenderPokemonId: allMascotsAdmin.get(t.targetId)?.pokemonId ?? 0,
           damage: t.damage,
           advantageApplied: t.advantageApplied,
+          actorRole: t.actorRole,
+          targetRole: t.targetRole,
+          effect: t.effect,
           isPlayerAttacker: t.actorOwnerId !== null,
         })),
       debugMode: true,
@@ -1653,10 +1657,11 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     battleAnimation: (() => {
       const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
       return combat.log
-        .filter(t => t.action === "ATTACK")
+        .filter(t => t.action === "ATTACK" || t.action === "DEFEND")
         .slice(0, 28) // cap para animação não ficar longa demais
         .map(t => ({
           turn: t.turn,
+          action: t.action,
           attackerId: t.actorId,
           attackerName: t.actorName,
           attackerPokemonId: allMascots.get(t.actorId)?.pokemonId ?? 0,
@@ -1665,6 +1670,9 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
           defenderPokemonId: allMascots.get(t.targetId)?.pokemonId ?? 0,
           damage: t.damage,
           advantageApplied: t.advantageApplied,
+          actorRole: t.actorRole,
+          targetRole: t.targetRole,
+          effect: t.effect,
           isPlayerAttacker: t.actorOwnerId !== null,
         }));
     })(),
@@ -2342,10 +2350,11 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       maxHp: m.hp,
     })),
     battleAnimation: combat.log
-      .filter(t => t.action === "ATTACK")
+      .filter(t => t.action === "ATTACK" || t.action === "DEFEND")
       .slice(0, 28)
       .map(t => ({
         turn: t.turn,
+        action: t.action,
         attackerId: t.actorId,
         attackerName: t.actorName,
         attackerPokemonId: allMascots.get(t.actorId)?.pokemonId ?? 0,
@@ -2354,6 +2363,9 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
         defenderPokemonId: allMascots.get(t.targetId)?.pokemonId ?? 0,
         damage: t.damage,
         advantageApplied: t.advantageApplied,
+        actorRole: t.actorRole,
+        targetRole: t.targetRole,
+        effect: t.effect,
         isPlayerAttacker: t.actorOwnerId === attackTeam.playerId,
       })),
   };

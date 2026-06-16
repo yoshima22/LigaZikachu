@@ -88,9 +88,6 @@ export async function setLineupCombatRoleAction(
     const team = await getActiveTeamForPlayer(player.id);
     if (!team) return { error: "VocÃª nÃ£o estÃ¡ em uma dupla ativa." };
 
-    const myStatus = team.playerAId === player.id ? team.lineupStatusA : team.lineupStatusB;
-    if (myStatus === "LOCKED") return { error: "Sua escalaÃ§Ã£o estÃ¡ travada e nÃ£o pode ser alterada." };
-
     const entry = team.lineups.find((l) => l.playerId === player.id && l.mascotId === mascotId);
     if (!entry) return { error: "Mascote nÃ£o estÃ¡ na sua escalaÃ§Ã£o." };
 
