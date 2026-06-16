@@ -5,7 +5,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Search } fr
 import { toast } from "sonner";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
-import { MascotCard } from "./mascot-card";
+import { MascotCard, markPetted, markPlayed } from "./mascot-card";
 import type { BankMascot } from "./mascot-bank-list";
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
@@ -273,6 +273,7 @@ function BankRow({
             inExpedition={mascot.expeditions.length > 0}
             onSuccess={(_, result) => {
               const now = new Date();
+              markPetted(mascot.id);
               setLocalLastPettedAt(now);
               if (result.newMood) setLocalMood(result.newMood);
               setFullData((current) => current ? {
@@ -296,6 +297,7 @@ function BankRow({
             inExpedition={mascot.expeditions.length > 0}
             onSuccess={(_, result) => {
               const now = new Date();
+              markPlayed(mascot.id);
               setLocalLastPlayedAt(now);
               if (result.newMood) setLocalMood(result.newMood);
               setFullData((current) => current ? {
@@ -349,7 +351,7 @@ function BankRow({
               </div>
               <div className="px-2 pb-2">
                 <MascotCard
-                  mascot={{ ...fullData, hasFood, hasSweet }}
+                  mascot={{ ...fullData, hasFood, hasSweet, lastPlayedAt: localLastPlayedAt, lastPettedAt: localLastPettedAt }}
                   isAdmin={isAdmin}
                   compactView={view === "basic"}
                   onRefresh={fetchFull}
