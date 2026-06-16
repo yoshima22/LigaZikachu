@@ -9,6 +9,7 @@ import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
 import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import { SyncRoomPanel } from "./_components/sync-room-panel";
+import { ModifierPanel } from "./_components/modifier-panel";
 import {
   leaveTeamAction,
   confirmTeamAction,
@@ -137,6 +138,9 @@ export default async function DesafioSincronizadoPage() {
       },
     },
   });
+
+  // Modificadores (apenas admin precisa da lista completa)
+  const allModifiers = admin ? await prisma.syncEventModifier.findMany({ orderBy: { active: "desc" } }) : [];
 
   const leftHalves = halves.filter((half) => half.side === SyncTicketSide.LEFT);
   const rightHalves = halves.filter((half) => half.side === SyncTicketSide.RIGHT);
@@ -393,18 +397,25 @@ export default async function DesafioSincronizadoPage() {
         </section>
       )}
 
-      {/* ── Admin: todas as salas do dia / formar salas ──────────────── */}
+      {/* ── Admin: gerenciar salas e modificadores ───────────────────── */}
       {admin && (
-        <section className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <h2 className="font-semibold text-slate-100">Admin — Gerenciar salas</h2>
-          <form action={async () => {
-            "use server";
-            await adminFormRoomsAction();
-          }}>
-            <button className="rounded-lg border border-[#FFCB05]/40 px-4 py-2 text-sm font-bold text-[#FFCB05]">
-              Fechar inscrições e formar salas agora
-            </button>
-          </form>
+        <section className="rounded-2xl border border-border bg-card p-5 space-y-6">
+          <div className="space-y-3">
+            <h2 className="font-semibold text-slate-100">Admin — Gerenciar salas</h2>
+            <form action={async () => {
+              "use server";
+              await adminFormRoomsAction();
+            }}>
+              <button className="rounded-lg border border-[#FFCB05]/40 px-4 py-2 text-sm font-bold text-[#FFCB05]">
+                Fechar inscrições e formar salas agora
+              </button>
+            </form>
+          </div>
+
+          <div className="border-t border-border pt-5 space-y-3">
+            <h2 className="font-semibold text-slate-100">Admin — Modificadores de rodada</h2>
+            <ModifierPanel modifiers={allModifiers} />
+          </div>
         </section>
       )}
 

@@ -4,10 +4,11 @@ import { useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Lock, Swords, Trophy } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, Medal, Trophy, Zap } from "lucide-react";
 import {
   adminStartRoundSelectionAction,
   adminExecuteRoundAction,
+  adminStartTiebreakAction,
   selectRoundMascotsAction,
   adminFinalizeRoomAction,
 } from "../combat-actions";
@@ -55,7 +56,10 @@ interface Score {
   losses: number;
   draws: number;
   damageDone: number;
+  damageTaken: number;
+  survivingTotal: number;
   finalPosition: number | null;
+  rewardGranted: boolean;
   player: { displayName: string };
 }
 
@@ -85,12 +89,24 @@ interface Props {
   myLineupMascots: MascotSlim[];
 }
 
+const ROOM_STATUS_LABEL: Record<string, string> = {
+  FORMING: "Aguardando inscrições",
+  VALIDATING: "Validando duplas",
+  READY: "Salas prontas — aguardando início",
+  ROUND_1: "🥊 Rodada 1 em andamento",
+  ROUND_2: "🥊 Rodada 2 em andamento",
+  ROUND_3: "🥊 Rodada 3 em andamento",
+  TIEBREAK: "⚡ Desempate em andamento",
+  FINISHED: "✅ Evento encerrado",
+  CANCELLED: "❌ Cancelado",
+};
+
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export function SyncRoomPanel({ room, playerId, isAdmin, myLineupMascots }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const act = async (fn: () => Promise<{ error?: string }>) => {
+  const act = (fn: () => Promise<{ error?: string }>) => {
     startTransition(async () => {
       const r = await fn();
       if (r.error) toast.error(r.error);
@@ -99,76 +115,134 @@ export function SyncRoomPanel({ room, playerId, isAdmin, myLineupMascots }: Prop
   };
 
   const myTeam = room.teams.find((t) => t.playerAId === playerId || t.playerBId === playerId);
-  const activeRound = room.rounds.find((r) => r.status === "SELECTING" || r.status === "MODIFIER_DRAWN" || r.status === "EXECUTING");
+  const allRoundsDone = room.rounds.filter((r) => r.roundNumber > 0).every((r) => r.status === "DONE");
+  const hasTiebreak = room.rounds.some((r) => r.roundNumber === 0);
 
-  const roomStatusLabel: Record<string, string> = {
-    FORMING: "Aguardando inscrições",
-    VALIDATING: "Validando duplas",
-    READY: "Salas formadas — aguardando início",
-    ROUND_1: "🥊 Rodada 1 em andamento",
-    ROUND_2: "🥊 Rodada 2 em andamento",
-    ROUND_3: "🥊 Rodada 3 em andamento",
-    TIEBREAK: "⚡ Desempate",
-    FINISHED: "✅ Evento encerrado",
-    CANCELLED: "❌ Cancelado",
-  };
+  // Duplas ordenadas por slot
+  const sortedTeams = [...room.teams].sort((a, b) => (a.roomSlot ?? 0) - (b.roomSlot ?? 0));
+
+  // Ranking ao vivo: agrupa scores por dupla (média ou soma por jogador da dupla)
+  const ranking = buildRanking(room);
 
   return (
-    <div className="space-y-5">
-      {/* Header da sala */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h3 className="font-semibold text-slate-100">Arena {room.roomIndex}</h3>
-          <p className="text-xs text-slate-400">{roomStatusLabel[room.status] ?? room.status}</p>
+          <p className="text-xs text-slate-400">{ROOM_STATUS_LABEL[room.status] ?? room.status}</p>
         </div>
-        {isAdmin && room.status === "FINISHED" && (
-          <button
-            disabled={pending}
-            onClick={() => act(() => adminFinalizeRoomAction(room.id))}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-bold text-slate-950 disabled:opacity-50"
-          >
-            <Trophy size={14} /> Entregar recompensas
-          </button>
-        )}
+        <div className="flex gap-2">
+          {isAdmin && allRoundsDone && !hasTiebreak && room.status !== "FINISHED" && (
+            <button
+              disabled={pending}
+              onClick={() => act(() => adminStartTiebreakAction(room.id))}
+              className="inline-flex items-center gap-2 rounded-lg border border-purple-400/40 px-3 py-1.5 text-xs font-bold text-purple-200 disabled:opacity-50"
+            >
+              <Zap size={13} /> Iniciar desempate
+            </button>
+          )}
+          {isAdmin && (room.status === "FINISHED" || allRoundsDone) && (
+            <button
+              disabled={pending}
+              onClick={() => act(() => adminFinalizeRoomAction(room.id))}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-bold text-slate-950 disabled:opacity-50"
+            >
+              <Trophy size={13} /> Entregar recompensas
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Duplas da sala */}
-      <div className="grid grid-cols-2 gap-2">
-        {room.teams.sort((a, b) => (a.roomSlot ?? 0) - (b.roomSlot ?? 0)).map((team) => {
-          const score = room.scores.find((s) => s.teamId === team.id && s.playerId === team.playerAId);
-          const isMyTeam = team.id === myTeam?.id;
-          return (
-            <div key={team.id} className={`rounded-xl border p-3 text-xs ${isMyTeam ? "border-[#FFCB05]/40 bg-[#FFCB05]/5" : "border-border bg-slate-950/60"}`}>
-              <p className="font-semibold text-slate-100">
-                {team.playerA.displayName}
-                {team.playerB ? ` + ${team.playerB.displayName}` : ""}
-              </p>
-              <p className="mt-1 text-slate-400">Slot {team.roomSlot}</p>
-              {score && (
-                <p className="mt-1 font-bold text-[#FFCB05]">
-                  {score.wins}V {score.losses}D {score.draws}E
-                  {score.finalPosition ? ` — ${score.finalPosition}º` : ""}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* Ranking ao vivo */}
+      <RankingTable ranking={ranking} playerId={playerId} />
 
       {/* Rodadas */}
-      {room.rounds.map((round) => (
-        <RoundCard
-          key={round.id}
-          round={round}
-          room={room}
-          playerId={playerId}
-          myTeam={myTeam ?? null}
-          isAdmin={isAdmin}
-          myLineupMascots={myLineupMascots}
-          pending={pending}
-          onAct={act}
-        />
-      ))}
+      {room.rounds
+        .sort((a, b) => a.roundNumber - b.roundNumber)
+        .map((round) => (
+          <RoundCard
+            key={round.id}
+            round={round}
+            room={room}
+            playerId={playerId}
+            myTeam={myTeam ?? null}
+            isAdmin={isAdmin}
+            myLineupMascots={myLineupMascots}
+            pending={pending}
+            onAct={act}
+          />
+        ))}
+    </div>
+  );
+}
+
+// ── Ranking ────────────────────────────────────────────────────────────────────
+
+interface RankingEntry {
+  teamId: string;
+  teamName: string;
+  wins: number;
+  damageDone: number;
+  damageTaken: number;
+  finalPosition: number | null;
+  rewardGranted: boolean;
+  playerIds: string[];
+}
+
+function buildRanking(room: Room): RankingEntry[] {
+  // Agrupa scores por dupla (2 jogadores por dupla, soma dano)
+  const byTeam = new Map<string, RankingEntry>();
+  for (const team of room.teams) {
+    const teamName = `${team.playerA.displayName}${team.playerB ? ` + ${team.playerB.displayName}` : ""}`;
+    byTeam.set(team.id, { teamId: team.id, teamName, wins: 0, damageDone: 0, damageTaken: 0, finalPosition: null, rewardGranted: false, playerIds: [team.playerAId, ...(team.playerBId ? [team.playerBId] : [])] });
+  }
+  for (const score of room.scores) {
+    const entry = byTeam.get(score.teamId);
+    if (!entry) continue;
+    entry.wins = Math.max(entry.wins, score.wins); // mesmo valor para ambos os jogadores da dupla
+    entry.damageDone += score.damageDone;
+    entry.damageTaken += score.damageTaken;
+    if (score.finalPosition) entry.finalPosition = score.finalPosition;
+    if (score.rewardGranted) entry.rewardGranted = true;
+  }
+  return [...byTeam.values()].sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
+    return a.damageTaken - b.damageTaken;
+  });
+}
+
+function RankingTable({ ranking, playerId }: { ranking: RankingEntry[]; playerId: string }) {
+  const medals = ["🥇", "🥈", "🥉", "4️⃣"];
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border bg-slate-950/60">
+            <th className="py-2 px-3 text-left font-semibold text-slate-400">#</th>
+            <th className="py-2 px-3 text-left font-semibold text-slate-400">Dupla</th>
+            <th className="py-2 px-3 text-center font-semibold text-slate-400">V</th>
+            <th className="py-2 px-3 text-center font-semibold text-slate-400">Dano</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranking.map((entry, i) => {
+            const isMe = entry.playerIds.includes(playerId);
+            return (
+              <tr key={entry.teamId} className={`border-b border-border/40 ${isMe ? "bg-[#FFCB05]/5" : ""}`}>
+                <td className="py-2 px-3 text-center">{medals[i] ?? `${i + 1}`}</td>
+                <td className={`py-2 px-3 font-medium ${isMe ? "text-[#FFCB05]" : "text-slate-200"}`}>
+                  {entry.teamName}
+                  {entry.rewardGranted && <span className="ml-1 text-[#FFCB05]">✓</span>}
+                </td>
+                <td className="py-2 px-3 text-center font-bold text-slate-100">{entry.wins}</td>
+                <td className="py-2 px-3 text-center text-slate-400">{entry.damageDone.toLocaleString()}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -188,8 +262,9 @@ function RoundCard({
   onAct: (fn: () => Promise<{ error?: string }>) => void;
 }) {
   const mySelection = round.selections.find((s) => s.playerId === playerId);
-  const roundLabel = round.roundNumber === 0 ? "Desempate" : `Rodada ${round.roundNumber}`;
-  const statusBadge: Record<string, string> = {
+  const roundLabel = round.roundNumber === 0 ? "⚡ Desempate" : `Rodada ${round.roundNumber}`;
+
+  const statusColor: Record<string, string> = {
     PENDING: "text-slate-500",
     SELECTING: "text-amber-300",
     MODIFIER_DRAWN: "text-blue-300",
@@ -197,38 +272,43 @@ function RoundCard({
     DONE: "text-green-400",
   };
 
+  const statusText: Record<string, string> = {
+    PENDING: "Aguardando",
+    SELECTING: "Selecionando mascotes…",
+    MODIFIER_DRAWN: "Modificador revelado",
+    EXECUTING: "Executando combates…",
+    DONE: "Concluída ✓",
+  };
+
   return (
     <div className="rounded-xl border border-border bg-slate-950/60 p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <Swords size={16} className="text-slate-400" />
           <span className="text-sm font-semibold text-slate-100">{roundLabel}</span>
-          <span className={`text-xs ${statusBadge[round.status] ?? "text-slate-500"}`}>
-            {round.status === "PENDING" && "Aguardando"}
-            {round.status === "SELECTING" && "Selecionando mascotes…"}
-            {round.status === "MODIFIER_DRAWN" && "Modificador revelado"}
-            {round.status === "EXECUTING" && "Executando…"}
-            {round.status === "DONE" && "Concluída"}
+          <span className={`text-xs ${statusColor[round.status] ?? "text-slate-500"}`}>
+            {statusText[round.status] ?? round.status}
           </span>
         </div>
-        {isAdmin && round.status === "PENDING" && (
-          <button
-            disabled={pending}
-            onClick={() => onAct(() => adminStartRoundSelectionAction(round.id))}
-            className="rounded-lg border border-amber-400/40 px-3 py-1 text-xs font-bold text-amber-100 disabled:opacity-50"
-          >
-            Abrir seleção
-          </button>
-        )}
-        {isAdmin && (round.status === "SELECTING" || round.status === "MODIFIER_DRAWN") && (
-          <button
-            disabled={pending}
-            onClick={() => onAct(() => adminExecuteRoundAction(round.id))}
-            className="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
-          >
-            Executar combates
-          </button>
-        )}
+        <div className="flex gap-2">
+          {isAdmin && round.status === "PENDING" && (
+            <button
+              disabled={pending}
+              onClick={() => onAct(() => adminStartRoundSelectionAction(round.id))}
+              className="rounded-lg border border-amber-400/40 px-3 py-1 text-xs font-bold text-amber-100 disabled:opacity-50"
+            >
+              Abrir seleção
+            </button>
+          )}
+          {isAdmin && (round.status === "SELECTING" || round.status === "MODIFIER_DRAWN") && (
+            <button
+              disabled={pending}
+              onClick={() => onAct(() => adminExecuteRoundAction(round.id))}
+              className="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+            >
+              Executar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Modificador */}
@@ -239,32 +319,32 @@ function RoundCard({
         </div>
       )}
 
-      {/* Seleção de mascotes (apenas se rodada ativa e jogador na sala) */}
-      {round.status === "SELECTING" && myTeam && (
+      {/* Seleção ativa */}
+      {round.status === "SELECTING" && myTeam && !mySelection && (
         <MascotSelector
           roundId={round.id}
           myTeamLineup={myTeam.lineups.filter((l) => l.playerId === playerId)}
-          existingSelection={mySelection?.mascotIds ?? null}
+          usedInPrevRounds={getUsedMascots(round, room, playerId)}
           onAct={onAct}
           pending={pending}
         />
       )}
 
       {/* Seleção confirmada */}
-      {mySelection && round.status !== "SELECTING" && (
+      {mySelection && (
         <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-xs">
           <p className="font-semibold text-green-400 flex items-center gap-1">
             <CheckCircle2 size={13} />
-            {mySelection.isAuto ? "Seleção automática" : "Sua seleção confirmada"}
+            {mySelection.isAuto ? "Seleção automática do sistema" : "Sua seleção confirmada"}
           </p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex gap-2 flex-wrap">
             {mySelection.mascotIds.map((mid) => {
               const m = myLineupMascots.find((x) => x.id === mid);
               if (!m) return null;
               return (
                 <div key={mid} className="flex flex-col items-center">
                   <Image src={getSpriteUrl(m.pokemonId)} alt={m.nickname ?? `#${m.pokemonId}`} width={40} height={40} className="pixelated" />
-                  <span className="text-[10px] text-slate-400">{m.nickname ?? `#${m.pokemonId}`}</span>
+                  <span className="text-[10px] text-slate-400 truncate w-10 text-center">{m.nickname ?? `#${m.pokemonId}`}</span>
                 </div>
               );
             })}
@@ -272,9 +352,15 @@ function RoundCard({
         </div>
       )}
 
-      {/* Resultados dos combates */}
+      {/* Aguardando seleção — já enviou mas rodada ainda aberta */}
+      {round.status === "SELECTING" && mySelection && (
+        <p className="text-xs text-slate-500">Aguardando outros jogadores e fechamento da rodada pelo admin…</p>
+      )}
+
+      {/* Resultados */}
       {round.matches.length > 0 && (
         <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Confrontos</p>
           {round.matches.map((match) => (
             <MatchResult key={match.id} match={match} room={room} />
           ))}
@@ -284,18 +370,29 @@ function RoundCard({
   );
 }
 
+function getUsedMascots(currentRound: Round, room: Room, playerId: string): Set<string> {
+  const used = new Set<string>();
+  for (const r of room.rounds) {
+    if (r.roundNumber >= currentRound.roundNumber || r.roundNumber === 0) continue;
+    for (const sel of r.selections) {
+      if (sel.playerId === playerId) sel.mascotIds.forEach((id) => used.add(id));
+    }
+  }
+  return used;
+}
+
 // ── Seletor de mascotes ────────────────────────────────────────────────────────
 
 function MascotSelector({
-  roundId, myTeamLineup, existingSelection, onAct, pending,
+  roundId, myTeamLineup, usedInPrevRounds, onAct, pending,
 }: {
   roundId: string;
   myTeamLineup: Team["lineups"];
-  existingSelection: string[] | null;
+  usedInPrevRounds: Set<string>;
   onAct: (fn: () => Promise<{ error?: string }>) => void;
   pending: boolean;
 }) {
-  const [selected, setSelected] = useState<string[]>(existingSelection ?? []);
+  const [selected, setSelected] = useState<string[]>([]);
 
   const toggle = (id: string) => {
     setSelected((prev) =>
@@ -303,22 +400,42 @@ function MascotSelector({
     );
   };
 
+  const available = myTeamLineup.filter((l) => !usedInPrevRounds.has(l.mascotId));
+
   return (
     <div className="rounded-lg border border-amber-400/30 bg-amber-500/5 p-3 space-y-3">
-      <p className="text-xs font-semibold text-amber-200">Escolha 3 mascotes para esta rodada ({selected.length}/3)</p>
+      <p className="text-xs font-semibold text-amber-200">
+        Escolha 3 mascotes para esta rodada ({selected.length}/3)
+      </p>
+      {available.length === 0 && (
+        <p className="text-xs text-slate-500">Todos os seus mascotes já foram usados. O sistema auto-selecionará.</p>
+      )}
       <div className="grid grid-cols-5 gap-2">
-        {myTeamLineup.map(({ mascot, slot }) => {
+        {myTeamLineup.map(({ mascot }) => {
+          const used = usedInPrevRounds.has(mascot.id);
           const sel = selected.includes(mascot.id);
           return (
             <button
               key={mascot.id}
               type="button"
+              disabled={used}
               onClick={() => toggle(mascot.id)}
-              className={`flex flex-col items-center rounded-lg border p-1 transition-colors ${sel ? "border-[#FFCB05] bg-[#FFCB05]/20" : "border-border bg-slate-950/60 hover:border-slate-500"}`}
+              className={`flex flex-col items-center rounded-lg border p-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                sel ? "border-[#FFCB05] bg-[#FFCB05]/20" : "border-border bg-slate-950/60 hover:border-slate-500"
+              }`}
             >
-              <Image src={getSpriteUrl(mascot.pokemonId)} alt={mascot.nickname ?? `#${mascot.pokemonId}`} width={40} height={40} className="pixelated" />
-              <span className="text-[10px] text-slate-400 truncate w-full text-center">{mascot.nickname ?? `Nv.${mascot.level}`}</span>
+              <Image
+                src={getSpriteUrl(mascot.pokemonId)}
+                alt={mascot.nickname ?? `#${mascot.pokemonId}`}
+                width={40}
+                height={40}
+                className="pixelated"
+              />
+              <span className="text-[10px] text-slate-400 truncate w-full text-center">
+                {mascot.nickname ?? `Nv.${mascot.level}`}
+              </span>
               {sel && <Lock size={10} className="text-[#FFCB05]" />}
+              {used && <span className="text-[10px] text-red-400">usado</span>}
             </button>
           );
         })}
@@ -343,32 +460,39 @@ function MatchResult({ match, room }: { match: RoundMatch; room: Room }) {
   const teamB = room.teams.find((t) => t.id === match.teamBId);
   if (!teamA || !teamB) return null;
 
-  const teamAName = `${teamA.playerA.displayName}${teamA.playerB ? ` + ${teamA.playerB.displayName}` : ""}`;
-  const teamBName = `${teamB.playerA.displayName}${teamB.playerB ? ` + ${teamB.playerB.displayName}` : ""}`;
-
-  const winner = match.result === "TEAM_A_WIN" ? teamAName : match.result === "TEAM_B_WIN" ? teamBName : "Empate";
+  const nameA = `${teamA.playerA.displayName}${teamA.playerB ? ` + ${teamA.playerB.displayName}` : ""}`;
+  const nameB = `${teamB.playerA.displayName}${teamB.playerB ? ` + ${teamB.playerB.displayName}` : ""}`;
+  const winner = match.result === "TEAM_A_WIN" ? nameA : match.result === "TEAM_B_WIN" ? nameB : "Empate";
 
   return (
     <div className="rounded-lg border border-border bg-slate-900 p-3 text-xs space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold text-slate-100">{teamAName} <span className="text-slate-500">vs</span> {teamBName}</p>
-        <span className={`font-bold ${match.result ? "text-green-400" : "text-slate-500"}`}>
-          {match.result ? `Vencedor: ${winner}` : "Aguardando"}
-        </span>
+      <div className="flex items-center justify-between flex-wrap gap-1">
+        <p className="font-semibold text-slate-100">
+          {nameA} <span className="text-slate-500">vs</span> {nameB}
+        </p>
+        {match.result && (
+          <span className="font-bold text-green-400">
+            <Medal size={11} className="inline mr-1" />
+            {winner}
+          </span>
+        )}
       </div>
       {match.result && (
         <div className="flex gap-4 text-slate-400">
-          <span>🗡️ A: {match.teamADamage} dmg, {match.survivingA} vivos</span>
-          <span>🗡️ B: {match.teamBDamage} dmg, {match.survivingB} vivos</span>
+          <span>A: {match.teamADamage} dano · {match.survivingA} vivos</span>
+          <span>B: {match.teamBDamage} dano · {match.survivingB} vivos</span>
         </div>
       )}
       {match.replayJson != null && (
-        <button onClick={() => setShowReplay((p) => !p)} className="text-cyan-400 underline">
-          {showReplay ? "Ocultar replay" : "Ver replay"}
+        <button
+          onClick={() => setShowReplay((p) => !p)}
+          className="text-cyan-400 underline text-[10px]"
+        >
+          {showReplay ? "Ocultar replay" : "▶ Ver replay"}
         </button>
       )}
       {showReplay && match.replayJson != null && (
-        <pre className="rounded-lg border border-border bg-slate-950 p-2 text-[10px] text-slate-300 overflow-auto max-h-40">
+        <pre className="rounded-lg border border-border bg-slate-950 p-2 text-[10px] text-slate-300 overflow-auto max-h-48">
           {JSON.stringify(match.replayJson as object, null, 2)}
         </pre>
       )}
