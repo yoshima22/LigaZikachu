@@ -11,6 +11,7 @@ import { SyncLineupPanel } from "./_components/sync-lineup-panel";
 import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import { SyncRoomPanel } from "./_components/sync-room-panel";
 import { ModifierPanel } from "./_components/modifier-panel";
+import { EventPreview } from "./_components/event-preview";
 import { SimulationButton } from "./_components/simulation-button";
 import { UndoSimulationButton } from "./_components/undo-simulation-button";
 import {
@@ -143,7 +144,12 @@ export default async function DesafioSincronizadoPage() {
     },
   });
 
-  // Modificadores (apenas admin precisa da lista completa)
+  // Modificadores ativos — visíveis a todos para preview; admin vê todos
+  const activeModifiers = await prisma.syncEventModifier.findMany({
+    where: { active: true },
+    select: { id: true, name: true, description: true },
+    orderBy: { name: "asc" },
+  });
   const allModifiers = admin ? await prisma.syncEventModifier.findMany({ orderBy: { active: "desc" } }) : [];
 
   // Ranking público de hoje — todas as salas do dia
@@ -205,6 +211,15 @@ export default async function DesafioSincronizadoPage() {
             />
           </div>
         </div>
+      </section>
+
+      {/* ── Preview público: recompensas + modificadores ─────────────── */}
+      <section className="rounded-2xl border border-border bg-card p-5 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles size={18} className="text-[#FFCB05]" />
+          <h2 className="font-semibold text-slate-100">O que está em jogo</h2>
+        </div>
+        <EventPreview modifiers={activeModifiers} />
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
