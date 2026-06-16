@@ -51,15 +51,25 @@ export default async function DesafioSincronizadoPage() {
   });
   const playerIdsWithTicket = new Set(playersWithAvailableTicket.map((t) => t.ownerId));
 
+  // Conta metades utilizáveis por jogador (geradas por OUTRO jogador) via SQL direto
+  const usableHalfCounts = await prisma.$queryRaw<{ owner_id: string; side: string; count: bigint }[]>`
+    SELECT owner_id, side, COUNT(*)::bigint AS count
+    FROM sync_ticket_halves
+    WHERE status IN ('AVAILABLE', 'SENT')
+      AND generated_by_player_id != owner_id
+    GROUP BY owner_id, side
+  `;
+  const usableByPlayer = new Map<string, { left: number; right: number }>();
+  for (const row of usableHalfCounts) {
+    if (!usableByPlayer.has(row.owner_id)) usableByPlayer.set(row.owner_id, { left: 0, right: 0 });
+    const entry = usableByPlayer.get(row.owner_id)!;
+    if (row.side === "LEFT") entry.left = Number(row.count);
+    else entry.right = Number(row.count);
+  }
+
   const allActivePlayers = await prisma.player.findMany({
     where: { active: true, user: { status: "ACTIVE" } },
-    select: {
-      id: true, displayName: true,
-      ownedSyncTicketHalves: {
-        where: { status: { in: ["AVAILABLE", "SENT"] } },
-        select: { side: true, generatedByPlayerId: true },
-      },
-    },
+    select: { id: true, displayName: true },
     orderBy: { displayName: "asc" },
   });
 
@@ -68,8 +78,8 @@ export default async function DesafioSincronizadoPage() {
     .map((p) => ({
       id: p.id,
       displayName: p.displayName,
-      leftHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.LEFT && h.generatedByPlayerId !== p.id).length,
-      rightHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.RIGHT && h.generatedByPlayerId !== p.id).length,
+      leftHalves: usableByPlayer.get(p.id)?.left ?? 0,
+      rightHalves: usableByPlayer.get(p.id)?.right ?? 0,
     }));
 
   const [halves, tickets, players, entries, config, openTeams] = await Promise.all([
