@@ -549,7 +549,7 @@ export async function interactWithMascot(
   const PET_COOLDOWN_MS  = 25 * 60 * 1000;
 
   if (!skipCooldown && type === "PLAY") {
-    const playedAt = mascot.lastPlayedAt ?? mascot.lastInteractedAt;
+    const playedAt = mascot.lastPlayedAt;
     if (playedAt && now.getTime() - playedAt.getTime() < PLAY_COOLDOWN_MS) {
       const remaining = Math.ceil((PLAY_COOLDOWN_MS - (now.getTime() - playedAt.getTime())) / 60_000);
       return { success: false, message: `Espere mais ${remaining} min antes de brincar novamente.`, happinessChange: 0, expGained: 0 };

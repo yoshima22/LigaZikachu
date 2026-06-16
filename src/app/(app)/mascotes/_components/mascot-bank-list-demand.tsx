@@ -122,7 +122,7 @@ function QuickInteractButton({
   const [playCooldownUntil, setPlayCooldownUntil] = useState<number | null>(null);
   const [petCooldownUntil, setPetCooldownUntil] = useState<number | null>(null);
 
-  const serverPlayBase = lastPlayedAt ?? lastInteractedAt;
+  const serverPlayBase = lastPlayedAt;
   const serverPlayCooldownUntil = serverPlayBase ? new Date(serverPlayBase).getTime() + PLAY_COOLDOWN_MS : 0;
   const serverPetCooldownUntil = lastPettedAt ? new Date(lastPettedAt).getTime() + PET_COOLDOWN_MS : 0;
   const effectivePlayCooldownUntil = Math.max(serverPlayCooldownUntil, playCooldownUntil ?? 0);

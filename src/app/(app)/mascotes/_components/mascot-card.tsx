@@ -378,20 +378,15 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     return () => clearInterval(iv);
   }, []);
 
-  // Semeia o Map de cooldown a partir do servidor (sobrevive a refresh de página)
-  // Prioriza lastPlayedAt (quando disponível após migração), cai para lastInteractedAt como proxy
-  // Chama setNowMs para forçar re-render e aplicar o cooldown imediatamente na UI
+  // Semeia o Map de cooldown a partir do servidor (sobrevive a refresh de pagina).
+  // Brincar e carinho possuem cooldowns independentes.
   useEffect(() => {
-    const ts = mascot.lastPlayedAt
-      ? new Date(mascot.lastPlayedAt).getTime()
-      : mascot.lastInteractedAt
-        ? new Date(mascot.lastInteractedAt).getTime()
-        : 0;
+    const ts = mascot.lastPlayedAt ? new Date(mascot.lastPlayedAt).getTime() : 0;
     if (ts > 0 && ts > (_playedAt.get(mascot.id) ?? 0)) {
       _playedAt.set(mascot.id, ts);
-      setNowMs(Date.now()); // força re-render para refletir cooldown na UI
+      setNowMs(Date.now());
     }
-  }, [mascot.id, mascot.lastPlayedAt, mascot.lastInteractedAt]);
+  }, [mascot.id, mascot.lastPlayedAt]);
   // Semeia cooldown de carinho a partir do localStorage (persiste entre refreshes)
   useEffect(() => {
     const ts = lsPetGet(mascot.id);
