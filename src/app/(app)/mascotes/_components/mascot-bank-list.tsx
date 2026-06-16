@@ -208,43 +208,35 @@ function BankRow({
 
   return (
     <div className="rounded-xl border border-border/50 bg-slate-950/40 overflow-hidden">
-      {/* Row — click to expand */}
-      <button
-        type="button"
-        onClick={handleExpand}
-        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-800/40 transition-colors"
-      >
-        {/* Static sprite */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={getStaticSpriteUrl(mascot.pokemonId)}
-          alt=""
-          className={`h-9 w-9 object-contain shrink-0 ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
-          style={{ imageRendering: "pixelated" }}
-          loading="lazy"
-        />
-
-        {/* Name + info */}
-        <span className="flex-1 min-w-0 space-y-0.5">
-          <span className="flex items-center gap-1.5 min-w-0">
-            <span className={`truncate text-sm font-semibold ${nameColor}`}>{name}</span>
-            {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">✦</span>}
-          </span>
-          <span className="flex items-center gap-1.5 flex-wrap">
-            {/* Nível */}
-            <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
-            {/* Tipos — badge(s) colorido(s) */}
-            {types.map(t => (
-              <span key={t} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[t] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
-                {TYPE_LABELS[t] ?? t}
+      <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-800/40 transition-colors">
+        {/* Área clicável para expandir */}
+        <button type="button" onClick={handleExpand} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={getStaticSpriteUrl(mascot.pokemonId)}
+            alt=""
+            className={`h-9 w-9 object-contain shrink-0 ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
+            style={{ imageRendering: "pixelated" }}
+            loading="lazy"
+          />
+          <span className="flex-1 min-w-0 space-y-0.5">
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className={`truncate text-sm font-semibold ${nameColor}`}>{name}</span>
+              {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">✦</span>}
+            </span>
+            <span className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
+              {types.map(t => (
+                <span key={t} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[t] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
+                  {TYPE_LABELS[t] ?? t}
+                </span>
+              ))}
+              <span className="text-[10px] text-slate-600">
+                {MOOD_EMOJI[mascot.mood] ?? "•"} {mascot.mood}
               </span>
-            ))}
-            {/* Humor */}
-            <span className="text-[10px] text-slate-600">
-              {MOOD_EMOJI[mascot.mood] ?? "•"} {mascot.mood}
             </span>
           </span>
-        </span>
+        </button>
 
         {/* Quick actions + occupation chips + chevron */}
         <span className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
@@ -262,15 +254,17 @@ function BankRow({
               </span>
             )}
           </span>
-          {loading ? (
-            <Loader2 size={13} className="animate-spin text-slate-500 shrink-0" />
-          ) : open ? (
-            <ChevronUp size={13} className="text-slate-500 shrink-0" />
-          ) : (
-            <ChevronDown size={13} className="text-slate-500 shrink-0" />
-          )}
+          <button type="button" onClick={handleExpand} className="ml-0.5">
+            {loading ? (
+              <Loader2 size={13} className="animate-spin text-slate-500 shrink-0" />
+            ) : open ? (
+              <ChevronUp size={13} className="text-slate-500 shrink-0" />
+            ) : (
+              <ChevronDown size={13} className="text-slate-500 shrink-0" />
+            )}
+          </button>
         </span>
-      </button>
+      </div>
 
       {/* Expanded panel */}
       {open && (

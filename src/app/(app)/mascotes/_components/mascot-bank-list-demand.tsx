@@ -163,34 +163,34 @@ function BankRow({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/50 bg-slate-950/40">
-      <button
-        type="button"
-        onClick={handleExpand}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-800/40"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={getStaticSpriteUrl(mascot.pokemonId)}
-          alt=""
-          className={`h-9 w-9 shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
-          style={{ imageRendering: "pixelated" }}
-          loading="lazy"
-        />
-        <span className="min-w-0 flex-1 space-y-0.5">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
-            {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}
+      <div className="flex w-full items-center gap-3 px-3 py-2.5 transition-colors hover:bg-slate-800/40">
+        {/* Área clicável para expandir */}
+        <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={getStaticSpriteUrl(mascot.pokemonId)}
+            alt=""
+            className={`h-9 w-9 shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
+            style={{ imageRendering: "pixelated" }}
+            loading="lazy"
+          />
+          <span className="min-w-0 flex-1 space-y-0.5">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
+              {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}
+            </span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
+              {types.map((type) => (
+                <span key={type} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[type] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
+                  {TYPE_LABELS[type] ?? type}
+                </span>
+              ))}
+              <span className="text-[10px] text-slate-600">{MOOD_EMOJI[mascot.mood] ?? "-"} {mascot.mood}</span>
+            </span>
           </span>
-          <span className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
-            {types.map((type) => (
-              <span key={type} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[type] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
-                {TYPE_LABELS[type] ?? type}
-              </span>
-            ))}
-            <span className="text-[10px] text-slate-600">{MOOD_EMOJI[mascot.mood] ?? "-"} {mascot.mood}</span>
-          </span>
-        </span>
+        </button>
+        {/* Ações rápidas + chips + chevron */}
         <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           <QuickInteractButton mascotId={mascot.id} type="PET" label="🤗 Carinho" />
           <QuickInteractButton mascotId={mascot.id} type="PLAY" label="🎮 Brincar" />
@@ -201,9 +201,11 @@ function BankRow({
               <span key={chip.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${chip.cls}`}>{chip.label}</span>
             ))}
           </span>
-          {loading ? <Loader2 size={13} className="shrink-0 animate-spin text-slate-500" /> : open ? <ChevronUp size={13} className="shrink-0 text-slate-500" /> : <ChevronDown size={13} className="shrink-0 text-slate-500" />}
+          <button type="button" onClick={handleExpand} className="ml-0.5">
+            {loading ? <Loader2 size={13} className="shrink-0 animate-spin text-slate-500" /> : open ? <ChevronUp size={13} className="shrink-0 text-slate-500" /> : <ChevronDown size={13} className="shrink-0 text-slate-500" />}
+          </button>
         </span>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-border/40 bg-slate-900/30">
