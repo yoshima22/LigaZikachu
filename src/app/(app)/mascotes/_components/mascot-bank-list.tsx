@@ -2,8 +2,9 @@
 
 import { useState, useTransition, useCallback } from "react";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
 import { getPokemonElement, getPokemonTypes, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
-import { getMascotDetailAction } from "../actions";
+import { getMascotDetailAction, interactAction } from "../actions";
 import { MascotCard } from "./mascot-card";
 
 export type BankMascot = {
@@ -132,6 +133,42 @@ function matchOcup(mascot: BankMascot, filter: OcupFilter): boolean {
 }
 
 // ── BankRow ─────────────────────────────────────────────────────────────────
+function QuickInteractButton({
+  mascotId,
+  type,
+  label,
+}: {
+  mascotId: string;
+  type: "PET" | "PLAY";
+  label: string;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startTransition(async () => {
+      const res = await interactAction(mascotId, type);
+      if (res.error) { toast.error(res.error); return; }
+      if (res.result?.message) {
+        if (res.result.success) toast.success(res.result.message);
+        else toast.error(res.result.message);
+      }
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={handleClick}
+      className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+      title={label}
+    >
+      {pending ? <Loader2 size={10} className="animate-spin inline" /> : label}
+    </button>
+  );
+}
+
 function BankRow({
   mascot,
   hasFood,
@@ -209,24 +246,28 @@ function BankRow({
           </span>
         </span>
 
-        {/* Occupation chips + chevron */}
-        <span className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[140px]">
-          {chips.map(c => (
-            <span key={c.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${c.cls}`}>
-              {c.label}
-            </span>
-          ))}
-          {chips.length === 0 && (
-            <span className="rounded border px-1.5 py-px text-[9px] font-semibold bg-green-500/10 text-green-400 border-green-500/20">
-              🟢 Livre
-            </span>
-          )}
+        {/* Quick actions + occupation chips + chevron */}
+        <span className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          <QuickInteractButton mascotId={mascot.id} type="PET" label="🤗 Carinho" />
+          <QuickInteractButton mascotId={mascot.id} type="PLAY" label="🎮 Brincar" />
+          <span className="flex items-center gap-1 flex-wrap justify-end max-w-[120px]">
+            {chips.map(c => (
+              <span key={c.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${c.cls}`}>
+                {c.label}
+              </span>
+            ))}
+            {chips.length === 0 && (
+              <span className="rounded border px-1.5 py-px text-[9px] font-semibold bg-green-500/10 text-green-400 border-green-500/20">
+                🟢 Livre
+              </span>
+            )}
+          </span>
           {loading ? (
-            <Loader2 size={13} className="animate-spin text-slate-500 ml-1 shrink-0" />
+            <Loader2 size={13} className="animate-spin text-slate-500 shrink-0" />
           ) : open ? (
-            <ChevronUp size={13} className="text-slate-500 ml-1 shrink-0" />
+            <ChevronUp size={13} className="text-slate-500 shrink-0" />
           ) : (
-            <ChevronDown size={13} className="text-slate-500 ml-1 shrink-0" />
+            <ChevronDown size={13} className="text-slate-500 shrink-0" />
           )}
         </span>
       </button>
