@@ -10,6 +10,7 @@ import { SyncLineupPanel } from "./_components/sync-lineup-panel";
 import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import { SyncRoomPanel } from "./_components/sync-room-panel";
 import { ModifierPanel } from "./_components/modifier-panel";
+import { SimulationButton } from "./_components/simulation-button";
 import {
   leaveTeamAction,
   confirmTeamAction,
@@ -110,12 +111,13 @@ export default async function DesafioSincronizadoPage() {
     take: 200,
   }) : [];
 
-  // Sala ativa — dupla já foi atribuída a uma arena
+  // Sala ativa ou finalizada hoje — dupla já foi atribuída a uma arena
   const activeRoom = await prisma.syncEventRoom.findFirst({
     where: {
-      status: { notIn: ["CANCELLED", "FINISHED"] },
+      status: { not: "CANCELLED" },
       teams: { some: { OR: [{ playerAId: player.id }, { playerBId: player.id }] } },
     },
+    orderBy: { formedAt: "desc" },
     include: {
       teams: {
         include: {
@@ -410,6 +412,11 @@ export default async function DesafioSincronizadoPage() {
                 Fechar inscrições e formar salas agora
               </button>
             </form>
+          </div>
+
+          <div className="border-t border-border pt-5 space-y-3">
+            <h2 className="font-semibold text-slate-100">Admin — Simulação completa</h2>
+            <SimulationButton />
           </div>
 
           <div className="border-t border-border pt-5 space-y-3">
