@@ -140,7 +140,7 @@ export default async function PlayerDetailPage({
       ? prisma.shopItem.findMany({
           // Admin vê todos os itens (ativos e desabilitados) para poder conceder
           select: { id: true, name: true, type: true, rarity: true, active: true },
-          orderBy: [{ type: "asc" }, { active: "desc" }, { rarity: "asc" }, { name: "asc" }]
+          orderBy: [{ type: "asc" }, { active: "desc" }, { sortOrder: "asc" }, { rarity: "asc" }, { name: "asc" }]
         })
       : [],
     isAdminUser
@@ -163,6 +163,10 @@ export default async function PlayerDetailPage({
     if (halfRightCount > 0)  syncOwnedItems.push({ id: "SYNC_TICKET_WATER_RIGHT", name: "Metade Direita (Água)",  type: "SYNC_TICKET_WATER_RIGHT", rarity: "EPIC",      quantity: halfRightCount });
     if (completeCount > 0)   syncOwnedItems.push({ id: "SYNC_TICKET_COMPLETE",    name: "Ticket Completo",        type: "SYNC_TICKET_COMPLETE",    rarity: "LEGENDARY", quantity: completeCount });
   }
+  const typedShopItems = shopItems as { id: string; name: string; type: string; rarity: string; active: boolean }[];
+  const uniqueShopItems = typedShopItems.filter((item, index, list) =>
+    list.findIndex((entry) => entry.type === item.type) === index
+  );
 
   // Time principal — apenas os 6 favoritos, campos mínimos para o grid simplificado
   const favoriteMascots = await prisma.mascot.findMany({
@@ -763,7 +767,7 @@ export default async function PlayerDetailPage({
         <div className="space-y-4">
           <GrantItemPanel
             playerId={playerId}
-            shopItems={shopItems as { id: string; name: string; type: string; rarity: string; active: boolean }[]}
+            shopItems={uniqueShopItems}
             ownedItemIds={new Set(
               (ownedInventory as { itemId: string; item: { type: string } }[])
                 .filter((i) => !isEggShopItemType(i.item.type))

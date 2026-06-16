@@ -59,10 +59,12 @@ export function getSideLabel(side: SyncTicketSide) {
 export async function ensureSyncChallengeItems(tx: Prisma.TransactionClient) {
   const items = [];
   for (const item of SYNC_TICKET_ITEMS) {
-    const existing = await tx.shopItem.findFirst({
-      where: { type: item.type as never, name: item.name },
+    const existingItems = await tx.shopItem.findMany({
+      where: { type: item.type as never },
       select: { id: true },
+      orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
     });
+    const existing = existingItems[0];
     const data = {
       type: item.type as never,
       name: item.name,
@@ -73,6 +75,12 @@ export async function ensureSyncChallengeItems(tx: Prisma.TransactionClient) {
       active: true,
       sortOrder: item.sortOrder,
     };
+    if (existingItems.length > 1) {
+      await tx.shopItem.updateMany({
+        where: { id: { in: existingItems.slice(1).map((entry) => entry.id) } },
+        data: { active: false },
+      });
+    }
     items.push(existing
       ? await tx.shopItem.update({ where: { id: existing.id }, data, select: { id: true, type: true, name: true } })
       : await tx.shopItem.create({ data, select: { id: true, type: true, name: true } }));
