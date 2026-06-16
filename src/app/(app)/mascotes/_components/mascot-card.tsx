@@ -279,7 +279,7 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
     return { emoji: "🪙", title: `${reward.amount} ZikaCoins encontrados!`, description: "Adicionados à sua carteira." };
   }
   if (reward.type === "BUFF_ITEM") {
-    const info = (reward.shopItemType && BUFF_ITEM_DISPLAY[reward.shopItemType]) ?? { emoji: "✨", label: "Item especial" };
+    const info = (reward.shopItemType ? BUFF_ITEM_DISPLAY[reward.shopItemType] : null) ?? { emoji: "✨", label: "Item especial" };
     return { emoji: info.emoji, title: `${info.label} encontrado!`, description: "O item foi adicionado à sua caixa de presentes." };
   }
   return { emoji: "😔", title: "Voltou de mãos vazias...", description: "Desta vez não encontrou nada." };
