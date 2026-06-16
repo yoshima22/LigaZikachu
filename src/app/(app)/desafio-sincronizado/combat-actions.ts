@@ -1,12 +1,186 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { EggType, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { runSyncBattle, loadModEffect } from "@/lib/sync-battle";
+import { runSyncBattle, loadModEffect, type ModEffect } from "@/lib/sync-battle";
 import { toBrtDateString } from "@/lib/date-utils";
+
+// ── Pokémon generation helper ─────────────────────────────────────────────────
+
+function pokemonGen(id: number): number {
+  if (id <= 151) return 1;
+  if (id <= 251) return 2;
+  if (id <= 386) return 3;
+  if (id <= 493) return 4;
+  if (id <= 649) return 5;
+  if (id <= 721) return 6;
+  if (id <= 809) return 7;
+  if (id <= 905) return 8;
+  return 9;
+}
+
+// ── Reward modifier delivery ──────────────────────────────────────────────────
+
+const EGG_REWARD_MAP: Record<string, EggType> = {
+  EGG_COMMON: EggType.COMMON,
+  EGG_RARE: EggType.RARE,
+  EGG_SPECIAL: EggType.SPECIAL,
+  EGG_EVENT: EggType.EVENT,
+  EGG_LAB: EggType.LAB,
+  EGG_COMMON_CHANCE: EggType.COMMON,
+};
+
+async function applyRoundRewardModifier(
+  tx: Prisma.TransactionClient,
+  modEffect: ModEffect | null,
+  teamA: { id: string; playerAId: string; playerBId: string | null },
+  teamB: { id: string; playerAId: string; playerBId: string | null },
+  battleResult: { result: string; teamADamage: number; teamBDamage: number },
+  confrontoSelections: { teamId: string; playerId: string; mascotIds: string[] }[],
+  roomId: string,
+): Promise<void> {
+  if (!modEffect) return;
+  const e = modEffect as Record<string, unknown>;
+  const type = typeof e.type === "string" ? e.type : "";
+  if (!type.startsWith("REWARD_")) return;
+
+  const playersA = [teamA.playerAId, teamA.playerBId].filter(Boolean) as string[];
+  const playersB = [teamB.playerAId, teamB.playerBId].filter(Boolean) as string[];
+  const allPlayers = [...playersA, ...playersB];
+  const aWon = battleResult.result === "TEAM_A_WIN";
+  const bWon = battleResult.result === "TEAM_B_WIN";
+  const winnerPlayers = aWon ? playersA : bWon ? playersB : [];
+  const loserPlayers = aWon ? playersB : bWon ? playersA : [];
+
+  const grantEgg = async (playerId: string, eggType: EggType) => {
+    await tx.mascotEgg.create({ data: { playerId, type: eggType, origin: "Modificador de Rodada" } });
+  };
+
+  const grantCoins = async (playerId: string, amount: number) => {
+    const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId } });
+    if (!wallet) return;
+    await tx.zikaCoinWallet.update({
+      where: { id: wallet.id },
+      data: { balance: { increment: amount }, totalEarned: { increment: amount } },
+    });
+    await tx.zikaCoinTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: ZikaCoinTxType.ADMIN_ADJUSTMENT,
+        amount,
+        balanceBefore: wallet.balance,
+        balanceAfter: wallet.balance + amount,
+        description: "Desafio Sincronizado — bônus de modificador",
+      },
+    });
+  };
+
+  const grantItem = async (playerId: string, itemName: string) => {
+    const shopItem = await tx.shopItem.findFirst({
+      where: { name: { contains: itemName, mode: "insensitive" }, active: true },
+      select: { id: true },
+    });
+    if (shopItem) {
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+        update: { quantity: { increment: 1 } },
+        create: { playerId, itemId: shopItem.id, quantity: 1, equipped: false },
+      });
+    } else {
+      await tx.playerGift.create({
+        data: {
+          playerId,
+          type: "CUSTOM",
+          title: "Bônus do Modificador",
+          description: `Você ganhou: ${itemName}`,
+          payload: { item: itemName, source: "sync-modifier" },
+          status: "UNCLAIMED",
+        },
+      });
+    }
+  };
+
+  switch (type) {
+    case "REWARD_WINNER": {
+      const item = typeof e.item === "string" ? e.item : null;
+      if (item) for (const pid of winnerPlayers) await grantItem(pid, item);
+      break;
+    }
+    case "REWARD_ALL": {
+      const item = typeof e.item === "string" ? e.item : null;
+      if (item) for (const pid of allPlayers) await grantItem(pid, item);
+      break;
+    }
+    case "REWARD_LOWEST_SCORE": {
+      const item = typeof e.item === "string" ? e.item : null;
+      if (item) for (const pid of loserPlayers) await grantItem(pid, item);
+      break;
+    }
+    case "REWARD_CHANCE_WINNER": {
+      const reward = typeof e.reward === "string" ? e.reward : null;
+      const chance = typeof e.chance === "number" ? e.chance : 0.05;
+      const eggType = reward ? EGG_REWARD_MAP[reward] : null;
+      if (eggType && Math.random() < chance) {
+        for (const pid of winnerPlayers) await grantEgg(pid, eggType);
+      }
+      break;
+    }
+    case "REWARD_UNDERDOG_WIN": {
+      if (winnerPlayers.length === 0) break;
+      const value = typeof e.value === "number" ? e.value : 0;
+      if (value <= 0) break;
+      const [scoresA, scoresB] = await Promise.all([
+        tx.syncEventScore.findMany({ where: { roomId, teamId: teamA.id }, select: { wins: true } }),
+        tx.syncEventScore.findMany({ where: { roomId, teamId: teamB.id }, select: { wins: true } }),
+      ]);
+      const winsA = Math.max(...scoresA.map((s) => s.wins), 0);
+      const winsB = Math.max(...scoresB.map((s) => s.wins), 0);
+      const underdogWon = (aWon && winsA < winsB) || (bWon && winsB < winsA);
+      if (underdogWon) for (const pid of winnerPlayers) await grantCoins(pid, value);
+      break;
+    }
+    case "REWARD_RANDOM_PLAYER": {
+      const value = typeof e.value === "number" ? e.value : 0;
+      const randomPid = allPlayers[Math.floor(Math.random() * allPlayers.length)];
+      if (randomPid && value > 0) await grantCoins(randomPid, value);
+      break;
+    }
+    case "REWARD_TOP_INSTINCT":
+    case "REWARD_TOP_INSTINCT_CHANCE": {
+      const reward = typeof e.reward === "string" ? e.reward : null;
+      const chance = type === "REWARD_TOP_INSTINCT" ? 1 : (typeof e.chance === "number" ? e.chance : 0.2);
+      if (!reward || Math.random() > chance) break;
+      const eggType = EGG_REWARD_MAP[reward];
+      if (!eggType) break;
+      const allMascotIds = confrontoSelections.flatMap((s) => s.mascotIds);
+      const mascots = await tx.mascot.findMany({
+        where: { id: { in: allMascotIds } },
+        select: { id: true, statInstinct: true },
+      });
+      if (mascots.length === 0) break;
+      const topMascot = mascots.reduce((best, m) => (m.statInstinct > best.statInstinct ? m : best));
+      const topSel = confrontoSelections.find((s) => s.mascotIds.includes(topMascot.id));
+      if (topSel) await grantEgg(topSel.playerId, eggType);
+      break;
+    }
+    case "REWARD_GEN_DIVERSITY": {
+      const chance = typeof e.value === "number" ? e.value : 0.1;
+      for (const sel of confrontoSelections) {
+        const mascots = await tx.mascot.findMany({
+          where: { id: { in: sel.mascotIds } },
+          select: { pokemonId: true },
+        });
+        const gens = new Set(mascots.map((m) => pokemonGen(m.pokemonId)));
+        if (gens.size >= 2 && Math.random() < chance) await grantEgg(sel.playerId, EggType.COMMON);
+      }
+      break;
+    }
+  }
+}
 
 async function requirePlayer() {
   const user = await getSessionUser();
@@ -294,6 +468,9 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
             executedAt: new Date(),
           },
         });
+
+        // Entrega recompensas de modificadores do tipo REWARD_*
+        await applyRoundRewardModifier(tx, modEffect, teamA, teamB, result, allSelections, round.roomId);
 
         // Atualiza pontuações dos jogadores
         const updateScore = async (pid: string, tid: string, won: boolean, lost: boolean, damage: number, surviving: number, damageTaken: number) => {

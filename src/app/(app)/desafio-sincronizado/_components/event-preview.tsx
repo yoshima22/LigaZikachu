@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Gift, Sparkles, Swords, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Gift, Sparkles, Swords, Ticket, Zap } from "lucide-react";
 
 // ── Recompensas fixas por posição ──────────────────────────────────────────────
 
@@ -104,10 +104,10 @@ interface Props {
 }
 
 export function EventPreview({ modifiers }: Props) {
-  const [openSection, setOpenSection] = useState<"rewards" | "modifiers" | null>("rewards");
+  const [openSection, setOpenSection] = useState<"rewards" | "modifiers" | "tickets" | null>("rewards");
   const [openCategory, setOpenCategory] = useState<string | null>(null);
 
-  const toggle = (section: "rewards" | "modifiers") =>
+  const toggle = (section: "rewards" | "modifiers" | "tickets") =>
     setOpenSection((prev) => (prev === section ? null : section));
 
   return (
@@ -210,6 +210,9 @@ export function EventPreview({ modifiers }: Props) {
         )}
       </div>
 
+      {/* ── Como funcionam os tickets ─────────────────────────────────── */}
+      <TicketExplainer openSection={openSection} toggle={toggle} />
+
       {/* ── Regra de seleção ──────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-slate-950/40 px-4 py-3">
         <div className="flex items-start gap-2">
@@ -221,6 +224,110 @@ export function EventPreview({ modifiers }: Props) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Ticket Explainer ──────────────────────────────────────────────────────────
+
+function TicketExplainer({
+  openSection,
+  toggle,
+}: {
+  openSection: "rewards" | "modifiers" | "tickets" | null;
+  toggle: (s: "rewards" | "modifiers" | "tickets") => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      <button
+        onClick={() => toggle("tickets")}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-slate-950/60"
+      >
+        <div className="flex items-center gap-2">
+          <Ticket size={16} className="text-[#FFCB05]" />
+          <span className="text-sm font-semibold text-slate-100">Como funcionam os tickets</span>
+        </div>
+        {openSection === "tickets"
+          ? <ChevronDown size={15} className="text-slate-500" />
+          : <ChevronRight size={15} className="text-slate-500" />}
+      </button>
+
+      {openSection === "tickets" && (
+        <div className="border-t border-border p-4 space-y-4 text-xs text-slate-400">
+
+          {/* Composição do ticket */}
+          <div>
+            <p className="font-semibold text-slate-200 mb-1">O que é um Ticket Completo?</p>
+            <p>Para entrar no Desafio Sincronizado você precisa montar um <span className="font-semibold text-slate-200">Ticket Completo de Desafio</span>, formado por duas metades:</p>
+            <div className="mt-2 flex gap-2">
+              <div className="flex-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-blue-300 uppercase tracking-wide">Metade Esquerda</p>
+              </div>
+              <div className="flex items-center text-slate-600 font-bold">+</div>
+              <div className="flex-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-center">
+                <p className="text-[10px] font-bold text-purple-300 uppercase tracking-wide">Metade Direita</p>
+              </div>
+            </div>
+            <p className="mt-2">Você pode ganhar metades jogando Arena, expedições, reciclagem de mascotes ou partidas validadas de Pokémon TCG Live.</p>
+          </div>
+
+          {/* Regra principal */}
+          <div className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2.5">
+            <p className="font-bold text-[#FFCB05] mb-1">Regra mais importante</p>
+            <p>Você <span className="font-semibold text-slate-200">não pode usar uma metade gerada por você mesmo</span>. Se você ganhou uma metade, ela precisa ser enviada para outro jogador.</p>
+          </div>
+
+          {/* Exemplo */}
+          <div>
+            <p className="font-semibold text-slate-200 mb-2">Exemplo prático</p>
+            <div className="space-y-1.5">
+              <div className="flex gap-2 items-start">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold flex items-center justify-center">1</span>
+                <p>Luiz ganha uma <span className="text-blue-300 font-semibold">metade esquerda</span> — mas não pode usá-la para si mesmo.</p>
+              </div>
+              <div className="flex gap-2 items-start">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold flex items-center justify-center">2</span>
+                <p>Luiz envia a metade esquerda para <span className="font-semibold text-slate-200">Rodrigo</span>.</p>
+              </div>
+              <div className="flex gap-2 items-start">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-purple-500/20 text-purple-300 text-[9px] font-bold flex items-center justify-center">3</span>
+                <p>Moisés ganha uma <span className="text-purple-300 font-semibold">metade direita</span> e também envia para Rodrigo.</p>
+              </div>
+              <div className="flex gap-2 items-start">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-[#FFCB05]/20 text-[#FFCB05] text-[9px] font-bold flex items-center justify-center">✓</span>
+                <p>Rodrigo tem as duas metades — nenhuma foi gerada por ele — e pode montar o <span className="font-semibold text-[#FFCB05]">Ticket Completo</span>.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bloqueio */}
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5">
+            <p className="font-bold text-red-300 mb-1">Bloqueio automático</p>
+            <p>O ticket guarda o nome dos dois jogadores que geraram as metades. No exemplo, <span className="font-semibold text-slate-200">Luiz e Moisés</span> ficam bloqueados de entrar na sala criada com o ticket do Rodrigo — para evitar que alguém combine tudo sozinho ou use os próprios drops.</p>
+          </div>
+
+          {/* Resumo */}
+          <div>
+            <p className="font-semibold text-slate-200 mb-2">Resumo rápido</p>
+            <ol className="space-y-1 list-none">
+              {[
+                "Você ganha uma metade (esquerda ou direita).",
+                "Não pode usar uma metade gerada por você mesmo.",
+                "Envie suas metades para outros jogadores.",
+                "Para montar o ticket, junte uma esquerda + uma direita de jogadores diferentes.",
+                "O ticket bloqueia os dois geradores de entrar na mesma sala.",
+                "Com o ticket completo, você entra no Desafio e forma uma dupla.",
+              ].map((step, i) => (
+                <li key={i} className="flex gap-2 items-start">
+                  <span className="shrink-0 font-mono text-[#FFCB05] text-[10px] mt-0.5">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-2 text-slate-500 italic">A ideia é fazer os tickets circularem entre jogadores e criar mais interação antes do evento começar.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
