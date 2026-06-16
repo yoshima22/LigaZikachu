@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { EggType, FoodType, SyncTicketSide } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
+import { grantSyncTicketHalf, grantValidSyncTicketForPlayer, SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
 
 const EGG_TYPE_MAP: Record<string, EggType> = {
   EGG_COMMON: EggType.COMMON,
@@ -35,12 +35,11 @@ export async function grantItemToPlayer(
   quantity = 1
 ): Promise<{ error?: string }> {
   try {
-    const adminUser = await requireAdmin();
+    await requireAdmin();
 
-    const [player, item, adminPlayer] = await Promise.all([
+    const [player, item] = await Promise.all([
       prisma.player.findUnique({ where: { id: playerId }, select: { id: true } }),
       prisma.shopItem.findUnique({ where: { id: itemId }, select: { id: true, name: true, type: true } }),
-      prisma.player.findFirst({ where: { userId: adminUser.id }, select: { id: true } }),
     ]);
     if (!player) return { error: "Jogador nao encontrado." };
     if (!item) return { error: "Item nao encontrado." };
@@ -64,37 +63,17 @@ export async function grantItemToPlayer(
       });
     } else if (item.type === SYNC_TICKET_TYPES.fireLeft || item.type === SYNC_TICKET_TYPES.waterRight) {
       const side = item.type === SYNC_TICKET_TYPES.fireLeft ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT;
-      for (let q = 0; q < safeQty; q++) {
-        await prisma.syncTicketHalf.create({
-          data: { side, ownerId: playerId, generatedByPlayerId: playerId, sourceAction: "admin-grant", status: "AVAILABLE" },
-        });
-      }
+      await prisma.$transaction(async (tx) => {
+        for (let q = 0; q < safeQty; q++) {
+          await grantSyncTicketHalf(tx, playerId, "admin-grant", side, playerId);
+        }
+      });
     } else if (item.type === SYNC_TICKET_TYPES.complete) {
-      // SyncTicket requer dois halfIds e dois bannedUser não-nulos.
-      // As metades são registradas como geradas pelo próprio jogador.
-      // Os campos de ban apontam para o admin (ou fallback para o jogador)
-      // para que o jogador-alvo não fique banido de usar o ticket.
-      const bannedId = adminPlayer?.id ?? playerId;
-      for (let q = 0; q < safeQty; q++) {
-        const [leftHalf, rightHalf] = await Promise.all([
-          prisma.syncTicketHalf.create({
-            data: { side: SyncTicketSide.LEFT, ownerId: playerId, generatedByPlayerId: playerId, sourceAction: "admin-grant", status: "COMBINED" },
-          }),
-          prisma.syncTicketHalf.create({
-            data: { side: SyncTicketSide.RIGHT, ownerId: playerId, generatedByPlayerId: playerId, sourceAction: "admin-grant", status: "COMBINED" },
-          }),
-        ]);
-        await prisma.syncTicket.create({
-          data: {
-            ownerId: playerId,
-            leftHalfId: leftHalf.id,
-            rightHalfId: rightHalf.id,
-            bannedUserAId: bannedId,
-            bannedUserBId: bannedId,
-            status: "AVAILABLE",
-          },
-        });
-      }
+      await prisma.$transaction(async (tx) => {
+        for (let q = 0; q < safeQty; q++) {
+          await grantValidSyncTicketForPlayer(tx, playerId);
+        }
+      });
     } else {
       await prisma.playerInventory.upsert({
         where: { playerId_itemId: { playerId, itemId } },

@@ -238,28 +238,7 @@ export async function adminGrantSyncTicketAction(
             targetPlayerId, // gerado pelo próprio jogador
           );
         } else {
-          // Ticket completo: cria duas metades sintéticas + syncTicket
-          // As metades ficam como geradas pelo jogador.
-          // bannedUserA/B apontam para o próprio jogador — o admin aceita essa limitação
-          // (ticket concedido, o jogador não pode banir outros, apenas usar a sala sem ban externo)
-          const [left, right] = await Promise.all([
-            tx.syncTicketHalf.create({
-              data: { side: SyncTicketSide.LEFT, ownerId: targetPlayerId, generatedByPlayerId: targetPlayerId, sourceAction: "admin-grant", status: "COMBINED" },
-            }),
-            tx.syncTicketHalf.create({
-              data: { side: SyncTicketSide.RIGHT, ownerId: targetPlayerId, generatedByPlayerId: targetPlayerId, sourceAction: "admin-grant", status: "COMBINED" },
-            }),
-          ]);
-          await tx.syncTicket.create({
-            data: {
-              ownerId: targetPlayerId,
-              leftHalfId: left.id,
-              rightHalfId: right.id,
-              bannedUserAId: targetPlayerId,
-              bannedUserBId: targetPlayerId,
-              status: "AVAILABLE",
-            },
-          });
+          await grantValidSyncTicketForPlayer(tx, targetPlayerId);
         }
       }
     });

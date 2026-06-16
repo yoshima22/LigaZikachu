@@ -21,6 +21,7 @@ import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI } from "@/lib/mascot-data";
 import { isEggShopItemType } from "@/lib/shop-config";
+import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 
 export default async function PlayerDetailPage({
   params
@@ -75,6 +76,9 @@ export default async function PlayerDetailPage({
   const activeSeason = player.seasonEntries.find((sp) => sp.season.status === SeasonStatus.ACTIVE);
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
+  if (isAdminUser) {
+    await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
+  }
 
   const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory] = await Promise.all([
     activeSeason ? getCachedPlayerRanking(activeSeason.seasonId) : [],

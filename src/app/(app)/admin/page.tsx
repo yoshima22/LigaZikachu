@@ -25,6 +25,7 @@ import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getGlobalNotice } from "@/lib/app-settings";
+import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { adminListActiveVips, adminGetSchedule, adminListScheduleLabels } from "@/app/(app)/passe-apoiador/actions";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -71,6 +72,7 @@ const adminCards = [
 
 export default async function AdminPage() {
   await requireAdmin();
+  await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
   const [
     pendingUsers,

@@ -7,6 +7,11 @@ import { creditCoins } from "@/lib/zikacoins";
 import { GLOBAL_NOTICE_KEY, revalidateGlobalNotice } from "@/lib/app-settings";
 import { revalidateTag } from "next/cache";
 import { EggType, FoodType, Prisma } from "@prisma/client";
+import {
+  grantSyncTicketHalf,
+  grantValidSyncTicketForPlayer,
+  SYNC_TICKET_TYPES,
+} from "@/lib/sync-challenge";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
@@ -291,6 +296,26 @@ export async function sendItemToAllPlayers(
               data: { playerId: player.id, type: eggType, origin: `Enviado pelo Admin: ${item.name}` }
             });
           }
+        } else if (
+          item.type === SYNC_TICKET_TYPES.fireLeft ||
+          item.type === SYNC_TICKET_TYPES.waterRight ||
+          item.type === SYNC_TICKET_TYPES.complete
+        ) {
+          await prisma.$transaction(async (tx) => {
+            for (let i = 0; i < qty; i++) {
+              if (item.type === SYNC_TICKET_TYPES.complete) {
+                await grantValidSyncTicketForPlayer(tx, player.id);
+              } else {
+                await grantSyncTicketHalf(
+                  tx,
+                  player.id,
+                  "admin-bulk-grant",
+                  item.type === SYNC_TICKET_TYPES.fireLeft ? "LEFT" : "RIGHT",
+                  player.id,
+                );
+              }
+            }
+          });
         } else if (foodType) {
           await prisma.mascotFoodItem.upsert({
             where: { playerId_type: { playerId: player.id, type: foodType } },
