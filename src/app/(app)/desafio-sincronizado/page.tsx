@@ -144,6 +144,27 @@ export default async function DesafioSincronizadoPage() {
   // Modificadores (apenas admin precisa da lista completa)
   const allModifiers = admin ? await prisma.syncEventModifier.findMany({ orderBy: { active: "desc" } }) : [];
 
+  // Ranking público de hoje — todas as salas do dia
+  const { toBrtDateString } = await import("@/lib/date-utils");
+  const todayDate = toBrtDateString(new Date());
+  const todayRooms = await prisma.syncEventRoom.findMany({
+    where: { date: todayDate, status: { not: "CANCELLED" } },
+    orderBy: { roomIndex: "asc" },
+    include: {
+      teams: {
+        include: {
+          playerA: { select: { id: true, displayName: true } },
+          playerB: { select: { id: true, displayName: true } },
+        },
+      },
+      scores: {
+        distinct: ["teamId"],
+        orderBy: [{ wins: "desc" }, { damageDone: "desc" }, { damageTaken: "asc" }],
+        include: { player: { select: { id: true, displayName: true } } },
+      },
+    },
+  });
+
   const leftHalves = halves.filter((half) => half.side === SyncTicketSide.LEFT);
   const rightHalves = halves.filter((half) => half.side === SyncTicketSide.RIGHT);
   const usableLeft = leftHalves.filter((half) => half.generatedByPlayerId !== player.id);
@@ -396,6 +417,90 @@ export default async function DesafioSincronizadoPage() {
             isAdmin={admin}
             myLineupMascots={myMascots}
           />
+        </section>
+      )}
+
+      {/* ── Ranking público de hoje ───────────────────────────────── */}
+      {todayRooms.length > 0 && (
+        <section className="rounded-2xl border border-border bg-card p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Swords size={18} className="text-[#FFCB05]" />
+            <h2 className="font-semibold text-slate-100">Ranking de hoje</h2>
+          </div>
+          <div className="space-y-6">
+            {todayRooms.map((room) => {
+              // Agrupa scores por dupla — pega o melhor de cada
+              const teamMap = new Map<string, { name: string; wins: number; damageDone: number; damageTaken: number; finalPosition: number | null }>();
+              for (const score of room.scores) {
+                const team = room.teams.find((t) => t.id === score.teamId);
+                if (!team) continue;
+                const name = `${team.playerA.displayName}${team.playerB ? ` + ${team.playerB.displayName}` : ""}`;
+                const existing = teamMap.get(score.teamId);
+                if (!existing || score.wins > existing.wins) {
+                  teamMap.set(score.teamId, {
+                    name,
+                    wins: score.wins,
+                    damageDone: score.damageDone,
+                    damageTaken: score.damageTaken,
+                    finalPosition: score.finalPosition,
+                  });
+                }
+              }
+              const ranking = [...teamMap.values()].sort((a, b) => {
+                if (a.finalPosition !== null && b.finalPosition !== null) return a.finalPosition - b.finalPosition;
+                if (a.finalPosition !== null) return -1;
+                if (b.finalPosition !== null) return 1;
+                if (b.wins !== a.wins) return b.wins - a.wins;
+                if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
+                return a.damageTaken - b.damageTaken;
+              });
+              const medals = ["🥇", "🥈", "🥉", "4️⃣"];
+              const statusLabels: Record<string, string> = {
+                READY: "Aguardando início",
+                ROUND_1: "Rodada 1",
+                ROUND_2: "Rodada 2",
+                ROUND_3: "Rodada 3",
+                TIEBREAK: "Desempate",
+                FINISHED: "Finalizado",
+              };
+              return (
+                <div key={room.id}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-200">Sala {room.roomIndex}</h3>
+                    <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs text-slate-400">
+                      {statusLabels[room.status] ?? room.status}
+                    </span>
+                  </div>
+                  {ranking.length === 0 ? (
+                    <p className="text-xs text-slate-500">Combates ainda não iniciados.</p>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-border">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border bg-slate-950/60 text-slate-400">
+                            <th className="p-2 text-left">#</th>
+                            <th className="p-2 text-left">Dupla</th>
+                            <th className="p-2 text-right">Vitórias</th>
+                            <th className="p-2 text-right">Dano</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ranking.map((row, idx) => (
+                            <tr key={row.name} className="border-b border-border/50 last:border-0">
+                              <td className="p-2 text-base">{medals[idx] ?? idx + 1}</td>
+                              <td className="p-2 font-medium text-slate-200">{row.name}</td>
+                              <td className="p-2 text-right text-slate-300">{row.wins}</td>
+                              <td className="p-2 text-right text-slate-400">{row.damageDone}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

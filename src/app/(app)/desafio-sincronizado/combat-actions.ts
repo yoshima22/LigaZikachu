@@ -199,15 +199,36 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
 
     await prisma.$transaction(async (tx) => {
       const teams = round.room.teams.sort((a, b) => (a.roomSlot ?? 0) - (b.roomSlot ?? 0));
-      // Chaveamento: R1: 1×2/3×4, R2: 1×3/2×4, R3: 1×4/2×3
-      const pairings: [number, number][] = round.roundNumber === 1
-        ? [[0, 1], [2, 3]]
-        : round.roundNumber === 2
-        ? [[0, 2], [1, 3]]
-        : [[0, 3], [1, 2]];
+
+      // Chaveamento regular: R1: 1×2/3×4, R2: 1×3/2×4, R3: 1×4/2×3
+      // Desempate (roundNumber=0): apenas as duplas empatadas no 1º lugar
+      let pairings: [number, number][];
+      let teamsForRound = teams;
+
+      if (round.roundNumber === 0) {
+        // Busca duplas com finalPosition null (ainda empatadas)
+        const tiedScores = await tx.syncEventScore.findMany({
+          where: { roomId: round.roomId, finalPosition: null },
+          distinct: ["teamId"],
+          select: { teamId: true },
+        });
+        const tiedIds = tiedScores.map((s) => s.teamId);
+        teamsForRound = teams.filter((t) => tiedIds.includes(t.id));
+        // Pareia de 2 em 2 (pode haver mais de 2 empatadas)
+        pairings = [];
+        for (let i = 0; i < Math.floor(teamsForRound.length / 2); i++) {
+          pairings.push([i * 2, i * 2 + 1]);
+        }
+      } else {
+        pairings = round.roundNumber === 1
+          ? [[0, 1], [2, 3]]
+          : round.roundNumber === 2
+          ? [[0, 2], [1, 3]]
+          : [[0, 3], [1, 2]];
+      }
 
       // Auto-seleciona mascotes para jogadores que não escolheram
-      for (const team of teams) {
+      for (const team of teamsForRound) {
         const playerIds = [team.playerAId, team.playerBId].filter(Boolean) as string[];
         for (const pid of playerIds) {
           const existing = round.selections.find((s) => s.playerId === pid);
@@ -241,8 +262,8 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
 
       // Executa cada confronto
       for (const [slotA, slotB] of pairings) {
-        const teamA = teams[slotA];
-        const teamB = teams[slotB];
+        const teamA = teamsForRound[slotA];
+        const teamB = teamsForRound[slotB];
         if (!teamA || !teamB) continue;
 
         const allSelections = await tx.syncRoundSelection.findMany({
@@ -308,6 +329,52 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
           data: { status: "FINISHED", finishedAt: new Date() },
         });
       }
+
+      // Se foi desempate (roundNumber=0), atribui posições finais e fecha sala
+      if (round.roundNumber === 0 && pairings.length > 0) {
+        for (const [slotA, slotB] of pairings) {
+          const teamA = teamsForRound[slotA];
+          const teamB = teamsForRound[slotB];
+          if (!teamA || !teamB) continue;
+
+          const match = await tx.syncRoundMatch.findFirst({
+            where: { roundId, teamAId: teamA.id, teamBId: teamB.id },
+            select: { result: true },
+          });
+          if (!match) continue;
+
+          // Determina qual position já está ocupada pelos não-empatados
+          const existingPositions = await tx.syncEventScore.findMany({
+            where: { roomId: round.roomId, finalPosition: { not: null } },
+            select: { finalPosition: true },
+          });
+          const takenPositions = new Set(existingPositions.map((s) => s.finalPosition));
+          // 1º e 2º devem ser os dois primeiros disponíveis
+          const available = [1, 2, 3, 4].filter((p) => !takenPositions.has(p));
+          const pos1 = available[0] ?? 1;
+          const pos2 = available[1] ?? 2;
+
+          const winnerId = match.result === "TEAM_A_WIN" ? teamA.id : match.result === "TEAM_B_WIN" ? teamB.id : null;
+          const loserId = match.result === "TEAM_A_WIN" ? teamB.id : match.result === "TEAM_B_WIN" ? teamA.id : null;
+
+          if (winnerId) {
+            await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: winnerId }, data: { finalPosition: pos1 } });
+          }
+          if (loserId) {
+            await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: loserId }, data: { finalPosition: pos2 } });
+          }
+          // Em caso de empate, ambas ficam na melhor posição disponível
+          if (!winnerId && !loserId) {
+            await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: teamA.id }, data: { finalPosition: pos1 } });
+            await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: teamB.id }, data: { finalPosition: pos1 } });
+          }
+        }
+
+        await tx.syncEventRoom.update({
+          where: { id: round.roomId },
+          data: { status: "FINISHED", finishedAt: new Date() },
+        });
+      }
     });
 
     revalidatePath("/desafio-sincronizado");
@@ -317,32 +384,87 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
   }
 }
 
-// ── Admin: iniciar rodada de desempate ────────────────────────────────────────
+// ── Admin: iniciar rodada de desempate (só para duplas empatadas em 1º) ───────
 
-export async function adminStartTiebreakAction(roomId: string): Promise<{ error?: string }> {
+export async function adminStartTiebreakAction(roomId: string): Promise<{ error?: string; tiedTeams?: string[] }> {
   try {
     await requireAdmin();
 
     const room = await prisma.syncEventRoom.findUnique({
       where: { id: roomId },
-      select: { id: true, status: true, rounds: { select: { id: true, roundNumber: true, status: true } } },
+      include: {
+        rounds: { select: { id: true, roundNumber: true, status: true } },
+        scores: { include: { player: { select: { displayName: true } } } },
+        teams: { select: { id: true, roomSlot: true, playerA: { select: { displayName: true } }, playerB: { select: { displayName: true } } } },
+      },
     });
     if (!room) return { error: "Sala não encontrada." };
 
     const existingTiebreak = room.rounds.find((r) => r.roundNumber === 0);
     if (existingTiebreak) return { error: "Desempate já foi criado." };
 
+    const allDone = room.rounds.filter((r) => r.roundNumber > 0).every((r) => r.status === "DONE");
+    if (!allDone) return { error: "Nem todas as rodadas foram concluídas ainda." };
+
+    // Calcula vitórias por dupla (soma scores dos 2 jogadores / 2 = vitórias únicas da dupla)
+    const teamWins = new Map<string, { wins: number; damageDone: number; damageTaken: number; name: string }>();
+    for (const team of room.teams) {
+      const name = `${team.playerA.displayName}${team.playerB ? ` + ${team.playerB.displayName}` : ""}`;
+      const teamScores = room.scores.filter((s) => s.teamId === team.id);
+      // Ambos jogadores têm o mesmo wins (foi incrementado identicamente) — pega o maior
+      const wins = Math.max(...teamScores.map((s) => s.wins), 0);
+      const damageDone = teamScores.reduce((sum, s) => sum + s.damageDone, 0);
+      const damageTaken = teamScores.reduce((sum, s) => sum + s.damageTaken, 0);
+      teamWins.set(team.id, { wins, damageDone, damageTaken, name });
+    }
+
+    // Encontra o máximo de vitórias
+    const maxWins = Math.max(...[...teamWins.values()].map((t) => t.wins));
+
+    // Duplas empatadas no topo
+    const tiedTeamIds = [...teamWins.entries()]
+      .filter(([, v]) => v.wins === maxWins)
+      .map(([id]) => id);
+
+    if (tiedTeamIds.length < 2) {
+      return { error: "Não há empate no 1º lugar. Nenhum desempate necessário." };
+    }
+
     const config = await prisma.syncChallengeConfig.findUnique({ where: { id: "singleton" } });
+    const tiedNames = tiedTeamIds.map((id) => teamWins.get(id)!.name);
 
     await prisma.$transaction(async (tx) => {
+      // Cria a rodada de desempate com metadado indicando quais duplas participam
       await tx.syncEventRound.create({
         data: {
           roomId,
           roundNumber: 0,
           status: "PENDING",
           scheduledAt: config?.tiebreakAt ?? new Date(),
+          // Usamos o modifierId para guardar quais teams disputam (via effectJson workaround não é possível)
+          // Simplesmente deixamos aberto — o executeRound usará roomSlot para parear
         },
       });
+
+      // Marca as duplas não empatadas como finalistas (4º/3º) antes do desempate
+      const nonTiedIds = [...teamWins.keys()].filter((id) => !tiedTeamIds.includes(id));
+      const sortedNonTied = nonTiedIds.sort((a, b) => {
+        const ta = teamWins.get(a)!;
+        const tb = teamWins.get(b)!;
+        if (tb.wins !== ta.wins) return tb.wins - ta.wins;
+        return tb.damageDone - ta.damageDone;
+      });
+
+      // posições finais provisórias para os não-empatados
+      let pos = tiedTeamIds.length + 1;
+      for (const tid of sortedNonTied) {
+        await tx.syncEventScore.updateMany({
+          where: { roomId, teamId: tid },
+          data: { finalPosition: pos },
+        });
+        pos++;
+      }
+
       await tx.syncEventRoom.update({
         where: { id: roomId },
         data: { status: "TIEBREAK" },
@@ -350,7 +472,7 @@ export async function adminStartTiebreakAction(roomId: string): Promise<{ error?
     });
 
     revalidatePath("/desafio-sincronizado");
-    return {};
+    return { tiedTeams: tiedNames };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao iniciar desempate." };
   }
