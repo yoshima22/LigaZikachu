@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown } from "lucide-react";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 
@@ -89,11 +90,21 @@ function fmtCountdown(ms: number): string {
 }
 
 function totalStats(m: ValidMascot) {
-  return m.statForce + m.statAgility + m.statVitality + m.statInstinct;
+  return m.statForce + m.statAgility + m.statVitality + m.statInstinct + m.statCharisma;
 }
 
 function displayName(m: ValidMascot) {
   return m.nickname ?? getPokemonName(m.pokemonId);
+}
+
+function recommendedRoleForMascot(m: ValidMascot): CombatRole {
+  return recommendCombatRole({
+    statForce: m.statForce,
+    statAgility: m.statAgility,
+    statVitality: m.statVitality,
+    statInstinct: m.statInstinct,
+    statCharisma: m.statCharisma,
+  });
 }
 
 type BlockInfo = { type: "arena" | "injured" | "resting" | "cooldown"; until?: number };
@@ -235,52 +246,66 @@ function MascotPick({
 // ── SelectedBar ────────────────────────────────────────────────────────────
 
 function SelectedBar({
-  mascots, selected, onRemove, roomLevel,
+  mascots, selected, roles, onRoleChange, onRemove, roomLevel,
 }: {
-  mascots: ValidMascot[]; selected: Set<string>; onRemove: (id: string) => void; roomLevel: ArenaRoomLevel;
+  mascots: ValidMascot[];
+  selected: Set<string>;
+  roles: Record<string, CombatRole>;
+  onRoleChange: (id: string, role: CombatRole) => void;
+  onRemove: (id: string) => void;
+  roomLevel: ArenaRoomLevel;
 }) {
   const selList = mascots.filter(m => selected.has(m.id));
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-2">
-      <span className="text-[9px] font-bold uppercase tracking-widest text-[#FFCB05]/70 shrink-0">Time</span>
-      <div className="flex flex-1 gap-1.5">
-        {Array.from({ length: MAX_MASCOTS }).map((_, i) => {
-          const m = selList[i];
-          const overLevel = m && m.level > roomLevel;
-          return m ? (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => onRemove(m.id)}
-              title={overLevel ? `Nível ${m.level} acima do máximo da sala` : `Remover ${displayName(m)}`}
-              className="relative group shrink-0"
-            >
+    <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-[9px] font-bold uppercase tracking-widest text-[#FFCB05]/70">Time e posturas</span>
+        <span className={`text-[10px] font-bold ${selected.size >= MAX_MASCOTS ? "text-[#FFCB05]" : "text-slate-500"}`}>
+          {selected.size}/{MAX_MASCOTS}
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {selList.map((m) => {
+          const overLevel = m.level > roomLevel;
+          const role = roles[m.id] ?? recommendedRoleForMascot(m);
+          const recommended = recommendedRoleForMascot(m);
+          return (
+            <div key={m.id} className={`flex items-center gap-2 rounded-lg border bg-slate-950/60 p-2 ${overLevel ? "border-red-500/50" : "border-slate-700/60"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={getSpriteUrl(m.pokemonId, true)}
                 alt={displayName(m)}
-                className={`h-9 w-9 object-contain rounded-lg bg-slate-800/60 transition-all ${
-                  overLevel
-                    ? "ring-2 ring-red-500/70 group-hover:ring-red-400"
-                    : "ring-1 ring-[#FFCB05]/30 group-hover:ring-red-400/60"
-                }`}
+                className="h-10 w-10 shrink-0 rounded-lg bg-slate-800/60 object-contain"
                 style={{ imageRendering: "pixelated" }}
                 onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
               />
-              {overLevel && (
-                <span className="absolute -left-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-black text-white">!</span>
-              )}
-              <span className="absolute -right-1 -top-1 hidden group-hover:flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[7px] font-black text-white">×</span>
-            </button>
-          ) : (
-            <div key={i} className="h-9 w-9 shrink-0 rounded-lg border border-dashed border-slate-700/50 bg-slate-900/30" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-[11px] font-semibold text-slate-100">{displayName(m)}</p>
+                  <button type="button" onClick={() => onRemove(m.id)} className="rounded px-1 text-[10px] font-black text-slate-500 hover:bg-red-500/10 hover:text-red-300">x</button>
+                </div>
+                <p className="text-[9px] text-slate-500">
+                  Nv.{m.level} - Recomendada: <span className="text-[#FFCB05]">{getCombatRoleLabel(recommended)}</span>
+                </p>
+                <select
+                  value={role}
+                  onChange={(event) => onRoleChange(m.id, event.target.value as CombatRole)}
+                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 outline-none hover:border-[#FFCB05]/40"
+                  title="Postura deste mascote na equipe"
+                >
+                  {COMBAT_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           );
         })}
+        {Array.from({ length: Math.max(0, MAX_MASCOTS - selList.length) }).map((_, index) => (
+          <div key={`empty-${index}`} className="min-h-[58px] rounded-lg border border-dashed border-slate-700/50 bg-slate-900/30" />
+        ))}
       </div>
-      <span className={`text-[10px] font-bold shrink-0 ${selected.size >= MAX_MASCOTS ? "text-[#FFCB05]" : "text-slate-500"}`}>
-        {selected.size}/{MAX_MASCOTS}
-      </span>
     </div>
   );
 }
@@ -291,6 +316,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [roles, setRoles] = useState<Record<string, CombatRole>>({});
   const [name, setName] = useState("");
   const [roomLevel, setRoomLevel] = useState<ArenaRoomLevel>(100);
   const [search, setSearch] = useState("");
@@ -312,12 +338,26 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const toggle = useCallback((id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); return next; }
-      if (next.size >= MAX_MASCOTS) { toast.error(`Máximo ${MAX_MASCOTS} mascotes.`); return prev; }
+      if (next.has(id)) {
+        next.delete(id);
+        setRoles(current => {
+          const copy = { ...current };
+          delete copy[id];
+          return copy;
+        });
+        return next;
+      }
+      if (next.size >= MAX_MASCOTS) { toast.error(`Maximo ${MAX_MASCOTS} mascotes.`); return prev; }
+      const mascot = mascots.find(m => m.id === id);
+      if (mascot) setRoles(current => ({ ...current, [id]: current[id] ?? recommendedRoleForMascot(mascot) }));
       next.add(id);
       return next;
     });
     setLevelError(null);
+  }, [mascots]);
+
+  const changeRole = useCallback((id: string, role: CombatRole) => {
+    setRoles(current => ({ ...current, [id]: role }));
   }, []);
 
   // All unique types present in the mascot pool
@@ -369,9 +409,13 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
     }
     setLevelError(null);
     startTransition(async () => {
-      const r = await createArenaTeamAction([...selected], name.trim(), roomLevel);
+      const rolePayload = Object.fromEntries([...selected].map(id => {
+        const mascot = mascots.find(m => m.id === id);
+        return [id, roles[id] ?? (mascot ? recommendedRoleForMascot(mascot) : "ATTACKER")];
+      }));
+      const r = await createArenaTeamAction([...selected], name.trim(), roomLevel, rolePayload);
       if (r.error) toast.error(r.error);
-      else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setName(""); }
+      else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setRoles({}); setName(""); }
     });
   };
 
@@ -380,7 +424,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
 
       {/* ── Barra de seleção ── */}
       {selected.size > 0 && (
-        <SelectedBar mascots={mascots} selected={selected} onRemove={toggle} roomLevel={roomLevel} />
+        <SelectedBar mascots={mascots} selected={selected} roles={roles} onRoleChange={changeRole} onRemove={toggle} roomLevel={roomLevel} />
       )}
 
       {/* ── Configurações fixas (nome + sala) ── */}
@@ -410,6 +454,18 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
       </div>
 
       {/* ── Erro de nível ── */}
+      <div className="rounded-xl border border-slate-700/60 bg-slate-950/60 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]">Posturas de combate</p>
+        <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-5">
+          {COMBAT_ROLE_OPTIONS.map((role) => (
+            <div key={role.value} className="rounded-lg border border-slate-800 bg-slate-900/50 p-2">
+              <p className="text-[10px] font-bold text-slate-200">{role.label}</p>
+              <p className="mt-0.5 text-[9px] leading-snug text-slate-500">{role.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {levelError && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 font-semibold flex items-start gap-2">
           <span className="shrink-0">⚠️</span>

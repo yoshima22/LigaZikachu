@@ -929,7 +929,7 @@ async function assertPvpExitUnlocked(teamId: string): Promise<void> {
   throw new Error(`Esta equipe atacou outro jogador recentemente. Aguarde ${min}:${sec.toString().padStart(2, "0")} para abandonar ou coletar recompensas.`);
 }
 
-export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], roomLevel: ArenaRoom = 100) {
+export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], roomLevel: ArenaRoom = 100, combatRoles?: Record<string, string>) {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
   if (!ARENA_ROOMS.includes(roomLevel as ArenaRoom)) throw new Error("Sala inválida.");
 
@@ -1001,7 +1001,7 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
           create: mascots.map((m, index) => ({
             mascotId: m.id,
             slot: index + 1,
-            combatRole: recommendCombatRole(m),
+            combatRole: combatRoles?.[m.id] ? normalizeCombatRole(combatRoles[m.id]) : recommendCombatRole(m),
           })),
         },
       },
