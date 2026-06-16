@@ -306,6 +306,26 @@ export async function leaveTeamAction(): Promise<{ error?: string }> {
   }
 }
 
+export async function cancelMyOpenSyncTeamAction(teamId: string): Promise<{ error?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    await prisma.$transaction(async (tx) => {
+      const team = await tx.syncEventTeam.findUnique({
+        where: { id: teamId },
+        select: { id: true, status: true, playerAId: true, playerBId: true },
+      });
+      if (!team || team.status !== "OPEN" || team.playerAId !== player.id || team.playerBId) {
+        throw new Error("Esta sala nao pode ser encerrada por voce.");
+      }
+      await cancelTeamTx(tx, team.id);
+    });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao encerrar sala." };
+  }
+}
+
 export async function adminGrantSyncTicketAction(
   targetPlayerId: string,
   type: "LEFT" | "RIGHT" | "COMPLETE",

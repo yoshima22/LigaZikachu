@@ -17,6 +17,7 @@ import {
   leaveTeamAction,
   confirmTeamAction,
   cancelSyncTeamAdminAction,
+  cancelMyOpenSyncTeamAction,
   combineSyncTicketsAction,
   createAdminSyncSimulationTeamAction,
   createOpenSyncTeamAction,
@@ -455,6 +456,16 @@ export default async function DesafioSincronizadoPage() {
                       </select>
                       <button disabled={availableTickets.length < 1 || !windowState.isOpen} className="rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">
                         Entrar nesta dupla
+                      </button>
+                    </form>
+                  )}
+                  {team.status === "OPEN" && team.playerAId === player.id && !team.playerB && (
+                    <form action={async () => {
+                      "use server";
+                      await cancelMyOpenSyncTeamAction(team.id);
+                    }} className="mt-3">
+                      <button className="w-full rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-100">
+                        Encerrar sala e recuperar ticket
                       </button>
                     </form>
                   )}
