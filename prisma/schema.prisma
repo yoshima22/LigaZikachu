@@ -1422,10 +1422,13 @@ model SyncEventTeam {
   ticketAId       String              @unique
   ticketBId       String?             @unique
   status          SyncEventTeamStatus @default(OPEN)
+  confirmedA      Boolean             @default(false)
+  confirmedB      Boolean             @default(false)
   lineupStatusA   SyncLineupStatus    @default(OPEN)
   lineupStatusB   SyncLineupStatus    @default(OPEN)
   createdAt       DateTime            @default(now())
   completedAt     DateTime?
+  confirmedAt     DateTime?
   cancelledAt     DateTime?
   lineupReadyAt   DateTime?
   playerA         Player              @relation("SyncEventTeamPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)

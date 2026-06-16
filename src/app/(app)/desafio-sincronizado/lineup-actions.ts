@@ -19,7 +19,7 @@ async function requirePlayer() {
 async function getActiveTeamForPlayer(playerId: string) {
   return prisma.syncEventTeam.findFirst({
     where: {
-      status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] },
+      status: { in: ["LINEUP_PENDING", "LINEUP_READY"] },
       OR: [{ playerAId: playerId }, { playerBId: playerId }],
     },
     include: { lineups: true },

@@ -7,7 +7,10 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
+import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import {
+  leaveTeamAction,
+  confirmTeamAction,
   cancelSyncTeamAdminAction,
   combineSyncTicketsAction,
   createAdminSyncSimulationTeamAction,
@@ -81,7 +84,7 @@ export default async function DesafioSincronizadoPage() {
     }),
   ]);
 
-  // Dupla ativa com escalação
+  // Dupla ativa — inclui COMPLETE (aguardando confirmação) e fases de lineup
   const activeTeam = await prisma.syncEventTeam.findFirst({
     where: {
       status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] },
@@ -279,37 +282,66 @@ export default async function DesafioSincronizadoPage() {
         )}
       </section>
 
-      {/* ── Escalação da dupla ───────────────────────────────────────── */}
+      {/* ── Dupla ativa: confirmação e escalação ─────────────────────── */}
       {activeTeam && activeTeam.playerB && (() => {
         const isA = activeTeam.playerAId === player.id;
         const partner = isA ? activeTeam.playerB : activeTeam.playerA;
+        const iConfirmed = isA ? activeTeam.confirmedA : activeTeam.confirmedB;
+        const partnerConfirmed = isA ? activeTeam.confirmedB : activeTeam.confirmedA;
+        const bothConfirmed = activeTeam.status !== "COMPLETE";
+
         const myLineup = activeTeam.lineups.filter((l) => l.playerId === player.id);
         const partnerLineup = activeTeam.lineups.filter((l) => l.playerId === partner.id);
         const myLocked = isA ? activeTeam.lineupStatusA === "LOCKED" : activeTeam.lineupStatusB === "LOCKED";
         const partnerLocked = isA ? activeTeam.lineupStatusB === "LOCKED" : activeTeam.lineupStatusA === "LOCKED";
+
         return (
-          <section className="rounded-2xl border border-[#FFCB05]/20 bg-card p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <span className="text-lg">🎯</span>
+          <section className="rounded-2xl border border-[#FFCB05]/20 bg-card p-5 space-y-5">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🤝</span>
               <div>
-                <h2 className="font-semibold text-slate-100">Escalação da dupla</h2>
+                <h2 className="font-semibold text-slate-100">
+                  {bothConfirmed ? "Escalação da dupla" : "Confirmar dupla"}
+                </h2>
                 <p className="text-xs text-slate-500">
-                  {partner.displayName} é seu parceiro. Escolha {9} mascotes para a sua escalação e trave quando estiver pronto.
+                  {bothConfirmed
+                    ? `Dupla com ${partner.displayName} confirmada. Escolha 9 Pokémon e trave sua escalação.`
+                    : `Dupla formada com ${partner.displayName}. Ambos precisam confirmar.`}
                 </p>
               </div>
             </div>
-            <SyncLineupPanel
-              teamId={activeTeam.id}
-              playerId={player.id}
-              partnerPlayerId={partner.id}
-              partnerName={partner.displayName}
-              myLineup={myLineup as Parameters<typeof SyncLineupPanel>[0]["myLineup"]}
-              partnerLineup={partnerLineup as Parameters<typeof SyncLineupPanel>[0]["partnerLineup"]}
-              myLocked={myLocked}
-              partnerLocked={partnerLocked}
-              myMascots={myMascots}
-              isAdmin={admin}
-            />
+
+            {!bothConfirmed && (
+              <TeamConfirmPanel
+                partnerName={partner.displayName}
+                iConfirmed={iConfirmed}
+                partnerConfirmed={partnerConfirmed}
+              />
+            )}
+
+            {admin && (
+              <form action={async (fd) => { "use server"; await cancelSyncTeamAdminAction(fd); }} className="flex justify-end">
+                <input type="hidden" name="teamId" value={activeTeam.id} />
+                <button className="rounded-lg border border-red-400/30 bg-red-500/5 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/15">
+                  Admin: cancelar dupla e liberar tickets
+                </button>
+              </form>
+            )}
+
+            {bothConfirmed && (
+              <SyncLineupPanel
+                teamId={activeTeam.id}
+                playerId={player.id}
+                partnerPlayerId={partner.id}
+                partnerName={partner.displayName}
+                myLineup={myLineup as Parameters<typeof SyncLineupPanel>[0]["myLineup"]}
+                partnerLineup={partnerLineup as Parameters<typeof SyncLineupPanel>[0]["partnerLineup"]}
+                myLocked={myLocked}
+                partnerLocked={partnerLocked}
+                myMascots={myMascots}
+                isAdmin={admin}
+              />
+            )}
           </section>
         );
       })()}

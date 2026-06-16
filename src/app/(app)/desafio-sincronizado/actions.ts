@@ -177,33 +177,41 @@ export async function createAdminSyncSimulationTeamAction(): Promise<{ error?: s
   }
 }
 
+const CANCELLABLE_STATUSES = ["OPEN", "COMPLETE", "LINEUP_PENDING", "LINEUP_READY"];
+
+async function cancelTeamTx(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], teamId: string) {
+  const team = await tx.syncEventTeam.findUnique({
+    where: { id: teamId },
+    select: { id: true, status: true, ticketAId: true, ticketBId: true },
+  });
+  if (!team || !CANCELLABLE_STATUSES.includes(team.status)) {
+    throw new Error("Dupla não encontrada ou não pode ser cancelada.");
+  }
+  const ticketIds = [team.ticketAId, team.ticketBId].filter(Boolean) as string[];
+  await tx.syncEventLineup.deleteMany({ where: { teamId: team.id } });
+  await tx.syncEventTeam.update({
+    where: { id: team.id },
+    data: { status: "CANCELLED", cancelledAt: new Date() },
+  });
+  if (ticketIds.length > 0) {
+    await tx.syncTicket.updateMany({
+      where: { id: { in: ticketIds }, status: "RESERVED" },
+      data: { status: "AVAILABLE" },
+    });
+  }
+  return ticketIds;
+}
+
 export async function cancelSyncTeamAdminAction(formData: FormData): Promise<{ error?: string }> {
   try {
     await requireAdmin();
     const teamId = z.string().min(1).parse(formData.get("teamId"));
     await prisma.$transaction(async (tx) => {
-      const team = await tx.syncEventTeam.findUnique({
-        where: { id: teamId },
-        select: { id: true, status: true, ticketAId: true, ticketBId: true },
-      });
-      if (!team || !["OPEN", "COMPLETE"].includes(team.status)) {
-        throw new Error("Dupla ativa nao encontrada.");
-      }
-      const ticketIds = [team.ticketAId, team.ticketBId].filter(Boolean) as string[];
-      await tx.syncEventTeam.update({
-        where: { id: team.id },
-        data: { status: "CANCELLED", cancelledAt: new Date() },
-      });
-      if (ticketIds.length > 0) {
-        await tx.syncTicket.updateMany({
-          where: { id: { in: ticketIds }, status: "RESERVED" },
-          data: { status: "AVAILABLE" },
-        });
-      }
+      const ticketIds = await cancelTeamTx(tx, teamId);
       await tx.auditLog.create({
         data: {
           entityType: "SyncEventTeam",
-          entityId: team.id,
+          entityId: teamId,
           action: "ADMIN_TEAM_CANCELLED",
           after: { releasedTicketIds: ticketIds },
         },
@@ -213,6 +221,88 @@ export async function cancelSyncTeamAdminAction(formData: FormData): Promise<{ e
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao cancelar dupla." };
+  }
+}
+
+export async function confirmTeamAction(): Promise<{ error?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const team = await prisma.syncEventTeam.findFirst({
+      where: { status: "COMPLETE", OR: [{ playerAId: player.id }, { playerBId: player.id }] },
+      select: { id: true, playerAId: true, playerBId: true, confirmedA: true, confirmedB: true },
+    });
+    if (!team) return { error: "Você não está em uma dupla aguardando confirmação." };
+
+    const isA = team.playerAId === player.id;
+    if (isA && team.confirmedA) return { error: "Você já confirmou." };
+    if (!isA && team.confirmedB) return { error: "Você já confirmou." };
+
+    const newA = isA ? true : team.confirmedA;
+    const newB = isA ? team.confirmedB : true;
+    const bothConfirmed = newA && newB;
+
+    await prisma.syncEventTeam.update({
+      where: { id: team.id },
+      data: {
+        confirmedA: newA,
+        confirmedB: newB,
+        ...(bothConfirmed ? { status: "LINEUP_PENDING", confirmedAt: new Date() } : {}),
+      },
+    });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao confirmar dupla." };
+  }
+}
+
+export async function leaveTeamAction(): Promise<{ error?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    await prisma.$transaction(async (tx) => {
+      const team = await tx.syncEventTeam.findFirst({
+        where: {
+          status: "COMPLETE",
+          OR: [{ playerAId: player.id }, { playerBId: player.id }],
+        },
+        select: { id: true, playerAId: true, playerBId: true, ticketAId: true, ticketBId: true, confirmedA: true, confirmedB: true },
+      });
+      if (!team) throw new Error("Você não está em uma dupla que pode ser desfeita.");
+
+      // Bloqueia saída se o parceiro já confirmou (ambos só saem via admin após confirmação mútua)
+      const isA = team.playerAId === player.id;
+      const partnerConfirmed = isA ? team.confirmedB : team.confirmedA;
+      if (partnerConfirmed) {
+        throw new Error("Seu parceiro já confirmou a dupla. Apenas o admin pode desfazê-la agora.");
+      }
+
+      if (isA) {
+        // Quem criou a dupla cancela tudo
+        await cancelTeamTx(tx, team.id);
+      } else {
+        // Parceiro B sai: libera apenas o ticket de B, dupla volta para OPEN
+        await tx.syncEventTeam.update({
+          where: { id: team.id },
+          data: {
+            playerBId: null,
+            ticketBId: null,
+            status: "OPEN",
+            confirmedA: false,
+            confirmedB: false,
+          },
+        });
+        if (team.ticketBId) {
+          await tx.syncTicket.update({
+            where: { id: team.ticketBId },
+            data: { status: "AVAILABLE" },
+          });
+        }
+      }
+    });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao sair da dupla." };
   }
 }
 
