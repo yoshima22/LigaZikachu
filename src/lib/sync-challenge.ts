@@ -375,15 +375,20 @@ export async function joinOpenSyncTeam(
   if (!getSyncWindowState(config, new Date(), { admin: options.adminBypass }).isOpen) {
     throw new Error("A janela do Desafio Sincronizado nao esta aberta.");
   }
-  await assertPlayerCanUseTicket(tx, playerId, ticketId);
+  const joiningTicket = await assertPlayerCanUseTicket(tx, playerId, ticketId);
   const team = await tx.syncEventTeam.findUnique({
     where: { id: teamId },
     include: { ticketA: { select: { bannedUserAId: true, bannedUserBId: true } } },
   });
   if (!team || team.status !== "OPEN" || team.playerBId) throw new Error("Dupla aberta nao encontrada.");
   if (team.playerAId === playerId) throw new Error("Voce ja e o criador desta dupla.");
+  // Ticket da sala bane o jogador entrante
   if (team.ticketA.bannedUserAId === playerId || team.ticketA.bannedUserBId === playerId) {
     throw new Error("Voce esta banido pela origem do ticket desta sala.");
+  }
+  // Ticket do entrante bane o criador da sala
+  if (joiningTicket.bannedUserAId === team.playerAId || joiningTicket.bannedUserBId === team.playerAId) {
+    throw new Error("O criador desta sala esta banido pela origem do seu ticket.");
   }
   await tx.syncTicket.update({ where: { id: ticketId }, data: { status: "RESERVED" } });
   const updated = await tx.syncEventTeam.update({
