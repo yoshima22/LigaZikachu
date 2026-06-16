@@ -11,6 +11,7 @@ import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import { SyncRoomPanel } from "./_components/sync-room-panel";
 import { ModifierPanel } from "./_components/modifier-panel";
 import { SimulationButton } from "./_components/simulation-button";
+import { UndoSimulationButton } from "./_components/undo-simulation-button";
 import {
   leaveTeamAction,
   confirmTeamAction,
@@ -521,6 +522,7 @@ export default async function DesafioSincronizadoPage() {
           <div className="border-t border-border pt-5 space-y-3">
             <h2 className="font-semibold text-slate-100">Admin — Simulação completa</h2>
             <SimulationButton />
+            <UndoSimulationButton />
           </div>
 
           <div className="border-t border-border pt-5 space-y-3">

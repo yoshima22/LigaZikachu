@@ -13,6 +13,8 @@ import {
   adminFinalizeRoomAction,
 } from "../combat-actions";
 import { getSpriteUrl } from "@/lib/mascot-data";
+import { SyncBattleReplayModal } from "./sync-battle-replay";
+import type { SyncReplayJson } from "./sync-battle-replay";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -455,7 +457,7 @@ function MascotSelector({
 // ── Resultado de uma partida ───────────────────────────────────────────────────
 
 function MatchResult({ match, room }: { match: RoundMatch; room: Room }) {
-  const [showReplay, setShowReplay] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const teamA = room.teams.find((t) => t.id === match.teamAId);
   const teamB = room.teams.find((t) => t.id === match.teamBId);
   if (!teamA || !teamB) return null;
@@ -464,38 +466,47 @@ function MatchResult({ match, room }: { match: RoundMatch; room: Room }) {
   const nameB = `${teamB.playerA.displayName}${teamB.playerB ? ` + ${teamB.playerB.displayName}` : ""}`;
   const winner = match.result === "TEAM_A_WIN" ? nameA : match.result === "TEAM_B_WIN" ? nameB : "Empate";
 
+  const replay = match.replayJson as SyncReplayJson | null;
+  const hasReplay = replay?.rounds && replay.rounds.length > 0;
+
   return (
-    <div className="rounded-lg border border-border bg-slate-900 p-3 text-xs space-y-2">
-      <div className="flex items-center justify-between flex-wrap gap-1">
-        <p className="font-semibold text-slate-100">
-          {nameA} <span className="text-slate-500">vs</span> {nameB}
-        </p>
+    <>
+      {showModal && hasReplay && (
+        <SyncBattleReplayModal
+          teamAName={nameA}
+          teamBName={nameB}
+          replay={replay!}
+          onFinish={() => setShowModal(false)}
+        />
+      )}
+
+      <div className="rounded-lg border border-border bg-slate-900 p-3 text-xs space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-1">
+          <p className="font-semibold text-slate-100">
+            {nameA} <span className="text-slate-500">vs</span> {nameB}
+          </p>
+          {match.result && (
+            <span className="font-bold text-green-400">
+              <Medal size={11} className="inline mr-1" />
+              {winner}
+            </span>
+          )}
+        </div>
         {match.result && (
-          <span className="font-bold text-green-400">
-            <Medal size={11} className="inline mr-1" />
-            {winner}
-          </span>
+          <div className="flex gap-4 text-slate-400">
+            <span>{nameA}: {match.teamADamage} dano · {match.survivingA} vivos</span>
+            <span>{nameB}: {match.teamBDamage} dano · {match.survivingB} vivos</span>
+          </div>
+        )}
+        {hasReplay && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-bold text-cyan-300 hover:bg-cyan-500/20"
+          >
+            ▶ Ver animação do combate
+          </button>
         )}
       </div>
-      {match.result && (
-        <div className="flex gap-4 text-slate-400">
-          <span>A: {match.teamADamage} dano · {match.survivingA} vivos</span>
-          <span>B: {match.teamBDamage} dano · {match.survivingB} vivos</span>
-        </div>
-      )}
-      {match.replayJson != null && (
-        <button
-          onClick={() => setShowReplay((p) => !p)}
-          className="text-cyan-400 underline text-[10px]"
-        >
-          {showReplay ? "Ocultar replay" : "▶ Ver replay"}
-        </button>
-      )}
-      {showReplay && match.replayJson != null && (
-        <pre className="rounded-lg border border-border bg-slate-950 p-2 text-[10px] text-slate-300 overflow-auto max-h-48">
-          {JSON.stringify(match.replayJson as object, null, 2)}
-        </pre>
-      )}
-    </div>
+    </>
   );
 }

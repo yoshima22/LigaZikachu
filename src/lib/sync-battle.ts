@@ -108,6 +108,8 @@ export async function runSyncBattle(params: {
       slot: i + 1,
       nameA: a.nickname ?? getPokemonName(a.pokemonId),
       nameB: b.nickname ?? getPokemonName(b.pokemonId),
+      pokemonIdA: a.pokemonId,
+      pokemonIdB: b.pokemonId,
       scoreA: Math.round(scoreA),
       scoreB: Math.round(scoreB),
       winner: aWins ? "A" : "B",

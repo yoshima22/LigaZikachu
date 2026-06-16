@@ -7,6 +7,54 @@ import { grantValidSyncTicketForPlayer } from "@/lib/sync-challenge";
 import { runSyncBattle, loadModEffect } from "@/lib/sync-battle";
 import { toBrtDateString } from "@/lib/date-utils";
 
+export async function adminUndoSimulationAction(): Promise<{ error?: string; log?: string[] }> {
+  try {
+    await requireAdmin();
+    const log: string[] = [];
+    const date = toBrtDateString(new Date());
+
+    const existingRooms = await prisma.syncEventRoom.findMany({
+      where: { date },
+      select: { id: true, teams: { select: { id: true } } },
+    });
+
+    if (existingRooms.length === 0) {
+      return { error: "Nenhuma sala encontrada para hoje." };
+    }
+
+    const roomIds = existingRooms.map((r) => r.id);
+    const teamIds = existingRooms.flatMap((r) => r.teams.map((t) => t.id));
+
+    await prisma.syncRoundMatch.deleteMany({ where: { round: { roomId: { in: roomIds } } } });
+    await prisma.syncRoundSelection.deleteMany({ where: { round: { roomId: { in: roomIds } } } });
+    await prisma.syncEventRound.deleteMany({ where: { roomId: { in: roomIds } } });
+    await prisma.syncEventScore.deleteMany({ where: { roomId: { in: roomIds } } });
+
+    if (teamIds.length > 0) {
+      const teamTickets = await prisma.syncEventTeam.findMany({
+        where: { id: { in: teamIds } },
+        select: { id: true, ticketAId: true, ticketBId: true },
+      });
+      const ticketIds = teamTickets.flatMap((t) => [t.ticketAId, t.ticketBId]).filter(Boolean) as string[];
+      if (ticketIds.length > 0) {
+        await prisma.syncTicket.updateMany({ where: { id: { in: ticketIds } }, data: { status: "AVAILABLE" } });
+      }
+      await prisma.syncEventLineup.deleteMany({ where: { teamId: { in: teamIds } } });
+      await prisma.syncEventTeam.deleteMany({ where: { id: { in: teamIds } } });
+    }
+
+    await prisma.syncEventRoom.deleteMany({ where: { id: { in: roomIds } } });
+
+    log.push(`🧹 ${existingRooms.length} sala(s) e ${teamIds.length} dupla(s) removidas.`);
+    log.push("✅ Simulação desfeita. A página está limpa para uma nova rodada.");
+
+    revalidatePath("/desafio-sincronizado");
+    return { log };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao desfazer simulação." };
+  }
+}
+
 export async function adminRunFullSimulationAction(): Promise<{
   error?: string;
   roomId?: string;
