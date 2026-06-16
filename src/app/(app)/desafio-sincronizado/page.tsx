@@ -51,20 +51,18 @@ export default async function DesafioSincronizadoPage() {
   });
   const playerIdsWithTicket = new Set(playersWithAvailableTicket.map((t) => t.ownerId));
 
-  // Conta metades utilizáveis por jogador (geradas por OUTRO jogador) via SQL direto
-  const usableHalfCounts = await prisma.$queryRaw<{ owner_id: string; side: string; count: bigint }[]>`
-    SELECT owner_id, side, COUNT(*)::bigint AS count
-    FROM sync_ticket_halves
-    WHERE status IN ('AVAILABLE', 'SENT')
-      AND generated_by_player_id != owner_id
-    GROUP BY owner_id, side
-  `;
+  // Conta metades utilizáveis por jogador (geradas por OUTRO jogador).
+  const usableHalvesForPlayers = await prisma.syncTicketHalf.findMany({
+    where: { status: { in: ["AVAILABLE", "SENT"] } },
+    select: { ownerId: true, generatedByPlayerId: true, side: true },
+  });
   const usableByPlayer = new Map<string, { left: number; right: number }>();
-  for (const row of usableHalfCounts) {
-    if (!usableByPlayer.has(row.owner_id)) usableByPlayer.set(row.owner_id, { left: 0, right: 0 });
-    const entry = usableByPlayer.get(row.owner_id)!;
-    if (row.side === "LEFT") entry.left = Number(row.count);
-    else entry.right = Number(row.count);
+  for (const row of usableHalvesForPlayers) {
+    if (row.generatedByPlayerId === row.ownerId) continue;
+    if (!usableByPlayer.has(row.ownerId)) usableByPlayer.set(row.ownerId, { left: 0, right: 0 });
+    const entry = usableByPlayer.get(row.ownerId)!;
+    if (row.side === "LEFT") entry.left += 1;
+    else entry.right += 1;
   }
 
   const allActivePlayers = await prisma.player.findMany({
