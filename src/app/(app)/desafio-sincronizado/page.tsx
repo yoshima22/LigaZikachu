@@ -6,6 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
+import { adminSeedModifiersAction } from "./seed-modifiers-action";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
 import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import { SyncRoomPanel } from "./_components/sync-room-panel";
@@ -527,6 +528,14 @@ export default async function DesafioSincronizadoPage() {
 
           <div className="border-t border-border pt-5 space-y-3">
             <h2 className="font-semibold text-slate-100">Admin — Modificadores de rodada</h2>
+            <form action={async () => {
+              "use server";
+              await adminSeedModifiersAction();
+            }} className="mb-3">
+              <button className="inline-flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/20">
+                <Sparkles size={13} /> Popular todos os modificadores do PDF (upsert)
+              </button>
+            </form>
             <ModifierPanel modifiers={allModifiers} />
           </div>
         </section>
