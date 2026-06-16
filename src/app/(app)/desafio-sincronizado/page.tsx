@@ -57,7 +57,7 @@ export default async function DesafioSincronizadoPage() {
       id: true, displayName: true,
       ownedSyncTicketHalves: {
         where: { status: { in: ["AVAILABLE", "SENT"] } },
-        select: { side: true },
+        select: { side: true, generatedByPlayerId: true },
       },
     },
     orderBy: { displayName: "asc" },
@@ -68,8 +68,8 @@ export default async function DesafioSincronizadoPage() {
     .map((p) => ({
       id: p.id,
       displayName: p.displayName,
-      leftHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.LEFT).length,
-      rightHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.RIGHT).length,
+      leftHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.LEFT && h.generatedByPlayerId !== p.id).length,
+      rightHalves: p.ownedSyncTicketHalves.filter((h) => h.side === SyncTicketSide.RIGHT && h.generatedByPlayerId !== p.id).length,
     }));
 
   const [halves, tickets, players, entries, config, openTeams] = await Promise.all([
