@@ -158,7 +158,6 @@ export default async function DesafioSincronizadoPage() {
         },
       },
       scores: {
-        distinct: ["teamId"],
         orderBy: [{ wins: "desc" }, { damageDone: "desc" }, { damageTaken: "asc" }],
         include: { player: { select: { id: true, displayName: true } } },
       },

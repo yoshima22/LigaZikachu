@@ -14,6 +14,12 @@ interface SelectionInput {
   mascotIds: string[];
 }
 
+export interface ModEffect {
+  type: string;
+  value: number;
+  targetStat?: string;
+}
+
 interface BattleOutput {
   result: SyncMatchResult;
   teamADamage: number;
@@ -39,13 +45,25 @@ function mascotScore(m: {
   return (base + m.happiness / 10 + mood + Math.random() * 15) * typeMult;
 }
 
+export async function loadModEffect(modifierId: string | null): Promise<ModEffect | null> {
+  if (!modifierId) return null;
+  const mod = await prisma.syncEventModifier.findUnique({ where: { id: modifierId }, select: { effectJson: true } });
+  if (mod?.effectJson && typeof mod.effectJson === "object" && !Array.isArray(mod.effectJson)) {
+    return mod.effectJson as unknown as ModEffect;
+  }
+  return null;
+}
+
 export async function runSyncBattle(params: {
   teamA: TeamInput;
   teamB: TeamInput;
   selections: SelectionInput[];
   modifierId: string | null;
+  modEffect?: ModEffect | null;
 }): Promise<BattleOutput> {
   const { teamA, teamB, selections, modifierId } = params;
+  // Accept pre-loaded modEffect to avoid an extra DB query per confronto
+  const modEffect = params.modEffect !== undefined ? params.modEffect : await loadModEffect(modifierId);
 
   const getTeamMascotIds = (teamId: string) =>
     selections.filter((s) => s.teamId === teamId).flatMap((s) => s.mascotIds);
@@ -58,18 +76,7 @@ export async function runSyncBattle(params: {
     prisma.mascot.findMany({ where: { id: { in: mascotIdsB } } }),
   ]);
 
-  // Modificador: lê o effectJson se existir
-  type ModEffect = { type: string; value: number; targetStat?: string };
-  let modEffect: ModEffect | null = null;
-  if (modifierId) {
-    const mod = await prisma.syncEventModifier.findUnique({ where: { id: modifierId }, select: { effectJson: true } });
-    if (mod?.effectJson && typeof mod.effectJson === "object" && !Array.isArray(mod.effectJson)) {
-      modEffect = mod.effectJson as unknown as ModEffect;
-    }
-  }
-
   type MascotRow = (typeof mascotsA)[0];
-  // Aplica modificador nos stats em memória
   const applyMod = (m: MascotRow): MascotRow => {
     if (!modEffect || modEffect.type !== "STAT_BOOST" || !modEffect.targetStat) return m;
     const stat = modEffect.targetStat as keyof MascotRow;
@@ -81,8 +88,7 @@ export async function runSyncBattle(params: {
   const boostedA = mascotsA.map(applyMod);
   const boostedB = mascotsB.map(applyMod);
 
-  // Combate 1×1: A[0]×B[0], A[1]×B[1], A[2]×B[2]
-  const log: object[] = [];
+  const logEntries: object[] = [];
   let teamADamage = 0;
   let teamBDamage = 0;
   let survivingA  = 0;
@@ -98,7 +104,7 @@ export async function runSyncBattle(params: {
     teamADamage += Math.round(scoreA);
     teamBDamage += Math.round(scoreB);
     if (aWins) survivingA++; else survivingB++;
-    log.push({
+    logEntries.push({
       slot: i + 1,
       nameA: a.nickname ?? getPokemonName(a.pokemonId),
       nameB: b.nickname ?? getPokemonName(b.pokemonId),
@@ -119,6 +125,6 @@ export async function runSyncBattle(params: {
     teamBDamage,
     survivingA,
     survivingB,
-    replayJson: { rounds: log, modifierId },
+    replayJson: { rounds: logEntries, modifierId },
   };
 }

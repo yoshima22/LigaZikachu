@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { runSyncBattle } from "@/lib/sync-battle";
+import { runSyncBattle, loadModEffect } from "@/lib/sync-battle";
 import { toBrtDateString } from "@/lib/date-utils";
 
 async function requirePlayer() {
@@ -249,16 +249,20 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
         }
       }
 
-      // Sorteia modificador
+      // Sorteia modificador e pré-carrega o effect (1 query, reutilizada em todos os confrontos)
       const modifiers = await tx.syncEventModifier.findMany({ where: { active: true }, select: { id: true } });
       const modifierId = modifiers.length > 0
         ? modifiers[Math.floor(Math.random() * modifiers.length)].id
         : null;
+      const modEffect = await loadModEffect(modifierId);
 
       await tx.syncEventRound.update({
         where: { id: roundId },
         data: { status: "EXECUTING", modifierId, selectionsClosedAt: new Date() },
       });
+
+      // Busca todas as seleções da rodada de uma vez
+      const roundSelections = await tx.syncRoundSelection.findMany({ where: { roundId } });
 
       // Executa cada confronto
       for (const [slotA, slotB] of pairings) {
@@ -266,15 +270,14 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
         const teamB = teamsForRound[slotB];
         if (!teamA || !teamB) continue;
 
-        const allSelections = await tx.syncRoundSelection.findMany({
-          where: { roundId, teamId: { in: [teamA.id, teamB.id] } },
-        });
+        const allSelections = roundSelections.filter((s) => s.teamId === teamA.id || s.teamId === teamB.id);
 
         const result = await runSyncBattle({
           teamA,
           teamB,
           selections: allSelections,
           modifierId,
+          modEffect,
         });
 
         const match = await tx.syncRoundMatch.create({

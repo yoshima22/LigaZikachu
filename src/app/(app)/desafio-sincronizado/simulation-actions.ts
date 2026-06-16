@@ -4,11 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { grantValidSyncTicketForPlayer } from "@/lib/sync-challenge";
-import { runSyncBattle } from "@/lib/sync-battle";
+import { runSyncBattle, loadModEffect } from "@/lib/sync-battle";
 import { toBrtDateString } from "@/lib/date-utils";
-
-// Executa um ciclo completo do Desafio Sincronizado de forma automática:
-// tickets → duplas → confirmação → escalação → sala → 3 rodadas → recompensas
 
 export async function adminRunFullSimulationAction(): Promise<{
   error?: string;
@@ -27,43 +24,81 @@ export async function adminRunFullSimulationAction(): Promise<{
       take: 30,
     });
 
-    // Filtra jogadores com ao menos 3 mascotes (mínimo para disputar 1 rodada)
     const eligible = players.filter((p) => p.mascots.length >= 3);
     if (eligible.length < 8) {
-      return {
-        error: `São necessários pelo menos 8 jogadores com ≥ 3 mascotes cada. Encontrados: ${eligible.length}.`,
-      };
+      return { error: `São necessários pelo menos 8 jogadores com ≥ 3 mascotes cada. Encontrados: ${eligible.length}.` };
     }
 
     const chosen = eligible.slice(0, 8);
     log.push(`✅ 8 jogadores selecionados: ${chosen.map((p) => p.displayName).join(", ")}`);
 
-    // ── 2. Limpa dados de simulação anteriores (equipes sem sala, lineups) ──
-    const oldTeams = await prisma.syncEventTeam.findMany({
+    // ── 2. Limpa salas existentes do dia (cascade manual) ───────────────────
+    const date = toBrtDateString(new Date());
+    const existingRooms = await prisma.syncEventRoom.findMany({
+      where: { date },
+      select: { id: true, teams: { select: { id: true } } },
+    });
+
+    if (existingRooms.length > 0) {
+      const roomIds = existingRooms.map((r) => r.id);
+      const teamIds = existingRooms.flatMap((r) => r.teams.map((t) => t.id));
+
+      await prisma.syncRoundMatch.deleteMany({ where: { round: { roomId: { in: roomIds } } } });
+      await prisma.syncRoundSelection.deleteMany({ where: { round: { roomId: { in: roomIds } } } });
+      await prisma.syncEventRound.deleteMany({ where: { roomId: { in: roomIds } } });
+      await prisma.syncEventScore.deleteMany({ where: { roomId: { in: roomIds } } });
+
+      if (teamIds.length > 0) {
+        const teamTickets = await prisma.syncEventTeam.findMany({
+          where: { id: { in: teamIds } },
+          select: { id: true, ticketAId: true, ticketBId: true },
+        });
+        const ticketIds = teamTickets.flatMap((t) => [t.ticketAId, t.ticketBId]).filter(Boolean) as string[];
+        if (ticketIds.length > 0) {
+          await prisma.syncTicket.updateMany({ where: { id: { in: ticketIds } }, data: { status: "AVAILABLE" } });
+        }
+        await prisma.syncEventLineup.deleteMany({ where: { teamId: { in: teamIds } } });
+        await prisma.syncEventTeam.deleteMany({ where: { id: { in: teamIds } } });
+      }
+
+      await prisma.syncEventRoom.deleteMany({ where: { id: { in: roomIds } } });
+      log.push(`🧹 ${existingRooms.length} sala(s) do dia limpas`);
+    }
+
+    // ── 3. Limpa times pendentes dos jogadores escolhidos ───────────────────
+    const pendingTeams = await prisma.syncEventTeam.findMany({
       where: {
         status: { in: ["OPEN", "COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] },
         roomId: null,
-        playerAId: { in: chosen.map((p) => p.id) },
+        OR: [
+          { playerAId: { in: chosen.map((p) => p.id) } },
+          { playerBId: { in: chosen.map((p) => p.id) } },
+        ],
       },
       select: { id: true, ticketAId: true, ticketBId: true },
     });
-    for (const t of oldTeams) {
-      await prisma.syncEventLineup.deleteMany({ where: { teamId: t.id } });
-      await prisma.syncEventTeam.update({ where: { id: t.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
-      const ids = [t.ticketAId, t.ticketBId].filter(Boolean) as string[];
-      if (ids.length) await prisma.syncTicket.updateMany({ where: { id: { in: ids } }, data: { status: "AVAILABLE" } });
+    if (pendingTeams.length > 0) {
+      const pendingIds = pendingTeams.map((t) => t.id);
+      const pendingTickets = pendingTeams.flatMap((t) => [t.ticketAId, t.ticketBId]).filter(Boolean) as string[];
+      await prisma.syncEventLineup.deleteMany({ where: { teamId: { in: pendingIds } } });
+      await prisma.syncEventTeam.updateMany({ where: { id: { in: pendingIds } }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+      if (pendingTickets.length > 0) {
+        await prisma.syncTicket.updateMany({ where: { id: { in: pendingTickets } }, data: { status: "AVAILABLE" } });
+      }
+      log.push(`🧹 ${pendingTeams.length} time(s) pendente(s) cancelados`);
     }
-    if (oldTeams.length) log.push(`🧹 ${oldTeams.length} equipe(s) pendente(s) da conta limpas`);
 
-    // ── 3. Cria 4 duplas (chosen[0+1], [2+3], [4+5], [6+7]) ────────────────
+    // ── 4. Cria 4 duplas ─────────────────────────────────────────────────────
     const teamIds: string[] = [];
     for (let i = 0; i < 4; i++) {
       const pA = chosen[i * 2];
       const pB = chosen[i * 2 + 1];
 
       await prisma.$transaction(async (tx) => {
-        const ticketA = await grantValidSyncTicketForPlayer(tx, pA.id);
-        const ticketB = await grantValidSyncTicketForPlayer(tx, pB.id);
+        const [ticketA, ticketB] = await Promise.all([
+          grantValidSyncTicketForPlayer(tx, pA.id),
+          grantValidSyncTicketForPlayer(tx, pB.id),
+        ]);
         await tx.syncTicket.updateMany({
           where: { id: { in: [ticketA.id, ticketB.id] } },
           data: { status: "RESERVED" },
@@ -83,75 +118,54 @@ export async function adminRunFullSimulationAction(): Promise<{
         });
         teamIds.push(team.id);
 
-        // Escala até 9 mascotes por jogador
-        for (const p of [pA, pB]) {
-          const mascots = p.mascots.slice(0, 9);
-          for (let slot = 0; slot < mascots.length; slot++) {
-            await tx.syncEventLineup.create({
-              data: { teamId: team.id, playerId: p.id, mascotId: mascots[slot].id, slot: slot + 1 },
-            });
-          }
-        }
+        const lineupData = [pA, pB].flatMap((p) =>
+          p.mascots.slice(0, 9).map((m, slot) => ({
+            teamId: team.id,
+            playerId: p.id,
+            mascotId: m.id,
+            slot: slot + 1,
+          }))
+        );
+        await tx.syncEventLineup.createMany({ data: lineupData });
 
-        // Trava as escalações (bypassa validação de 9 mínimo para jogadores com menos)
         await tx.syncEventTeam.update({
           where: { id: team.id },
-          data: {
-            lineupStatusA: "LOCKED",
-            lineupStatusB: "LOCKED",
-            status: "LINEUP_READY",
-            lineupReadyAt: new Date(),
-          },
+          data: { lineupStatusA: "LOCKED", lineupStatusB: "LOCKED", status: "LINEUP_READY", lineupReadyAt: new Date() },
         });
       });
 
       log.push(`🤝 Dupla ${i + 1}: ${pA.displayName} + ${pB.displayName}`);
     }
 
-    // ── 4. Forma a sala ──────────────────────────────────────────────────────
-    const date = toBrtDateString(new Date());
-
-    // Remove sala anterior de hoje se houver (para simulação repetível)
-    await prisma.syncEventRoom.deleteMany({ where: { date, status: { in: ["READY", "CANCELLED"] } } });
-
+    // ── 5. Forma a sala ──────────────────────────────────────────────────────
     const room = await prisma.$transaction(async (tx) => {
-      const r = await tx.syncEventRoom.create({
-        data: { roomIndex: 1, date, status: "READY" },
-      });
+      const r = await tx.syncEventRoom.create({ data: { roomIndex: 1, date, status: "READY" } });
 
-      for (let slot = 0; slot < 4; slot++) {
-        await tx.syncEventTeam.update({
-          where: { id: teamIds[slot] },
-          data: { roomId: r.id, roomSlot: slot + 1 },
-        });
-      }
+      await Promise.all(
+        teamIds.map((tid, slot) =>
+          tx.syncEventTeam.update({ where: { id: tid }, data: { roomId: r.id, roomSlot: slot + 1 } })
+        )
+      );
 
       const now = new Date();
-      for (let rn = 1; rn <= 3; rn++) {
-        await tx.syncEventRound.create({
-          data: { roomId: r.id, roundNumber: rn, status: "PENDING", scheduledAt: now },
-        });
-      }
+      await tx.syncEventRound.createMany({
+        data: [1, 2, 3].map((rn) => ({ roomId: r.id, roundNumber: rn, status: "PENDING", scheduledAt: now })),
+      });
 
-      for (let i = 0; i < 4; i++) {
-        const pA = chosen[i * 2];
-        const pB = chosen[i * 2 + 1];
-        for (const pid of [pA.id, pB.id]) {
-          await tx.syncEventScore.create({
-            data: { roomId: r.id, teamId: teamIds[i], playerId: pid },
-          });
-        }
-      }
+      const scoreData = chosen.map((p, idx) => ({ roomId: r.id, teamId: teamIds[Math.floor(idx / 2)], playerId: p.id }));
+      await tx.syncEventScore.createMany({ data: scoreData });
 
       return r;
     });
 
     log.push(`🏟️ Sala formada: Arena 1 com 4 duplas`);
 
-    // ── 5. Executa as 3 rodadas automaticamente ──────────────────────────────
-    const rounds = await prisma.syncEventRound.findMany({
+    // ── 6. Executa as 3 rodadas ──────────────────────────────────────────────
+    const rounds = await prisma.syncEventRound.findMany({ where: { roomId: room.id }, orderBy: { roundNumber: "asc" } });
+    const teams = await prisma.syncEventTeam.findMany({
       where: { roomId: room.id },
-      orderBy: { roundNumber: "asc" },
+      include: { lineups: true },
+      orderBy: { roomSlot: "asc" },
     });
 
     const pairingsPerRound: [number, number][][] = [
@@ -160,23 +174,36 @@ export async function adminRunFullSimulationAction(): Promise<{
       [[0, 3], [1, 2]],
     ];
 
-    for (const round of rounds) {
-      const teams = await prisma.syncEventTeam.findMany({
-        where: { roomId: room.id },
-        include: { lineups: true },
-        orderBy: { roomSlot: "asc" },
-      });
+    // Pré-carrega todos os lineups indexados por playerId
+    const lineupsByPlayer = new Map<string, string[]>();
+    for (const team of teams) {
+      const playerIds = [team.playerAId, team.playerBId].filter(Boolean) as string[];
+      for (const pid of playerIds) {
+        lineupsByPlayer.set(pid, team.lineups.filter((l) => l.playerId === pid).map((l) => l.mascotId));
+      }
+    }
 
-      // Sorteia modificador (se houver)
+    for (const round of rounds) {
       const modifiers = await prisma.syncEventModifier.findMany({ where: { active: true }, select: { id: true } });
-      const modifierId = modifiers.length > 0
-        ? modifiers[Math.floor(Math.random() * modifiers.length)].id
-        : null;
+      const modifierId = modifiers.length > 0 ? modifiers[Math.floor(Math.random() * modifiers.length)].id : null;
+      const modEffect = await loadModEffect(modifierId);
 
       await prisma.syncEventRound.update({
         where: { id: round.id },
         data: { status: "EXECUTING", modifierId, selectionsClosedAt: new Date() },
       });
+
+      // Busca todas as seleções feitas até agora para esta sala (1 query por rodada)
+      const allPrevSels = await prisma.syncRoundSelection.findMany({
+        where: { round: { roomId: room.id, roundNumber: { lt: round.roundNumber } } },
+        select: { playerId: true, mascotIds: true },
+      });
+      const usedByPlayer = new Map<string, Set<string>>();
+      for (const sel of allPrevSels) {
+        const set = usedByPlayer.get(sel.playerId) ?? new Set();
+        for (const mid of sel.mascotIds) set.add(mid);
+        usedByPlayer.set(sel.playerId, set);
+      }
 
       const pairings = pairingsPerRound[round.roundNumber - 1] ?? [[0, 1], [2, 3]];
 
@@ -185,35 +212,31 @@ export async function adminRunFullSimulationAction(): Promise<{
         const teamB = teams[slotB];
         if (!teamA || !teamB) continue;
 
-        // Auto-seleciona 3 mascotes disponíveis por jogador
         const allSelections: { teamId: string; playerId: string; mascotIds: string[] }[] = [];
+        const createdSelections: { roundId: string; teamId: string; playerId: string; mascotIds: string[]; isAuto: boolean }[] = [];
 
         for (const team of [teamA, teamB]) {
           const playerIds = [team.playerAId, team.playerBId].filter(Boolean) as string[];
           for (const pid of playerIds) {
-            const prevSels = await prisma.syncRoundSelection.findMany({
-              where: { playerId: pid, round: { roomId: room.id, roundNumber: { lt: round.roundNumber } } },
-              select: { mascotIds: true },
-            });
-            const used = new Set(prevSels.flatMap((s) => s.mascotIds));
-            const available = team.lineups.filter((l) => l.playerId === pid && !used.has(l.mascotId));
-            const picks = available.slice(0, 3).map((l) => l.mascotId);
+            const used = usedByPlayer.get(pid) ?? new Set();
+            const lineup = lineupsByPlayer.get(pid) ?? [];
+            const available = lineup.filter((mid) => !used.has(mid));
+            let picks = available.slice(0, 3);
             if (picks.length < 3) {
-              // Reutiliza qualquer mascote do lineup se acabaram
-              const fallback = team.lineups.filter((l) => l.playerId === pid).slice(0, 3).map((l) => l.mascotId);
-              picks.push(...fallback.filter((id) => !picks.includes(id)));
+              // fallback: reutiliza mascotes já usados
+              picks = lineup.slice(0, 3);
             }
             const finalPicks = picks.slice(0, 3);
             if (finalPicks.length > 0) {
-              await prisma.syncRoundSelection.create({
-                data: { roundId: round.id, teamId: team.id, playerId: pid, mascotIds: finalPicks, isAuto: true },
-              });
               allSelections.push({ teamId: team.id, playerId: pid, mascotIds: finalPicks });
+              createdSelections.push({ roundId: round.id, teamId: team.id, playerId: pid, mascotIds: finalPicks, isAuto: true });
             }
           }
         }
 
-        const result = await runSyncBattle({ teamA, teamB, selections: allSelections, modifierId });
+        await prisma.syncRoundSelection.createMany({ data: createdSelections });
+
+        const result = await runSyncBattle({ teamA, teamB, selections: allSelections, modifierId, modEffect });
 
         await prisma.syncRoundMatch.create({
           data: {
@@ -233,23 +256,40 @@ export async function adminRunFullSimulationAction(): Promise<{
         const aWon = result.result === "TEAM_A_WIN";
         const bWon = result.result === "TEAM_B_WIN";
 
-        for (const [team, won, lost, dmg, surv, dmgTaken] of [
-          [teamA, aWon, bWon, result.teamADamage, result.survivingA, result.teamBDamage],
-          [teamB, bWon, aWon, result.teamBDamage, result.survivingB, result.teamADamage],
-        ] as [typeof teamA, boolean, boolean, number, number, number][]) {
-          for (const pid of [team.playerAId, team.playerBId].filter(Boolean) as string[]) {
-            await prisma.syncEventScore.updateMany({
-              where: { roomId: room.id, playerId: pid },
+        await Promise.all([
+          ...[teamA.playerAId, teamA.playerBId].filter(Boolean).map((pid) =>
+            prisma.syncEventScore.updateMany({
+              where: { roomId: room.id, playerId: pid as string },
               data: {
-                wins: won ? { increment: 1 } : undefined,
-                losses: lost ? { increment: 1 } : undefined,
-                draws: (!won && !lost) ? { increment: 1 } : undefined,
-                damageDone: { increment: dmg },
-                damageTaken: { increment: dmgTaken },
-                survivingTotal: { increment: surv },
+                wins: aWon ? { increment: 1 } : undefined,
+                losses: bWon ? { increment: 1 } : undefined,
+                draws: (!aWon && !bWon) ? { increment: 1 } : undefined,
+                damageDone: { increment: result.teamADamage },
+                damageTaken: { increment: result.teamBDamage },
+                survivingTotal: { increment: result.survivingA },
               },
-            });
-          }
+            })
+          ),
+          ...[teamB.playerAId, teamB.playerBId].filter(Boolean).map((pid) =>
+            prisma.syncEventScore.updateMany({
+              where: { roomId: room.id, playerId: pid as string },
+              data: {
+                wins: bWon ? { increment: 1 } : undefined,
+                losses: aWon ? { increment: 1 } : undefined,
+                draws: (!aWon && !bWon) ? { increment: 1 } : undefined,
+                damageDone: { increment: result.teamBDamage },
+                damageTaken: { increment: result.teamADamage },
+                survivingTotal: { increment: result.survivingB },
+              },
+            })
+          ),
+        ]);
+
+        // Atualiza o mapa de used para a próxima iteração da mesma rodada
+        for (const sel of createdSelections) {
+          const set = usedByPlayer.get(sel.playerId) ?? new Set();
+          for (const mid of sel.mascotIds) set.add(mid);
+          usedByPlayer.set(sel.playerId, set);
         }
       }
 
@@ -261,11 +301,7 @@ export async function adminRunFullSimulationAction(): Promise<{
       log.push(`⚔️ Rodada ${round.roundNumber} concluída${modifierId ? " (com modificador)" : ""}`);
     }
 
-    await prisma.syncEventRoom.update({
-      where: { id: room.id },
-      data: { status: "FINISHED", finishedAt: new Date() },
-    });
-
+    await prisma.syncEventRoom.update({ where: { id: room.id }, data: { status: "FINISHED", finishedAt: new Date() } });
     log.push("🏁 Evento encerrado. Acesse a sala para ver o ranking e entregar recompensas.");
 
     revalidatePath("/desafio-sincronizado");
