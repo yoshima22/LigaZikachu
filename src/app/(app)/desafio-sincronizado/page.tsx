@@ -6,6 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
+import { SyncLineupPanel } from "./_components/sync-lineup-panel";
 import {
   cancelSyncTeamAdminAction,
   combineSyncTicketsAction,
@@ -79,6 +80,29 @@ export default async function DesafioSincronizadoPage() {
       take: 24,
     }),
   ]);
+
+  // Dupla ativa com escalação
+  const activeTeam = await prisma.syncEventTeam.findFirst({
+    where: {
+      status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] },
+      OR: [{ playerAId: player.id }, { playerBId: player.id }],
+    },
+    include: {
+      playerA: { select: { id: true, displayName: true } },
+      playerB: { select: { id: true, displayName: true } },
+      lineups: {
+        include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true } } },
+        orderBy: { slot: "asc" },
+      },
+    },
+  });
+
+  const myMascots = activeTeam ? await prisma.mascot.findMany({
+    where: { playerId: player.id },
+    select: { id: true, pokemonId: true, nickname: true, level: true },
+    orderBy: [{ level: "desc" }, { id: "asc" }],
+    take: 200,
+  }) : [];
 
   const leftHalves = halves.filter((half) => half.side === SyncTicketSide.LEFT);
   const rightHalves = halves.filter((half) => half.side === SyncTicketSide.RIGHT);
@@ -254,6 +278,41 @@ export default async function DesafioSincronizadoPage() {
           </div>
         )}
       </section>
+
+      {/* ── Escalação da dupla ───────────────────────────────────────── */}
+      {activeTeam && activeTeam.playerB && (() => {
+        const isA = activeTeam.playerAId === player.id;
+        const partner = isA ? activeTeam.playerB : activeTeam.playerA;
+        const myLineup = activeTeam.lineups.filter((l) => l.playerId === player.id);
+        const partnerLineup = activeTeam.lineups.filter((l) => l.playerId === partner.id);
+        const myLocked = isA ? activeTeam.lineupStatusA === "LOCKED" : activeTeam.lineupStatusB === "LOCKED";
+        const partnerLocked = isA ? activeTeam.lineupStatusB === "LOCKED" : activeTeam.lineupStatusA === "LOCKED";
+        return (
+          <section className="rounded-2xl border border-[#FFCB05]/20 bg-card p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-lg">🎯</span>
+              <div>
+                <h2 className="font-semibold text-slate-100">Escalação da dupla</h2>
+                <p className="text-xs text-slate-500">
+                  {partner.displayName} é seu parceiro. Escolha {9} mascotes para a sua escalação e trave quando estiver pronto.
+                </p>
+              </div>
+            </div>
+            <SyncLineupPanel
+              teamId={activeTeam.id}
+              playerId={player.id}
+              partnerPlayerId={partner.id}
+              partnerName={partner.displayName}
+              myLineup={myLineup as Parameters<typeof SyncLineupPanel>[0]["myLineup"]}
+              partnerLineup={partnerLineup as Parameters<typeof SyncLineupPanel>[0]["partnerLineup"]}
+              myLocked={myLocked}
+              partnerLocked={partnerLocked}
+              myMascots={myMascots}
+              isAdmin={admin}
+            />
+          </section>
+        );
+      })()}
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">

@@ -274,6 +274,7 @@ model Player {
   syncTicketsBannedByRight  SyncTicket[]     @relation("SyncTicketBannedB")
   syncTeamsAsA              SyncEventTeam[]  @relation("SyncEventTeamPlayerA")
   syncTeamsAsB              SyncEventTeam[]  @relation("SyncEventTeamPlayerB")
+  syncLineups               SyncEventLineup[] @relation("SyncEventLineupPlayer")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
 
@@ -1234,7 +1235,14 @@ enum SyncTicketStatus {
 enum SyncEventTeamStatus {
   OPEN
   COMPLETE
+  LINEUP_PENDING
+  LINEUP_READY
   CANCELLED
+}
+
+enum SyncLineupStatus {
+  OPEN
+  LOCKED
 }
 
 enum ZikaLootStatus {
@@ -1408,24 +1416,46 @@ model SyncTicket {
 }
 
 model SyncEventTeam {
-  id          String              @id @default(cuid())
-  playerAId   String
-  playerBId   String?
-  ticketAId   String              @unique
-  ticketBId   String?             @unique
-  status      SyncEventTeamStatus @default(OPEN)
-  createdAt   DateTime            @default(now())
-  completedAt DateTime?
-  cancelledAt DateTime?
-  playerA     Player              @relation("SyncEventTeamPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
-  playerB     Player?             @relation("SyncEventTeamPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  ticketA     SyncTicket          @relation("SyncEventTeamTicketA", fields: [ticketAId], references: [id], onDelete: Restrict)
-  ticketB     SyncTicket?         @relation("SyncEventTeamTicketB", fields: [ticketBId], references: [id], onDelete: Restrict)
+  id              String              @id @default(cuid())
+  playerAId       String
+  playerBId       String?
+  ticketAId       String              @unique
+  ticketBId       String?             @unique
+  status          SyncEventTeamStatus @default(OPEN)
+  lineupStatusA   SyncLineupStatus    @default(OPEN)
+  lineupStatusB   SyncLineupStatus    @default(OPEN)
+  createdAt       DateTime            @default(now())
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  lineupReadyAt   DateTime?
+  playerA         Player              @relation("SyncEventTeamPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB         Player?             @relation("SyncEventTeamPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  ticketA         SyncTicket          @relation("SyncEventTeamTicketA", fields: [ticketAId], references: [id], onDelete: Restrict)
+  ticketB         SyncTicket?         @relation("SyncEventTeamTicketB", fields: [ticketBId], references: [id], onDelete: Restrict)
+  lineups         SyncEventLineup[]
 
   @@index([status, createdAt])
   @@index([playerAId, status])
   @@index([playerBId, status])
   @@map("sync_event_teams")
+}
+
+model SyncEventLineup {
+  id        String           @id @default(cuid())
+  teamId    String
+  playerId  String
+  mascotId  String
+  slot      Int              // 1–9
+  createdAt DateTime         @default(now())
+
+  team      SyncEventTeam    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player    Player           @relation("SyncEventLineupPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  mascot    Mascot           @relation("SyncEventLineupMascot", fields: [mascotId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, playerId, slot])
+  @@unique([teamId, mascotId])
+  @@index([teamId, playerId])
+  @@map("sync_event_lineups")
 }
 
 model UserFcmToken {
@@ -1615,6 +1645,7 @@ model Mascot {
   socialDecisionLogsAsB MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
   events           MascotEvent[]
   buffs            MascotBuff[]
+  syncLineups      SyncEventLineup[] @relation("SyncEventLineupMascot")
   @@index([playerId])
   @@map("mascots")
 }
