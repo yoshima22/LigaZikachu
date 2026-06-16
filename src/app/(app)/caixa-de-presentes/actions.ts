@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
+import { openStickerPackByName } from "@/app/(app)/passe-apoiador/pack-opener";
 
 const claimGiftSchema = z.object({
   giftId: z.string().min(1),
@@ -63,6 +64,14 @@ async function applyGiftReward(
   if (gift.type !== "CUSTOM" || !payload) return {};
 
   const rewardKind = typeof payload.rewardKind === "string" ? payload.rewardKind : null;
+
+  if (rewardKind === "STICKER_PACK") {
+    const packName = typeof payload.packName === "string" ? payload.packName : null;
+    if (packName) {
+      await openStickerPackByName(playerId, packName);
+    }
+    return {};
+  }
 
   if (rewardKind === "MASCOT_EGG" && isEggType(payload.eggType)) {
     await tx.mascotEgg.create({

@@ -179,7 +179,12 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
           } else if (prize.type === "EGG") {
             const eggEnumMap: Record<string, EggType> = {
               COMMON: EggType.COMMON, RARE: EggType.RARE, SPECIAL: EggType.SPECIAL,
-              EVENT: EggType.EVENT, EGG_GEN1: EggType.EGG_GEN1, EGG_GEN2: EggType.EGG_GEN2
+              LAB: EggType.LAB, EVENT: EggType.EVENT,
+              EGG_GEN1: EggType.EGG_GEN1, EGG_GEN2: EggType.EGG_GEN2,
+              EGG_GEN3: EggType.EGG_GEN3, EGG_GEN4: EggType.EGG_GEN4,
+              EGG_GEN5: EggType.EGG_GEN5, EGG_GEN6: EggType.EGG_GEN6,
+              EGG_GEN7: EggType.EGG_GEN7, EGG_GEN8: EggType.EGG_GEN8,
+              EGG_GEN9: EggType.EGG_GEN9, EGG_GEN6PLUS: EggType.EGG_GEN6PLUS,
             };
             const qty = prize.qty ?? 1;
             for (let q = 0; q < qty; q++) {
