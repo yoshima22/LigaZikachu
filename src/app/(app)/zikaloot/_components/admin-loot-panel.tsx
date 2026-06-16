@@ -4,13 +4,17 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createZikaLoot, runDraw, cancelZikaLoot, deleteZikaLoot, updateZikaLoot } from "../actions";
+import { createZikaLoot, runDraw, cancelZikaLoot, deleteZikaLoot, updateZikaLoot, adminRevokePickAction } from "../actions";
 import type { PrizeItem, PrizeConfig } from "@/lib/zikaloot-types";
+
+interface LootPick {
+  id: string; number: number; playerName: string; playerId: string;
+}
 
 interface Loot {
   id: string; name: string; prize: string; description?: string | null; status: string;
   drawAt: string; drawnNumber: number | null; winnerName: string | null; picksCount: number;
-  prizeConfig?: unknown;
+  prizeConfig?: unknown; picks?: LootPick[];
 }
 
 const PRIZE_LABELS: Record<string, string> = {
@@ -238,6 +242,17 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
     });
   };
 
+  const handleRevokePick = (pickId: string, number: number, playerName: string) => {
+    if (!confirm(`Revogar ticket #${number} de ${playerName}? O ticket será devolvido ao jogador.`)) return;
+    startTransition(async () => {
+      try {
+        const result = await adminRevokePickAction(pickId);
+        if (result.error) { toast.error(result.error); return; }
+        toast.success(`Ticket #${number} revogado. Ticket devolvido a ${playerName}.`);
+      } catch { toast.error("Erro ao revogar."); }
+    });
+  };
+
   const handleDelete = (id: string, name: string) => {
     if (!confirm(`Excluir permanentemente a loteria "${name}" do histórico?`)) return;
     startTransition(async () => {
@@ -321,6 +336,23 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
                 </button>
               </div>
             </div>
+            {l.picks && l.picks.length > 0 && editingId !== l.id && (
+              <div className="border-t border-border bg-slate-900/30 px-4 py-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Tickets vendidos ({l.picks.length})</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {l.picks.map((pick) => (
+                    <span key={pick.id} className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs text-slate-300">
+                      <span className="text-[#FFCB05] font-semibold">#{pick.number}</span>
+                      <span className="opacity-70">{pick.playerName}</span>
+                      <button type="button" disabled={pending} onClick={() => handleRevokePick(pick.id, pick.number, pick.playerName)}
+                        className="ml-0.5 text-red-400 hover:text-red-300 disabled:opacity-40">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {editingId === l.id && (
               <div className="border-t border-border bg-slate-900/60 grid gap-3 p-4 sm:grid-cols-2">
                 {[

@@ -328,6 +328,34 @@ export async function checkAndRunPendingDraws(): Promise<void> {
   } catch { /* silently ignore */ }
 }
 
+export async function adminRevokePickAction(pickId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const pick = await prisma.zikaLootPick.findUnique({
+      where: { id: pickId },
+      include: { loot: { select: { status: true } } }
+    });
+    if (!pick) return { error: "Pick não encontrado." };
+    if (pick.loot.status !== ZikaLootStatus.SCHEDULED)
+      return { error: "Não é possível revogar picks de uma loteria já sorteada ou cancelada." };
+    const ticketItem = await prisma.shopItem.findFirst({ where: { type: ShopItemType.ZIKALOOT_TICKET, active: true } });
+    await prisma.$transaction(async (tx) => {
+      await tx.zikaLootPick.delete({ where: { id: pickId } });
+      if (ticketItem) {
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: pick.playerId, itemId: ticketItem.id } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: pick.playerId, itemId: ticketItem.id, quantity: 1 },
+        });
+      }
+    });
+    revalidatePath("/zikaloot");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function cancelZikaLoot(lootId: string): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -357,3 +385,4 @@ export async function cancelZikaLoot(lootId: string): Promise<{ error?: string }
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+

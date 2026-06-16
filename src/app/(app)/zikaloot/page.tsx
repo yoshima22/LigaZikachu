@@ -39,7 +39,7 @@ export default async function ZikaLootPage() {
       take: 10,
       include: {
         picks: {
-          select: { number: true, playerId: true, player: { select: { displayName: true } } }
+          select: { id: true, number: true, playerId: true, player: { select: { displayName: true } } }
         },
         winner: { select: { displayName: true } }
       }
@@ -226,7 +226,8 @@ export default async function ZikaLootPage() {
         drawnNumber: l.drawnNumber,
         winnerName: l.winner?.displayName ?? null,
         picksCount: l.picks.length,
-        prizeConfig: l.prizeConfig
+        prizeConfig: l.prizeConfig,
+        picks: l.picks.map((p) => ({ id: p.id, number: p.number, playerId: p.playerId, playerName: p.player.displayName }))
       }))} />}
 
       {/* Histórico */}
