@@ -21,6 +21,8 @@ export type BankMascot = {
   expeditions: { id: string; finishAt: Date; status: string }[];
   buffs: { id: string }[];
   lastInteractedAt: Date | null;
+  lastPlayedAt?: Date | null;
+  lastPettedAt?: Date | null;
   socialCooldownUntil: Date | null;
   statForce: number;
   statAgility: number;

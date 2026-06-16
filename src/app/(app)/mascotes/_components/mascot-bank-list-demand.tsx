@@ -101,24 +101,32 @@ function QuickInteractButton({
   type,
   label,
   lastInteractedAt,
+  lastPlayedAt,
+  lastPettedAt,
   socialCooldownUntil,
   inExpedition,
+  onSuccess,
 }: {
   mascotId: string;
   type: "PET" | "PLAY";
   label: string;
   lastInteractedAt: Date | null;
+  lastPlayedAt?: Date | null;
+  lastPettedAt?: Date | null;
   socialCooldownUntil: Date | null;
   inExpedition: boolean;
+  onSuccess?: (type: "PET" | "PLAY", result: { happinessChange?: number; expGained?: number; newMood?: string }) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [playCooldownUntil, setPlayCooldownUntil] = useState<number | null>(null);
   const [petCooldownUntil, setPetCooldownUntil] = useState<number | null>(null);
 
-  const serverPlayCooldownUntil = lastInteractedAt ? new Date(lastInteractedAt).getTime() + PLAY_COOLDOWN_MS : 0;
+  const serverPlayBase = lastPlayedAt ?? lastInteractedAt;
+  const serverPlayCooldownUntil = serverPlayBase ? new Date(serverPlayBase).getTime() + PLAY_COOLDOWN_MS : 0;
+  const serverPetCooldownUntil = lastPettedAt ? new Date(lastPettedAt).getTime() + PET_COOLDOWN_MS : 0;
   const effectivePlayCooldownUntil = Math.max(serverPlayCooldownUntil, playCooldownUntil ?? 0);
-  const effectivePetCooldownUntil = petCooldownUntil ?? 0;
+  const effectivePetCooldownUntil = Math.max(serverPetCooldownUntil, petCooldownUntil ?? 0);
   const now = nowMs;
   const socialBlocked = socialCooldownUntil ? new Date(socialCooldownUntil).getTime() > now : false;
   const playBlocked = type === "PLAY" && effectivePlayCooldownUntil > now;
@@ -156,6 +164,7 @@ function QuickInteractButton({
           toast.success(res.result.message);
           if (type === "PLAY") setPlayCooldownUntil(Date.now() + PLAY_COOLDOWN_MS);
           if (type === "PET") setPetCooldownUntil(Date.now() + PET_COOLDOWN_MS);
+          onSuccess?.(type, res.result);
         } else {
           toast.error(res.result.message);
         }
@@ -192,6 +201,9 @@ function BankRow({
   const [loading, startLoading] = useTransition();
   const [fullData, setFullData] = useState<FullMascotData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [localMood, setLocalMood] = useState(mascot.mood);
+  const [localLastPlayedAt, setLocalLastPlayedAt] = useState<Date | null>(mascot.lastPlayedAt ?? null);
+  const [localLastPettedAt, setLocalLastPettedAt] = useState<Date | null>(mascot.lastPettedAt ?? null);
 
   const fetchFull = useCallback(() => {
     startLoading(() => {
@@ -244,14 +256,58 @@ function BankRow({
                   {TYPE_LABELS[type] ?? type}
                 </span>
               ))}
-              <span className="text-[10px] text-slate-600">{MOOD_EMOJI[mascot.mood] ?? "-"} {mascot.mood}</span>
+              <span className="text-[10px] text-slate-600">{MOOD_EMOJI[localMood] ?? "-"} {localMood}</span>
             </span>
           </span>
         </button>
         {/* Ações rápidas + chips + chevron */}
         <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          <QuickInteractButton mascotId={mascot.id} type="PET" label="🤗 Carinho" lastInteractedAt={mascot.lastInteractedAt} socialCooldownUntil={mascot.socialCooldownUntil} inExpedition={mascot.expeditions.length > 0} />
-          <QuickInteractButton mascotId={mascot.id} type="PLAY" label="🎮 Brincar" lastInteractedAt={mascot.lastInteractedAt} socialCooldownUntil={mascot.socialCooldownUntil} inExpedition={mascot.expeditions.length > 0} />
+          <QuickInteractButton
+            mascotId={mascot.id}
+            type="PET"
+            label="🤗 Carinho"
+            lastInteractedAt={mascot.lastInteractedAt}
+            lastPlayedAt={localLastPlayedAt}
+            lastPettedAt={localLastPettedAt}
+            socialCooldownUntil={mascot.socialCooldownUntil}
+            inExpedition={mascot.expeditions.length > 0}
+            onSuccess={(_, result) => {
+              const now = new Date();
+              setLocalLastPettedAt(now);
+              if (result.newMood) setLocalMood(result.newMood);
+              setFullData((current) => current ? {
+                ...current,
+                happiness: Math.min(100, current.happiness + (result.happinessChange ?? 0)),
+                exp: current.exp + (result.expGained ?? 0),
+                mood: result.newMood ?? current.mood,
+                lastPettedAt: now,
+                lastInteractedAt: now,
+              } : current);
+            }}
+          />
+          <QuickInteractButton
+            mascotId={mascot.id}
+            type="PLAY"
+            label="🎮 Brincar"
+            lastInteractedAt={mascot.lastInteractedAt}
+            lastPlayedAt={localLastPlayedAt}
+            lastPettedAt={localLastPettedAt}
+            socialCooldownUntil={mascot.socialCooldownUntil}
+            inExpedition={mascot.expeditions.length > 0}
+            onSuccess={(_, result) => {
+              const now = new Date();
+              setLocalLastPlayedAt(now);
+              if (result.newMood) setLocalMood(result.newMood);
+              setFullData((current) => current ? {
+                ...current,
+                happiness: Math.min(100, current.happiness + (result.happinessChange ?? 0)),
+                exp: current.exp + (result.expGained ?? 0),
+                mood: result.newMood ?? current.mood,
+                lastPlayedAt: now,
+                lastInteractedAt: now,
+              } : current);
+            }}
+          />
           <span className="flex max-w-[120px] flex-wrap items-center justify-end gap-1">
             {chips.length === 0 ? (
               <span className="rounded border border-green-500/20 bg-green-500/10 px-1.5 py-px text-[9px] font-semibold text-green-400">Livre</span>

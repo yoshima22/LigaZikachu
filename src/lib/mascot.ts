@@ -548,14 +548,19 @@ export async function interactWithMascot(
   const PLAY_COOLDOWN_MS = 45 * 60 * 1000;
   const PET_COOLDOWN_MS  = 25 * 60 * 1000;
 
-  // PLAY usa lastInteractedAt persistido no banco; PET tem cooldown apenas no cliente
   if (!skipCooldown && type === "PLAY") {
-    if (mascot.lastInteractedAt && now.getTime() - mascot.lastInteractedAt.getTime() < PLAY_COOLDOWN_MS) {
-      const remaining = Math.ceil((PLAY_COOLDOWN_MS - (now.getTime() - mascot.lastInteractedAt.getTime())) / 60_000);
+    const playedAt = mascot.lastPlayedAt ?? mascot.lastInteractedAt;
+    if (playedAt && now.getTime() - playedAt.getTime() < PLAY_COOLDOWN_MS) {
+      const remaining = Math.ceil((PLAY_COOLDOWN_MS - (now.getTime() - playedAt.getTime())) / 60_000);
       return { success: false, message: `Espere mais ${remaining} min antes de brincar novamente.`, happinessChange: 0, expGained: 0 };
     }
   }
-  // PET cooldown é gerenciado no cliente (Map _pettedAt) — sem verificação server-side aqui
+  if (!skipCooldown && type === "PET") {
+    if (mascot.lastPettedAt && now.getTime() - mascot.lastPettedAt.getTime() < PET_COOLDOWN_MS) {
+      const remaining = Math.ceil((PET_COOLDOWN_MS - (now.getTime() - mascot.lastPettedAt.getTime())) / 60_000);
+      return { success: false, message: `Espere mais ${remaining} min antes de fazer carinho novamente.`, happinessChange: 0, expGained: 0 };
+    }
+  }
   // Verifica se um rival travou as interações
   if (type !== "FEED_FOOD" && type !== "FEED_SWEET" && mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
     const remaining = Math.ceil((mascot.socialCooldownUntil.getTime() - now.getTime()) / 60_000);
@@ -684,10 +689,9 @@ export async function interactWithMascot(
     data: {
       happiness: newHappiness,
       mood: finalMood,
-      // Persiste cooldown independente por ação — lastInteractedAt mantido para mood decay
-      // lastInteractedAt só atualiza no PLAY (para preservar o cooldown server-side)
-      // PET não atualiza para não bloquear o próximo brincar
-      lastInteractedAt: type === "PLAY" ? now : mascot.lastInteractedAt,
+      lastInteractedAt: type === "PLAY" || type === "PET" ? now : mascot.lastInteractedAt,
+      lastPlayedAt: type === "PLAY" ? now : mascot.lastPlayedAt,
+      lastPettedAt: type === "PET" ? now : mascot.lastPettedAt,
       lastFedAt: type.startsWith("FEED") ? now : mascot.lastFedAt,
     }
   });

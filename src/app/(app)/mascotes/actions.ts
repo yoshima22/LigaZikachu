@@ -749,6 +749,8 @@ export async function getBankMascotsPageAction(input?: {
       injuredAt: Date | null;
       restingUntil: Date | null;
       lastInteractedAt: Date | null;
+      lastPlayedAt: Date | null;
+      lastPettedAt: Date | null;
       socialCooldownUntil: Date | null;
       expeditions: { id: string; finishAt: Date; status: string }[];
       buffs: { id: string }[];
@@ -845,7 +847,7 @@ export async function getBankMascotsPageAction(input?: {
         select: {
           id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
           arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
-          lastInteractedAt: true, socialCooldownUntil: true,
+          lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
           statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
           expeditions: {
             where: { status: "ACTIVE" },
@@ -922,8 +924,8 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         arenaState: m.arenaState, bazarListed: m.bazarListed,
         injuredAt: m.injuredAt, restingUntil: m.restingUntil, hatchedAt: m.hatchedAt,
         lastInteractedAt: m.lastInteractedAt,
-        lastPlayedAt: null,
-        lastPettedAt:  null,
+        lastPlayedAt: m.lastPlayedAt,
+        lastPettedAt: m.lastPettedAt,
         lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
         evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, isShiny: m.isShiny,
         activeBuffs,
