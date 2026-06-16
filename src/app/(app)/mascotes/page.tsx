@@ -22,6 +22,7 @@ const BUFF_TYPES_LIST = [
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
 ] as const;
+const BANK_MASCOT_INITIAL_LIMIT = 60;
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,6 +60,7 @@ async function fetchMascotPageData(playerId: string) {
   const [
     featuredMascots,
     bankMascots,
+    bankMascotCount,
     eggs,
     incubator,
     foods,
@@ -102,7 +104,10 @@ async function fetchMascotPageData(playerId: string) {
         },
       },
       orderBy: [{ level: "desc" }, { id: "asc" }],
-      take: 200,
+      take: BANK_MASCOT_INITIAL_LIMIT,
+    }),
+    prisma.mascot.count({
+      where: { playerId, isFavorite: false, isEquipped: false },
     }),
     prisma.mascotEgg.findMany({
       where: { playerId, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },
@@ -187,7 +192,7 @@ async function fetchMascotPageData(playerId: string) {
     return [];
   }) : [];
 
-  return { featuredMascots: featuredMascotsEnriched, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
+  return { featuredMascots: featuredMascotsEnriched, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
 }
 
 const getCachedMascotPageData = (playerId: string) =>
@@ -261,7 +266,7 @@ export default async function MascotesPage() {
     return {} as Record<string, string>;
   });
 
-  const { featuredMascots, bankMascots, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots } = pageData;
+  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots } = pageData;
 
   const eggImageByType: Record<string, string> = {};
   for (const [type, url] of Object.entries(rawEggImages)) {
@@ -506,7 +511,7 @@ export default async function MascotesPage() {
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-slate-200">🐾 Meus Mascotes</h2>
-          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{featuredMascots.length + bankMascots.length}</span>
+          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{featuredMascots.length + bankMascotCount}</span>
         </div>
 
         {featuredMascots.length === 0 && bankMascots.length === 0 ? (
@@ -522,6 +527,7 @@ export default async function MascotesPage() {
           <MascotList
             mascots={mascotData}
             bankMascots={bankMascots}
+            bankMascotCount={bankMascotCount}
             hasFood={hasFood}
             hasSweet={hasSweet}
             isAdmin={admin}

@@ -292,11 +292,13 @@ const BANK_TYPE_OPTIONS = [
 
 export function MascotBankList({
   mascots,
+  totalCount,
   hasFood,
   hasSweet,
   isAdmin,
 }: {
   mascots: BankMascot[];
+  totalCount?: number;
   hasFood: boolean;
   hasSweet: boolean;
   isAdmin: boolean;
@@ -328,6 +330,8 @@ export function MascotBankList({
   // Contadores para cada situação (para exibir no select)
   const busyCount = mascots.filter(m => isBusy(m)).length;
   const freeCount = mascots.length - busyCount;
+  const knownTotal = Math.max(totalCount ?? mascots.length, mascots.length);
+  const isPartial = knownTotal > mascots.length;
 
   if (mascots.length === 0) return null;
 
@@ -337,7 +341,9 @@ export function MascotBankList({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-slate-300">
           Banco de mascotes
-          <span className="ml-2 text-[10px] text-slate-500 font-normal">({mascots.length})</span>
+          <span className="ml-2 text-[10px] text-slate-500 font-normal">
+            ({isPartial ? `${mascots.length} de ${knownTotal}` : mascots.length})
+          </span>
           {freeCount > 0 && (
             <span className="ml-1.5 text-[10px] text-green-500/70 font-normal">{freeCount} livres</span>
           )}
@@ -346,6 +352,12 @@ export function MascotBankList({
           )}
         </h2>
       </div>
+      {isPartial && (
+        <p className="rounded-xl border border-slate-700/50 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-500">
+          Para economizar dados, esta tela carrega primeiro os {mascots.length} mascotes de maior nivel do banco.
+          Favoritos e companheiro continuam sempre completos.
+        </p>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-2">

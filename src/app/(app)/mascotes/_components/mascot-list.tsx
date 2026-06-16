@@ -201,12 +201,14 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
 export function MascotList({
   mascots,
   bankMascots = [],
+  bankMascotCount,
   hasFood = false,
   hasSweet = false,
   isAdmin = false,
 }: {
   mascots: MascotData[];
   bankMascots?: BankMascot[];
+  bankMascotCount?: number;
   hasFood?: boolean;
   hasSweet?: boolean;
   isAdmin?: boolean;
@@ -350,6 +352,7 @@ export function MascotList({
           {bankMascots.length > 0 && (
             <MascotBankList
               mascots={bankMascots}
+              totalCount={bankMascotCount}
               hasFood={hasFood}
               hasSweet={hasSweet}
               isAdmin={isAdmin}
