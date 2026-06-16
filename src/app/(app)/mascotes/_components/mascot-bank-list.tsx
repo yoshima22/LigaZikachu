@@ -20,6 +20,8 @@ export type BankMascot = {
   restingUntil: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
   buffs: { id: string }[];
+  lastInteractedAt: Date | null;
+  socialCooldownUntil: Date | null;
   statForce: number;
   statAgility: number;
   statCharisma: number;

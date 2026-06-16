@@ -93,24 +93,71 @@ function getOccupationChips(mascot: BankMascot) {
   return chips;
 }
 
-function QuickInteractButton({ mascotId, type, label }: { mascotId: string; type: "PET" | "PLAY"; label: string }) {
+const PLAY_COOLDOWN_MS = 45 * 60 * 1000;
+const PET_COOLDOWN_MS = 25 * 60 * 1000;
+
+function QuickInteractButton({
+  mascotId,
+  type,
+  label,
+  lastInteractedAt,
+  socialCooldownUntil,
+  inExpedition,
+}: {
+  mascotId: string;
+  type: "PET" | "PLAY";
+  label: string;
+  lastInteractedAt: Date | null;
+  socialCooldownUntil: Date | null;
+  inExpedition: boolean;
+}) {
   const [pending, startTransition] = useTransition();
+  const [petCooldownUntil, setPetCooldownUntil] = useState<number | null>(null);
+
+  const now = Date.now();
+  const socialBlocked = socialCooldownUntil ? new Date(socialCooldownUntil).getTime() > now : false;
+  const playBlocked = type === "PLAY" && lastInteractedAt
+    ? now - new Date(lastInteractedAt).getTime() < PLAY_COOLDOWN_MS
+    : false;
+  const petBlocked = type === "PET" && petCooldownUntil ? petCooldownUntil > now : false;
+  const isDisabled = pending || inExpedition || socialBlocked || playBlocked || petBlocked;
+
+  const getTitle = () => {
+    if (inExpedition) return "Em expedição";
+    if (socialBlocked) return "Em cooldown social";
+    if (playBlocked) {
+      const rem = Math.ceil((new Date(lastInteractedAt!).getTime() + PLAY_COOLDOWN_MS - now) / 60_000);
+      return `Disponível em ${rem} min`;
+    }
+    if (petBlocked) {
+      const rem = Math.ceil((petCooldownUntil! - now) / 60_000);
+      return `Disponível em ${rem} min`;
+    }
+    return undefined;
+  };
+
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     startTransition(async () => {
       const res = await interactAction(mascotId, type);
       if (res.error) { toast.error(res.error); return; }
       if (res.result?.message) {
-        if (res.result.success) toast.success(res.result.message);
-        else toast.error(res.result.message);
+        if (res.result.success) {
+          toast.success(res.result.message);
+          if (type === "PET") setPetCooldownUntil(Date.now() + PET_COOLDOWN_MS);
+        } else {
+          toast.error(res.result.message);
+        }
       }
     });
   };
+
   return (
     <button
       type="button"
-      disabled={pending}
+      disabled={isDisabled}
       onClick={handleClick}
+      title={getTitle()}
       className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
     >
       {pending ? <Loader2 size={10} className="animate-spin inline" /> : label}
@@ -192,8 +239,8 @@ function BankRow({
         </button>
         {/* Ações rápidas + chips + chevron */}
         <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          <QuickInteractButton mascotId={mascot.id} type="PET" label="🤗 Carinho" />
-          <QuickInteractButton mascotId={mascot.id} type="PLAY" label="🎮 Brincar" />
+          <QuickInteractButton mascotId={mascot.id} type="PET" label="🤗 Carinho" lastInteractedAt={mascot.lastInteractedAt} socialCooldownUntil={mascot.socialCooldownUntil} inExpedition={mascot.expeditions.length > 0} />
+          <QuickInteractButton mascotId={mascot.id} type="PLAY" label="🎮 Brincar" lastInteractedAt={mascot.lastInteractedAt} socialCooldownUntil={mascot.socialCooldownUntil} inExpedition={mascot.expeditions.length > 0} />
           <span className="flex max-w-[120px] flex-wrap items-center justify-end gap-1">
             {chips.length === 0 ? (
               <span className="rounded border border-green-500/20 bg-green-500/10 px-1.5 py-px text-[9px] font-semibold text-green-400">Livre</span>
