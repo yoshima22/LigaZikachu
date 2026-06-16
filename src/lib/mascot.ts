@@ -2307,7 +2307,7 @@ export async function applyXpShare(playerId: string, mascotId: string) {
   const count = await prisma.mascotBuff.count({
     where: { type: "XP_SHARE", mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }
   });
-  if (count >= 1) throw new Error("Você já tem um Compartilhador de XP ativo. Remova-o antes.");
+  if (count >= 1) throw new Error("Você já tem um Compartilhador de XP ativo em outro mascote.");
   await prisma.mascotBuff.create({
     data: { mascotId, type: "XP_SHARE", expiresAt: new Date("2099-12-31T23:59:59Z") }
   });

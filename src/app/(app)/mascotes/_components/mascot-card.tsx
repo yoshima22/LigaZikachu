@@ -21,7 +21,7 @@ import {
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
   toggleExpLockAction,
-  removeXpShareAction,
+
 } from "../actions";
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -782,20 +782,6 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               buff.type === "XP_SHARE" ? (
                 <span key={i} className="flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
                   📡 Comp. XP <span className="opacity-70">Permanente</span>
-                  <button
-                    type="button"
-                    title="Remover Compartilhador de XP"
-                    className="ml-1 rounded-full hover:bg-red-500/20 text-red-400 hover:text-red-300 px-1 leading-none"
-                    disabled={pending}
-                    onClick={() => {
-                      if (!confirm("Remover Compartilhador de XP deste mascote?")) return;
-                      startTransition(async () => {
-                        const r = await removeXpShareAction(mascot.id);
-                        if (r.error) toast.error(r.error);
-                        else { toast.success("Compartilhador de XP removido. 📡"); router.refresh(); }
-                      });
-                    }}
-                  >✕</button>
                 </span>
               ) : (
                 <ActiveBuffBadge key={i} type={buff.type} expiresAt={buff.expiresAt} />

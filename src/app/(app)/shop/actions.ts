@@ -147,7 +147,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.XP_SHARE,
     name: "Compartilhador de XP",
-    description: "Equipe em um Pokémon. Quando outra expedição de treinamento terminar, ele recebe metade do EXP. Permanente até remover. Limite: 1 por jogador.",
+    description: "Equipe em um Pokémon. Quando outra expedição de treinamento terminar, ele recebe metade do EXP. Permanente e não pode ser removido após equipar. Limite: 1 por jogador.",
     imageUrl: null,
     rarity: ShopItemRarity.RARE,
     price: 500,
