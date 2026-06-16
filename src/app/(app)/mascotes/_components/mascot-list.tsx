@@ -105,18 +105,29 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [reward, setReward] = useState<ExpeditionRewardDisplay | null>(null);
+  const [pendingRefresh, setPendingRefresh] = useState(false);
   const { expired, remaining } = useTimerExpiry(expedition.finishAt);
   const ready = expired;
   const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
+
+  const closeReward = () => {
+    setReward(null);
+    if (pendingRefresh) {
+      setPendingRefresh(false);
+      router.refresh();
+    }
+  };
 
   const collectExpedition = () => {
     startTransition(async () => {
       const result = await claimExpeditionAction(expedition.id);
       if (result.error) { toast.error(result.error); return; }
       if (result.result?.reward) {
-        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }));
+        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
+        setPendingRefresh(true);
+      } else {
+        router.refresh();
       }
-      router.refresh();
     });
   };
 
@@ -127,17 +138,19 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
       const result = await claimExpeditionAction(expedition.id);
       if (result.error) { toast.error(result.error); return; }
       if (result.result?.reward) {
-        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }));
+        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
+        setPendingRefresh(true);
+      } else {
+        router.refresh();
       }
-      router.refresh();
     });
   };
 
   return (
     <>
-      {/* Modal de recompensa — idêntico ao do MascotCard */}
+      {/* Modal de recompensa */}
       {reward && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setReward(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeReward}>
           <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
             <div className="text-6xl">{reward.emoji}</div>
             <div className="space-y-1">
@@ -145,7 +158,7 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
               <p className="text-sm text-slate-400">{reward.description}</p>
             </div>
             <button
-              onClick={() => setReward(null)}
+              onClick={closeReward}
               className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors"
             >
               Fechar

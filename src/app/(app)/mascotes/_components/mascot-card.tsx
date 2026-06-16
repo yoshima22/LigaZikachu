@@ -247,7 +247,17 @@ export interface ExpeditionRewardDisplay {
   description: string;
 }
 
-export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string }): ExpeditionRewardDisplay {
+const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
+  EXP_BOOST:       { emoji: "⚡",    label: "Boost de EXP" },
+  LUCK_BOOST:      { emoji: "🍀",   label: "Boost de Sorte" },
+  STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika" },
+  LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte" },
+  WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política de Fraqueza" },
+  PICNIC_BASKET:   { emoji: "🧺",   label: "Cesta de Piquenique" },
+  XP_SHARE:        { emoji: "📡",   label: "Compartilhador de XP" },
+};
+
+export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
   if (reward.type === "TRAINING") {
     const exp = reward.exp ?? 0;
     const dur = reward.durationLabel ?? "";
@@ -258,7 +268,7 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
     };
   }
   if (reward.type === "EGG") {
-    const label = reward.eggType === "RARE" ? "Raro" : reward.eggType === "SPECIAL" ? "Especial" : "Comum";
+    const label = reward.eggType === "RARE" ? "Raro" : reward.eggType === "SPECIAL" ? "Especial" : reward.eggType === "EVENT" ? "de Evento" : "Comum";
     return { emoji: "🥚", title: `Ovo ${label} encontrado!`, description: "Seu mascote voltou com um ovo misterioso." };
   }
   if (reward.type === "FOOD") {
@@ -267,6 +277,10 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
   }
   if (reward.type === "COINS") {
     return { emoji: "🪙", title: `${reward.amount} ZikaCoins encontrados!`, description: "Adicionados à sua carteira." };
+  }
+  if (reward.type === "BUFF_ITEM") {
+    const info = (reward.shopItemType && BUFF_ITEM_DISPLAY[reward.shopItemType]) ?? { emoji: "✨", label: "Item especial" };
+    return { emoji: info.emoji, title: `${info.label} encontrado!`, description: "O item foi adicionado à sua caixa de presentes." };
   }
   return { emoji: "😔", title: "Voltou de mãos vazias...", description: "Desta vez não encontrou nada." };
 }
@@ -311,6 +325,14 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
   const [imgFailed, setImgFailed] = useState(false);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
+  const [expeditionRewardPendingRefresh, setExpeditionRewardPendingRefresh] = useState(false);
+  const closeExpeditionReward = () => {
+    setExpeditionReward(null);
+    if (expeditionRewardPendingRefresh) {
+      setExpeditionRewardPendingRefresh(false);
+      router.refresh();
+    }
+  };
   const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
   const [expeditionMode, setExpeditionMode] = useState<ExpeditionMode>("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
@@ -483,7 +505,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     <>
     {/* Expedition reward modal */}
     {expeditionReward && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setExpeditionReward(null)}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeExpeditionReward}>
         <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
           <div className="text-6xl">{expeditionReward.emoji}</div>
           <div className="space-y-1">
@@ -491,7 +513,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             <p className="text-sm text-slate-400">{expeditionReward.description}</p>
           </div>
           <button
-            onClick={() => setExpeditionReward(null)}
+            onClick={closeExpeditionReward}
             className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors">
             Fechar
           </button>
@@ -833,9 +855,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 const r = await claimExpeditionAction(expedition.id);
                 if (r.error) { toast.error(r.error); return; }
                 if (r.result?.reward) {
-                  setExpeditionReward(rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number }));
+                  setExpeditionReward(rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; shopItemType?: string }));
+                  setExpeditionRewardPendingRefresh(true);
+                } else {
+                  router.refresh();
                 }
-                router.refresh();
               });
             }}
             className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20 animate-pulse">
