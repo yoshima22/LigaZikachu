@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
+import { getCombatRoleLabel, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { Prisma } from "@prisma/client";
@@ -141,8 +142,10 @@ type ArenaMascot = {
   agility: number;
   instinct: number;
   vitality: number;
+  charisma: number;
   happiness: number;
   hp: number;
+  combatRole: CombatRole;
 };
 
 export type ArenaLoot = {
@@ -166,6 +169,9 @@ export type ArenaTurnLog = {
   defenderType: string;
   multiplier: number;
   advantageApplied: boolean;
+  actorRole?: string;
+  targetRole?: string;
+  effect?: string;
 };
 
 function rand(min: number, max: number) {
@@ -200,9 +206,11 @@ function levelBand(level: number) {
 
 function toArenaMascot(m: {
   id: string; playerId: string; pokemonId: number; nickname: string | null; level: number;
-  statForce: number; statAgility: number; statInstinct: number; statVitality: number; happiness: number;
+  statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma?: number | null; happiness: number;
+  combatRole?: string | null;
 }, debuffPct = 0): ArenaMascot {
-  const mult = 1 - debuffPct; // e.g. debuffPct=0.20 → mult=0.80 → 80% dos stats
+  const mult = 1 - debuffPct;
+  const charisma = m.statCharisma ?? 10;
   return {
     id: m.id,
     ownerId: m.playerId,
@@ -213,8 +221,16 @@ function toArenaMascot(m: {
     agility: Math.max(1, Math.round(m.statAgility * mult)),
     instinct: Math.max(1, Math.round(m.statInstinct * mult)),
     vitality: Math.max(1, Math.round(m.statVitality * mult)),
+    charisma: Math.max(1, Math.round(charisma * mult)),
     happiness: m.happiness,
     hp: Math.max(10, Math.round((55 + m.level * 6 + m.statVitality * 4) * mult)),
+    combatRole: normalizeCombatRole(m.combatRole ?? recommendCombatRole({
+      statForce: m.statForce,
+      statAgility: m.statAgility,
+      statInstinct: m.statInstinct,
+      statVitality: m.statVitality,
+      statCharisma: charisma,
+    })),
   };
 }
 
@@ -229,18 +245,33 @@ function makeBotMascot(index: number, levelMin: number, levelMax: number, rng: (
   ];
   const pokemonId = seededPick(rng, pokemonIds);
   const level = seededRand(rng, levelMin, levelMax);
+  const stats = {
+    force: seededRand(rng, 8, 14) + Math.floor(level / 2),
+    agility: seededRand(rng, 8, 14) + Math.floor(level / 2),
+    instinct: seededRand(rng, 8, 14) + Math.floor(level / 3),
+    vitality: seededRand(rng, 8, 14) + Math.floor(level / 2),
+    charisma: seededRand(rng, 8, 14) + Math.floor(level / 3),
+  };
   return {
     id: `bot-${index}-${pokemonId}-${level}`,
     ownerId: null,
     pokemonId,
     name: `${getPokemonName(pokemonId)} Bot`,
     level,
-    force: seededRand(rng, 8, 14) + Math.floor(level / 2),
-    agility: seededRand(rng, 8, 14) + Math.floor(level / 2),
-    instinct: seededRand(rng, 8, 14) + Math.floor(level / 3),
-    vitality: seededRand(rng, 8, 14) + Math.floor(level / 2),
+    force: stats.force,
+    agility: stats.agility,
+    instinct: stats.instinct,
+    vitality: stats.vitality,
+    charisma: stats.charisma,
     happiness: 70,
-    hp: 55 + level * 6 + (10 + Math.floor(level / 2)) * 4,
+    hp: 55 + level * 6 + stats.vitality * 4,
+    combatRole: recommendCombatRole({
+      statForce: stats.force,
+      statAgility: stats.agility,
+      statInstinct: stats.instinct,
+      statVitality: stats.vitality,
+      statCharisma: stats.charisma,
+    }),
   };
 }
 
@@ -248,11 +279,67 @@ function alive(team: ArenaMascot[], hp: Map<string, number>) {
   return team.filter(m => (hp.get(m.id) ?? 0) > 0);
 }
 
+function getEffectiveStat(m: ArenaMascot, debuffs: Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>, stat: "force" | "agility" | "instinct" | "vitality") {
+  const pct = debuffs.get(m.id)?.[stat] ?? 0;
+  return Math.max(1, Math.round(m[stat] * (1 - pct)));
+}
+
+function aliveEncourageBonus(team: ArenaMascot[], hp: Map<string, number>) {
+  const encouragers = team.filter(m => m.combatRole === "ENCOURAGER" && (hp.get(m.id) ?? 0) > 0);
+  if (encouragers.length === 0) return 0;
+  const charisma = encouragers.reduce((sum, m) => sum + m.charisma, 0);
+  return Math.min(0.18, 0.04 + charisma / 650);
+}
+
+function chooseRoleTarget(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<string, number>) {
+  const defenders = opponents.filter(m => m.combatRole === "DEFENDER");
+  const lowestHp = [...opponents].sort((a, b) => (hp.get(a.id) ?? 0) - (hp.get(b.id) ?? 0))[0];
+
+  if (actor.combatRole === "FLANK") {
+    const slipChance = Math.min(0.82, 0.35 + actor.agility / 150);
+    if (Math.random() < slipChance) return lowestHp ?? pick(opponents);
+  }
+
+  if (defenders.length > 0) {
+    const pullChance = actor.combatRole === "ATTACKER" ? 0.62 : 0.78;
+    if (Math.random() < pullChance) return [...defenders].sort((a, b) => b.vitality - a.vitality)[0];
+  }
+
+  if (actor.combatRole === "ATTACKER") return [...opponents].sort((a, b) => b.force - a.force)[0] ?? pick(opponents);
+  if (actor.combatRole === "OPPORTUNIST") return [...opponents].sort((a, b) => a.instinct - b.instinct)[0] ?? pick(opponents);
+  return pick(opponents);
+}
+
+function roleDamageMultiplier(actor: ArenaMascot, target: ArenaMascot) {
+  let mult = 1;
+  if (actor.combatRole === "ATTACKER") mult *= 1.08 + Math.min(0.18, actor.force / 420);
+  if (actor.combatRole === "ATTACKER" && target.combatRole === "DEFENDER") mult *= 1.15;
+  if (actor.combatRole === "FLANK") mult *= 1.04 + Math.min(0.14, actor.agility / 500);
+  if (actor.combatRole === "FLANK" && ["ENCOURAGER", "OPPORTUNIST"].includes(target.combatRole)) mult *= 1.12;
+  if (actor.combatRole === "OPPORTUNIST" && actor.instinct > target.instinct) mult *= 1.1;
+  if (target.combatRole === "DEFENDER") mult *= 1 - Math.min(0.35, 0.08 + target.vitality / 240);
+  if (target.combatRole === "FLANK") mult *= 1 - Math.min(0.25, target.agility / 360);
+  return mult;
+}
+
+function tryApplyOpportunistDebuff(actor: ArenaMascot, target: ArenaMascot, debuffs: Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>) {
+  if (actor.combatRole !== "OPPORTUNIST") return null;
+  const chance = Math.min(0.62, 0.22 + actor.instinct / 220);
+  if (Math.random() > chance) return null;
+  const current = debuffs.get(target.id) ?? {};
+  const amount = Math.min(0.25, 0.08 + actor.instinct / 500);
+  const stats: Array<"force" | "agility" | "instinct" | "vitality"> = ["force", "agility", "instinct", "vitality"];
+  const stat = stats[Math.floor(Math.random() * stats.length)];
+  debuffs.set(target.id, { ...current, [stat]: Math.max(current[stat] ?? 0, amount) });
+  return `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}%.`;
+}
+
 function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
   const hp = new Map<string, number>();
   for (const m of [...attackers, ...defenders]) hp.set(m.id, m.hp);
 
   const log: ArenaTurnLog[] = [];
+  const debuffs = new Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>();
   let turn = 1;
   let guard: { team: "A" | "D"; reduction: number } | null = null;
 
@@ -260,42 +347,58 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
     const aAlive = alive(attackers, hp);
     const dAlive = alive(defenders, hp);
     const all = [...aAlive.map(m => ({ mascot: m, side: "A" as const })), ...dAlive.map(m => ({ mascot: m, side: "D" as const }))];
-    all.sort((x, y) => y.mascot.agility - x.mascot.agility + rand(-3, 3));
+    all.sort((x, y) => getEffectiveStat(y.mascot, debuffs, "agility") - getEffectiveStat(x.mascot, debuffs, "agility") + rand(-3, 3));
 
     for (const entry of all) {
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
       const opponents = entry.side === "A" ? alive(defenders, hp) : alive(attackers, hp);
+      const allies = entry.side === "A" ? attackers : defenders;
       if (opponents.length === 0) break;
 
       const actor = entry.mascot;
-      const target = pick(opponents);
+      const target = chooseRoleTarget(actor, opponents, hp);
       const attackerType = getPokemonElement(actor.pokemonId);
       const defenderType = getPokemonElement(target.pokemonId);
       const multiplier = getTypeAdvantageMultiplier(getPokemonTypes(actor.pokemonId), getPokemonTypes(target.pokemonId));
-      const defend = Math.random() < 0.12;
+      const defendChance = actor.combatRole === "DEFENDER" ? 0.2 : 0.1;
+      const defend = Math.random() < defendChance;
 
       if (defend) {
-        guard = { team: entry.side, reduction: 0.35 };
+        const reduction = actor.combatRole === "DEFENDER" ? 0.45 : 0.32;
+        guard = { team: entry.side, reduction };
         log.push({
           turn, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId,
           targetId: actor.id, targetName: actor.name, targetOwnerId: actor.ownerId,
           action: "DEFEND", damage: 0, attackerType, defenderType: attackerType, multiplier: 1, advantageApplied: false,
+          actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(actor.combatRole),
+          effect: `${getCombatRoleLabel(actor.combatRole)} preparou defesa (${Math.round(reduction * 100)}%).`,
         });
         turn++;
         continue;
       }
 
-      const raw = actor.force * 1.8 + actor.level * 2 + actor.instinct * 0.7 + rand(0, 12);
-      const mitigation = target.vitality * 0.8 + target.level;
+      const force = getEffectiveStat(actor, debuffs, "force");
+      const instinct = getEffectiveStat(actor, debuffs, "instinct");
+      const vitality = getEffectiveStat(target, debuffs, "vitality");
+      const encourage = aliveEncourageBonus(allies, hp);
+      const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12)) * (1 + encourage) * roleDamageMultiplier(actor, target);
+      const mitigation = vitality * 0.8 + target.level;
       const guarded = guard && guard.team !== entry.side ? guard.reduction : 0;
       const damage = Math.max(1, Math.round((raw * multiplier - mitigation) * (1 - guarded)));
       hp.set(target.id, Math.max(0, (hp.get(target.id) ?? 0) - damage));
       guard = null;
 
+      const debuffEffect = tryApplyOpportunistDebuff(actor, target, debuffs);
+      const effects = [
+        encourage > 0 ? `Encorajador ativo: +${Math.round(encourage * 100)}% impulso.` : null,
+        debuffEffect,
+      ].filter(Boolean).join(" ") || undefined;
+
       log.push({
         turn, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId,
         targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId,
         action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: multiplier > 1,
+        actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole), effect: effects,
       });
       turn++;
     }
@@ -406,10 +509,10 @@ function splitDefeatedLoot(loot: ArenaLoot) {
 export async function getArenaBotPreview(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId || team.status !== "ACTIVE" || team.members.length === 0) return null;
-  const attackers = team.members.map(m => toArenaMascot(m.mascot));
+  const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
   // Seed baseado no teamId + dificuldade + hora do dia (muda a cada 10min → bot muda mas é estável por período)
   const hourSlot = Math.floor(Date.now() / (10 * 60 * 1000));
   const seed = parseInt(teamId.replace(/[^0-9]/g, "").slice(-4) || "0") + hourSlot;
@@ -895,7 +998,11 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
         name: teamName,
         roomLevel,
         members: {
-          create: mascots.map((m, index) => ({ mascotId: m.id, slot: index + 1 })),
+          create: mascots.map((m, index) => ({
+            mascotId: m.id,
+            slot: index + 1,
+            combatRole: recommendCombatRole(m),
+          })),
         },
       },
     });
@@ -944,11 +1051,28 @@ export async function addMascotToArenaTeam(playerId: string, teamId: string, mas
     if (locked.count !== 1) throw new Error("Mascote deixou de estar disponivel. Atualize a pagina e tente novamente.");
 
     const member = await tx.arenaTeamMember.create({
-      data: { teamId, mascotId: mascot.id, slot },
+      data: { teamId, mascotId: mascot.id, slot, combatRole: recommendCombatRole(mascot) },
     });
     return member;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
+
+export async function setArenaTeamMemberCombatRole(playerId: string, teamId: string, mascotId: string, combatRole: string) {
+  const role = normalizeCombatRole(combatRole);
+  const team = await prisma.arenaTeam.findUnique({
+    where: { id: teamId },
+    select: { playerId: true, status: true },
+  });
+  if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
+  if (team.status !== "ACTIVE") throw new Error("Apenas equipes ativas podem alterar postura.");
+
+  const updated = await prisma.arenaTeamMember.updateMany({
+    where: { teamId, mascotId },
+    data: { combatRole: role },
+  });
+  if (updated.count === 0) throw new Error("Mascote nao encontrado nesta equipe.");
+}
+
 
 /** Remove equipe completamente (admin ou dono). Libera mascotes e apaga o registro. */
 export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin = false) {
@@ -1138,7 +1262,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
 export async function syncDefeatedArenaTeams(playerId: string) {
   const teams = await prisma.arenaTeam.findMany({
     where: { playerId, status: "ACTIVE" },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } } } } },
   });
 
   const activeMascotIds = new Set(teams.flatMap(team => team.members.map(member => member.mascotId)));
@@ -1231,7 +1355,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
     include: {
-      members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } },
+      members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } },
       player: { select: { displayName: true } },
     },
   });
@@ -1244,7 +1368,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   const isAdminPlayer = ["ADMIN","SUPER_ADMIN"].includes(ownerUser?.user.role ?? "");
   if (isAdminPlayer) {
     // Debug mode automático para admin: roda combate sem persistir resultado real
-    const attackers = team.members.map(m => toArenaMascot(m.mascot));
+    const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
     const bot = buildBotOpponent(attackers, difficulty);
     const combat = runCombat(attackers, bot.defenders);
     const won = combat.result === "ATTACKER_WIN";
@@ -1322,7 +1446,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   }
 
   const teamDebuffPct = getArenaDebuffPct(team.enteredAt);
-  let attackers = team.members.map(m => toArenaMascot(m.mascot, teamDebuffPct));
+  let attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }, teamDebuffPct));
   attackers = applyBondModifiersToArenaMascots(attackers, await getBondCombatModifier(attackers.map(m => m.id)));
 
   // Bot determinístico: usa pendingBotJson se disponível
@@ -1552,7 +1676,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
 export async function lockBotForTeam(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
@@ -1566,7 +1690,7 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
     );
   }
 
-  const attackers = team.members.map(m => toArenaMascot(m.mascot));
+  const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
   const hourSlot = Math.floor(Date.now() / (10 * 60 * 1000));
   const seed = parseInt(teamId.replace(/[^0-9]/g, "").slice(-4) || "0") + hourSlot;
   const bot = buildBotOpponent(attackers, difficulty, seed);
@@ -1697,7 +1821,7 @@ export const getCachedOpponentTeams = unstable_cache(
               select: {
                 id: true, pokemonId: true, nickname: true, level: true,
                 arenaState: true, restingUntil: true, isShiny: true,
-                statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true,
+                statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true,
               },
             },
           },
@@ -1880,7 +2004,7 @@ function teamTotalLevel(members: { mascot: { level: number } }[]): number {
 export async function runPvpBattle(playerId: string, attackTeamId: string, defenseTeamId: string) {
   if (attackTeamId === defenseTeamId) throw new Error("Escolha duas equipes diferentes.");
 
-  const mascotBattleSelect = { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true, arenaState: true, restingUntil: true } as const;
+  const mascotBattleSelect = { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } as const;
   const [attackTeam, defenseTeam] = await Promise.all([
     prisma.arenaTeam.findUnique({
       where: { id: attackTeamId },
@@ -1957,8 +2081,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
   const attackDebuffPct = getArenaDebuffPct(attackTeam.enteredAt);
   const defenseDebuffPct = getArenaDebuffPct(defenseTeam.enteredAt);
-  let attackers = attackTeam.members.map(m => toArenaMascot(m.mascot, attackDebuffPct));
-  let defenders = defenseTeam.members.map(m => toArenaMascot(m.mascot, defenseDebuffPct));
+  let attackers = attackTeam.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }, attackDebuffPct));
+  let defenders = defenseTeam.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }, defenseDebuffPct));
   attackers = applyBondModifiersToArenaMascots(attackers, await getBondCombatModifier(attackers.map(m => m.id)));
   defenders = applyBondModifiersToArenaMascots(defenders, await getBondCombatModifier(defenders.map(m => m.id)));
   const combat = runCombat(attackers, defenders);

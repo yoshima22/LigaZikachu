@@ -1273,6 +1273,14 @@ enum SyncMatchResult {
   DRAW
 }
 
+enum MascotCombatRole {
+  DEFENDER
+  ATTACKER
+  FLANK
+  OPPORTUNIST
+  ENCOURAGER
+}
+
 enum ZikaLootStatus {
   SCHEDULED
   DRAWN
@@ -1485,6 +1493,7 @@ model SyncEventLineup {
   playerId  String
   mascotId  String
   slot      Int              // 1–9
+  combatRole MascotCombatRole @default(ATTACKER)
   createdAt DateTime         @default(now())
 
   team      SyncEventTeam    @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -2004,6 +2013,7 @@ model ArenaTeamMember {
   teamId    String
   mascotId  String
   slot      Int
+  combatRole MascotCombatRole @default(ATTACKER)
   joinedAt  DateTime  @default(now())
 
   team      ArenaTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)

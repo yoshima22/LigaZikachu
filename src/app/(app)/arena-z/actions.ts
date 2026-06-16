@@ -21,6 +21,7 @@ import {
   runBotBattle,
   runOpportunisticAttack,
   runPvpBattle,
+  setArenaTeamMemberCombatRole,
   markPvpDefenseSeenForTeam,
   useSusShield,
 } from "@/lib/arena-z";
@@ -104,6 +105,17 @@ export async function addMascotToArenaTeamAction(teamId: string, mascotId: strin
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao adicionar mascote." };
+  }
+}
+
+export async function setArenaTeamMemberCombatRoleAction(teamId: string, mascotId: string, combatRole: string): Promise<{ error?: string }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    await setArenaTeamMemberCombatRole(playerId, teamId, mascotId, combatRole);
+    revalidateTag("arena-active-teams");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao alterar postura." };
   }
 }
 
@@ -378,4 +390,3 @@ export async function adminRepairArenaAction(targetPlayerId?: string): Promise<{
     return { error: err instanceof Error ? err.message : "Erro ao reparar arena." };
   }
 }
-

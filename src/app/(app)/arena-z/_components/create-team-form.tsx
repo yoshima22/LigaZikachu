@@ -16,6 +16,7 @@ export interface ValidMascot {
   statAgility: number;
   statVitality: number;
   statInstinct: number;
+  statCharisma: number;
   arenaState: string;
   restingUntil: string | null;
   arenaEntryCooldownUntil: string | null;

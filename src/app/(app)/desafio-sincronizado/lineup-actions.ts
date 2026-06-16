@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
+import { normalizeCombatRole, recommendCombatRole } from "@/lib/combat-roles";
 
 const LINEUP_SLOTS = 9;
 
@@ -44,7 +45,10 @@ export async function addLineupMascotAction(
     // Valida dono e disponibilidade do mascote
     const mascot = await prisma.mascot.findUnique({
       where: { id: mascotId },
-      select: { id: true, playerId: true, nickname: true, pokemonId: true },
+      select: {
+        id: true, playerId: true, nickname: true, pokemonId: true,
+        statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
+      },
     });
     if (!mascot) return { error: "Mascote não encontrado." };
     if (mascot.playerId !== player.id) return { error: "Este mascote não pertence a você." };
@@ -57,7 +61,7 @@ export async function addLineupMascotAction(
 
     const nextSlot = myLineup.length + 1;
     await prisma.syncEventLineup.create({
-      data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot },
+      data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot, combatRole: recommendCombatRole(mascot) },
     });
 
     // Atualiza status da dupla para LINEUP_PENDING se ainda estava COMPLETE
@@ -67,6 +71,33 @@ export async function addLineupMascotAction(
         data: { status: "LINEUP_PENDING" },
       });
     }
+
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido." };
+  }
+}
+
+export async function setLineupCombatRoleAction(
+  mascotId: string,
+  combatRole: string,
+): Promise<{ error?: string }> {
+  try {
+    const { player } = await requirePlayer();
+    const team = await getActiveTeamForPlayer(player.id);
+    if (!team) return { error: "VocÃª nÃ£o estÃ¡ em uma dupla ativa." };
+
+    const myStatus = team.playerAId === player.id ? team.lineupStatusA : team.lineupStatusB;
+    if (myStatus === "LOCKED") return { error: "Sua escalaÃ§Ã£o estÃ¡ travada e nÃ£o pode ser alterada." };
+
+    const entry = team.lineups.find((l) => l.playerId === player.id && l.mascotId === mascotId);
+    if (!entry) return { error: "Mascote nÃ£o estÃ¡ na sua escalaÃ§Ã£o." };
+
+    await prisma.syncEventLineup.update({
+      where: { id: entry.id },
+      data: { combatRole: normalizeCombatRole(combatRole) },
+    });
 
     revalidatePath("/desafio-sincronizado");
     return {};

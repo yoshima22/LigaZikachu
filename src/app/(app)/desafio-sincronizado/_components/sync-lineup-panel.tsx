@@ -4,13 +4,15 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Lock, Search, Unlock, X, CheckCircle2, Clock } from "lucide-react";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
 import { getStaticSpriteUrl, getPokemonName } from "@/lib/mascot-data";
-import { addLineupMascotAction, lockLineupAction, removeLineupMascotAction, adminClearLineupAction } from "../lineup-actions";
+import { addLineupMascotAction, lockLineupAction, removeLineupMascotAction, adminClearLineupAction, setLineupCombatRoleAction } from "../lineup-actions";
 
 interface LineupEntry {
   id: string;
   mascotId: string;
   slot: number;
+  combatRole?: string | null;
   mascot: { id: string; pokemonId: number; nickname: string | null; level: number };
 }
 
@@ -125,6 +127,21 @@ export function SyncLineupPanel({
                         {entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId)}
                       </p>
                       <p className="text-[9px] text-slate-500">Nv.{entry.mascot.level}</p>
+                      {!myLocked ? (
+                        <select
+                          value={normalizeCombatRole(entry.combatRole)}
+                          disabled={pending}
+                          onChange={(event) => act(() => setLineupCombatRoleAction(entry.mascotId, event.target.value))}
+                          className="mt-0.5 w-full rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[8px] font-semibold text-slate-300 outline-none"
+                          title="Postura de combate"
+                        >
+                          {COMBAT_ROLE_OPTIONS.map((role) => (
+                            <option key={role.value} value={role.value}>{role.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-[8px] font-semibold text-[#FFCB05]">{getCombatRoleLabel(entry.combatRole)}</p>
+                      )}
                       {!myLocked && (
                         <button
                           type="button"
@@ -228,6 +245,7 @@ export function SyncLineupPanel({
                         {entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId)}
                       </p>
                       <p className="text-[9px] text-slate-600">Nv.{entry.mascot.level}</p>
+                      <p className="text-[8px] font-semibold text-slate-500">{getCombatRoleLabel(entry.combatRole)}</p>
                       {isAdmin && (
                         <button
                           type="button"

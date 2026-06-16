@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getCombatRoleLabel, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getTypeAdvantageMultiplier, getPokemonName } from "@/lib/mascot-data";
 import type { SyncMatchResult } from "@prisma/client";
 
@@ -53,6 +54,7 @@ type MascotRow = {
   statInstinct: number;
   happiness: number;
   mood: string;
+  combatRole?: CombatRole | string | null;
   [key: string]: unknown;
 };
 
@@ -303,20 +305,58 @@ function applyModToMascot(m: MascotRow, modEffect: ModEffect | null, modContext:
   }
 }
 
+function roleBaseScore(m: {
+  statForce: number;
+  statAgility: number;
+  statVitality: number;
+  statCharisma: number;
+  statInstinct: number;
+  combatRole?: CombatRole | string | null;
+}) {
+  const role = normalizeCombatRole(m.combatRole);
+  switch (role) {
+    case "DEFENDER":
+      return m.statVitality * 0.52 + m.statForce * 0.2 + m.statInstinct * 0.18 + m.statCharisma * 0.1;
+    case "ATTACKER":
+      return m.statForce * 0.58 + m.statInstinct * 0.2 + m.statAgility * 0.17 + m.statVitality * 0.05;
+    case "FLANK":
+      return m.statAgility * 0.52 + m.statForce * 0.22 + m.statInstinct * 0.2 + m.statVitality * 0.06;
+    case "OPPORTUNIST":
+      return m.statInstinct * 0.52 + m.statForce * 0.2 + m.statAgility * 0.16 + m.statCharisma * 0.12;
+    case "ENCOURAGER":
+      return m.statCharisma * 0.52 + m.statVitality * 0.2 + m.statInstinct * 0.16 + m.statAgility * 0.12;
+  }
+}
+
+function roleMatchupMultiplier(attacker: MascotRow, defender: MascotRow) {
+  const a = normalizeCombatRole(attacker.combatRole);
+  const d = normalizeCombatRole(defender.combatRole);
+  let mult = 1;
+  if (a === "ATTACKER" && d === "DEFENDER") mult *= 1.12;
+  if (a === "FLANK" && (d === "ENCOURAGER" || d === "OPPORTUNIST")) mult *= 1.12;
+  if (a === "OPPORTUNIST" && attacker.statInstinct > defender.statInstinct) mult *= 1.1;
+  if (a === "DEFENDER" && d === "FLANK" && attacker.statVitality > defender.statAgility) mult *= 1.08;
+  if (a === "ENCOURAGER") mult *= 1 + Math.min(0.12, attacker.statCharisma / 700);
+  return mult;
+}
+
 function mascotScore(m: {
   statForce: number;
   statAgility: number;
   statVitality: number;
+  statCharisma: number;
+  statInstinct: number;
   happiness: number;
   mood: string;
   pokemonId: number;
-}, opponentPokemonId: number): number {
+  combatRole?: CombatRole | string | null;
+}, opponent: MascotRow): number {
   const elemSelf = getPokemonElement(m.pokemonId);
-  const elemOpp  = getPokemonElement(opponentPokemonId);
+  const elemOpp  = getPokemonElement(opponent.pokemonId);
   const typeMult = getTypeAdvantageMultiplier(elemSelf, elemOpp);
-  const base = m.statForce * 0.4 + m.statAgility * 0.3 + m.statVitality * 0.3;
+  const base = roleBaseScore(m);
   const mood  = m.mood === "CONFIDENT" ? 10 : m.mood === "ANGRY" ? 5 : 0;
-  return (base + m.happiness / 10 + mood + Math.random() * 15) * typeMult;
+  return (base + m.happiness / 10 + mood + Math.random() * 15) * typeMult * roleMatchupMultiplier(m as MascotRow, opponent);
 }
 
 export async function loadModEffect(modifierId: string | null): Promise<ModEffect | null> {
@@ -349,8 +389,14 @@ export async function runSyncBattle(params: {
     prisma.mascot.findMany({ where: { id: { in: mascotIdsB } } }),
   ]);
 
-  const mascotsA = rawA as MascotRow[];
-  const mascotsB = rawB as MascotRow[];
+  const lineupRoles = await prisma.syncEventLineup.findMany({
+    where: { teamId: { in: [teamA.id, teamB.id] }, mascotId: { in: [...mascotIdsA, ...mascotIdsB] } },
+    select: { mascotId: true, combatRole: true },
+  });
+  const roleByMascot = new Map(lineupRoles.map((entry) => [entry.mascotId, entry.combatRole]));
+
+  const mascotsA = (rawA as MascotRow[]).map((m) => ({ ...m, combatRole: roleByMascot.get(m.id) ?? "ATTACKER" }));
+  const mascotsB = (rawB as MascotRow[]).map((m) => ({ ...m, combatRole: roleByMascot.get(m.id) ?? "ATTACKER" }));
 
   // Compute cross-team context for complex modifiers
   const modContext = computeModContext(mascotsA, mascotsB, modEffect);
@@ -392,8 +438,8 @@ export async function runSyncBattle(params: {
   for (let i = 0; i < paired; i++) {
     const a = boostedA[i];
     const b = boostedB[i];
-    const scoreA = mascotScore(a, b.pokemonId);
-    const scoreB = mascotScore(b, a.pokemonId);
+    const scoreA = mascotScore(a, b);
+    const scoreB = mascotScore(b, a);
     const aWins  = scoreA > scoreB;
     teamADamage += Math.round(scoreA);
     teamBDamage += Math.round(scoreB);
@@ -404,6 +450,8 @@ export async function runSyncBattle(params: {
       nameB: b.nickname ?? getPokemonName(b.pokemonId),
       pokemonIdA: a.pokemonId,
       pokemonIdB: b.pokemonId,
+      roleA: getCombatRoleLabel(a.combatRole),
+      roleB: getCombatRoleLabel(b.combatRole),
       scoreA: Math.round(scoreA),
       scoreB: Math.round(scoreB),
       winner: aWins ? "A" : "B",

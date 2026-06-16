@@ -9,6 +9,8 @@ export interface SyncReplaySlot {
   nameB: string;
   pokemonIdA?: number;
   pokemonIdB?: number;
+  roleA?: string;
+  roleB?: string;
   scoreA: number;
   scoreB: number;
   winner: "A" | "B";
@@ -35,6 +37,7 @@ function FighterPanel({
   name,
   pokemonId,
   score,
+  role,
   maxScore,
   side,
   phase,
@@ -44,6 +47,7 @@ function FighterPanel({
   name: string;
   pokemonId?: number;
   score: number;
+  role?: string;
   maxScore: number;
   side: "A" | "B";
   phase: "idle" | "fight" | "result";
@@ -88,6 +92,7 @@ function FighterPanel({
       <span className={`text-center text-[9px] font-semibold truncate max-w-full ${isA ? "text-blue-300" : "text-red-300"}`}>
         {name}
       </span>
+      {role && <span className="text-[8px] font-semibold text-[#FFCB05]">{role}</span>}
       <ScoreBar score={revealed ? score : 0} max={maxScore} side={side} />
       <span className="text-[9px] text-slate-400 font-mono">
         {revealed ? score : "???"}
@@ -215,6 +220,7 @@ export function SyncBattleReplayModal({
                   name={current.nameA}
                   pokemonId={current.pokemonIdA}
                   score={current.scoreA}
+                  role={current.roleA}
                   maxScore={maxScore}
                   side="A"
                   phase={phase}
@@ -233,6 +239,7 @@ export function SyncBattleReplayModal({
                   name={current.nameB}
                   pokemonId={current.pokemonIdB}
                   score={current.scoreB}
+                  role={current.roleB}
                   maxScore={maxScore}
                   side="B"
                   phase={phase}

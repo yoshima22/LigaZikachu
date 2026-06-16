@@ -22,6 +22,7 @@ import {
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
+import { CombatRoleSelect } from "./_components/combat-role-select";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
 export const dynamic = "force-dynamic";
@@ -157,7 +158,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         arenaState: true, restingUntil: true, injuredAt: true,
         bazarListed: true, happiness: true,
-        statForce: true, statAgility: true, statInstinct: true, statVitality: true,
+        statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
         expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
       },
       orderBy: [{ level: "desc" }],
@@ -171,7 +172,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               select: {
                 id: true, pokemonId: true, nickname: true, level: true,
                 arenaState: true, restingUntil: true, isShiny: true,
-                statForce: true, statAgility: true, statInstinct: true, statVitality: true, happiness: true,
+                statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true,
               },
             },
           },
@@ -788,6 +789,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                           {member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)}
                         </p>
                         <p className="text-[10px] text-slate-500">Nv.{member.mascot.level} · {stateLabel(member.mascot.arenaState, member.mascot.restingUntil)}</p>
+                        {team.status === "ACTIVE" && (
+                          <CombatRoleSelect teamId={team.id} mascotId={member.mascotId} value={member.combatRole} />
+                        )}
                       </div>
                     </div>
                   ))}
@@ -808,7 +812,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     mascots={availableMascots.map(m => ({
                       id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
                       level: m.level, statForce: m.statForce, statAgility: m.statAgility,
-                      statVitality: m.statVitality, statInstinct: m.statInstinct,
+                      statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
                       arenaState: m.arenaState, restingUntil: m.restingUntil?.toISOString() ?? null,
                       arenaEntryCooldownUntil: null,
                     }))}
@@ -905,7 +909,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               ).map(m => ({
                 id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
                 level: m.level, statForce: m.statForce, statAgility: m.statAgility,
-                statVitality: m.statVitality, statInstinct: m.statInstinct,
+                statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
                 arenaState: m.arenaState, restingUntil: m.restingUntil?.toISOString() ?? null,
                 arenaEntryCooldownUntil: null,
               }))} />
