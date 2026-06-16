@@ -110,7 +110,7 @@ export default async function DesafioSincronizadoPage() {
           </div>
           <div className="relative min-h-[240px]">
             <Image
-              src="/events/desafio-sincronizado/ticket-completo-agua-fogo.png"
+              src="/events/desafio-sincronizado/ticket-completo-agua-fogo.webp"
               alt="Ticket completo do Desafio Sincronizado"
               fill
               sizes="(max-width: 1024px) 100vw, 420px"
@@ -299,7 +299,7 @@ export default async function DesafioSincronizadoPage() {
             {tickets.map((ticket) => (
               <div key={ticket.id} className="rounded-xl border border-[#FFCB05]/20 bg-slate-950/60 p-4">
                 <div className="flex gap-3">
-                  <Image src="/events/desafio-sincronizado/ticket-completo-agua-fogo.png" alt="Ticket completo" width={88} height={120} className="h-28 w-20 object-contain" />
+                  <Image src="/events/desafio-sincronizado/ticket-completo-agua-fogo.webp" alt="Ticket completo" width={88} height={120} className="h-28 w-20 object-contain" />
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-[#FFCB05]">Ticket completo</p>
                     <p className="mt-1 text-xs text-slate-400">Status: {ticket.status}</p>

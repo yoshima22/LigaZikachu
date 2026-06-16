@@ -46,10 +46,10 @@ function ItemDisplay({ itemType, imageUrl }: { itemType: string; imageUrl?: stri
   }
 
   // 2. Ovos — mesmos arquivos estáticos da ZikaShop
-  if (itemType === "EGG_RARE"    || itemType === "RARE")    return <EggImg src="/mascot/egg-common.png" />;
-  if (itemType === "EGG_SPECIAL" || itemType === "SPECIAL") return <EggImg src="/mascot/egg-common.png" />;
+  if (itemType === "EGG_RARE"    || itemType === "RARE")    return <EggImg src="/mascot/egg-common.webp" />;
+  if (itemType === "EGG_SPECIAL" || itemType === "SPECIAL") return <EggImg src="/mascot/egg-common.webp" />;
   if (itemType.startsWith("EGG_") || itemType === "COMMON" || itemType === "EVENT")
-    return <EggImg src="/mascot/egg-common.png" />;
+    return <EggImg src="/mascot/egg-common.webp" />;
 
   // 3. Buffs e comidas — emojis grandes (igual à ZikaShop)
   const emoji = getShopItemEmoji(itemType);
@@ -287,7 +287,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
       */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/miauvadao-cat.png"
+        src="/miauvadao-cat.webp"
         alt="Miauvadão"
         className="pointer-events-none absolute left-0 hidden md:block"
         style={{

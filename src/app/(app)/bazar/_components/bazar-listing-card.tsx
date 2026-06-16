@@ -64,7 +64,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         ) : (payload.itemType as string)?.startsWith("EGG_") || ["COMMON","RARE","SPECIAL","EVENT"].includes(payload.itemType as string) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src="/mascot/egg-common.png"
+            src="/mascot/egg-common.webp"
             alt={(payload.displayName as string) ?? "Ovo"}
             className="h-20 object-contain"
           />

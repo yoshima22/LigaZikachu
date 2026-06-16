@@ -43,11 +43,11 @@ function getEggLabel(type: string, origin?: string) {
 }
 // Imagem específica por raridade (coloque os arquivos em /public/mascot/)
 const EGG_IMAGE: Record<string, string> = {
-  COMMON:  "/mascot/egg-common.png",
-  RARE:    "/mascot/egg-rare.png",
-  SPECIAL: "/mascot/egg-special.png",
-  LAB:     "/mascot/egg-special.png",
-  EVENT:   "/mascot/egg-common.png",
+  COMMON:  "/mascot/egg-common.webp",
+  RARE:    "/mascot/egg-common.webp",
+  SPECIAL: "/mascot/egg-common.webp",
+  LAB:     "/mascot/egg-common.webp",
+  EVENT:   "/mascot/egg-common.webp",
 };
 
 function Countdown({ finishAt }: { finishAt: Date }) {

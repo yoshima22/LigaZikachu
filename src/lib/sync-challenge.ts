@@ -20,7 +20,7 @@ export const SYNC_TICKET_ITEMS = [
     side: SyncTicketSide.LEFT,
     name: "Metade Ticket de Desafio - Esquerda",
     description: "Metade esquerda de fogo. Nao pode ser usada por quem gerou; envie para outro jogador.",
-    imageUrl: "/events/desafio-sincronizado/ticket-esquerda-fogo.png",
+    imageUrl: "/events/desafio-sincronizado/ticket-esquerda-fogo.webp",
     rarity: ShopItemRarity.EPIC,
     price: 0,
     sortOrder: 910,
@@ -30,7 +30,7 @@ export const SYNC_TICKET_ITEMS = [
     side: SyncTicketSide.RIGHT,
     name: "Metade Ticket de Desafio - Direita",
     description: "Metade direita de agua. Nao pode ser usada por quem gerou; envie para outro jogador.",
-    imageUrl: "/events/desafio-sincronizado/ticket-direita-agua.png",
+    imageUrl: "/events/desafio-sincronizado/ticket-direita-agua.webp",
     rarity: ShopItemRarity.EPIC,
     price: 0,
     sortOrder: 911,
@@ -39,7 +39,7 @@ export const SYNC_TICKET_ITEMS = [
     type: SYNC_TICKET_TYPES.complete,
     name: "Ticket Completo de Desafio",
     description: "Ticket completo formado por uma metade esquerda e uma direita. Bane automaticamente os dois geradores da sala criada.",
-    imageUrl: "/events/desafio-sincronizado/ticket-completo-agua-fogo.png",
+    imageUrl: "/events/desafio-sincronizado/ticket-completo-agua-fogo.webp",
     rarity: ShopItemRarity.LEGENDARY,
     price: 0,
     sortOrder: 912,
@@ -48,8 +48,8 @@ export const SYNC_TICKET_ITEMS = [
 
 export function getSideImage(side: SyncTicketSide) {
   return side === SyncTicketSide.LEFT
-    ? "/events/desafio-sincronizado/ticket-esquerda-fogo.png"
-    : "/events/desafio-sincronizado/ticket-direita-agua.png";
+    ? "/events/desafio-sincronizado/ticket-esquerda-fogo.webp"
+    : "/events/desafio-sincronizado/ticket-direita-agua.webp";
 }
 
 export function getSideLabel(side: SyncTicketSide) {

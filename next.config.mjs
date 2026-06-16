@@ -6,6 +6,19 @@ const nextConfig = {
   env: {
     TZ: "America/Sao_Paulo",
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*\\.(png|jpg|jpeg|gif|webp|svg|ico|avif)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

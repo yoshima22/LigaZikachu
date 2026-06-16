@@ -521,7 +521,7 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
             : (form.type as string) === "ZIKALOOT_TICKET"
             ? "Ticket: qualquer imagem decorativa."
             : isMascotItem
-            ? "Mascote: imagem opcional. Ovos podem usar /mascot/egg-common.png."
+            ? "Mascote: imagem opcional. Ovos podem usar /mascot/egg-common.webp."
             : "Imagem opcional para o item."
         }
       />
