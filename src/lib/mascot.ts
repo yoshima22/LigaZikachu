@@ -3,6 +3,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { creditCoins } from "@/lib/zikacoins";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { getShopItemMeta } from "@/lib/shop-cache";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
+import { ZikaCoinTxType } from "@prisma/client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -404,20 +406,88 @@ export async function addExp(
   if (leveled) {
     const membership = await prisma.arenaTeamMember.findFirst({
       where: { mascotId },
-      include: { team: { select: { roomLevel: true } } }
+      include: {
+        team: {
+          select: {
+            id: true, roomLevel: true, playerId: true, status: true,
+            vaultCoins: true, vaultExp: true, vaultFood: true, vaultSweet: true,
+            members: { select: { id: true, mascotId: true, mascot: { select: { level: true, arenaState: true } } } },
+          },
+        },
+      },
     });
     if (membership && membership.team.roomLevel !== null && level > membership.team.roomLevel) {
-      await prisma.$transaction([
-        prisma.arenaTeamMember.delete({ where: { id: membership.id } }),
-        prisma.mascot.update({ where: { id: mascotId }, data: { arenaState: "FREE" } }),
-        prisma.mascotEvent.create({
-          data: {
-            mascotId,
-            emoji: "📤",
-            description: `Saiu da equipe da Arena automaticamente: atingiu nível ${level}, que ultrapassa o limite da Sala ${membership.team.roomLevel}.`
+      const team = membership.team;
+      // Membros restantes com nível válido (excluindo este mascote)
+      const remainingValid = team.members.filter(
+        m => m.mascotId !== mascotId && m.mascot.arenaState !== "INJURED" && m.mascot.level <= team.roomLevel!
+      );
+
+      if (remainingValid.length === 0) {
+        // Último membro válido — retira a equipe distribuindo as recompensas do cofre
+        const allMascotIds = team.members.map(m => m.mascotId);
+        await prisma.$transaction(async (tx) => {
+          if (team.vaultCoins > 0) {
+            await creditCoins(tx, {
+              playerId: team.playerId,
+              type: ZikaCoinTxType.BET_WON,
+              amount: team.vaultCoins,
+              description: `Cofre Arena Z (retirada automática por nível): ${team.vaultCoins} ZC`,
+            });
           }
-        })
-      ]);
+          if (team.vaultFood > 0) {
+            await tx.mascotFoodItem.upsert({
+              where: { playerId_type: { playerId: team.playerId, type: "FOOD" } },
+              update: { quantity: { increment: team.vaultFood } },
+              create: { playerId: team.playerId, type: "FOOD", quantity: team.vaultFood },
+            });
+          }
+          if (team.vaultSweet > 0) {
+            await tx.mascotFoodItem.upsert({
+              where: { playerId_type: { playerId: team.playerId, type: "SWEET" } },
+              update: { quantity: { increment: team.vaultSweet } },
+              create: { playerId: team.playerId, type: "SWEET", quantity: team.vaultSweet },
+            });
+          }
+          // Libera todos os mascotes da equipe
+          await tx.mascot.updateMany({
+            where: { id: { in: allMascotIds }, arenaState: { not: "INJURED" } },
+            data: { arenaState: "FREE" },
+          });
+          // Retira a equipe
+          await tx.arenaTeam.update({
+            where: { id: team.id },
+            data: { status: "RETIRED", vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0 },
+          });
+          await tx.mascotEvent.create({
+            data: {
+              mascotId,
+              emoji: "📤",
+              description: `Equipe da Sala ${team.roomLevel} encerrada automaticamente: atingiu nível ${level} e não havia mais membros válidos. Cofre distribuído.`,
+            },
+          });
+        });
+        // Distribui EXP do cofre para todos os mascotes da equipe (fora da transaction para evitar recursão)
+        if (team.vaultExp > 0 && allMascotIds.length > 0) {
+          const expPerMascot = Math.max(1, Math.floor(team.vaultExp / allMascotIds.length));
+          await Promise.allSettled(
+            allMascotIds.map(id => addExp(id, expPerMascot, { ignoreBenchPenalty: true }))
+          );
+        }
+      } else {
+        // Ainda há membros válidos — apenas remove este mascote da equipe
+        await prisma.$transaction([
+          prisma.arenaTeamMember.delete({ where: { id: membership.id } }),
+          prisma.mascot.update({ where: { id: mascotId }, data: { arenaState: "FREE" } }),
+          prisma.mascotEvent.create({
+            data: {
+              mascotId,
+              emoji: "📤",
+              description: `Saiu da equipe da Arena automaticamente: atingiu nível ${level}, acima do limite da Sala ${team.roomLevel}. Equipe continua ativa com os demais.`,
+            },
+          }),
+        ]);
+      }
     }
   }
 
