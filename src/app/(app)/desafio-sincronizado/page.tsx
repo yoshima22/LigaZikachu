@@ -8,7 +8,6 @@ import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowStat
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import { adminSeedModifiersAction } from "./seed-modifiers-action";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
-import { TeamConfirmPanel } from "./_components/team-confirm-panel";
 import { SyncRoomPanel } from "./_components/sync-room-panel";
 import { ModifierPanel } from "./_components/modifier-panel";
 import { EventPreview } from "./_components/event-preview";
@@ -507,7 +506,7 @@ export default async function DesafioSincronizadoPage() {
             </div>
 
             {!bothConfirmed && (
-              <TeamConfirmPanel
+              <TeamConfirmServerPanel
                 partnerName={partner.displayName}
                 iConfirmed={iConfirmed}
                 partnerConfirmed={partnerConfirmed}
@@ -878,6 +877,70 @@ function TicketCounter({ label, count, tone }: { label: string; count: number; t
     <div className={`rounded-xl border px-4 py-3 ${styles}`}>
       <p className="text-xs uppercase tracking-widest opacity-70">{label}</p>
       <p className="mt-1 text-2xl font-black">{count}</p>
+    </div>
+  );
+}
+
+function TeamConfirmServerPanel({
+  partnerName,
+  iConfirmed,
+  partnerConfirmed,
+}: {
+  partnerName: string;
+  iConfirmed: boolean;
+  partnerConfirmed: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-400">
+        Voce e <span className="font-semibold text-slate-200">{partnerName}</span> formaram uma dupla.
+        Ambos precisam confirmar antes de escolherem seus Pokemon.
+        Apos a confirmacao mutua, a dupla so pode ser desfeita por um admin.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <ConfirmStatusCard name="Voce" confirmed={iConfirmed} />
+        <ConfirmStatusCard name={partnerName} confirmed={partnerConfirmed} />
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {!iConfirmed && (
+          <form action={async () => {
+            "use server";
+            await confirmTeamAction();
+          }}>
+            <button className="rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700]">
+              Confirmar dupla
+            </button>
+          </form>
+        )}
+        {!partnerConfirmed && (
+          <form action={async () => {
+            "use server";
+            await leaveTeamAction();
+          }}>
+            <button className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20">
+              Sair da dupla
+            </button>
+          </form>
+        )}
+        {iConfirmed && !partnerConfirmed && (
+          <p className="self-center text-xs text-slate-500">Aguardando {partnerName} confirmar...</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmStatusCard({ name, confirmed }: { name: string; confirmed: boolean }) {
+  return (
+    <div className={`rounded-xl border p-3 text-center ${confirmed ? "border-green-500/30 bg-green-500/5" : "border-slate-700 bg-slate-900/40"}`}>
+      <p className="truncate text-[10px] text-slate-500">{name}</p>
+      {confirmed ? (
+        <p className="mt-1 text-xs font-semibold text-green-400">Confirmado</p>
+      ) : (
+        <p className="mt-1 text-xs text-slate-500">Aguardando</p>
+      )}
     </div>
   );
 }
