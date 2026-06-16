@@ -25,7 +25,7 @@ export const ARENA_Z_CONFIG = {
   pvpQuickExitPenaltyHours: 2,
 };
 
-export const ARENA_MAX_TEAMS = 1;
+export const ARENA_MAX_TEAMS = 3;
 export const PVE_DAILY_COINS_CAP = 2000; // ZC PvE por jogador por dia (meia-noite BRT)
 export const ARENA_ROOMS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 export type ArenaRoom = typeof ARENA_ROOMS[number];
@@ -842,7 +842,7 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
   // Limite de 3 equipes simultâneas por jogador
   const activeCount = await prisma.arenaTeam.count({ where: { playerId, status: "ACTIVE" } });
   if (activeCount >= ARENA_MAX_TEAMS) {
-    throw new Error("Você já tem uma equipe ativa na Arena. Retire-a antes de criar uma nova.");
+    throw new Error(`Você já tem ${ARENA_MAX_TEAMS} equipes ativas na Arena. Retire uma antes de criar uma nova.`);
   }
 
   // Nome padrão: "Time do [primeiro pokemon] de [player]"
