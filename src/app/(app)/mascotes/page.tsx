@@ -22,7 +22,6 @@ const BUFF_TYPES_LIST = [
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
 ] as const;
-const BANK_MASCOT_INITIAL_LIMIT = 60;
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,7 +58,6 @@ async function retryMascotLoad<T>(load: () => Promise<T>, attempts = 2): Promise
 async function fetchMascotPageData(playerId: string) {
   const [
     featuredMascots,
-    bankMascots,
     bankMascotCount,
     eggs,
     incubator,
@@ -86,25 +84,6 @@ async function fetchMascotPageData(playerId: string) {
         },
       },
       orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
-    }),
-    prisma.mascot.findMany({
-      where: { playerId, isFavorite: false, isEquipped: false },
-      select: {
-        id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
-        arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
-        statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-        expeditions: {
-          where: { status: "ACTIVE" }, take: 1,
-          select: { id: true, finishAt: true, status: true }
-        },
-        buffs: {
-          where: { expiresAt: { gt: new Date() } },
-          select: { id: true },
-          take: 1,
-        },
-      },
-      orderBy: [{ level: "desc" }, { id: "asc" }],
-      take: BANK_MASCOT_INITIAL_LIMIT,
     }),
     prisma.mascot.count({
       where: { playerId, isFavorite: false, isEquipped: false },
@@ -192,7 +171,7 @@ async function fetchMascotPageData(playerId: string) {
     return [];
   }) : [];
 
-  return { featuredMascots: featuredMascotsEnriched, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
+  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
 }
 
 const getCachedMascotPageData = (playerId: string) =>

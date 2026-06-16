@@ -13,11 +13,31 @@ import {
 } from "@/lib/mascot";
 import { healMascotSus } from "@/lib/arena-z";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
+import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import type { Prisma } from "@prisma/client";
 
 function revalidate(playerId?: string) {
   revalidatePath("/mascotes");
   revalidateTag("arena-active-teams");
   if (playerId) revalidateTag(`player-mascots-${playerId}`);
+}
+
+const BANK_MASCOT_PAGE_SIZE = 9;
+const POKEMON_ID_POOL = Array.from({ length: 1025 }, (_, index) => index + 1);
+
+function findPokemonIdsBySearch(search: string) {
+  const normalized = search.trim().toLowerCase();
+  if (!normalized) return [];
+  const numeric = Number.parseInt(normalized, 10);
+  const byNumber = Number.isFinite(numeric) && String(numeric) === normalized ? [numeric] : [];
+  const byName = POKEMON_ID_POOL.filter((id) => getPokemonName(id).toLowerCase().includes(normalized));
+  return Array.from(new Set([...byNumber, ...byName])).filter((id) => id >= 1 && id <= 1025);
+}
+
+function findPokemonIdsByType(type: string) {
+  const normalized = type.trim().toLowerCase();
+  if (!normalized) return [];
+  return POKEMON_ID_POOL.filter((id) => getPokemonTypes(id).includes(normalized));
 }
 
 export async function putEggInIncubator(eggId: string, genOverride?: string): Promise<{ error?: string }> {
@@ -709,6 +729,144 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
 
 // ── Carregamento sob demanda de um mascote do banco ─────────────────────────
 // Chamado pelo cliente apenas ao clicar no mascote, evitando carregar todos.
+export async function getBankMascotsPageAction(input?: {
+  page?: number;
+  search?: string;
+  type?: string;
+  ocup?: string;
+}): Promise<{
+  error?: string;
+  data?: {
+    mascots: {
+      id: string;
+      pokemonId: number;
+      nickname: string | null;
+      level: number;
+      mood: string;
+      isShiny: boolean;
+      arenaState: string;
+      bazarListed: boolean;
+      injuredAt: Date | null;
+      restingUntil: Date | null;
+      expeditions: { id: string; finishAt: Date; status: string }[];
+      buffs: { id: string }[];
+      statForce: number;
+      statAgility: number;
+      statCharisma: number;
+      statInstinct: number;
+      statVitality: number;
+    }[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const page = Math.max(1, Math.min(999, Math.floor(input?.page ?? 1)));
+    const search = (input?.search ?? "").trim();
+    const type = (input?.type ?? "").trim().toLowerCase();
+    const ocup = (input?.ocup ?? "all").trim().toLowerCase();
+    const now = new Date();
+
+    const and: Prisma.MascotWhereInput[] = [
+      { playerId: player.id },
+      { isFavorite: false },
+      { isEquipped: false },
+    ];
+
+    if (search) {
+      const pokemonIds = findPokemonIdsBySearch(search);
+      and.push({
+        OR: [
+          { nickname: { contains: search, mode: "insensitive" } },
+          ...(pokemonIds.length > 0 ? [{ pokemonId: { in: pokemonIds } }] : []),
+        ],
+      });
+    }
+
+    if (type) {
+      const pokemonIds = findPokemonIdsByType(type);
+      and.push(pokemonIds.length > 0 ? { pokemonId: { in: pokemonIds } } : { id: "__no_match__" });
+    }
+
+    switch (ocup) {
+      case "free":
+        and.push({
+          arenaState: "FREE",
+          bazarListed: false,
+          expeditions: { none: { status: "ACTIVE" } },
+          buffs: { none: { expiresAt: { gt: now } } },
+          OR: [{ restingUntil: null }, { restingUntil: { lte: now } }],
+        });
+        break;
+      case "busy":
+        and.push({
+          OR: [
+            { expeditions: { some: { status: "ACTIVE" } } },
+            { bazarListed: true },
+            { arenaState: { not: "FREE" } },
+            { restingUntil: { gt: now } },
+            { buffs: { some: { expiresAt: { gt: now } } } },
+          ],
+        });
+        break;
+      case "expedition":
+        and.push({ expeditions: { some: { status: "ACTIVE" } } });
+        break;
+      case "bazar":
+        and.push({ bazarListed: true });
+        break;
+      case "arena":
+        and.push({ arenaState: "ARENA" });
+        break;
+      case "resting":
+        and.push({ OR: [{ arenaState: "RESTING" }, { arenaState: "FREE", restingUntil: { gt: now } }] });
+        break;
+      case "injured":
+        and.push({ arenaState: "INJURED" });
+        break;
+      case "buff":
+        and.push({ buffs: { some: { expiresAt: { gt: now } } } });
+        break;
+    }
+
+    const where: Prisma.MascotWhereInput = { AND: and };
+    const [total, mascots] = await Promise.all([
+      prisma.mascot.count({ where }),
+      prisma.mascot.findMany({
+        where,
+        select: {
+          id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
+          arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
+          statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+          expeditions: {
+            where: { status: "ACTIVE" },
+            take: 1,
+            select: { id: true, finishAt: true, status: true },
+          },
+          buffs: {
+            where: { expiresAt: { gt: now } },
+            select: { id: true },
+            take: 1,
+          },
+        },
+        orderBy: [{ level: "desc" }, { id: "asc" }],
+        skip: (page - 1) * BANK_MASCOT_PAGE_SIZE,
+        take: BANK_MASCOT_PAGE_SIZE,
+      }),
+    ]);
+
+    return { data: { mascots, total, page, pageSize: BANK_MASCOT_PAGE_SIZE } };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
+  }
+}
+
 export async function getMascotDetailAction(mascotId: string): Promise<{
   error?: string;
   data?: {

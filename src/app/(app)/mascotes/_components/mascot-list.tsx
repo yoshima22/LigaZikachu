@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { MapPin, Search, Star } from "lucide-react";
 import { getPokemonElement, getPokemonTypes, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
-import { MascotBankList, type BankMascot } from "./mascot-bank-list";
+import { MascotBankList } from "./mascot-bank-list-demand";
+import type { BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { MascotCard, rewardToDisplay, type ExpeditionRewardDisplay } from "./mascot-card";
 
@@ -324,7 +325,7 @@ export function MascotList({
         </section>
       )}
 
-      {filtered.length === 0 && bankMascots.length === 0 ? (
+      {filtered.length === 0 && (bankMascotCount ?? bankMascots.length) === 0 ? (
         <p className="rounded-xl border border-dashed border-border py-8 text-center text-sm text-slate-500">
           Nenhum mascote encontrado com esses filtros.
         </p>
@@ -349,7 +350,7 @@ export function MascotList({
           )}
 
           {/* Banco — mascotes não favoritos, carregados de forma mínima */}
-          {bankMascots.length > 0 && (
+          {(bankMascotCount ?? bankMascots.length) > 0 && (
             <MascotBankList
               mascots={bankMascots}
               totalCount={bankMascotCount}
