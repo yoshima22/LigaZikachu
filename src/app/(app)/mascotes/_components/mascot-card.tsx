@@ -299,7 +299,7 @@ function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date })
   const { remaining, expired } = useTimerExpiry(expiresAt);
   if (expired) return null;
   const info = BUFF_DISPLAY[type] ?? { emoji: "✨", label: type, color: "border-blue-500/40 bg-blue-500/10 text-blue-300" };
-  const isPermanent = info.permanent || expiresAt.getFullYear() >= 2090;
+  const isPermanent = info.permanent || new Date(expiresAt).getFullYear() >= 2090;
   const h = Math.floor(remaining / 3_600_000);
   const m = Math.floor((remaining % 3_600_000) / 60_000);
   const s = Math.floor((remaining % 60_000) / 1_000);
