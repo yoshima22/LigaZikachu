@@ -183,6 +183,18 @@ export default async function DesafioSincronizadoPage() {
     },
   });
 
+  // Times em fase de escalação — para mostrar publicamente quem já está pronto
+  const lineupTeams = await prisma.syncEventTeam.findMany({
+    where: { status: { in: ["LINEUP_PENDING", "LINEUP_READY"] } },
+    select: {
+      id: true,
+      lineupStatusA: true,
+      lineupStatusB: true,
+      playerA: { select: { id: true, displayName: true } },
+      playerB: { select: { id: true, displayName: true } },
+    },
+  });
+
   // Modificadores ativos — visíveis a todos para preview; admin vê todos
   const activeModifiers = await prisma.syncEventModifier.findMany({
     where: { active: true },
@@ -295,6 +307,42 @@ export default async function DesafioSincronizadoPage() {
           </div>
         </section>
       )}
+
+      {/* ── Quem já está pronto (lineup locked) ─────────────────────── */}
+      {lineupTeams.length > 0 && (() => {
+        const readyPlayers: { id: string; displayName: string; partnerName: string; bothReady: boolean }[] = [];
+        for (const team of lineupTeams) {
+          if (!team.playerB) continue;
+          const aLocked = team.lineupStatusA === "LOCKED";
+          const bLocked = team.lineupStatusB === "LOCKED";
+          const bothLocked = aLocked && bLocked;
+          if (aLocked) readyPlayers.push({ id: team.playerA.id, displayName: team.playerA.displayName, partnerName: team.playerB.displayName, bothReady: bothLocked });
+          if (bLocked) readyPlayers.push({ id: team.playerB.id, displayName: team.playerB.displayName, partnerName: team.playerA.displayName, bothReady: bothLocked });
+        }
+        if (readyPlayers.length === 0) return null;
+        return (
+          <section className="rounded-2xl border border-green-500/20 bg-green-500/5 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-lg">✅</span>
+              <div>
+                <h2 className="font-semibold text-slate-100">Prontos para o evento</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Jogadores que já travaram sua escalação.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {readyPlayers.map((p) => (
+                <div key={p.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${p.bothReady ? "border-green-500/40 bg-green-500/10" : "border-slate-700/60 bg-slate-900/60"}`}>
+                  <span className="text-sm">{p.bothReady ? "✅" : "⏳"}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-100">{p.displayName}</p>
+                    <p className="text-[10px] text-slate-500">dupla com {p.partnerName}{p.bothReady ? " · dupla completa" : " · aguardando parceiro"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
