@@ -112,25 +112,35 @@ function QuickInteractButton({
   inExpedition: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [playCooldownUntil, setPlayCooldownUntil] = useState<number | null>(null);
   const [petCooldownUntil, setPetCooldownUntil] = useState<number | null>(null);
 
-  const now = Date.now();
+  const serverPlayCooldownUntil = lastInteractedAt ? new Date(lastInteractedAt).getTime() + PLAY_COOLDOWN_MS : 0;
+  const effectivePlayCooldownUntil = Math.max(serverPlayCooldownUntil, playCooldownUntil ?? 0);
+  const effectivePetCooldownUntil = petCooldownUntil ?? 0;
+  const now = nowMs;
   const socialBlocked = socialCooldownUntil ? new Date(socialCooldownUntil).getTime() > now : false;
-  const playBlocked = type === "PLAY" && lastInteractedAt
-    ? now - new Date(lastInteractedAt).getTime() < PLAY_COOLDOWN_MS
-    : false;
-  const petBlocked = type === "PET" && petCooldownUntil ? petCooldownUntil > now : false;
+  const playBlocked = type === "PLAY" && effectivePlayCooldownUntil > now;
+  const petBlocked = type === "PET" && effectivePetCooldownUntil > now;
   const isDisabled = pending || inExpedition || socialBlocked || playBlocked || petBlocked;
+  const hasActiveCooldown = playBlocked || petBlocked;
+
+  useEffect(() => {
+    if (!hasActiveCooldown) return;
+    const iv = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => window.clearInterval(iv);
+  }, [hasActiveCooldown]);
 
   const getTitle = () => {
     if (inExpedition) return "Em expedição";
     if (socialBlocked) return "Em cooldown social";
     if (playBlocked) {
-      const rem = Math.ceil((new Date(lastInteractedAt!).getTime() + PLAY_COOLDOWN_MS - now) / 60_000);
+      const rem = Math.ceil((effectivePlayCooldownUntil - now) / 60_000);
       return `Disponível em ${rem} min`;
     }
     if (petBlocked) {
-      const rem = Math.ceil((petCooldownUntil! - now) / 60_000);
+      const rem = Math.ceil((effectivePetCooldownUntil - now) / 60_000);
       return `Disponível em ${rem} min`;
     }
     return undefined;
@@ -144,6 +154,7 @@ function QuickInteractButton({
       if (res.result?.message) {
         if (res.result.success) {
           toast.success(res.result.message);
+          if (type === "PLAY") setPlayCooldownUntil(Date.now() + PLAY_COOLDOWN_MS);
           if (type === "PET") setPetCooldownUntil(Date.now() + PET_COOLDOWN_MS);
         } else {
           toast.error(res.result.message);
