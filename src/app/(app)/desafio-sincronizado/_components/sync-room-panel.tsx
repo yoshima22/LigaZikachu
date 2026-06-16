@@ -12,7 +12,7 @@ import {
   selectRoundMascotsAction,
   adminFinalizeRoomAction,
 } from "../combat-actions";
-import { getSpriteUrl } from "@/lib/mascot-data";
+import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { SyncBattleReplayModal } from "./sync-battle-replay";
 import type { SyncReplayJson } from "./sync-battle-replay";
 
@@ -45,7 +45,7 @@ interface Round {
   status: string;
   modifierId: string | null;
   scheduledAt: Date | string;
-  modifier?: { name: string; description: string } | null;
+  modifier?: { name: string; description: string; effectJson: unknown } | null;
   selections: RoundSel[];
   matches: RoundMatch[];
 }
@@ -249,6 +249,45 @@ function RankingTable({ ranking, playerId }: { ranking: RankingEntry[]; playerId
   );
 }
 
+// ── Modificador ────────────────────────────────────────────────────────────────
+
+const STAT_LABELS: Record<string, string> = {
+  statForce: "Força",
+  statAgility: "Agilidade",
+  statVitality: "Vitalidade",
+  statCharisma: "Carisma",
+  statInstinct: "Instinto",
+};
+
+function parseModifierEffect(effectJson: unknown): string | null {
+  if (!effectJson || typeof effectJson !== "object" || Array.isArray(effectJson)) return null;
+  const ej = effectJson as Record<string, unknown>;
+  if (ej.type === "STAT_BOOST" && typeof ej.value === "number") {
+    const stat = typeof ej.targetStat === "string" ? STAT_LABELS[ej.targetStat] ?? ej.targetStat : null;
+    const pct = Math.round(ej.value * 100);
+    if (stat) return `+${pct}% em ${stat} para todos os mascotes desta rodada`;
+    return `+${pct}% em todos os atributos`;
+  }
+  return null;
+}
+
+function ModifierBanner({ modifier }: { modifier: { name: string; description: string; effectJson: unknown } }) {
+  const parsedEffect = parseModifierEffect(modifier.effectJson);
+  return (
+    <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-xs space-y-1.5">
+      <p className="font-bold text-purple-200">⚡ Modificador ativo: {modifier.name}</p>
+      <p className="text-purple-300">{modifier.description}</p>
+      {parsedEffect && (
+        <div className="flex items-start gap-1.5 rounded-md border border-purple-400/20 bg-purple-900/30 px-2 py-1.5">
+          <span className="mt-0.5 text-purple-400">→</span>
+          <span className="text-purple-100 font-semibold">{parsedEffect}</span>
+        </div>
+      )}
+      <p className="text-purple-400/60 italic">Afeta: todos os mascotes escalados nos confrontos desta rodada</p>
+    </div>
+  );
+}
+
 // ── Rodada ─────────────────────────────────────────────────────────────────────
 
 function RoundCard({
@@ -315,10 +354,7 @@ function RoundCard({
 
       {/* Modificador */}
       {round.modifier && (
-        <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-xs text-purple-200">
-          <p className="font-bold">⚡ Modificador: {round.modifier.name}</p>
-          <p className="mt-1 text-purple-300">{round.modifier.description}</p>
-        </div>
+        <ModifierBanner modifier={round.modifier} />
       )}
 
       {/* Seleção ativa */}
@@ -334,19 +370,28 @@ function RoundCard({
 
       {/* Seleção confirmada */}
       {mySelection && (
-        <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-xs">
+        <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-xs space-y-2">
           <p className="font-semibold text-green-400 flex items-center gap-1">
             <CheckCircle2 size={13} />
-            {mySelection.isAuto ? "Seleção automática do sistema" : "Sua seleção confirmada"}
+            {mySelection.isAuto ? "Escalação automática do sistema" : "Sua escalação confirmada"}
           </p>
-          <div className="mt-2 flex gap-2 flex-wrap">
-            {mySelection.mascotIds.map((mid) => {
+          <p className="text-slate-500">
+            {mySelection.isAuto
+              ? "O sistema escolheu automaticamente os 3 mascotes abaixo para representar você nesta rodada:"
+              : "Os 3 mascotes abaixo foram escalados por você para este confronto:"}
+          </p>
+          <div className="flex gap-3 flex-wrap">
+            {mySelection.mascotIds.map((mid, idx) => {
               const m = myLineupMascots.find((x) => x.id === mid);
               if (!m) return null;
               return (
-                <div key={mid} className="flex flex-col items-center">
-                  <Image src={getSpriteUrl(m.pokemonId)} alt={m.nickname ?? `#${m.pokemonId}`} width={40} height={40} className="pixelated" />
-                  <span className="text-[10px] text-slate-400 truncate w-10 text-center">{m.nickname ?? `#${m.pokemonId}`}</span>
+                <div key={mid} className="flex flex-col items-center gap-0.5">
+                  <span className="text-[8px] text-slate-600 uppercase">slot {idx + 1}</span>
+                  <Image src={getSpriteUrl(m.pokemonId)} alt={m.nickname ?? getPokemonName(m.pokemonId)} width={44} height={44} className="pixelated" />
+                  <span className="text-[10px] font-semibold text-slate-200 truncate w-12 text-center">
+                    {m.nickname ?? getPokemonName(m.pokemonId)}
+                  </span>
+                  <span className="text-[9px] text-slate-500">Nv. {m.level}</span>
                 </div>
               );
             })}
@@ -364,7 +409,7 @@ function RoundCard({
         <div className="space-y-2">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Confrontos</p>
           {round.matches.map((match) => (
-            <MatchResult key={match.id} match={match} room={room} />
+            <MatchResult key={match.id} match={match} room={room} modifier={round.modifier ?? null} />
           ))}
         </div>
       )}
@@ -456,7 +501,7 @@ function MascotSelector({
 
 // ── Resultado de uma partida ───────────────────────────────────────────────────
 
-function MatchResult({ match, room }: { match: RoundMatch; room: Room }) {
+function MatchResult({ match, room, modifier }: { match: RoundMatch; room: Room; modifier: Round["modifier"] }) {
   const [showModal, setShowModal] = useState(false);
   const teamA = room.teams.find((t) => t.id === match.teamAId);
   const teamB = room.teams.find((t) => t.id === match.teamBId);
@@ -469,6 +514,8 @@ function MatchResult({ match, room }: { match: RoundMatch; room: Room }) {
   const replay = match.replayJson as SyncReplayJson | null;
   const hasReplay = replay?.rounds && replay.rounds.length > 0;
 
+  const modifierLabel = modifier ? parseModifierEffect(modifier.effectJson) : null;
+
   return (
     <>
       {showModal && hasReplay && (
@@ -476,6 +523,8 @@ function MatchResult({ match, room }: { match: RoundMatch; room: Room }) {
           teamAName={nameA}
           teamBName={nameB}
           replay={replay!}
+          modifierName={modifier?.name ?? null}
+          modifierEffect={modifierLabel}
           onFinish={() => setShowModal(false)}
         />
       )}

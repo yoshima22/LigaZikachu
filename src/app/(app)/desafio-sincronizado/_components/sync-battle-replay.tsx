@@ -100,11 +100,15 @@ export function SyncBattleReplayModal({
   teamAName,
   teamBName,
   replay,
+  modifierName,
+  modifierEffect,
   onFinish,
 }: {
   teamAName: string;
   teamBName: string;
   replay: SyncReplayJson;
+  modifierName?: string | null;
+  modifierEffect?: string | null;
   onFinish: () => void;
 }) {
   const slots = replay.rounds ?? [];
@@ -184,6 +188,17 @@ export function SyncBattleReplayModal({
               style={{ width: `${progress}%` }}
             />
           </div>
+
+          {/* Modifier badge */}
+          {modifierName && (
+            <div className="mx-4 mb-2 flex items-start gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2">
+              <span className="shrink-0 text-purple-300">⚡</span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-purple-200">{modifierName} ativo</p>
+                {modifierEffect && <p className="text-[9px] text-purple-300">{modifierEffect}</p>}
+              </div>
+            </div>
+          )}
 
           {/* Team labels */}
           <div className="mx-4 mb-2 flex justify-between text-[10px] font-bold uppercase tracking-wide">

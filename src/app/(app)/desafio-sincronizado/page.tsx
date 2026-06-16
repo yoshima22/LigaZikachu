@@ -129,7 +129,7 @@ export default async function DesafioSincronizadoPage() {
       },
       rounds: {
         include: {
-          modifier: { select: { name: true, description: true } },
+          modifier: { select: { name: true, description: true, effectJson: true } },
           selections: true,
           matches: true,
         },
