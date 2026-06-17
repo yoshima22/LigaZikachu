@@ -51,7 +51,7 @@ export function rollPokemonFromEgg(eggType: string): number {
   // Chance lendaria por raridade. SPECIAL e RARE custam mais e devem parecer especiais.
   // SPECIAL: 4% | RARE: 2% | GEN eggs: 0.7% | COMMON: 0.7% | EVENT: 0.2%
   const legendaryChance =
-    eggType === "SPECIAL" ? 0.04 :
+    eggType === "SPECIAL" ? 0.02 :
     eggType === "RARE" ? 0.02 :
     eggType.startsWith("EGG_GEN") ? 0.007 :
     eggType === "COMMON" ? 0.007 :
