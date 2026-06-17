@@ -69,15 +69,15 @@ export default async function LacosPage({
     }).catch(() => null),
     prisma.mascotSocialEvent.count({
       where: { ownerId: player.id, status: "PENDING" },
-    }).catch(() => 5),
+    }).catch(() => 7),
   ]);
 
   const hoursSinceLast = lastEvent
     ? (Date.now() - lastEvent.createdAt.getTime()) / 3_600_000
     : 999;
 
-  if (hoursSinceLast >= 4 && currentPending < 5) {
-    const toCreate = Math.min(5 - currentPending, hoursSinceLast >= 8 ? 2 : 1);
+  if (hoursSinceLast >= 2 && currentPending < 7) {
+    const toCreate = Math.min(7 - currentPending, hoursSinceLast >= 8 ? 3 : hoursSinceLast >= 4 ? 2 : 1);
     for (let i = 0; i < toCreate; i++) {
       await createBondEventForPlayer(player.id).catch(() => {});
     }

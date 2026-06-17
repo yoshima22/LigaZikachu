@@ -88,20 +88,34 @@ export function normalizeBondOptions(options: unknown): BondOption[] {
 export function defaultBondOptions(eventType: string): BondOption[] {
   if (eventType === "SHARE_SNACK") {
     return [
-      { id: "share_food", label: "Dividir o lanche", type: "POSITIVE", cost: { kind: "FOOD", quantity: 1 }, scoreDelta: 10, happinessA: 4, happinessB: 8 },
+      { id: "share_food", label: "Dividir o lanche", type: "POSITIVE", cost: { kind: "FOOD", quantity: 2 }, scoreDelta: 12, happinessA: 4, happinessB: 10 },
       { id: "keep_calm", label: "Guardar e evitar confusao", type: "NEUTRAL", scoreDelta: 1, happinessA: 1 },
-      { id: "eat_alone", label: "Deixar comer sozinho", type: "AGGRESSIVE", scoreDelta: -8, happinessA: 5, happinessB: -4 },
+      { id: "eat_alone", label: "Comer sozinho e provocar inveja", type: "AGGRESSIVE", scoreDelta: -10, happinessA: 6, happinessB: -6, publicEligible: true },
     ];
   }
   if (eventType === "EXP_STEAL") {
     return [
-      { id: "train_together", label: "Treinar os dois juntos", type: "POSITIVE", cost: { kind: "SWEET", quantity: 1 }, scoreDelta: 8, expA: 20, expB: 20 },
+      { id: "train_together", label: "Treinar os dois juntos", type: "POSITIVE", cost: { kind: "SWEET", quantity: 2 }, scoreDelta: 10, expA: 24, expB: 24 },
       { id: "normal_training", label: "Deixar o treino seguir", type: "NEUTRAL", scoreDelta: 0, expA: 8 },
-      { id: "take_advantage", label: "Incentivar vantagem", type: "AGGRESSIVE", scoreDelta: -12, expA: 35, happinessB: -5, publicEligible: true },
+      { id: "take_advantage", label: "Tomar parte do treino", type: "AGGRESSIVE", scoreDelta: -14, expA: 42, happinessB: -7, publicEligible: true },
+    ];
+  }
+  if (eventType === "REST_PROVOKE") {
+    return [
+      { id: "guard_rest", label: "Proteger o descanso", type: "POSITIVE", cost: { kind: "FOOD", quantity: 2 }, scoreDelta: 9, happinessA: 2, happinessB: 9 },
+      { id: "let_rest", label: "Deixar descansar", type: "NEUTRAL", scoreDelta: 1, happinessB: 2 },
+      { id: "wake_up", label: "Atrapalhar o descanso", type: "AGGRESSIVE", scoreDelta: -12, expA: 14, happinessB: -8, cooldownBMinutes: 18, publicEligible: true },
+    ];
+  }
+  if (eventType === "FOOD_ENVY") {
+    return [
+      { id: "offer_snack", label: "Oferecer comida tambem", type: "POSITIVE", cost: { kind: "FOOD", quantity: 2 }, scoreDelta: 11, happinessA: 3, happinessB: 9 },
+      { id: "change_subject", label: "Distrair sem gastar comida", type: "NEUTRAL", scoreDelta: 0, happinessB: 1 },
+      { id: "show_off_food", label: "Exibir a comida e causar inveja", type: "AGGRESSIVE", scoreDelta: -13, happinessA: 5, happinessB: -9, publicEligible: true },
     ];
   }
   return [
-    { id: "help", label: "Ajudar com cuidado", type: "POSITIVE", cost: { kind: "FOOD", quantity: 1 }, scoreDelta: 8, happinessA: 3, happinessB: 6 },
+    { id: "help", label: "Ajudar com cuidado", type: "POSITIVE", cost: { kind: "FOOD", quantity: 2 }, scoreDelta: 8, happinessA: 3, happinessB: 6 },
     { id: "observe", label: "Observar sem interferir", type: "NEUTRAL", scoreDelta: 0 },
     { id: "provoke", label: "Incentivar provocacao", type: "AGGRESSIVE", scoreDelta: -10, expA: 12, cooldownBMinutes: 10 },
   ];
@@ -145,23 +159,53 @@ function specialBondFromScore(score: number) {
 export async function createBondEventForPlayer(playerId: string) {
   const mascots = await prisma.mascot.findMany({
     where: { playerId, arenaState: { not: "INJURED" } },
-    select: { id: true, pokemonId: true, nickname: true, level: true },
+    select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, player: { select: { displayName: true } } },
     orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
-    take: 20,
+    take: 12,
   });
-  if (mascots.length < 2) throw new Error("Voce precisa de pelo menos 2 mascotes para gerar um evento de lacos.");
+  if (mascots.length < 1) throw new Error("Voce precisa de pelo menos 1 mascote para gerar um evento de lacos.");
 
-  const [a, b] = mascots.sort(() => Math.random() - 0.5).slice(0, 2);
-  const eventType = Math.random() < 0.55 ? "SHARE_SNACK" : Math.random() < 0.5 ? "EXP_STEAL" : "REST_PROVOKE";
+  const otherMascots = await prisma.mascot.findMany({
+    where: {
+      playerId: { not: playerId },
+      arenaState: { not: "INJURED" },
+      player: { user: { role: "PLAYER" } },
+    },
+    select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, player: { select: { displayName: true } } },
+    orderBy: [{ lastInteractedAt: "desc" }, { level: "desc" }],
+    take: 48,
+  });
+
+  const a = mascots[Math.floor(Math.random() * mascots.length)];
+  const externalPool = otherMascots.length > 0 ? otherMascots : mascots.filter((m) => m.id !== a.id);
+  const b = externalPool[Math.floor(Math.random() * externalPool.length)];
+  if (!b) throw new Error("Nao ha outro mascote disponivel para gerar um evento de lacos.");
+
+  const roll = Math.random();
+  const eventType =
+    roll < 0.30 ? "SHARE_SNACK" :
+    roll < 0.58 ? "EXP_STEAL" :
+    roll < 0.82 ? "REST_PROVOKE" :
+    "FOOD_ENVY";
   const nameA = a.nickname ?? getPokemonName(a.pokemonId);
   const nameB = b.nickname ?? getPokemonName(b.pokemonId);
-  const title = eventType === "SHARE_SNACK" ? "Dividir lanche" : eventType === "EXP_STEAL" ? "Treino disputado" : "Provocacao na recarga";
+  const ownerA = a.player.displayName;
+  const ownerB = b.player.displayName;
+  const labelA = `${nameA} (${ownerA})`;
+  const labelB = `${nameB} (${ownerB})`;
+  const title =
+    eventType === "SHARE_SNACK" ? "Dividir lanche" :
+    eventType === "EXP_STEAL" ? "Treino disputado" :
+    eventType === "FOOD_ENVY" ? "Inveja de comida" :
+    "Provocacao na recarga";
   const description =
     eventType === "SHARE_SNACK"
-      ? `${nameA} encontrou um lanche. ${nameB} ficou olhando com vontade.`
+      ? `${labelA} encontrou um lanche. ${labelB} ficou olhando com vontade.`
       : eventType === "EXP_STEAL"
-        ? `${nameA} viu uma chance de tomar para si parte do treino de ${nameB}.`
-        : `${nameA} pode atrapalhar o descanso de ${nameB} antes da proxima atividade.`;
+        ? `${labelA} viu uma chance de tomar para si parte do treino de ${labelB}.`
+        : eventType === "FOOD_ENVY"
+          ? `${labelA} esta com comida por perto, e ${labelB} percebeu. Isso pode virar amizade ou inveja.`
+          : `${labelA} pode atrapalhar o descanso de ${labelB} antes da proxima atividade.`;
 
   return prisma.mascotSocialEvent.create({
     data: {
@@ -172,7 +216,9 @@ export async function createBondEventForPlayer(playerId: string) {
       title,
       description,
       optionsJson: defaultBondOptions(eventType) as unknown as Prisma.InputJsonValue,
-      visibility: "PRIVATE",
+      visibility: a.playerId === b.playerId ? "PRIVATE" : "INVOLVED_PLAYERS",
+      affectedPlayerIds: [a.playerId, b.playerId] as unknown as Prisma.InputJsonValue,
+      publicEligible: true,
       expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
     },
   });

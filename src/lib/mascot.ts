@@ -1739,7 +1739,7 @@ function _trackSocialCd(id: string, min: number) {
 
 // Throttle: eventos sociais automáticos rodam no máximo 1x por hora
 let _lastSocialEventRun = 0;
-const SOCIAL_EVENT_THROTTLE_MS = 60 * 60 * 1000; // 1 hora
+const SOCIAL_EVENT_THROTTLE_MS = 30 * 60 * 1000; // 30 minutos
 
 export async function triggerSocialEvents(): Promise<SocialEventSummary> {
   // Throttle in-process (evita múltiplos fire-and-forget simultâneos)
@@ -1758,6 +1758,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       statCharisma: true, statInstinct: true,
       happiness: true, mood: true, level: true,
       restingUntil: true, arenaState: true,
+      player: { select: { displayName: true } },
     },
     orderBy: { lastInteractedAt: "desc" },
     take: 40,
@@ -1767,7 +1768,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
 
   const summary: SocialEventSummary = { battles: 0, friendships: 0, events: [] };
   const shuffled = [...allMascots].sort(() => Math.random() - 0.5);
-  const maxPairs = Math.min(5, Math.floor(allMascots.length / 2));
+  const maxPairs = Math.min(10, Math.floor(allMascots.length / 2));
   const usedIds = new Set<string>();
 
   for (let i = 0; i < shuffled.length && summary.battles + summary.friendships < maxPairs; i++) {
@@ -1778,8 +1779,8 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
     usedIds.add(a.id);
     usedIds.add(partner.id);
 
-    const aName = a.nickname ?? getPokemonName(a.pokemonId);
-    const bName = partner.nickname ?? getPokemonName(partner.pokemonId);
+    const aName = `${a.nickname ?? getPokemonName(a.pokemonId)} (${a.player.displayName})`;
+    const bName = `${partner.nickname ?? getPokemonName(partner.pokemonId)} (${partner.player.displayName})`;
     // Distribuição §8: 45% batalha, 35% amizade, 20% neutro
     // Carisma médio aumenta chance de amizade em até +5%
     const avgCarisma = ((a.statCharisma ?? 10) + (partner.statCharisma ?? 10)) / 2;
@@ -1838,22 +1839,23 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
   const rivalPairs = await prisma.mascotRelation.findMany({
     where: { type: "RIVAL" },
     include: {
-      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, arenaState: true, level: true } },
+      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, arenaState: true, level: true, player: { select: { displayName: true } } } },
       mascotB: {
         select: { id: true, pokemonId: true, nickname: true, playerId: true,
+                  player: { select: { displayName: true } },
                   arenaState: true, mood: true, happiness: true, restingUntil: true,
                   statAgility: true, statVitality: true,
                   expeditions: { where: { status: "ACTIVE" }, take: 1 } }
       },
     },
     orderBy: { interactionCount: "desc" },
-    take: 5,
+    take: 10,
   });
 
   for (const rel of rivalPairs) {
     if (!rel.mascotA || !rel.mascotB) continue;
-    const aName = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
-    const bName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+    const aName = `${rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId)} (${rel.mascotA.player.displayName})`;
+    const bName = `${rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId)} (${rel.mascotB.player.displayName})`;
     const isArchRival = rel.interactionCount >= 3;
 
     // Sorteia o tipo de evento rival (pesos diferentes)
@@ -2016,22 +2018,23 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
   const friendPairs = await prisma.mascotRelation.findMany({
     where: { type: "FRIEND" },
     include: {
-      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, happiness: true, isEquipped: true, arenaState: true } },
+      mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, happiness: true, isEquipped: true, arenaState: true, player: { select: { displayName: true } } } },
       mascotB: {
         select: { id: true, pokemonId: true, nickname: true, playerId: true,
+                  player: { select: { displayName: true } },
                   happiness: true, isEquipped: true, arenaState: true,
                   restingUntil: true, susRestBonusMinutes: true,
                   expeditions: { where: { status: "ACTIVE" }, take: 1 } }
       },
     },
     orderBy: { interactionCount: "desc" },
-    take: 5,
+    take: 10,
   });
 
   for (const rel of friendPairs) {
     if (!rel.mascotA || !rel.mascotB) continue;
-    const aName = rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId);
-    const bName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+    const aName = `${rel.mascotA.nickname ?? getPokemonName(rel.mascotA.pokemonId)} (${rel.mascotA.player.displayName})`;
+    const bName = `${rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId)} (${rel.mascotB.player.displayName})`;
     const isBestFriend = rel.interactionCount >= 5;
 
     const eventRoll = Math.random();
