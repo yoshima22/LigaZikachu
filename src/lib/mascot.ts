@@ -37,7 +37,7 @@ function randomPersonality(): MascotPersonality {
  * acima do ovo SPECIAL normal (6%), recompensando o custo em pó de criação.
  */
 export function rollLabEggChoice(): number {
-  if (Math.random() < 0.10) return randomFrom(LEGENDARY_POOL);
+  if (Math.random() < 0.07) return randomFrom(LEGENDARY_POOL);
   const pool = EGG_POOLS.SPECIAL?.length ? EGG_POOLS.SPECIAL : EGG_POOLS.RARE;
   return randomFrom(pool);
 }
@@ -49,13 +49,13 @@ export function rollPokemonFromEgg(eggType: string): number {
     : (EGG_POOLS[eggType] ?? EGG_POOLS.RANDOM);
 
   // Chance lendaria por raridade. SPECIAL e RARE custam mais e devem parecer especiais.
-  // SPECIAL: 6% | RARE: 3% | GEN eggs: 1% | COMMON: 1% | EVENT: 0.3%
+  // SPECIAL: 4% | RARE: 2% | GEN eggs: 0.7% | COMMON: 0.7% | EVENT: 0.2%
   const legendaryChance =
-    eggType === "SPECIAL" ? 0.06 :
-    eggType === "RARE" ? 0.03 :
-    eggType.startsWith("EGG_GEN") ? 0.01 :
-    eggType === "COMMON" ? 0.01 :   // modo aleatório: +1% de bônus
-    0.003;
+    eggType === "SPECIAL" ? 0.04 :
+    eggType === "RARE" ? 0.02 :
+    eggType.startsWith("EGG_GEN") ? 0.007 :
+    eggType === "COMMON" ? 0.007 :
+    0.002;
 
   if (Math.random() < legendaryChance) {
     return randomFrom(LEGENDARY_POOL);
