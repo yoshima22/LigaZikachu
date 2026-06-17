@@ -329,7 +329,7 @@ export default async function ManualPage() {
               ["🍯 Bala de Mel", "Felicidade vai para 100 instantaneamente + humor HAPPY"],
               ["💧 Água Sagrada", "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente"],
               ["🛡️ Política de Fraqueza", "Protege contra ataques oportunistas na Arena Z (permanente)"],
-              ["📡 Compartilhador de XP", "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Permanente após equipar — não pode ser removido."],
+              ["📡 Compartilhador de XP", "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Pode ser desequipado pelo card do mascote — o item volta ao inventário."],
               ["🏖️ Ticket de Férias", "Envia mascote para 7 dias com o Prof. Carvalho (+EXP e felicidade)"],
               ["🌈 Pena Arco-Íris", "IRREVERSÍVEL — reseta o mascote para nível 1"],
             ]}

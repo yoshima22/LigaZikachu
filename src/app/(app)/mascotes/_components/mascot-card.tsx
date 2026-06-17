@@ -21,7 +21,7 @@ import {
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
   toggleExpLockAction,
-
+  removeXpShareAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -315,6 +315,32 @@ function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date })
         <span className="text-[9px] opacity-60 font-normal">{info.areas}</span>
       )}
     </div>
+  );
+}
+
+function XpShareBadge({ mascotId }: { mascotId: string }) {
+  const [pending, startTransition] = useTransition();
+  const handleRemove = () => {
+    if (!confirm("Desequipar Compartilhador de XP? O item voltará ao seu inventário.")) return;
+    startTransition(async () => {
+      const res = await removeXpShareAction(mascotId);
+      if (res.error) toast.error(res.error);
+      else toast.success("Compartilhador de XP removido e devolvido ao inventário. 📡");
+    });
+  };
+  return (
+    <span className="flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+      📡 Comp. XP
+      <button
+        type="button"
+        disabled={pending}
+        onClick={handleRemove}
+        title="Desequipar e devolver ao inventário"
+        className="ml-0.5 rounded-full hover:text-red-300 disabled:opacity-40 transition-colors"
+      >
+        ✕
+      </button>
+    </span>
   );
 }
 
@@ -775,9 +801,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           <div className="flex flex-wrap gap-1.5">
             {mascot.activeBuffs.map((buff, i) => (
               buff.type === "XP_SHARE" ? (
-                <span key={i} className="flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
-                  📡 Comp. XP <span className="opacity-70">Permanente</span>
-                </span>
+                <XpShareBadge key={i} mascotId={mascot.id} />
               ) : (
                 <ActiveBuffBadge key={i} type={buff.type} expiresAt={buff.expiresAt} />
               )
