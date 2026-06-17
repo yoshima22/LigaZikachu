@@ -636,21 +636,43 @@ export const ALL_EVOLVED_IDS = new Set<number>([...EVOLVED_IDS, ...EXTRA_EVOLVED
 // ── EXP necessária por nível ──────────────────────────────────────────────────
 // Curva linear suave: jogável mesmo nos níveis altos.
 // Nível 1→2: 120 EXP | Nível 50→51: 1.100 EXP | Nível 100→101: 2.100 EXP
-export function expForLevel(level: number): number {
+const PSEUDO_LEGENDARY_LINE_IDS = new Set([
+  147, 148, 149,
+  246, 247, 248,
+  371, 372, 373,
+  374, 375, 376,
+  443, 444, 445,
+  633, 634, 635,
+  704, 705, 706,
+  10241, 10242,
+  782, 783, 784,
+  885, 886, 887,
+  996, 997, 998,
+]);
+
+export function getMascotExpProgressionMultiplier(pokemonId?: number | null): number {
+  if (!pokemonId) return 1;
+  if (LEGENDARY_POOL.includes(pokemonId)) return 1.3;
+  if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return 1.1;
+  return 1;
+}
+
+export function expForLevel(level: number, pokemonId?: number | null): number {
   if (level <= 1) return 0;
-  return 100 + (level - 1) * 20;
+  const base = 100 + (level - 1) * 20;
+  return Math.ceil(base * getMascotExpProgressionMultiplier(pokemonId));
 }
 
 // EXP total acumulada até o nível N
-export function totalExpForLevel(level: number): number {
+export function totalExpForLevel(level: number, pokemonId?: number | null): number {
   let total = 0;
-  for (let l = 2; l <= level; l++) total += expForLevel(l);
+  for (let l = 2; l <= level; l++) total += expForLevel(l, pokemonId);
   return total;
 }
 
 // EXP necessária para ir do nível atual para o próximo
-export function expToNextLevel(currentLevel: number): number {
-  return expForLevel(currentLevel + 1);
+export function expToNextLevel(currentLevel: number, pokemonId?: number | null): number {
+  return expForLevel(currentLevel + 1, pokemonId);
 }
 
 // ── Status derivados (calculados a partir dos dados, sem campo extra no BD) ───

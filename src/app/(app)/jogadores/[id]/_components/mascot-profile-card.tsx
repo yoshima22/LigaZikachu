@@ -81,7 +81,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
 
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const spriteUrl = imgFailed ? getStaticSpriteUrl(mascot.pokemonId) : getSpriteUrl(mascot.pokemonId, true);
-  const expNeeded = expToNextLevel(mascot.level);
+  const expNeeded = expToNextLevel(mascot.level, mascot.pokemonId);
   const expPct = Math.min(100, Math.round((mascot.exp / expNeeded) * 100));
 
   const hungerStatus    = getHungerStatus(mascot.lastFedAt);

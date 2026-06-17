@@ -361,8 +361,8 @@ export async function addExp(
   let newPokemonId: number | undefined;
 
   // Verifica level ups em cadeia (cap: nível 100)
-  while (level < 100 && exp >= expToNextLevel(level)) {
-    exp -= expToNextLevel(level);
+  while (level < 100 && exp >= expToNextLevel(level, pokemonId)) {
+    exp -= expToNextLevel(level, pokemonId);
     level++;
     levelsGained++;
     if (level >= 100) { exp = 0; break; }
