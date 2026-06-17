@@ -219,15 +219,6 @@ export default async function MascotesPage() {
   if (!player) return notFound();
 
   // Limpa repouso expirado — fire-and-forget, fora do cache pois é uma mutação
-  prisma.mascot.updateMany({
-    where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lte: new Date() } },
-    data: { arenaState: "FREE", restingUntil: null },
-  }).catch(() => null);
-  prisma.mascot.updateMany({
-    where: { playerId: player.id, arenaState: "FREE", restingUntil: { lte: new Date() } },
-    data: { restingUntil: null },
-  }).catch(() => null);
-
   const pageData = await getCachedMascotPageData(player.id).catch(async (error) => {
     console.error("[Mascotes] Cache/load falhou; tentando carga direta.", error);
     return retryMascotLoad(() => fetchMascotPageData(player.id), 2);

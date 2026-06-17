@@ -249,7 +249,6 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
       });
 
       revalidatePath("/zikaloot");
-      revalidatePath("/", "layout");
       return { drawnNumber, winner: winningPick.player.displayName };
     } else {
       // Ninguém escolheu — bloquear número, agendar novo sorteio em 24h
@@ -385,4 +384,3 @@ export async function cancelZikaLoot(lootId: string): Promise<{ error?: string }
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
-

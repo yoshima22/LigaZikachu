@@ -382,7 +382,6 @@ export async function purchaseItem(
             });
           });
           revalidatePath("/carteira");
-          revalidatePath("/", "layout");
           revalidateTag(`nav-${actor.id}`);
           return { autoSold: { itemName: item.name, coins: halfPrice } };
         }
@@ -463,7 +462,6 @@ export async function purchaseItem(
     revalidatePath("/inventario");
     revalidatePath("/mascotes");
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
     revalidateTag(`nav-${actor.id}`);
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)

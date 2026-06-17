@@ -97,6 +97,7 @@ export function DmChat({ me, other, initialMessages }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const realtimeReadyRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -154,9 +155,14 @@ export function DmChat({ me, other, initialMessages }: Props) {
           }]);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        realtimeReadyRef.current = status === "SUBSCRIBED";
+      });
 
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      realtimeReadyRef.current = false;
+      void supabase.removeChannel(channel);
+    };
   }, [me.id, other.id, other.displayName, other.avatarUrl]);
 
   // Polling fallback: garante entrega mesmo se o WebSocket cair, mas sem
@@ -185,7 +191,9 @@ export function DmChat({ me, other, initialMessages }: Props) {
     };
 
     const onVisible = () => { void poll(); };
-    const id = setInterval(poll, DM_POLL_MS);
+    const id = setInterval(() => {
+      if (!realtimeReadyRef.current) void poll();
+    }, DM_POLL_MS);
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
 

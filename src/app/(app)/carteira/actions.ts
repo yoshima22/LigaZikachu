@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { ZikaCoinTxType } from "@prisma/client";
@@ -26,8 +26,9 @@ export async function adjustCoins(
       });
     });
 
+    const player = await prisma.player.findUnique({ where: { id: playerId }, select: { userId: true } }).catch(() => null);
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
+    if (player?.userId) revalidateTag(`nav-${player.userId}`);
     revalidatePath("/admin");
     return {};
   } catch (err) {

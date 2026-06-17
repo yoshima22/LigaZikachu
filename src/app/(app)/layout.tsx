@@ -45,7 +45,7 @@ const getNavData = (userId: string) =>
       return { player, giftCount, wallet, unreadDms, bazarAlerts };
     },
     [`nav-data-${userId}`],
-    { revalidate: 30, tags: [`nav-${userId}`] },
+    { revalidate: 180, tags: [`nav-${userId}`] },
   )();
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {

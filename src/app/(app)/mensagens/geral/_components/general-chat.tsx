@@ -38,6 +38,7 @@ export function GeneralChat({ me, initialMessages }: Props) {
   const [pending, start] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Message[]>(initialMessages);
+  const realtimeReadyRef = useRef(false);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -90,9 +91,14 @@ export function GeneralChat({ me, initialMessages }: Props) {
           void fetchNewMessages();
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        realtimeReadyRef.current = status === "SUBSCRIBED";
+      });
 
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      realtimeReadyRef.current = false;
+      void supabase.removeChannel(channel);
+    };
   }, [me.id]);
 
   useEffect(() => {
@@ -104,7 +110,9 @@ export function GeneralChat({ me, initialMessages }: Props) {
     };
 
     const onVisible = () => { void poll(); };
-    const id = setInterval(poll, GENERAL_POLL_MS);
+    const id = setInterval(() => {
+      if (!realtimeReadyRef.current) void poll();
+    }, GENERAL_POLL_MS);
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {

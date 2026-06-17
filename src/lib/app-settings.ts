@@ -27,7 +27,7 @@ export const getGlobalNotice = unstable_cache(
     }
   },
   [GLOBAL_NOTICE_KEY],
-  { revalidate: 120, tags: [GLOBAL_NOTICE_TAG] },
+  { revalidate: 600, tags: [GLOBAL_NOTICE_TAG] },
 );
 
 export function revalidateGlobalNotice() {

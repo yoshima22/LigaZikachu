@@ -161,7 +161,6 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     revalidatePath("/zikabet");
     revalidatePath("/zikabet/minhas-apostas");
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues[0].message };
@@ -338,7 +337,6 @@ export async function undoBet(betId: string): Promise<{ error?: string }> {
     revalidatePath("/zikabet");
     revalidatePath("/zikabet/minhas-apostas");
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -371,7 +369,6 @@ export async function cancelBet(betId: string): Promise<{ error?: string }> {
 
     revalidatePath("/zikabet");
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
@@ -408,7 +405,6 @@ export async function adminSettleWeekBets(
     revalidatePath("/zikabet");
     revalidatePath(`/torneios/${week.tournament.slug}`);
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
 
     return { settled: pending, refunded };
   } catch (err) {

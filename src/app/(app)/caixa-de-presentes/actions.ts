@@ -155,7 +155,6 @@ function revalidateGiftTargets(userId?: string, playerId?: string) {
   revalidatePath("/codigos");
   revalidatePath("/mascotes");
   revalidatePath("/carteira");
-  revalidatePath("/", "layout");
   if (userId) revalidateTag(`nav-${userId}`);
   if (playerId) revalidateTag(`player-mascots-${playerId}`);
 }

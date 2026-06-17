@@ -129,7 +129,6 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
 
     revalidatePath("/album");
     revalidatePath("/carteira");
-    revalidatePath("/", "layout");
     void onStickerPackOpened(player.id).catch(() => {});
     return { cards: resultCards, totalCoinsEarned };
   } catch (err) {

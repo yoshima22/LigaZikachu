@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-react";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -11,11 +10,10 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { getMiauvadaoConfig, autoRefreshMiauvadaoIfNeeded, autoCleanupStaleBazarListings } from "./actions";
+import { getMiauvadaoConfig } from "./actions";
 import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
-import { revalidateTag } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -35,19 +33,7 @@ export default async function BazarPage({
 
   // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
   // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
-  Promise.all([
-    autoRefreshMiauvadaoIfNeeded(),
-    autoCleanupStaleBazarListings(),
-  ]).catch(() => null);
-
   // Marcar propostas respondidas como vistas — invalida o badge do nav
-  if (playerId && session?.user?.id) {
-    prisma.bazarProposal.updateMany({
-      where: { proposerId: playerId, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
-      data: { viewedByProposerAt: new Date() },
-    }).then(() => revalidateTag(`nav-${session.user!.id}`)).catch(() => null);
-  }
-
   const [listingsResult, transactions, miauvadao] = await Promise.all([
     getCachedListings({
       category: searchParams.cat as BazarItemCategory | undefined,

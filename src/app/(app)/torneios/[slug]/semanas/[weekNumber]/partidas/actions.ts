@@ -333,7 +333,6 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
     revalidatePath("/ranking"); revalidateTag("ranking");
     revalidatePath("/dashboard");
-    revalidatePath("/", "layout");
     return { success: true, confirmed: true };
   }
 
@@ -526,7 +525,6 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/ranking`);
   revalidatePath("/ranking");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout");
   return { success: true };
 }
 const confirmResultSchema = z.object({
@@ -605,7 +603,6 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/ranking`);
   revalidatePath("/ranking");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout");
 
   // Narrativa + mascote em background
   const weekIdForNarrative = match.tournamentWeekId;
@@ -890,7 +887,6 @@ export async function confirmAllWeekResults(
     revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
     revalidatePath("/ranking"); revalidateTag("ranking");
     revalidatePath("/dashboard");
-    revalidatePath("/", "layout");
 
     return { confirmed, skipped };
   } catch (err) {

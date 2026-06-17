@@ -9,7 +9,7 @@ import {
   ARENA_Z_CONFIG, ARENA_ROOMS, ARENA_MAX_TEAMS, PVE_DAILY_COINS_CAP,
   PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H,
   RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog,
-  getTeamTimeMultiplier, applyMultiplierToVault, syncDefeatedArenaTeams,
+  getTeamTimeMultiplier, applyMultiplierToVault,
   getArenaDebuffPct, getRoomsData, getTopArenaPlayers,
   getCachedDbReady, getCachedOpponentTeams,
 } from "@/lib/arena-z";
@@ -118,12 +118,6 @@ export default async function ArenaZPage({
   const playerArenaData = await prisma.player.findUnique({
     where: { id: player.id },
     select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true, arenaTutorialClaimed: true },
-  }).catch(() => null);
-
-  syncDefeatedArenaTeams(player.id).catch(() => null);
-  prisma.mascot.updateMany({
-    where: { playerId: player.id, arenaState: "RESTING", restingUntil: { lt: new Date() } },
-    data: { arenaState: "FREE", restingUntil: null },
   }).catch(() => null);
 
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
