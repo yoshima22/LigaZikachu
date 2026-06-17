@@ -820,27 +820,33 @@ export const EXP_REWARDS = {
 
 // IDs máximos com GIF animado no PokeAPI (Black/White animated — gen 1-5 apenas)
 const MAX_ANIMATED_ID = 649;
+const SPRITE_ID_OVERRIDES: Record<number, number> = {
+  10164: 10167,
+};
 
 export function getSpriteUrl(pokemonId: number, animated = false): string {
+  const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
   // GIFs animados só existem para gen 1-5 (IDs 1-649).
   // Para IDs > 649 (gen 6+), usar sempre o PNG estático para evitar imagens quebradas.
-  if (animated && pokemonId <= MAX_ANIMATED_ID) {
-    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${pokemonId}.gif`;
+  if (animated && spriteId <= MAX_ANIMATED_ID) {
+    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${spriteId}.gif`;
   }
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${spriteId}.png`;
 }
 
 // URL do sprite estático (sempre PNG, qualquer geração)
 export function getStaticSpriteUrl(pokemonId: number): string {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+  const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${spriteId}.png`;
 }
 
 // Sprites shiny (variante cromática)
 export function getShinySprite(pokemonId: number, animated = false): string {
-  if (animated && pokemonId <= 649) {
-    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${pokemonId}.gif`;
+  const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
+  if (animated && spriteId <= 649) {
+    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${spriteId}.gif`;
   }
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${pokemonId}.png`;
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${spriteId}.png`;
 }
 
 // ── Stat ranges por tipo de ovo ───────────────────────────────────────────────
