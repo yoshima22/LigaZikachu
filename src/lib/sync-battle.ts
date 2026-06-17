@@ -58,6 +58,8 @@ type MascotRow = {
   [key: string]: unknown;
 };
 
+export type SyntheticSyncMascot = MascotRow;
+
 type ModContext = {
   highestForceId: string | null;
   highestLevelIdPerTeam: { a: string | null; b: string | null };
@@ -374,6 +376,7 @@ export async function runSyncBattle(params: {
   selections: SelectionInput[];
   modifierId: string | null;
   modEffect?: ModEffect | null;
+  syntheticMascotsB?: SyntheticSyncMascot[];
 }): Promise<BattleOutput> {
   const { teamA, teamB, selections, modifierId } = params;
   const modEffect = params.modEffect !== undefined ? params.modEffect : await loadModEffect(modifierId);
@@ -386,7 +389,9 @@ export async function runSyncBattle(params: {
 
   const [rawA, rawB] = await Promise.all([
     prisma.mascot.findMany({ where: { id: { in: mascotIdsA } } }),
-    prisma.mascot.findMany({ where: { id: { in: mascotIdsB } } }),
+    params.syntheticMascotsB
+      ? Promise.resolve(params.syntheticMascotsB)
+      : prisma.mascot.findMany({ where: { id: { in: mascotIdsB } } }),
   ]);
 
   const lineupRoles = await prisma.syncEventLineup.findMany({

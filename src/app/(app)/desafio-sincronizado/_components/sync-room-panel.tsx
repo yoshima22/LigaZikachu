@@ -30,7 +30,8 @@ interface RoundSel {
 interface RoundMatch {
   id: string;
   teamAId: string;
-  teamBId: string;
+  teamBId: string | null;
+  botName?: string | null;
   result: string | null;
   teamADamage: number;
   teamBDamage: number;
@@ -504,11 +505,13 @@ function MascotSelector({
 function MatchResult({ match, room, modifier }: { match: RoundMatch; room: Room; modifier: Round["modifier"] }) {
   const [showModal, setShowModal] = useState(false);
   const teamA = room.teams.find((t) => t.id === match.teamAId);
-  const teamB = room.teams.find((t) => t.id === match.teamBId);
-  if (!teamA || !teamB) return null;
+  const teamB = match.teamBId ? room.teams.find((t) => t.id === match.teamBId) : null;
+  if (!teamA || (!teamB && !match.botName)) return null;
 
   const nameA = `${teamA.playerA.displayName}${teamA.playerB ? ` + ${teamA.playerB.displayName}` : ""}`;
-  const nameB = `${teamB.playerA.displayName}${teamB.playerB ? ` + ${teamB.playerB.displayName}` : ""}`;
+  const nameB = teamB
+    ? `${teamB.playerA.displayName}${teamB.playerB ? ` + ${teamB.playerB.displayName}` : ""}`
+    : match.botName ?? "Bot Sincronizado";
   const winner = match.result === "TEAM_A_WIN" ? nameA : match.result === "TEAM_B_WIN" ? nameB : "Empate";
 
   const replay = match.replayJson as SyncReplayJson | null;

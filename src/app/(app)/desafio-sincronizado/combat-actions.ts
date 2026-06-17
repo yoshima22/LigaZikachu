@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { runSyncBattle, loadModEffect, type ModEffect } from "@/lib/sync-battle";
+import { runSyncBattle, loadModEffect, type ModEffect, type SyntheticSyncMascot } from "@/lib/sync-battle";
+import { getPokemonName } from "@/lib/mascot-data";
 import { toBrtDateString } from "@/lib/date-utils";
 
 // ── Pokémon generation helper ─────────────────────────────────────────────────
@@ -21,6 +22,66 @@ function pokemonGen(id: number): number {
   if (id <= 809) return 7;
   if (id <= 905) return 8;
   return 9;
+}
+
+function buildRoundPairings<T>(teams: T[], roundNumber: number): [T, T | null][] {
+  if (teams.length <= 1) return teams.map((team) => [team, null]);
+
+  const pool: (T | null)[] = [...teams];
+  if (pool.length % 2 === 1) pool.push(null);
+
+  const rotations = Math.max(0, roundNumber - 1);
+  for (let i = 0; i < rotations; i++) {
+    const fixed = pool[0];
+    const rest = pool.slice(1);
+    const last = rest.pop();
+    pool.splice(0, pool.length, fixed ?? null, last ?? null, ...rest);
+  }
+
+  const pairings: [T, T | null][] = [];
+  const half = pool.length / 2;
+  for (let i = 0; i < half; i++) {
+    const a = pool[i];
+    const b = pool[pool.length - 1 - i];
+    if (a) pairings.push([a, b ?? null]);
+    else if (b) pairings.push([b, null]);
+  }
+  return pairings;
+}
+
+function makeSyncBotMascots(baseMascots: SyntheticSyncMascot[], seed: number): SyntheticSyncMascot[] {
+  const fallbackLevel = 12;
+  const count = Math.max(3, Math.min(6, baseMascots.length || 6));
+  const avg = (field: keyof Pick<SyntheticSyncMascot, "level" | "statForce" | "statAgility" | "statVitality" | "statCharisma" | "statInstinct" | "happiness">, fallback: number) => {
+    if (baseMascots.length === 0) return fallback;
+    return baseMascots.reduce((sum, mascot) => sum + Number(mascot[field] ?? fallback), 0) / baseMascots.length;
+  };
+
+  const pokemonPool = [25, 59, 65, 68, 94, 130, 143, 149, 181, 197, 208, 212, 214, 229, 248];
+  const level = Math.max(5, Math.round(avg("level", fallbackLevel) + 2));
+  const force = Math.max(5, Math.round(avg("statForce", 12) * 1.08));
+  const agility = Math.max(5, Math.round(avg("statAgility", 12) * 1.08));
+  const vitality = Math.max(5, Math.round(avg("statVitality", 12) * 1.08));
+  const charisma = Math.max(5, Math.round(avg("statCharisma", 12) * 1.04));
+  const instinct = Math.max(5, Math.round(avg("statInstinct", 12) * 1.04));
+
+  return Array.from({ length: count }, (_, index) => {
+    const pokemonId = pokemonPool[(seed + index * 3) % pokemonPool.length];
+    return {
+      id: `sync-bot-${seed}-${index}-${pokemonId}`,
+      pokemonId,
+      nickname: `Sombra ${getPokemonName(pokemonId)}`,
+      level,
+      statForce: force + (index % 3),
+      statAgility: agility + ((index + 1) % 3),
+      statVitality: vitality + ((index + 2) % 3),
+      statCharisma: charisma,
+      statInstinct: instinct,
+      happiness: Math.round(avg("happiness", 70)),
+      mood: "FOCUSED",
+      combatRole: index % 3 === 0 ? "DEFENDER" : index % 3 === 1 ? "ATTACKER" : "SUPPORT",
+    };
+  });
 }
 
 // ── Reward modifier delivery ──────────────────────────────────────────────────
@@ -377,7 +438,7 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
 
       // Chaveamento regular: R1: 1×2/3×4, R2: 1×3/2×4, R3: 1×4/2×3
       // Desempate (roundNumber=0): apenas as duplas empatadas no 1º lugar
-      let pairings: [number, number][];
+      let pairings: [typeof teams[number], typeof teams[number] | null][];
       let teamsForRound = teams;
 
       if (round.roundNumber === 0) {
@@ -389,17 +450,9 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
         });
         const tiedIds = tiedScores.map((s) => s.teamId);
         teamsForRound = teams.filter((t) => tiedIds.includes(t.id));
-        // Pareia de 2 em 2 (pode haver mais de 2 empatadas)
-        pairings = [];
-        for (let i = 0; i < Math.floor(teamsForRound.length / 2); i++) {
-          pairings.push([i * 2, i * 2 + 1]);
-        }
+        pairings = buildRoundPairings(teamsForRound, 1);
       } else {
-        pairings = round.roundNumber === 1
-          ? [[0, 1], [2, 3]]
-          : round.roundNumber === 2
-          ? [[0, 2], [1, 3]]
-          : [[0, 3], [1, 2]];
+        pairings = buildRoundPairings(teamsForRound, round.roundNumber);
       }
 
       // Auto-seleciona mascotes para jogadores que não escolheram
@@ -437,26 +490,40 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
       const roundSelections = await tx.syncRoundSelection.findMany({ where: { roundId } });
 
       // Executa cada confronto
-      for (const [slotA, slotB] of pairings) {
-        const teamA = teamsForRound[slotA];
-        const teamB = teamsForRound[slotB];
-        if (!teamA || !teamB) continue;
+      for (let pairingIndex = 0; pairingIndex < pairings.length; pairingIndex++) {
+        const [teamA, teamB] = pairings[pairingIndex];
+        if (!teamA) continue;
 
-        const allSelections = roundSelections.filter((s) => s.teamId === teamA.id || s.teamId === teamB.id);
+        const isBotMatch = !teamB;
+        const botName = isBotMatch ? "Bot Sincronizado" : null;
+        const botTeam = { id: `sync-bot-${round.id}-${teamA.id}`, playerAId: "sync-bot", playerBId: null };
+        const opponentTeam = teamB ?? botTeam;
+        const allSelections = roundSelections.filter((s) => s.teamId === teamA.id || (teamB && s.teamId === teamB.id));
+
+        const syntheticMascotsB = isBotMatch
+          ? makeSyncBotMascots(
+              await tx.mascot.findMany({
+                where: { id: { in: allSelections.filter((s) => s.teamId === teamA.id).flatMap((s) => s.mascotIds) } },
+              }) as SyntheticSyncMascot[],
+              round.roundNumber * 100 + pairingIndex,
+            )
+          : undefined;
 
         const result = await runSyncBattle({
           teamA,
-          teamB,
+          teamB: opponentTeam,
           selections: allSelections,
           modifierId,
           modEffect,
+          syntheticMascotsB,
         });
 
-        const match = await tx.syncRoundMatch.create({
+        await tx.syncRoundMatch.create({
           data: {
             roundId,
             teamAId: teamA.id,
-            teamBId: teamB.id,
+            teamBId: teamB?.id ?? null,
+            botName,
             result: result.result,
             teamADamage: result.teamADamage,
             teamBDamage: result.teamBDamage,
@@ -468,7 +535,9 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
         });
 
         // Entrega recompensas de modificadores do tipo REWARD_*
-        await applyRoundRewardModifier(tx, modEffect, teamA, teamB, result, allSelections, round.roomId);
+        if (teamB) {
+          await applyRoundRewardModifier(tx, modEffect, teamA, teamB, result, allSelections, round.roomId);
+        }
 
         // Atualiza pontuações dos jogadores
         const updateScore = async (pid: string, tid: string, won: boolean, lost: boolean, damage: number, surviving: number, damageTaken: number) => {
@@ -490,8 +559,10 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
         for (const pid of [teamA.playerAId, teamA.playerBId].filter(Boolean) as string[]) {
           await updateScore(pid, teamA.id, aWon, bWon, result.teamADamage, result.survivingA, result.teamBDamage);
         }
-        for (const pid of [teamB.playerAId, teamB.playerBId].filter(Boolean) as string[]) {
-          await updateScore(pid, teamB.id, bWon, aWon, result.teamBDamage, result.survivingB, result.teamADamage);
+        if (teamB) {
+          for (const pid of [teamB.playerAId, teamB.playerBId].filter(Boolean) as string[]) {
+            await updateScore(pid, teamB.id, bWon, aWon, result.teamBDamage, result.survivingB, result.teamADamage);
+          }
         }
       }
 
@@ -510,13 +581,11 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
 
       // Se foi desempate (roundNumber=0), atribui posições finais e fecha sala
       if (round.roundNumber === 0 && pairings.length > 0) {
-        for (const [slotA, slotB] of pairings) {
-          const teamA = teamsForRound[slotA];
-          const teamB = teamsForRound[slotB];
-          if (!teamA || !teamB) continue;
+        for (const [teamA, teamB] of pairings) {
+          if (!teamA) continue;
 
           const match = await tx.syncRoundMatch.findFirst({
-            where: { roundId, teamAId: teamA.id, teamBId: teamB.id },
+            where: { roundId, teamAId: teamA.id, teamBId: teamB?.id ?? null },
             select: { result: true },
           });
           if (!match) continue;
@@ -532,8 +601,8 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
           const pos1 = available[0] ?? 1;
           const pos2 = available[1] ?? 2;
 
-          const winnerId = match.result === "TEAM_A_WIN" ? teamA.id : match.result === "TEAM_B_WIN" ? teamB.id : null;
-          const loserId = match.result === "TEAM_A_WIN" ? teamB.id : match.result === "TEAM_B_WIN" ? teamA.id : null;
+          const winnerId = match.result === "TEAM_A_WIN" ? teamA.id : match.result === "TEAM_B_WIN" ? teamB?.id ?? null : null;
+          const loserId = match.result === "TEAM_A_WIN" ? teamB?.id ?? null : match.result === "TEAM_B_WIN" ? teamA.id : null;
 
           if (winnerId) {
             await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: winnerId }, data: { finalPosition: pos1 } });
@@ -544,7 +613,9 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
           // Em caso de empate, ambas ficam na melhor posição disponível
           if (!winnerId && !loserId) {
             await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: teamA.id }, data: { finalPosition: pos1 } });
-            await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: teamB.id }, data: { finalPosition: pos1 } });
+            if (teamB) {
+              await tx.syncEventScore.updateMany({ where: { roomId: round.roomId, teamId: teamB.id }, data: { finalPosition: pos1 } });
+            }
           }
         }
 

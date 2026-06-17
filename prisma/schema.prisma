@@ -1579,7 +1579,8 @@ model SyncRoundMatch {
   id          String           @id @default(cuid())
   roundId     String
   teamAId     String
-  teamBId     String
+  teamBId     String?
+  botName     String?
   result      SyncMatchResult?
   teamADamage Int              @default(0)
   teamBDamage Int              @default(0)
@@ -1590,7 +1591,7 @@ model SyncRoundMatch {
 
   round SyncEventRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
   teamA SyncEventTeam  @relation("SyncRoundMatchTeamA", fields: [teamAId], references: [id], onDelete: Cascade)
-  teamB SyncEventTeam  @relation("SyncRoundMatchTeamB", fields: [teamBId], references: [id], onDelete: Cascade)
+  teamB SyncEventTeam? @relation("SyncRoundMatchTeamB", fields: [teamBId], references: [id], onDelete: Cascade)
 
   @@unique([roundId, teamAId, teamBId])
   @@map("sync_round_matches")
