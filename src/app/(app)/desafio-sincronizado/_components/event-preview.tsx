@@ -180,7 +180,7 @@ export function EventPreview({ modifiers }: Props) {
         {openSection === "modifiers" && (
           <div className="border-t border-border p-4 space-y-4">
             <p className="text-xs text-slate-400">
-              Um modificador é sorteado por rodada <span className="font-semibold text-slate-200">depois</span> que os mascotes são escolhidos — você escolhe sem saber qual será. Conheça os possíveis abaixo:
+              Um modificador é sorteado e revelado na abertura de cada rodada <span className="font-semibold text-slate-200">antes</span> dos jogadores escolherem os 3 mascotes. Use a regra revelada para adaptar sua seleção. Conheça os possíveis abaixo:
             </p>
 
             {modifiers.length === 0 ? (
@@ -236,7 +236,7 @@ export function EventPreview({ modifiers }: Props) {
           <div className="text-xs text-slate-400 space-y-1">
             <p><span className="font-semibold text-slate-300">Arena única:</span> todas as duplas prontas entram na mesma Arena Sincronizada. Não existe mais limite fixo de 4 duplas por sala.</p>
             <p><span className="font-semibold text-slate-300">Número ímpar:</span> se uma rodada ficar com uma dupla sem adversário, ela enfrenta o Bot Sincronizado em vez de receber folga.</p>
-            <p><span className="font-semibold text-slate-300">Regra do desconhecimento:</span> você escolhe 3 mascotes <em>antes</em> do modificador ser revelado. Estratégia e sorte andam juntas.</p>
+            <p><span className="font-semibold text-slate-300">Regra de adaptação:</span> o modificador aparece primeiro; depois você escolhe 3 mascotes para responder ao efeito da rodada.</p>
             <p><span className="font-semibold text-slate-300">Uso único:</span> cada mascote só pode ser usado 1 vez por evento, exceto em desempate.</p>
             <p><span className="font-semibold text-slate-300">Desempate:</span> se duplas empatarem em 1º, elas jogam uma rodada extra podendo reutilizar qualquer um dos 9 mascotes.</p>
           </div>

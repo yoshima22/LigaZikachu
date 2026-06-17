@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Flame, Send, ShieldBan, Sparkles, Swords, Ticket, Waves } from "lucide-react";
+import { Clock, Flame, Send, ShieldBan, Sparkles, Swords, Ticket, Waves } from "lucide-react";
 import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
@@ -73,12 +73,26 @@ export default async function DesafioSincronizadoPage() {
 
   const playersNeedingTicket = allActivePlayers
     .filter((p) => !playerIdsWithTicket.has(p.id))
-    .map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      leftHalves: usableByPlayer.get(p.id)?.left ?? 0,
-      rightHalves: usableByPlayer.get(p.id)?.right ?? 0,
-    }));
+    .map((p) => {
+      const leftHalves = usableByPlayer.get(p.id)?.left ?? 0;
+      const rightHalves = usableByPlayer.get(p.id)?.right ?? 0;
+      const missingLeft = leftHalves < 1;
+      const missingRight = rightHalves < 1;
+      const missingLabel = missingLeft && missingRight
+        ? "precisa esquerda/fogo e direita/agua"
+        : missingLeft
+          ? "precisa esquerda/fogo"
+          : "precisa direita/agua";
+      return {
+        id: p.id,
+        displayName: `${p.displayName} — ${missingLabel}`,
+        leftHalves,
+        rightHalves,
+        missingLeft,
+        missingRight,
+      };
+    })
+    .filter((p) => p.missingLeft || p.missingRight);
 
   const [halves, tickets, players, entries, config, openTeams] = await Promise.all([
     prisma.syncTicketHalf.findMany({
@@ -182,7 +196,13 @@ export default async function DesafioSincronizadoPage() {
   });
 
   // Jogadores com escalação travada — para mostrar publicamente quem já está pronto
-  let readyPlayers: { id: string; displayName: string; partnerName: string; bothReady: boolean }[] = [];
+  let eventReadiness: {
+    id: string;
+    playerAName: string;
+    playerBName: string;
+    lockedCount: number;
+    status: "pending" | "partial" | "ready";
+  }[] = [];
   try {
     const lineupTeams = await prisma.syncEventTeam.findMany({
       where: { status: { in: ["LINEUP_PENDING", "LINEUP_READY"] } },
@@ -193,18 +213,35 @@ export default async function DesafioSincronizadoPage() {
         playerA: { select: { id: true, displayName: true } },
         playerB: { select: { id: true, displayName: true } },
       },
+      orderBy: [{ lineupReadyAt: "desc" }, { confirmedAt: "asc" }],
     });
-    for (const team of lineupTeams) {
-      if (!team.playerB) continue;
+    eventReadiness = lineupTeams.flatMap((team) => {
+      if (!team.playerB) return [];
       const aLocked = team.lineupStatusA === "LOCKED";
       const bLocked = team.lineupStatusB === "LOCKED";
-      const bothLocked = aLocked && bLocked;
-      if (aLocked) readyPlayers.push({ id: team.playerA.id, displayName: team.playerA.displayName, partnerName: team.playerB.displayName, bothReady: bothLocked });
-      if (bLocked) readyPlayers.push({ id: `${team.playerB.id}_b`, displayName: team.playerB.displayName, partnerName: team.playerA.displayName, bothReady: bothLocked });
-    }
+      const lockedCount = Number(aLocked) + Number(bLocked);
+      return [{
+        id: team.id,
+        playerAName: team.playerA.displayName,
+        playerBName: team.playerB.displayName,
+        lockedCount,
+        status: lockedCount === 2 ? "ready" : lockedCount === 1 ? "partial" : "pending",
+      }];
+    });
   } catch {
-    readyPlayers = [];
+    eventReadiness = [];
   }
+
+  const readyPlayers = eventReadiness.map((team) => ({
+    id: team.id,
+    displayName: `${team.playerAName} + ${team.playerBName}`,
+    partnerName: team.status === "ready"
+      ? "escalação travada"
+      : team.status === "partial"
+        ? `${2 - team.lockedCount} jogador pendente`
+        : "escalação pendente",
+    bothReady: team.status === "ready",
+  }));
 
   // Modificadores ativos — visíveis a todos para preview; admin vê todos
   const activeModifiers = await prisma.syncEventModifier.findMany({
@@ -240,6 +277,15 @@ export default async function DesafioSincronizadoPage() {
   const usableRight = rightHalves.filter((half) => half.generatedByPlayerId !== player.id);
   const availableTickets = tickets.filter((ticket) => ticket.status === "AVAILABLE");
   const windowState = getSyncWindowState(config, new Date(), { admin });
+  const eventSchedule = [
+    { label: "Abre inscrição", value: config.registrationOpensAt, tone: "text-green-200 border-green-400/30 bg-green-500/10" },
+    { label: "Fecha inscrição", value: config.registrationClosesAt, tone: "text-amber-200 border-amber-400/30 bg-amber-500/10" },
+    { label: "Rodada 1", value: config.round1At, tone: "text-purple-200 border-purple-400/30 bg-purple-500/10" },
+    { label: "Rodada 2", value: config.round2At, tone: "text-purple-200 border-purple-400/30 bg-purple-500/10" },
+    { label: "Rodada 3", value: config.round3At, tone: "text-purple-200 border-purple-400/30 bg-purple-500/10" },
+    { label: "Desempate", value: config.tiebreakAt, tone: "text-cyan-200 border-cyan-400/30 bg-cyan-500/10" },
+    { label: "Premiação", value: config.rewardsAt, tone: "text-[#FFCB05] border-[#FFCB05]/30 bg-[#FFCB05]/10" },
+  ];
 
   return (
     <div className="space-y-8">
@@ -283,6 +329,34 @@ export default async function DesafioSincronizadoPage() {
           <h2 className="font-semibold text-slate-100">O que está em jogo</h2>
         </div>
         <EventPreview modifiers={activeModifiers} />
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="mb-4 flex items-start gap-2">
+          <Clock size={18} className="mt-0.5 text-[#FFCB05]" />
+          <div>
+            <h2 className="font-semibold text-slate-100">Fluxo e horários do evento</h2>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Todos os horários usam Brasília (BRT). A janela de inscrição abre e fecha automaticamente para jogadores.
+              Se o cron da Vercel estiver ativo, o fechamento valida duplas prontas e forma a Arena Sincronizada única.
+              As rodadas ficam agendadas; o admin abre a seleção de cada rodada, e o modificador aparece antes dos 3 mascotes escolhidos.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {eventSchedule.map((item) => (
+            <div key={item.label} className={`rounded-xl border px-3 py-2 ${item.tone}`}>
+              <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">{item.label}</p>
+              <p className="mt-1 text-sm font-semibold">{formatFullBrt(item.value) ?? "Não definido"}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-2 text-xs text-slate-400 md:grid-cols-4">
+          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">1.</span> Jogadores juntam metades válidas e montam o ticket completo.</p>
+          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">2.</span> Duplas entram, confirmam presença e travam 9 mascotes por jogador.</p>
+          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">3.</span> Em cada rodada, o modificador é revelado antes da escolha dos 3 mascotes.</p>
+          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">4.</span> A arena roda por pareamentos; duplas ímpares enfrentam o Bot Sincronizado.</p>
+        </div>
       </section>
 
       {/* ── Quem ainda precisa de ticket ─────────────────────────────── */}
@@ -980,6 +1054,20 @@ function formatBrt(value?: Date | string | null) {
     timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatFullBrt(value?: Date | string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);

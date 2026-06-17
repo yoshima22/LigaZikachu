@@ -83,62 +83,52 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (validTeams.length < 4) {
+    if (validTeams.length < 2) {
       return NextResponse.json({
         ok: true,
         skipped: true,
-        reason: `Apenas ${validTeams.length} dupla(s) válida(s). Mínimo 4 por sala.`,
+        reason: `Apenas ${validTeams.length} dupla(s) valida(s). Minimo de 2 necessario para formar a Arena Sincronizada.`,
         invalidRemoved: invalidCount,
       });
-    }
-
-    // Forma salas de 4 (máx 3 por dia)
-    const maxRooms = 3;
-    const roomSlots: typeof validTeams[] = [];
-    for (let i = 0; i < Math.min(Math.floor(validTeams.length / 4), maxRooms); i++) {
-      roomSlots.push(validTeams.slice(i * 4, i * 4 + 4));
     }
 
     const roundTimes = [config.round1At, config.round2At, config.round3At];
     const formed: string[] = [];
 
-    for (let ri = 0; ri < roomSlots.length; ri++) {
-      const slot = roomSlots[ri];
-      await prisma.$transaction(async (tx) => {
-        const room = await tx.syncEventRoom.create({
-          data: { roomIndex: ri + 1, date, status: "READY" },
-        });
-        formed.push(room.id);
-
-        for (let s = 0; s < 4; s++) {
-          await tx.syncEventTeam.update({
-            where: { id: slot[s].id },
-            data: { roomId: room.id, roomSlot: s + 1 },
-          });
-        }
-
-        for (let rn = 1; rn <= 3; rn++) {
-          await tx.syncEventRound.create({
-            data: {
-              roomId: room.id,
-              roundNumber: rn,
-              status: "PENDING",
-              scheduledAt: roundTimes[rn - 1] ?? new Date(),
-            },
-          });
-        }
-
-        for (const team of slot) {
-          for (const pid of [team.playerAId, team.playerBId].filter(Boolean) as string[]) {
-            await tx.syncEventScore.create({
-              data: { roomId: room.id, teamId: team.id, playerId: pid },
-            });
-          }
-        }
+    await prisma.$transaction(async (tx) => {
+      const room = await tx.syncEventRoom.create({
+        data: { roomIndex: 1, date, status: "READY" },
       });
-    }
+      formed.push(room.id);
 
-    console.log(`[SyncClose] ${formed.length} sala(s) formada(s). ${invalidCount} dupla(s) inválida(s) canceladas.`);
+      for (let s = 0; s < validTeams.length; s++) {
+        await tx.syncEventTeam.update({
+          where: { id: validTeams[s].id },
+          data: { roomId: room.id, roomSlot: s + 1 },
+        });
+      }
+
+      for (let rn = 1; rn <= 3; rn++) {
+        await tx.syncEventRound.create({
+          data: {
+            roomId: room.id,
+            roundNumber: rn,
+            status: "PENDING",
+            scheduledAt: roundTimes[rn - 1] ?? new Date(),
+          },
+        });
+      }
+
+      for (const team of validTeams) {
+        for (const pid of [team.playerAId, team.playerBId].filter(Boolean) as string[]) {
+          await tx.syncEventScore.create({
+            data: { roomId: room.id, teamId: team.id, playerId: pid },
+          });
+        }
+      }
+    });
+
+    console.log(`[SyncClose] Arena unica formada com ${validTeams.length} dupla(s). ${invalidCount} dupla(s) invalidas canceladas.`);
 
     return NextResponse.json({
       ok: true,
