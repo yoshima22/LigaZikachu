@@ -198,69 +198,60 @@ export async function adminFormRoomsAction(): Promise<{ error?: string; formed?:
 
     const date = toBrtDateString(new Date());
 
-    // Verifica se já há salas para hoje
+    // Nao altera evento/sala ja formada no dia atual.
     const existingRooms = await prisma.syncEventRoom.count({ where: { date } });
-    if (existingRooms > 0) return { error: `Salas para ${date} já foram formadas.` };
+    if (existingRooms > 0) return { error: `Salas para ${date} ja foram formadas.` };
 
-    // Busca duplas com lineup completo
+    // Busca duplas com lineup completo.
     const readyTeams = await prisma.syncEventTeam.findMany({
       where: { status: "LINEUP_READY", roomId: null },
       orderBy: { lineupReadyAt: "asc" },
       select: { id: true, playerAId: true, playerBId: true },
     });
 
-    if (readyTeams.length < 4) {
-      return { error: `Apenas ${readyTeams.length} dupla(s) prontas. Mínimo de 4 necessário para formar uma sala.` };
-    }
-
-    // Agrupa em salas de 4 (máximo 3 salas por dia)
-    const maxRooms = 3;
-    const rooms: typeof readyTeams[] = [];
-    for (let i = 0; i < Math.min(Math.floor(readyTeams.length / 4), maxRooms); i++) {
-      rooms.push(readyTeams.slice(i * 4, i * 4 + 4));
+    if (readyTeams.length < 2) {
+      return { error: `Apenas ${readyTeams.length} dupla(s) pronta(s). Minimo de 2 necessario para formar a Arena Sincronizada.` };
     }
 
     await prisma.$transaction(async (tx) => {
-      for (let roomIdx = 0; roomIdx < rooms.length; roomIdx++) {
-        const config = await tx.syncChallengeConfig.findUnique({ where: { id: "singleton" } });
-        const room = await tx.syncEventRoom.create({
-          data: { roomIndex: roomIdx + 1, date, status: "READY" },
+      const config = await tx.syncChallengeConfig.findUnique({ where: { id: "singleton" } });
+      const room = await tx.syncEventRoom.create({
+        data: { roomIndex: 1, date, status: "READY" },
+      });
+
+      // Uma unica Arena Sincronizada recebe todas as duplas prontas.
+      for (let slot = 0; slot < readyTeams.length; slot++) {
+        await tx.syncEventTeam.update({
+          where: { id: readyTeams[slot].id },
+          data: { roomId: room.id, roomSlot: slot + 1 },
         });
+      }
 
-        // Atribui as 4 duplas ao slot da sala
-        for (let slot = 0; slot < 4; slot++) {
-          await tx.syncEventTeam.update({
-            where: { id: rooms[roomIdx][slot].id },
-            data: { roomId: room.id, roomSlot: slot + 1 },
+      // Cria as 3 rodadas com os horarios da config.
+      const roundTimes = [config?.round1At, config?.round2At, config?.round3At];
+      for (let rn = 1; rn <= 3; rn++) {
+        await tx.syncEventRound.create({
+          data: {
+            roomId: room.id,
+            roundNumber: rn,
+            status: "PENDING",
+            scheduledAt: roundTimes[rn - 1] ?? new Date(),
+          },
+        });
+      }
+
+      // Inicializa pontuacao de todos os jogadores da arena.
+      for (const team of readyTeams) {
+        for (const pid of [team.playerAId, team.playerBId].filter(Boolean) as string[]) {
+          await tx.syncEventScore.create({
+            data: { roomId: room.id, teamId: team.id, playerId: pid },
           });
-        }
-
-        // Cria as 3 rodadas com os horários da config
-        const roundTimes = [config?.round1At, config?.round2At, config?.round3At];
-        for (let rn = 1; rn <= 3; rn++) {
-          await tx.syncEventRound.create({
-            data: {
-              roomId: room.id,
-              roundNumber: rn,
-              status: "PENDING",
-              scheduledAt: roundTimes[rn - 1] ?? new Date(),
-            },
-          });
-        }
-
-        // Inicializa pontuação de todos os jogadores da sala
-        for (const team of rooms[roomIdx]) {
-          for (const pid of [team.playerAId, team.playerBId].filter(Boolean) as string[]) {
-            await tx.syncEventScore.create({
-              data: { roomId: room.id, teamId: team.id, playerId: pid },
-            });
-          }
         }
       }
     });
 
     revalidatePath("/desafio-sincronizado");
-    return { formed: rooms.length };
+    return { formed: 1 };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao formar salas." };
   }
@@ -699,6 +690,13 @@ export async function adminFinalizeRoomAction(roomId: string): Promise<{ error?:
       4: { coins: 300,  label: "4º lugar no Desafio Sincronizado", eggType: "COMMON", foodGift: "Água Fresca" },
     };
 
+    const consolationReward: RewardDef = {
+      coins: 150,
+      label: "Participacao no Desafio Sincronizado",
+      eggType: "COMMON",
+      foodGift: "Agua Fresca",
+    };
+
     // Deduplica scores por dupla (pega o score com wins mais alto por dupla)
     const scoresByTeam = new Map<string, typeof sorted[0]>();
     for (const score of sorted) {
@@ -715,7 +713,7 @@ export async function adminFinalizeRoomAction(roomId: string): Promise<{ error?:
       for (let pos = 0; pos < teamRanking.length; pos++) {
         const position = pos + 1;
         const teamTopScore = teamRanking[pos];
-        const reward = rewardsByPosition[position];
+        const reward = rewardsByPosition[position] ?? consolationReward;
 
         // Todos os jogadores desta dupla recebem a recompensa
         const allTeamScores = sorted.filter((s) => s.teamId === teamTopScore.teamId);
@@ -726,8 +724,6 @@ export async function adminFinalizeRoomAction(roomId: string): Promise<{ error?:
             where: { id: score.id },
             data: { finalPosition: position, rewardGranted: true },
           });
-
-          if (!reward) continue;
 
           // ZC
           const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: score.playerId } });
