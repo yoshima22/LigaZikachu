@@ -504,6 +504,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 909, to: 910, level: 16 }, { from: 910, to: 911, level: 36 },
   { from: 912, to: 913, level: 16 }, { from: 913, to: 914, level: 36 },
   { from: 915, to: 916, level: 18 },
+  { from: 917, to: 918, level: 15 }, // Tarountula → Spidops
   { from: 919, to: 920, level: 30 },
   { from: 921, to: 922, level: 18 }, { from: 922, to: 923, level: 32 },
   { from: 924, to: 925, level: 25 },
@@ -528,6 +529,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 974, to: 975, level: 30 },
   { from: 996, to: 997, level: 35 }, { from: 997, to: 998, level: 54 },
   { from: 999, to: 1000, level: 45 }, // Gimmighoul (Chest) → Gholdengo
+  { from: 1011, to: 1019, level: 45 }, // Dipplin → Hydrapple
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
   { from: 10091, to: 10092, level: 20 }, // Rattata-Alola → Raticate-Alola
   { from: 10101, to: 10102, level: 22 }, // Sandshrew-Alola → Sandslash-Alola (Ice Stone)
@@ -1264,7 +1266,7 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   1009:"Walking Wake",1010:"Iron Leaves",
   1011:"Dipplin",1012:"Poltchageist",1013:"Sinistcha",
   1014:"Okidogi",1015:"Munkidori",1016:"Fezandipiti",
-  1017:"Ogerpon",1020:"Gouging Fire",1021:"Raging Bolt",
+  1017:"Ogerpon",1018:"Archaludon",1019:"Hydrapple",1020:"Gouging Fire",1021:"Raging Bolt",
   1022:"Iron Boulder",1023:"Iron Crown",
   1024:"Terapagos",1025:"Pecharunt",
   // Formas especiais (IDs PokeAPI de forma, não National Dex)
@@ -1668,7 +1670,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   1007:"dragon/fighting",1008:"dragon/electric",
   1009:"water/dragon",1010:"grass/psychic",
   1014:"poison/fighting",1015:"poison/psychic",1016:"poison/fairy",
-  1017:"grass",
+  1017:"grass",1018:"steel/dragon",1019:"grass/dragon",
   1020:"fire/dragon",1021:"electric/dragon",1022:"rock/psychic",1023:"steel/psychic",
   1024:"normal",1025:"poison/ghost",
   // ── Formas especiais (IDs PokeAPI 10000+) ────────────────────────────────────
