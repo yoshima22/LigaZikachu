@@ -338,8 +338,8 @@ export default async function DesafioSincronizadoPage() {
             <h2 className="font-semibold text-slate-100">Fluxo e horários do evento</h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">
               Todos os horários usam Brasília (BRT). A janela de inscrição abre e fecha automaticamente para jogadores.
-              Se o cron da Vercel estiver ativo, o fechamento valida duplas prontas e forma a Arena Sincronizada única.
-              As rodadas ficam agendadas; o admin abre a seleção de cada rodada, e o modificador aparece antes dos 3 mascotes escolhidos.
+              Forma a Arena Sincronizada única. As rodadas ficam agendadas; o sistema abre a seleção de cada rodada,
+              e o modificador aparece antes dos 3 mascotes escolhidos.
             </p>
           </div>
         </div>

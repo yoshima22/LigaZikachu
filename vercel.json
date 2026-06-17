@@ -15,6 +15,14 @@
     {
       "path": "/api/cron/arena-pve-reset",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/sync-close",
+      "schedule": "1 20 * * *"
+    },
+    {
+      "path": "/api/cron/sync-event",
+      "schedule": "*/2 * * * *"
     }
   ]
 }
