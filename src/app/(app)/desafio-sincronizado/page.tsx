@@ -252,8 +252,9 @@ export default async function DesafioSincronizadoPage() {
             <div>
               <h1 className="font-pixel text-lg text-[#FFCB05]">Desafio Sincronizado</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Monte tickets com outros jogadores, forme uma dupla e enfrente combates com regras surpresa. Metades geradas por voce
-                precisam circular: voce nao pode usa-las no seu proprio ticket.
+                Monte tickets com outros jogadores, forme uma dupla e entre em uma Arena Sincronizada unica, sem limite fixo de duplas.
+                Se uma rodada ficar impar, a dupla sem adversario enfrenta o Bot Sincronizado. Metades geradas por voce precisam circular:
+                voce nao pode usa-las no seu proprio ticket.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -399,9 +400,9 @@ export default async function DesafioSincronizadoPage() {
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold text-slate-100">Janelas e duplas</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Criacao/entrada: {describeRegistrationWindow(config)}. Agora: {windowState.currentTime} BRT - {windowState.label}
+              <h2 className="font-semibold text-slate-100">Janelas, duplas e arena unica</h2>
+              <p className="mt-1 text-xs text-slate-500">
+              Criacao/entrada: {describeRegistrationWindow(config)}. Todas as duplas prontas entram na mesma arena; se sobrar uma dupla em uma rodada, ela enfrenta o Bot Sincronizado. Agora: {windowState.currentTime} BRT - {windowState.label}
             </p>
             {windowState.simulation && (
               <p className="mt-1 text-xs font-semibold text-amber-200">

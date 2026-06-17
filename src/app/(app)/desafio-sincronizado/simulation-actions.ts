@@ -206,7 +206,7 @@ export async function adminRunFullSimulationAction(): Promise<{
       return r;
     });
 
-    log.push(`🏟️ Sala formada: Arena 1 com 4 duplas`);
+    log.push(`🏟️ Arena única formada com todas as duplas simuladas`);
 
     // ── 6. Executa as 3 rodadas ──────────────────────────────────────────────
     const rounds = await prisma.syncEventRound.findMany({ where: { roomId: room.id }, orderBy: { roundNumber: "asc" } });
@@ -541,7 +541,7 @@ export async function adminSimSetupAction(): Promise<SimSetupResult> {
       return r;
     });
 
-    log.push(`🏟️ Sala formada: Arena 1 com 4 duplas`);
+    log.push(`🏟️ Arena única formada com todas as duplas simuladas`);
 
     revalidatePath("/desafio-sincronizado");
     return { roomId: room.id, log, teams: teamsResult };

@@ -46,6 +46,16 @@ const REWARDS = [
     highlight: "border-border bg-slate-950/40",
     coinColor: "text-slate-400",
   },
+  {
+    position: 5,
+    medal: "✨",
+    label: "5º em diante",
+    coins: 150,
+    egg: "Ovo Comum",
+    item: "Agua Fresca",
+    highlight: "border-cyan-500/20 bg-cyan-500/5",
+    coinColor: "text-cyan-300",
+  },
 ];
 
 // ── Categorias de modificadores visíveis ──────────────────────────────────────
@@ -126,7 +136,12 @@ export function EventPreview({ modifiers }: Props) {
         </button>
 
         {openSection === "rewards" && (
-          <div className="border-t border-border p-4 grid gap-3 sm:grid-cols-2">
+          <div className="border-t border-border p-4 space-y-3">
+            <p className="text-xs leading-relaxed text-slate-400">
+              Premios sao entregues por jogador da dupla. As quatro primeiras colocacoes recebem premios progressivos;
+              todas as duplas abaixo do 4º lugar recebem a mesma recompensa de participacao.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
             {REWARDS.map((r) => (
               <div key={r.position} className={`rounded-xl border p-3 ${r.highlight}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -141,6 +156,7 @@ export function EventPreview({ modifiers }: Props) {
                 <p className="mt-2 text-[10px] text-slate-500">por jogador da dupla</p>
               </div>
             ))}
+            </div>
           </div>
         )}
       </div>
@@ -218,9 +234,11 @@ export function EventPreview({ modifiers }: Props) {
         <div className="flex items-start gap-2">
           <Swords size={14} className="text-slate-500 mt-0.5 shrink-0" />
           <div className="text-xs text-slate-400 space-y-1">
+            <p><span className="font-semibold text-slate-300">Arena única:</span> todas as duplas prontas entram na mesma Arena Sincronizada. Não existe mais limite fixo de 4 duplas por sala.</p>
+            <p><span className="font-semibold text-slate-300">Número ímpar:</span> se uma rodada ficar com uma dupla sem adversário, ela enfrenta o Bot Sincronizado em vez de receber folga.</p>
             <p><span className="font-semibold text-slate-300">Regra do desconhecimento:</span> você escolhe 3 mascotes <em>antes</em> do modificador ser revelado. Estratégia e sorte andam juntas.</p>
-            <p><span className="font-semibold text-slate-300">Uso único:</span> cada mascote só pode ser usado 1 vez por evento (exceto no desempate).</p>
-            <p><span className="font-semibold text-slate-300">Desempate:</span> se duas duplas empatarem em 1º, jogam uma rodada extra podendo reutilizar qualquer um dos 9.</p>
+            <p><span className="font-semibold text-slate-300">Uso único:</span> cada mascote só pode ser usado 1 vez por evento, exceto em desempate.</p>
+            <p><span className="font-semibold text-slate-300">Desempate:</span> se duplas empatarem em 1º, elas jogam uma rodada extra podendo reutilizar qualquer um dos 9 mascotes.</p>
           </div>
         </div>
       </div>
