@@ -650,29 +650,28 @@ const PSEUDO_LEGENDARY_LINE_IDS = new Set([
   996, 997, 998,
 ]);
 
-export function getMascotExpProgressionMultiplier(pokemonId?: number | null): number {
+export function getMascotStatusGrowthMultiplier(pokemonId?: number | null): number {
   if (!pokemonId) return 1;
   if (LEGENDARY_POOL.includes(pokemonId)) return 1.3;
   if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return 1.1;
   return 1;
 }
 
-export function expForLevel(level: number, pokemonId?: number | null): number {
+export function expForLevel(level: number): number {
   if (level <= 1) return 0;
-  const base = 100 + (level - 1) * 20;
-  return Math.ceil(base * getMascotExpProgressionMultiplier(pokemonId));
+  return 100 + (level - 1) * 20;
 }
 
 // EXP total acumulada até o nível N
-export function totalExpForLevel(level: number, pokemonId?: number | null): number {
+export function totalExpForLevel(level: number): number {
   let total = 0;
-  for (let l = 2; l <= level; l++) total += expForLevel(l, pokemonId);
+  for (let l = 2; l <= level; l++) total += expForLevel(l);
   return total;
 }
 
 // EXP necessária para ir do nível atual para o próximo
-export function expToNextLevel(currentLevel: number, pokemonId?: number | null): number {
-  return expForLevel(currentLevel + 1, pokemonId);
+export function expToNextLevel(currentLevel: number): number {
+  return expForLevel(currentLevel + 1);
 }
 
 // ── Status derivados (calculados a partir dos dados, sem campo extra no BD) ───

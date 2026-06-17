@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus } from "lucide-react";
-import { recycleMascotAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
+import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
 import type { MascotRarity } from "../rarity";
 
 type LabMascot = {
@@ -132,20 +132,17 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
     const ids = filledSlots.map((m) => m.id);
     if (ids.length === 0) return;
     start(async () => {
-      let earned = 0;
-      let failed = 0;
-      for (const id of ids) {
-        const res = await recycleMascotAction(id);
-        if (res.ok) earned += res.dust;
-        else failed++;
+      const res = await recycleMascotsAction(ids);
+      if (!res.ok) {
+        showFeedback(false, res.error);
+        return;
       }
-      setDust((d) => d + earned);
-      const recycledIds = new Set(ids);
+      setDust((d) => d + res.dust);
+      const recycledIds = new Set(res.recycledIds);
       setMascots((prev) => prev.filter((m) => !recycledIds.has(m.id)));
       setSlots(Array(MAX_SLOTS).fill(null));
       setConfirming(false);
-      if (failed > 0) showFeedback(false, `${failed} mascote(s) não puderam ser reciclados.`);
-      else showFeedback(true, `+${earned} Pó de Criação obtido!`);
+      showFeedback(true, `+${res.dust} Po de Criacao obtido!`);
     });
   };
 

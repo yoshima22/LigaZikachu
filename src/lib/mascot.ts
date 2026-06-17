@@ -8,9 +8,10 @@ import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { getShopItemMeta } from "@/lib/shop-cache";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
-  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expForLevel, expToNextLevel, EXP_REWARDS,
+  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
+  getMascotStatusGrowthMultiplier,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
@@ -262,8 +263,8 @@ function levelStatBonuses(
     levelsGained * (mascot.personality === "LOYAL" ? 2 : 1) +
     levelsGained +
     levelsGained * (mascot.personality === "DRAMATIC" ? 0 : 1);
-  const legendaryBonus = LEGENDARY_POOL.includes(mascot.pokemonId) ? 1.3 : 1.0;
-  const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER * legendaryBonus)) : 0;
+  const growthMultiplier = getMascotStatusGrowthMultiplier(mascot.pokemonId);
+  const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER * growthMultiplier)) : 0;
 
   const weights: Record<MascotStatKey, number> = {
     statForce: mascot.statForce * 3,
@@ -361,8 +362,8 @@ export async function addExp(
   let newPokemonId: number | undefined;
 
   // Verifica level ups em cadeia (cap: nível 100)
-  while (level < 100 && exp >= expToNextLevel(level, pokemonId)) {
-    exp -= expToNextLevel(level, pokemonId);
+  while (level < 100 && exp >= expToNextLevel(level)) {
+    exp -= expToNextLevel(level);
     level++;
     levelsGained++;
     if (level >= 100) { exp = 0; break; }

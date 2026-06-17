@@ -119,10 +119,10 @@ export async function recycleMascotAction(mascotId: string) {
     select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
-  if (mascot.isFavorite) return { ok: false as const, error: "Não é possível reciclar mascotes favoritos." };
+  if (mascot.isFavorite) return { ok: false as const, error: "Nao e possivel reciclar mascotes favoritos." };
   if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes de reciclar." };
   if (mascot.arenaState && mascot.arenaState !== "FREE") {
-    return { ok: false as const, error: "Mascote está em batalha ou descansando." };
+    return { ok: false as const, error: "Mascote esta em batalha ou descansando." };
   }
 
   const allMascots = await prisma.mascot.findMany({
@@ -144,6 +144,63 @@ export async function recycleMascotAction(mascotId: string) {
   ]);
 
   return { ok: true as const, dust };
+}
+
+// ── Batch recycle mascot ──────────────────────────────────────────────────────
+export async function recycleMascotsAction(mascotIds: string[]) {
+  const me = await requirePlayer();
+  const uniqueIds = [...new Set(mascotIds.filter(Boolean))].slice(0, 6);
+
+  if (uniqueIds.length === 0) {
+    return { ok: false as const, error: "Selecione ao menos um mascote." };
+  }
+
+  const mascots = await prisma.mascot.findMany({
+    where: { id: { in: uniqueIds }, playerId: me.id },
+    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true },
+  });
+
+  if (mascots.length !== uniqueIds.length) {
+    return { ok: false as const, error: "Algum mascote selecionado nao foi encontrado." };
+  }
+
+  const blocked = mascots.find((m) =>
+    m.isFavorite ||
+    m.bazarListed ||
+    (m.arenaState && m.arenaState !== "FREE")
+  );
+  if (blocked?.isFavorite) return { ok: false as const, error: "Nao e possivel reciclar mascotes favoritos." };
+  if (blocked?.bazarListed) return { ok: false as const, error: "Retire mascotes do Bazar antes de reciclar." };
+  if (blocked) return { ok: false as const, error: "Mascote esta em batalha ou descansando." };
+
+  const selectedCountMap = new Map<number, number>();
+  for (const mascot of mascots) {
+    selectedCountMap.set(mascot.pokemonId, (selectedCountMap.get(mascot.pokemonId) ?? 0) + 1);
+  }
+
+  const breakdown = mascots.map((mascot) => {
+    const baseDust = getMascotBaseDust(mascot.pokemonId);
+    const copies = selectedCountMap.get(mascot.pokemonId) ?? 1;
+    const extras = copies - 1;
+    const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
+    return {
+      mascotId: mascot.id,
+      pokemonId: mascot.pokemonId,
+      dust: Math.ceil(baseDust * multiplier),
+    };
+  });
+
+  const dust = breakdown.reduce((sum, item) => sum + item.dust, 0);
+
+  await prisma.$transaction([
+    prisma.mascot.deleteMany({ where: { id: { in: uniqueIds }, playerId: me.id } }),
+    prisma.player.update({
+      where: { id: me.id },
+      data: { creationDust: { increment: dust } },
+    }),
+  ]);
+
+  return { ok: true as const, dust, recycledIds: uniqueIds, breakdown };
 }
 
 // ── Trade for ZikaCoins ───────────────────────────────────────────────────────
