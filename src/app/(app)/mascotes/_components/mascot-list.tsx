@@ -77,6 +77,7 @@ const EXPEDITION_MODE_LABELS: Record<string, string> = {
   TRAINING: "Treinamento",
   STANDARD: "Padrao",
   ITEMS: "Itens",
+  VACATION: "Férias",
 };
 
 

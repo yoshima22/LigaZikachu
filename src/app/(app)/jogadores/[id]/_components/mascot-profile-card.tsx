@@ -146,7 +146,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
     const data = (expedition?.rewardJson ?? {}) as Record<string, unknown>;
     return typeof data.mode === "string" ? data.mode : "STANDARD";
   })();
-  const expeditionModeLabel = expeditionMode === "TRAINING" ? "Treinamento" : expeditionMode === "ITEMS" ? "Itens" : "Padrao";
+  const expeditionModeLabel = expeditionMode === "TRAINING" ? "Treinamento" : expeditionMode === "ITEMS" ? "Itens" : expeditionMode === "VACATION" ? "Férias" : "Padrao";
 
   const runAdminAction = (action: () => Promise<{ error?: string }>, message: string) => {
     startTransition(async () => {

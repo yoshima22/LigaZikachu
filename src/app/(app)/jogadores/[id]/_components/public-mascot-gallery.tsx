@@ -73,6 +73,7 @@ function expeditionMode(expedition: NonNullable<PublicMascot["expeditions"]>[num
 function modeLabel(mode: string) {
   if (mode === "TRAINING") return "Treinamento";
   if (mode === "ITEMS") return "Itens";
+  if (mode === "VACATION") return "Férias";
   return "Padrao";
 }
 

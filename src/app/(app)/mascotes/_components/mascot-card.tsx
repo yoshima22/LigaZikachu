@@ -257,7 +257,7 @@ const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
   XP_SHARE:        { emoji: "📡",   label: "Compartilhador de XP" },
 };
 
-export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
+export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; expBonus?: number; gotEgg?: boolean; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
   if (reward.type === "TRAINING") {
     const exp = reward.exp ?? 0;
     const dur = reward.durationLabel ?? "";
@@ -265,6 +265,14 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
       emoji: "🏋️",
       title: `Treinamento de ${dur} concluído!`,
       description: `+${exp.toLocaleString("pt-BR")} EXP recebido. Nenhum item — isso é esperado no modo Treinamento.`,
+    };
+  }
+  if (reward.type === "VACATION") {
+    const exp = reward.expBonus ?? 0;
+    return {
+      emoji: "🏖️",
+      title: "Férias concluídas!",
+      description: `Seu mascote voltou revigorado com felicidade máxima e +${exp.toLocaleString("pt-BR")} EXP.${reward.gotEgg ? " Também trouxe um Ovo Comum." : ""}`,
     };
   }
   if (reward.type === "EGG") {
@@ -834,7 +842,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <span>
                 {(() => {
                   const mode = expedition.mode;
-                  const modeLabel = mode === "TRAINING" ? "🏋️ Treinamento" : mode === "ITEMS" ? "📦 Itens" : "🗺 Padrão";
+                  const modeLabel = mode === "TRAINING" ? "🏋️ Treinamento" : mode === "ITEMS" ? "📦 Itens" : mode === "VACATION" ? "🏖️ Férias" : "🗺 Padrão";
                   return <><strong className="text-blue-300">{modeLabel}</strong> — falta </>;
                 })()}
                 <ExpeditionCountdown finishAt={new Date(expedition.finishAt)} />

@@ -768,6 +768,7 @@ export type ExpeditionReward =
   | { type: "COINS";     amount: number }
   | { type: "BUFF_ITEM"; shopItemType: string }
   | { type: "TRAINING";  exp: number; durationLabel: string }  // retorna só EXP, nunca itens
+  | { type: "VACATION";  expBonus: number; gotEgg: boolean }
   | { type: "NOTHING" };
 
 // Pool de itens especiais que podem ser encontrados em expedições
@@ -960,6 +961,8 @@ function describeExpeditionReward(reward: ExpeditionReward) {
         }
       };
     }
+    case "VACATION":
+      return null;
     case "NOTHING":
       return null;
   }
@@ -1089,6 +1092,18 @@ export async function claimExpedition(
   const durationKey: ExpeditionDuration = (stored.durationKey as ExpeditionDuration) ?? "1h";
   const mode: ExpeditionMode = (stored.mode as ExpeditionMode) ?? "STANDARD";
   const dur = EXPEDITION_DURATIONS[durationKey];
+
+  if (mode === "VACATION") {
+    const vacationReward = await claimVacation(playerId, expeditionId);
+    return {
+      mascotId: expedition.mascotId,
+      reward: {
+        type: "VACATION",
+        expBonus: vacationReward.expBonus,
+        gotEgg: vacationReward.gotEgg,
+      },
+    };
+  }
 
   // Busca aliados ANTES de rolar recompensa (influenciam as chances)
   const friends = await prisma.mascotRelation.findMany({
@@ -2342,7 +2357,7 @@ export async function claimVacation(playerId: string, expeditionId: string) {
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
       where: { id: expeditionId },
-      data: { status: "CLAIMED", rewardJson: { expBonus, gotEgg } }
+      data: { status: "CLAIMED", rewardJson: { type: "VACATION", expBonus, gotEgg } }
     });
     await tx.mascot.update({
       where: { id: expedition.mascotId },
@@ -2366,7 +2381,7 @@ export async function claimVacation(playerId: string, expeditionId: string) {
     });
   });
 
-  await addExp(expedition.mascotId, expBonus).catch(() => {});
+  await addExp(expedition.mascotId, expBonus, { ignoreBenchPenalty: true });
   return { expBonus, gotEgg };
 }
 
