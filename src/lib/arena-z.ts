@@ -2551,6 +2551,37 @@ export async function adminSetMascotArenaState(mascotId: string, state: "FREE" |
   });
 }
 
+export async function cleanupExpiredArenaResting(targetPlayerId?: string): Promise<{
+  releasedResting: number;
+  clearedCooldowns: number;
+}> {
+  const now = new Date();
+  const wherePlayer = targetPlayerId ? { playerId: targetPlayerId } : {};
+
+  const released = await prisma.mascot.updateMany({
+    where: {
+      ...wherePlayer,
+      arenaState: "RESTING",
+      restingUntil: { lte: now },
+    },
+    data: { arenaState: "FREE", restingUntil: null, injuredAt: null },
+  });
+
+  const cooldowns = await prisma.mascot.updateMany({
+    where: {
+      ...wherePlayer,
+      arenaState: "FREE",
+      restingUntil: { lte: now },
+    },
+    data: { restingUntil: null },
+  });
+
+  return {
+    releasedResting: released.count,
+    clearedCooldowns: cooldowns.count,
+  };
+}
+
 // ── Reparo de estado da Arena (admin) ─────────────────────────────────────────
 /**
  * Corrige inconsistências de estado na Arena Z:

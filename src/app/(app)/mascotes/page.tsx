@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -13,7 +13,7 @@ import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
-import { RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
+import { cleanupExpiredArenaResting, RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
 import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 
 export const dynamic = "force-dynamic";
@@ -218,7 +218,12 @@ export default async function MascotesPage() {
   });
   if (!player) return notFound();
 
-  // Limpa repouso expirado — fire-and-forget, fora do cache pois é uma mutação
+  const cleanup = await cleanupExpiredArenaResting(player.id).catch(() => null);
+  if (cleanup && (cleanup.releasedResting > 0 || cleanup.clearedCooldowns > 0)) {
+    revalidateTag(`player-mascots-${player.id}`);
+  }
+
+  // Dados de mascote são cacheados por jogador; a limpeza acima invalida quando muda estado.
   const pageData = await getCachedMascotPageData(player.id).catch(async (error) => {
     console.error("[Mascotes] Cache/load falhou; tentando carga direta.", error);
     return retryMascotLoad(() => fetchMascotPageData(player.id), 2);

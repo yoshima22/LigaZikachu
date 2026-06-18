@@ -11,7 +11,7 @@ import {
   applyLuckyEgg, applyWeaknessPolicy, applyPicnicBasket, applyVacationTicket,
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
 } from "@/lib/mascot";
-import { healMascotSus } from "@/lib/arena-z";
+import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import type { Prisma } from "@prisma/client";
@@ -770,6 +770,7 @@ export async function getBankMascotsPageAction(input?: {
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
+    await cleanupExpiredArenaResting(player.id).catch(() => null);
 
     const page = Math.max(1, Math.min(999, Math.floor(input?.page ?? 1)));
     const search = (input?.search ?? "").trim();
@@ -895,6 +896,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
+    await cleanupExpiredArenaResting(player.id).catch(() => null);
 
     const m = await prisma.mascot.findUnique({
       where: { id: mascotId },

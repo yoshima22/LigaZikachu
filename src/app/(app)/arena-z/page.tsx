@@ -11,7 +11,7 @@ import {
   RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog,
   getTeamTimeMultiplier, applyMultiplierToVault,
   getArenaDebuffPct, getRoomsData, getTopArenaPlayers,
-  getCachedDbReady, getCachedOpponentTeams,
+  getCachedDbReady, getCachedOpponentTeams, cleanupExpiredArenaResting,
 } from "@/lib/arena-z";
 import {
   AdminMascotStateButton, BotBattleButton, DeleteTeamButton,
@@ -113,6 +113,8 @@ export default async function ArenaZPage({
     select: { id: true, displayName: true },
   });
   if (!player) redirect("/dashboard");
+
+  await cleanupExpiredArenaResting(player.id).catch(() => null);
 
   // Colunas novas (adicionadas na reformulação Jun/2026) — lidas separadamente para não quebrar se migration ainda não rodou
   const playerArenaData = await prisma.player.findUnique({
