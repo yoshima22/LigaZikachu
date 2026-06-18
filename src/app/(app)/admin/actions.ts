@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { sendDeckReminderEmail } from "@/lib/email";
 import { creditCoins } from "@/lib/zikacoins";
 import { GLOBAL_NOTICE_KEY, revalidateGlobalNotice } from "@/lib/app-settings";
+import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { revalidateTag } from "next/cache";
 import { EggType, FoodType, Prisma } from "@prisma/client";
 import {
@@ -715,6 +716,7 @@ export async function transferMascotAction(
           restingUntil: null,
         },
       });
+      await registerPokemonDiscovery({ playerId: targetPlayerId, pokemonId: mascot.pokemonId, source: "admin-transfer" }, tx);
 
       await tx.mascotEvent.create({
         data: { mascotId, emoji: "🔀", description: `Transferido para ${target.displayName} pelo admin.` },
@@ -807,6 +809,7 @@ export async function createMascotForPlayerAction(opts: {
         statVitality:opts.statVitality + extraV,
       },
     });
+    await registerPokemonDiscovery({ playerId: opts.playerId, pokemonId: opts.pokemonId, source: "admin-create" });
 
     await prisma.mascotEvent.create({
       data: { mascotId: mascot.id, emoji: "🎁", description: "Mascote adicionado pelo admin." }

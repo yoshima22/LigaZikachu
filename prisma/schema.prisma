@@ -244,6 +244,7 @@ model Player {
   zikalootPicks           ZikaLootPick[]
   savedDecks              SavedDeck[]
   mascots                 Mascot[]
+  pokemonDex              PlayerPokemonDex[]
   ownedMascotSocialEvents MascotSocialEvent[]  @relation("MascotSocialEventOwner")
   resolvedMascotSocialEvents MascotSocialEvent[] @relation("MascotSocialEventResolver")
   mascotSocialDecisionLogs MascotSocialDecisionLog[]
@@ -1813,6 +1814,20 @@ model Mascot {
   syncLineups      SyncEventLineup[] @relation("SyncEventLineupMascot")
   @@index([playerId])
   @@map("mascots")
+}
+
+model PlayerPokemonDex {
+  id              String   @id @default(cuid())
+  playerId        String
+  pokemonId       Int
+  firstObtainedAt DateTime @default(now())
+  source          String?
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, pokemonId])
+  @@index([playerId])
+  @@index([pokemonId])
+  @@map("player_pokemon_dex")
 }
 
 enum MascotRelationType {

@@ -93,7 +93,7 @@ export default async function AlbumPage({
     wallet,
     packs,
     allOwnedStickers,
-    mascotRows,
+    dexRows,
     otherPlayers,
     genStats,
   ] = await Promise.all([
@@ -111,9 +111,8 @@ export default async function AlbumPage({
         })
       : [],
     player
-      ? prisma.mascot.findMany({
+      ? prisma.playerPokemonDex.findMany({
           where: { playerId: player.id },
-          distinct: ["pokemonId"],
           select: { pokemonId: true },
         })
       : [],
@@ -138,7 +137,7 @@ export default async function AlbumPage({
       { cardId: sticker.cardId, quantity: sticker.quantity, isFavorite: sticker.isFavorite },
     ]),
   );
-  const mascotPokemonIds = new Set(mascotRows.map((row) => row.pokemonId));
+  const discoveredPokemonIds = new Set(dexRows.map((row) => row.pokemonId));
 
   const cardWhere: Prisma.PokemonCardWhereInput = {
     active: true,
@@ -146,7 +145,7 @@ export default async function AlbumPage({
     ...(selectedRarity ? { rarity: selectedRarity as never } : {}),
     ...(selectedType ? { types: { has: selectedType } } : {}),
     ...(onlyOwned && player ? { stickers: { some: { playerId: player.id } } } : {}),
-    ...(onlyMascot && player ? { nationalId: { in: [...mascotPokemonIds] } } : {}),
+    ...(onlyMascot && player ? { nationalId: { in: [...discoveredPokemonIds] } } : {}),
     ...(searchText
       ? {
           OR: [
@@ -176,18 +175,18 @@ export default async function AlbumPage({
       },
     }),
     prisma.pokemonCard.count({ where: cardWhere }),
-    mascotPokemonIds.size > 0
+    discoveredPokemonIds.size > 0
       ? prisma.pokemonCard.findMany({
-          where: { active: true, nationalId: { in: [...mascotPokemonIds] } },
+          where: { active: true, nationalId: { in: [...discoveredPokemonIds] } },
           select: { generation: true, nationalId: true },
         })
       : [],
   ]);
 
-  const mascotNationalIds = new Set(mascotCards.map((card) => card.nationalId));
+  const discoveredNationalIds = new Set(mascotCards.map((card) => card.nationalId));
   const totalCards = genStats.reduce((sum, generation) => sum + generation._count.id, 0);
   const totalOwned = ownedMap.size;
-  const totalMascotSpecies = mascotNationalIds.size;
+  const totalMascotSpecies = discoveredNationalIds.size;
   const totalPages = Math.max(1, Math.ceil(totalCardsInFilter / PAGE_SIZE));
 
   const ownedPerGen: Record<number, number> = {};
@@ -398,7 +397,7 @@ export default async function AlbumPage({
               rarity: card.rarity,
               generation: card.generation,
               types: card.types,
-              hasMascot: mascotNationalIds.has(card.nationalId),
+              hasMascot: discoveredNationalIds.has(card.nationalId),
             }))}
             ownedMap={Object.fromEntries(ownedMap)}
             generations={cards.map((card) => card.generation)}

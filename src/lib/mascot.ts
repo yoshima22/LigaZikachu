@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { getShopItemMeta } from "@/lib/shop-cache";
+import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
   EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
@@ -120,6 +121,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
         statVitality: randomInt(statMin, statMax),
       }
     });
+    await registerPokemonDiscovery({ playerId, pokemonId, source: `egg:${incubator.egg.type}` }, tx);
     // Marca incubadora como chocada
     await tx.mascotIncubator.update({ where: { playerId }, data: { hatched: true } });
     // Remove ovo do inventário e incubadora

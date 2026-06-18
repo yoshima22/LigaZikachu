@@ -8,6 +8,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
+import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -751,6 +752,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
               where: { id: item.mascotId },
               data: { playerId: player.id, bazarListed: false, isEquipped: false },
             });
+            await registerPokemonDiscovery({ playerId: player.id, pokemonId: mascot.pokemonId, source: "bazar-proposal" }, tx);
           } else if (item.type === "FOOD" || item.type === "SWEET") {
             const food = await tx.mascotFoodItem.findUnique({
               where: { playerId_type: { playerId: proposal.proposerId, type: item.type as "FOOD" | "SWEET" } }
@@ -1175,6 +1177,10 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
       where: { id: mascotId },
       data: { playerId: toBuyerId, bazarListed: false, isEquipped: false },
     });
+    const pokemonId = Number(payload.pokemonId);
+    if (Number.isFinite(pokemonId)) {
+      await registerPokemonDiscovery({ playerId: toBuyerId, pokemonId, source: "bazar-purchase" }, tx);
+    }
   } else if (listing.category === "ITEM") {
     const itemType = payload.itemType as string;
     const qty = (payload.quantity as number) ?? 1;
