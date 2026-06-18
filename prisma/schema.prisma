@@ -1810,6 +1810,7 @@ model Mascot {
   socialDecisionLogsAsA MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
   socialDecisionLogsAsB MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
   events           MascotEvent[]
+  progressMilestones MascotProgressMilestone[]
   buffs            MascotBuff[]
   syncLineups      SyncEventLineup[] @relation("SyncEventLineupMascot")
   @@index([playerId])
@@ -1948,6 +1949,21 @@ model MascotEvent {
   mascot      Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
   @@index([mascotId, createdAt])
   @@map("mascot_events")
+}
+
+model MascotProgressMilestone {
+  id        String   @id @default(cuid())
+  mascotId String
+  key       String
+  label     String
+  level     Int
+  statsJson Json
+  createdAt DateTime @default(now())
+  mascot    Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
+  @@unique([mascotId, key])
+  @@index([mascotId])
+  @@map("mascot_progress_milestones")
 }
 
 model MascotExpedition {

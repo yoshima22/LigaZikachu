@@ -12,7 +12,7 @@ import {
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
-  getMascotStatusGrowthMultiplier,
+  getMascotStatusGrowthMultiplier, getMascotProgressMilestones,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
@@ -288,6 +288,23 @@ function levelStatBonuses(
   return distributeStatPoints(pointsToAdd, weights);
 }
 
+function addStatRecords(
+  base: Record<MascotStatKey, number>,
+  add: Record<MascotStatKey, number>,
+): Record<MascotStatKey, number> {
+  return {
+    statForce: base.statForce + add.statForce,
+    statAgility: base.statAgility + add.statAgility,
+    statCharisma: base.statCharisma + add.statCharisma,
+    statInstinct: base.statInstinct + add.statInstinct,
+    statVitality: base.statVitality + add.statVitality,
+  };
+}
+
+function emptyStatRecord(): Record<MascotStatKey, number> {
+  return { statForce: 0, statAgility: 0, statCharisma: 0, statInstinct: 0, statVitality: 0 };
+}
+
 /**
  * Simula o crescimento procedural de stats de nível 1 até `targetLevel`.
  * Usa a mesma lógica de level-up real, começando de stats base aleatórios
@@ -400,10 +417,78 @@ export async function addExp(
       )
     : {};
 
+  const baseAfterLevelBonuses: Record<MascotStatKey, number> = {
+    statForce: typeof statUpdates.statForce === "number" ? statUpdates.statForce : mascot.statForce,
+    statAgility: typeof statUpdates.statAgility === "number" ? statUpdates.statAgility : mascot.statAgility,
+    statCharisma: typeof statUpdates.statCharisma === "number" ? statUpdates.statCharisma : mascot.statCharisma,
+    statInstinct: typeof statUpdates.statInstinct === "number" ? statUpdates.statInstinct : mascot.statInstinct,
+    statVitality: typeof statUpdates.statVitality === "number" ? statUpdates.statVitality : mascot.statVitality,
+  };
+
+  const candidateMilestones = leveled ? getMascotProgressMilestones(pokemonId, level, evolved) : [];
+  const existingMilestoneKeys = candidateMilestones.length > 0
+    ? new Set((await prisma.mascotProgressMilestone.findMany({
+        where: { mascotId, key: { in: candidateMilestones.map((m) => m.key) } },
+        select: { key: true },
+      })).map((m) => m.key))
+    : new Set<string>();
+  const newMilestones = candidateMilestones.filter((m) => !existingMilestoneKeys.has(m.key));
+  let milestoneBonuses = emptyStatRecord();
+  const milestoneRows: {
+    mascotId: string;
+    key: string;
+    label: string;
+    level: number;
+    statsJson: Record<MascotStatKey, number>;
+  }[] = [];
+  for (const milestone of newMilestones) {
+    const currentStats = addStatRecords(baseAfterLevelBonuses, milestoneBonuses);
+    const weights: Record<MascotStatKey, number> = {
+      statForce: currentStats.statForce * 3,
+      statAgility: currentStats.statAgility * 3,
+      statCharisma: currentStats.statCharisma * 3,
+      statInstinct: currentStats.statInstinct * 3,
+      statVitality: currentStats.statVitality * 3,
+    };
+    const points = distributeStatPoints(milestone.points, weights);
+    milestoneBonuses = addStatRecords(milestoneBonuses, points);
+    milestoneRows.push({
+      mascotId,
+      key: milestone.key,
+      label: milestone.label,
+      level: milestone.level,
+      statsJson: points,
+    });
+  }
+
+  const finalStatUpdates = newMilestones.length > 0
+    ? {
+        statForce: baseAfterLevelBonuses.statForce + milestoneBonuses.statForce,
+        statAgility: baseAfterLevelBonuses.statAgility + milestoneBonuses.statAgility,
+        statCharisma: baseAfterLevelBonuses.statCharisma + milestoneBonuses.statCharisma,
+        statInstinct: baseAfterLevelBonuses.statInstinct + milestoneBonuses.statInstinct,
+        statVitality: baseAfterLevelBonuses.statVitality + milestoneBonuses.statVitality,
+      }
+    : statUpdates;
+
   await prisma.mascot.update({
     where: { id: mascotId },
-    data: { level, exp, pokemonId, ...statUpdates, ...nicknameUpdate }
+    data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate }
   });
+
+  if (newMilestones.length > 0) {
+    await prisma.mascotProgressMilestone.createMany({
+      data: milestoneRows,
+      skipDuplicates: true,
+    });
+    await prisma.mascotEvent.create({
+      data: {
+        mascotId,
+        emoji: "🌟",
+        description: `Marco de crescimento: ${newMilestones.map((m) => m.label).join(", ")}. Atributos bonus aplicados.`,
+      },
+    }).catch(() => null);
+  }
 
   // Auto-kick da arena se o nível ultrapassou o limite da sala
   if (leveled) {

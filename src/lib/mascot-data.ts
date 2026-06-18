@@ -563,6 +563,16 @@ export const EVOLUTION_MAP = new Map<number, Evolution>(
   EVOLUTIONS.map(e => [e.from, e])
 );
 
+export const EVOLUTION_REVERSE_MAP = new Map<number, Evolution[]>();
+for (const evolution of EVOLUTIONS) {
+  const targets = evolution.toOptions?.length ? evolution.toOptions : [evolution.to];
+  for (const target of targets) {
+    const list = EVOLUTION_REVERSE_MAP.get(target) ?? [];
+    list.push(evolution);
+    EVOLUTION_REVERSE_MAP.set(target, list);
+  }
+}
+
 // IDs de formas evoluídas via level-up (mapeadas em EVOLUTIONS)
 export const EVOLVED_IDS = new Set(EVOLUTIONS.map(e => e.to));
 
@@ -655,6 +665,116 @@ export function getMascotStatusGrowthMultiplier(pokemonId?: number | null): numb
   if (LEGENDARY_POOL.includes(pokemonId)) return 1.3;
   if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return 1.1;
   return 1;
+}
+
+export type MascotProgressMilestoneRule = {
+  key: string;
+  label: string;
+  level: number;
+  points: number;
+  kind: "EVOLUTION" | "MATURITY";
+};
+
+export const MASCOT_PROGRESS_MILESTONE_TABLE = [
+  { line: "Sem evolucao", trigger: "Nv.16", bonus: "+3 atributos", notes: "Primeiro marco de maturidade." },
+  { line: "Sem evolucao", trigger: "Nv.32", bonus: "+3 atributos", notes: "Segundo marco de maturidade." },
+  { line: "Sem evolucao", trigger: "Nv.50", bonus: "+3 atributos", notes: "Maturidade plena." },
+  { line: "Linha com 1 evolucao", trigger: "Ao evoluir", bonus: "+4 atributos", notes: "Momento de evolucao mais forte." },
+  { line: "Linha com 1 evolucao", trigger: "Nv.50", bonus: "+3 atributos", notes: "Compensacao de maturidade final." },
+  { line: "Linha com 2 evolucoes", trigger: "Cada evolucao", bonus: "+3 atributos", notes: "Dois momentos de evolucao." },
+  { line: "Lendario/Mitico", trigger: "Sempre", bonus: "Crescimento x1.3", notes: "Nao acumula marcos de maturidade." },
+] as const;
+
+function getEvolutionDepth(pokemonId: number): number {
+  let current = pokemonId;
+  let depth = 0;
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const previous = EVOLUTION_REVERSE_MAP.get(current)?.[0];
+    if (!previous) break;
+    depth++;
+    current = previous.from;
+  }
+  return depth;
+}
+
+function getEvolutionRemaining(pokemonId: number): number {
+  let current = pokemonId;
+  let remaining = 0;
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const next = EVOLUTION_MAP.get(current);
+    if (!next) break;
+    remaining++;
+    current = next.toOptions?.[0] ?? next.to;
+  }
+  return remaining;
+}
+
+export function getEvolutionLineStageCount(pokemonId: number): number {
+  return 1 + getEvolutionDepth(pokemonId) + getEvolutionRemaining(pokemonId);
+}
+
+export function getMascotProgressMilestones(
+  pokemonId: number,
+  level: number,
+  evolvedThisGain = false,
+): MascotProgressMilestoneRule[] {
+  if (LEGENDARY_POOL.includes(pokemonId)) return [];
+
+  const depth = getEvolutionDepth(pokemonId);
+  const remaining = getEvolutionRemaining(pokemonId);
+  const stageCount = 1 + depth + remaining;
+  const rules: MascotProgressMilestoneRule[] = [];
+
+  if (stageCount <= 1) {
+    for (const milestoneLevel of [16, 32, 50]) {
+      if (level >= milestoneLevel) {
+        rules.push({
+          key: `maturity:${milestoneLevel}`,
+          label: `Maturidade Nv.${milestoneLevel}`,
+          level: milestoneLevel,
+          points: 3,
+          kind: "MATURITY",
+        });
+      }
+    }
+    return rules;
+  }
+
+  if (depth > 0) {
+    for (let stage = 1; stage <= depth; stage++) {
+      rules.push({
+        key: `evolution:${stage}`,
+        label: stageCount === 2 ? "Evolucao marcante" : `Evolucao ${stage}`,
+        level,
+        points: stageCount === 2 ? 4 : 3,
+        kind: "EVOLUTION",
+      });
+    }
+  } else if (evolvedThisGain) {
+    rules.push({
+      key: "evolution:1",
+      label: stageCount === 2 ? "Evolucao marcante" : "Evolucao 1",
+      level,
+      points: stageCount === 2 ? 4 : 3,
+      kind: "EVOLUTION",
+    });
+  }
+
+  if (stageCount === 2 && level >= 50) {
+    rules.push({
+      key: "maturity:50",
+      label: "Maturidade Nv.50",
+      level: 50,
+      points: 3,
+      kind: "MATURITY",
+    });
+  }
+
+  return rules;
 }
 
 export function expForLevel(level: number): number {
