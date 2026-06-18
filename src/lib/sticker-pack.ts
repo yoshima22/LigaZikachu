@@ -29,6 +29,10 @@ export const DUPLICATE_COINS: Record<PokemonRarity, number> = {
   LEGENDARY: 100
 };
 
+// Cada figurinha só converte as primeiras duplicatas em ZikaCoins.
+// Ex.: limite 3 => a 2ª, 3ª e 4ª cópias pagam; da 5ª em diante vira só repetição/troca.
+export const DUPLICATE_COIN_REFUND_LIMIT = 3;
+
 export function pickRarity(rarityBoost: boolean): PokemonRarity {
   const weights = rarityBoost ? RARITY_WEIGHTS_BOOST : RARITY_WEIGHTS_BASIC;
   const total = Object.values(weights).reduce((s, w) => s + w, 0);

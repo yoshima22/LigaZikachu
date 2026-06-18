@@ -8,7 +8,7 @@ import { ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onStickerPackOpened, onGiftSent } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
-import { pickRarity, pickCardFromPool, DUPLICATE_COINS, GENERATION_RANGES } from "@/lib/sticker-pack";
+import { pickRarity, pickCardFromPool, DUPLICATE_COINS, DUPLICATE_COIN_REFUND_LIMIT, GENERATION_RANGES } from "@/lib/sticker-pack";
 
 export type PackOpenResult = {
   cards: {
@@ -93,7 +93,10 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
       for (const card of drawn) {
         const alreadyHas = ownedMap.has(card.id);
         const isDuplicate = alreadyHas;
-        const coinsEarned = isDuplicate ? DUPLICATE_COINS[card.rarity as keyof typeof DUPLICATE_COINS] ?? 5 : 0;
+        const currentQuantity = ownedMap.get(card.id) ?? 0;
+        const paidDuplicateCount = Math.max(0, currentQuantity - 1);
+        const canConvertDuplicate = isDuplicate && paidDuplicateCount < DUPLICATE_COIN_REFUND_LIMIT;
+        const coinsEarned = canConvertDuplicate ? DUPLICATE_COINS[card.rarity as keyof typeof DUPLICATE_COINS] ?? 5 : 0;
 
         if (alreadyHas) {
           await tx.playerSticker.update({
@@ -109,6 +112,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
             });
             totalCoinsEarned += coinsEarned;
           }
+          ownedMap.set(card.id, currentQuantity + 1);
         } else {
           await tx.playerSticker.create({
             data: { playerId: player.id, cardId: card.id, quantity: 1 }

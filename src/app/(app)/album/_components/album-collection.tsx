@@ -34,6 +34,7 @@ interface Card {
   rarity: string;
   generation: number;
   types: string[];
+  hasMascot?: boolean;
 }
 
 interface OwnedInfo {
@@ -128,12 +129,18 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
         {cards.map((card) => {
           const owned = ownedMap[card.id];
           const isDuplicate = owned && owned.quantity > 1;
+          const discoveredByMascot = Boolean(card.hasMascot);
+          const visible = Boolean(owned || discoveredByMascot);
 
           return (
             <div
               key={card.id}
               className={`relative rounded-xl border bg-slate-950/60 overflow-hidden transition-all ${
-                owned ? `${RARITY_COLORS[card.rarity]} ${RARITY_GLOW[card.rarity]}` : "border-slate-800 opacity-40 grayscale"
+                owned
+                  ? `${RARITY_COLORS[card.rarity]} ${RARITY_GLOW[card.rarity]}`
+                  : discoveredByMascot
+                    ? "border-cyan-400/40 bg-cyan-950/10 opacity-85"
+                    : "border-slate-800 opacity-40 grayscale"
               }`}
             >
               {/* Número da Pokédex */}
@@ -142,7 +149,7 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
               </p>
 
               <div className="aspect-square relative">
-                {owned && card.imageUrl ? (
+                {visible && card.imageUrl ? (
                   <Image
                     src={card.imageUrl}
                     alt={card.displayName}
@@ -155,6 +162,12 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
                   <div className="flex h-full items-center justify-center">
                     <p className="font-pixel text-[10px] text-slate-600">?</p>
                   </div>
+                )}
+
+                {discoveredByMascot && !owned && (
+                  <span className="absolute right-1 top-1 rounded-full border border-cyan-400/40 bg-cyan-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase text-cyan-200">
+                    Mascote
+                  </span>
                 )}
 
                 {owned && (
@@ -181,8 +194,11 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
               </div>
               <div className="px-1 pb-1 text-center">
                 <p className="truncate text-[9px] text-slate-300 leading-tight">
-                  {owned ? capitalize(card.displayName) : "???"}
+                  {visible ? capitalize(card.displayName) : "???"}
                 </p>
+                {owned && discoveredByMascot && (
+                  <p className="mt-0.5 truncate text-[8px] text-cyan-300">Figurinha + mascote</p>
+                )}
               </div>
             </div>
           );
