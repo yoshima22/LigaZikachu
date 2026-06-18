@@ -6,6 +6,7 @@ import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
+import { toBrtDateString } from "@/lib/date-utils";
 import {
   combineSyncTicketHalves,
   createOpenSyncTeam,
@@ -434,41 +435,72 @@ export async function updateSyncChallengeConfigAction(formData: FormData): Promi
     tiebreakAt: parseBrtDateTime(formData.get("tiebreakAt")),
     rewardsAt: parseBrtDateTime(formData.get("rewardsAt")),
   };
-  await prisma.syncChallengeConfig.upsert({
-    where: { id: "singleton" },
-    update: {
-      ticketsEnabled: data.ticketsEnabled,
-      adminSimulationEnabled: data.adminSimulationEnabled,
-      ...schedule,
-      dropFromPve: data.dropFromPve,
-      dropFromPvp: data.dropFromPvp,
-      dropFromExpedition: data.dropFromExpedition,
-      dropFromCraftingDustRecycle: data.dropFromCraftingDustRecycle,
-      dropFromTcgMatch: data.dropFromTcgMatch,
-      pveDropChance: data.pveDropChance / 100,
-      pvpDropChance: data.pvpDropChance / 100,
-      expedition3hDropChance: data.expedition3hDropChance / 100,
-      expedition6hDropChance: data.expedition6hDropChance / 100,
-      recycleDropChance: data.recycleDropChance / 100,
-      tcgWinDropChance: data.tcgWinDropChance / 100,
-    },
-    create: {
-      id: "singleton",
-      ticketsEnabled: data.ticketsEnabled,
-      adminSimulationEnabled: data.adminSimulationEnabled,
-      ...schedule,
-      dropFromPve: data.dropFromPve,
-      dropFromPvp: data.dropFromPvp,
-      dropFromExpedition: data.dropFromExpedition,
-      dropFromCraftingDustRecycle: data.dropFromCraftingDustRecycle,
-      dropFromTcgMatch: data.dropFromTcgMatch,
-      pveDropChance: data.pveDropChance / 100,
-      pvpDropChance: data.pvpDropChance / 100,
-      expedition3hDropChance: data.expedition3hDropChance / 100,
-      expedition6hDropChance: data.expedition6hDropChance / 100,
-      recycleDropChance: data.recycleDropChance / 100,
-      tcgWinDropChance: data.tcgWinDropChance / 100,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.syncChallengeConfig.upsert({
+      where: { id: "singleton" },
+      update: {
+        ticketsEnabled: data.ticketsEnabled,
+        adminSimulationEnabled: data.adminSimulationEnabled,
+        ...schedule,
+        dropFromPve: data.dropFromPve,
+        dropFromPvp: data.dropFromPvp,
+        dropFromExpedition: data.dropFromExpedition,
+        dropFromCraftingDustRecycle: data.dropFromCraftingDustRecycle,
+        dropFromTcgMatch: data.dropFromTcgMatch,
+        pveDropChance: data.pveDropChance / 100,
+        pvpDropChance: data.pvpDropChance / 100,
+        expedition3hDropChance: data.expedition3hDropChance / 100,
+        expedition6hDropChance: data.expedition6hDropChance / 100,
+        recycleDropChance: data.recycleDropChance / 100,
+        tcgWinDropChance: data.tcgWinDropChance / 100,
+      },
+      create: {
+        id: "singleton",
+        ticketsEnabled: data.ticketsEnabled,
+        adminSimulationEnabled: data.adminSimulationEnabled,
+        ...schedule,
+        dropFromPve: data.dropFromPve,
+        dropFromPvp: data.dropFromPvp,
+        dropFromExpedition: data.dropFromExpedition,
+        dropFromCraftingDustRecycle: data.dropFromCraftingDustRecycle,
+        dropFromTcgMatch: data.dropFromTcgMatch,
+        pveDropChance: data.pveDropChance / 100,
+        pvpDropChance: data.pvpDropChance / 100,
+        expedition3hDropChance: data.expedition3hDropChance / 100,
+        expedition6hDropChance: data.expedition6hDropChance / 100,
+        recycleDropChance: data.recycleDropChance / 100,
+        tcgWinDropChance: data.tcgWinDropChance / 100,
+      },
+    });
+
+    const today = toBrtDateString(new Date());
+    const activeRooms = await tx.syncEventRoom.findMany({
+      where: {
+        date: { gte: today },
+        status: { notIn: ["FINISHED", "CANCELLED"] },
+      },
+      select: { id: true },
+    });
+    const roomIds = activeRooms.map((room) => room.id);
+    if (roomIds.length === 0) return;
+
+    const roundSchedule = [
+      { roundNumber: 1, scheduledAt: schedule.round1At },
+      { roundNumber: 2, scheduledAt: schedule.round2At },
+      { roundNumber: 3, scheduledAt: schedule.round3At },
+    ];
+
+    for (const round of roundSchedule) {
+      if (!round.scheduledAt) continue;
+      await tx.syncEventRound.updateMany({
+        where: {
+          roomId: { in: roomIds },
+          roundNumber: round.roundNumber,
+          status: { in: ["PENDING", "SELECTING"] },
+        },
+        data: { scheduledAt: round.scheduledAt },
+      });
+    }
   });
   revalidatePath("/desafio-sincronizado");
 }
