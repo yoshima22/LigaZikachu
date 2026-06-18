@@ -9,6 +9,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { runSyncBattle, loadModEffect, type ModEffect, type SyntheticSyncMascot } from "@/lib/sync-battle";
 import { getPokemonName } from "@/lib/mascot-data";
 import { toBrtDateString } from "@/lib/date-utils";
+import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
 
 // ── Pokémon generation helper ─────────────────────────────────────────────────
 
@@ -331,9 +332,10 @@ export async function adminStartRoundSelectionAction(roundId: string): Promise<{
       // Sorteia o modificador já na abertura da seleção para que os jogadores
       // possam ver as regras especiais ao escolher os mascotes
       const modifiers = await tx.syncEventModifier.findMany({ where: { active: true }, select: { id: true } });
-      const modifierId = modifiers.length > 0
+      const baseModifierId = modifiers.length > 0
         ? modifiers[Math.floor(Math.random() * modifiers.length)].id
         : null;
+      const modifierId = await materializeRoundModifier(tx, baseModifierId, roundId);
 
       await tx.syncEventRound.update({
         where: { id: roundId },

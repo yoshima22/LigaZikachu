@@ -263,6 +263,12 @@ const STAT_LABELS: Record<string, string> = {
 function parseModifierEffect(effectJson: unknown): string | null {
   if (!effectJson || typeof effectJson !== "object" || Array.isArray(effectJson)) return null;
   const ej = effectJson as Record<string, unknown>;
+  if (ej.type === "GENERATION_STAT_BOOST") {
+    const generation = typeof ej.selectedGeneration === "number" ? ej.selectedGeneration : null;
+    const value = typeof ej.value === "number" ? ej.value : 30;
+    if (generation) return `Geração ${generation} selecionada: +${value} em todos os status desses mascotes`;
+    return `Geração sorteada: +${value} em todos os status dos mascotes elegíveis`;
+  }
   if (ej.type === "STAT_BOOST" && typeof ej.value === "number") {
     const stat = typeof ej.targetStat === "string" ? STAT_LABELS[ej.targetStat] ?? ej.targetStat : null;
     const pct = Math.round(ej.value * 100);

@@ -255,7 +255,7 @@ const MODIFIERS: ModifierSeed[] = [
     key: "GERACAO_SORTEADA",
     name: "Geração Sorteada",
     description: "Apenas mascotes de uma geração sorteada recebem bônus de +30 em todos os status.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    effectJson: { type: "RANDOM_GENERATION_STAT_BOOST", value: 30 },
   },
 ];
 

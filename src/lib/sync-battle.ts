@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCombatRoleLabel, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getTypeAdvantageMultiplier, getPokemonName } from "@/lib/mascot-data";
+import { pokemonGeneration } from "@/lib/sync-round-modifiers";
 import type { SyncMatchResult } from "@prisma/client";
 
 interface TeamInput {
@@ -27,6 +28,7 @@ export type ModEffect =
   | { type: "EQUALIZE_EXTREMES"; topPenalty: number; bottomBonus: number }
   | { type: "HIGHEST_LEVEL_AGILITY_PENALTY"; value: number }
   | { type: "RANDOM_MASCOT_BOOST"; value: number }
+  | { type: "GENERATION_STAT_BOOST"; selectedGeneration: number; value: number }
   | { type: "STAT_SWAP_TOP"; stat: string; swapTo: string }
   | { type: "TOP_TOTAL_STATS_NERF"; value: number }
   | { type: "CHARISMA_WINS" }
@@ -273,6 +275,12 @@ function applyModToMascot(m: MascotRow, modEffect: ModEffect | null, modContext:
       const e = modEffect as { type: "RANDOM_MASCOT_BOOST"; value: number };
       const targetId = side === "A" ? modContext.randomBoostMascotIdA : modContext.randomBoostMascotIdB;
       if (m.id === targetId) return { ...m, ...allStats(e.value) };
+      return m;
+    }
+
+    case "GENERATION_STAT_BOOST": {
+      const e = modEffect as { type: "GENERATION_STAT_BOOST"; selectedGeneration: number; value: number };
+      if (pokemonGeneration(m.pokemonId) === e.selectedGeneration) return { ...m, ...allStats(e.value) };
       return m;
     }
 

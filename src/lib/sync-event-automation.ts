@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { toBrtDateString } from "@/lib/date-utils";
 import { getPokemonName } from "@/lib/mascot-data";
 import { loadModEffect, runSyncBattle, type ModEffect, type SyntheticSyncMascot } from "@/lib/sync-battle";
+import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
 
 const SELECTION_WINDOW_MS = 10 * 60 * 1000;
 
@@ -323,7 +324,8 @@ export async function openDueSyncRounds(now = new Date()) {
 
     await prisma.$transaction(async (tx) => {
       const modifiers = await tx.syncEventModifier.findMany({ where: { active: true }, select: { id: true } });
-      const modifierId = modifiers.length > 0 ? modifiers[Math.floor(Math.random() * modifiers.length)].id : null;
+      const baseModifierId = modifiers.length > 0 ? modifiers[Math.floor(Math.random() * modifiers.length)].id : null;
+      const modifierId = await materializeRoundModifier(tx, baseModifierId, round.id);
       await tx.syncEventRound.update({
         where: { id: round.id },
         data: { status: "SELECTING", modifierId },
