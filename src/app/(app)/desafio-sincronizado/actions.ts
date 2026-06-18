@@ -490,15 +490,23 @@ export async function updateSyncChallengeConfigAction(formData: FormData): Promi
       { roundNumber: 3, scheduledAt: schedule.round3At },
     ];
 
+    const now = Date.now();
     for (const round of roundSchedule) {
       if (!round.scheduledAt) continue;
+      const shouldWaitForNewStart = round.scheduledAt.getTime() > now;
       await tx.syncEventRound.updateMany({
         where: {
           roomId: { in: roomIds },
           roundNumber: round.roundNumber,
           status: { in: ["PENDING", "SELECTING"] },
         },
-        data: { scheduledAt: round.scheduledAt },
+        data: {
+          scheduledAt: round.scheduledAt,
+          status: shouldWaitForNewStart ? "PENDING" : undefined,
+          modifierId: shouldWaitForNewStart ? null : undefined,
+          selectionsClosedAt: shouldWaitForNewStart ? null : undefined,
+          executedAt: shouldWaitForNewStart ? null : undefined,
+        },
       });
     }
   });
