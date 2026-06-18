@@ -2184,6 +2184,7 @@ model BazarProposal {
   proposerId  String
 
   coinsOffer  Int                 @default(0)
+  coinsEscrowed Boolean           @default(false)
   // JSON: [{type:"ITEM", itemType, quantity, displayName}]
   itemsOffer  Json?
   message     String?

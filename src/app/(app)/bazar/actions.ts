@@ -455,10 +455,10 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
         where: { listingId, status: "PENDING" },
-        select: { proposerId: true, itemsOffer: true },
+        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
       });
       for (const proposal of pendingProposals) {
-        await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+        await _releaseProposalEscrow(tx, proposal);
       }
       await tx.bazarProposal.updateMany({
         where: { listingId, status: "PENDING" },
@@ -559,10 +559,10 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
         where: { listingId, status: "PENDING" },
-        select: { proposerId: true, itemsOffer: true },
+        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
       });
       for (const proposal of pendingProposals) {
-        await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+        await _releaseProposalEscrow(tx, proposal);
       }
       await tx.bazarProposal.updateMany({
         where: { listingId, status: "PENDING" },
@@ -618,9 +618,11 @@ export async function createProposal(
     if (!listing || listing.status !== "ACTIVE") return { error: "Anúncio indisponível." };
     if (listing.playerId === player.id) return { error: "Você não pode propor no seu próprio anúncio." };
 
-    if (coinsOffer > 0) {
+    const reservedCoins = Math.max(0, Math.floor(Number(coinsOffer) || 0));
+
+    if (reservedCoins > 0) {
       const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-      if (!wallet || wallet.balance < coinsOffer) {
+      if (!wallet || wallet.balance < reservedCoins) {
         return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).` };
       }
     }
@@ -651,12 +653,19 @@ export async function createProposal(
 
     await prisma.$transaction(async (tx) => {
       await _reserveProposalOffers(tx, player.id, cleanItems);
+      if (reservedCoins > 0) {
+        await tx.zikaCoinWallet.update({
+          where: { playerId: player.id },
+          data: { balance: { decrement: reservedCoins } },
+        });
+      }
 
       await tx.bazarProposal.create({
         data: {
           listingId,
           proposerId: player.id,
-          coinsOffer,
+          coinsOffer: reservedCoins,
+          coinsEscrowed: reservedCoins > 0,
           message,
           itemsOffer: cleanItems.length > 0
             ? cleanItems as unknown as import("@prisma/client").Prisma.InputJsonValue
@@ -694,8 +703,8 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     if (proposal.status !== "PENDING") return { error: "Proposta não está mais pendente." };
     if (proposal.listing.status !== "ACTIVE") return { error: "Anúncio não está mais ativo." };
 
-    // Verificar saldo do proponente
-    if (proposal.coinsOffer > 0) {
+    // Propostas novas jÃ¡ reservam ZC ao serem criadas. Este bloco preserva propostas antigas.
+    if (proposal.coinsOffer > 0 && !proposal.coinsEscrowed) {
       const proposerWallet = await prisma.zikaCoinWallet.findUnique({
         where: { playerId: proposal.proposerId },
       });
@@ -716,10 +725,10 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       // Rejeitar outras proposals e liberar mascotes que estavam reservados nelas.
       const rejectedProposals = await tx.bazarProposal.findMany({
         where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
-        select: { proposerId: true, itemsOffer: true },
+        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
       });
       for (const rejected of rejectedProposals) {
-        await _releaseProposalOffers(tx, rejected.itemsOffer as ProposalOfferItem[] | null, rejected.proposerId);
+        await _releaseProposalEscrow(tx, rejected);
       }
       await tx.bazarProposal.updateMany({
         where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
@@ -728,10 +737,12 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
 
       // Transferir coins (proponente → dono do anúncio)
       if (proposal.coinsOffer > 0) {
-        await tx.zikaCoinWallet.update({
-          where: { playerId: proposal.proposerId },
-          data: { balance: { decrement: proposal.coinsOffer } },
-        });
+        if (!proposal.coinsEscrowed) {
+          await tx.zikaCoinWallet.update({
+            where: { playerId: proposal.proposerId },
+            data: { balance: { decrement: proposal.coinsOffer } },
+          });
+        }
         await tx.zikaCoinWallet.upsert({
           where: { playerId: player.id },
           update: { balance: { increment: proposal.coinsOffer } },
@@ -852,6 +863,11 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     const newStatus = sellerIsRejecting ? "REJECTED" : "CANCELLED";
     await prisma.$transaction(async (tx) => {
       await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+      await _refundProposalCoins(tx, {
+        proposerId: proposal.proposerId,
+        coinsOffer: proposal.coinsOffer,
+        coinsEscrowed: proposal.coinsEscrowed,
+      });
       await tx.bazarProposal.update({ where: { id: proposalId }, data: { status: newStatus } });
     });
 
@@ -1166,6 +1182,36 @@ async function _releaseProposalOffers(tx: TxClient, items: ProposalOfferItem[] |
     where: { id: { in: mascotIds }, playerId: ownerId },
     data: { bazarListed: false },
   });
+}
+
+async function _refundProposalCoins(
+  tx: TxClient,
+  proposal: { proposerId: string; coinsOffer: number; coinsEscrowed: boolean },
+) {
+  if (!proposal.coinsEscrowed || proposal.coinsOffer <= 0) return;
+
+  await tx.zikaCoinWallet.upsert({
+    where: { playerId: proposal.proposerId },
+    update: { balance: { increment: proposal.coinsOffer } },
+    create: {
+      playerId: proposal.proposerId,
+      balance: proposal.coinsOffer,
+      totalEarned: 0,
+    },
+  });
+}
+
+async function _releaseProposalEscrow(
+  tx: TxClient,
+  proposal: {
+    proposerId: string;
+    coinsOffer: number;
+    coinsEscrowed: boolean;
+    itemsOffer: unknown;
+  },
+) {
+  await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
+  await _refundProposalCoins(tx, proposal);
 }
 
 async function _transferItem(tx: TxClient, listing: { id: string; category: string; payload: unknown }, toBuyerId: string) {
