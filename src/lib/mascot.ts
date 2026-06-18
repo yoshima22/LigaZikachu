@@ -830,11 +830,11 @@ async function rollExpeditionReward(
   const roll        = Math.random() * total;
 
   // Ovo: qualidade requer instinto significativo com stat max=250
-  // 6h SPECIAL: luck>100 (~instinct 80 com nv100), 3h RARE: luck>70, 1h/30min RARE: luck>100
+  // 6h SPECIAL: luck>90, 3h RARE: luck>60, 1h/30min RARE: luck>85
   let eggType = "COMMON";
-  if (durationKey === "6h")                            eggType = luck > 100 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h" && luck > 70)          eggType = "RARE";
-  else if ((durationKey === "1h" || durationKey === "30min") && luck > 100) eggType = "RARE";
+  if (durationKey === "6h")                            eggType = luck > 90 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h" && luck > 60)          eggType = "RARE";
+  else if ((durationKey === "1h" || durationKey === "30min") && luck > 85) eggType = "RARE";
 
   // Quantidade de comida melhora com duração
   const foodQtyMin =
@@ -890,9 +890,9 @@ async function rollItemExpeditionReward(
   const roll = Math.random() * total;
 
   let eggType = "COMMON";
-  if (durationKey === "6h")       eggType = luck > 100 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h")  eggType = luck > 70 ? "RARE" : "COMMON";
-  else if (luck > 100)            eggType = "RARE";
+  if (durationKey === "6h")       eggType = luck > 90 ? "SPECIAL" : "RARE";
+  else if (durationKey === "3h")  eggType = luck > 60 ? "RARE" : "COMMON";
+  else if (luck > 85)             eggType = "RARE";
 
   const quantityBase =
     durationKey === "6h" ? 4 :
