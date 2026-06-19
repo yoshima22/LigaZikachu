@@ -10,6 +10,7 @@ import { runSyncBattle, loadModEffect, type ModEffect, type SyntheticSyncMascot 
 import { getPokemonName } from "@/lib/mascot-data";
 import { toBrtDateString } from "@/lib/date-utils";
 import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
+import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
 
 // ── Pokémon generation helper ─────────────────────────────────────────────────
 
@@ -734,116 +735,10 @@ export async function adminStartTiebreakAction(roomId: string): Promise<{ error?
 export async function adminFinalizeRoomAction(roomId: string): Promise<{ error?: string }> {
   try {
     await requireAdmin();
-
-    const room = await prisma.syncEventRoom.findUnique({
+    await finalizeSyncEventRoomRewards(roomId);
+    await prisma.syncEventRoom.update({
       where: { id: roomId },
-      include: { scores: { include: { player: { select: { id: true, displayName: true } } } } },
-    });
-    if (!room) return { error: "Sala não encontrada." };
-
-    // Ranking: vitórias DESC, damageDone DESC, damageTaken ASC
-    const sorted = [...room.scores].sort((a, b) => {
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
-      return a.damageTaken - b.damageTaken;
-    });
-
-    type RewardDef = {
-      coins: number;
-      label: string;
-      eggType: "EVENT" | "SPECIAL" | "RARE" | "COMMON" | null;
-      foodGift: string | null; // descrição do item extra
-    };
-
-    // Recompensas por posição por dupla (entregues individualmente a cada jogador)
-    const rewardsByPosition: Record<number, RewardDef> = {
-      1: { coins: 1200, label: "1º lugar no Desafio Sincronizado", eggType: "EVENT", foodGift: "Amuleto da Sorte" },
-      2: { coins: 800,  label: "2º lugar no Desafio Sincronizado", eggType: "SPECIAL", foodGift: "Vitamina Chocante" },
-      3: { coins: 500,  label: "3º lugar no Desafio Sincronizado", eggType: "RARE", foodGift: "Bala de Mel" },
-      4: { coins: 300,  label: "4º lugar no Desafio Sincronizado", eggType: "COMMON", foodGift: "Água Fresca" },
-    };
-
-    const consolationReward: RewardDef = {
-      coins: 150,
-      label: "Participacao no Desafio Sincronizado",
-      eggType: "COMMON",
-      foodGift: "Agua Fresca",
-    };
-
-    // Deduplica scores por dupla (pega o score com wins mais alto por dupla)
-    const scoresByTeam = new Map<string, typeof sorted[0]>();
-    for (const score of sorted) {
-      const existing = scoresByTeam.get(score.teamId);
-      if (!existing || score.wins > existing.wins) scoresByTeam.set(score.teamId, score);
-    }
-    const teamRanking = [...scoresByTeam.values()].sort((a, b) => {
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
-      return a.damageTaken - b.damageTaken;
-    });
-
-    await prisma.$transaction(async (tx) => {
-      for (let pos = 0; pos < teamRanking.length; pos++) {
-        const position = pos + 1;
-        const teamTopScore = teamRanking[pos];
-        const reward = rewardsByPosition[position] ?? consolationReward;
-
-        // Todos os jogadores desta dupla recebem a recompensa
-        const allTeamScores = sorted.filter((s) => s.teamId === teamTopScore.teamId);
-        for (const score of allTeamScores) {
-          if (score.rewardGranted) continue;
-
-          await tx.syncEventScore.update({
-            where: { id: score.id },
-            data: { finalPosition: position, rewardGranted: true },
-          });
-
-          // ZC
-          const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: score.playerId } });
-          if (wallet) {
-            await tx.zikaCoinWallet.update({
-              where: { id: wallet.id },
-              data: { balance: { increment: reward.coins }, totalEarned: { increment: reward.coins } },
-            });
-            await tx.zikaCoinTransaction.create({
-              data: {
-                walletId: wallet.id,
-                type: "ADMIN_ADJUSTMENT",
-                amount: reward.coins,
-                balanceBefore: wallet.balance,
-                balanceAfter: wallet.balance + reward.coins,
-                description: `Desafio Sincronizado — ${reward.label}`,
-              },
-            });
-          }
-
-          // Ovo
-          if (reward.eggType) {
-            await tx.mascotEgg.create({
-              data: { playerId: score.playerId, type: reward.eggType, origin: `Desafio Sincronizado — ${reward.label}` },
-            });
-          }
-
-          // Item extra via PlayerGift
-          if (reward.foodGift) {
-            await tx.playerGift.create({
-              data: {
-                playerId: score.playerId,
-                type: "CUSTOM",
-                title: `Recompensa Desafio Sincronizado`,
-                description: `${reward.label} — ${reward.foodGift}`,
-                payload: { item: reward.foodGift, source: "sync-challenge" },
-                status: "UNCLAIMED",
-              },
-            });
-          }
-        }
-      }
-
-      await tx.syncEventRoom.update({
-        where: { id: roomId },
-        data: { status: "FINISHED", finishedAt: new Date() },
-      });
+      data: { status: "FINISHED", finishedAt: new Date() },
     });
 
     revalidatePath("/desafio-sincronizado");

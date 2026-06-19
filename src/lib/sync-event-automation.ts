@@ -4,6 +4,7 @@ import { toBrtDateString } from "@/lib/date-utils";
 import { getPokemonName } from "@/lib/mascot-data";
 import { loadModEffect, runSyncBattle, type ModEffect, type SyntheticSyncMascot } from "@/lib/sync-battle";
 import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
+import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
 
 const SELECTION_WINDOW_MS = 10 * 60 * 1000;
 
@@ -487,6 +488,9 @@ export async function executeDueSyncRounds(now = new Date()) {
         });
       }
     });
+    if (round.roundNumber === 3) {
+      await finalizeSyncEventRoomRewards(round.roomId);
+    }
     executed++;
   }
 
