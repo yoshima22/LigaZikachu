@@ -376,6 +376,7 @@ export async function makeTraceMoveAction(roomId: string, direction: Direction) 
       where: { id: roomId },
       data: { skipNextMove: false, lastHunterMoveAt: new Date(), updatedAt: new Date() },
     });
+    revalidatePath("/combates/cacada-de-rastros");
     return { skipped: true, message: "Seu movimento foi bloqueado por um evento! Tente novamente." };
   }
 

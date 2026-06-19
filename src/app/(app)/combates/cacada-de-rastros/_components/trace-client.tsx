@@ -165,10 +165,18 @@ function CountdownTimer({ until }: { until: string | null }) {
 
 // ── Active Room View ───────────────────────────────────────────────────────
 
-function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string }) {
+function ActiveRoomView({ room, playerId, refresh }: { room: TraceRoom; playerId: string; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
+  const [lastResult, setLastResult] = useState<{
+    tone: "success" | "warning" | "danger";
+    title: string;
+    message: string;
+  } | null>(null);
+
   const isHider = room.hiderId === playerId;
   const isHunter = room.hunterId === playerId;
+  const isAdminDuel = room.isAdminSim && isHider && isHunter;
+  const totalSteps = ROUTE_STEPS[room.routeType] + (room.sinalizadorUsed ? 1 : 0);
   const nextMoveAt = room.lastHunterMoveAt
     ? new Date(new Date(room.lastHunterMoveAt).getTime() + 3 * 60 * 1000).toISOString()
     : null;
@@ -177,86 +185,155 @@ function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string 
   const move = (dir: string) => {
     startTransition(async () => {
       const res = await makeTraceMoveAction(room.id, dir as "N" | "S" | "L" | "O");
-      if ("error" in res) { toast.error(res.error); return; }
-      if (res.skipped) { toast.warning(res.message); return; }
-      if (res.correct) {
-        if (res.isFound) toast.success("🏆 Você encontrou o esconderijo! Pegadas Douradas ganhas!");
-        else toast.success("✅ Direção correta! Continue avançando.");
-      } else {
-        if (res.isEscaped) toast.error("💨 Foco esgotado — o escondido fugiu!");
-        else toast.error("❌ Direção errada. Foco reduzido.");
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
       }
-      if (res.event) toast.info(`⚡ ${res.event.label}: ${res.event.description}`);
+      if (res.skipped) {
+        setLastResult({ tone: "warning", title: "Movimento bloqueado", message: res.message });
+        toast.warning(res.message);
+        refresh();
+        return;
+      }
+      if (res.correct) {
+        if (res.isFound) {
+          setLastResult({ tone: "success", title: "Esconderijo encontrado", message: "A rota foi concluida e as Pegadas Douradas foram distribuidas." });
+          toast.success("Voce encontrou o esconderijo! Pegadas Douradas ganhas.");
+        } else {
+          setLastResult({ tone: "success", title: "Direcao correta", message: "Voce avancou 1 passo na trilha. Continue seguindo os rastros." });
+          toast.success("Direcao correta! Continue avancando.");
+        }
+      } else if (res.isEscaped) {
+        setLastResult({ tone: "danger", title: "O escondido fugiu", message: "O foco acabou. A sala foi encerrada e as recompensas foram distribuidas." });
+        toast.error("Foco esgotado. O escondido fugiu!");
+      } else {
+        setLastResult({ tone: "danger", title: "Direcao errada", message: "O foco caiu em 1 ponto. Tente ler melhor a rota antes do proximo movimento." });
+        toast.error("Direcao errada. Foco reduzido.");
+      }
+      if (res.event) toast.info(`${res.event.label}: ${res.event.description}`);
+      refresh();
     });
   };
 
   const flare = () => {
     startTransition(async () => {
       const res = await useSinalizadorAction(room.id);
-      if ("error" in res) { toast.error(res.error); return; }
-      toast.success("🚩 Sinalizador usado! O caminho ganhou +1 seta secreta.");
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      setLastResult({ tone: "warning", title: "Sinalizador usado", message: "A rota ganhou +1 seta secreta. O cacador precisara acertar um passo extra." });
+      toast.success("Sinalizador usado! O caminho ganhou +1 seta secreta.");
+      refresh();
     });
   };
 
   const leave = () => {
-    if (!confirm("Abandonar esta caçada? Nenhum Foco ou recompensa será ganho.")) return;
+    if (!confirm("Abandonar esta cacada? Nenhum Foco ou recompensa sera ganho.")) return;
     startTransition(async () => {
       const res = await leaveTraceRoomAction(room.id);
-      if ("error" in res) toast.error(res.error);
-      else toast.success("Você saiu da caçada.");
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Voce saiu da cacada.");
+      refresh();
     });
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-4 shadow-lg shadow-black/10">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <MascotAvatar pokemonId={room.hiderMascot.pokemonId} />
           <div>
-            <p className="text-xs font-bold text-slate-200">{mascotLabel(room.hiderMascot)}</p>
+            <p className="text-xs font-bold text-slate-100">{mascotLabel(room.hiderMascot)}</p>
             <p className="text-[10px] text-slate-400">Escondido por {room.hider.displayName}</p>
+            {room.hunter && <p className="text-[10px] text-cyan-300">Cacado por {room.hunter.displayName}</p>}
           </div>
         </div>
-        <div className="text-right">
+        <div className="flex flex-wrap justify-end gap-1 text-right">
           <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[10px] font-semibold text-orange-300">
             {ROUTE_LABELS[room.routeType]}
           </span>
           {room.isAdminSim && (
-            <span className="ml-1 rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-300">SIM</span>
+            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-300">SIM</span>
           )}
+          <span className="rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+            {room.status === "HUNTING" ? "Em andamento" : room.status}
+          </span>
+        </div>
+      </div>
+
+      {isAdminDuel && (
+        <div className="rounded-xl border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs text-purple-200">
+          <strong>Simulacao admin:</strong> voce controla os dois lados. Use as direcoes para testar o cacador e o sinalizador para testar o escondido.
+        </div>
+      )}
+
+      <div className="grid gap-2 md:grid-cols-3">
+        <div className="rounded-xl border border-slate-700/60 bg-slate-950/40 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Objetivo do cacador</p>
+          <p className="text-xs text-slate-300">Acertar {totalSteps} direcoes antes do Foco acabar.</p>
+        </div>
+        <div className="rounded-xl border border-slate-700/60 bg-slate-950/40 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Objetivo do escondido</p>
+          <p className="text-xs text-slate-300">Fazer o cacador errar ate zerar o Foco.</p>
+        </div>
+        <div className="rounded-xl border border-slate-700/60 bg-slate-950/40 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">Proximo clique</p>
+          <p className="text-xs text-slate-300">{canMoveNow ? "Escolha uma direcao abaixo." : "Aguarde o cooldown do movimento."}</p>
         </div>
       </div>
 
       <FocusBar current={room.focusPoints} max={room.maxFocus} />
 
-      {/* Step progress */}
-      <div className="flex items-center gap-1">
-        {Array.from({ length: Math.max(room.maxFocus, room.currentStep) }, (_, i) => {
-          const move = room.moves.find((m) => m.step === i);
-          return (
-            <div key={i} className={`h-2 flex-1 rounded-full ${
-              i < room.currentStep
-                ? "bg-green-500"
-                : i === room.currentStep
-                ? "bg-yellow-400 animate-pulse"
-                : "bg-slate-700"
-            }`} title={move ? `${move.direction} (${move.correct ? "✓" : "✗"})` : undefined} />
-          );
-        })}
-        <span className="ml-2 text-[10px] text-slate-400">{room.currentStep}/{ROUTE_STEPS[room.routeType]}</span>
+      <div className="space-y-1">
+        <div className="flex items-center gap-1">
+          {Array.from({ length: totalSteps }, (_, i) => {
+            const move = room.moves.find((m) => m.step === i);
+            return (
+              <div
+                key={i}
+                className={`h-2.5 flex-1 rounded-full transition-all ${
+                  i < room.currentStep
+                    ? "bg-green-500 shadow-sm shadow-green-500/40"
+                    : i === room.currentStep
+                    ? "bg-yellow-400 animate-pulse"
+                    : "bg-slate-700"
+                }`}
+                title={move ? `${move.direction} (${move.correct ? "certo" : "errado"})` : undefined}
+              />
+            );
+          })}
+          <span className="ml-2 text-[10px] text-slate-400">{room.currentStep}/{totalSteps}</span>
+        </div>
+        <p className="text-[10px] text-slate-500">Cada barra representa uma direcao secreta da rota.</p>
       </div>
 
-      {/* Hint */}
-      {room.hintDirection && isHunter && (
-        <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-300">
-          🧭 Dica: a próxima direção correta é <strong>{DIRECTION_LABELS[room.hintDirection]}</strong>
+      {lastResult && (
+        <div className={`rounded-xl border px-3 py-2 text-xs ${
+          lastResult.tone === "success"
+            ? "border-green-500/30 bg-green-500/10 text-green-200"
+            : lastResult.tone === "warning"
+            ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+            : "border-red-500/30 bg-red-500/10 text-red-200"
+        }`}>
+          <p className="font-bold">{lastResult.title}</p>
+          <p className="mt-0.5 opacity-90">{lastResult.message}</p>
         </div>
       )}
 
-      {/* Hunter actions */}
+      {room.hintDirection && isHunter && (
+        <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-300">
+          Dica: a proxima direcao correta e <strong>{DIRECTION_LABELS[room.hintDirection]}</strong>
+        </div>
+      )}
+
       {isHunter && room.status === "HUNTING" && (
-        <div className="space-y-2">
-          <p className="text-[11px] text-slate-400 font-semibold">Escolha a direção:</p>
+        <div className="space-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <p className="text-[11px] text-cyan-200 font-semibold">Controles do cacador</p>
+          <p className="text-[10px] text-slate-400">Clique em uma direcao. Acerto avanca, erro reduz o Foco. Na simulacao admin nao ha cooldown.</p>
           <div className="grid grid-cols-2 gap-2">
             {DIRECTIONS.map((dir) => (
               <button
@@ -277,20 +354,20 @@ function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string 
         </div>
       )}
 
-      {/* Hider actions */}
       {isHider && room.status === "HUNTING" && (
-        <div className="flex gap-2">
+        <div className="space-y-2 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3">
+          <p className="text-[11px] text-yellow-200 font-semibold">Controles do escondido</p>
+          <p className="text-[10px] text-slate-400">O sinalizador adiciona uma direcao secreta na rota. Use uma vez por sala.</p>
           <button
             onClick={flare}
             disabled={pending || room.sinalizadorUsed}
-            className="flex-1 rounded-xl border border-yellow-500/30 bg-yellow-500/10 py-2 text-xs font-semibold text-yellow-300 hover:bg-yellow-500/20 disabled:opacity-40 transition-colors"
+            className="w-full rounded-xl border border-yellow-500/30 bg-yellow-500/10 py-2 text-xs font-semibold text-yellow-300 hover:bg-yellow-500/20 disabled:opacity-40 transition-colors"
           >
-            🚩 {room.sinalizadorUsed ? "Sinalizador Usado" : "Usar Sinalizador Gratuito"}
+            {room.sinalizadorUsed ? "Sinalizador usado" : "Usar Sinalizador Gratuito"}
           </button>
         </div>
       )}
 
-      {/* Recent events */}
       {room.randomEvents.length > 0 && (
         <div className="space-y-1">
           <p className="text-[10px] font-semibold text-slate-500">Eventos nesta sala:</p>
@@ -298,7 +375,7 @@ function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string 
             const info = TRACE_EVENTS.find((e) => e.code === ev.eventCode);
             return (
               <div key={ev.id} className="rounded-lg bg-slate-800/50 px-2 py-1 text-[10px] text-slate-400">
-                ⚡ {info?.label ?? ev.eventCode} (passo {ev.step + 1})
+                {info?.label ?? ev.eventCode} (passo {ev.step + 1})
               </div>
             );
           })}
@@ -310,13 +387,13 @@ function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string 
         disabled={pending}
         className="w-full rounded-xl border border-red-500/20 bg-red-500/10 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
       >
-        Abandonar Caçada
+        Abandonar Cacada
       </button>
     </div>
   );
 }
 
-// ── Hide Tab ───────────────────────────────────────────────────────────────
+// Active Room View end
 
 function HideTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
@@ -345,7 +422,7 @@ function HideTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-300">
           Voce ja possui 3 esconderijos ativos. Resolva um antes de criar outro.
         </div>
-        {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} />)}
+        {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} refresh={refresh} />)}
       </div>
     );
   }
@@ -357,7 +434,7 @@ function HideTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
             Voce tem {myActiveRooms.length}/3 esconderijo(s) ativo(s). Ainda pode abrir mais testes.
           </div>
-          {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} />)}
+          {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} refresh={refresh} />)}
         </div>
       )}
 
@@ -453,7 +530,7 @@ function HuntTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <div className="rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm text-green-300">
           Você está ativamente caçando. Faça seus movimentos!
         </div>
-        <ActiveRoomView room={myHuntRoom} playerId={data.player.id} />
+        <ActiveRoomView room={myHuntRoom} playerId={data.player.id} refresh={refresh} />
       </div>
     );
   }
@@ -607,7 +684,7 @@ function GoldenShopTab({ goldenPaws, refresh }: { goldenPaws: number; refresh: (
 
 // ── Admin Panel ────────────────────────────────────────────────────────────
 
-function AdminPanel({ data, refresh }: { data: PageData; refresh: () => void }) {
+function AdminPanel({ data, refresh, onSimulationCreated }: { data: PageData; refresh: () => void; onSimulationCreated: () => void }) {
   const [pending, startTransition] = useTransition();
   const [hiderMascotId, setHiderMascotId] = useState("");
   const [hunterMascotId, setHunterMascotId] = useState("");
@@ -630,6 +707,7 @@ function AdminPanel({ data, refresh }: { data: PageData; refresh: () => void }) 
       if ("error" in res && !res.success) { toast.error(res.error ?? "Erro"); return; }
       toast.success("Sala de simulação criada! Vá para a aba Esconder ou Caçar.");
       refresh();
+      onSimulationCreated();
     });
   };
 
@@ -860,7 +938,7 @@ export function TraceClient({ initialData }: { initialData: PageData }) {
         {tab === "cacar" && <HuntTab data={data} refresh={refresh} />}
         {tab === "historico" && <HistoryTab history={data.globalHistory} />}
         {tab === "loja" && <GoldenShopTab goldenPaws={data.player.goldenPaws} refresh={refresh} />}
-        {tab === "admin" && <AdminPanel data={data} refresh={refresh} />}
+        {tab === "admin" && <AdminPanel data={data} refresh={refresh} onSimulationCreated={() => setTab("cacar")} />}
       </div>
     </div>
   );
