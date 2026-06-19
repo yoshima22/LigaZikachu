@@ -280,6 +280,10 @@ model Player {
   syncEventScores           SyncEventScore[] @relation("SyncEventScorePlayer")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
+  goldenPaws              Int                  @default(0)
+  traceRoomsAsHider       TraceRoom[]          @relation("TraceRoomHider")
+  traceRoomsAsHunter      TraceRoom[]          @relation("TraceRoomHunter")
+  goldenPawTransactions   GoldenPawTransaction[]
 
   @@map("players")
 }
@@ -1207,6 +1211,19 @@ enum ShopItemType {
   SYNC_TICKET_FIRE_LEFT
   SYNC_TICKET_WATER_RIGHT
   SYNC_TICKET_COMPLETE
+  TRACE_MAP_SHORT
+  TRACE_MAP_MEDIUM
+  TRACE_MAP_LONG
+  TRACE_MAP_WEEKLY
+  TRACE_HUNT_TICKET
+  TRACE_SIGNAL_FLARE
+  TRACE_DECOY
+  TRACE_SILENCE_POTION
+  TRACE_ARMOR_VEST
+  TRACE_MIST_SHIELD
+  TRACE_INSTINCT_BOOST
+  TRACE_GOLDEN_TICKET
+  TRACE_SPECIAL_MAP
 }
 
 enum SyncChallengeStatus {
@@ -1714,6 +1731,8 @@ enum MascotArenaState {
   ARENA
   INJURED
   RESTING
+  TRACE_HIDING
+  TRACE_HUNTING
 }
 
 enum ArenaTeamStatus {
@@ -1813,6 +1832,8 @@ model Mascot {
   progressMilestones MascotProgressMilestone[]
   buffs            MascotBuff[]
   syncLineups      SyncEventLineup[] @relation("SyncEventLineupMascot")
+  traceRoomsAsHider  TraceRoom[] @relation("TraceRoomHiderMascot")
+  traceRoomsAsHunter TraceRoom[] @relation("TraceRoomHunterMascot")
   @@index([playerId])
   @@map("mascots")
 }
@@ -2348,4 +2369,107 @@ model SiteContent {
   updatedBy String?  // userId do admin que editou por último
 
   @@map("site_content")
+}
+
+// ── Caçada de Rastros ─────────────────────────────────────────────────────────
+
+enum TraceRouteType {
+  SHORT
+  MEDIUM
+  LONG
+  WEEKLY
+}
+
+enum TraceRoomStatus {
+  WAITING
+  HUNTING
+  FOUND
+  ESCAPED
+  CANCELLED
+}
+
+enum TraceTarget {
+  HIDER
+  HUNTER
+}
+
+model TraceRoom {
+  id               String          @id @default(cuid())
+  hiderId          String
+  hiderMascotId    String
+  hunterId         String?
+  hunterMascotId   String?
+  routeType        TraceRouteType
+  routePath        String          // JSON: ["N","S","L","O"]
+  focusPoints      Int             // remaining hider focus
+  maxFocus         Int             // initial focus (= steps + vitality bonus)
+  currentStep      Int             @default(0)
+  status           TraceRoomStatus @default(WAITING)
+  lastHunterMoveAt DateTime?
+  sinalizadorUsed  Boolean         @default(false)
+  skipNextMove     Boolean         @default(false) // event: hunter skips next move
+  hintDirection    String?         // event-revealed correct direction hint
+  isAdminSim       Boolean         @default(false)
+  expiresAt        DateTime
+  resolvedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  hider            Player          @relation("TraceRoomHider", fields: [hiderId], references: [id], onDelete: Cascade)
+  hiderMascot      Mascot          @relation("TraceRoomHiderMascot", fields: [hiderMascotId], references: [id], onDelete: Cascade)
+  hunter           Player?         @relation("TraceRoomHunter", fields: [hunterId], references: [id], onDelete: Cascade)
+  hunterMascot     Mascot?         @relation("TraceRoomHunterMascot", fields: [hunterMascotId], references: [id], onDelete: Cascade)
+  moves            TraceMove[]
+  randomEvents     TraceRoomEvent[]
+  eventLogs        TraceEventLog[]
+  @@index([hiderId])
+  @@index([hunterId])
+  @@index([status])
+  @@map("trace_rooms")
+}
+
+model TraceMove {
+  id        String    @id @default(cuid())
+  roomId    String
+  step      Int
+  direction String
+  correct   Boolean
+  createdAt DateTime  @default(now())
+  room      TraceRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@index([roomId])
+  @@map("trace_moves")
+}
+
+model TraceRoomEvent {
+  id            String      @id @default(cuid())
+  roomId        String
+  eventCode     String
+  target        TraceTarget
+  step          Int
+  effectApplied Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  room          TraceRoom   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@index([roomId])
+  @@map("trace_room_events")
+}
+
+model TraceEventLog {
+  id          String     @id @default(cuid())
+  roomId      String?
+  description String     @db.Text
+  playerName  String
+  createdAt   DateTime   @default(now())
+  room        TraceRoom? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  @@index([createdAt])
+  @@map("trace_event_logs")
+}
+
+model GoldenPawTransaction {
+  id        String   @id @default(cuid())
+  playerId  String
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@index([playerId])
+  @@map("golden_paw_transactions")
 }

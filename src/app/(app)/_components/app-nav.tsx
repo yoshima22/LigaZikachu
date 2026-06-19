@@ -28,6 +28,7 @@ import {
   Users,
   ShoppingCart,
   FlaskConical,
+  Footprints,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -39,7 +40,8 @@ const mainLinks = [
 const combatLinks = [
   { href: "/arena-z", label: "Arena Z", icon: Swords, adminOnly: false },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
-  { href: "/desafio-sincronizado", label: "Arena Sincronizada", icon: Ticket, adminOnly: false }
+  { href: "/desafio-sincronizado", label: "Arena Sincronizada", icon: Ticket, adminOnly: false },
+  { href: "/combates/cacada-de-rastros", label: "Caçada de Rastros", icon: Footprints, adminOnly: true },
 ];
 
 const rankingLinks = [
