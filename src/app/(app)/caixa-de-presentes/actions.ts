@@ -133,6 +133,25 @@ async function applyGiftReward(
     return {};
   }
 
+  const itemName = typeof payload.item === "string" ? payload.item.trim() : null;
+  if (itemName) {
+    const quantity = typeof payload.quantity === "number" && payload.quantity > 0
+      ? Math.floor(payload.quantity)
+      : 1;
+    const shopItem = await tx.shopItem.findFirst({
+      where: { name: { equals: itemName, mode: "insensitive" }, active: true },
+      select: { id: true, name: true },
+    });
+    if (shopItem) {
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+        update: { quantity: { increment: quantity } },
+        create: { playerId, itemId: shopItem.id, quantity, equipped: false },
+      });
+    }
+    return {};
+  }
+
   if (rewardKind === "ZIKA_COINS") {
     const amount = typeof payload.amount === "number" && payload.amount > 0
       ? Math.floor(payload.amount)
