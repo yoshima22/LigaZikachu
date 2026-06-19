@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus } from "lucide-react";
 import { MyListingsClient } from "./_client";
+import { markBazarProposalsViewed } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export default async function MeuBazarPage() {
 
   const player = await getSessionPlayer(session.user.id);
   if (!player) return notFound();
+
+  await markBazarProposalsViewed();
 
   // Anúncios ativos/reservados — todos; vendidos/cancelados — apenas últimos 4
   const [activeListings, soldListings] = await Promise.all([

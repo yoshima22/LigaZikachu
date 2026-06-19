@@ -427,6 +427,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao criar anúncio." };
@@ -449,14 +450,17 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
       return { error: "Este anúncio não pode ser cancelado." };
     }
 
+    let rejectedProposerUserIds: string[] = [];
+
     await prisma.$transaction(async (tx) => {
       await tx.bazarListing.update({ where: { id: listingId }, data: { status: "CANCELLED" } });
       await _returnEscrow(tx, listing, player.id);
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
         where: { listingId, status: "PENDING" },
-        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
+        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, proposer: { select: { userId: true } } },
       });
+      rejectedProposerUserIds = pendingProposals.map((proposal) => proposal.proposer.userId);
       for (const proposal of pendingProposals) {
         await _releaseProposalEscrow(tx, proposal);
       }
@@ -467,6 +471,8 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
+    for (const proposerUserId of rejectedProposerUserIds) revalidateTag(`nav-${proposerUserId}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -504,6 +510,7 @@ export async function editListing(
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -522,7 +529,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
 
     const listing = await prisma.bazarListing.findUnique({
       where: { id: listingId },
-      include: { player: { select: { id: true, displayName: true } } },
+      include: { player: { select: { id: true, displayName: true, userId: true } } },
     });
     if (!listing) return { error: "Anúncio não encontrado." };
     if (listing.status !== "ACTIVE") return { error: "Este anúncio não está mais disponível." };
@@ -590,6 +597,8 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
+    revalidateTag(`nav-${listing.player.userId}`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao comprar." };
@@ -675,6 +684,7 @@ export async function createProposal(
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
     // Notifica o vendedor que recebeu uma nova proposta
     revalidateTag(`nav-${listing.player.userId}`);
     return {};
@@ -830,6 +840,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
     // Notifica o proponente que sua proposta foi aceita
     revalidateTag(`nav-${proposal.proposer.userId}`);
     return {};
@@ -872,6 +883,7 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     });
 
     revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
     // Se o vendedor rejeitou, notifica o proponente
     if (sellerIsRejecting) revalidateTag(`nav-${proposal.proposer.userId}`);
     return {};

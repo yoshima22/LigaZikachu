@@ -10,7 +10,7 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { getMiauvadaoConfig } from "./actions";
+import { getMiauvadaoConfig, markBazarProposalsViewed } from "./actions";
 import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
@@ -34,7 +34,8 @@ export default async function BazarPage({
   // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
   // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
   // Marcar propostas respondidas como vistas — invalida o badge do nav
-  const [listingsResult, transactions, miauvadao] = await Promise.all([
+  const [, listingsResult, transactions, miauvadao] = await Promise.all([
+    markBazarProposalsViewed(),
     getCachedListings({
       category: searchParams.cat as BazarItemCategory | undefined,
       type: searchParams.type as BazarListingType | undefined,
