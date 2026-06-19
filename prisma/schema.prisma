@@ -280,7 +280,6 @@ model Player {
   syncEventScores           SyncEventScore[] @relation("SyncEventScorePlayer")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
-  goldenPaws              Int                  @default(0)
   traceRoomsAsHider       TraceRoom[]          @relation("TraceRoomHider")
   traceRoomsAsHunter      TraceRoom[]          @relation("TraceRoomHunter")
   goldenPawTransactions   GoldenPawTransaction[]

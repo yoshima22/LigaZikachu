@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { TraceRouteType, TraceTarget } from "@prisma/client";
+import { TraceRouteType, TraceTarget } from "@prisma/client"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { TRACE_EVENTS, GOLDEN_PAW_SHOP, type TraceEvent } from "./constants";
 function createId() { return crypto.randomUUID(); }
 
@@ -111,7 +111,6 @@ async function awardGoldenPaws(
   amount: number,
   reason: string,
 ) {
-  await tx.player.update({ where: { id: playerId }, data: { goldenPaws: { increment: amount } } });
   await tx.goldenPawTransaction.create({
     data: { id: createId(), playerId, amount, reason },
   });
@@ -632,31 +631,26 @@ export async function buyGoldenPawItemAction(itemType: string) {
   const shopEntry = GOLDEN_PAW_SHOP.find((e) => e.type === itemType);
   if (!shopEntry) return { error: "Item inválido" };
 
-  const player = await prisma.player.findUnique({
-    where: { id: basePlayer.id },
-    select: { id: true, goldenPaws: true },
+  const balance = await prisma.goldenPawTransaction.aggregate({
+    where: { playerId: basePlayer.id },
+    _sum: { amount: true },
   });
-  if (!player) return { error: "Jogador não encontrado" };
+  const currentPaws = balance._sum.amount ?? 0;
 
-  if (player.goldenPaws < shopEntry.cost) {
-    return { error: `Pegadas insuficientes. Você tem ${player.goldenPaws}, precisa de ${shopEntry.cost}.` };
+  if (currentPaws < shopEntry.cost) {
+    return { error: `Pegadas insuficientes. Você tem ${currentPaws}, precisa de ${shopEntry.cost}.` };
   }
 
-  // Find the ShopItem in DB
   const shopItem = await prisma.shopItem.findFirst({ where: { type: itemType as never } });
   if (!shopItem) return { error: "Item não configurado no sistema. Peça ao admin para executar o seed." };
 
   await prisma.$transaction(async (tx) => {
-    await tx.player.update({
-      where: { id: player.id },
-      data: { goldenPaws: { decrement: shopEntry.cost } },
-    });
     await tx.goldenPawTransaction.create({
-      data: { id: createId(), playerId: player.id, amount: -shopEntry.cost, reason: `Compra: ${shopEntry.name}` },
+      data: { id: createId(), playerId: basePlayer.id, amount: -shopEntry.cost, reason: `Compra: ${shopEntry.name}` },
     });
     await tx.playerInventory.upsert({
-      where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } },
-      create: { id: createId(), playerId: player.id, itemId: shopItem.id, quantity: 1, source: "GOLDEN_PAW_SHOP" },
+      where: { playerId_itemId: { playerId: basePlayer.id, itemId: shopItem.id } },
+      create: { id: createId(), playerId: basePlayer.id, itemId: shopItem.id, quantity: 1, source: "GOLDEN_PAW_SHOP" },
       update: { quantity: { increment: 1 } },
     });
   });

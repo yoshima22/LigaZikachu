@@ -86,14 +86,14 @@ export async function getTracePageData(playerId: string, displayName: string) {
         },
         orderBy: { level: "desc" },
       }),
-      prisma.player.findUnique({
-        where: { id: playerId },
-        select: { goldenPaws: true },
+      prisma.goldenPawTransaction.aggregate({
+        where: { playerId },
+        _sum: { amount: true },
       }),
     ]);
 
   return {
-    player: { id: playerId, displayName, goldenPaws: fullPlayer?.goldenPaws ?? 0 },
+    player: { id: playerId, displayName, goldenPaws: fullPlayer._sum.amount ?? 0 },
     myRooms,
     openRooms,
     globalHistory,
