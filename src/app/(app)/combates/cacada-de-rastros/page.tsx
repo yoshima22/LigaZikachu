@@ -21,7 +21,19 @@ export default async function CacadaDeRastrosPage() {
     );
   }
 
-  const data = await getTracePageData(player.id, player.displayName);
+  let data;
+  try {
+    data = await getTracePageData(player.id, player.displayName);
+  } catch (err) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-300 space-y-2">
+          <p className="font-bold">Erro ao carregar Caçada de Rastros (admin debug):</p>
+          <pre className="whitespace-pre-wrap break-all">{String(err)}</pre>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
