@@ -4,6 +4,25 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { getMiauvadaoConfig } from "@/app/(app)/bazar/actions";
 
+const HIDDEN_BAZAR_ITEM_TYPES = [
+  "SYNC_TICKET_FIRE_LEFT",
+  "SYNC_TICKET_WATER_RIGHT",
+  "SYNC_TICKET_COMPLETE",
+  "TRACE_MAP_SHORT",
+  "TRACE_MAP_MEDIUM",
+  "TRACE_MAP_LONG",
+  "TRACE_MAP_WEEKLY",
+  "TRACE_HUNT_TICKET",
+  "TRACE_SIGNAL_FLARE",
+  "TRACE_DECOY",
+  "TRACE_SILENCE_POTION",
+  "TRACE_ARMOR_VEST",
+  "TRACE_MIST_SHIELD",
+  "TRACE_INSTINCT_BOOST",
+  "TRACE_GOLDEN_TICKET",
+  "TRACE_SPECIAL_MAP",
+] as const;
+
 export async function GET() {
   try {
     const session = await getAppSession();
@@ -49,7 +68,7 @@ export async function GET() {
         where: {
           playerId: player.id,
           quantity: { gt: 0 },
-          item: { type: { notIn: ["SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"] as never[] } },
+          item: { type: { notIn: [...HIDDEN_BAZAR_ITEM_TYPES] as never[] } },
         },
         include: {
           item: {

@@ -860,6 +860,7 @@ export async function validateArenaMascots(playerId: string, mascotIds: string[]
     if (m.bazarListed) throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} esta anunciado no Bazar.`);
     if (m.arenaState === "INJURED") throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} esta ferido.`);
     if (m.arenaState === "RESTING" && m.restingUntil && m.restingUntil > now) throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} esta em repouso.`);
+    if (m.arenaState === "TRACE_HIDING" || m.arenaState === "TRACE_HUNTING") throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} esta em Cacada de Rastros.`);
     if (m.arenaState === "ARENA") throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} ja esta em uma equipe da Arena.`);
     // Cooldown de re-entrada: FREE + restingUntil no futuro = saiu da arena recentemente
     if (m.arenaState === "FREE" && m.restingUntil && m.restingUntil > now) {

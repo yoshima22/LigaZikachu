@@ -78,10 +78,17 @@ type PageData = {
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const ROUTE_LABELS: Record<TraceRouteType, string> = {
-  SHORT: "Curta (3 passos)",
-  MEDIUM: "Média (4 passos)",
-  LONG: "Longa (5 passos)",
-  WEEKLY: "Semanal (6 passos)",
+  SHORT: "Curta (4 passos)",
+  MEDIUM: "Media (6 passos)",
+  LONG: "Longa (8 passos)",
+  WEEKLY: "Semanal (10 passos)",
+};
+
+const ROUTE_STEPS: Record<TraceRouteType, number> = {
+  SHORT: 4,
+  MEDIUM: 6,
+  LONG: 8,
+  WEEKLY: 10,
 };
 
 const ROUTE_EXPIRY_LABELS: Record<TraceRouteType, string> = {
@@ -187,7 +194,7 @@ function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string 
     startTransition(async () => {
       const res = await useSinalizadorAction(room.id);
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(`🚩 Sinalizador usado! Dica enviada ao caçador: ${res.hint}`);
+      toast.success("🚩 Sinalizador usado! O caminho ganhou +1 seta secreta.");
     });
   };
 
@@ -236,7 +243,7 @@ function ActiveRoomView({ room, playerId }: { room: TraceRoom; playerId: string 
             }`} title={move ? `${move.direction} (${move.correct ? "✓" : "✗"})` : undefined} />
           );
         })}
-        <span className="ml-2 text-[10px] text-slate-400">{room.currentStep}/{JSON.parse(room.routeType === "SHORT" ? "3" : room.routeType === "MEDIUM" ? "4" : room.routeType === "LONG" ? "5" : "6")}</span>
+        <span className="ml-2 text-[10px] text-slate-400">{room.currentStep}/{ROUTE_STEPS[room.routeType]}</span>
       </div>
 
       {/* Hint */}
@@ -320,7 +327,7 @@ function HideTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     (i) => i.item.type === MAP_ITEM_FOR_ROUTE[routeType] && i.quantity > 0,
   );
 
-  const myActiveRoom = data.myRooms.find((r) => r.hiderId === data.player.id);
+  const myActiveRooms = data.myRooms.filter((r) => r.hiderId === data.player.id);
 
   const submit = () => {
     if (!mascotId) { toast.error("Selecione um mascote"); return; }
@@ -332,19 +339,28 @@ function HideTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     });
   };
 
-  if (myActiveRoom && myActiveRoom.hiderId === data.player.id) {
+  if (myActiveRooms.length >= 3) {
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-300">
-          Você já possui um esconderijo ativo. Resolva-o antes de criar outro.
+          Voce ja possui 3 esconderijos ativos. Resolva um antes de criar outro.
         </div>
-        <ActiveRoomView room={myActiveRoom} playerId={data.player.id} />
+        {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} />)}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {myActiveRooms.length > 0 && (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
+            Voce tem {myActiveRooms.length}/3 esconderijo(s) ativo(s). Ainda pode abrir mais testes.
+          </div>
+          {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} />)}
+        </div>
+      )}
+
       <p className="text-sm text-slate-400">Escolha um mascote e o tipo de rota para se esconder. O caçador tentará te encontrar!</p>
 
       <div className="space-y-2">

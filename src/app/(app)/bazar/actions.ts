@@ -37,6 +37,22 @@ function isEggOfferType(type: string) {
   return EGG_OFFER_TYPES.includes(type);
 }
 
+const HIDDEN_BAZAR_ITEM_TYPES = new Set([
+  "TRACE_MAP_SHORT",
+  "TRACE_MAP_MEDIUM",
+  "TRACE_MAP_LONG",
+  "TRACE_MAP_WEEKLY",
+  "TRACE_HUNT_TICKET",
+  "TRACE_SIGNAL_FLARE",
+  "TRACE_DECOY",
+  "TRACE_SILENCE_POTION",
+  "TRACE_ARMOR_VEST",
+  "TRACE_MIST_SHIELD",
+  "TRACE_INSTINCT_BOOST",
+  "TRACE_GOLDEN_TICKET",
+  "TRACE_SPECIAL_MAP",
+]);
+
 // Tipos de shop que o Miauvadão pode oferecer (excluindo cosméticos únicos)
 const MIAUVADAO_ELIGIBLE_TYPES = [
   ...MASCOT_SHOP_ITEM_TYPES,
@@ -352,6 +368,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         const qty = input.quantity ?? 1;
         if (qty < 1) throw new Error("Quantidade inválida.");
         if (!input.itemType) throw new Error("Tipo de item não especificado.");
+        if (HIDDEN_BAZAR_ITEM_TYPES.has(input.itemType)) throw new Error("Este item ainda nao pode ser anunciado no Bazar.");
 
         // Deducir do inventário (escrow)
         if (input.itemType === "FOOD" || input.itemType === "SWEET") {

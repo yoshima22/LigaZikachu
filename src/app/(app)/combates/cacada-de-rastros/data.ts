@@ -1,6 +1,57 @@
 import { prisma } from "@/lib/prisma";
 
+const EXPIRED_REWARDS = { SHORT: 30, MEDIUM: 22, LONG: 16, WEEKLY: 50 } as const;
+
+async function settleExpiredTraceRooms() {
+  const expiredRooms = await prisma.traceRoom.findMany({
+    where: { status: { in: ["WAITING", "HUNTING"] }, expiresAt: { lte: new Date() } },
+    select: {
+      id: true,
+      hiderId: true,
+      hiderMascotId: true,
+      hunterMascotId: true,
+      routeType: true,
+      isAdminSim: true,
+      hider: { select: { displayName: true } },
+    },
+    take: 10,
+  });
+
+  for (const room of expiredRooms) {
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.traceRoom.updateMany({
+        where: { id: room.id, status: { in: ["WAITING", "HUNTING"] } },
+        data: { status: "ESCAPED", resolvedAt: new Date(), updatedAt: new Date() },
+      });
+      if (updated.count !== 1) return;
+
+      await tx.mascot.update({ where: { id: room.hiderMascotId }, data: { arenaState: "FREE", restingUntil: null } });
+      if (room.hunterMascotId) {
+        await tx.mascot.update({ where: { id: room.hunterMascotId }, data: { arenaState: "FREE", restingUntil: null } });
+      }
+      if (!room.isAdminSim) {
+        await tx.goldenPawTransaction.create({
+          data: {
+            playerId: room.hiderId,
+            amount: EXPIRED_REWARDS[room.routeType],
+            reason: `Esconderijo expirou sem ser encontrado (${room.routeType})`,
+          },
+        });
+      }
+      await tx.traceEventLog.create({
+        data: {
+          roomId: room.id,
+          playerName: room.hider.displayName,
+          description: `${room.hider.displayName} resistiu ate o fim da rota ${room.routeType}.`,
+        },
+      });
+    });
+  }
+}
+
 export async function getTracePageData(playerId: string, displayName: string) {
+  await settleExpiredTraceRooms();
+
   const [myRooms, openRooms, globalHistory, myInventory, allMascots, fullPlayer] =
     await Promise.all([
       prisma.traceRoom.findMany({
@@ -23,10 +74,11 @@ export async function getTracePageData(playerId: string, displayName: string) {
           hunterMascot: {
             select: { pokemonId: true, nickname: true, statInstinct: true, statAgility: true },
           },
-          moves: { orderBy: { createdAt: "asc" } },
-          randomEvents: { orderBy: { createdAt: "asc" } },
+          moves: { orderBy: { createdAt: "desc" }, take: 8 },
+          randomEvents: { orderBy: { createdAt: "desc" }, take: 5 },
         },
         orderBy: { createdAt: "desc" },
+        take: 6,
       }),
       prisma.traceRoom.findMany({
         where: { status: "WAITING", hiderId: { not: playerId } },
@@ -35,6 +87,7 @@ export async function getTracePageData(playerId: string, displayName: string) {
           hiderMascot: { select: { pokemonId: true, nickname: true } },
         },
         orderBy: { createdAt: "desc" },
+        take: 12,
       }),
       prisma.traceEventLog.findMany({
         orderBy: { createdAt: "desc" },
@@ -70,6 +123,8 @@ export async function getTracePageData(playerId: string, displayName: string) {
         where: {
           playerId,
           arenaState: "FREE",
+          bazarListed: false,
+          OR: [{ restingUntil: null }, { restingUntil: { lte: new Date() } }],
           expeditions: { none: { status: "ACTIVE" } },
           buffs: { none: { type: "VACATION", expiresAt: { gt: new Date() } } },
         },
@@ -85,6 +140,7 @@ export async function getTracePageData(playerId: string, displayName: string) {
           level: true,
         },
         orderBy: { level: "desc" },
+        take: 120,
       }),
       prisma.goldenPawTransaction.aggregate({
         where: { playerId },

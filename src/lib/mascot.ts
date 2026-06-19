@@ -1065,6 +1065,7 @@ export async function startExpedition(
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote nao encontrado.");
   if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z nao pode sair em expedicao.");
   if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido nao pode sair em expedicao.");
+  if (mascot.arenaState === "TRACE_HIDING" || mascot.arenaState === "TRACE_HUNTING") throw new Error("Mascote em Caçada de Rastros nao pode sair em expedicao.");
   if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote em repouso nao pode sair em expedicao.");
 
   const active = await prisma.mascotExpedition.findFirst({

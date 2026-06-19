@@ -11,10 +11,10 @@ function createId() { return crypto.randomUUID(); }
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const ROUTE_STEPS: Record<TraceRouteType, number> = {
-  SHORT: 3,
-  MEDIUM: 4,
-  LONG: 5,
-  WEEKLY: 6,
+  SHORT: 4,
+  MEDIUM: 6,
+  LONG: 8,
+  WEEKLY: 10,
 };
 
 const ROUTE_EXPIRY_HOURS: Record<TraceRouteType, number> = {
@@ -27,10 +27,19 @@ const ROUTE_EXPIRY_HOURS: Record<TraceRouteType, number> = {
 const DIRECTIONS = ["N", "S", "L", "O"] as const;
 type Direction = (typeof DIRECTIONS)[number];
 
+const ROUTE_FOCUS_BASE: Record<TraceRouteType, number> = {
+  SHORT: 3,
+  MEDIUM: 4,
+  LONG: 5,
+  WEEKLY: 6,
+};
+
 const GOLDEN_PAWS_REWARDS = {
-  hunterWins: { hunter: 20, hider: 8 },
-  hiderEscapes: { hider: 25, hunter: 5 },
-  routeBonus: { SHORT: 1, MEDIUM: 1.25, LONG: 1.5, WEEKLY: 2 },
+  hunterFound: { SHORT: 12, MEDIUM: 22, LONG: 38, WEEKLY: 60 },
+  hunterFailed: 2,
+  hiderCreated: 2,
+  hiderPerFailedHunt: 3,
+  hiderExpired: { SHORT: 30, MEDIUM: 22, LONG: 16, WEEKLY: 50 },
 };
 
 const MAP_ITEM_TO_ROUTE: Record<string, TraceRouteType> = {
@@ -47,8 +56,41 @@ function generateRoutePath(steps: number): Direction[] {
   return Array.from({ length: steps }, () => DIRECTIONS[Math.floor(Math.random() * 4)]);
 }
 
-function calcFocus(steps: number, vitalityStat: number): number {
-  return steps + Math.floor(vitalityStat / 20);
+function calcFocus(routeType: TraceRouteType, vitalityStat: number): number {
+  const base = ROUTE_FOCUS_BASE[routeType];
+  const vitalityBonus = vitalityStat >= 90 ? 2 : vitalityStat >= 60 ? 1 : 0;
+  return base + vitalityBonus;
+}
+
+function traceStateLabel(state: string) {
+  if (state === "TRACE_HIDING") return "escondido em Caçada de Rastros";
+  if (state === "TRACE_HUNTING") return "caçando em Caçada de Rastros";
+  return null;
+}
+
+async function ensureMascotAvailableForTrace(mascotId: string, playerId: string) {
+  const mascot = await prisma.mascot.findFirst({
+    where: { id: mascotId, playerId },
+    include: {
+      expeditions: { where: { status: "ACTIVE" }, take: 1 },
+      buffs: { where: { type: "VACATION", expiresAt: { gt: new Date() } }, take: 1 },
+      arenaTeamMembers: { where: { team: { status: "ACTIVE" } }, take: 1 },
+    },
+  });
+  if (!mascot) return { error: "Mascote não encontrado" as const };
+  const traceLabel = traceStateLabel(mascot.arenaState);
+  if (traceLabel) return { error: `Mascote já está ${traceLabel}.` as const };
+  if (mascot.arenaState === "ARENA") return { error: "Mascote registrado na Arena Z não pode participar." as const };
+  if (mascot.arenaState === "INJURED") return { error: "Mascote ferido precisa se recuperar antes de participar." as const };
+  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) {
+    return { error: "Mascote em repouso não pode participar." as const };
+  }
+  if (mascot.restingUntil && mascot.restingUntil > new Date()) return { error: "Mascote em cooldown não pode participar." as const };
+  if (mascot.expeditions.length > 0) return { error: "Mascote em expedição não pode participar." as const };
+  if (mascot.buffs.length > 0) return { error: "Mascote em férias não pode participar." as const };
+  if (mascot.arenaTeamMembers.length > 0) return { error: "Mascote já está em uma equipe ativa da Arena." as const };
+  if (mascot.bazarListed) return { error: "Mascote anunciado no Bazar não pode participar." as const };
+  return { mascot };
 }
 
 function rollRandomEvent(
@@ -154,21 +196,18 @@ export async function createTraceRoomAction(mascotId: string, routeType: TraceRo
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
-  const mascot = await prisma.mascot.findFirst({
-    where: { id: mascotId, playerId: player.id, arenaState: "FREE" },
-  });
-  if (!mascot) return { error: "Mascote não disponível" };
+  const availability = await ensureMascotAvailableForTrace(mascotId, player.id);
+  if ("error" in availability) return { error: availability.error };
+  const mascot = availability.mascot;
 
-  // Check vacation/recovery
-  const onVacation = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "VACATION", expiresAt: { gt: new Date() } },
-  });
-  if (onVacation) return { error: "Mascote em férias não pode participar" };
-
-  const onExpedition = await prisma.mascotExpedition.findFirst({
-    where: { mascotId, status: "ACTIVE" },
-  });
-  if (onExpedition) return { error: "Mascote em expedição não pode participar" };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [activeHiddenCount, createdTodayCount] = await Promise.all([
+    prisma.traceRoom.count({ where: { hiderId: player.id, status: { in: ["WAITING", "HUNTING"] } } }),
+    prisma.traceRoom.count({ where: { hiderId: player.id, createdAt: { gte: today } } }),
+  ]);
+  if (!bypassItem && activeHiddenCount >= 3) return { error: "Limite de 3 esconderijos ativos atingido." };
+  if (!bypassItem && createdTodayCount >= 3) return { error: "Limite diario de 3 esconderijos atingido." };
 
   // Verify player has the map item (unless admin bypass)
   let mapInventoryId: string | null = null;
@@ -189,7 +228,7 @@ export async function createTraceRoomAction(mascotId: string, routeType: TraceRo
 
   const steps = ROUTE_STEPS[routeType];
   const path = generateRoutePath(steps);
-  const focus = calcFocus(steps, mascot.statVitality);
+  const focus = calcFocus(routeType, mascot.statVitality);
   const expiresAt = new Date(Date.now() + ROUTE_EXPIRY_HOURS[routeType] * 60 * 60 * 1000);
 
   await prisma.$transaction(async (tx) => {
@@ -221,6 +260,9 @@ export async function createTraceRoomAction(mascotId: string, routeType: TraceRo
     }
 
     await logGlobalEvent(tx, room.id, player.displayName, `${player.displayName} abriu um esconderijo (rota ${routeType}).`);
+    if (!bypassItem) {
+      await awardGoldenPaws(tx, player.id, GOLDEN_PAWS_REWARDS.hiderCreated, `Criou esconderijo (${routeType})`);
+    }
   });
 
   revalidatePath("/combates/cacada-de-rastros");
@@ -243,20 +285,17 @@ export async function joinTraceRoomAction(roomId: string, mascotId: string, bypa
   if (!room) return { error: "Sala não encontrada ou já em andamento" };
   if (room.hiderId === player.id) return { error: "Você não pode caçar seu próprio esconderijo" };
 
-  const mascot = await prisma.mascot.findFirst({
-    where: { id: mascotId, playerId: player.id, arenaState: "FREE" },
-  });
-  if (!mascot) return { error: "Mascote não disponível" };
+  const availability = await ensureMascotAvailableForTrace(mascotId, player.id);
+  if ("error" in availability) return { error: availability.error };
 
-  const onVacation = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "VACATION", expiresAt: { gt: new Date() } },
-  });
-  if (onVacation) return { error: "Mascote em férias não pode participar" };
-
-  const onExpedition = await prisma.mascotExpedition.findFirst({
-    where: { mascotId, status: "ACTIVE" },
-  });
-  if (onExpedition) return { error: "Mascote em expedição não pode participar" };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [activeHuntCount, huntsTodayCount] = await Promise.all([
+    prisma.traceRoom.count({ where: { hunterId: player.id, status: "HUNTING" } }),
+    prisma.traceRoom.count({ where: { hunterId: player.id, createdAt: { gte: today } } }),
+  ]);
+  if (!bypassItem && activeHuntCount >= 1) return { error: "Voce ja tem 1 perseguicao ativa." };
+  if (!bypassItem && huntsTodayCount >= 4) return { error: "Limite diario de 4 cacadas atingido." };
 
   // Check hunt ticket
   let ticketInvId: string | null = null;
@@ -355,9 +394,8 @@ export async function makeTraceMoveAction(roomId: string, direction: Direction) 
 
     if (isFound) {
       // Hunter wins
-      const bonus = GOLDEN_PAWS_REWARDS.routeBonus[room.routeType];
-      const hunterPaws = Math.round(GOLDEN_PAWS_REWARDS.hunterWins.hunter * bonus);
-      const hiderPaws = Math.round(GOLDEN_PAWS_REWARDS.hunterWins.hider * bonus);
+      const hunterPaws = GOLDEN_PAWS_REWARDS.hunterFound[room.routeType] + (room.sinalizadorUsed ? 4 : 0);
+      const hiderPaws = Math.max(3, Math.round(hunterPaws * 0.35));
 
       await tx.traceRoom.update({
         where: { id: roomId },
@@ -370,9 +408,8 @@ export async function makeTraceMoveAction(roomId: string, direction: Direction) 
       await logGlobalEvent(tx, roomId, room.hunter!.displayName, `🏆 ${room.hunter!.displayName} encontrou o esconderijo de ${room.hider.displayName}! +${hunterPaws} 🐾`);
     } else if (isEscaped) {
       // Hider escapes due to no focus left
-      const bonus = GOLDEN_PAWS_REWARDS.routeBonus[room.routeType];
-      const hiderPaws = Math.round(GOLDEN_PAWS_REWARDS.hiderEscapes.hider * bonus);
-      const hunterPaws = GOLDEN_PAWS_REWARDS.hiderEscapes.hunter;
+      const hiderPaws = GOLDEN_PAWS_REWARDS.hiderPerFailedHunt;
+      const hunterPaws = GOLDEN_PAWS_REWARDS.hunterFailed;
 
       await tx.traceRoom.update({
         where: { id: roomId },
@@ -490,15 +527,19 @@ export async function useSinalizadorAction(roomId: string) {
   if (room.sinalizadorUsed) return { error: "Sinalizador gratuito já usado nesta sala" };
 
   const routePath: Direction[] = JSON.parse(room.routePath);
-  const hint = routePath[room.currentStep] ?? null;
+  const addedDirection = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
+  routePath.push(addedDirection);
 
-  await prisma.traceRoom.update({
-    where: { id: roomId },
-    data: { sinalizadorUsed: true, hintDirection: hint, updatedAt: new Date() },
+  await prisma.$transaction(async (tx) => {
+    await tx.traceRoom.update({
+      where: { id: roomId },
+      data: { sinalizadorUsed: true, routePath: JSON.stringify(routePath), updatedAt: new Date() },
+    });
+    await logGlobalEvent(tx, roomId, player.displayName, `${player.displayName} sinalizou o mascote escondido. O caminho ganhou +1 seta secreta.`);
   });
 
   revalidatePath("/combates/cacada-de-rastros");
-  return { success: true, hint };
+  return { success: true, addedDirection };
 }
 
 // ── Admin: Grant Golden Paws ───────────────────────────────────────────────
@@ -537,7 +578,7 @@ export async function adminSimulateRoomAction(
 
   const steps = ROUTE_STEPS[routeType];
   const path = generateRoutePath(steps);
-  const focus = calcFocus(steps, hiderMascot.statVitality);
+  const focus = calcFocus(routeType, hiderMascot.statVitality);
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   await prisma.$transaction(async (tx) => {
@@ -579,11 +620,11 @@ export async function adminSeedTraceShopItemsAction() {
   const now = new Date();
 
   const items = [
-    { type: "TRACE_MAP_SHORT",        name: "Mapa de Rota Curta",        description: "Abre um esconderijo de rota curta (3 passos).",           price: 150,  active: false },
-    { type: "TRACE_MAP_MEDIUM",       name: "Mapa de Rota Média",        description: "Abre um esconderijo de rota média (4 passos).",           price: 300,  active: false },
-    { type: "TRACE_MAP_LONG",         name: "Mapa de Rota Longa",        description: "Abre um esconderijo de rota longa (5 passos).",           price: 600,  active: false },
-    { type: "TRACE_MAP_WEEKLY",       name: "Mapa de Rota Semanal",      description: "Abre um esconderijo semanal de alta recompensa (6 passos).", price: 1200, active: false },
-    { type: "TRACE_HUNT_TICKET",      name: "Ticket de Caçada",          description: "Permite entrar como caçador em uma sala aberta.",         price: 120,  active: false },
+    { type: "TRACE_MAP_SHORT",        name: "Mapa de Rota Curta",        description: "Abre um esconderijo de rota curta (4 passos).",           price: 500,  active: false },
+    { type: "TRACE_MAP_MEDIUM",       name: "Mapa de Rota Média",        description: "Abre um esconderijo de rota média (6 passos).",           price: 750,  active: false },
+    { type: "TRACE_MAP_LONG",         name: "Mapa de Rota Longa",        description: "Abre um esconderijo de rota longa (8 passos).",           price: 1000, active: false },
+    { type: "TRACE_MAP_WEEKLY",       name: "Mapa de Rota Semanal",      description: "Abre um esconderijo semanal de alta recompensa (10 passos).", price: 0, active: false },
+    { type: "TRACE_HUNT_TICKET",      name: "Ticket de Caçada",          description: "Permite entrar como caçador em uma sala aberta.",         price: 250,  active: false },
     { type: "TRACE_SIGNAL_FLARE",     name: "Sinalizador de Rastro",     description: "Adiciona uma seta de pista visível ao caçador (loja Pegadas).", price: 0, active: false },
     { type: "TRACE_DECOY",            name: "Isca Falsa",                description: "Cria um rastro falso para confundir o caçador.",          price: 0,    active: false },
     { type: "TRACE_SILENCE_POTION",   name: "Poção do Silêncio",         description: "Desativa o próximo evento aleatório do escondido.",       price: 0,    active: false },
@@ -611,6 +652,17 @@ export async function adminSeedTraceShopItemsAction() {
         },
       });
       created++;
+    } else {
+      await prisma.shopItem.update({
+        where: { id: exists.id },
+        data: {
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          active: false,
+          updatedAt: now,
+        },
+      });
     }
   }
 
