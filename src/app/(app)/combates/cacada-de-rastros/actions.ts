@@ -128,7 +128,7 @@ async function logGlobalEvent(
   });
 }
 
-// ── Read action ────────────────────────────────────────────────────────────
+// ── Read action (usado pelo client para refresh) ───────────────────────────
 
 export async function getTracePageDataAction() {
   const session = await getAppSession();
@@ -138,81 +138,11 @@ export async function getTracePageDataAction() {
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
-  const [myRooms, openRooms, globalHistory, myInventory, allMascots] = await Promise.all([
-    // Salas onde o jogador participa (hider ou hunter), não finalizadas
-    prisma.traceRoom.findMany({
-      where: {
-        OR: [{ hiderId: player.id }, { hunterId: player.id }],
-        status: { in: ["WAITING", "HUNTING"] },
-      },
-      include: {
-        hider: { select: { displayName: true } },
-        hiderMascot: { select: { pokemonId: true, nickname: true, statVitality: true, statInstinct: true, statAgility: true } },
-        hunter: { select: { displayName: true } },
-        hunterMascot: { select: { pokemonId: true, nickname: true, statInstinct: true, statAgility: true } },
-        moves: { orderBy: { createdAt: "asc" } },
-        randomEvents: { orderBy: { createdAt: "asc" } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    // Salas abertas aguardando caçador (não minhas)
-    prisma.traceRoom.findMany({
-      where: { status: "WAITING", hiderId: { not: player.id } },
-      include: {
-        hider: { select: { displayName: true } },
-        hiderMascot: { select: { pokemonId: true, nickname: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    // Histórico global (últimas 10 entradas)
-    prisma.traceEventLog.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    }),
-    // Inventário do jogador (itens de rastros)
-    prisma.playerInventory.findMany({
-      where: {
-        playerId: player.id,
-        item: {
-          type: {
-            in: [
-              "TRACE_MAP_SHORT", "TRACE_MAP_MEDIUM", "TRACE_MAP_LONG", "TRACE_MAP_WEEKLY",
-              "TRACE_HUNT_TICKET", "TRACE_SIGNAL_FLARE", "TRACE_DECOY", "TRACE_SILENCE_POTION",
-              "TRACE_ARMOR_VEST", "TRACE_MIST_SHIELD", "TRACE_INSTINCT_BOOST",
-              "TRACE_GOLDEN_TICKET", "TRACE_SPECIAL_MAP",
-            ],
-          },
-        },
-        quantity: { gt: 0 },
-      },
-      include: { item: { select: { type: true, name: true } } },
-    }),
-    // Mascotes disponíveis (FREE, não em expedição)
-    prisma.mascot.findMany({
-      where: {
-        playerId: player.id,
-        arenaState: "FREE",
-        expeditions: { none: { status: "ACTIVE" } },
-        buffs: { none: { type: "VACATION", expiresAt: { gt: new Date() } } },
-      },
-      select: { id: true, pokemonId: true, nickname: true, statInstinct: true, statAgility: true, statVitality: true, statForce: true, statCharisma: true, level: true },
-      orderBy: { level: "desc" },
-    }),
-  ]);
+  const { getTracePageData } = await import("./data");
+  const data = await getTracePageData(player.id, player.displayName);
 
-  const fullPlayer = await prisma.player.findUnique({
-    where: { id: player.id },
-    select: { goldenPaws: true },
-  });
-
-  return {
-    player: { id: player.id, displayName: player.displayName, goldenPaws: fullPlayer?.goldenPaws ?? 0 },
-    myRooms,
-    openRooms,
-    globalHistory,
-    myInventory,
-    availableMascots: allMascots,
-  };
+  // Serialize dates to strings so RSC serialization works for client refresh
+  return JSON.parse(JSON.stringify(data));
 }
 
 // ── Create Hide Room ───────────────────────────────────────────────────────

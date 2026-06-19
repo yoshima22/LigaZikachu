@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { getAppSession } from "@/lib/session";
+import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { getTracePageDataAction } from "./actions";
+import { getTracePageData } from "./data";
 import { TraceClient } from "./_components/trace-client";
 
 export const dynamic = "force-dynamic";
@@ -12,14 +12,16 @@ export default async function CacadaDeRastrosPage() {
     redirect("/dashboard");
   }
 
-  const data = await getTracePageDataAction();
-  if ("error" in data) {
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) {
     return (
-      <div className="py-20 text-center text-sm text-red-400">
-        {data.error}
+      <div className="py-20 text-center text-sm text-slate-500">
+        Crie um jogador para acessar esta página.
       </div>
     );
   }
+
+  const data = await getTracePageData(player.id, player.displayName);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
