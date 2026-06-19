@@ -4,11 +4,12 @@ type RewardDef = {
   coins: number;
   label: string;
   eggType: "EVENT" | "SPECIAL" | "RARE" | "COMMON" | null;
+  eggQuantity?: number;
   foodGift: string | null;
 };
 
 const rewardsByPosition: Record<number, RewardDef> = {
-  1: { coins: 1200, label: "1º lugar no Desafio Sincronizado", eggType: "EVENT", foodGift: "Amuleto da Sorte" },
+  1: { coins: 1200, label: "1º lugar no Desafio Sincronizado", eggType: "EVENT", eggQuantity: 3, foodGift: "Amuleto da Sorte" },
   2: { coins: 800, label: "2º lugar no Desafio Sincronizado", eggType: "SPECIAL", foodGift: "Vitamina Chocante" },
   3: { coins: 500, label: "3º lugar no Desafio Sincronizado", eggType: "RARE", foodGift: "Bala de Mel" },
   4: { coins: 300, label: "4º lugar no Desafio Sincronizado", eggType: "COMMON", foodGift: "Água Fresca" },
@@ -83,8 +84,13 @@ export async function finalizeSyncEventRoomRewards(roomId: string) {
       });
 
       if (reward.eggType) {
-        await prisma.mascotEgg.create({
-          data: { playerId: score.playerId, type: reward.eggType, origin: `Desafio Sincronizado — ${reward.label}` },
+        const eggQuantity = Math.max(1, reward.eggQuantity ?? 1);
+        await prisma.mascotEgg.createMany({
+          data: Array.from({ length: eggQuantity }, () => ({
+            playerId: score.playerId,
+            type: reward.eggType!,
+            origin: `Desafio Sincronizado — ${reward.label}`,
+          })),
         });
       }
 

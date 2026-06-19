@@ -350,7 +350,7 @@ export async function adminRunFullSimulationAction(): Promise<{
     }
 
     await prisma.syncEventRoom.update({ where: { id: room.id }, data: { status: "FINISHED", finishedAt: new Date() } });
-    log.push("🏁 Evento encerrado. Acesse a sala para ver o ranking e entregar recompensas.");
+    log.push("🏁 Evento encerrado. Acesse a sala para ver o ranking e conferir as recompensas.");
 
     revalidatePath("/desafio-sincronizado");
     return { roomId: room.id, log };

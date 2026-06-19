@@ -11,7 +11,7 @@ const REWARDS = [
     medal: "🥇",
     label: "1º lugar",
     coins: 1200,
-    egg: "Ovo de Evento",
+    egg: "3 Ovos de Evento",
     item: "Amuleto da Sorte",
     highlight: "border-[#FFCB05]/40 bg-[#FFCB05]/5",
     coinColor: "text-[#FFCB05]",
