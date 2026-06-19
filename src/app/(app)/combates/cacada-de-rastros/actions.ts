@@ -50,10 +50,22 @@ const MAP_ITEM_TO_ROUTE: Record<string, TraceRouteType> = {
   TRACE_SPECIAL_MAP: "LONG",
 };
 
+const HIDER_ITEM_TYPES = ["TRACE_DECOY", "TRACE_SILENCE_POTION", "TRACE_MIST_SHIELD"] as const;
+const HUNTER_ITEM_TYPES = ["TRACE_ARMOR_VEST", "TRACE_INSTINCT_BOOST", "TRACE_GOLDEN_TICKET"] as const;
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function generateRoutePath(steps: number): Direction[] {
   return Array.from({ length: steps }, () => DIRECTIONS[Math.floor(Math.random() * 4)]);
+}
+
+function normalizeRoutePath(routeType: TraceRouteType, requestedPath?: string[] | null): Direction[] {
+  const steps = ROUTE_STEPS[routeType];
+  const cleaned = (requestedPath ?? []).filter((dir): dir is Direction =>
+    DIRECTIONS.includes(dir as Direction),
+  );
+  if (cleaned.length === steps) return cleaned;
+  return generateRoutePath(steps);
 }
 
 function calcFocus(routeType: TraceRouteType, vitalityStat: number): number {
@@ -188,7 +200,14 @@ export async function getTracePageDataAction() {
 
 // ── Create Hide Room ───────────────────────────────────────────────────────
 
-export async function createTraceRoomAction(mascotId: string, routeType: TraceRouteType, bypassItem = false) {
+export async function createTraceRoomAction(
+  mascotId: string,
+  routeType: TraceRouteType,
+  routePath?: string[] | null,
+  defensiveItemType?: string | null,
+  defensiveItemStep?: number | null,
+  bypassItem = false,
+) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
@@ -227,9 +246,24 @@ export async function createTraceRoomAction(mascotId: string, routeType: TraceRo
   }
 
   const steps = ROUTE_STEPS[routeType];
-  const path = generateRoutePath(steps);
+  const path = normalizeRoutePath(routeType, routePath);
+  const selectedDefensiveItem = defensiveItemType && HIDER_ITEM_TYPES.includes(defensiveItemType as never)
+    ? defensiveItemType
+    : null;
+  const selectedDefensiveStep = typeof defensiveItemStep === "number"
+    ? Math.max(0, Math.min(steps - 1, defensiveItemStep))
+    : null;
   const focus = calcFocus(routeType, mascot.statVitality);
   const expiresAt = new Date(Date.now() + ROUTE_EXPIRY_HOURS[routeType] * 60 * 60 * 1000);
+
+  let defensiveInvId: string | null = null;
+  if (selectedDefensiveItem && !bypassItem) {
+    const inv = await prisma.playerInventory.findFirst({
+      where: { playerId: player.id, quantity: { gt: 0 }, item: { type: selectedDefensiveItem as never } },
+    });
+    if (!inv) return { error: "Voce nao possui o item defensivo escolhido." };
+    defensiveInvId = inv.id;
+  }
 
   await prisma.$transaction(async (tx) => {
     const room = await tx.traceRoom.create({
@@ -259,7 +293,27 @@ export async function createTraceRoomAction(mascotId: string, routeType: TraceRo
       });
     }
 
-    await logGlobalEvent(tx, room.id, player.displayName, `${player.displayName} abriu um esconderijo (rota ${routeType}).`);
+    if (selectedDefensiveItem && selectedDefensiveStep !== null) {
+      await tx.traceRoomEvent.create({
+        data: {
+          id: createId(),
+          roomId: room.id,
+          eventCode: `ITEM:${selectedDefensiveItem}`,
+          target: "HIDER",
+          step: selectedDefensiveStep,
+          effectApplied: false,
+        },
+      });
+    }
+
+    if (defensiveInvId) {
+      await tx.playerInventory.update({
+        where: { id: defensiveInvId },
+        data: { quantity: { decrement: 1 } },
+      });
+    }
+
+    await logGlobalEvent(tx, room.id, player.displayName, `${player.displayName} abriu um esconderijo ${routeType} com uma rota de ${path.length} passos.`);
     if (!bypassItem) {
       await awardGoldenPaws(tx, player.id, GOLDEN_PAWS_REWARDS.hiderCreated, `Criou esconderijo (${routeType})`);
     }
@@ -271,7 +325,12 @@ export async function createTraceRoomAction(mascotId: string, routeType: TraceRo
 
 // ── Join Hunt Room ─────────────────────────────────────────────────────────
 
-export async function joinTraceRoomAction(roomId: string, mascotId: string, bypassItem = false) {
+export async function joinTraceRoomAction(
+  roomId: string,
+  mascotId: string,
+  hunterItemTypes: string[] = [],
+  bypassItem = false,
+) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
@@ -297,6 +356,19 @@ export async function joinTraceRoomAction(roomId: string, mascotId: string, bypa
   if (!bypassItem && activeHuntCount >= 1) return { error: "Voce ja tem 1 perseguicao ativa." };
   if (!bypassItem && huntsTodayCount >= 4) return { error: "Limite diario de 4 cacadas atingido." };
 
+  const selectedHunterItems = [...new Set(hunterItemTypes)]
+    .filter((type) => HUNTER_ITEM_TYPES.includes(type as never))
+    .slice(0, 2);
+  const hunterItemInvs = selectedHunterItems.length > 0 && !bypassItem
+    ? await prisma.playerInventory.findMany({
+        where: { playerId: player.id, quantity: { gt: 0 }, item: { type: { in: selectedHunterItems as never } } },
+        include: { item: { select: { type: true } } },
+      })
+    : [];
+  if (!bypassItem && hunterItemInvs.length < selectedHunterItems.length) {
+    return { error: "Voce nao possui todos os itens de cacador escolhidos." };
+  }
+
   // Check hunt ticket
   let ticketInvId: string | null = null;
   if (!bypassItem) {
@@ -312,6 +384,7 @@ export async function joinTraceRoomAction(roomId: string, mascotId: string, bypa
   }
 
   await prisma.$transaction(async (tx) => {
+    const routePath: Direction[] = JSON.parse(room.routePath);
     await tx.traceRoom.update({
       where: { id: roomId },
       data: {
@@ -319,6 +392,7 @@ export async function joinTraceRoomAction(roomId: string, mascotId: string, bypa
         hunterMascotId: mascotId,
         status: "HUNTING",
         lastHunterMoveAt: new Date(),
+        hintDirection: selectedHunterItems.includes("TRACE_INSTINCT_BOOST") ? routePath[0] ?? null : null,
         updatedAt: new Date(),
       },
     });
@@ -332,7 +406,24 @@ export async function joinTraceRoomAction(roomId: string, mascotId: string, bypa
       });
     }
 
-    await logGlobalEvent(tx, roomId, player.displayName, `${player.displayName} entrou na caçada!`);
+    for (const itemType of selectedHunterItems) {
+      await tx.traceRoomEvent.create({
+        data: {
+          id: createId(),
+          roomId,
+          eventCode: `ITEM:${itemType}`,
+          target: "HUNTER",
+          step: -1,
+          effectApplied: itemType === "TRACE_INSTINCT_BOOST",
+        },
+      });
+      const inv = hunterItemInvs.find((entry) => entry.item.type === itemType);
+      if (inv) {
+        await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+      }
+    }
+
+    await logGlobalEvent(tx, roomId, player.displayName, `${player.displayName} entrou na cacada com ${selectedHunterItems.length} item(ns) preparado(s).`);
   });
 
   revalidatePath("/combates/cacada-de-rastros");
@@ -358,6 +449,7 @@ export async function makeTraceMoveAction(roomId: string, direction: Direction) 
       hunter: { select: { displayName: true, id: true } },
       hiderMascot: { select: { statInstinct: true, statAgility: true, statVitality: true } },
       hunterMascot: { select: { statInstinct: true, statAgility: true } },
+      randomEvents: { where: { eventCode: { startsWith: "ITEM:" }, target: "HIDER", effectApplied: false } },
     },
   });
   if (!room) return { error: "Sala não encontrada" };
@@ -382,6 +474,7 @@ export async function makeTraceMoveAction(roomId: string, direction: Direction) 
 
   const routePath: Direction[] = JSON.parse(room.routePath);
   const correct = routePath[room.currentStep] === direction;
+  const defensiveItemAtStep = room.randomEvents.find((event) => event.step === room.currentStep);
 
   let eventResult: TraceEvent | null = null;
   const newStep = correct ? room.currentStep + 1 : room.currentStep;
@@ -392,6 +485,14 @@ export async function makeTraceMoveAction(roomId: string, direction: Direction) 
     await tx.traceMove.create({
       data: { id: createId(), roomId, step: room.currentStep, direction, correct },
     });
+
+    if (defensiveItemAtStep) {
+      await tx.traceRoomEvent.update({
+        where: { id: defensiveItemAtStep.id },
+        data: { effectApplied: true },
+      });
+      await logGlobalEvent(tx, roomId, room.hider.displayName, `${room.hider.displayName} ativou ${defensiveItemAtStep.eventCode.replace("ITEM:", "")} no passo ${room.currentStep + 1}.`);
+    }
 
     if (isFound) {
       // Hunter wins
@@ -513,7 +614,7 @@ export async function leaveTraceRoomAction(roomId: string) {
 
 // ── Use Sinalizador (free flare per room) ─────────────────────────────────
 
-export async function useSinalizadorAction(roomId: string) {
+export async function useSinalizadorAction(roomId: string, direction?: string | null) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
@@ -528,7 +629,9 @@ export async function useSinalizadorAction(roomId: string) {
   if (room.sinalizadorUsed) return { error: "Sinalizador gratuito já usado nesta sala" };
 
   const routePath: Direction[] = JSON.parse(room.routePath);
-  const addedDirection = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
+  const addedDirection = DIRECTIONS.includes(direction as Direction)
+    ? (direction as Direction)
+    : DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
   routePath.push(addedDirection);
 
   await prisma.$transaction(async (tx) => {
@@ -564,23 +667,36 @@ export async function adminSimulateRoomAction(
   hiderMascotId: string,
   hunterMascotId: string,
   routeType: TraceRouteType,
+  routePath?: string[] | null,
+  defensiveItemType?: string | null,
+  defensiveItemStep?: number | null,
+  hunterItemTypes: string[] = [],
 ) {
   const session = await getAppSession();
-  if (!session?.user) return { error: "Não autenticado" };
+  if (!session?.user) return { error: "Nao autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
 
   const player = await getSessionPlayer(session.user.id);
-  if (!player) return { error: "Jogador não encontrado" };
+  if (!player) return { error: "Jogador nao encontrado" };
 
   const hiderMascot = await prisma.mascot.findFirst({ where: { id: hiderMascotId, playerId: player.id } });
   const hunterMascot = await prisma.mascot.findFirst({ where: { id: hunterMascotId, playerId: player.id } });
-  if (!hiderMascot || !hunterMascot) return { error: "Mascotes não encontrados" };
-  if (hiderMascotId === hunterMascotId) return { error: "Use mascotes diferentes para hider e hunter" };
+  if (!hiderMascot || !hunterMascot) return { error: "Mascotes nao encontrados" };
+  if (hiderMascotId === hunterMascotId) return { error: "Use mascotes diferentes para escondido e cacador" };
 
   const steps = ROUTE_STEPS[routeType];
-  const path = generateRoutePath(steps);
+  const path = normalizeRoutePath(routeType, routePath);
+  const selectedDefensiveItem = defensiveItemType && HIDER_ITEM_TYPES.includes(defensiveItemType as never)
+    ? defensiveItemType
+    : null;
+  const selectedDefensiveStep = typeof defensiveItemStep === "number"
+    ? Math.max(0, Math.min(steps - 1, defensiveItemStep))
+    : null;
+  const selectedHunterItems = [...new Set(hunterItemTypes)]
+    .filter((type) => HUNTER_ITEM_TYPES.includes(type as never))
+    .slice(0, 2);
   const focus = calcFocus(routeType, hiderMascot.statVitality);
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + ROUTE_EXPIRY_HOURS[routeType] * 60 * 60 * 1000);
 
   await prisma.$transaction(async (tx) => {
     const room = await tx.traceRoom.create({
@@ -596,6 +712,7 @@ export async function adminSimulateRoomAction(
         maxFocus: focus,
         status: "HUNTING",
         lastHunterMoveAt: new Date(Date.now() - MOVE_COOLDOWN_MS),
+        hintDirection: selectedHunterItems.includes("TRACE_INSTINCT_BOOST") ? path[0] ?? null : null,
         expiresAt,
         isAdminSim: true,
         updatedAt: new Date(),
@@ -604,14 +721,41 @@ export async function adminSimulateRoomAction(
 
     await tx.mascot.update({ where: { id: hiderMascotId }, data: { arenaState: "TRACE_HIDING" } });
     await tx.mascot.update({ where: { id: hunterMascotId }, data: { arenaState: "TRACE_HUNTING" } });
-    await logGlobalEvent(tx, room.id, player.displayName, `[Simulação Admin] ${player.displayName} criou uma sala de teste.`);
+
+    if (selectedDefensiveItem && selectedDefensiveStep !== null) {
+      await tx.traceRoomEvent.create({
+        data: {
+          id: createId(),
+          roomId: room.id,
+          eventCode: `ITEM:${selectedDefensiveItem}`,
+          target: "HIDER",
+          step: selectedDefensiveStep,
+          effectApplied: false,
+        },
+      });
+    }
+
+    for (const itemType of selectedHunterItems) {
+      await tx.traceRoomEvent.create({
+        data: {
+          id: createId(),
+          roomId: room.id,
+          eventCode: `ITEM:${itemType}`,
+          target: "HUNTER",
+          step: -1,
+          effectApplied: itemType === "TRACE_INSTINCT_BOOST",
+        },
+      });
+    }
+
+    await logGlobalEvent(tx, room.id, player.displayName, `[Simulacao Admin] ${player.displayName} criou uma sala de teste com rota manual de ${path.length} passos.`);
   });
 
   revalidatePath("/combates/cacada-de-rastros");
   return { success: true };
 }
 
-// ── Admin: Seed shop items (disabled) ─────────────────────────────────────
+// Admin: Seed shop items
 
 export async function adminSeedTraceShopItemsAction() {
   const session = await getAppSession();

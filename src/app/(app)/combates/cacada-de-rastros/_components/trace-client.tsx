@@ -32,7 +32,7 @@ type Mascot = {
 };
 
 type TraceMove = { id: string; step: number; direction: string; correct: boolean };
-type TraceRoomEvent = { id: string; eventCode: string; step: number };
+type TraceRoomEvent = { id: string; eventCode: string; target?: string; step: number; effectApplied?: boolean };
 type TraceRoom = {
   id: string;
   hiderId: string;
@@ -107,6 +107,38 @@ const MAP_ITEM_FOR_ROUTE: Record<TraceRouteType, string> = {
   WEEKLY: "TRACE_MAP_WEEKLY",
 };
 
+const DIRECTION_WORDS: Record<string, string> = { N: "Norte", S: "Sul", L: "Leste", O: "Oeste" };
+
+const HIDER_ITEMS = [
+  { type: "TRACE_DECOY", name: "Isca Falsa", text: "Cria uma distração no passo escolhido." },
+  { type: "TRACE_SILENCE_POTION", name: "Poção do Silêncio", text: "Tenta abafar um evento favorável ao caçador." },
+  { type: "TRACE_MIST_SHIELD", name: "Escudo de Neblina", text: "Deixa a leitura daquele passo mais nebulosa." },
+];
+
+const HUNTER_ITEMS = [
+  { type: "TRACE_INSTINCT_BOOST", name: "Impulso de Instinto", text: "Revela a primeira direção correta ao entrar." },
+  { type: "TRACE_ARMOR_VEST", name: "Colete de Armadura", text: "Preparado para absorver uma armadilha em implementação." },
+  { type: "TRACE_GOLDEN_TICKET", name: "Ticket Dourado", text: "Entrada especial registrada como item de caçada." },
+];
+
+const CLUE_TEXT = {
+  correct: [
+    "O chão tem marcas recentes e a trilha parece quente.",
+    "Seu mascote fareja com confiança. Algo passou por aqui.",
+    "Uma pequena marca combina com o padrão do rastro escondido.",
+  ],
+  wrong: [
+    "As marcas se espalham e logo somem. Parece uma pista ruim.",
+    "Seu mascote hesita. O cheiro fica fraco nessa direção.",
+    "A trilha faz barulho, mas não parece levar ao alvo.",
+  ],
+};
+
+function itemName(type: string) {
+  const clean = type.replace("ITEM:", "");
+  return [...HIDER_ITEMS, ...HUNTER_ITEMS].find((item) => item.type === clean)?.name ?? clean;
+}
+
 function pokeImgUrl(id: number) {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 }
@@ -172,11 +204,19 @@ function ActiveRoomView({ room, playerId, refresh }: { room: TraceRoom; playerId
     title: string;
     message: string;
   } | null>(null);
+  const [signalDirection, setSignalDirection] = useState<string>("N");
 
   const isHider = room.hiderId === playerId;
   const isHunter = room.hunterId === playerId;
   const isAdminDuel = room.isAdminSim && isHider && isHunter;
   const totalSteps = ROUTE_STEPS[room.routeType] + (room.sinalizadorUsed ? 1 : 0);
+  const hiderItems = room.randomEvents.filter((event) => event.eventCode.startsWith("ITEM:") && event.target === "HIDER");
+  const hunterItems = room.randomEvents.filter((event) => event.eventCode.startsWith("ITEM:") && event.target === "HUNTER");
+  const currentDefensiveItem = hiderItems.find((event) => event.step === room.currentStep && !event.effectApplied);
+  const lastMove = room.moves[0];
+  const routeClue = lastMove
+    ? (lastMove.correct ? CLUE_TEXT.correct[lastMove.step % CLUE_TEXT.correct.length] : CLUE_TEXT.wrong[lastMove.step % CLUE_TEXT.wrong.length])
+    : "O rastro acabou de começar. Observe os sinais, escolha uma direção e avance etapa por etapa.";
   const nextMoveAt = room.lastHunterMoveAt
     ? new Date(new Date(room.lastHunterMoveAt).getTime() + 3 * 60 * 1000).toISOString()
     : null;
@@ -217,7 +257,7 @@ function ActiveRoomView({ room, playerId, refresh }: { room: TraceRoom; playerId
 
   const flare = () => {
     startTransition(async () => {
-      const res = await useSinalizadorAction(room.id);
+      const res = await useSinalizadorAction(room.id, signalDirection);
       if ("error" in res) {
         toast.error(res.error);
         return;
@@ -285,6 +325,53 @@ function ActiveRoomView({ room, playerId, refresh }: { room: TraceRoom; playerId
           <p className="text-xs text-slate-300">{canMoveNow ? "Escolha uma direcao abaixo." : "Aguarde o cooldown do movimento."}</p>
         </div>
       </div>
+
+      <div className="rounded-2xl border border-slate-700/60 bg-slate-950/50 p-4">
+        <p className="text-[10px] uppercase tracking-wide text-slate-500">Leitura da trilha</p>
+        <p className="mt-1 text-sm font-semibold text-slate-100">{routeClue}</p>
+        <p className="mt-2 text-xs text-slate-400">
+          Passo atual: {Math.min(room.currentStep + 1, totalSteps)} de {totalSteps}. O caçador escolhe uma direção; o sistema compara com a rota secreta desenhada pelo escondido.
+        </p>
+      </div>
+
+      {(hiderItems.length > 0 || hunterItems.length > 0) && (
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+            <p className="text-[11px] font-bold text-purple-200">Itens do escondido</p>
+            {hiderItems.length === 0 ? (
+              <p className="mt-1 text-[10px] text-slate-500">Nenhum item defensivo preparado.</p>
+            ) : (
+              <div className="mt-2 space-y-1">
+                {hiderItems.map((item) => (
+                  <p key={item.id} className="text-[10px] text-slate-300">
+                    {itemName(item.eventCode)} no passo {item.step + 1}{item.effectApplied ? " - ativado" : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+            <p className="text-[11px] font-bold text-cyan-200">Itens do caçador</p>
+            {hunterItems.length === 0 ? (
+              <p className="mt-1 text-[10px] text-slate-500">Nenhum item de busca preparado.</p>
+            ) : (
+              <div className="mt-2 space-y-1">
+                {hunterItems.map((item) => (
+                  <p key={item.id} className="text-[10px] text-slate-300">
+                    {itemName(item.eventCode)}{item.effectApplied ? " - usado" : " - preparado"}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {currentDefensiveItem && (
+        <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs text-purple-200">
+          Armadilha preparada neste passo: <strong>{itemName(currentDefensiveItem.eventCode)}</strong>. O efeito completo sera expandido no balanceamento, mas o evento ja fica registrado no fluxo.
+        </div>
+      )}
 
       <FocusBar current={room.focusPoints} max={room.maxFocus} />
 
@@ -357,7 +444,20 @@ function ActiveRoomView({ room, playerId, refresh }: { room: TraceRoom; playerId
       {isHider && room.status === "HUNTING" && (
         <div className="space-y-2 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3">
           <p className="text-[11px] text-yellow-200 font-semibold">Controles do escondido</p>
-          <p className="text-[10px] text-slate-400">O sinalizador adiciona uma direcao secreta na rota. Use uma vez por sala.</p>
+          <p className="text-[10px] text-slate-400">O sinalizador adiciona uma direcao secreta no fim da rota. Escolha qual seta extra sera adicionada.</p>
+          {!room.sinalizadorUsed && (
+            <div className="grid grid-cols-4 gap-1">
+              {DIRECTIONS.map((dir) => (
+                <button
+                  key={dir}
+                  onClick={() => setSignalDirection(dir)}
+                  className={`rounded-lg border py-1.5 text-[10px] font-bold ${signalDirection === dir ? "border-yellow-400 bg-yellow-400/15 text-yellow-200" : "border-border bg-slate-800 text-slate-400"}`}
+                >
+                  {DIRECTION_WORDS[dir]}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             onClick={flare}
             disabled={pending || room.sinalizadorUsed}
@@ -399,127 +499,205 @@ function HideTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
   const [mascotId, setMascotId] = useState("");
   const [routeType, setRouteType] = useState<TraceRouteType>("SHORT");
+  const [path, setPath] = useState<string[]>(Array.from({ length: ROUTE_STEPS.SHORT }, () => ""));
+  const [defensiveItem, setDefensiveItem] = useState("");
+  const [defensiveStep, setDefensiveStep] = useState(0);
 
-  const hasMap = data.myInventory.some(
-    (i) => i.item.type === MAP_ITEM_FOR_ROUTE[routeType] && i.quantity > 0,
-  );
-
+  const steps = ROUTE_STEPS[routeType];
+  const hasMap = data.myInventory.some((i) => i.item.type === MAP_ITEM_FOR_ROUTE[routeType] && i.quantity > 0);
   const myActiveRooms = data.myRooms.filter((r) => r.hiderId === data.player.id);
+  const pathComplete = path.length === steps && path.every(Boolean);
+  const availableHiderItems = HIDER_ITEMS.filter((item) => data.myInventory.some((inv) => inv.item.type === item.type && inv.quantity > 0));
+
+  const setRoute = (route: TraceRouteType) => {
+    setRouteType(route);
+    setPath(Array.from({ length: ROUTE_STEPS[route] }, (_, index) => path[index] ?? ""));
+    setDefensiveStep(0);
+  };
+
+  const setPathStep = (index: number, dir: string) => {
+    setPath((current) => current.map((value, i) => (i === index ? dir : value)));
+  };
 
   const submit = () => {
     if (!mascotId) { toast.error("Selecione um mascote"); return; }
+    if (!pathComplete) { toast.error("Desenhe a rota completa antes de abrir a sala"); return; }
     startTransition(async () => {
-      const res = await createTraceRoomAction(mascotId, routeType, !hasMap);
+      const res = await createTraceRoomAction(
+        mascotId,
+        routeType,
+        path,
+        defensiveItem || null,
+        defensiveItem ? defensiveStep : null,
+        !hasMap,
+      );
       if ("error" in res && !res.success) { toast.error(res.error ?? "Erro"); return; }
-      toast.success("🗺️ Esconderijo aberto! Aguardando caçador...");
+      toast.success("Esconderijo aberto com rota manual. Agora aguarde um cacador.");
       refresh();
     });
   };
 
-  if (myActiveRooms.length >= 3) {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-300">
-          Voce ja possui 3 esconderijos ativos. Resolva um antes de criar outro.
-        </div>
-        {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} refresh={refresh} />)}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {myActiveRooms.length > 0 && (
         <div className="space-y-3">
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
-            Voce tem {myActiveRooms.length}/3 esconderijo(s) ativo(s). Ainda pode abrir mais testes.
+            Voce tem {myActiveRooms.length}/3 esconderijo(s) ativo(s). Acompanhe aqui e use o Sinalizador se alguem entrar na sua rota.
           </div>
           {myActiveRooms.map((room) => <ActiveRoomView key={room.id} room={room} playerId={data.player.id} refresh={refresh} />)}
         </div>
       )}
 
-      <p className="text-sm text-slate-400">Escolha um mascote e o tipo de rota para se esconder. O caçador tentará te encontrar!</p>
+      <div className="rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-slate-900/70 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-bold text-yellow-200">1. Prepare o esconderijo</p>
+          <p className="text-xs text-slate-400">Escolha um mascote livre, o tamanho da sala, desenhe a rota secreta com setas e opcionalmente prepare 1 item defensivo em um passo especifico.</p>
+        </div>
 
-      <div className="space-y-2">
-        <label className="text-[11px] font-semibold text-slate-400">Mascote</label>
-        <select
-          value={mascotId}
-          onChange={(e) => setMascotId(e.target.value)}
-          className="w-full rounded-xl border border-border bg-slate-800 px-3 py-2 text-xs text-slate-200"
-        >
-          <option value="">Selecione um mascote...</option>
-          {data.availableMascots.map((m) => (
-            <option key={m.id} value={m.id}>
-              #{m.pokemonId} {m.nickname ? `(${m.nickname})` : ""} — Nv.{m.level} | Vit:{m.statVitality} Inst:{m.statInstinct}
-            </option>
-          ))}
-        </select>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold text-slate-400">Mascote escondido</label>
+            <select
+              value={mascotId}
+              onChange={(e) => setMascotId(e.target.value)}
+              className="w-full rounded-xl border border-border bg-slate-800 px-3 py-2 text-xs text-slate-200"
+            >
+              <option value="">Selecione um mascote...</option>
+              {data.availableMascots.map((m) => (
+                <option key={m.id} value={m.id}>
+                  #{m.pokemonId} {m.nickname ? `(${m.nickname})` : ""} - Nv.{m.level} | Vit:{m.statVitality} Inst:{m.statInstinct}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold text-slate-400">Tipo de rota</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["SHORT", "MEDIUM", "LONG", "WEEKLY"] as TraceRouteType[]).map((r) => {
+                const hasThisMap = data.myInventory.some((i) => i.item.type === MAP_ITEM_FOR_ROUTE[r] && i.quantity > 0);
+                return (
+                  <button
+                    key={r}
+                    onClick={() => setRoute(r)}
+                    className={`rounded-xl border py-2 text-[11px] font-semibold transition-colors ${
+                      routeType === r
+                        ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-200"
+                        : "border-border bg-slate-800 text-slate-400 hover:border-slate-600"
+                    }`}
+                  >
+                    {ROUTE_LABELS[r]}
+                    <span className="block text-[9px] opacity-70">{ROUTE_EXPIRY_LABELS[r]} {hasThisMap ? "- mapa ok" : "- admin bypass"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-[11px] font-semibold text-slate-400">Tipo de Rota</label>
-        <div className="grid grid-cols-2 gap-2">
-          {(["SHORT", "MEDIUM", "LONG", "WEEKLY"] as TraceRouteType[]).map((r) => {
-            const hasThisMap = data.myInventory.some((i) => i.item.type === MAP_ITEM_FOR_ROUTE[r] && i.quantity > 0);
-            return (
-              <button
-                key={r}
-                onClick={() => setRouteType(r)}
-                className={`rounded-xl border py-2.5 text-xs font-semibold transition-colors ${
-                  routeType === r
-                    ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-300"
-                    : "border-border bg-slate-800 text-slate-400 hover:border-slate-600"
-                }`}
-              >
-                {ROUTE_LABELS[r]}
-                <span className="ml-1 text-[9px] opacity-70">({ROUTE_EXPIRY_LABELS[r]})</span>
-                {hasThisMap ? (
-                  <span className="ml-1 text-[9px] text-green-400">✓ Mapa</span>
-                ) : (
-                  <span className="ml-1 text-[9px] text-orange-400">Admin</span>
-                )}
-              </button>
-            );
-          })}
+      <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-cyan-200">2. Desenhe a rota secreta</p>
+            <p className="text-xs text-slate-400">O ca?ador nao ve esta sequencia. Ele vai tentar descobrir uma direcao por vez.</p>
+          </div>
+          <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200">{path.filter(Boolean).length}/{steps}</span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {path.map((dir, index) => (
+            <div key={index} className="rounded-xl border border-border bg-slate-950/40 p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-300">Passo {index + 1}</span>
+                <span className="text-slate-500">{dir ? DIRECTION_WORDS[dir] : "pendente"}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {DIRECTIONS.map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => setPathStep(index, option)}
+                    className={`rounded-lg border py-1.5 text-[11px] font-bold ${dir === option ? "border-cyan-400 bg-cyan-400/15 text-cyan-200" : "border-border bg-slate-800 text-slate-400 hover:text-slate-200"}`}
+                  >
+                    {DIRECTION_WORDS[option]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-purple-500/20 bg-slate-900/70 p-4 space-y-3">
+        <p className="text-sm font-bold text-purple-200">3. Item defensivo opcional</p>
+        <p className="text-xs text-slate-400">No MVP, o item fica registrado no passo escolhido e aparece no log da perseguicao. Depois podemos expandir os efeitos individuais.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <select
+            value={defensiveItem}
+            onChange={(e) => setDefensiveItem(e.target.value)}
+            className="rounded-xl border border-border bg-slate-800 px-3 py-2 text-xs text-slate-200"
+          >
+            <option value="">Sem item defensivo</option>
+            {availableHiderItems.map((item) => (
+              <option key={item.type} value={item.type}>{item.name}</option>
+            ))}
+            {availableHiderItems.length === 0 && <option disabled>Nenhum item defensivo no inventario</option>}
+          </select>
+          <select
+            value={defensiveStep}
+            onChange={(e) => setDefensiveStep(Number(e.target.value))}
+            disabled={!defensiveItem}
+            className="rounded-xl border border-border bg-slate-800 px-3 py-2 text-xs text-slate-200 disabled:opacity-40"
+          >
+            {path.map((_, index) => <option key={index} value={index}>Ativar no passo {index + 1}</option>)}
+          </select>
         </div>
       </div>
 
       {!hasMap && (
         <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-[11px] text-orange-300">
-          Você não possui o Mapa para esta rota. Como admin, o item será ignorado.
+          Voce nao possui o Mapa para esta rota. Como admin, a criacao usa bypass para teste.
         </div>
       )}
 
       <button
         onClick={submit}
-        disabled={pending || !mascotId}
-        className="w-full rounded-xl bg-yellow-500/20 border border-yellow-500/30 py-2.5 text-sm font-bold text-yellow-300 hover:bg-yellow-500/30 disabled:opacity-40 transition-colors"
+        disabled={pending || !mascotId || !pathComplete}
+        className="w-full rounded-2xl bg-yellow-500 py-3 text-sm font-black text-slate-950 shadow-lg shadow-yellow-500/20 hover:bg-yellow-400 disabled:opacity-40 transition-colors"
       >
-        {pending ? "Abrindo esconderijo..." : "🗺️ Abrir Esconderijo"}
+        {pending ? "Abrindo esconderijo..." : "Abrir esconderijo com esta rota"}
       </button>
     </div>
   );
 }
 
-// ── Hunt Tab ───────────────────────────────────────────────────────────────
-
 function HuntTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [mascotId, setMascotId] = useState("");
+  const [hunterItems, setHunterItems] = useState<string[]>([]);
 
   const myHuntRoom = data.myRooms.find((r) => r.hunterId === data.player.id && r.status === "HUNTING");
+  const hasTicket = data.myInventory.some((i) => (i.item.type === "TRACE_HUNT_TICKET" || i.item.type === "TRACE_GOLDEN_TICKET") && i.quantity > 0);
+  const availableHunterItems = HUNTER_ITEMS.filter((item) => data.myInventory.some((inv) => inv.item.type === item.type && inv.quantity > 0));
 
-  const hasTicket = data.myInventory.some(
-    (i) => (i.item.type === "TRACE_HUNT_TICKET" || i.item.type === "TRACE_GOLDEN_TICKET") && i.quantity > 0,
-  );
+  const toggleHunterItem = (itemType: string) => {
+    setHunterItems((current) => {
+      if (current.includes(itemType)) return current.filter((item) => item !== itemType);
+      if (current.length >= 2) {
+        toast.warning("Escolha no maximo 2 itens de busca.");
+        return current;
+      }
+      return [...current, itemType];
+    });
+  };
 
   const join = () => {
     if (!selectedRoom || !mascotId) { toast.error("Selecione sala e mascote"); return; }
     startTransition(async () => {
-      const res = await joinTraceRoomAction(selectedRoom, mascotId, !hasTicket);
+      const res = await joinTraceRoomAction(selectedRoom, mascotId, hunterItems, !hasTicket);
       if ("error" in res && !res.success) { toast.error(res.error ?? "Erro"); return; }
-      toast.success("🔍 Entrou na caçada! Boa sorte!");
+      toast.success("Voce entrou na cacada. Leia as pistas e escolha uma direcao.");
       refresh();
     });
   };
@@ -528,7 +706,7 @@ function HuntTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm text-green-300">
-          Você está ativamente caçando. Faça seus movimentos!
+          Voce esta em perseguicao. Leia o texto da etapa, escolha uma direcao e acompanhe o log da sala.
         </div>
         <ActiveRoomView room={myHuntRoom} playerId={data.player.id} refresh={refresh} />
       </div>
@@ -536,78 +714,86 @@ function HuntTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   }
 
   if (data.openRooms.length === 0) {
-    return (
-      <div className="py-10 text-center text-sm text-slate-500">
-        Nenhum esconderijo aberto no momento. Volte mais tarde ou seja o escondido!
-      </div>
-    );
+    return <div className="py-10 text-center text-sm text-slate-500">Nenhum esconderijo aberto no momento.</div>;
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-400">Esconderijos disponíveis para caçar:</p>
+      <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <p className="text-sm font-bold text-cyan-200">Como come?ar uma ca?a</p>
+        <p className="mt-1 text-xs text-slate-400">Escolha uma sala, escolha seu mascote ca?ador e prepare ate 2 itens antes de entrar. Depois disso nao e possivel trocar itens nessa perseguicao.</p>
+      </div>
 
-      <div className="space-y-2">
+      <div className="grid gap-3 md:grid-cols-2">
         {data.openRooms.map((room) => (
           <button
             key={room.id}
             onClick={() => setSelectedRoom(room.id === selectedRoom ? null : room.id)}
-            className={`w-full rounded-xl border p-3 text-left transition-colors ${
-              selectedRoom === room.id
-                ? "border-yellow-500/50 bg-yellow-500/10"
-                : "border-border bg-slate-900/60 hover:border-slate-600"
-            }`}
+            className={`rounded-2xl border p-4 text-left transition-all ${selectedRoom === room.id ? "border-yellow-500/60 bg-yellow-500/10 shadow-lg shadow-yellow-500/10" : "border-border bg-slate-900/60 hover:border-slate-600"}`}
           >
             <div className="flex items-center gap-3">
-              <MascotAvatar pokemonId={room.hiderMascot.pokemonId} size={36} />
+              <MascotAvatar pokemonId={room.hiderMascot.pokemonId} size={42} />
               <div className="flex-1">
-                <p className="text-xs font-semibold text-slate-200">{room.hider.displayName}</p>
-                <p className="text-[10px] text-slate-400">
-                  {mascotLabel(room.hiderMascot)} · {ROUTE_LABELS[room.routeType]}
-                </p>
+                <p className="text-sm font-bold text-slate-100">Rastro de {room.hider.displayName}</p>
+                <p className="text-[11px] text-slate-400">{mascotLabel(room.hiderMascot)} - {ROUTE_LABELS[room.routeType]}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Status do mascote escondido nao e revelado.</p>
               </div>
-              <span className="text-[10px] text-slate-500">
-                {new Date(room.expiresAt).toLocaleDateString("pt-BR")}
-              </span>
             </div>
           </button>
         ))}
       </div>
 
       {selectedRoom && (
-        <div className="space-y-2 rounded-xl border border-border bg-slate-900/60 p-3">
-          <label className="text-[11px] font-semibold text-slate-400">Seu mascote</label>
-          <select
-            value={mascotId}
-            onChange={(e) => setMascotId(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-800 px-3 py-2 text-xs text-slate-200"
-          >
-            <option value="">Selecione...</option>
-            {data.availableMascots.map((m) => (
-              <option key={m.id} value={m.id}>
-                #{m.pokemonId} {m.nickname ?? ""} — Nv.{m.level} | Inst:{m.statInstinct}
-              </option>
-            ))}
-          </select>
+        <div className="space-y-4 rounded-2xl border border-border bg-slate-900/70 p-4">
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold text-slate-400">Seu mascote ca?ador</label>
+            <select
+              value={mascotId}
+              onChange={(e) => setMascotId(e.target.value)}
+              className="w-full rounded-xl border border-border bg-slate-800 px-3 py-2 text-xs text-slate-200"
+            >
+              <option value="">Selecione...</option>
+              {data.availableMascots.map((m) => (
+                <option key={m.id} value={m.id}>#{m.pokemonId} {m.nickname ?? ""} - Nv.{m.level} | Inst:{m.statInstinct} Agi:{m.statAgility}</option>
+              ))}
+            </select>
+          </div>
 
-          {!hasTicket && (
-            <p className="text-[10px] text-orange-300">Sem ticket — entrada como admin (bypass).</p>
-          )}
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold text-slate-400">Itens de busca (maximo 2)</p>
+            <div className="grid gap-2 md:grid-cols-3">
+              {HUNTER_ITEMS.map((item) => {
+                const owned = availableHunterItems.some((available) => available.type === item.type);
+                const active = hunterItems.includes(item.type);
+                return (
+                  <button
+                    key={item.type}
+                    onClick={() => owned || !hasTicket ? toggleHunterItem(item.type) : toast.error("Voce nao possui este item")}
+                    className={`rounded-xl border p-3 text-left text-xs transition-colors ${active ? "border-cyan-400 bg-cyan-400/15 text-cyan-100" : "border-border bg-slate-800 text-slate-400 hover:text-slate-200"}`}
+                  >
+                    <span className="block font-bold">{item.name}</span>
+                    <span className="mt-1 block text-[10px] opacity-75">{item.text}</span>
+                    {!owned && hasTicket && <span className="mt-1 block text-[10px] text-orange-300">Nao possui</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {!hasTicket && <p className="text-[10px] text-orange-300">Sem ticket - entrada como admin para teste.</p>}
 
           <button
             onClick={join}
             disabled={pending || !mascotId}
-            className="w-full rounded-xl bg-green-500/20 border border-green-500/30 py-2 text-sm font-bold text-green-300 hover:bg-green-500/30 disabled:opacity-40 transition-colors"
+            className="w-full rounded-2xl bg-green-500 py-3 text-sm font-black text-slate-950 hover:bg-green-400 disabled:opacity-40 transition-colors"
           >
-            {pending ? "Entrando..." : "🔍 Entrar na Caçada"}
+            {pending ? "Entrando..." : "Entrar na Ca?ada"}
           </button>
         </div>
       )}
     </div>
   );
 }
-
-// ── History Tab ────────────────────────────────────────────────────────────
 
 function HistoryTab({ history }: { history: HistoryEntry[] }) {
   if (history.length === 0) {
@@ -689,6 +875,10 @@ function AdminPanel({ data, refresh, onSimulationCreated }: { data: PageData; re
   const [hiderMascotId, setHiderMascotId] = useState("");
   const [hunterMascotId, setHunterMascotId] = useState("");
   const [simRoute, setSimRoute] = useState<TraceRouteType>("SHORT");
+  const [simPath, setSimPath] = useState<string[]>(Array.from({ length: ROUTE_STEPS.SHORT }, () => ""));
+  const [simDefensiveItem, setSimDefensiveItem] = useState("");
+  const [simDefensiveStep, setSimDefensiveStep] = useState(0);
+  const [simHunterItems, setSimHunterItems] = useState<string[]>([]);
   const [grantPlayerId, setGrantPlayerId] = useState("");
   const [grantAmount, setGrantAmount] = useState("50");
 
@@ -700,12 +890,39 @@ function AdminPanel({ data, refresh, onSimulationCreated }: { data: PageData; re
     });
   };
 
+  const setSimulationRoute = (route: TraceRouteType) => {
+    setSimRoute(route);
+    setSimPath(Array.from({ length: ROUTE_STEPS[route] }, (_, index) => simPath[index] ?? ""));
+    setSimDefensiveStep(0);
+  };
+
+  const setSimulationStep = (index: number, dir: string) => {
+    setSimPath((current) => current.map((value, i) => (i === index ? dir : value)));
+  };
+
+  const toggleSimHunterItem = (type: string) => {
+    setSimHunterItems((current) => {
+      if (current.includes(type)) return current.filter((item) => item !== type);
+      if (current.length >= 2) return current;
+      return [...current, type];
+    });
+  };
+
   const simulate = () => {
     if (!hiderMascotId || !hunterMascotId) { toast.error("Selecione os dois mascotes"); return; }
+    if (!simPath.every(Boolean)) { toast.error("Desenhe a rota da simula??o"); return; }
     startTransition(async () => {
-      const res = await adminSimulateRoomAction(hiderMascotId, hunterMascotId, simRoute);
+      const res = await adminSimulateRoomAction(
+        hiderMascotId,
+        hunterMascotId,
+        simRoute,
+        simPath,
+        simDefensiveItem || null,
+        simDefensiveItem ? simDefensiveStep : null,
+        simHunterItems,
+      );
       if ("error" in res && !res.success) { toast.error(res.error ?? "Erro"); return; }
-      toast.success("Sala de simulação criada! Vá para a aba Esconder ou Caçar.");
+      toast.success("Sala de simula??o criada. Abrindo a aba Ca?ar.");
       refresh();
       onSimulationCreated();
     });
@@ -772,13 +989,79 @@ function AdminPanel({ data, refresh, onSimulationCreated }: { data: PageData; re
 
         <select
           value={simRoute}
-          onChange={(e) => setSimRoute(e.target.value as TraceRouteType)}
+          onChange={(e) => setSimulationRoute(e.target.value as TraceRouteType)}
           className="w-full rounded-lg border border-border bg-slate-800 px-2 py-1.5 text-[11px] text-slate-200"
         >
           {(["SHORT", "MEDIUM", "LONG", "WEEKLY"] as TraceRouteType[]).map((r) => (
             <option key={r} value={r}>{ROUTE_LABELS[r]}</option>
           ))}
         </select>
+
+        <div className="rounded-xl border border-blue-500/20 bg-slate-950/40 p-3 space-y-2">
+          <p className="text-[11px] font-bold text-blue-200">Rota da simulação</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            {simPath.map((dir, index) => (
+              <div key={index} className="rounded-lg border border-border bg-slate-900/70 p-2">
+                <div className="mb-1 flex justify-between text-[10px] text-slate-400">
+                  <span>Passo {index + 1}</span>
+                  <span>{dir ? DIRECTION_WORDS[dir] : "pendente"}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {DIRECTIONS.map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => setSimulationStep(index, option)}
+                      className={`rounded border py-1 text-[10px] font-bold ${dir === option ? "border-blue-400 bg-blue-400/15 text-blue-200" : "border-border bg-slate-800 text-slate-400"}`}
+                    >
+                      {DIRECTION_WORDS[option]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 space-y-2">
+            <p className="text-[11px] font-bold text-purple-200">Item defensivo simulado</p>
+            <select
+              value={simDefensiveItem}
+              onChange={(e) => setSimDefensiveItem(e.target.value)}
+              className="w-full rounded-lg border border-border bg-slate-800 px-2 py-1.5 text-[11px] text-slate-200"
+            >
+              <option value="">Sem item</option>
+              {HIDER_ITEMS.map((item) => <option key={item.type} value={item.type}>{item.name}</option>)}
+            </select>
+            <select
+              value={simDefensiveStep}
+              onChange={(e) => setSimDefensiveStep(Number(e.target.value))}
+              disabled={!simDefensiveItem}
+              className="w-full rounded-lg border border-border bg-slate-800 px-2 py-1.5 text-[11px] text-slate-200 disabled:opacity-40"
+            >
+              {simPath.map((_, index) => <option key={index} value={index}>Passo {index + 1}</option>)}
+            </select>
+          </div>
+
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2">
+            <p className="text-[11px] font-bold text-cyan-200">Itens do caçador simulado</p>
+            <div className="grid gap-1">
+              {HUNTER_ITEMS.map((item) => {
+                const active = simHunterItems.includes(item.type);
+                return (
+                  <button
+                    key={item.type}
+                    onClick={() => toggleSimHunterItem(item.type)}
+                    className={`rounded-lg border px-2 py-1.5 text-left text-[10px] ${active ? "border-cyan-400 bg-cyan-400/15 text-cyan-100" : "border-border bg-slate-800 text-slate-400"}`}
+                  >
+                    <span className="font-bold">{item.name}</span>
+                    <span className="ml-1 opacity-70">{item.text}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         <button
           onClick={simulate}
