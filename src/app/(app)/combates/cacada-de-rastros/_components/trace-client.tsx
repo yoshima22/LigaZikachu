@@ -14,9 +14,8 @@ import {
   adminSimulateRoomAction,
   adminSeedTraceShopItemsAction,
   buyGoldenPawItemAction,
-  GOLDEN_PAW_SHOP,
-  TRACE_EVENTS,
 } from "../actions";
+import { GOLDEN_PAW_SHOP, TRACE_EVENTS } from "../constants";
 
 // ── Types (matching server return shape) ───────────────────────────────────
 
