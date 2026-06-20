@@ -19,28 +19,53 @@ const MATCH_LOSS_COINS = 120;
 /** Credita ZikaCoins ao vencedor e perdedor de uma partida confirmada */
 async function awardMatchCoins(
   tx: Prisma.TransactionClient,
-  match: { id: string; playerAId: string; playerBId: string | null; winnerPlayerId: string | null; tournamentWeek?: { tournamentId: string } | null }
+  match: {
+    id: string;
+    playerAId: string;
+    playerBId: string | null;
+    winnerPlayerId: string | null;
+    tournamentWeekId?: string | null;
+    tournamentWeek?: { id?: string; tournamentId: string } | null;
+  }
 ) {
-  if (!match.winnerPlayerId || !match.playerBId) return; // bye ou sem resultado
+  if (!match.winnerPlayerId || !match.playerBId) return;
 
   const loserId = match.winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId;
+  const existingRewards = await tx.zikaCoinTransaction.findMany({
+    where: {
+      matchId: match.id,
+      type: { in: [ZikaCoinTxType.MATCH_WIN_REWARD, ZikaCoinTxType.MATCH_LOSS_REWARD] },
+      status: "COMPLETED",
+    },
+    select: { type: true, wallet: { select: { playerId: true } } },
+  });
+  const hasReward = (playerId: string, type: ZikaCoinTxType) =>
+    existingRewards.some((reward) => reward.wallet.playerId === playerId && reward.type === type);
+  const tournamentId = match.tournamentWeek?.tournamentId ?? null;
+  const tournamentWeekId = match.tournamentWeekId ?? match.tournamentWeek?.id ?? null;
 
-  await Promise.all([
-    creditCoins(tx, {
+  if (!hasReward(match.winnerPlayerId, ZikaCoinTxType.MATCH_WIN_REWARD)) {
+    await creditCoins(tx, {
       playerId: match.winnerPlayerId,
-      type: "MATCH_WIN_REWARD",
+      type: ZikaCoinTxType.MATCH_WIN_REWARD,
       amount: MATCH_WIN_COINS,
       matchId: match.id,
-      description: `Vitória na partida — +${MATCH_WIN_COINS} ZC`
-    }),
-    creditCoins(tx, {
+      tournamentId: tournamentId ?? undefined,
+      tournamentWeekId: tournamentWeekId ?? undefined,
+      description: `Vitoria na partida - +${MATCH_WIN_COINS} ZC`,
+    });
+  }
+  if (!hasReward(loserId, ZikaCoinTxType.MATCH_LOSS_REWARD)) {
+    await creditCoins(tx, {
       playerId: loserId,
-      type: "MATCH_LOSS_REWARD",
+      type: ZikaCoinTxType.MATCH_LOSS_REWARD,
       amount: MATCH_LOSS_COINS,
       matchId: match.id,
-      description: `Participação na partida — +${MATCH_LOSS_COINS} ZC`
-    })
-  ]);
+      tournamentId: tournamentId ?? undefined,
+      tournamentWeekId: tournamentWeekId ?? undefined,
+      description: `Participacao na partida - +${MATCH_LOSS_COINS} ZC`,
+    });
+  }
   await maybeDropSyncTicket(tx, match.winnerPlayerId, "tcg-match-win").catch(() => null);
 }
 
@@ -339,7 +364,16 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
 
   if (isInPerson) {
     // Partida presencial já confirmada — credita ZikaCoins imediatamente
-    const matchForCoins = { id: matchId, playerAId: match.playerAId, playerBId: match.playerBId, winnerPlayerId: winnerId };
+    const matchForCoins = {
+      id: matchId,
+      playerAId: match.playerAId,
+      playerBId: match.playerBId,
+      winnerPlayerId: winnerId,
+      tournamentWeekId: match.tournamentWeekId,
+      tournamentWeek: match.tournamentWeek
+        ? { id: match.tournamentWeek.id, tournamentId: match.tournamentWeek.tournamentId }
+        : null,
+    };
     try {
       await prisma.$transaction(async (tx) => { await awardMatchCoins(tx, matchForCoins); });
     } catch { /* ignora erros de moedas para não bloquear o resultado */ }
@@ -863,6 +897,8 @@ export async function confirmAllWeekResults(
             type:        ZikaCoinTxType.MATCH_WIN_REWARD,
             amount:      MATCH_WIN_COINS,
             matchId:     match.id,
+            tournamentId,
+            tournamentWeekId: week.id,
             description: `Vitória validada — +${MATCH_WIN_COINS} ZC`
           });
           await creditCoins(tx, {
@@ -870,6 +906,8 @@ export async function confirmAllWeekResults(
             type:        ZikaCoinTxType.MATCH_LOSS_REWARD,
             amount:      MATCH_LOSS_COINS,
             matchId:     match.id,
+            tournamentId,
+            tournamentWeekId: week.id,
             description: `Participação validada — +${MATCH_LOSS_COINS} ZC`
           });
 
