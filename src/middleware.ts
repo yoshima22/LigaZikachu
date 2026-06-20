@@ -150,6 +150,7 @@ function shouldSkipMiddleware(pathname: string) {
   return (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/cron") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/manifest.json") ||
     pathname.startsWith("/manifest.webmanifest") ||
@@ -183,10 +184,29 @@ export default auth(async (request) => {
       return NextResponse.next();
     }
 
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          error: "maintenance",
+          message: maintenance.message ?? "A Liga Zikachu esta temporariamente em manutencao.",
+          until: maintenance.until?.toISOString() ?? null,
+        },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Retry-After": "300",
+          },
+        },
+      );
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = DISABLED_REDIRECT_PATH;
     appendMaintenanceParams(url, maintenance);
-    return NextResponse.redirect(url);
+    const response = NextResponse.redirect(url);
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    return response;
   }
 
   const disabledPages = getDisabledPages();
@@ -214,6 +234,6 @@ export default auth(async (request) => {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons|.*\\..*).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons|.*\\..*).*)",
   ],
 };
