@@ -172,26 +172,42 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
       }
     }
   } else {
-    // Padrao: round-robin aleatorio, 3 partidas por jogador
-    for (let round = 1; round <= maxRounds; round++) {
-      const shuffled = shuffleArray(players);
-      const used = new Set<string>();
-      for (let i = 0; i < shuffled.length; i++) {
-        if (used.has(shuffled[i].id)) continue;
-        for (let j = i + 1; j < shuffled.length; j++) {
-          if (used.has(shuffled[j].id)) continue;
-          matches.push({
-            playerAId: shuffled[i].id,
-            playerBId: shuffled[j].id,
-            roundLabel: `Rodada ${round}`,
-            tournamentWeekId: week.id,
-            createdById: admin.id,
-          });
-          used.add(shuffled[i].id);
-          used.add(shuffled[j].id);
-          break;
-        }
-      }
+    // Grafo regular: todos recebem exatamente a quantidade configurada,
+    // sem BYE persistido e sem repetir o mesmo confronto.
+    const requested = week.tournament.format === TournamentFormat.IN_PERSON
+      ? (week.tournament.matchesPerPlayer ?? Math.min(3, n - 1))
+      : Math.min(3, n - 1);
+    const matchesPerPlayer = Math.min(requested, n - 1);
+
+    if (matchesPerPlayer < 1) throw new Error("Quantidade de partidas por jogador precisa ser maior que zero");
+    if ((n * matchesPerPlayer) % 2 !== 0) {
+      throw new Error(`Com ${n} jogadores, escolha uma quantidade par de partidas por jogador para evitar BYE.`);
+    }
+
+    const pairKeys = new Set<string>();
+    const addPair = (aIndex: number, bIndex: number) => {
+      const a = players[aIndex];
+      const b = players[bIndex];
+      if (!a || !b || a.id === b.id) return;
+      const key = [a.id, b.id].sort().join(":");
+      if (pairKeys.has(key)) return;
+      pairKeys.add(key);
+      matches.push({
+        playerAId: a.id,
+        playerBId: b.id,
+        roundLabel: `Rodada ${matches.length + 1}`,
+        tournamentWeekId: week.id,
+        createdById: admin.id,
+      });
+    };
+
+    for (let distance = 1; distance <= Math.floor(matchesPerPlayer / 2); distance++) {
+      for (let i = 0; i < n; i++) addPair(i, (i + distance) % n);
+    }
+
+    if (matchesPerPlayer % 2 === 1) {
+      if (n % 2 !== 0) throw new Error("Numero impar de jogadores exige quantidade par de partidas por jogador.");
+      for (let i = 0; i < n / 2; i++) addPair(i, i + n / 2);
     }
   }
 
