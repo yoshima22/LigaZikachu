@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import authConfig from "@/auth.config";
+import { getMaintenanceState } from "@/lib/maintenance";
 
 const { auth } = NextAuth(authConfig);
 
@@ -45,12 +46,6 @@ function getDisabledPages() {
 
 function matchesPath(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
-}
-
-function parseDateEnv(value: string | undefined) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function appendMaintenanceParams(
@@ -105,45 +100,6 @@ async function hasValidManualAdminBypass(token: string | undefined) {
 
   const expected = await signMaintenanceBypassPayload(`${userId}.${expiresRaw}`);
   return Boolean(expected && constantTimeEqual(signature, expected));
-}
-
-function getMaintenanceState(now = new Date()) {
-  const message = process.env.MAINTENANCE_MESSAGE?.trim() || null;
-  const emergencyUntil = parseDateEnv(process.env.EMERGENCY_MAINTENANCE_UNTIL);
-
-  if (
-    process.env.EMERGENCY_MAINTENANCE === "true" &&
-    (!emergencyUntil || emergencyUntil.getTime() > now.getTime())
-  ) {
-    return { active: true, until: emergencyUntil, message, reason: "emergency" };
-  }
-
-  const scheduledStart = parseDateEnv(process.env.MAINTENANCE_START_AT);
-  const scheduledEnd = parseDateEnv(process.env.MAINTENANCE_END_AT);
-  if (scheduledStart && scheduledEnd && now >= scheduledStart && now < scheduledEnd) {
-    return { active: true, until: scheduledEnd, message, reason: "scheduled" };
-  }
-
-  const windows = (process.env.MAINTENANCE_WINDOWS ?? "")
-    .split(";")
-    .map((chunk) => chunk.trim())
-    .filter(Boolean);
-
-  for (const windowSpec of windows) {
-    const [startRaw, endRaw, windowMessage] = windowSpec.split("|");
-    const start = parseDateEnv(startRaw);
-    const end = parseDateEnv(endRaw);
-    if (start && end && now >= start && now < end) {
-      return {
-        active: true,
-        until: end,
-        message: windowMessage?.trim() || message,
-        reason: "window",
-      };
-    }
-  }
-
-  return { active: false, until: null, message: null, reason: null };
 }
 
 function shouldSkipMiddleware(pathname: string) {

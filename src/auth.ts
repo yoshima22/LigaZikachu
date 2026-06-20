@@ -6,6 +6,7 @@ import { z } from "zod";
 import authConfig from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
+import { getMaintenanceState } from "@/lib/maintenance";
 
 // Aceita email OU nick do PTCG Live como identificador
 const credentialsSchema = z.object({
@@ -52,6 +53,10 @@ const providers = [
         const isValid = await verifyPassword(parsed.data.password, user.passwordHash);
 
         if (!isValid || user.status === UserStatus.REJECTED || user.status === UserStatus.SUSPENDED) {
+          return null;
+        }
+
+        if (getMaintenanceState().active && user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) {
           return null;
         }
 

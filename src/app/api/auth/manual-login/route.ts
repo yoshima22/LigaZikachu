@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
+import { getMaintenanceState } from "@/lib/maintenance";
 import {
   ADMIN_MAINTENANCE_BYPASS_COOKIE,
   MANUAL_SESSION_COOKIE,
@@ -75,6 +76,21 @@ export async function POST(request: Request) {
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
       return NextResponse.json({ error: "Senha invalida.", code: "INVALID_PASSWORD" }, { status: 401 });
+    }
+
+    const maintenance = getMaintenanceState();
+    if (maintenance.active && !ADMIN_ROLES.has(user.role)) {
+      return NextResponse.json(
+        {
+          error: maintenance.message ?? "A Liga Zikachu esta em manutencao. Tente novamente mais tarde.",
+          code: "MAINTENANCE",
+          until: maintenance.until?.toISOString() ?? null,
+        },
+        {
+          status: 503,
+          headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+        },
+      );
     }
 
     const expires = new Date(Date.now() + MANUAL_SESSION_MAX_AGE_SECONDS * 1000);
