@@ -227,20 +227,10 @@ export async function computeTournamentRanking(
 
   // Se a query filtrada por torneio não retornar nada, tenta sem filtro
   // de torneio mas restrita aos jogadores registrados (fallback).
-  const badgesToCount = playerBadges.length > 0
-    ? playerBadges
-    : await prisma.playerBadge.findMany({
-        where: { playerId: { in: registeredPlayerIds } },
-        select: {
-          playerId: true,
-          player: { select: { displayName: true } }
-        }
-      });
-
   const BADGE_PTS = 3;
-  if (badgesToCount.length > 0) {
+  if (playerBadges.length > 0) {
     const entryMap = new Map(entries.map((e) => [e.playerId, e]));
-    for (const pb of badgesToCount) {
+    for (const pb of playerBadges) {
       const entry = entryMap.get(pb.playerId);
       if (!entry) continue;
       entry.badgesOwned  += 1;
