@@ -330,38 +330,46 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
   const createLeague = () => {
     startTransition(async () => {
-      const res = await createLeagueAction();
-      if ("error" in res) { toast.error(res.error); return; }
-      toast.success("Liga semanal criada!");
-      refresh();
+      try {
+        const res = await createLeagueAction();
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success("Liga semanal criada!");
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
     });
   };
 
   const setMod = () => {
     if (!data.currentLeague) { toast.error("Crie uma liga primeiro"); return; }
     startTransition(async () => {
-      const res = await setModifierAction(data.currentLeague.id, modId);
-      if ("error" in res) { toast.error(res.error); return; }
-      toast.success("Modificador definido!");
-      refresh();
+      try {
+        const res = await setModifierAction(data.currentLeague.id, modId);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success("Modificador definido!");
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
     });
   };
 
   const simRound = (slot: number) => {
     if (!data.currentLeague) { toast.error("Crie uma liga primeiro"); return; }
     startTransition(async () => {
-      const res = await simulateRoundAction(data.currentLeague.id, slot);
-      if ("error" in res) { toast.error(res.error); return; }
-      toast.success(`Rodada slot ${slot} simulada!`);
-      refresh();
+      try {
+        const res = await simulateRoundAction(data.currentLeague.id, slot);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success(`Rodada slot ${slot} simulada!`);
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
     });
   };
 
   const seedItems = () => {
     startTransition(async () => {
-      const res = await seedLeagueItemsAction();
-      if ("error" in res) { toast.error(res.error); return; }
-      toast.success(`${(res as any).created ?? 0} itens criados!`);
+      try {
+        const res = await seedLeagueItemsAction();
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success(`${(res as any).created ?? 0} itens criados!`);
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
     });
   };
 
