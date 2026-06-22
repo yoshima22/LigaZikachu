@@ -442,7 +442,11 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>
               <div className="flex items-center gap-2">
-                {team ? <span className="text-[10px] text-green-400">✓ Montado</span> : <span className="text-[10px] text-orange-400">Não montado</span>}
+                {team ? (
+                  team.inherited
+                    ? <span className="text-[10px] text-cyan-400">↩ Herdado</span>
+                    : <span className="text-[10px] text-green-400">✓ Montado</span>
+                ) : <span className="text-[10px] text-orange-400">Não montado</span>}
                 <button onClick={() => startEditing(slot)} className="rounded-lg border border-border bg-slate-800 px-2 py-1 text-[10px] text-slate-300 hover:text-yellow-300 transition-colors">
                   {team ? "Editar" : "Montar"}
                 </button>

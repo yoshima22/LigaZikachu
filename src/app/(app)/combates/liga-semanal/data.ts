@@ -28,7 +28,7 @@ async function ensureCurrentLeague() {
   try {
     return await prisma.$transaction(async (tx) => {
       const league = await tx.weeklyMascotLeague.create({ data: { weekKey, weekStart: monday, weekEnd: friday, status: "ACTIVE", modifierJson: { ...modifier, dailyDate: battleDate, dailyHistory: [modifier.id] } } });
-      const players = await tx.player.findMany({ where: { active: true }, select: { id: true } });
+      const players = await tx.player.findMany({ where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } }, select: { id: true } });
       if (players.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: players.map((player) => ({ leagueId: league.id, playerId: player.id })), skipDuplicates: true });
       return league;
     });
@@ -61,15 +61,18 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
       });
       const playerIds = (participants as Array<{ playerId: string }>).map((entry) => entry.playerId);
-      const names = await prisma.player.findMany({
+      const players = await prisma.player.findMany({
         where: { id: { in: playerIds } },
-        select: { id: true, displayName: true, ptcglNick: true },
+        select: { id: true, displayName: true, ptcglNick: true, active: true, user: { select: { role: true, status: true } } },
       });
-      const nameById = new Map(names.map((entry) => [entry.id, entry.displayName || entry.ptcglNick]));
-      participants = (participants as Array<Record<string, unknown> & { playerId: string }>).map((entry) => ({
-        ...entry,
-        playerName: nameById.get(entry.playerId) ?? "Jogador",
-      }));
+      const validPlayerIds = new Set(players.filter(p => p.active && p.user.status === "ACTIVE" && !["ADMIN", "SUPER_ADMIN"].includes(p.user.role)).map(p => p.id));
+      const nameById = new Map(players.map((entry) => [entry.id, entry.displayName || entry.ptcglNick]));
+      participants = (participants as Array<Record<string, unknown> & { playerId: string }>)
+        .filter((entry) => validPlayerIds.has(entry.playerId))
+        .map((entry) => ({
+          ...entry,
+          playerName: nameById.get(entry.playerId) ?? "Jogador",
+        }));
     } catch { /* table may not exist yet */ }
 
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -78,6 +81,17 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         where: { leagueId: (currentLeague as any).id, playerId, battleDate: today },
         orderBy: { battleSlot: "asc" },
       });
+      // Se não tem times hoje, carregar do último dia registrado (persistência entre dias)
+      if ((myTeams as any[]).length === 0) {
+        const lastTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
+          where: { leagueId: (currentLeague as any).id, playerId },
+          orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }],
+          take: 3,
+        });
+        if ((lastTeams as any[]).length > 0) {
+          myTeams = (lastTeams as any[]).map((t: any) => ({ ...t, battleDate: today, inherited: true }));
+        }
+      }
     } catch { /* table may not exist yet */ }
 
     // Load which players registered teams today
