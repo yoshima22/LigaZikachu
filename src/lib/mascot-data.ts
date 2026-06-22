@@ -293,6 +293,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 204, to: 205, level: 31 },
   { from: 209, to: 210, level: 23 },
   { from: 216, to: 217, level: 30 },
+  { from: 217, to: 901, level: 45 }, // Ursaring → Ursaluna (Peat Block)
   { from: 218, to: 219, level: 38 },
   { from: 220, to: 221, level: 33 },
   { from: 223, to: 224, level: 25 },
@@ -1380,6 +1381,7 @@ const POKEMON_GEN8_NAMES: Record<number, string> = {
   891:"Kubfu",892:"Urshifu",893:"Zarude",
   894:"Regieleki",895:"Regidrago",
   896:"Glastrier",897:"Spectrier",898:"Calyrex",
+  901:"Ursaluna",
 };
 
 // Gen 9 (Paldea)
@@ -1800,6 +1802,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   888:"fairy/steel",889:"dark/steel",890:"poison/dragon",
   891:"fighting",892:"fighting/dark",893:"grass/dark",  // 892 = Urshifu Single Strike
   894:"electric",895:"ice",896:"ice",897:"ghost",898:"psychic",
+  901:"ground/normal",
   // ── Gen 9 ──────────────────────────────────────────────────────────────────
   906:"grass",907:"grass",908:"grass/dark",
   909:"fire",910:"fire",911:"fire/ghost",
