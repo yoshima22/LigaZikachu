@@ -301,9 +301,10 @@ function CreateListingForm() {
                 <label className="text-xs text-slate-400 shrink-0">
                   Quantidade{selectedItem.maxQty > 1 ? ` (máx. ${selectedItem.maxQty})` : ""}:
                 </label>
-                <input type="number" min={1} max={selectedItem.maxQty ?? 99} value={itemQuantity}
+                <input type="number" min={1} max={selectedItem.maxQty ?? 99} inputMode="numeric" pattern="[0-9]*"
+                  value={itemQuantity}
                   onChange={e => {
-                    const v = parseInt(e.target.value) || 1;
+                    const v = parseInt(e.target.value.replace(/\D/g, "")) || 1;
                     setItemQuantity(Math.min(v, selectedItem.maxQty ?? 99));
                   }}
                   className="w-20 rounded-lg border border-border bg-slate-900 px-2 py-1 text-xs text-slate-200 text-center outline-none" />
@@ -318,7 +319,8 @@ function CreateListingForm() {
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <Coins size={14}/> Preço (ZikaCoins)
             </label>
-            <input type="number" min={1} value={priceCoins} onChange={e => setPriceCoins(e.target.value)}
+            <input type="number" min={1} inputMode="numeric" pattern="[0-9]*"
+              value={priceCoins} onChange={e => setPriceCoins(e.target.value.replace(/\D/g, ""))}
               placeholder="Ex: 2500"
               className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60" />
           </div>

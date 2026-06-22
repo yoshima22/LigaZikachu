@@ -366,8 +366,9 @@ export default function BazarListingPage(): React.JSX.Element {
                   <div className="flex gap-2 items-center">
                     <Coins size={13} className="text-[#FFCB05] shrink-0"/>
                     <input
-                      type="number" min={0} value={proposalCoins}
-                      onChange={e => setProposalCoins(e.target.value)}
+                      type="number" min={0} inputMode="numeric" pattern="[0-9]*"
+                      value={proposalCoins}
+                      onChange={e => setProposalCoins(e.target.value.replace(/\D/g, ""))}
                       placeholder="ZikaCoins oferecidos (0 = sem moedas)"
                       className="flex-1 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-blue-500/60"
                     />
@@ -478,8 +479,9 @@ export default function BazarListingPage(): React.JSX.Element {
                   <div className="space-y-1">
                     <label className="text-[10px] text-slate-400 uppercase tracking-wide">Preço (ZC) — deixe vazio para troca</label>
                     <input
-                      type="number" min={0} value={editPrice}
-                      onChange={e => setEditPrice(e.target.value)}
+                      type="number" min={0} inputMode="numeric" pattern="[0-9]*"
+                      value={editPrice}
+                      onChange={e => setEditPrice(e.target.value.replace(/\D/g, ""))}
                       placeholder="Sem preço (somente troca)"
                       className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
                     />
@@ -657,8 +659,9 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
                       🥚 {label} ({egg.count})
                     </button>
                     {sel && (
-                      <input type="number" min={1} max={egg.count} value={sel.quantity}
-                        onChange={e => updateQty(egg.type, parseInt(e.target.value)||1)}
+                      <input type="number" min={1} max={egg.count} inputMode="numeric" pattern="[0-9]*"
+                        value={sel.quantity}
+                        onChange={e => updateQty(egg.type, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
                   </div>
@@ -682,8 +685,9 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
                       {food.type === "FOOD" ? "🍖" : "🍬"} {label} ({food.quantity})
                     </button>
                     {sel && (
-                      <input type="number" min={1} max={food.quantity} value={sel.quantity}
-                        onChange={e => updateQty(food.type, parseInt(e.target.value)||1)}
+                      <input type="number" min={1} max={food.quantity} inputMode="numeric" pattern="[0-9]*"
+                        value={sel.quantity}
+                        onChange={e => updateQty(food.type, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
                   </div>
@@ -715,8 +719,9 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
                       <span className="ml-auto text-[9px] text-slate-500 shrink-0">×{item.quantity}</span>
                     </button>
                     {sel && (
-                      <input type="number" min={1} max={item.quantity} value={selected.find(i => i.type === item.type)?.quantity ?? 1}
-                        onChange={e => updateQty(item.type, parseInt(e.target.value)||1)}
+                      <input type="number" min={1} max={item.quantity} inputMode="numeric" pattern="[0-9]*"
+                        value={selected.find(i => i.type === item.type)?.quantity ?? 1}
+                        onChange={e => updateQty(item.type, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
                   </div>
