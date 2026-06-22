@@ -267,6 +267,106 @@ export async function joinLeagueAction(leagueId: string) {
   return { success: true };
 }
 
+// ── Generate daily matchups (preview before battles) ──────────────────────
+
+function calculateLeagueOdds(
+  pA: { points: number; wins: number; damageDealt: number },
+  pB: { points: number; wins: number; damageDealt: number },
+): { oddsA: number; oddsB: number } {
+  const scoreA = (pA.points * 10) + (pA.wins * 5) + (pA.damageDealt / 100);
+  const scoreB = (pB.points * 10) + (pB.wins * 5) + (pB.damageDealt / 100);
+  const total = scoreA + scoreB;
+  if (total === 0) return { oddsA: 1.90, oddsB: 1.90 };
+  const probA = scoreA / total;
+  const probB = scoreB / total;
+  const margin = 0.92;
+  const round5 = (v: number) => Math.round(v / 0.05) * 0.05;
+  return {
+    oddsA: Math.max(1.10, round5(probA > 0.02 ? margin / probA : 8)),
+    oddsB: Math.max(1.10, round5(probB > 0.02 ? margin / probB : 8)),
+  };
+}
+
+export async function generateDailyMatchupsAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const league = await prisma.weeklyMascotLeague.findFirst({ where: { id: leagueId, status: "ACTIVE" } });
+    if (!league) return { error: "Liga não ativa" };
+
+    const today = getTodayBrt();
+    const existing = await prisma.weeklyMascotLeagueMatch.findMany({ where: { leagueId, battleDate: today } });
+    if (existing.length > 0) return { error: "Matchups de hoje já existem." };
+
+    const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
+      where: { leagueId },
+      orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
+    });
+
+    if (participants.length < 2) return { error: "Menos de 2 participantes" };
+
+    const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId } });
+    const pMap = new Map(participants.map(p => [p.playerId, p]));
+    let created = 0;
+
+    for (const battleSlot of [1, 2, 3]) {
+      const paired = new Set<string>();
+      for (let i = 0; i < participants.length; i++) {
+        const p = participants[i];
+        if (paired.has(p.playerId)) continue;
+
+        let opp: typeof p | null = null;
+        for (let j = i + 1; j < participants.length; j++) {
+          if (!paired.has(participants[j].playerId)) { opp = participants[j]; break; }
+        }
+
+        if (opp) {
+          const { oddsA, oddsB } = calculateLeagueOdds(p, opp);
+          await prisma.weeklyMascotLeagueMatch.create({
+            data: {
+              id: createId(), leagueId,
+              roundNumber: roundBase + battleSlot,
+              battleDate: today, battleSlot,
+              scheduledAt: new Date(),
+              playerAId: p.playerId,
+              playerBId: opp.playerId,
+              status: "SCHEDULED",
+              resultJson: { oddsA, oddsB },
+            },
+          });
+          paired.add(p.playerId);
+          paired.add(opp.playerId);
+          created++;
+        } else {
+          await prisma.weeklyMascotLeagueMatch.create({
+            data: {
+              id: createId(), leagueId,
+              roundNumber: roundBase + battleSlot,
+              battleDate: today, battleSlot,
+              scheduledAt: new Date(),
+              playerAId: p.playerId,
+              status: "BYE",
+              resolvedAt: new Date(),
+            },
+          });
+          await prisma.weeklyMascotLeagueParticipant.updateMany({
+            where: { leagueId, playerId: p.playerId },
+            data: { points: { increment: 3 }, byes: { increment: 1 }, updatedAt: new Date() },
+          });
+          paired.add(p.playerId);
+        }
+      }
+    }
+
+    revalidatePath(PATH);
+    return { success: true, matchups: created };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Save daily team ───────────────────────────────────────────────────────
 
 export async function saveDailyTeamAction(
@@ -383,57 +483,62 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
   if (participants.length < 2) return { error: "Precisa de pelo menos 2 participantes" };
 
   const today = getTodayBrt();
-  const existingMatches = await prisma.weeklyMascotLeagueMatch.findMany({
-    where: { leagueId, battleDate: today, battleSlot },
+
+  // Check if already resolved
+  const resolvedMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+    where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
   });
-  if (existingMatches.length > 0) return { error: `Slot ${battleSlot} de hoje já foi simulado` };
+  if (resolvedMatches.length > 0) return { error: `Slot ${battleSlot} de hoje já foi simulado` };
+
+  // Use pre-generated SCHEDULED matchups if they exist
+  const scheduledMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+    where: { leagueId, battleDate: today, battleSlot, status: "SCHEDULED" },
+  });
 
   const roundNumber = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId } }) + 1;
   const modifier = league.modifierJson as unknown as WeeklyModifier | null;
 
-  // Swiss pairing: pair by proximity in standings
-  const paired = new Set<string>();
-  const pairings: Array<{ aId: string; bId: string | null }> = [];
+  // Use pre-generated matchups or create Swiss pairings
+  let pairings: Array<{ aId: string; bId: string | null; existingMatchId?: string }> = [];
 
-  for (let i = 0; i < participants.length; i++) {
-    const p = participants[i];
-    if (paired.has(p.playerId)) continue;
-
-    let opponent: typeof p | null = null;
-    for (let j = i + 1; j < participants.length; j++) {
-      if (!paired.has(participants[j].playerId)) {
-        opponent = participants[j];
-        break;
+  if (scheduledMatches.length > 0) {
+    pairings = scheduledMatches.map(m => ({
+      aId: m.playerAId,
+      bId: m.playerBId,
+      existingMatchId: m.id,
+    }));
+  } else {
+    const paired = new Set<string>();
+    for (let i = 0; i < participants.length; i++) {
+      const p = participants[i];
+      if (paired.has(p.playerId)) continue;
+      let opponent: typeof p | null = null;
+      for (let j = i + 1; j < participants.length; j++) {
+        if (!paired.has(participants[j].playerId)) { opponent = participants[j]; break; }
       }
-    }
-
-    if (opponent) {
-      pairings.push({ aId: p.playerId, bId: opponent.playerId });
-      paired.add(p.playerId);
-      paired.add(opponent.playerId);
-    } else {
-      pairings.push({ aId: p.playerId, bId: null });
-      paired.add(p.playerId);
+      if (opponent) {
+        pairings.push({ aId: p.playerId, bId: opponent.playerId });
+        paired.add(p.playerId);
+        paired.add(opponent.playerId);
+      } else {
+        pairings.push({ aId: p.playerId, bId: null });
+        paired.add(p.playerId);
+      }
     }
   }
 
-  // Run all matches
   for (const pair of pairings) {
     if (!pair.bId) {
-      // BYE
-      await prisma.weeklyMascotLeagueMatch.create({
-        data: {
-          id: createId(),
-          leagueId,
-          roundNumber,
-          battleDate: today,
-          battleSlot,
-          scheduledAt: new Date(),
-          playerAId: pair.aId,
-          status: "BYE",
-          resolvedAt: new Date(),
-        },
-      });
+      if (pair.existingMatchId) {
+        await prisma.weeklyMascotLeagueMatch.update({
+          where: { id: pair.existingMatchId },
+          data: { status: "BYE", resolvedAt: new Date() },
+        });
+      } else {
+        await prisma.weeklyMascotLeagueMatch.create({
+          data: { id: createId(), leagueId, roundNumber, battleDate: today, battleSlot, scheduledAt: new Date(), playerAId: pair.aId, status: "BYE", resolvedAt: new Date() },
+        });
+      }
       await prisma.weeklyMascotLeagueParticipant.updateMany({
         where: { leagueId, playerId: pair.aId },
         data: { points: { increment: 3 }, byes: { increment: 1 }, updatedAt: new Date() },
@@ -520,19 +625,23 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
     const winnerId = result.winner === "A" ? pair.aId : result.winner === "B" ? pair.bId : null;
     const loserId = result.winner === "A" ? pair.bId : result.winner === "B" ? pair.aId : null;
 
-    await prisma.weeklyMascotLeagueMatch.create({
-      data: {
-        id: createId(), leagueId, roundNumber, battleDate: today, battleSlot,
-        scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId,
-        winnerId, loserId, isDraw: result.winner === "DRAW",
-        playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors,
-        playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt,
-        playerADamageTaken: result.teamADamageTaken, playerBDamageTaken: result.teamBDamageTaken,
-        resultJson: { winner: result.winner, rounds: result.rounds },
-        replayJson: result.log as unknown as any,
-        status: "RESOLVED", resolvedAt: new Date(),
-      },
-    });
+    const matchData = {
+      winnerId, loserId, isDraw: result.winner === "DRAW",
+      playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors,
+      playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt,
+      playerADamageTaken: result.teamADamageTaken, playerBDamageTaken: result.teamBDamageTaken,
+      resultJson: { winner: result.winner, rounds: result.rounds },
+      replayJson: result.log as unknown as any,
+      status: "RESOLVED" as const, resolvedAt: new Date(),
+    };
+
+    if (pair.existingMatchId) {
+      await prisma.weeklyMascotLeagueMatch.update({ where: { id: pair.existingMatchId }, data: matchData });
+    } else {
+      await prisma.weeklyMascotLeagueMatch.create({
+        data: { id: createId(), leagueId, roundNumber, battleDate: today, battleSlot, scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId, ...matchData },
+      });
+    }
 
     await prisma.weeklyMascotLeagueBattleItem.updateMany({
       where: { leagueId, battleDate: today, battleSlot, playerId: { in: [pair.aId, pair.bId!] }, consumedAt: null, refundedAt: null },

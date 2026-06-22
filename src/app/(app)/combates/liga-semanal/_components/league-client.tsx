@@ -18,6 +18,7 @@ import {
   cancelLeagueAction,
   deleteLeagueAction,
   purgeAdminsFromLeagueAction,
+  generateDailyMatchupsAction,
 } from "../actions";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
@@ -492,32 +493,76 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
 function ResultsTab({ data }: { data: PageData }) {
   if (data.todayMatches.length === 0) {
-    return <div className="py-10 text-center text-sm text-slate-500">Nenhum combate hoje ainda.</div>;
+    return <div className="py-10 text-center text-sm text-slate-500">Matchups ainda não gerados. Admin pode gerar na aba Admin.</div>;
   }
 
+  const slotGroups = [1, 2, 3].map(slot => ({
+    slot,
+    time: BATTLE_TIMES_BRT[slot - 1],
+    matches: data.todayMatches.filter((m: any) => m.battleSlot === slot),
+  }));
+
   return (
-    <div className="space-y-2">
-      <h3 className="text-xs font-bold text-slate-300">Combates de Hoje</h3>
-      {data.todayMatches.map((match: any) => (
-        <div key={match.id} className="rounded-xl border border-border bg-slate-900/60 p-3 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-200">Rodada {match.roundNumber} — Slot {match.battleSlot}</span>
-            <span className={`text-[10px] font-bold ${
-              match.status === "RESOLVED" ? "text-green-400" : "text-yellow-400"
-            }`}>{match.status}</span>
+    <div className="space-y-4">
+      <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
+
+      {slotGroups.map(({ slot, time, matches }) => (
+        <div key={slot} className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-yellow-300">Rodada {slot}</span>
+            <span className="text-[10px] text-slate-500">{time} BRT</span>
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span>{match.playerAId?.slice(0, 8)}...</span>
-            <span className="font-bold text-slate-300">vs</span>
-            <span>{match.playerBId?.slice(0, 8) ?? "BYE"}...</span>
-          </div>
-          {match.status === "RESOLVED" && (
-            <div className="text-[10px] text-slate-500">
-              {match.isDraw ? "Empate" : `Vencedor: ${match.winnerId?.slice(0, 8)}...`}
-              {" · "}Sobr: {match.playerASurvivors} vs {match.playerBSurvivors}
-              {" · "}Dano: {match.playerADamageDealt} vs {match.playerBDamageDealt}
-            </div>
-          )}
+
+          {matches.length === 0 ? (
+            <p className="text-[11px] text-slate-600 pl-2">Sem confrontos nesta rodada.</p>
+          ) : matches.map((match: any) => {
+            const odds = match.resultJson as any;
+            const isScheduled = match.status === "SCHEDULED";
+            const isResolved = match.status === "RESOLVED";
+            const isBye = match.status === "BYE";
+            const winnerIsA = match.winnerId === match.playerAId;
+            const winnerIsB = match.winnerId === match.playerBId;
+
+            if (isBye) {
+              return (
+                <div key={match.id} className="rounded-xl border border-slate-700/50 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-500">
+                  {match.playerAName} — <span className="text-slate-600">BYE (+3 pts)</span>
+                </div>
+              );
+            }
+
+            return (
+              <div key={match.id} className={`rounded-xl border p-3 space-y-1 ${
+                isScheduled ? "border-yellow-500/20 bg-yellow-500/5" :
+                isResolved ? "border-green-500/20 bg-green-500/5" :
+                "border-border bg-slate-900/60"
+              }`}>
+                <div className="flex items-center justify-between">
+                  {isScheduled && <span className="text-[10px] font-semibold text-yellow-400">⏳ Agendado</span>}
+                  {isResolved && <span className="text-[10px] font-semibold text-green-400">✓ Resolvido</span>}
+                </div>
+
+                {/* Matchup card */}
+                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                  <div className={`text-right ${isResolved && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
+                    <p className="text-xs font-bold">{match.playerAName}</p>
+                    {odds?.oddsA && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsA).toFixed(2)}×</p>}
+                    {isResolved && <p className="text-[9px] text-slate-500">Dano: {match.playerADamageDealt} | Sobr: {match.playerASurvivors}</p>}
+                  </div>
+
+                  <span className="text-xs font-bold text-slate-500 px-2">vs</span>
+
+                  <div className={`text-left ${isResolved && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
+                    <p className="text-xs font-bold">{match.playerBName ?? "—"}</p>
+                    {odds?.oddsB && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsB).toFixed(2)}×</p>}
+                    {isResolved && <p className="text-[9px] text-slate-500">Dano: {match.playerBDamageDealt} | Sobr: {match.playerBSurvivors}</p>}
+                  </div>
+                </div>
+
+                {isResolved && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
@@ -782,6 +827,18 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     });
   };
 
+  const genMatchups = () => {
+    if (!data.currentLeague) { toast.error("Crie uma liga primeiro"); return; }
+    startTransition(async () => {
+      try {
+        const res = await generateDailyMatchupsAction(data.currentLeague.id);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success(`${(res as any).matchups ?? 0} confrontos gerados para hoje!`);
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
+    });
+  };
+
   const purgeAdmins = () => {
     if (!data.currentLeague) return;
     startTransition(async () => {
@@ -868,6 +925,15 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         </select>
         <button onClick={setMod} disabled={pending} className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/20 disabled:opacity-40 transition-colors">
           Definir Modificador
+        </button>
+      </div>
+
+      {/* Generate matchups */}
+      <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-3">
+        <p className="text-xs font-bold text-cyan-300">Gerar Confrontos do Dia</p>
+        <p className="text-[10px] text-slate-400">Gera os 3 rounds do dia com odds automáticas. Os jogadores poderão ver os confrontos antes dos combates.</p>
+        <button onClick={genMatchups} disabled={pending} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40 transition-colors">
+          Gerar Matchups + Odds
         </button>
       </div>
 

@@ -113,11 +113,21 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     } catch {}
 
     try {
-      todayMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
+      const rawMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
         where: { leagueId: (currentLeague as any).id, battleDate: today },
-        select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true },
+        select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true, resultJson: true },
         orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
       });
+      // Enrich with player names
+      const matchPlayerIds = new Set<string>();
+      for (const m of rawMatches as any[]) { matchPlayerIds.add(m.playerAId); if (m.playerBId) matchPlayerIds.add(m.playerBId); }
+      const matchPlayers = await prisma.player.findMany({ where: { id: { in: [...matchPlayerIds] } }, select: { id: true, displayName: true } });
+      const mpNames = new Map(matchPlayers.map(p => [p.id, p.displayName]));
+      todayMatches = (rawMatches as any[]).map(m => ({
+        ...m,
+        playerAName: mpNames.get(m.playerAId) ?? "Jogador",
+        playerBName: m.playerBId ? (mpNames.get(m.playerBId) ?? "Jogador") : null,
+      }));
     } catch { /* table may not exist yet */ }
   }
 
