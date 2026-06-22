@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import Image from "next/image";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
-import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
+import { getPokemonName, getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
 import {
   createLeagueAction,
   joinLeagueAction,
@@ -13,10 +13,6 @@ import {
   seedLeagueItemsAction,
   saveDailyTeamAction,
 } from "../actions";
-
-function pokeImg(id: number) {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
-}
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
@@ -155,11 +151,26 @@ function LeagueTab({ data }: { data: PageData }) {
 
 // ── Meus Times ─────────────────────────────────────────────────────────────
 
+const TYPE_COLORS: Record<string, string> = {
+  normal: "bg-slate-500", fire: "bg-red-500", water: "bg-blue-500", grass: "bg-green-500",
+  electric: "bg-yellow-400", ice: "bg-cyan-400", fighting: "bg-orange-600", poison: "bg-purple-500",
+  ground: "bg-amber-600", flying: "bg-indigo-400", psychic: "bg-pink-500", bug: "bg-lime-500",
+  rock: "bg-stone-500", ghost: "bg-violet-600", dragon: "bg-indigo-600", dark: "bg-slate-700",
+  steel: "bg-slate-400", fairy: "bg-pink-400",
+};
+
+const ALL_TYPES = ["fire","water","grass","electric","ice","fighting","poison","ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy","normal"] as const;
+
+const MASCOTS_PER_PAGE = 12;
+
 function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [roles, setRoles] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
 
   const usedInOtherSlots = (slot: number) => {
     const otherTeams = data.myTeams.filter((t: any) => t.battleSlot !== slot);
@@ -171,6 +182,9 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     setEditingSlot(slot);
     setSelected(existing ? (existing.mascotIdsJson as string[] ?? []) : []);
     setRoles(existing?.rolesJson ? (existing.rolesJson as Record<string, string>) : {});
+    setSearch("");
+    setTypeFilter(null);
+    setPage(0);
   };
 
   const toggleMascot = (id: string) => {
@@ -194,9 +208,25 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     return <div className="py-10 text-center text-sm text-slate-500">Crie uma liga na aba Admin primeiro.</div>;
   }
 
+  // ── Editing mode ─────────────────────────────────────────────
   if (editingSlot) {
     const used = usedInOtherSlots(editingSlot);
-    const available = data.availableMascots.filter((m: any) => !used.has(m.id));
+    const allAvailable = data.availableMascots.filter((m: any) => !used.has(m.id));
+
+    const filtered = allAvailable.filter((m: any) => {
+      const name = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
+      if (search && !name.includes(search.toLowerCase())) return false;
+      if (typeFilter) {
+        const types = getPokemonTypes(m.pokemonId);
+        if (!types.includes(typeFilter)) return false;
+      }
+      return true;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / MASCOTS_PER_PAGE));
+    const paginated = filtered.slice(page * MASCOTS_PER_PAGE, (page + 1) * MASCOTS_PER_PAGE);
+
+    const selectedMascots = selected.map(id => data.availableMascots.find((m: any) => m.id === id)).filter(Boolean);
 
     return (
       <div className="space-y-4">
@@ -205,37 +235,92 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <button onClick={() => setEditingSlot(null)} className="text-xs text-slate-400 hover:text-slate-200">← Voltar</button>
         </div>
 
-        <p className="text-xs text-slate-400">Selecione 6 mascotes ({selected.length}/6). Toque para selecionar/remover.</p>
-
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {available.map((m: any) => {
-            const isSelected = selected.includes(m.id);
+        {/* Slot grid (selected mascots) */}
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {Array.from({ length: 6 }, (_, i) => {
+            const m = selectedMascots[i] as any;
             return (
-              <button key={m.id} onClick={() => toggleMascot(m.id)} className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-colors ${
-                isSelected ? "border-yellow-500/50 bg-yellow-500/10" : "border-border bg-slate-900/60 hover:border-slate-600"
-              } ${!isSelected && selected.length >= 6 ? "opacity-30" : ""}`}>
-                <Image src={pokeImg(m.pokemonId)} alt="" width={40} height={40} unoptimized className="pixelated" />
-                <span className="text-[10px] text-slate-300">{m.nickname || `#${m.pokemonId}`}</span>
-                <span className="text-[9px] text-slate-500">Nv.{m.level}</span>
-                {isSelected && (
-                  <select
-                    value={roles[m.id] ?? "ATTACKER"}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => { e.stopPropagation(); setRoles(prev => ({ ...prev, [m.id]: e.target.value })); }}
-                    className="mt-0.5 w-full rounded bg-slate-800 px-1 py-0.5 text-[9px] text-yellow-300 border border-border"
-                  >
-                    {COMBAT_ROLE_OPTIONS.map(r => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
+              <div key={i} className={`relative rounded-xl border p-2 flex flex-col items-center gap-0.5 min-h-[100px] ${m ? "bg-[#FFCB05]/10 border-[#FFCB05]/30" : "border-dashed border-slate-700"}`}>
+                <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
+                {m ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <p className="text-[8px] text-slate-300 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                    <p className="text-[8px] text-slate-500">Nv.{m.level}</p>
+                    <select
+                      value={roles[m.id] ?? "ATTACKER"}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setRoles(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-0.5 py-0.5 text-[7px] font-semibold text-yellow-300 outline-none"
+                    >
+                      {COMBAT_ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                    <button onClick={() => toggleMascot(m.id)} className="absolute top-0.5 right-0.5 rounded-full p-0.5 text-slate-600 hover:text-red-400 text-[10px]">✕</button>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-slate-700 mt-8">vazio</span>
                 )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Search + filter */}
+        <div className="space-y-2">
+          <div className="relative">
+            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="Buscar mascote por nome..."
+              className="w-full rounded-lg border border-border bg-slate-900 pl-3 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600" />
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <button onClick={() => { setTypeFilter(null); setPage(0); }} className={`rounded-full px-2 py-0.5 text-[9px] font-semibold transition-colors ${!typeFilter ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>Todos</button>
+            {ALL_TYPES.map(t => (
+              <button key={t} onClick={() => { setTypeFilter(typeFilter === t ? null : t); setPage(0); }} className={`rounded-full px-2 py-0.5 text-[9px] font-semibold capitalize transition-colors ${typeFilter === t ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>{t}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Mascot grid */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {paginated.map((m: any) => {
+            const isSelected = selected.includes(m.id);
+            const types = getPokemonTypes(m.pokemonId);
+            return (
+              <button key={m.id} onClick={() => toggleMascot(m.id)} className={`flex items-start gap-2 rounded-xl border p-2 text-left transition-colors ${
+                isSelected ? "border-yellow-500/50 bg-yellow-500/10" : "border-border bg-slate-900/60 hover:border-slate-600"
+              } ${!isSelected && selected.length >= 6 ? "opacity-30 pointer-events-none" : ""}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-10 w-10 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold text-slate-200 truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                  <p className="text-[9px] text-slate-500">Nv.{m.level}</p>
+                  <div className="flex gap-0.5 mt-0.5">
+                    {types.map(t => (
+                      <span key={t} className={`rounded-full px-1.5 py-px text-[7px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>
+                    ))}
+                  </div>
+                  <div className="mt-1 grid grid-cols-5 gap-px text-[7px]">
+                    <span className="text-red-400" title="Força">F{m.statForce}</span>
+                    <span className="text-blue-400" title="Agilidade">A{m.statAgility}</span>
+                    <span className="text-purple-400" title="Instinto">I{m.statInstinct}</span>
+                    <span className="text-green-400" title="Vitalidade">V{m.statVitality}</span>
+                    <span className="text-pink-400" title="Carisma">C{m.statCharisma}</span>
+                  </div>
+                </div>
               </button>
             );
           })}
         </div>
 
-        {available.length === 0 && (
-          <p className="text-xs text-red-400">Nenhum mascote disponível (todos já usados em outros times hoje).</p>
+        {filtered.length === 0 && <p className="text-xs text-slate-500 text-center py-3">Nenhum mascote encontrado.</p>}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2">
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="rounded-lg border border-border bg-slate-800 px-3 py-1 text-[10px] text-slate-300 disabled:opacity-30">← Anterior</button>
+            <span className="text-[10px] text-slate-500">{page + 1}/{totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-lg border border-border bg-slate-800 px-3 py-1 text-[10px] text-slate-300 disabled:opacity-30">Próxima →</button>
+          </div>
         )}
 
         <button onClick={saveTeam} disabled={pending || selected.length !== 6} className="w-full rounded-xl bg-yellow-500/20 border border-yellow-500/30 py-2.5 text-sm font-bold text-yellow-300 hover:bg-yellow-500/30 disabled:opacity-40 transition-colors">
@@ -245,42 +330,45 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     );
   }
 
+  // ── Overview mode ────────────────────────────────────────────
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-400">Monte até 3 times por dia (6 mascotes cada, sem repetição entre times).</p>
 
       {[1, 2, 3].map(slot => {
         const team = data.myTeams.find((t: any) => t.battleSlot === slot);
+        const mascotIds = team ? (team.mascotIdsJson as string[] ?? []) : [];
+        const teamRoles = team?.rolesJson as Record<string, string> | undefined;
         return (
-          <div key={slot} className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-2">
+          <div key={slot} className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>
               <div className="flex items-center gap-2">
-                {team ? (
-                  <span className="text-[10px] text-green-400">✓ Montado</span>
-                ) : (
-                  <span className="text-[10px] text-orange-400">Não montado</span>
-                )}
+                {team ? <span className="text-[10px] text-green-400">✓ Montado</span> : <span className="text-[10px] text-orange-400">Não montado</span>}
                 <button onClick={() => startEditing(slot)} className="rounded-lg border border-border bg-slate-800 px-2 py-1 text-[10px] text-slate-300 hover:text-yellow-300 transition-colors">
                   {team ? "Editar" : "Montar"}
                 </button>
               </div>
             </div>
             {team && (
-              <div className="flex gap-1 flex-wrap">
-                {(team.mascotIdsJson as string[] ?? []).map((id: string) => {
-                  const m = data.availableMascots.find((x: any) => x.id === id);
-                  const role = team.rolesJson ? (team.rolesJson as Record<string, string>)[id] : null;
-                  return m ? (
-                    <div key={id} className="flex items-center gap-1 rounded-lg bg-slate-800 px-2 py-1">
-                      <Image src={pokeImg(m.pokemonId)} alt="" width={24} height={24} unoptimized className="pixelated" />
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-slate-300">Nv.{m.level}</span>
-                        {role && <span className="text-[8px] text-yellow-400">{COMBAT_ROLE_OPTIONS.find(r => r.value === role)?.label ?? role}</span>}
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {mascotIds.map((id: string, i: number) => {
+                  const m = data.availableMascots.find((x: any) => x.id === id) as any;
+                  if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
+                  const types = getPokemonTypes(m.pokemonId);
+                  const role = teamRoles?.[id];
+                  return (
+                    <div key={id} className="relative rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-2 flex flex-col items-center gap-0.5">
+                      <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
+                      <p className="text-[8px] text-slate-300 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                      <p className="text-[8px] text-slate-500">Nv.{m.level}</p>
+                      <div className="flex gap-0.5">
+                        {types.map(t => <span key={t} className={`rounded-full px-1 py-px text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
                       </div>
+                      {role && <p className="text-[7px] font-semibold text-yellow-400">{getCombatRoleLabel(role)}</p>}
                     </div>
-                  ) : (
-                    <span key={id} className="text-[10px] text-slate-500">{id.slice(0, 6)}</span>
                   );
                 })}
               </div>
