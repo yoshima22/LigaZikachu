@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { getSpriteUrl } from "@/lib/mascot-data";
+import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 
 export type TurnLog = {
   turn: number;
@@ -30,6 +30,12 @@ interface Fighter {
   role?: string;
 }
 
+function resolveName(name: string, pokemonId?: number) {
+  if (name && !name.startsWith("#")) return name;
+  if (pokemonId) return getPokemonName(pokemonId);
+  return name;
+}
+
 function buildFighters(turns: TurnLog[]): Fighter[] {
   const seen = new Map<string, Fighter>();
   const sideA = new Set<string>();
@@ -43,7 +49,7 @@ function buildFighters(turns: TurnLog[]): Fighter[] {
       if (!seen.has(id)) {
         const side = sideA.size < 6 && !sideB.has(id) ? "A" as const : "B" as const;
         if (side === "A") sideA.add(id); else sideB.add(id);
-        seen.set(id, { id, name, pokemonId: pId, side, maxHp: 100, hp: 100, role });
+        seen.set(id, { id, name: resolveName(name, pId), pokemonId: pId, side, maxHp: 100, hp: 100, role });
       } else if (pId && !seen.get(id)!.pokemonId) {
         seen.get(id)!.pokemonId = pId;
       }
@@ -65,7 +71,7 @@ function HpBar({ hp, maxHp }: { hp: number; maxHp: number }) {
   const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const color = pct > 50 ? "bg-green-500" : pct > 25 ? "bg-yellow-500" : "bg-red-500";
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
       <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -73,10 +79,9 @@ function HpBar({ hp, maxHp }: { hp: number; maxHp: number }) {
 
 function FighterRow({ f, isActor, isTarget, isAttack }: { f: Fighter; isActor: boolean; isTarget: boolean; isAttack: boolean }) {
   return (
-    <div className={`flex items-center gap-2 rounded-lg px-2 py-1 transition-all duration-300 ${
+    <div className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-all duration-300 ${
       isActor ? "bg-blue-500/10 ring-1 ring-blue-500/40" :
-      isTarget && isAttack ? "bg-red-500/10 ring-1 ring-red-500/40" :
-      ""
+      isTarget && isAttack ? "bg-red-500/10 ring-1 ring-red-500/40" : ""
     }`}
     style={{ animation: isTarget && isAttack ? "leagueShake 0.4s ease" : isActor && isAttack ? "leagueAttack 0.5s ease" : "none" }}>
       {f.pokemonId ? (
@@ -84,18 +89,18 @@ function FighterRow({ f, isActor, isTarget, isAttack }: { f: Fighter; isActor: b
         <img
           src={getSpriteUrl(f.pokemonId, true)}
           alt={f.name}
-          className={`h-8 w-8 object-contain shrink-0 ${f.hp <= 0 ? "grayscale opacity-30" : ""} ${f.side === "B" ? "scale-x-[-1]" : ""}`}
+          className={`h-10 w-10 object-contain shrink-0 ${f.hp <= 0 ? "grayscale opacity-30" : ""} ${f.side === "B" ? "scale-x-[-1]" : ""}`}
           style={{ imageRendering: "pixelated" }}
         />
       ) : (
-        <div className={`h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-[10px] shrink-0 ${f.hp <= 0 ? "opacity-30" : ""}`}>
+        <div className={`h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-sm shrink-0 ${f.hp <= 0 ? "opacity-30" : ""}`}>
           {f.side === "A" ? "🔵" : "🔴"}
         </div>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between">
-          <p className={`text-[9px] font-semibold truncate ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>{f.name}</p>
-          {f.role && <span className="text-[7px] text-yellow-400 shrink-0 ml-1">{f.role}</span>}
+          <p className={`text-[11px] font-semibold truncate ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>{f.name}</p>
+          {f.role && <span className="text-[9px] text-yellow-400 shrink-0 ml-1">{f.role}</span>}
         </div>
         <HpBar hp={f.hp} maxHp={f.maxHp} />
       </div>
@@ -117,6 +122,7 @@ export function LeagueBattleReplayModal({
   const [turnIdx, setTurnIdx] = useState(-1);
   const [fighters, setFighters] = useState<Fighter[]>([]);
   const [autoPlay, setAutoPlay] = useState(true);
+  const [speed, setSpeed] = useState(1);
   const onFinishRef = useRef(onFinish);
   useEffect(() => { onFinishRef.current = onFinish; });
 
@@ -125,10 +131,13 @@ export function LeagueBattleReplayModal({
     setTurnIdx(-1);
   }, [replay]);
 
+  const baseDelay = 1800;
+  const delay = Math.round(baseDelay / speed);
+
   useEffect(() => {
     if (!autoPlay) return;
     if (turnIdx >= replay.length) {
-      const t = setTimeout(() => onFinishRef.current(), 2000);
+      const t = setTimeout(() => onFinishRef.current(), 2000 / speed);
       return () => clearTimeout(t);
     }
 
@@ -146,10 +155,20 @@ export function LeagueBattleReplayModal({
         }
         return next;
       });
-    }, turnIdx < 0 ? 800 : 1800);
+    }, turnIdx < 0 ? 600 / speed : delay);
 
     return () => clearTimeout(t);
-  }, [turnIdx, autoPlay, replay]);
+  }, [turnIdx, autoPlay, replay, delay, speed]);
+
+  const advanceTurn = () => {
+    setAutoPlay(false);
+    const next = turnIdx + 1;
+    if (next < replay.length) {
+      const t = replay[next];
+      setFighters(p => p.map(c => c.id === t.targetId && t.action === "ATTACK" ? { ...c, hp: Math.max(0, c.hp - t.damage) } : c));
+    }
+    setTurnIdx(next);
+  };
 
   const current = turnIdx >= 0 && turnIdx < replay.length ? replay[turnIdx] : null;
   const finished = turnIdx >= replay.length;
@@ -160,41 +179,50 @@ export function LeagueBattleReplayModal({
   const aliveA = teamA.filter(c => c.hp > 0).length;
   const aliveB = teamB.filter(c => c.hp > 0).length;
 
+  const resolvedActorName = current ? resolveName(current.actorName, current.actorPokemonId) : "";
+  const resolvedTargetName = current ? resolveName(current.targetName, current.targetPokemonId) : "";
+
   return (
     <>
       <style>{`
-        @keyframes leagueAttack { 0%,100%{transform:translateX(0)} 50%{transform:translateX(8px)} }
-        @keyframes leagueShake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+        @keyframes leagueAttack { 0%,100%{transform:translateX(0)} 50%{transform:translateX(10px)} }
+        @keyframes leagueShake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-3" onClick={onFinish}>
-        <div className="w-full max-w-lg rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2" onClick={onFinish}>
+        <div className="w-full max-w-2xl max-h-[95vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl" onClick={e => e.stopPropagation()}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-2">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-[#FFCB05]">⚔️ Replay da Batalha</p>
-            <div className="flex gap-2">
-              <button onClick={() => setAutoPlay(!autoPlay)} className="rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white">
+          <div className="flex items-center justify-between px-5 pt-5 pb-2">
+            <p className="text-sm font-bold uppercase tracking-widest text-[#FFCB05]">⚔️ Replay da Batalha</p>
+            <div className="flex gap-1.5">
+              <button onClick={() => setAutoPlay(!autoPlay)} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">
                 {autoPlay ? "⏸" : "▶"}
               </button>
-              <button onClick={onFinish} className="rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white">✕</button>
+              <button onClick={() => setSpeed(s => s === 1 ? 2 : s === 2 ? 4 : 1)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                  speed > 1 ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-300" : "border-border text-slate-400 hover:text-white"
+                }`}>
+                {speed}×
+              </button>
+              <button onClick={onFinish} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">✕</button>
             </div>
           </div>
 
           {/* Progress */}
-          <div className="mx-4 mb-2 h-1 overflow-hidden rounded-full bg-slate-800">
-            <div className="h-1 rounded-full bg-[#FFCB05] transition-all duration-500" style={{ width: `${progress}%` }} />
+          <div className="mx-5 mb-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+            <div className="h-full rounded-full bg-[#FFCB05] transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
 
           {/* Team headers */}
-          <div className="mx-4 mb-2 flex justify-between text-[10px] font-bold">
+          <div className="mx-5 mb-3 flex justify-between text-sm font-bold">
             <span className="text-blue-300">{playerAName} ({aliveA}/{teamA.length})</span>
-            <span className="text-slate-600">Turno {Math.max(0, turnIdx + 1)}/{replay.length}</span>
+            <span className="text-xs text-slate-600">Turno {Math.max(0, turnIdx + 1)}/{replay.length}</span>
             <span className="text-red-300">{playerBName} ({aliveB}/{teamB.length})</span>
           </div>
 
-          {/* Fighter panels with sprites */}
-          <div className="mx-4 grid grid-cols-2 gap-2 mb-2">
-            <div className="space-y-1">
+          {/* Fighter panels */}
+          <div className="mx-5 grid grid-cols-2 gap-3 mb-3">
+            <div className="space-y-1.5">
               {teamA.map(f => (
                 <FighterRow key={f.id} f={f}
                   isActor={current?.actorId === f.id}
@@ -203,7 +231,7 @@ export function LeagueBattleReplayModal({
                 />
               ))}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {teamB.map(f => (
                 <FighterRow key={f.id} f={f}
                   isActor={current?.actorId === f.id}
@@ -215,39 +243,42 @@ export function LeagueBattleReplayModal({
           </div>
 
           {/* Action text */}
-          <div className="mx-4 mb-3 rounded-xl border border-border bg-slate-900/60 px-3 py-2.5 text-center min-h-[50px] flex flex-col items-center justify-center">
+          <div className="mx-5 mb-4 rounded-xl border border-border bg-slate-900/60 px-4 py-3 text-center min-h-[60px] flex flex-col items-center justify-center">
             {current ? (
               <>
-                <p className="text-[11px] text-slate-300">
-                  <span className="font-bold text-[#FFCB05]">{current.actorName}</span>
+                <p className="text-sm text-slate-300">
+                  <span className="font-bold text-[#FFCB05]">{resolvedActorName}</span>
                   {current.action === "ATTACK" ? " atacou " : " defendeu "}
-                  <span className="font-bold text-[#FFCB05]">{current.targetName}</span>
+                  <span className="font-bold text-[#FFCB05]">{resolvedTargetName}</span>
                 </p>
                 {current.action === "ATTACK" && (
-                  <p className="text-[10px]">
+                  <p className="text-xs mt-0.5">
                     <span className="font-bold text-red-400">-{current.damage} HP</span>
-                    {current.advantageApplied && <span className="ml-1 text-green-400 text-[9px]">Super efetivo! ×{current.multiplier.toFixed(1)}</span>}
+                    {current.advantageApplied && <span className="ml-1.5 text-green-400 text-[10px]">Super efetivo! ×{current.multiplier.toFixed(1)}</span>}
                   </p>
                 )}
-                {current.effect && <p className="text-[9px] text-purple-300 mt-0.5">{current.effect}</p>}
+                {current.effect && <p className="text-[10px] text-purple-300 mt-1">{current.effect}</p>}
               </>
             ) : finished ? (
               <div>
-                <p className="text-sm font-bold text-[#FFCB05]">🏁 Batalha Encerrada!</p>
-                <p className="text-[10px] text-slate-400">{aliveA > aliveB ? playerAName : aliveB > aliveA ? playerBName : "Empate"} {aliveA !== aliveB ? "venceu!" : ""}</p>
+                <p className="text-lg font-bold text-[#FFCB05]">🏁 Batalha Encerrada!</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {aliveA > aliveB ? `${playerAName} venceu!` : aliveB > aliveA ? `${playerBName} venceu!` : "Empate!"}
+                </p>
               </div>
             ) : (
-              <p className="text-[11px] text-slate-500">Preparando batalha...</p>
+              <p className="text-sm text-slate-500">Preparando batalha...</p>
             )}
           </div>
 
           {/* Controls */}
-          <div className="flex items-center justify-center gap-2 px-4 pb-4">
+          <div className="flex items-center justify-center gap-3 px-5 pb-5">
             <button onClick={() => { setAutoPlay(false); setTurnIdx(i => Math.max(-1, i - 1)); }} disabled={turnIdx <= 0}
-              className="rounded-lg border border-border bg-slate-900 px-3 py-1 text-[10px] text-slate-400 disabled:opacity-30">←</button>
-            <button onClick={() => { setAutoPlay(false); const next = turnIdx + 1; if (next < replay.length) { const t = replay[next]; setFighters(p => p.map(c => c.id === t.targetId && t.action === "ATTACK" ? { ...c, hp: Math.max(0, c.hp - t.damage) } : c)); } setTurnIdx(next); }} disabled={finished}
-              className="rounded-lg border border-border bg-slate-900 px-3 py-1 text-[10px] text-slate-400 disabled:opacity-30">→</button>
-            <button onClick={() => { setAutoPlay(false); setTurnIdx(replay.length); }} className="rounded-lg border border-border bg-slate-900 px-3 py-1 text-[10px] text-slate-400">Pular</button>
+              className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white disabled:opacity-30">← Anterior</button>
+            <button onClick={advanceTurn} disabled={finished}
+              className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white disabled:opacity-30">Próximo →</button>
+            <button onClick={() => { setAutoPlay(false); setTurnIdx(replay.length); }}
+              className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white">Pular</button>
           </div>
         </div>
       </div>

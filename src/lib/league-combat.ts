@@ -1,5 +1,5 @@
 import type { ArenaTurnLog } from "./arena-z";
-import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier } from "./mascot-data";
+import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName } from "./mascot-data";
 import { normalizeCombatRole, getCombatRoleLabel, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 
@@ -66,7 +66,7 @@ export function toLeagueMascot(m: {
     id: m.id,
     ownerId: m.playerId,
     pokemonId: m.pokemonId,
-    name: m.nickname || `#${m.pokemonId}`,
+    name: m.nickname || getPokemonName(m.pokemonId),
     level: m.level,
     force: m.statForce,
     agility: m.statAgility,
