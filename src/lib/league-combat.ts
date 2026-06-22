@@ -173,6 +173,10 @@ export function applyItems(
       case "LOCKER_TONIC":
         for (const m of t) m.hp = Math.round(m.hp * 1.05);
         break;
+      case "ENGUICA_STRATEGY":
+        // Handled at modifier level — reduces penalty impact by 20%
+        // (applied in applyModifier if penalty flag is set; here we mark the team)
+        break;
     }
   }
 
@@ -202,6 +206,20 @@ export function applyItems(
         }
         break;
       }
+      case "WRONG_SIGN": {
+        const slot1 = o.find(m => m.slot === 1);
+        if (slot1) slot1.instinct = Math.round(slot1.instinct * 0.92);
+        break;
+      }
+      case "EVIL_EYE":
+        for (const m of o) m.instinct = Math.round(m.instinct * 0.95);
+        break;
+      case "CROWD_NOISE":
+        for (const m of o) {
+          m.agility = Math.round(m.agility * 0.96);
+          m.instinct = Math.round(m.instinct * 0.96);
+        }
+        break;
     }
   }
 

@@ -75,14 +75,21 @@ export async function createLeagueAction() {
         },
       });
 
-      await tx.weeklyMascotLeagueParticipant.create({
-        data: {
-          id: createId(),
-          leagueId: league.id,
-          playerId: player.id,
-          updatedAt: new Date(),
-        },
+      const allPlayers = await tx.player.findMany({
+        where: { active: true },
+        select: { id: true },
       });
+
+      for (const p of allPlayers) {
+        await tx.weeklyMascotLeagueParticipant.create({
+          data: {
+            id: createId(),
+            leagueId: league.id,
+            playerId: p.id,
+            updatedAt: new Date(),
+          },
+        });
+      }
     });
 
     revalidatePath(PATH);
@@ -287,24 +294,51 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number) 
       continue;
     }
 
-    // Get mascots for both players (auto-select top 6 by level)
-    const [mascotsA, mascotsB] = await Promise.all([
-      prisma.mascot.findMany({
-        where: { playerId: pair.aId },
-        orderBy: { level: "desc" },
-        take: 6,
-      }),
-      prisma.mascot.findMany({
-        where: { playerId: pair.bId },
-        orderBy: { level: "desc" },
-        take: 6,
-      }),
-    ]);
+    // Load daily teams (manual) or fallback to auto-select
+    async function loadTeam(playerId: string) {
+      const dailyTeam = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId, battleDate: today, battleSlot } },
+      });
 
-    if (mascotsA.length < 6 || mascotsB.length < 6) {
-      // WO for the team with insufficient mascots
-      const woPlayer = mascotsA.length < 6 ? pair.aId : pair.bId;
-      const winPlayer = woPlayer === pair.aId ? pair.bId : pair.aId;
+      if (dailyTeam) {
+        const ids = dailyTeam.mascotIdsJson as string[];
+        const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
+        const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
+        const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
+        return ordered.map((m, i) => toLeagueMascot(m!, i + 1, roles[m!.id]));
+      }
+
+      // Auto-fill: favorites first, then by level
+      const favs = await prisma.mascot.findMany({
+        where: { playerId, isFavorite: true },
+        orderBy: { level: "desc" },
+        take: 6,
+      });
+      if (favs.length >= 6) return favs.slice(0, 6).map((m, i) => toLeagueMascot(m, i + 1));
+
+      const usedIds = new Set(favs.map(m => m.id));
+      const rest = await prisma.mascot.findMany({
+        where: { playerId, id: { notIn: [...usedIds] } },
+        orderBy: { level: "desc" },
+        take: 6 - favs.length,
+      });
+      const all = [...favs, ...rest];
+      return all.map((m, i) => toLeagueMascot(m, i + 1));
+    }
+
+    // Load items for each player
+    async function loadItems(playerId: string) {
+      const battleItems = await prisma.weeklyMascotLeagueBattleItem.findMany({
+        where: { leagueId, playerId, battleDate: today, battleSlot, consumedAt: null, refundedAt: null },
+      });
+      return battleItems.map(bi => LEAGUE_ITEMS.find(li => li.type === bi.effectType)).filter(Boolean) as typeof LEAGUE_ITEMS;
+    }
+
+    const [teamAMascots, teamBMascots] = await Promise.all([loadTeam(pair.aId), loadTeam(pair.bId!)]);
+
+    if (teamAMascots.length < 6 || teamBMascots.length < 6) {
+      const woPlayer = teamAMascots.length < 6 ? pair.aId : pair.bId!;
+      const winPlayer = woPlayer === pair.aId ? pair.bId! : pair.aId;
       await prisma.weeklyMascotLeagueMatch.create({
         data: {
           id: createId(), leagueId, roundNumber, battleDate: today, battleSlot,
@@ -323,10 +357,8 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number) 
       continue;
     }
 
-    const teamA = mascotsA.map((m, i) => toLeagueMascot(m, i + 1));
-    const teamB = mascotsB.map((m, i) => toLeagueMascot(m, i + 1));
-
-    const result = runLeagueCombat(teamA, teamB, modifier);
+    const [itemsA, itemsB] = await Promise.all([loadItems(pair.aId), loadItems(pair.bId!)]);
+    const result = runLeagueCombat(teamAMascots, teamBMascots, modifier, itemsA, itemsB);
 
     const winnerId = result.winner === "A" ? pair.aId : result.winner === "B" ? pair.bId : null;
     const loserId = result.winner === "A" ? pair.bId : result.winner === "B" ? pair.aId : null;
