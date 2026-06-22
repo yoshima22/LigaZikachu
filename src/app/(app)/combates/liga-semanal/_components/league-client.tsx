@@ -606,14 +606,27 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
   const [modId, setModId] = useState(WEEKLY_MODIFIERS[0].id);
 
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
   const createLeague = () => {
+    setLastResult("Processando...");
     startTransition(async () => {
       try {
         const res = await startWeeklyLeagueNowAction();
-        if (res && "error" in res) { toast.error(res.error); return; }
-        toast.success(`Liga automática sincronizada com ${(res as any).participants ?? 0} jogadores!`);
+        if (res && "error" in res) {
+          setLastResult(`Erro: ${res.error}`);
+          toast.error(res.error);
+          return;
+        }
+        const msg = `Liga sincronizada com ${(res as any).participants ?? 0} jogadores!`;
+        setLastResult(msg);
+        toast.success(msg);
         refresh();
-      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
+      } catch (err) {
+        const msg = `Exceção: ${String(err).slice(0, 200)}`;
+        setLastResult(msg);
+        toast.error(msg);
+      }
     });
   };
 
@@ -719,8 +732,13 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <p className="text-xs font-bold text-blue-300">Contingência do cron</p>
         <p className="text-[10px] text-slate-400">Cria ou completa a semana, inscreve todos os jogadores ativos, sorteia o modificador do dia e ativa a Liga.</p>
         <button onClick={createLeague} disabled={pending || data.currentLeague?.status === "FINISHED"} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40 transition-colors">
-          {data.currentLeague ? "Sincronizar Liga Automática Agora" : "Iniciar Liga Automática Agora"}
+          {pending ? "Processando..." : data.currentLeague ? "Sincronizar Liga Automática Agora" : "Iniciar Liga Automática Agora"}
         </button>
+        {lastResult && (
+          <p className={`text-[10px] mt-1 ${lastResult.startsWith("Erro") || lastResult.startsWith("Exceção") ? "text-red-400" : "text-green-400"}`}>
+            {lastResult}
+          </p>
+        )}
       </div>
 
       {/* Set modifier */}
