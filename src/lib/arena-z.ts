@@ -8,6 +8,7 @@ import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
 import { unstable_cache } from "next/cache";
+import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -599,7 +600,8 @@ function botReward(levelMin: number, levelMax: number, difficulty: ArenaDifficul
   // Chance de item buff no dificil — entra no cofre e pode ser roubado em PvP
   let buffItem: string | undefined;
   if (difficulty === "hard" && Math.random() < 0.20) { // 20% de chance no Difícil
-    buffItem = BUFF_ITEM_POOL[Math.floor(Math.random() * BUFF_ITEM_POOL.length)];
+    const pool = Math.random() < 0.20 ? [...LEAGUE_SHOP_ITEM_TYPES] : BUFF_ITEM_POOL;
+    buffItem = pool[Math.floor(Math.random() * pool.length)];
   }
 
   return {

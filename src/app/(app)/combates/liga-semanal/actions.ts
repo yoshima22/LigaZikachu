@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -438,7 +438,9 @@ export async function seedLeagueItemsAction() {
 
     for (const item of LEAGUE_ITEMS) {
       const exists = await prisma.shopItem.findFirst({ where: { type: item.type as never } });
-      if (!exists) {
+      if (exists) {
+        await prisma.shopItem.update({ where: { id: exists.id }, data: { name: item.name, description: item.description, price: item.price, active: true } });
+      } else {
         await prisma.shopItem.create({
           data: {
             id: createId(),
@@ -446,7 +448,7 @@ export async function seedLeagueItemsAction() {
             name: item.name,
             description: item.description,
             price: item.price,
-            active: false,
+            active: true,
             createdAt: now,
             updatedAt: now,
           },
@@ -456,7 +458,8 @@ export async function seedLeagueItemsAction() {
     }
 
     revalidatePath(PATH);
-    revalidatePath(PATH);
+    revalidatePath("/shop");
+    revalidateTag("shop-items-active");
     return { success: true, created };
   } catch (err) {
     return { error: `Erro ao criar itens: ${String(err).slice(0, 200)}` };
@@ -648,6 +651,21 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
   const weekday = value("weekday");
   const minuteOfDay = Number(value("hour")) * 60 + Number(value("minute"));
   if (!new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]).has(weekday)) return { success: true, skipped: "weekend" };
+
+  const activeLeagueItems = await prisma.shopItem.count({
+    where: { active: true, type: { in: LEAGUE_ITEMS.map((item) => item.type) as never[] } },
+  });
+  if (activeLeagueItems < LEAGUE_ITEMS.length) {
+    await prisma.$transaction(async (tx) => {
+      for (const item of LEAGUE_ITEMS) {
+        const existing = await tx.shopItem.findFirst({ where: { type: item.type as never }, select: { id: true } });
+        if (existing) await tx.shopItem.update({ where: { id: existing.id }, data: { name: item.name, description: item.description, price: item.price, active: true } });
+        else await tx.shopItem.create({ data: { id: createId(), type: item.type as never, name: item.name, description: item.description, price: item.price, active: true, updatedAt: now } });
+      }
+    });
+    revalidateTag("shop-items-active");
+    revalidatePath("/shop");
+  }
 
   const weekKey = getCurrentWeekKey();
   let league = await prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });

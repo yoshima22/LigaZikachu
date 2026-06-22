@@ -17,6 +17,7 @@ import {
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
+import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -860,6 +861,8 @@ export type ExpeditionReward =
 
 // Pool de itens especiais que podem ser encontrados em expedições
 function rollBuffItemType(durationKey: ExpeditionDuration): string {
+  const leagueChance = durationKey === "6h" ? 0.18 : durationKey === "3h" ? 0.10 : 0.05;
+  if (Math.random() < leagueChance) return randomFrom([...LEAGUE_SHOP_ITEM_TYPES]);
   const roll = Math.random() * 100;
   if (durationKey === "6h") {
     if (roll < 34) return "MASCOT_BUFF_EXP";   // 34% — Vitamina Elétrica
