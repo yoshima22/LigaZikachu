@@ -33,10 +33,13 @@ export default async function LigaSemanalPage() {
     );
   }
 
+  // Serialize to strip Prisma Date objects and avoid client hydration issues
+  const safeData = JSON.parse(JSON.stringify(data));
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <LeagueClient initialData={data as any} />
+      <LeagueClient initialData={safeData as any} />
     </div>
   );
 }
