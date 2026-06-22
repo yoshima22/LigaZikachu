@@ -136,6 +136,62 @@ export async function startWeeklyLeagueNowAction() {
   }
 }
 
+// ── Cancel league ─────────────────────────────────────────────────────────
+
+export async function cancelLeagueAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const league = await prisma.weeklyMascotLeague.findUnique({ where: { id: leagueId } });
+    if (!league) return { error: "Liga não encontrada" };
+    if (league.status === "FINISHED") return { error: "Liga já encerrada, não pode cancelar." };
+    if (league.status === "CANCELLED") return { error: "Liga já está cancelada." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueBattleItem.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueMascotStats.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueParticipant.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeague.update({
+        where: { id: leagueId },
+        data: { status: "CANCELLED", updatedAt: new Date() },
+      });
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao cancelar: ${String(err).slice(0, 200)}` };
+  }
+}
+
+// ── Delete league (remove completely) ─────────────────────────────────────
+
+export async function deleteLeagueAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueBattleItem.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueMascotStats.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueParticipant.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeague.delete({ where: { id: leagueId } });
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao excluir: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Join league ───────────────────────────────────────────────────────────
 
 export async function joinLeagueAction(leagueId: string) {

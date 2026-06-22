@@ -15,6 +15,8 @@ import {
   buyLeagueItemAction,
   finalizeLeagueAction,
   selectBattleItemsAction,
+  cancelLeagueAction,
+  deleteLeagueAction,
 } from "../actions";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
@@ -652,10 +654,36 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const finalizeLeague = () => {
     if (!data.currentLeague || !confirm("Encerrar a liga e distribuir todas as recompensas agora?")) return;
     startTransition(async () => {
-      const res = await finalizeLeagueAction(data.currentLeague.id);
-      if ("error" in res) { toast.error(res.error); return; }
-      toast.success(`Liga encerrada. ${res.granted} jogadores premiados.`);
-      refresh();
+      try {
+        const res = await finalizeLeagueAction(data.currentLeague.id);
+        if ("error" in res) { toast.error(res.error); return; }
+        toast.success(`Liga encerrada. ${(res as any).granted} jogadores premiados.`);
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
+    });
+  };
+
+  const cancelLeague = () => {
+    if (!data.currentLeague || !confirm("Cancelar a liga atual? Todos os dados (partidas, times, itens) serão removidos. A liga ficará com status CANCELLED.")) return;
+    startTransition(async () => {
+      try {
+        const res = await cancelLeagueAction(data.currentLeague.id);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success("Liga cancelada.");
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
+    });
+  };
+
+  const deleteLeague = () => {
+    if (!data.currentLeague || !confirm("EXCLUIR completamente a liga? Isso remove TUDO (liga, participantes, partidas, times). Essa ação não pode ser desfeita.")) return;
+    startTransition(async () => {
+      try {
+        const res = await deleteLeagueAction(data.currentLeague.id);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success("Liga excluída completamente.");
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
     });
   };
 
@@ -668,6 +696,22 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <button onClick={finalizeLeague} disabled={pending || data.currentLeague.status === "FINISHED"} className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-xs font-bold text-yellow-300 disabled:opacity-40">
             Encerrar e distribuir recompensas
           </button>
+        </div>
+      )}
+
+      {/* Cancel / Delete league */}
+      {data.currentLeague && data.currentLeague.status !== "FINISHED" && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-red-300">Cancelar / Excluir Liga</p>
+          <p className="text-[10px] text-slate-400">Cancelar mantém o registro mas remove dados. Excluir apaga tudo permanentemente.</p>
+          <div className="flex gap-2">
+            <button onClick={cancelLeague} disabled={pending} className="flex-1 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-40 transition-colors">
+              Cancelar Liga
+            </button>
+            <button onClick={deleteLeague} disabled={pending} className="flex-1 rounded-xl border border-red-700/30 bg-red-700/10 px-4 py-2 text-xs font-bold text-red-400 hover:bg-red-700/20 disabled:opacity-40 transition-colors">
+              Excluir Completamente
+            </button>
+          </div>
         </div>
       )}
       {/* Create league */}
