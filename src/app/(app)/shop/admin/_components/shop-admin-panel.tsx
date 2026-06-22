@@ -8,7 +8,7 @@ import { ImageUpload } from "@/components/ui/image-upload";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { createDefaultMascotShopItems, createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem } from "../../actions";
-import { getSuggestedPrice } from "@/lib/shop-config";
+import { getSuggestedPrice, LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
@@ -20,6 +20,7 @@ const typeOpts = [
   "MASCOT_FOOD","MASCOT_SWEET",
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
+  ...LEAGUE_SHOP_ITEM_TYPES,
 ] as const;
 const typeLabel: Record<string, string> = {
   TITLE: "Título", BANNER: "Banner",
@@ -44,6 +45,22 @@ const typeLabel: Record<string, string> = {
   VACATION_TICKET:   "🏖️ Ticket de Férias do Prof. Carvalho",
   XP_SHARE:          "📡 Compartilhador de XP",
   RAINBOW_FEATHER:   "🌈 Pena Arco-Íris",
+  LEAGUE_CAPTAIN_BAND: "Faixa de Capitão",
+  LEAGUE_FORMATION_WHISTLE: "Apito de Formação",
+  LEAGUE_BENCH_SHIELD: "Escudo de Banco",
+  LEAGUE_CHEER_FLAG: "Bandeira da Torcida",
+  LEAGUE_ENGUICA_STRATEGY: "Estratégia do Enguiça",
+  LEAGUE_ANALYSIS_LANTERN: "Lanterna de Análise",
+  LEAGUE_ROUND_BOOTS: "Botas de Rodada",
+  LEAGUE_LOCKER_TONIC: "Tônico de Vestiário",
+  LEAGUE_CONFUSION_SPRAY: "Spray de Confusão",
+  LEAGUE_WRONG_SIGN: "Placa de Caminho Errado",
+  LEAGUE_ANNOYING_WHISTLE: "Apito Irritante",
+  LEAGUE_FIELD_SAND: "Areia no Campo",
+  LEAGUE_EVIL_EYE: "Olho Gordo do Miauvadão",
+  LEAGUE_CROWD_NOISE: "Barulho da Arquibancada",
+  LEAGUE_EMBARRASSING_TAPE: "Fita Embaraçosa",
+  LEAGUE_PROVOCATION_TICKET: "Bilhete de Provocação",
 };
 const rarityLabel: Record<string, string> = {
   COMMON: "⚪ Comum", UNCOMMON: "🟢 Incomum", RARE: "🔵 Raro",

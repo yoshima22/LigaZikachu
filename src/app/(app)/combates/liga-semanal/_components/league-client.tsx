@@ -550,6 +550,19 @@ function ItemsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
             <p className="text-xs font-bold text-yellow-300">Preparar itens do combate</p>
             <p className="text-[10px] text-slate-400">Escolha ate 2. Eles ficam reservados agora e so sao consumidos quando o combate acontece.</p>
           </div>
+          <div className="rounded-xl border border-border bg-slate-950/50 p-3">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Seu inventário disponível</p>
+            {data.leagueInventory.length === 0 ? (
+              <p className="text-[10px] text-slate-500">Você ainda não possui itens da Liga. Compre na ZikaShop, negocie no Bazar ou encontre em drops.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {data.leagueInventory.map((entry) => {
+                  const item = LEAGUE_ITEMS.find((candidate) => candidate.type === entry.type);
+                  return <span key={entry.type} className="rounded-full border border-green-500/25 bg-green-500/10 px-2 py-1 text-[9px] text-green-200">{item?.name ?? entry.type} ×{entry.quantity}</span>;
+                })}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             {[1, 2, 3].map((slot) => <button key={slot} onClick={() => changeSlot(slot)} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] ${battleSlot === slot ? "border-yellow-400 bg-yellow-400/15 text-yellow-200" : "border-border text-slate-400"}`}>Combate {slot}<br />{BATTLE_TIMES_BRT[slot - 1]}</button>)}
           </div>
@@ -561,6 +574,7 @@ function ItemsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
               </button>
             ))}
           </div>
+          {data.leagueInventory.length === 0 && selectedItems.length === 0 && <p className="text-center text-[10px] text-slate-500">Nenhum item disponível para selecionar.</p>}
           <button onClick={saveSelection} disabled={pending} className="w-full rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Salvar itens ({selectedItems.length}/2)</button>
         </div>
       )}

@@ -6,17 +6,30 @@ import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
-import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
-import { getActiveShopItems } from "@/lib/shop-cache";
+import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { getActiveShopItems, invalidateShopCache } from "@/lib/shop-cache";
+import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+async function ensureWeeklyLeagueItems() {
+  const active = await prisma.shopItem.count({ where: { active: true, type: { in: LEAGUE_ITEMS.map((item) => item.type) as never[] } } });
+  if (active >= LEAGUE_ITEMS.length) return;
+  for (const item of LEAGUE_ITEMS) {
+    const existing = await prisma.shopItem.findFirst({ where: { type: item.type as never }, select: { id: true } });
+    if (existing) await prisma.shopItem.update({ where: { id: existing.id }, data: { name: item.name, description: item.description, price: item.price, active: true } });
+    else await prisma.shopItem.create({ data: { type: item.type as never, name: item.name, description: item.description, price: item.price, active: true } });
+  }
+  await invalidateShopCache();
+}
 
 export default async function ShopPage() {
   const session = await getAppSession();
   if (!session?.user) return null;
 
   const admin = isAdmin(session.user.role);
+  await ensureWeeklyLeagueItems();
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -54,8 +67,10 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
+  const leagueItems = items.filter((i) => LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]));
   const mascotItems = items.filter((i) =>
-    MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number])
+    MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number]) &&
+    !LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number])
   );
   // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
   const buffInventory = inventoryRows.filter(r => {
@@ -129,6 +144,15 @@ export default async function ShopPage() {
             content: mascotItems.length > 0 ? (
               <ShopGrid title="Ovos, Comida e Buffs de Mascote"
                 items={mascotItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+            ) : null,
+          },
+          {
+            id: "liga-semanal", label: "Liga Semanal", icon: TAB_ICONS.buffs,
+            count: leagueItems.length,
+            content: leagueItems.length > 0 ? (
+              <ShopGrid title="Itens táticos da Liga Semanal"
+                items={leagueItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
             ) : null,
           },

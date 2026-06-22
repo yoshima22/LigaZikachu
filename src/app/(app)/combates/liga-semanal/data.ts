@@ -1,4 +1,41 @@
 import { prisma } from "@/lib/prisma";
+import { WEEKLY_MODIFIERS } from "./constants";
+
+function currentWeekKey() {
+  const now = new Date();
+  const jan1 = new Date(now.getFullYear(), 0, 1);
+  const days = Math.floor((now.getTime() - jan1.getTime()) / 86400000);
+  return `${now.getFullYear()}-W${String(Math.ceil((days + jan1.getDay() + 1) / 7)).padStart(2, "0")}`;
+}
+
+async function ensureCurrentLeague() {
+  const weekKey = currentWeekKey();
+  const existing = await prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });
+  if (existing) return existing.status === "FINISHED" ? null : existing;
+
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return null;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
+  monday.setHours(0, 0, 0, 0);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  friday.setHours(23, 59, 59, 999);
+  const battleDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
+  const modifier = WEEKLY_MODIFIERS[[...battleDate].reduce((sum, char) => sum + char.charCodeAt(0), 0) % WEEKLY_MODIFIERS.length];
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const league = await tx.weeklyMascotLeague.create({ data: { weekKey, weekStart: monday, weekEnd: friday, status: "ACTIVE", modifierJson: { ...modifier, dailyDate: battleDate, dailyHistory: [modifier.id] } } });
+      const players = await tx.player.findMany({ where: { active: true }, select: { id: true } });
+      if (players.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: players.map((player) => ({ leagueId: league.id, playerId: player.id })), skipDuplicates: true });
+      return league;
+    });
+  } catch {
+    return prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });
+  }
+}
 
 export async function getLeaguePageData(playerId: string, displayName: string, admin = false) {
   // Current active league (if any)
@@ -13,6 +50,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       where: { status: { in: ["REGISTRATION", "ACTIVE"] } },
       orderBy: { createdAt: "desc" },
     });
+    if (!currentLeague) currentLeague = await ensureCurrentLeague();
   } catch { /* table may not exist yet */ }
 
   if (currentLeague) {
