@@ -16,6 +16,7 @@ import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
 import { AchievementNotifier } from "@/components/achievement-notifier";
 import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
+import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -75,6 +76,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         }}
       />
       <MaintenanceVisibilityGuard />
+      <SessionPersistenceGuard />
       <div className="min-h-screen bg-[#0f0f1a]">
         {/* Header Pokemon Style */}
         <header className="sticky top-0 z-40 border-b border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#1e1e3a] to-[#1A1A2E] pt-[env(safe-area-inset-top)] backdrop-blur-md">
