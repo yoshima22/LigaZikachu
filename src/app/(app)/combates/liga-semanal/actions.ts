@@ -42,6 +42,7 @@ function getTodayBrt() {
 }
 
 const PATH = "/combates/liga-semanal";
+const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
 
 // ── Read action (client refresh) ──────────────────────────────────────────
 
@@ -85,7 +86,7 @@ export async function createLeagueAction() {
       });
 
       const allPlayers = await tx.player.findMany({
-        where: { active: true },
+        where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
         select: { id: true },
       });
 
@@ -133,7 +134,7 @@ export async function startWeeklyLeagueNowAction() {
         const stored = (league.modifierJson ?? {}) as Record<string, unknown>;
         league = await tx.weeklyMascotLeague.update({ where: { id: league.id }, data: { status: "ACTIVE", modifierJson: stored.dailyDate === battleDate ? undefined : { ...modifier, dailyDate: battleDate, dailyHistory: [...(Array.isArray(stored.dailyHistory) ? stored.dailyHistory : []), modifier.id].slice(-5) }, updatedAt: new Date() } });
       }
-      const activePlayers = await tx.player.findMany({ where: { active: true }, select: { id: true } });
+      const activePlayers = await tx.player.findMany({ where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }, select: { id: true } });
       if (activePlayers.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: activePlayers.map((player) => ({ id: createId(), leagueId: league!.id, playerId: player.id, updatedAt: new Date() })), skipDuplicates: true });
       return { leagueId: league.id, participants: activePlayers.length, modifier: modifier.name };
     });
@@ -197,6 +198,46 @@ export async function deleteLeagueAction(leagueId: string) {
     return { success: true };
   } catch (err) {
     return { error: `Erro ao excluir: ${String(err).slice(0, 200)}` };
+  }
+}
+
+// ── Purge admins from current league ──────────────────────────────────────
+
+export async function purgeAdminsFromLeagueAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const adminPlayers = await prisma.player.findMany({
+      where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } },
+      select: { id: true },
+    });
+    const adminIds = adminPlayers.map(p => p.id);
+    if (adminIds.length === 0) return { success: true, removed: 0 };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.weeklyMascotLeagueMatch.deleteMany({
+        where: { leagueId, OR: [{ playerAId: { in: adminIds } }, { playerBId: { in: adminIds } }] },
+      });
+      await tx.weeklyMascotLeagueDailyTeam.deleteMany({
+        where: { leagueId, playerId: { in: adminIds } },
+      });
+      await tx.weeklyMascotLeagueBattleItem.deleteMany({
+        where: { leagueId, playerId: { in: adminIds } },
+      });
+      await tx.weeklyMascotLeagueMascotStats.deleteMany({
+        where: { leagueId, ownerId: { in: adminIds } },
+      });
+      await tx.weeklyMascotLeagueParticipant.deleteMany({
+        where: { leagueId, playerId: { in: adminIds } },
+      });
+    });
+
+    revalidatePath(PATH);
+    return { success: true, removed: adminIds.length };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
   }
 }
 
@@ -765,7 +806,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
     const { weekStart, weekEnd } = getWeekBounds();
     league = await prisma.$transaction(async (tx) => {
       const created = await tx.weeklyMascotLeague.create({ data: { id: createId(), weekKey, weekStart, weekEnd, status: "REGISTRATION", updatedAt: now } });
-      const players = await tx.player.findMany({ where: { active: true }, select: { id: true } });
+      const players = await tx.player.findMany({ where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }, select: { id: true } });
       if (players.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: players.map((player) => ({ id: createId(), leagueId: created.id, playerId: player.id, updatedAt: now })), skipDuplicates: true });
       return created;
     });

@@ -17,6 +17,7 @@ import {
   selectBattleItemsAction,
   cancelLeagueAction,
   deleteLeagueAction,
+  purgeAdminsFromLeagueAction,
 } from "../actions";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
@@ -688,6 +689,18 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     });
   };
 
+  const purgeAdmins = () => {
+    if (!data.currentLeague) return;
+    startTransition(async () => {
+      try {
+        const res = await purgeAdminsFromLeagueAction(data.currentLeague.id);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success(`${(res as any).removed ?? 0} admin(s) removido(s) do torneio.`);
+        refresh();
+      } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
+    });
+  };
+
   const deleteLeague = () => {
     if (!data.currentLeague || !confirm("EXCLUIR completamente a liga? Isso remove TUDO (liga, participantes, partidas, times). Essa ação não pode ser desfeita.")) return;
     startTransition(async () => {
@@ -708,6 +721,17 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <p className="text-[10px] text-slate-400">Fecha a semana uma unica vez, define a classificacao e envia ovos, caixas e ZikaCoins. Participantes sem combate valido nao recebem premio.</p>
           <button onClick={finalizeLeague} disabled={pending || data.currentLeague.status === "FINISHED"} className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-xs font-bold text-yellow-300 disabled:opacity-40">
             Encerrar e distribuir recompensas
+          </button>
+        </div>
+      )}
+
+      {/* Purge admins */}
+      {data.currentLeague && (
+        <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-orange-300">Remover Admins do Torneio</p>
+          <p className="text-[10px] text-slate-400">Remove todas as contas admin do chaveamento, partidas e ranking da liga atual.</p>
+          <button onClick={purgeAdmins} disabled={pending} className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-xs font-bold text-orange-300 hover:bg-orange-500/20 disabled:opacity-40 transition-colors">
+            Remover Admins
           </button>
         </div>
       )}
