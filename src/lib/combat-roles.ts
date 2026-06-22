@@ -33,19 +33,19 @@ export const COMBAT_ROLE_LABELS: Record<CombatRole, string> = {
 };
 
 export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
-  DEFENDER: "Atrai ataques e reduz parte do dano com Vitalidade. Protege o time absorvendo pressão.",
-  ATTACKER: "Transforma Força em dano bruto, especialmente contra defensores. Pressiona alvos importantes.",
-  FLANK: "Usa Agilidade para passar pela defesa e atingir alvos vulneráveis. Ótimo contra suportes.",
-  OPPORTUNIST: "Usa Instinto para explorar brechas e aplicar enfraquecimentos nos stats do alvo.",
-  ENCOURAGER: "Usa Carisma para fortalecer aliados com buffs temporários enquanto continua lutando.",
-  GUARDIAN: "Protege um aliado específico, reduz dano recebido pelo protegido e pode tomar parte do dano no lugar dele. Ideal para proteger Encorajadores, Oportunistas ou Cuidadores.",
-  DUELIST: "Marca um alvo e insiste nele, ganhando bônus em confrontos diretos. Bônus extra contra mascotes com relação de Rival ou Nemesis.",
-  SABOTEUR: "Atrapalha buffs, ordem de ação e ritmo do combate inimigo. Diferente do Oportunista que reduz stats, o Sabotador interfere em efeitos temporários.",
-  HEALER: "Recupera pouca vida e remove penalidades leves dos aliados, mantendo o time estável sem tornar a luta infinita.",
-  SCOUT: "Reconhece fraquezas e ajuda o time a escolher alvo. Melhora precisão e chance de crítico. Combina com Flancos e Atacantes.",
-  PROVOKER: "Manipula alvos, força decisões ruins e cria caos. Pode gerar sinergia com o sistema de Laços e rivalidades.",
-  SPECIALIST: "Usa o melhor atributo do mascote e ganha bônus contextual. Flexível para mascotes com um stat dominante ou stats bem distribuídos.",
-  SURVIVOR: "Fica mais resistente conforme a luta piora. Pode evitar ser finalizado uma vez. Opção para mascotes com boa Vitalidade e Instinto.",
+  DEFENDER: "Atributo direto: Vitalidade. Atrai 62% a 78% dos ataques e reduz entre 8% e 35% do dano recebido, conforme a Vitalidade.",
+  ATTACKER: "Atributo direto: Força. Recebe de +8% a +26% de dano conforme a Força e mais +15% contra Defensores.",
+  FLANK: "Atributo direto: Agilidade. Ganha de +4% a +18% de dano, tem 35% a 82% de chance de furar a defesa e causa +12% contra suportes.",
+  OPPORTUNIST: "Atributo direto: Instinto. Tem 22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; causa +10% se superar o Instinto do alvo.",
+  ENCOURAGER: "Atributo direto: Carisma. Enquanto estiver ativo, concede de +4% a +18% de dano para toda a equipe. Sabotadores inimigos reduzem esse bônus.",
+  GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Intercepta de 15% a 40% do dano de um aliado e recebe de 5% a 20% menos dano; causa 10% menos dano.",
+  DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",
+  SABOTEUR: "Atributos diretos: Instinto e Agilidade. Prioriza suportes e reduz em 15% a 40% os bônus dos Encorajadores inimigos enquanto estiver ativo.",
+  HEALER: "Atributos diretos: Carisma e Vitalidade. Cura até duas vezes usando 30% do Carisma + 20% da Vitalidade; causa 20% menos dano.",
+  SCOUT: "Atributos diretos: Agilidade e Instinto. Concede até +8% de dano à equipe, tem 35% a 82% de chance de focar o alvo mais frágil e causa 5% menos dano.",
+  PROVOKER: "Atributos diretos: Carisma e Instinto. Tem 20% a 55% de chance de redirecionar ataques para si e reduz o dano desviado em 8%; causa 8% menos dano.",
+  SPECIALIST: "Atributo direto: o maior entre Força, Agilidade, Instinto, Vitalidade e Carisma. Recebe de +6% a +20% de dano.",
+  SURVIVOR: "Atributos diretos: Vitalidade e Instinto. Reduz até 15% do dano; abaixo de 30% de HP ganha +15% de dano e mais 25% de redução, além de sobreviver uma vez com 1 HP.",
 };
 
 export const COMBAT_ROLE_OPTIONS = COMBAT_ROLE_VALUES.map((value) => ({

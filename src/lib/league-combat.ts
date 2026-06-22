@@ -326,7 +326,7 @@ export function runLeagueCombat(
       const instinct = getStat(actor, debuffs, "instinct");
       const vitality = getStat(target, debuffs, "vitality");
 
-      const encourage = aliveEncourageBonus(allies, hp);
+      const encourage = aliveEncourageBonus(allies, hp, opponents);
       const scoutBonus = aliveScoutBonus(allies, hp);
       const duelistMult = actor.combatRole === "DUELIST" && duelistLock.get(actor.id) === target.id ? 1.12 : 1;
       const survivorDmg = actor.combatRole === "SURVIVOR" && ((hp.get(actor.id) ?? 0) / actor.hp) < 0.3 ? 1.15 : 1;
@@ -469,12 +469,13 @@ function roleDamageMult(actor: LeagueMascot, target: LeagueMascot) {
   return mult;
 }
 
-function aliveEncourageBonus(team: LeagueMascot[], hp: Map<string, number>) {
+function aliveEncourageBonus(team: LeagueMascot[], hp: Map<string, number>, opponents: LeagueMascot[]) {
   const enc = team.filter(m => m.combatRole === "ENCOURAGER" && (hp.get(m.id) ?? 0) > 0);
   if (enc.length === 0) return 0;
   const charisma = enc.reduce((s, m) => s + m.charisma, 0);
-  const saboteurs = team.filter(m => m.combatRole === "SABOTEUR" && (hp.get(m.id) ?? 0) > 0);
-  const suppression = saboteurs.length > 0 ? 0.30 : 0;
+  const saboteurs = opponents.filter(m => m.combatRole === "SABOTEUR" && (hp.get(m.id) ?? 0) > 0);
+  const bestSaboteur = saboteurs.sort((a, b) => (b.instinct + b.agility) - (a.instinct + a.agility))[0];
+  const suppression = bestSaboteur ? Math.min(0.40, 0.15 + (bestSaboteur.instinct + bestSaboteur.agility) / 800) : 0;
   return Math.min(0.18, 0.04 + charisma / 650) * (1 - suppression);
 }
 

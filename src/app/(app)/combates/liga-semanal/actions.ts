@@ -523,12 +523,10 @@ export async function selectBattleItemsAction(leagueId: string, battleSlot: numb
 
       for (const type of itemTypes) {
         const definition = LEAGUE_ITEMS.find((item) => item.type === type)!;
-        const shopItem = await tx.shopItem.findFirst({ where: { type: type as never }, select: { id: true } });
-        if (!shopItem) throw new Error(`${definition.name} nao foi cadastrado`);
-        const inventory = await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+        const inventory = await tx.playerInventory.findFirst({ where: { playerId: player.id, quantity: { gt: 0 }, item: { type: type as never } } });
         if (!inventory || inventory.quantity < 1) throw new Error(`Voce nao possui ${definition.name}`);
         await tx.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: 1 } } });
-        await tx.weeklyMascotLeagueBattleItem.create({ data: { id: createId(), leagueId, playerId: player.id, itemId: shopItem.id, effectType: type, targetType: definition.targetType, battleDate, battleSlot } });
+        await tx.weeklyMascotLeagueBattleItem.create({ data: { id: createId(), leagueId, playerId: player.id, itemId: inventory.itemId, effectType: type, targetType: definition.targetType, battleDate, battleSlot } });
       }
     });
     revalidatePath(PATH);

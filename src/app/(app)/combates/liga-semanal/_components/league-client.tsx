@@ -59,7 +59,8 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-slate-100">🏆 Liga Semanal dos Mascotes</h1>
-          <p className="text-xs text-slate-400">Modo oculto · Apenas administradores</p>
+          <p className="text-xs text-slate-400">Liga automática de segunda a sexta · aberta a todos os jogadores</p>
+          {!data.player.isAdmin && <span className="mt-1 inline-flex rounded-full border border-green-500/25 bg-green-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-green-300">Visão do jogador</span>}
         </div>
         <button onClick={refresh} disabled={refreshing} className="rounded-xl border border-border bg-slate-800 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40 transition-colors">
           {refreshing ? "..." : "↻ Atualizar"}
@@ -94,7 +95,7 @@ function LeagueTab({ data }: { data: PageData }) {
   if (!league) {
     return (
       <div className="py-10 text-center text-sm text-slate-500">
-        Nenhuma liga ativa. Use a aba Admin para criar uma nova liga.
+        Nenhuma liga ativa nesta semana. A próxima liga será criada automaticamente.
       </div>
     );
   }
@@ -210,7 +211,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   };
 
   if (!data.currentLeague) {
-    return <div className="py-10 text-center text-sm text-slate-500">Crie uma liga na aba Admin primeiro.</div>;
+    return <div className="py-10 text-center text-sm text-slate-500">Aguarde a abertura automática da liga desta semana.</div>;
   }
 
   // ── Editing mode ─────────────────────────────────────────────

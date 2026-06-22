@@ -76,7 +76,9 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       },
       include: { item: { select: { type: true } } },
     });
-    leagueInventory = inv.map(i => ({ type: i.item.type, quantity: i.quantity }));
+    const totals = new Map<string, number>();
+    for (const entry of inv) totals.set(entry.item.type, (totals.get(entry.item.type) ?? 0) + entry.quantity);
+    leagueInventory = [...totals].map(([type, quantity]) => ({ type, quantity }));
   } catch {}
 
   if (currentLeague) {
