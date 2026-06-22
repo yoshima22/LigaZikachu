@@ -983,7 +983,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
 
   if (dueSlots.length) {
     const completedSlots = await prisma.weeklyMascotLeagueMatch.findMany({
-      where: { leagueId: league.id, battleDate, battleSlot: { in: dueSlots.map((entry) => entry.slot) } },
+      where: { leagueId: league.id, battleDate, battleSlot: { in: dueSlots.map((entry) => entry.slot) }, status: { in: ["RESOLVED", "WO"] } },
       select: { battleSlot: true },
       distinct: ["battleSlot"],
     });
