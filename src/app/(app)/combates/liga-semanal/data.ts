@@ -39,6 +39,33 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
     } catch { /* table may not exist yet */ }
   }
 
+  let walletBalance = 0;
+  let leagueInventory: { type: string; quantity: number }[] = [];
+
+  try {
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId }, select: { balance: true } });
+    walletBalance = wallet?.balance ?? 0;
+  } catch {}
+
+  try {
+    const inv = await prisma.playerInventory.findMany({
+      where: {
+        playerId,
+        quantity: { gt: 0 },
+        item: { type: { in: [
+          "LEAGUE_CAPTAIN_BAND", "LEAGUE_FORMATION_WHISTLE", "LEAGUE_BENCH_SHIELD",
+          "LEAGUE_CHEER_FLAG", "LEAGUE_ENGUICA_STRATEGY", "LEAGUE_ANALYSIS_LANTERN",
+          "LEAGUE_ROUND_BOOTS", "LEAGUE_LOCKER_TONIC",
+          "LEAGUE_CONFUSION_SPRAY", "LEAGUE_WRONG_SIGN", "LEAGUE_ANNOYING_WHISTLE",
+          "LEAGUE_FIELD_SAND", "LEAGUE_EVIL_EYE", "LEAGUE_CROWD_NOISE",
+          "LEAGUE_EMBARRASSING_TAPE", "LEAGUE_PROVOCATION_TICKET",
+        ] } },
+      },
+      include: { item: { select: { type: true } } },
+    });
+    leagueInventory = inv.map(i => ({ type: i.item.type, quantity: i.quantity }));
+  } catch {}
+
   try {
     allMascots = await prisma.mascot.findMany({
       where: { playerId },
@@ -51,11 +78,12 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
   } catch { /* should always work */ }
 
   return {
-    player: { id: playerId, displayName },
+    player: { id: playerId, displayName, walletBalance },
     currentLeague,
     participants,
     myTeams,
     todayMatches,
     availableMascots: allMascots,
+    leagueInventory,
   };
 }

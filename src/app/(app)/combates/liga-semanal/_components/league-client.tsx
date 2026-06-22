@@ -12,17 +12,19 @@ import {
   simulateRoundAction,
   seedLeagueItemsAction,
   saveDailyTeamAction,
+  buyLeagueItemAction,
 } from "../actions";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
 type PageData = {
-  player: { id: string; displayName: string };
+  player: { id: string; displayName: string; walletBalance: number };
   currentLeague: any;
   participants: any[];
   myTeams: any[];
   todayMatches: any[];
   availableMascots: any[];
+  leagueInventory: { type: string; quantity: number }[];
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -44,7 +46,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
     { id: "liga", label: "Liga Atual", emoji: "🏆" },
     { id: "times", label: "Meus Times", emoji: "👥" },
     { id: "resultados", label: "Resultados", emoji: "📊" },
-    { id: "colinha", label: "Colinha", emoji: "📋" },
+    { id: "colinha", label: "Regras", emoji: "📋" },
     { id: "itens", label: "Itens", emoji: "🎒" },
     { id: "admin", label: "Admin", emoji: "⚙️" },
   ];
@@ -74,7 +76,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
         {tab === "times" && <TeamsTab data={data} refresh={refresh} />}
         {tab === "resultados" && <ResultsTab data={data} />}
         {tab === "colinha" && <ColinhaTab />}
-        {tab === "itens" && <ItemsTab />}
+        {tab === "itens" && <ItemsTab data={data} refresh={refresh} />}
         {tab === "admin" && <AdminTab data={data} refresh={refresh} />}
       </div>
     </div>
@@ -471,38 +473,67 @@ function ColinhaTab() {
 
 // ── Itens ──────────────────────────────────────────────────────────────────
 
-function ItemsTab() {
+function ItemsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
+  const [pending, startTransition] = useTransition();
   const positive = LEAGUE_ITEMS.filter(i => i.effectType === "POSITIVE");
   const negative = LEAGUE_ITEMS.filter(i => i.effectType === "NEGATIVE");
+  const balance = data.player.walletBalance;
+
+  const getOwned = (type: string) => data.leagueInventory.find(i => i.type === type)?.quantity ?? 0;
+
+  const buy = (type: string) => {
+    startTransition(async () => {
+      try {
+        const res = await buyLeagueItemAction(type);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success("Item comprado!");
+        refresh();
+      } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+    });
+  };
+
+  function ItemRow({ item }: { item: typeof LEAGUE_ITEMS[number] }) {
+    const owned = getOwned(item.type);
+    const canBuy = balance >= item.price;
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-slate-900/60 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold text-slate-200">{item.name}</p>
+            {owned > 0 && (
+              <span className="rounded-full bg-green-500/20 px-1.5 py-px text-[9px] font-bold text-green-400">×{owned}</span>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-400">{item.description}</p>
+        </div>
+        <button
+          onClick={() => buy(item.type)}
+          disabled={pending || !canBuy}
+          className="shrink-0 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5 text-xs font-bold text-yellow-300 hover:bg-yellow-500/20 disabled:opacity-40 transition-colors"
+        >
+          {item.price} ZC
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-400">Itens consumíveis por combate (até 2 por combate). Preços em ZikaCoins.</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-400">Itens consumíveis por combate (até 2 por combate).</p>
+        <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-bold text-yellow-300">
+          💰 {balance.toLocaleString()} ZC
+        </span>
+      </div>
 
       <div className="space-y-2">
         <h3 className="text-xs font-bold text-green-300">✨ Itens Positivos (próprio time)</h3>
-        {positive.map(item => (
-          <div key={item.type} className="flex items-center justify-between rounded-xl border border-border bg-slate-900/60 px-3 py-2">
-            <div>
-              <p className="text-xs font-semibold text-slate-200">{item.name}</p>
-              <p className="text-[10px] text-slate-400">{item.description}</p>
-            </div>
-            <span className="shrink-0 ml-2 text-xs font-bold text-yellow-300">{item.price} ZC</span>
-          </div>
-        ))}
+        {positive.map(item => <ItemRow key={item.type} item={item} />)}
       </div>
 
       <div className="space-y-2">
         <h3 className="text-xs font-bold text-red-300">💀 Itens Negativos (adversário)</h3>
-        {negative.map(item => (
-          <div key={item.type} className="flex items-center justify-between rounded-xl border border-border bg-slate-900/60 px-3 py-2">
-            <div>
-              <p className="text-xs font-semibold text-slate-200">{item.name}</p>
-              <p className="text-[10px] text-slate-400">{item.description}</p>
-            </div>
-            <span className="shrink-0 ml-2 text-xs font-bold text-yellow-300">{item.price} ZC</span>
-          </div>
-        ))}
+        {negative.map(item => <ItemRow key={item.type} item={item} />)}
       </div>
     </div>
   );

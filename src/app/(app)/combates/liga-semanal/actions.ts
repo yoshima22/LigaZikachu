@@ -405,8 +405,49 @@ export async function seedLeagueItemsAction() {
     }
 
     revalidatePath(PATH);
+    revalidatePath(PATH);
     return { success: true, created };
   } catch (err) {
     return { error: `Erro ao criar itens: ${String(err).slice(0, 200)}` };
+  }
+}
+
+// ── Buy league item ───────────────────────────────────────────────────────
+
+export async function buyLeagueItemAction(itemType: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+
+  const def = LEAGUE_ITEMS.find(i => i.type === itemType);
+  if (!def) return { error: "Item inválido" };
+
+  try {
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: itemType as never } });
+    if (!shopItem) return { error: "Item não existe no banco. Execute o Seed primeiro." };
+
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    if (!wallet || wallet.balance < def.price) {
+      return { error: `ZikaCoins insuficientes. Você tem ${wallet?.balance ?? 0} ZC, precisa de ${def.price} ZC.` };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.zikaCoinWallet.update({
+        where: { playerId: player.id },
+        data: { balance: { decrement: def.price }, totalSpent: { increment: def.price }, updatedAt: new Date() },
+      });
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } },
+        create: { id: createId(), playerId: player.id, itemId: shopItem.id, quantity: 1, source: "LEAGUE_SHOP" },
+        update: { quantity: { increment: 1 } },
+      });
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao comprar: ${String(err).slice(0, 200)}` };
   }
 }
