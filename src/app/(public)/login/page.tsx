@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignInForm } from "@/components/auth/sign-in-form";
+import { AutoRestoreSession } from "@/components/auth/auto-restore-session";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
@@ -14,6 +15,7 @@ export default function LoginPage() {
 
         <div className="my-6 h-px bg-border" />
 
+        <AutoRestoreSession />
         <SignInForm />
 
         <div className="mt-6 flex items-center justify-between text-sm text-slate-300">

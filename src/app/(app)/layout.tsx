@@ -17,6 +17,7 @@ import { AchievementNotifier } from "@/components/achievement-notifier";
 import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
+import { LogoutButton } from "@/components/logout-button";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -138,22 +139,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                   🪙 {wallet.balance.toLocaleString("pt-BR")}
                 </span>
               )}
-              <form action={async () => {
-                "use server";
-                const { cookies } = await import("next/headers");
-                const cookieStore = await cookies();
-                const manualToken = cookieStore.get(MANUAL_SESSION_COOKIE)?.value;
-                if (manualToken) {
-                  await prisma.session.deleteMany({ where: { sessionToken: manualToken } }).catch(() => {});
-                }
-                cookieStore.delete(MANUAL_SESSION_COOKIE);
-                await signOut({ redirectTo: "/login" });
-              }}>
-                <Button type="submit" variant="ghost" size="sm"
-                  className="text-slate-400 hover:text-red-400 hover:bg-red-500/10">
-                  <LogOut size={14} />
-                </Button>
-              </form>
+              <LogoutButton />
             </div>
           </div>
 

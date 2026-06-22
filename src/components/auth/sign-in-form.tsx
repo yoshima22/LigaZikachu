@@ -14,11 +14,6 @@ export function SignInForm({
   const [state, setState] = useState<FormState | undefined>(defaultState);
   const [pending, setPending] = useState(false);
 
-  // Limpar backup de sessão ao chegar na tela de login (significa que deslogou)
-  if (typeof window !== "undefined") {
-    try { localStorage.removeItem("lz_session_backup"); } catch {}
-  }
-
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
