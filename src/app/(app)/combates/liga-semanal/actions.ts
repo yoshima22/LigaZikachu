@@ -56,36 +56,40 @@ export async function createLeagueAction() {
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
-  const weekKey = getCurrentWeekKey();
-  const { weekStart, weekEnd } = getWeekBounds();
+  try {
+    const weekKey = getCurrentWeekKey();
+    const { weekStart, weekEnd } = getWeekBounds();
 
-  const existing = await prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });
-  if (existing) return { error: `Liga ${weekKey} já existe.` };
+    const existing = await prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });
+    if (existing) return { error: `Liga ${weekKey} já existe.` };
 
-  await prisma.$transaction(async (tx) => {
-    const league = await tx.weeklyMascotLeague.create({
-      data: {
-        id: createId(),
-        weekKey,
-        weekStart,
-        weekEnd,
-        status: "REGISTRATION",
-        updatedAt: new Date(),
-      },
+    await prisma.$transaction(async (tx) => {
+      const league = await tx.weeklyMascotLeague.create({
+        data: {
+          id: createId(),
+          weekKey,
+          weekStart,
+          weekEnd,
+          status: "REGISTRATION",
+          updatedAt: new Date(),
+        },
+      });
+
+      await tx.weeklyMascotLeagueParticipant.create({
+        data: {
+          id: createId(),
+          leagueId: league.id,
+          playerId: player.id,
+          updatedAt: new Date(),
+        },
+      });
     });
 
-    await tx.weeklyMascotLeagueParticipant.create({
-      data: {
-        id: createId(),
-        leagueId: league.id,
-        playerId: player.id,
-        updatedAt: new Date(),
-      },
-    });
-  });
-
-  revalidatePath(PATH);
-  return { success: true };
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao criar liga: ${String(err).slice(0, 200)}. A migration SQL 011 foi aplicada?` };
+  }
 }
 
 // ── Join league ───────────────────────────────────────────────────────────
@@ -125,13 +129,16 @@ export async function setModifierAction(leagueId: string, modifierId: string) {
   const mod = WEEKLY_MODIFIERS.find(m => m.id === modifierId);
   if (!mod) return { error: "Modificador inválido" };
 
-  await prisma.weeklyMascotLeague.update({
-    where: { id: leagueId },
-    data: { modifierJson: mod as unknown as any, status: "ACTIVE", updatedAt: new Date() },
-  });
-
-  revalidatePath(PATH);
-  return { success: true };
+  try {
+    await prisma.weeklyMascotLeague.update({
+      where: { id: leagueId },
+      data: { modifierJson: mod as unknown as any, status: "ACTIVE", updatedAt: new Date() },
+    });
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
 }
 
 // ── Simulate round ────────────────────────────────────────────────────────
@@ -141,6 +148,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number) 
   if (!session?.user) return { error: "Não autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
 
+  try {
   const league = await prisma.weeklyMascotLeague.findFirst({
     where: { id: leagueId, status: "ACTIVE" },
   });
@@ -294,6 +302,9 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number) 
 
   revalidatePath(PATH);
   return { success: true, matches: pairings.length };
+  } catch (err) {
+    return { error: `Erro na simulação: ${String(err).slice(0, 200)}` };
+  }
 }
 
 // ── Seed shop items ───────────────────────────────────────────────────────
@@ -303,28 +314,32 @@ export async function seedLeagueItemsAction() {
   if (!session?.user) return { error: "Não autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
 
-  const now = new Date();
-  let created = 0;
+  try {
+    const now = new Date();
+    let created = 0;
 
-  for (const item of LEAGUE_ITEMS) {
-    const exists = await prisma.shopItem.findFirst({ where: { type: item.type as never } });
-    if (!exists) {
-      await prisma.shopItem.create({
-        data: {
-          id: createId(),
-          type: item.type as never,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          active: false,
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-      created++;
+    for (const item of LEAGUE_ITEMS) {
+      const exists = await prisma.shopItem.findFirst({ where: { type: item.type as never } });
+      if (!exists) {
+        await prisma.shopItem.create({
+          data: {
+            id: createId(),
+            type: item.type as never,
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            active: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        created++;
+      }
     }
-  }
 
-  revalidatePath(PATH);
-  return { success: true, created };
+    revalidatePath(PATH);
+    return { success: true, created };
+  } catch (err) {
+    return { error: `Erro ao criar itens: ${String(err).slice(0, 200)}` };
+  }
 }
