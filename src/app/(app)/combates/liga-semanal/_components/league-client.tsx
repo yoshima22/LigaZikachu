@@ -827,11 +827,12 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     });
   };
 
-  const genMatchups = () => {
+  const genMatchups = (force = false) => {
     if (!data.currentLeague) { toast.error("Crie uma liga primeiro"); return; }
+    if (force && !confirm("Refazer a chave do dia? Matchups atuais serão deletados e BYEs revertidos.")) return;
     startTransition(async () => {
       try {
-        const res = await generateDailyMatchupsAction(data.currentLeague.id);
+        const res = await generateDailyMatchupsAction(data.currentLeague.id, force);
         if (res && "error" in res) { toast.error(res.error); return; }
         toast.success(`${(res as any).matchups ?? 0} confrontos gerados para hoje!`);
         refresh();
@@ -932,9 +933,14 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
       <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-3">
         <p className="text-xs font-bold text-cyan-300">Gerar Confrontos do Dia</p>
         <p className="text-[10px] text-slate-400">Gera os 3 rounds do dia com odds automáticas. Os jogadores poderão ver os confrontos antes dos combates.</p>
-        <button onClick={genMatchups} disabled={pending} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40 transition-colors">
-          Gerar Matchups + Odds
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => genMatchups(false)} disabled={pending} className="flex-1 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40 transition-colors">
+            Gerar Matchups + Odds
+          </button>
+          <button onClick={() => genMatchups(true)} disabled={pending} className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-xs font-bold text-orange-300 hover:bg-orange-500/20 disabled:opacity-40 transition-colors">
+            Refazer Chave
+          </button>
+        </div>
       </div>
 
       {/* Simulate round */}

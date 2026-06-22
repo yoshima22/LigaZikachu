@@ -287,7 +287,7 @@ function calculateLeagueOdds(
   };
 }
 
-export async function generateDailyMatchupsAction(leagueId: string) {
+export async function generateDailyMatchupsAction(leagueId: string, forceRegenerate = false) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
   if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
@@ -297,8 +297,23 @@ export async function generateDailyMatchupsAction(leagueId: string) {
     if (!league) return { error: "Liga não ativa" };
 
     const today = getTodayBrt();
+
+    // Delete existing SCHEDULED (not yet resolved) if regenerating
     const existing = await prisma.weeklyMascotLeagueMatch.findMany({ where: { leagueId, battleDate: today } });
-    if (existing.length > 0) return { error: "Matchups de hoje já existem." };
+    const hasResolved = existing.some(m => m.status === "RESOLVED" || m.status === "WO");
+    if (hasResolved && !forceRegenerate) return { error: "Já existem combates resolvidos hoje. Use 'Refazer Chave' para forçar." };
+
+    if (existing.length > 0) {
+      // Revert BYE points before deleting
+      const byeMatches = existing.filter(m => m.status === "BYE");
+      for (const bye of byeMatches) {
+        await prisma.weeklyMascotLeagueParticipant.updateMany({
+          where: { leagueId, playerId: bye.playerAId },
+          data: { points: { decrement: 3 }, byes: { decrement: 1 }, updatedAt: new Date() },
+        });
+      }
+      await prisma.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId, battleDate: today } });
+    }
 
     const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
       where: { leagueId },
@@ -308,18 +323,27 @@ export async function generateDailyMatchupsAction(leagueId: string) {
     if (participants.length < 2) return { error: "Menos de 2 participantes" };
 
     const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId } });
-    const pMap = new Map(participants.map(p => [p.playerId, p]));
+    const byeCount = new Map<string, number>(); // track BYEs across slots
     let created = 0;
 
     for (const battleSlot of [1, 2, 3]) {
+      // Sort: players who already got BYE today go to the FRONT (paired first)
+      const sorted = [...participants].sort((a, b) => {
+        const aB = byeCount.get(a.playerId) ?? 0;
+        const bB = byeCount.get(b.playerId) ?? 0;
+        if (aB !== bB) return bB - aB; // more BYEs = higher priority to be paired
+        return (b.points - a.points) || (b.wins - a.wins);
+      });
+
       const paired = new Set<string>();
-      for (let i = 0; i < participants.length; i++) {
-        const p = participants[i];
+
+      for (let i = 0; i < sorted.length; i++) {
+        const p = sorted[i];
         if (paired.has(p.playerId)) continue;
 
         let opp: typeof p | null = null;
-        for (let j = i + 1; j < participants.length; j++) {
-          if (!paired.has(participants[j].playerId)) { opp = participants[j]; break; }
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (!paired.has(sorted[j].playerId)) { opp = sorted[j]; break; }
         }
 
         if (opp) {
@@ -340,6 +364,7 @@ export async function generateDailyMatchupsAction(leagueId: string) {
           paired.add(opp.playerId);
           created++;
         } else {
+          // BYE — give to this player
           await prisma.weeklyMascotLeagueMatch.create({
             data: {
               id: createId(), leagueId,
@@ -355,6 +380,7 @@ export async function generateDailyMatchupsAction(leagueId: string) {
             where: { leagueId, playerId: p.playerId },
             data: { points: { increment: 3 }, byes: { increment: 1 }, updatedAt: new Date() },
           });
+          byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
           paired.add(p.playerId);
         }
       }
