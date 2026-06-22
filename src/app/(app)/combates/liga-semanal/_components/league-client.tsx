@@ -19,7 +19,10 @@ import {
   deleteLeagueAction,
   purgeAdminsFromLeagueAction,
   generateDailyMatchupsAction,
+  purgeInactivePlayersAction,
+  resetAndResimulateAction,
 } from "../actions";
+import { LeagueBattleReplayModal, type ArenaTurnLog } from "./league-battle-replay";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
@@ -492,6 +495,8 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 // ── Resultados ─────────────────────────────────────────────────────────────
 
 function ResultsTab({ data }: { data: PageData }) {
+  const [replayMatch, setReplayMatch] = useState<any>(null);
+
   if (data.todayMatches.length === 0) {
     return <div className="py-10 text-center text-sm text-slate-500">Matchups ainda não gerados. Admin pode gerar na aba Admin.</div>;
   }
@@ -504,6 +509,15 @@ function ResultsTab({ data }: { data: PageData }) {
 
   return (
     <div className="space-y-4">
+      {replayMatch && replayMatch.replayJson && (
+        <LeagueBattleReplayModal
+          playerAName={replayMatch.playerAName}
+          playerBName={replayMatch.playerBName ?? "???"}
+          replay={replayMatch.replayJson as ArenaTurnLog[]}
+          onFinish={() => setReplayMatch(null)}
+        />
+      )}
+
       <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
 
       {slotGroups.map(({ slot, time, matches }) => (
@@ -560,6 +574,14 @@ function ResultsTab({ data }: { data: PageData }) {
                 </div>
 
                 {isResolved && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
+                {isResolved && match.replayJson && (
+                  <button
+                    onClick={() => setReplayMatch(match)}
+                    className="mt-1 w-full rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 py-1 text-[10px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10 transition-colors"
+                  >
+                    Ver Replay
+                  </button>
+                )}
               </div>
             );
           })}
@@ -746,6 +768,7 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [modId, setModId] = useState(WEEKLY_MODIFIERS[0].id);
 
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [resimSlots, setResimSlots] = useState<Set<number>>(new Set());
 
   const createLeague = () => {
     setLastResult("Processando...");
@@ -883,6 +906,75 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <p className="text-[10px] text-slate-400">Remove todas as contas admin do chaveamento, partidas e ranking da liga atual.</p>
           <button onClick={purgeAdmins} disabled={pending} className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-xs font-bold text-orange-300 hover:bg-orange-500/20 disabled:opacity-40 transition-colors">
             Remover Admins
+          </button>
+        </div>
+      )}
+
+      {/* Purge inactive players */}
+      {data.currentLeague && (
+        <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-orange-300">Limpar Jogadores Inativos</p>
+          <p className="text-[10px] text-slate-400">Remove jogadores deletados, suspensos ou inativos da liga atual (partidas, times, stats).</p>
+          <button
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  const res = await purgeInactivePlayersAction(data.currentLeague.id);
+                  if (res && "error" in res) { toast.error(res.error); return; }
+                  toast.success(`${(res as any).removed ?? 0} jogador(es) inativo(s) removido(s).`);
+                  refresh();
+                } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+              });
+            }}
+            disabled={pending}
+            className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-xs font-bold text-orange-300 hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
+          >
+            Limpar Jogadores Inativos
+          </button>
+        </div>
+      )}
+
+      {/* Reset and re-simulate slots */}
+      {data.currentLeague && (
+        <div className="rounded-xl border border-pink-500/20 bg-pink-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-pink-300">Resetar e Resimular Rodadas</p>
+          <p className="text-[10px] text-slate-400">Reverte stats, deleta partidas dos slots selecionados e re-simula os combates.</p>
+          <div className="flex gap-2">
+            {[1, 2, 3].map(slot => (
+              <label key={slot} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resimSlots.has(slot)}
+                  onChange={() => setResimSlots(prev => {
+                    const next = new Set(prev);
+                    if (next.has(slot)) next.delete(slot);
+                    else next.add(slot);
+                    return next;
+                  })}
+                  className="rounded border-slate-600"
+                />
+                <span className="text-[10px] text-slate-300">Slot {slot} ({BATTLE_TIMES_BRT[slot - 1]})</span>
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              if (resimSlots.size === 0) { toast.error("Selecione pelo menos 1 slot."); return; }
+              if (!confirm(`Resetar e resimular slots ${[...resimSlots].join(", ")}? Stats serao revertidos e novos combates simulados.`)) return;
+              startTransition(async () => {
+                try {
+                  const res = await resetAndResimulateAction(data.currentLeague.id, [...resimSlots]);
+                  if (res && "error" in res) { toast.error(res.error); return; }
+                  toast.success("Slots resimulados com sucesso!");
+                  setResimSlots(new Set());
+                  refresh();
+                } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+              });
+            }}
+            disabled={pending || resimSlots.size === 0}
+            className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 py-2 text-xs font-bold text-pink-300 hover:bg-pink-500/20 disabled:opacity-40 transition-colors"
+          >
+            Resetar e Resimular ({resimSlots.size} slot{resimSlots.size !== 1 ? "s" : ""})
           </button>
         </div>
       )}
