@@ -118,7 +118,15 @@ export async function startWeeklyLeagueNowAction() {
     const { weekStart, weekEnd } = getWeekBounds();
     const result = await prisma.$transaction(async (tx) => {
       let league = await tx.weeklyMascotLeague.findUnique({ where: { weekKey } });
-      if (league?.status === "FINISHED") throw new Error("A Liga desta semana ja foi encerrada.");
+      if (league?.status === "FINISHED" || league?.status === "CANCELLED") {
+        await tx.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId: league.id } });
+        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId: league.id } });
+        await tx.weeklyMascotLeagueBattleItem.deleteMany({ where: { leagueId: league.id } });
+        await tx.weeklyMascotLeagueMascotStats.deleteMany({ where: { leagueId: league.id } });
+        await tx.weeklyMascotLeagueParticipant.deleteMany({ where: { leagueId: league.id } });
+        await tx.weeklyMascotLeague.delete({ where: { id: league.id } });
+        league = null;
+      }
       if (!league) {
         league = await tx.weeklyMascotLeague.create({ data: { id: createId(), weekKey, weekStart, weekEnd, status: "ACTIVE", modifierJson: { ...modifier, dailyDate: battleDate, dailyHistory: [modifier.id] }, updatedAt: new Date() } });
       } else {
