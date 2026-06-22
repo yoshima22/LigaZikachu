@@ -241,6 +241,56 @@ export async function purgeAdminsFromLeagueAction(leagueId: string) {
   }
 }
 
+// ── Purge inactive/deleted players from current league ───────────────────
+
+export async function purgeInactivePlayersAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
+      where: { leagueId },
+      select: { playerId: true },
+    });
+    const playerIds = participants.map(p => p.playerId);
+    if (playerIds.length === 0) return { success: true, removed: 0 };
+
+    // Find players that still exist and are valid
+    const validPlayers = await prisma.player.findMany({
+      where: { id: { in: playerIds }, active: true, user: { status: "ACTIVE", role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
+      select: { id: true },
+    });
+    const validIds = new Set(validPlayers.map(p => p.id));
+    const invalidIds = playerIds.filter(id => !validIds.has(id));
+
+    if (invalidIds.length === 0) return { success: true, removed: 0 };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.weeklyMascotLeagueMatch.deleteMany({
+        where: { leagueId, OR: [{ playerAId: { in: invalidIds } }, { playerBId: { in: invalidIds } }] },
+      });
+      await tx.weeklyMascotLeagueDailyTeam.deleteMany({
+        where: { leagueId, playerId: { in: invalidIds } },
+      });
+      await tx.weeklyMascotLeagueBattleItem.deleteMany({
+        where: { leagueId, playerId: { in: invalidIds } },
+      });
+      await tx.weeklyMascotLeagueMascotStats.deleteMany({
+        where: { leagueId, ownerId: { in: invalidIds } },
+      });
+      await tx.weeklyMascotLeagueParticipant.deleteMany({
+        where: { leagueId, playerId: { in: invalidIds } },
+      });
+    });
+
+    revalidatePath(PATH);
+    return { success: true, removed: invalidIds.length };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Join league ───────────────────────────────────────────────────────────
 
 export async function joinLeagueAction(leagueId: string) {
@@ -326,6 +376,22 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
     const byeCount = new Map<string, number>(); // track BYEs across slots
     let created = 0;
 
+    // Track all previous opponents this week to avoid repeated matchups
+    const previousMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+      where: { leagueId, status: { in: ["RESOLVED", "WO", "SCHEDULED"] } },
+      select: { playerAId: true, playerBId: true },
+    });
+    const previousOpponents = new Map<string, Set<string>>();
+    for (const m of previousMatches) {
+      if (!m.playerBId) continue;
+      if (!previousOpponents.has(m.playerAId)) previousOpponents.set(m.playerAId, new Set());
+      if (!previousOpponents.has(m.playerBId)) previousOpponents.set(m.playerBId, new Set());
+      previousOpponents.get(m.playerAId)!.add(m.playerBId);
+      previousOpponents.get(m.playerBId)!.add(m.playerAId);
+    }
+    // Also track today's pairings as we generate them
+    const todayOpponents = new Map<string, Set<string>>();
+
     for (const battleSlot of [1, 2, 3]) {
       // Sort: players who already got BYE today go to the FRONT (paired first)
       const sorted = [...participants].sort((a, b) => {
@@ -341,12 +407,29 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
         const p = sorted[i];
         if (paired.has(p.playerId)) continue;
 
+        const prevOpps = previousOpponents.get(p.playerId) ?? new Set();
+        const todayOpps = todayOpponents.get(p.playerId) ?? new Set();
+
+        // Try to find opponent not yet faced this week, closest in score
         let opp: typeof p | null = null;
+        let fallbackOpp: typeof p | null = null;
         for (let j = i + 1; j < sorted.length; j++) {
-          if (!paired.has(sorted[j].playerId)) { opp = sorted[j]; break; }
+          if (paired.has(sorted[j].playerId)) continue;
+          if (!fallbackOpp) fallbackOpp = sorted[j];
+          if (!prevOpps.has(sorted[j].playerId) && !todayOpps.has(sorted[j].playerId)) {
+            opp = sorted[j];
+            break;
+          }
         }
+        // Last resort: repeat an opponent
+        if (!opp) opp = fallbackOpp;
 
         if (opp) {
+          // Track today's pairing
+          if (!todayOpponents.has(p.playerId)) todayOpponents.set(p.playerId, new Set());
+          if (!todayOpponents.has(opp.playerId)) todayOpponents.set(opp.playerId, new Set());
+          todayOpponents.get(p.playerId)!.add(opp.playerId);
+          todayOpponents.get(opp.playerId)!.add(p.playerId);
           const { oddsA, oddsB } = calculateLeagueOdds(p, opp);
           await prisma.weeklyMascotLeagueMatch.create({
             data: {
@@ -700,6 +783,98 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
   return { success: true, matches: pairings.length };
   } catch (err) {
     return { error: `Erro na simulação: ${String(err).slice(0, 200)}` };
+  }
+}
+
+// ── Reset and re-simulate specific slots ─────────────────────────────────
+
+export async function resetAndResimulateAction(leagueId: string, slots: number[]) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  if (!slots.length || slots.some(s => s < 1 || s > 3)) return { error: "Slots inválidos" };
+
+  try {
+    const league = await prisma.weeklyMascotLeague.findFirst({ where: { id: leagueId, status: "ACTIVE" } });
+    if (!league) return { error: "Liga não ativa" };
+
+    const today = getTodayBrt();
+
+    // Find resolved matches for the given slots today
+    const matches = await prisma.weeklyMascotLeagueMatch.findMany({
+      where: { leagueId, battleDate: today, battleSlot: { in: slots }, status: { in: ["RESOLVED", "WO", "BYE"] } },
+    });
+
+    if (matches.length === 0) return { error: "Nenhuma partida resolvida encontrada para os slots selecionados." };
+
+    // Revert participant stats for each match
+    await prisma.$transaction(async (tx) => {
+      for (const match of matches) {
+        if (match.status === "BYE") {
+          await tx.weeklyMascotLeagueParticipant.updateMany({
+            where: { leagueId, playerId: match.playerAId },
+            data: { points: { decrement: 3 }, byes: { decrement: 1 }, updatedAt: new Date() },
+          });
+        } else if (match.status === "WO") {
+          if (match.winnerId) {
+            await tx.weeklyMascotLeagueParticipant.updateMany({
+              where: { leagueId, playerId: match.winnerId },
+              data: { points: { decrement: 3 }, wins: { decrement: 1 }, updatedAt: new Date() },
+            });
+          }
+          if (match.loserId) {
+            await tx.weeklyMascotLeagueParticipant.updateMany({
+              where: { leagueId, playerId: match.loserId },
+              data: { woLosses: { decrement: 1 }, updatedAt: new Date() },
+            });
+          }
+        } else if (match.isDraw) {
+          await tx.weeklyMascotLeagueParticipant.updateMany({
+            where: { leagueId, playerId: match.playerAId },
+            data: { points: { decrement: 1 }, draws: { decrement: 1 }, damageDealt: { decrement: match.playerADamageDealt }, damageTaken: { decrement: match.playerADamageTaken }, survivorsScore: { decrement: match.playerASurvivors }, updatedAt: new Date() },
+          });
+          if (match.playerBId) {
+            await tx.weeklyMascotLeagueParticipant.updateMany({
+              where: { leagueId, playerId: match.playerBId },
+              data: { points: { decrement: 1 }, draws: { decrement: 1 }, damageDealt: { decrement: match.playerBDamageDealt }, damageTaken: { decrement: match.playerBDamageTaken }, survivorsScore: { decrement: match.playerBSurvivors }, updatedAt: new Date() },
+            });
+          }
+        } else if (match.winnerId && match.loserId) {
+          const wIsA = match.winnerId === match.playerAId;
+          await tx.weeklyMascotLeagueParticipant.updateMany({
+            where: { leagueId, playerId: match.winnerId },
+            data: { points: { decrement: 3 }, wins: { decrement: 1 }, damageDealt: { decrement: wIsA ? match.playerADamageDealt : match.playerBDamageDealt }, damageTaken: { decrement: wIsA ? match.playerADamageTaken : match.playerBDamageTaken }, survivorsScore: { decrement: wIsA ? match.playerASurvivors : match.playerBSurvivors }, updatedAt: new Date() },
+          });
+          await tx.weeklyMascotLeagueParticipant.updateMany({
+            where: { leagueId, playerId: match.loserId },
+            data: { losses: { decrement: 1 }, damageDealt: { decrement: !wIsA ? match.playerADamageDealt : match.playerBDamageDealt }, damageTaken: { decrement: !wIsA ? match.playerADamageTaken : match.playerBDamageTaken }, survivorsScore: { decrement: !wIsA ? match.playerASurvivors : match.playerBSurvivors }, updatedAt: new Date() },
+          });
+        }
+      }
+
+      // Delete the matches for these slots
+      await tx.weeklyMascotLeagueMatch.deleteMany({
+        where: { leagueId, battleDate: today, battleSlot: { in: slots } },
+      });
+
+      // Un-consume battle items so they can be re-used
+      await tx.weeklyMascotLeagueBattleItem.updateMany({
+        where: { leagueId, battleDate: today, battleSlot: { in: slots }, consumedAt: { not: null } },
+        data: { consumedAt: null },
+      });
+    });
+
+    // Re-simulate each slot
+    const results = [];
+    for (const slot of slots.sort()) {
+      results.push({ slot, result: await simulateRoundAction(leagueId, slot) });
+    }
+
+    revalidatePath(PATH);
+    return { success: true, results };
+  } catch (err) {
+    return { error: `Erro ao resetar/resimular: ${String(err).slice(0, 200)}` };
   }
 }
 
