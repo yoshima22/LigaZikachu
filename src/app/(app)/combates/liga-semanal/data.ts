@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export async function getLeaguePageData(playerId: string, displayName: string) {
+export async function getLeaguePageData(playerId: string, displayName: string, admin = false) {
   // Current active league (if any)
   let currentLeague = null;
   let participants: unknown[] = [];
@@ -19,11 +19,22 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
     try {
       participants = await (prisma as any).weeklyMascotLeagueParticipant.findMany({
         where: { leagueId: (currentLeague as any).id },
+        select: { id: true, playerId: true, points: true, wins: true, losses: true, draws: true, woLosses: true, byes: true, survivorsScore: true, damageDealt: true, finalRank: true, rewardGranted: true },
         orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
       });
+      const playerIds = (participants as Array<{ playerId: string }>).map((entry) => entry.playerId);
+      const names = await prisma.player.findMany({
+        where: { id: { in: playerIds } },
+        select: { id: true, displayName: true, ptcglNick: true },
+      });
+      const nameById = new Map(names.map((entry) => [entry.id, entry.displayName || entry.ptcglNick]));
+      participants = (participants as Array<Record<string, unknown> & { playerId: string }>).map((entry) => ({
+        ...entry,
+        playerName: nameById.get(entry.playerId) ?? "Jogador",
+      }));
     } catch { /* table may not exist yet */ }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     try {
       myTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
         where: { leagueId: (currentLeague as any).id, playerId, battleDate: today },
@@ -34,6 +45,7 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
     try {
       todayMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
         where: { leagueId: (currentLeague as any).id, battleDate: today },
+        select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true },
         orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
       });
     } catch { /* table may not exist yet */ }
@@ -41,6 +53,7 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
 
   let walletBalance = 0;
   let leagueInventory: { type: string; quantity: number }[] = [];
+  let selectedBattleItems: { battleSlot: number; effectType: string }[] = [];
 
   try {
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId }, select: { balance: true } });
@@ -66,6 +79,15 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
     leagueInventory = inv.map(i => ({ type: i.item.type, quantity: i.quantity }));
   } catch {}
 
+  if (currentLeague) {
+    try {
+      selectedBattleItems = await prisma.weeklyMascotLeagueBattleItem.findMany({
+        where: { leagueId: (currentLeague as any).id, playerId, battleDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()), consumedAt: null, refundedAt: null },
+        select: { battleSlot: true, effectType: true },
+      });
+    } catch {}
+  }
+
   try {
     allMascots = await prisma.mascot.findMany({
       where: { playerId },
@@ -78,12 +100,13 @@ export async function getLeaguePageData(playerId: string, displayName: string) {
   } catch { /* should always work */ }
 
   return {
-    player: { id: playerId, displayName, walletBalance },
+    player: { id: playerId, displayName, walletBalance, isAdmin: admin },
     currentLeague,
     participants,
     myTeams,
     todayMatches,
     availableMascots: allMascots,
     leagueInventory,
+    selectedBattleItems,
   };
 }

@@ -13,18 +13,21 @@ import {
   seedLeagueItemsAction,
   saveDailyTeamAction,
   buyLeagueItemAction,
+  finalizeLeagueAction,
+  selectBattleItemsAction,
 } from "../actions";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
 type PageData = {
-  player: { id: string; displayName: string; walletBalance: number };
+  player: { id: string; displayName: string; walletBalance: number; isAdmin: boolean };
   currentLeague: any;
   participants: any[];
   myTeams: any[];
   todayMatches: any[];
   availableMascots: any[];
   leagueInventory: { type: string; quantity: number }[];
+  selectedBattleItems: { battleSlot: number; effectType: string }[];
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -42,14 +45,14 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
     });
   };
 
-  const tabs: { id: Tab; label: string; emoji: string }[] = [
+  const tabs = ([
     { id: "liga", label: "Liga Atual", emoji: "🏆" },
     { id: "times", label: "Meus Times", emoji: "👥" },
     { id: "resultados", label: "Resultados", emoji: "📊" },
     { id: "colinha", label: "Regras", emoji: "📋" },
     { id: "itens", label: "Itens", emoji: "🎒" },
     { id: "admin", label: "Admin", emoji: "⚙️" },
-  ];
+  ] satisfies { id: Tab; label: string; emoji: string }[]).filter((item) => item.id !== "admin" || data.player.isAdmin);
 
   return (
     <div className="space-y-4">
@@ -77,7 +80,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
         {tab === "resultados" && <ResultsTab data={data} />}
         {tab === "colinha" && <ColinhaTab />}
         {tab === "itens" && <ItemsTab data={data} refresh={refresh} />}
-        {tab === "admin" && <AdminTab data={data} refresh={refresh} />}
+        {tab === "admin" && data.player.isAdmin && <AdminTab data={data} refresh={refresh} />}
       </div>
     </div>
   );
@@ -136,7 +139,7 @@ function LeagueTab({ data }: { data: PageData }) {
               <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-800/50 px-3 py-1.5">
                 <div className="flex items-center gap-2">
                   <span className={`w-5 text-center text-[10px] font-bold ${i < 3 ? "text-yellow-300" : "text-slate-500"}`}>{i + 1}°</span>
-                  <span className="text-xs text-slate-200">{p.playerId}</span>
+                  <span className="text-xs text-slate-200">{p.playerName ?? "Jogador"}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-slate-400">
                   <span>{p.points}pts</span>
@@ -475,11 +478,32 @@ function ColinhaTab() {
 
 function ItemsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
+  const [battleSlot, setBattleSlot] = useState(1);
+  const [selectedItems, setSelectedItems] = useState<string[]>(() => data.selectedBattleItems.filter((item) => item.battleSlot === 1).map((item) => item.effectType));
   const positive = LEAGUE_ITEMS.filter(i => i.effectType === "POSITIVE");
   const negative = LEAGUE_ITEMS.filter(i => i.effectType === "NEGATIVE");
   const balance = data.player.walletBalance;
 
   const getOwned = (type: string) => data.leagueInventory.find(i => i.type === type)?.quantity ?? 0;
+
+  const changeSlot = (slot: number) => {
+    setBattleSlot(slot);
+    setSelectedItems(data.selectedBattleItems.filter((item) => item.battleSlot === slot).map((item) => item.effectType));
+  };
+
+  const toggleSelected = (type: string) => {
+    setSelectedItems((current) => current.includes(type) ? current.filter((item) => item !== type) : current.length < 2 ? [...current, type] : current);
+  };
+
+  const saveSelection = () => {
+    if (!data.currentLeague) return;
+    startTransition(async () => {
+      const result = await selectBattleItemsAction(data.currentLeague.id, battleSlot, selectedItems);
+      if ("error" in result) { toast.error(result.error); return; }
+      toast.success(`Itens do combate ${battleSlot} reservados.`);
+      refresh();
+    });
+  };
 
   const buy = (type: string) => {
     startTransition(async () => {
@@ -519,6 +543,26 @@ function ItemsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
   return (
     <div className="space-y-4">
+      {data.currentLeague && (
+        <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/5 p-4 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-yellow-300">Preparar itens do combate</p>
+            <p className="text-[10px] text-slate-400">Escolha ate 2. Eles ficam reservados agora e so sao consumidos quando o combate acontece.</p>
+          </div>
+          <div className="flex gap-2">
+            {[1, 2, 3].map((slot) => <button key={slot} onClick={() => changeSlot(slot)} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] ${battleSlot === slot ? "border-yellow-400 bg-yellow-400/15 text-yellow-200" : "border-border text-slate-400"}`}>Combate {slot}<br />{BATTLE_TIMES_BRT[slot - 1]}</button>)}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {LEAGUE_ITEMS.filter((item) => getOwned(item.type) > 0 || selectedItems.includes(item.type)).map((item) => (
+              <button key={item.type} onClick={() => toggleSelected(item.type)} className={`rounded-lg border p-2 text-left ${selectedItems.includes(item.type) ? "border-yellow-400 bg-yellow-400/10" : "border-border bg-slate-900/60"}`}>
+                <span className="text-[10px] font-semibold text-slate-200">{item.name}</span>
+                <span className="ml-2 text-[9px] text-slate-500">x{getOwned(item.type) + (selectedItems.includes(item.type) ? 1 : 0)}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={saveSelection} disabled={pending} className="w-full rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Salvar itens ({selectedItems.length}/2)</button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-400">Itens consumíveis por combate (até 2 por combate).</p>
         <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-bold text-yellow-300">
@@ -590,8 +634,27 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     });
   };
 
+  const finalizeLeague = () => {
+    if (!data.currentLeague || !confirm("Encerrar a liga e distribuir todas as recompensas agora?")) return;
+    startTransition(async () => {
+      const res = await finalizeLeagueAction(data.currentLeague.id);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(`Liga encerrada. ${res.granted} jogadores premiados.`);
+      refresh();
+    });
+  };
+
   return (
     <div className="space-y-6">
+      {data.currentLeague && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-yellow-300">Encerramento e premios</p>
+          <p className="text-[10px] text-slate-400">Fecha a semana uma unica vez, define a classificacao e envia ovos, caixas e ZikaCoins. Participantes sem combate valido nao recebem premio.</p>
+          <button onClick={finalizeLeague} disabled={pending || data.currentLeague.status === "FINISHED"} className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-xs font-bold text-yellow-300 disabled:opacity-40">
+            Encerrar e distribuir recompensas
+          </button>
+        </div>
+      )}
       {/* Create league */}
       <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
         <p className="text-xs font-bold text-blue-300">Criar Nova Liga Semanal</p>

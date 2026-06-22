@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import type { WeeklyModifier } from "./constants";
+import { EggType, GiftType, ZikaCoinTxType } from "@prisma/client";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -31,6 +32,15 @@ function getWeekBounds() {
   return { weekStart: monday, weekEnd: friday };
 }
 
+function getTodayBrt() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 const PATH = "/combates/liga-semanal";
 
 // ── Read action (client refresh) ──────────────────────────────────────────
@@ -38,12 +48,11 @@ const PATH = "/combates/liga-semanal";
 export async function getLeagueDataAction() {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
-  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
   const { getLeaguePageData } = await import("./data");
-  const data = await getLeaguePageData(player.id, player.displayName);
+  const data = await getLeaguePageData(player.id, player.displayName, isAdmin(session.user.role));
   return JSON.parse(JSON.stringify(data));
 }
 
@@ -104,7 +113,6 @@ export async function createLeagueAction() {
 export async function joinLeagueAction(leagueId: string) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
-  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
@@ -136,7 +144,6 @@ export async function saveDailyTeamAction(
 ) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
-  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
@@ -144,7 +151,7 @@ export async function saveDailyTeamAction(
   if (battleSlot < 1 || battleSlot > 3) return { error: "Slot inválido." };
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayBrt();
 
     // Check no mascot is used in other slots today
     const otherTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
@@ -235,7 +242,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number) 
 
   if (participants.length < 2) return { error: "Precisa de pelo menos 2 participantes" };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayBrt();
   const existingMatches = await prisma.weeklyMascotLeagueMatch.findMany({
     where: { leagueId, battleDate: today, battleSlot },
   });
@@ -377,6 +384,11 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number) 
       },
     });
 
+    await prisma.weeklyMascotLeagueBattleItem.updateMany({
+      where: { leagueId, battleDate: today, battleSlot, playerId: { in: [pair.aId, pair.bId!] }, consumedAt: null, refundedAt: null },
+      data: { consumedAt: new Date() },
+    });
+
     // Update participant stats
     if (result.winner === "DRAW") {
       await prisma.weeklyMascotLeagueParticipant.updateMany({
@@ -449,7 +461,6 @@ export async function seedLeagueItemsAction() {
 export async function buyLeagueItemAction(itemType: string) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
-  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
 
@@ -481,5 +492,137 @@ export async function buyLeagueItemAction(itemType: string) {
     return { success: true };
   } catch (err) {
     return { error: `Erro ao comprar: ${String(err).slice(0, 200)}` };
+  }
+}
+
+export async function selectBattleItemsAction(leagueId: string, battleSlot: number, itemTypes: string[]) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Nao autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador nao encontrado" };
+  if (battleSlot < 1 || battleSlot > 3) return { error: "Combate invalido" };
+  if (itemTypes.length > 2 || new Set(itemTypes).size !== itemTypes.length) return { error: "Escolha ate 2 itens diferentes" };
+  if (itemTypes.some((type) => !LEAGUE_ITEMS.some((item) => item.type === type))) return { error: "Item invalido" };
+
+  const battleDate = getTodayBrt();
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.weeklyMascotLeagueBattleItem.findMany({ where: { leagueId, playerId: player.id, battleDate, battleSlot, consumedAt: null } });
+      for (const previous of existing) {
+        const inventory = await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: previous.itemId } } });
+        if (inventory) await tx.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { increment: 1 } } });
+      }
+      await tx.weeklyMascotLeagueBattleItem.deleteMany({ where: { leagueId, playerId: player.id, battleDate, battleSlot, consumedAt: null } });
+
+      for (const type of itemTypes) {
+        const definition = LEAGUE_ITEMS.find((item) => item.type === type)!;
+        const shopItem = await tx.shopItem.findFirst({ where: { type: type as never }, select: { id: true } });
+        if (!shopItem) throw new Error(`${definition.name} nao foi cadastrado`);
+        const inventory = await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+        if (!inventory || inventory.quantity < 1) throw new Error(`Voce nao possui ${definition.name}`);
+        await tx.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: 1 } } });
+        await tx.weeklyMascotLeagueBattleItem.create({ data: { id: createId(), leagueId, playerId: player.id, itemId: shopItem.id, effectType: type, targetType: definition.targetType, battleDate, battleSlot } });
+      }
+    });
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (error) {
+    return { error: String(error instanceof Error ? error.message : error).slice(0, 160) };
+  }
+}
+
+const WEEKLY_BOX_POOL = [
+  { kind: "EGG", eggType: EggType.RARE, label: "Ovo Raro", weight: 34 },
+  { kind: "EGG", eggType: EggType.EVENT, label: "Ovo de Evento", weight: 24 },
+  { kind: "ITEM", itemType: "MASCOT_BUFF_LUCK", label: "Amuleto da Sorte", weight: 20 },
+  { kind: "ITEM", itemType: "MASCOT_BUFF_EXP", label: "Vitamina Chocante", weight: 16 },
+  { kind: "EGG", eggType: EggType.SPECIAL, label: "Ovo Especial", weight: 6 },
+] as const;
+
+function drawWeeklyBoxReward() {
+  const roll = Math.random() * 100;
+  let cursor = 0;
+  return WEEKLY_BOX_POOL.find((reward) => (cursor += reward.weight) > roll) ?? WEEKLY_BOX_POOL[0];
+}
+
+function weeklyCoinsForRank(rank: number) {
+  if (rank === 4) return 700;
+  if (rank === 5) return 600;
+  if (rank === 6) return 500;
+  if (rank <= 10) return 400;
+  if (rank <= 15) return 300;
+  return 200;
+}
+
+export async function finalizeLeagueAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user || !isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
+      where: { leagueId },
+      orderBy: [{ points: "desc" }, { wins: "desc" }, { survivorsScore: "desc" }, { damageDealt: "desc" }],
+    });
+    if (!participants.length) return { error: "Liga sem participantes." };
+
+    let granted = 0;
+    await prisma.$transaction(async (tx) => {
+      for (let index = 0; index < participants.length; index++) {
+        const participant = participants[index];
+        if (participant.rewardGranted) continue;
+        const matchesPlayed = participant.wins + participant.losses + participant.draws + participant.woLosses + participant.byes;
+        if (matchesPlayed === 0) continue;
+
+        const rank = index + 1;
+        const claimed = await tx.weeklyMascotLeagueParticipant.updateMany({
+          where: { id: participant.id, rewardGranted: false },
+          data: { finalRank: rank, rewardGranted: true },
+        });
+        if (claimed.count === 0) continue;
+        const boxItems = rank === 1 ? 3 : rank === 2 ? 2 : rank === 3 ? 1 : 0;
+        await tx.playerGift.create({
+          data: {
+            playerId: participant.playerId,
+            type: GiftType.CUSTOM,
+            title: "Liga Semanal: Ovo de Evento",
+            description: `Premio de participacao valida - ${rank}o lugar.`,
+            payload: { rewardKind: "MASCOT_EGG", eggType: EggType.EVENT, origin: `liga-semanal:${leagueId}` },
+          },
+        });
+
+        for (let boxIndex = 0; boxIndex < boxItems; boxIndex++) {
+          const reward = drawWeeklyBoxReward();
+          await tx.playerGift.create({
+            data: {
+              playerId: participant.playerId,
+              type: GiftType.CUSTOM,
+              title: `Caixa Surpresa: ${reward.label}`,
+              description: `Conteudo da caixa do ${rank}o lugar da Liga Semanal.`,
+              payload: reward.kind === "EGG"
+                ? { rewardKind: "MASCOT_EGG", eggType: reward.eggType, origin: `liga-semanal-caixa:${leagueId}` }
+                : { rewardKind: "MASCOT_BUFF", buffType: reward.itemType, quantity: 1 },
+            },
+          });
+        }
+
+        if (rank > 3) {
+          const coins = weeklyCoinsForRank(rank);
+          const wallet = await tx.zikaCoinWallet.upsert({ where: { playerId: participant.playerId }, create: { playerId: participant.playerId }, update: {} });
+          await tx.zikaCoinTransaction.create({
+            data: { walletId: wallet.id, type: ZikaCoinTxType.PARTICIPATION_REWARD, amount: coins, balanceBefore: wallet.balance, balanceAfter: wallet.balance + coins, description: `Liga Semanal - ${rank}o lugar` },
+          });
+          await tx.zikaCoinWallet.update({ where: { id: wallet.id }, data: { balance: { increment: coins }, totalEarned: { increment: coins } } });
+        }
+
+        granted++;
+      }
+      await tx.weeklyMascotLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: participants[0].playerId } });
+    });
+
+    revalidatePath(PATH);
+    revalidatePath("/caixa-de-presentes");
+    return { success: true, granted };
+  } catch (error) {
+    return { error: `Falha ao encerrar: ${String(error).slice(0, 180)}` };
   }
 }

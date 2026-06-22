@@ -42,7 +42,7 @@ const combatLinks = [
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
   { href: "/desafio-sincronizado", label: "Arena Sincronizada", icon: Ticket, adminOnly: false },
   { href: "/combates/cacada-de-rastros", label: "Caçada de Rastros", icon: Footprints, adminOnly: true },
-  { href: "/combates/liga-semanal", label: "Liga Semanal", icon: Trophy, adminOnly: true },
+  { href: "/combates/liga-semanal", label: "Liga Semanal", icon: Trophy, adminOnly: false },
 ];
 
 const rankingLinks = [

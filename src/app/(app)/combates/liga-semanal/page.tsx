@@ -8,9 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LigaSemanalPage() {
   const session = await getAppSession();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    redirect("/dashboard");
-  }
+  if (!session?.user) redirect("/login");
 
   const player = await getSessionPlayer(session.user.id);
   if (!player) {
@@ -23,7 +21,7 @@ export default async function LigaSemanalPage() {
 
   let data;
   try {
-    data = await getLeaguePageData(player.id, player.displayName);
+    data = await getLeaguePageData(player.id, player.displayName, isAdmin(session.user.role));
   } catch (err) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8">
