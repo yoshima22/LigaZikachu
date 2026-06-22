@@ -335,6 +335,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 343, to: 344, level: 36 },
   { from: 345, to: 346, level: 40 },
   { from: 347, to: 348, level: 40 },
+  { from: 349, to: 350, level: 30 }, // Feebas → Milotic (Prism Scale/beleza)
   { from: 353, to: 354, level: 37 },
   { from: 355, to: 356, level: 37 },
   { from: 361, to: 362, level: 42 },
