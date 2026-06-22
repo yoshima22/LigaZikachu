@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { getManualSessionUser } from "@/lib/manual-session";
+import { AutoRestoreSession } from "@/components/auth/auto-restore-session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -21,9 +23,12 @@ import {
 export default async function HomePage() {
   const session = await auth();
   if (session?.user) redirect("/dashboard");
+  const manualUser = await getManualSessionUser();
+  if (manualUser) redirect("/dashboard");
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f0f1a] via-[#1a1a2e] to-[#0f0f1a]">
+      <AutoRestoreSession />
       {/* Hero */}
       <section className="relative overflow-hidden px-6 pt-16 pb-20 sm:pt-24 sm:pb-28">
         {/* Background pattern */}
