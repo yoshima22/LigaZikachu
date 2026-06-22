@@ -3,12 +3,17 @@
 import { useEffect } from "react";
 
 const STORAGE_KEY = "lz_session_backup";
-const COOKIE_NAME = "lz_session";
-const CHECK_INTERVAL_MS = 8_000;
 
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
+async function checkSession(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/auth/session-check", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return true;
+  }
 }
 
 async function restoreSession(token: string): Promise<boolean> {
@@ -28,45 +33,36 @@ async function restoreSession(token: string): Promise<boolean> {
 
 export function SessionPersistenceGuard() {
   useEffect(() => {
-    const currentCookie = getCookie(COOKIE_NAME);
-    if (currentCookie) {
-      localStorage.setItem(STORAGE_KEY, currentCookie);
-    }
+    let busy = false;
 
-    let restoring = false;
+    const onResume = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
 
-    const checkAndRestore = async () => {
-      if (restoring) return;
-      const cookie = getCookie(COOKIE_NAME);
-      if (cookie) {
-        localStorage.setItem(STORAGE_KEY, cookie);
-        return;
-      }
+      try {
+        const alive = await checkSession();
+        if (alive) { busy = false; return; }
 
-      const backup = localStorage.getItem(STORAGE_KEY);
-      if (!backup) return;
+        const backup = localStorage.getItem(STORAGE_KEY);
+        if (!backup) { busy = false; return; }
 
-      restoring = true;
-      const ok = await restoreSession(backup);
-      restoring = false;
+        const ok = await restoreSession(backup);
+        if (ok) {
+          window.location.reload();
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      } catch {}
 
-      if (!ok) {
-        localStorage.removeItem(STORAGE_KEY);
-      }
+      busy = false;
     };
 
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void checkAndRestore();
-    };
-
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("focus", () => void checkAndRestore());
-
-    const interval = setInterval(checkAndRestore, CHECK_INTERVAL_MS);
+    const onVis = () => { if (document.visibilityState === "visible") void onResume(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", () => void onResume());
 
     return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 

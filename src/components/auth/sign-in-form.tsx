@@ -44,6 +44,9 @@ export function SignInForm({
       }
 
       setState({ success: true });
+      if (payload.sessionToken) {
+        try { localStorage.setItem("lz_session_backup", payload.sessionToken); } catch {}
+      }
       window.location.assign("/dashboard");
     } catch (error) {
       console.error("[LoginForm] manual login failed", error);

@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const response = NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true, sessionToken });
     const secure = new URL(request.url).protocol === "https:";
     response.cookies.set(
       MANUAL_SESSION_COOKIE,
