@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
 import {
   startWeeklyLeagueNowAction,
@@ -197,7 +197,17 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   };
 
   const toggleMascot = (id: string) => {
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 6 ? [...prev, id] : prev);
+    if (selected.includes(id)) {
+      setSelected(prev => prev.filter(x => x !== id));
+      setRoles(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
+    } else if (selected.length < 6) {
+      setSelected(prev => [...prev, id]);
+      const m = data.availableMascots.find((x: any) => x.id === id);
+      if (m) {
+        const rec = recommendCombatRole(m as any);
+        setRoles(prev => ({ ...prev, [id]: prev[id] ?? rec }));
+      }
+    }
   };
 
   const saveTeam = () => {
@@ -248,87 +258,111 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {Array.from({ length: 6 }, (_, i) => {
             const m = selectedMascots[i] as any;
+            const currentRole = m ? (roles[m.id] ?? "ATTACKER") as CombatRole : null;
+            const recRole = m ? recommendCombatRole(m as any) : null;
             return (
-              <div key={i} className={`relative rounded-xl border p-2 flex flex-col items-center gap-0.5 min-h-[100px] ${m ? "bg-[#FFCB05]/10 border-[#FFCB05]/30" : "border-dashed border-slate-700"}`}>
-                <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
+              <div key={i} className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[120px] ${m ? "bg-[#FFCB05]/10 border-[#FFCB05]/30" : "border-dashed border-slate-700"}`}>
+                <span className="absolute top-1 left-1.5 text-[10px] text-slate-500 font-mono font-bold">{i + 1}</span>
                 {m ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
-                    <p className="text-[8px] text-slate-300 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
-                    <p className="text-[8px] text-slate-500">Nv.{m.level}</p>
+                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <p className="text-[10px] font-semibold text-slate-200 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                    <p className="text-[9px] text-slate-400">Nv.{m.level}</p>
                     <select
-                      value={roles[m.id] ?? "ATTACKER"}
+                      value={currentRole ?? "ATTACKER"}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setRoles(prev => ({ ...prev, [m.id]: e.target.value }))}
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-0.5 py-0.5 text-[7px] font-semibold text-yellow-300 outline-none"
+                      title={currentRole ? COMBAT_ROLE_DESCRIPTIONS[currentRole] : ""}
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[9px] font-semibold text-yellow-300 outline-none hover:border-yellow-500/50"
                     >
-                      {COMBAT_ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      {COMBAT_ROLE_OPTIONS.map(r => (
+                        <option key={r.value} value={r.value} title={r.description}>
+                          {r.label}{r.value === recRole ? " ★" : ""}
+                        </option>
+                      ))}
                     </select>
-                    <button onClick={() => toggleMascot(m.id)} className="absolute top-0.5 right-0.5 rounded-full p-0.5 text-slate-600 hover:text-red-400 text-[10px]">✕</button>
+                    {recRole && currentRole !== recRole && (
+                      <p className="text-[8px] text-cyan-400">Sugerido: {getCombatRoleLabel(recRole)}</p>
+                    )}
+                    <button onClick={() => toggleMascot(m.id)} className="absolute top-0.5 right-0.5 rounded-full p-1 text-slate-500 hover:text-red-400 text-xs">✕</button>
                   </>
                 ) : (
-                  <span className="text-[10px] text-slate-700 mt-8">vazio</span>
+                  <span className="text-xs text-slate-700 mt-10">vazio</span>
                 )}
               </div>
             );
           })}
         </div>
 
+        {/* Tooltip da postura selecionada */}
+        {selectedMascots.length > 0 && (() => {
+          const lastM = selectedMascots[selectedMascots.length - 1] as any;
+          const lastRole = (roles[lastM?.id] ?? "ATTACKER") as CombatRole;
+          return (
+            <div className="rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2">
+              <p className="text-[11px] font-semibold text-yellow-300">{getCombatRoleLabel(lastRole)}</p>
+              <p className="text-[10px] text-slate-400">{COMBAT_ROLE_DESCRIPTIONS[lastRole]}</p>
+            </div>
+          );
+        })()}
+
         {/* Search + filter */}
         <div className="space-y-2">
           <div className="relative">
             <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="Buscar mascote por nome..."
-              className="w-full rounded-lg border border-border bg-slate-900 pl-3 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600" />
+              className="w-full rounded-lg border border-border bg-slate-900 pl-3 pr-3 py-2.5 text-sm text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-500" />
           </div>
-          <div className="flex flex-wrap gap-1">
-            <button onClick={() => { setTypeFilter(null); setPage(0); }} className={`rounded-full px-2 py-0.5 text-[9px] font-semibold transition-colors ${!typeFilter ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>Todos</button>
+          <div className="flex flex-wrap gap-1.5">
+            <button onClick={() => { setTypeFilter(null); setPage(0); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${!typeFilter ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>Todos</button>
             {ALL_TYPES.map(t => (
-              <button key={t} onClick={() => { setTypeFilter(typeFilter === t ? null : t); setPage(0); }} className={`rounded-full px-2 py-0.5 text-[9px] font-semibold capitalize transition-colors ${typeFilter === t ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>{t}</button>
+              <button key={t} onClick={() => { setTypeFilter(typeFilter === t ? null : t); setPage(0); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${typeFilter === t ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>{t}</button>
             ))}
           </div>
         </div>
 
         {/* Mascot grid */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {paginated.map((m: any) => {
             const isSelected = selected.includes(m.id);
             const types = getPokemonTypes(m.pokemonId);
+            const rec = recommendCombatRole(m as any);
             return (
-              <button key={m.id} onClick={() => toggleMascot(m.id)} className={`flex items-start gap-2 rounded-xl border p-2 text-left transition-colors ${
+              <button key={m.id} onClick={() => toggleMascot(m.id)} className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors ${
                 isSelected ? "border-yellow-500/50 bg-yellow-500/10" : "border-border bg-slate-900/60 hover:border-slate-600"
               } ${!isSelected && selected.length >= 6 ? "opacity-30 pointer-events-none" : ""}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-10 w-10 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-12 w-12 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold text-slate-200 truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
-                  <p className="text-[9px] text-slate-500">Nv.{m.level}</p>
-                  <div className="flex gap-0.5 mt-0.5">
+                  <p className="text-xs font-bold text-slate-200 truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                  <p className="text-[11px] text-slate-400">Nv.{m.level}</p>
+                  <div className="flex gap-1 mt-1">
                     {types.map(t => (
-                      <span key={t} className={`rounded-full px-1.5 py-px text-[7px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>
+                      <span key={t} className={`rounded-full px-2 py-0.5 text-[9px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>
                     ))}
                   </div>
-                  <div className="mt-1 grid grid-cols-5 gap-px text-[7px]">
+                  <div className="mt-1.5 grid grid-cols-5 gap-0.5 text-[10px] font-semibold">
                     <span className="text-red-400" title="Força">F{m.statForce}</span>
                     <span className="text-blue-400" title="Agilidade">A{m.statAgility}</span>
                     <span className="text-purple-400" title="Instinto">I{m.statInstinct}</span>
                     <span className="text-green-400" title="Vitalidade">V{m.statVitality}</span>
                     <span className="text-pink-400" title="Carisma">C{m.statCharisma}</span>
                   </div>
+                  <p className="mt-1 text-[9px] text-cyan-400/80" title={COMBAT_ROLE_DESCRIPTIONS[rec]}>★ {getCombatRoleLabel(rec)}</p>
                 </div>
               </button>
             );
           })}
         </div>
 
-        {filtered.length === 0 && <p className="text-xs text-slate-500 text-center py-3">Nenhum mascote encontrado.</p>}
+        {filtered.length === 0 && <p className="text-sm text-slate-500 text-center py-4">Nenhum mascote encontrado.</p>}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="rounded-lg border border-border bg-slate-800 px-3 py-1 text-[10px] text-slate-300 disabled:opacity-30">← Anterior</button>
-            <span className="text-[10px] text-slate-500">{page + 1}/{totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-lg border border-border bg-slate-800 px-3 py-1 text-[10px] text-slate-300 disabled:opacity-30">Próxima →</button>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="rounded-lg border border-border bg-slate-800 px-4 py-1.5 text-xs text-slate-300 disabled:opacity-30">← Anterior</button>
+            <span className="text-xs text-slate-500">{page + 1}/{totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-lg border border-border bg-slate-800 px-4 py-1.5 text-xs text-slate-300 disabled:opacity-30">Próxima →</button>
           </div>
         )}
 
