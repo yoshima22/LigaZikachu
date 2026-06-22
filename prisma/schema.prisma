@@ -1223,6 +1223,22 @@ enum ShopItemType {
   TRACE_INSTINCT_BOOST
   TRACE_GOLDEN_TICKET
   TRACE_SPECIAL_MAP
+  LEAGUE_CAPTAIN_BAND
+  LEAGUE_FORMATION_WHISTLE
+  LEAGUE_BENCH_SHIELD
+  LEAGUE_CHEER_FLAG
+  LEAGUE_ENGUICA_STRATEGY
+  LEAGUE_ANALYSIS_LANTERN
+  LEAGUE_ROUND_BOOTS
+  LEAGUE_LOCKER_TONIC
+  LEAGUE_CONFUSION_SPRAY
+  LEAGUE_WRONG_SIGN
+  LEAGUE_ANNOYING_WHISTLE
+  LEAGUE_FIELD_SAND
+  LEAGUE_EVIL_EYE
+  LEAGUE_CROWD_NOISE
+  LEAGUE_EMBARRASSING_TAPE
+  LEAGUE_PROVOCATION_TICKET
 }
 
 enum SyncChallengeStatus {
@@ -1304,6 +1320,21 @@ enum MascotCombatRole {
   PROVOKER
   SPECIALIST
   SURVIVOR
+}
+
+enum WeeklyLeagueStatus {
+  REGISTRATION
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum WeeklyMatchStatus {
+  SCHEDULED
+  RESOLVED
+  BYE
+  WO
+  CANCELLED
 }
 
 enum ZikaLootStatus {
@@ -2366,6 +2397,152 @@ model PassScheduleConfig {
   updatedBy String?  // userId do admin que salvou por último
 
   @@map("pass_schedule_config")
+}
+
+// ── Liga Semanal dos Mascotes ──────────────────────────────────
+
+model WeeklyMascotLeague {
+  id               String              @id @default(cuid())
+  weekKey          String              @unique // e.g. "2026-W26"
+  weekStart        DateTime
+  weekEnd          DateTime
+  status           WeeklyLeagueStatus  @default(REGISTRATION)
+  modifierJson     Json?               // {id, name, description, effectType, bonusPct, ...}
+  championPlayerId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  participants     WeeklyMascotLeagueParticipant[]
+  dailyTeams       WeeklyMascotLeagueDailyTeam[]
+  matches          WeeklyMascotLeagueMatch[]
+  battleItems      WeeklyMascotLeagueBattleItem[]
+  mascotStats      WeeklyMascotLeagueMascotStats[]
+
+  @@map("weekly_mascot_leagues")
+}
+
+model WeeklyMascotLeagueParticipant {
+  id             String   @id @default(cuid())
+  leagueId       String
+  playerId       String
+  points         Int      @default(0)
+  wins           Int      @default(0)
+  losses         Int      @default(0)
+  draws          Int      @default(0)
+  woLosses       Int      @default(0)
+  byes           Int      @default(0)
+  survivorsScore Int      @default(0)
+  damageDealt    Int      @default(0)
+  damageTaken    Int      @default(0)
+  finalRank      Int?
+  rewardGranted  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  league         WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, playerId])
+  @@index([leagueId])
+  @@map("weekly_mascot_league_participants")
+}
+
+model WeeklyMascotLeagueDailyTeam {
+  id            String    @id @default(cuid())
+  leagueId      String
+  playerId      String
+  battleDate    String    // "YYYY-MM-DD"
+  battleSlot    Int       // 1, 2, or 3
+  source        String    @default("MANUAL") // MANUAL | AUTO_FAVORITE | AUTO_COLLECTION
+  mascotIdsJson Json      // string[] of mascot IDs
+  rolesJson     Json?     // Record<mascotId, CombatRole>
+  lockedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  league        WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, playerId, battleDate, battleSlot])
+  @@index([leagueId, battleDate])
+  @@map("weekly_mascot_league_daily_teams")
+}
+
+model WeeklyMascotLeagueMatch {
+  id                  String             @id @default(cuid())
+  leagueId            String
+  roundNumber         Int
+  battleDate          String             // "YYYY-MM-DD"
+  battleSlot          Int                // 1, 2, or 3
+  scheduledAt         DateTime
+  playerAId           String
+  playerBId           String?
+  winnerId            String?
+  loserId             String?
+  isDraw              Boolean            @default(false)
+  playerASurvivors    Int                @default(0)
+  playerBSurvivors    Int                @default(0)
+  playerADamageDealt  Int                @default(0)
+  playerBDamageDealt  Int                @default(0)
+  playerADamageTaken  Int                @default(0)
+  playerBDamageTaken  Int                @default(0)
+  resultJson          Json?
+  replayJson          Json?
+  status              WeeklyMatchStatus  @default(SCHEDULED)
+  resolvedAt          DateTime?
+  createdAt           DateTime           @default(now())
+  league              WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  battleItems         WeeklyMascotLeagueBattleItem[]
+
+  @@index([leagueId, battleDate])
+  @@index([playerAId])
+  @@index([playerBId])
+  @@map("weekly_mascot_league_matches")
+}
+
+model WeeklyMascotLeagueBattleItem {
+  id             String                    @id @default(cuid())
+  leagueId       String
+  matchId        String?
+  playerId       String
+  itemId         String
+  effectType     String                    // POSITIVE or NEGATIVE
+  targetType     String                    // SELF or OPPONENT
+  targetPlayerId String?
+  battleDate     String
+  battleSlot     Int
+  consumedAt     DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime                  @default(now())
+  league         WeeklyMascotLeague        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  match          WeeklyMascotLeagueMatch?  @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, battleDate])
+  @@index([playerId])
+  @@map("weekly_mascot_league_battle_items")
+}
+
+model WeeklyMascotLeagueMascotStats {
+  id               String   @id @default(cuid())
+  leagueId         String
+  mascotId         String
+  ownerId          String
+  combatRole       String
+  matchesPlayed    Int      @default(0)
+  wins             Int      @default(0)
+  losses           Int      @default(0)
+  damageDealt      Int      @default(0)
+  damageTaken      Int      @default(0)
+  kosDealt         Int      @default(0)
+  kosReceived      Int      @default(0)
+  buffsApplied     Int      @default(0)
+  debuffsApplied   Int      @default(0)
+  interceptions    Int      @default(0)
+  successfulFlanks Int      @default(0)
+  healingDone      Int      @default(0)
+  turnsSurvived    Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  league           WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, mascotId])
+  @@index([leagueId])
+  @@map("weekly_mascot_league_mascot_stats")
 }
 
 // Conteúdo editável do site (textos do manual, etc.)
