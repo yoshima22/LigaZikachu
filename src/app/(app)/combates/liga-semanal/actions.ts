@@ -108,6 +108,34 @@ export async function createLeagueAction() {
   }
 }
 
+export async function startWeeklyLeagueNowAction() {
+  const session = await getAppSession();
+  if (!session?.user || !isAdmin(session.user.role)) return { error: "Acesso restrito" };
+  try {
+    const weekKey = getCurrentWeekKey();
+    const battleDate = getTodayBrt();
+    const modifier = WEEKLY_MODIFIERS[[...battleDate].reduce((sum, char) => sum + char.charCodeAt(0), 0) % WEEKLY_MODIFIERS.length];
+    const { weekStart, weekEnd } = getWeekBounds();
+    const result = await prisma.$transaction(async (tx) => {
+      let league = await tx.weeklyMascotLeague.findUnique({ where: { weekKey } });
+      if (league?.status === "FINISHED") throw new Error("A Liga desta semana ja foi encerrada.");
+      if (!league) {
+        league = await tx.weeklyMascotLeague.create({ data: { id: createId(), weekKey, weekStart, weekEnd, status: "ACTIVE", modifierJson: { ...modifier, dailyDate: battleDate, dailyHistory: [modifier.id] }, updatedAt: new Date() } });
+      } else {
+        const stored = (league.modifierJson ?? {}) as Record<string, unknown>;
+        league = await tx.weeklyMascotLeague.update({ where: { id: league.id }, data: { status: "ACTIVE", modifierJson: stored.dailyDate === battleDate ? undefined : { ...modifier, dailyDate: battleDate, dailyHistory: [...(Array.isArray(stored.dailyHistory) ? stored.dailyHistory : []), modifier.id].slice(-5) }, updatedAt: new Date() } });
+      }
+      const activePlayers = await tx.player.findMany({ where: { active: true }, select: { id: true } });
+      if (activePlayers.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: activePlayers.map((player) => ({ id: createId(), leagueId: league!.id, playerId: player.id, updatedAt: new Date() })), skipDuplicates: true });
+      return { leagueId: league.id, participants: activePlayers.length, modifier: modifier.name };
+    });
+    revalidatePath(PATH);
+    return { success: true, ...result };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nao foi possivel iniciar a Liga." };
+  }
+}
+
 // ── Join league ───────────────────────────────────────────────────────────
 
 export async function joinLeagueAction(leagueId: string) {

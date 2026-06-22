@@ -6,7 +6,7 @@ import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../con
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
 import {
-  createLeagueAction,
+  startWeeklyLeagueNowAction,
   joinLeagueAction,
   setModifierAction,
   simulateRoundAction,
@@ -607,9 +607,9 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const createLeague = () => {
     startTransition(async () => {
       try {
-        const res = await createLeagueAction();
+        const res = await startWeeklyLeagueNowAction();
         if (res && "error" in res) { toast.error(res.error); return; }
-        toast.success("Liga semanal criada!");
+        toast.success(`Liga automática sincronizada com ${(res as any).participants ?? 0} jogadores!`);
         refresh();
       } catch (err) { toast.error(`Exceção: ${String(err).slice(0, 150)}`); }
     });
@@ -672,10 +672,10 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
       )}
       {/* Create league */}
       <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
-        <p className="text-xs font-bold text-blue-300">Criar Nova Liga Semanal</p>
-        <p className="text-[10px] text-slate-400">Cria uma liga para a semana atual. Inclui o admin como participante.</p>
-        <button onClick={createLeague} disabled={pending || !!data.currentLeague} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40 transition-colors">
-          {data.currentLeague ? "Liga já existe" : "Criar Liga"}
+        <p className="text-xs font-bold text-blue-300">Contingência do cron</p>
+        <p className="text-[10px] text-slate-400">Cria ou completa a semana, inscreve todos os jogadores ativos, sorteia o modificador do dia e ativa a Liga.</p>
+        <button onClick={createLeague} disabled={pending || data.currentLeague?.status === "FINISHED"} className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40 transition-colors">
+          {data.currentLeague ? "Sincronizar Liga Automática Agora" : "Iniciar Liga Automática Agora"}
         </button>
       </div>
 
