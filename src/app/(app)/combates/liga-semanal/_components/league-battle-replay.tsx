@@ -7,9 +7,11 @@ export type TurnLog = {
   turn: number;
   actorId: string;
   actorName: string;
+  actorOwnerId?: string | null;
   actorPokemonId?: number;
   targetId: string;
   targetName: string;
+  targetOwnerId?: string | null;
   targetPokemonId?: number;
   action: "ATTACK" | "DEFEND";
   damage: number;
@@ -38,22 +40,35 @@ function resolveName(name: string, pokemonId?: number) {
 
 function buildFighters(turns: TurnLog[]): Fighter[] {
   const seen = new Map<string, Fighter>();
-  const sideA = new Set<string>();
-  const sideB = new Set<string>();
+
+  // First pass: determine which ownerId is "A" (first actor in turn 1)
+  let ownerA: string | null = null;
+  for (const t of turns) {
+    if (t.actorOwnerId) { ownerA = t.actorOwnerId; break; }
+  }
+
+  function getSide(ownerId?: string | null): "A" | "B" {
+    if (!ownerId || !ownerA) return "A";
+    return ownerId === ownerA ? "A" : "B";
+  }
 
   for (const t of turns) {
-    for (const [id, name, pId, role] of [
-      [t.actorId, t.actorName, t.actorPokemonId, t.actorRole],
-      [t.targetId, t.targetName, t.targetPokemonId, t.targetRole],
-    ] as Array<[string, string, number | undefined, string | undefined]>) {
-      if (!seen.has(id)) {
-        const side = sideA.size < 6 && !sideB.has(id) ? "A" as const : "B" as const;
-        if (side === "A") sideA.add(id); else sideB.add(id);
-        seen.set(id, { id, name: resolveName(name, pId), pokemonId: pId, side, maxHp: 100, hp: 100, role });
-      } else if (pId && !seen.get(id)!.pokemonId) {
-        seen.get(id)!.pokemonId = pId;
-      }
+    if (!seen.has(t.actorId)) {
+      seen.set(t.actorId, {
+        id: t.actorId, name: resolveName(t.actorName, t.actorPokemonId),
+        pokemonId: t.actorPokemonId, side: getSide(t.actorOwnerId),
+        maxHp: 100, hp: 100, role: t.actorRole,
+      });
     }
+    if (!seen.has(t.targetId)) {
+      seen.set(t.targetId, {
+        id: t.targetId, name: resolveName(t.targetName, t.targetPokemonId),
+        pokemonId: t.targetPokemonId, side: getSide(t.targetOwnerId),
+        maxHp: 100, hp: 100, role: t.targetRole,
+      });
+    }
+    if (t.actorPokemonId && !seen.get(t.actorId)!.pokemonId) seen.get(t.actorId)!.pokemonId = t.actorPokemonId;
+    if (t.targetPokemonId && !seen.get(t.targetId)!.pokemonId) seen.get(t.targetId)!.pokemonId = t.targetPokemonId;
   }
 
   for (const t of turns) {
