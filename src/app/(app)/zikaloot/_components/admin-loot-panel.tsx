@@ -24,9 +24,9 @@ const PRIZE_LABELS: Record<string, string> = {
   SHOP_ITEM: "Item da ZikaShop (por nome)", STICKER_PACK: "Pacote de Figurinhas"
 };
 
-const EGG_TYPES = ["COMMON", "RARE", "SPECIAL", "EVENT", "EGG_GEN1", "EGG_GEN2"];
+const EGG_TYPES = ["COMMON", "RARE", "SPECIAL", "EVENT", "LAB"];
 const EGG_LABELS: Record<string, string> = {
-  COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial", EVENT: "Evento", EGG_GEN1: "Geração 1", EGG_GEN2: "Geração 2"
+  COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial", EVENT: "Evento", LAB: "Laboratório",
 };
 
 function PrizeList({ prizes, onChange }: { prizes: PrizeItem[]; onChange: (p: PrizeItem[]) => void }) {
