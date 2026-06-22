@@ -153,6 +153,12 @@ export async function saveDailyTeamAction(
   try {
     const today = getTodayBrt();
 
+    const resolvedMatch = await prisma.weeklyMascotLeagueMatch.findFirst({
+      where: { leagueId, battleDate: today, battleSlot },
+      select: { id: true },
+    });
+    if (resolvedMatch) return { error: "Este combate ja aconteceu e o time esta travado." };
+
     // Check no mascot is used in other slots today
     const otherTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
       where: { leagueId, playerId: player.id, battleDate: today, battleSlot: { not: battleSlot } },
@@ -224,10 +230,11 @@ export async function setModifierAction(leagueId: string, modifierId: string) {
 
 // ── Simulate round ────────────────────────────────────────────────────────
 
-export async function simulateRoundAction(leagueId: string, battleSlot: number) {
+export async function simulateRoundAction(leagueId: string, battleSlot: number, automationSecret?: string) {
   const session = await getAppSession();
-  if (!session?.user) return { error: "Não autenticado" };
-  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+  const automated = Boolean(process.env.CRON_SECRET && automationSecret === process.env.CRON_SECRET);
+  if (!automated && !session?.user) return { error: "Não autenticado" };
+  if (!automated && !isAdmin(session!.user.role)) return { error: "Acesso restrito" };
 
   try {
   const league = await prisma.weeklyMascotLeague.findFirst({
@@ -554,9 +561,10 @@ function weeklyCoinsForRank(rank: number) {
   return 200;
 }
 
-export async function finalizeLeagueAction(leagueId: string) {
+export async function finalizeLeagueAction(leagueId: string, automationSecret?: string) {
   const session = await getAppSession();
-  if (!session?.user || !isAdmin(session.user.role)) return { error: "Acesso restrito" };
+  const automated = Boolean(process.env.CRON_SECRET && automationSecret === process.env.CRON_SECRET);
+  if (!automated && (!session?.user || !isAdmin(session.user.role))) return { error: "Acesso restrito" };
 
   try {
     const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
@@ -625,4 +633,104 @@ export async function finalizeLeagueAction(leagueId: string) {
   } catch (error) {
     return { error: `Falha ao encerrar: ${String(error).slice(0, 180)}` };
   }
+}
+
+export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso?: string) {
+  if (!process.env.CRON_SECRET || automationSecret !== process.env.CRON_SECRET) return { error: "Acesso restrito" };
+
+  const now = nowIso ? new Date(nowIso) : new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const weekday = value("weekday");
+  const minuteOfDay = Number(value("hour")) * 60 + Number(value("minute"));
+  if (!new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]).has(weekday)) return { success: true, skipped: "weekend" };
+
+  const weekKey = getCurrentWeekKey();
+  let league = await prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });
+  if (!league) {
+    const { weekStart, weekEnd } = getWeekBounds();
+    league = await prisma.$transaction(async (tx) => {
+      const created = await tx.weeklyMascotLeague.create({ data: { id: createId(), weekKey, weekStart, weekEnd, status: "REGISTRATION", updatedAt: now } });
+      const players = await tx.player.findMany({ where: { active: true }, select: { id: true } });
+      if (players.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: players.map((player) => ({ id: createId(), leagueId: created.id, playerId: player.id, updatedAt: now })), skipDuplicates: true });
+      return created;
+    });
+  }
+  if (league.status === "FINISHED") return { success: true, skipped: "finished" };
+
+  const battleDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
+  const storedModifier = (league.modifierJson ?? {}) as Record<string, unknown>;
+  if (storedModifier.dailyDate !== battleDate) {
+    const history = Array.isArray(storedModifier.dailyHistory) ? storedModifier.dailyHistory.filter((id): id is string => typeof id === "string") : [];
+    const available = WEEKLY_MODIFIERS.filter((modifier) => !history.includes(modifier.id));
+    const pool = available.length ? available : WEEKLY_MODIFIERS;
+    const seed = [...battleDate].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const modifier = pool[seed % pool.length];
+    const dailyHistory = [...history, modifier.id].slice(-5);
+    league = await prisma.weeklyMascotLeague.update({
+      where: { id: league.id },
+      data: { status: "ACTIVE", modifierJson: { ...modifier, dailyDate: battleDate, dailyHistory }, updatedAt: now },
+    });
+  } else if (league.status === "REGISTRATION") {
+    league = await prisma.weeklyMascotLeague.update({ where: { id: league.id }, data: { status: "ACTIVE" } });
+  }
+
+  let dueSlots = [
+    { slot: 1, minute: 20 * 60 },
+    { slot: 2, minute: 20 * 60 + 10 },
+    { slot: 3, minute: 20 * 60 + 20 },
+  ].filter((entry) => minuteOfDay >= entry.minute);
+
+  if (dueSlots.length) {
+    const completedSlots = await prisma.weeklyMascotLeagueMatch.findMany({
+      where: { leagueId: league.id, battleDate, battleSlot: { in: dueSlots.map((entry) => entry.slot) } },
+      select: { battleSlot: true },
+      distinct: ["battleSlot"],
+    });
+    const completed = new Set(completedSlots.map((match) => match.battleSlot));
+    dueSlots = dueSlots.filter((entry) => !completed.has(entry.slot));
+  }
+
+  if (dueSlots.length) {
+    const participants = await prisma.weeklyMascotLeagueParticipant.findMany({ where: { leagueId: league.id }, select: { playerId: true } });
+    const playerIds = participants.map((participant) => participant.playerId);
+    const [existingTeams, mascots] = await Promise.all([
+      prisma.weeklyMascotLeagueDailyTeam.findMany({ where: { leagueId: league.id, battleDate, playerId: { in: playerIds } }, select: { playerId: true, battleSlot: true, mascotIdsJson: true } }),
+      prisma.mascot.findMany({ where: { playerId: { in: playerIds } }, select: { id: true, playerId: true, isFavorite: true, level: true }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }] }),
+    ]);
+    const teamKey = new Set(existingTeams.map((team) => `${team.playerId}:${team.battleSlot}`));
+    const usedByPlayer = new Map<string, Set<string>>();
+    for (const team of existingTeams) {
+      const used = usedByPlayer.get(team.playerId) ?? new Set<string>();
+      for (const id of (team.mascotIdsJson as string[])) used.add(id);
+      usedByPlayer.set(team.playerId, used);
+    }
+    const mascotsByPlayer = new Map<string, typeof mascots>();
+    for (const mascot of mascots) mascotsByPlayer.set(mascot.playerId, [...(mascotsByPlayer.get(mascot.playerId) ?? []), mascot]);
+
+    await prisma.$transaction(async (tx) => {
+      for (const participant of participants) {
+        const used = usedByPlayer.get(participant.playerId) ?? new Set<string>();
+        for (const { slot } of dueSlots) {
+          if (teamKey.has(`${participant.playerId}:${slot}`)) continue;
+          const selected = (mascotsByPlayer.get(participant.playerId) ?? []).filter((mascot) => !used.has(mascot.id)).slice(0, 6);
+          for (const mascot of selected) used.add(mascot.id);
+          await tx.weeklyMascotLeagueDailyTeam.create({ data: { id: createId(), leagueId: league!.id, playerId: participant.playerId, battleDate, battleSlot: slot, source: "AUTO_FAVORITE", mascotIdsJson: selected.map((mascot) => mascot.id), rolesJson: {}, lockedAt: now, updatedAt: now } });
+        }
+      }
+    });
+  }
+
+  const results = [];
+  for (const { slot } of dueSlots) results.push({ slot, result: await simulateRoundAction(league.id, slot, automationSecret) });
+
+  let finalized: unknown = null;
+  if (weekday === "Fri" && minuteOfDay >= 20 * 60 + 30) finalized = await finalizeLeagueAction(league.id, automationSecret);
+  return { success: true, leagueId: league.id, battleDate, modifier: (league.modifierJson as Record<string, unknown>)?.id, results, finalized };
 }
