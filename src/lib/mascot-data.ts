@@ -941,7 +941,23 @@ export const EXP_REWARDS = {
 // IDs máximos com GIF animado no PokeAPI (Black/White animated — gen 1-5 apenas)
 const MAX_ANIMATED_ID = 649;
 const SPRITE_ID_OVERRIDES: Record<number, number> = {
-  10164: 10167,
+  // Galar form IDs in this codebase differ from PokeAPI sprite IDs
+  10158: 10161, // Meowth-Galar
+  10159: 10162, // Ponyta-Galar
+  10160: 10163, // Rapidash-Galar
+  10161: 10164, // Slowpoke-Galar
+  10162: 10165, // Slowbro-Galar
+  10163: 10166, // Farfetch'd-Galar
+  10164: 10167, // Weezing-Galar
+  10165: 10168, // Mr. Mime-Galar
+  10169: 10172, // Slowking-Galar
+  10170: 10173, // Corsola-Galar
+  10171: 10174, // Zigzagoon-Galar
+  10172: 10175, // Linoone-Galar
+  10173: 10176, // Darumaka-Galar
+  10174: 10177, // Darmanitan-Galar
+  10175: 10179, // Yamask-Galar
+  10176: 10180, // Stunfisk-Galar
 };
 
 export function getSpriteUrl(pokemonId: number, animated = false): string {
