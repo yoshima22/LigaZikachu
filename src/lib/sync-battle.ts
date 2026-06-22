@@ -335,6 +335,26 @@ function roleBaseScore(m: {
       return m.statInstinct * 0.52 + m.statForce * 0.2 + m.statAgility * 0.16 + m.statCharisma * 0.12;
     case "ENCOURAGER":
       return m.statCharisma * 0.52 + m.statVitality * 0.2 + m.statInstinct * 0.16 + m.statAgility * 0.12;
+    case "GUARDIAN":
+      return m.statVitality * 0.40 + m.statCharisma * 0.30 + m.statForce * 0.15 + m.statInstinct * 0.15;
+    case "DUELIST":
+      return m.statForce * 0.40 + m.statInstinct * 0.30 + m.statAgility * 0.18 + m.statVitality * 0.12;
+    case "SABOTEUR":
+      return m.statInstinct * 0.38 + m.statAgility * 0.32 + m.statForce * 0.18 + m.statCharisma * 0.12;
+    case "HEALER":
+      return m.statCharisma * 0.40 + m.statVitality * 0.30 + m.statInstinct * 0.18 + m.statAgility * 0.12;
+    case "SCOUT":
+      return m.statAgility * 0.35 + m.statInstinct * 0.35 + m.statForce * 0.18 + m.statCharisma * 0.12;
+    case "PROVOKER":
+      return m.statCharisma * 0.38 + m.statInstinct * 0.32 + m.statVitality * 0.18 + m.statForce * 0.12;
+    case "SPECIALIST": {
+      const sorted = [m.statForce, m.statAgility, m.statVitality, m.statInstinct, m.statCharisma].sort((a, b) => b - a);
+      return sorted[0] * 0.55 + sorted[1] * 0.25 + sorted[2] * 0.12 + sorted[3] * 0.08;
+    }
+    case "SURVIVOR":
+      return m.statVitality * 0.40 + m.statInstinct * 0.30 + m.statForce * 0.18 + m.statAgility * 0.12;
+    default:
+      return m.statForce * 0.58 + m.statInstinct * 0.2 + m.statAgility * 0.17 + m.statVitality * 0.05;
   }
 }
 
@@ -347,6 +367,17 @@ function roleMatchupMultiplier(attacker: MascotRow, defender: MascotRow) {
   if (a === "OPPORTUNIST" && attacker.statInstinct > defender.statInstinct) mult *= 1.1;
   if (a === "DEFENDER" && d === "FLANK" && attacker.statVitality > defender.statAgility) mult *= 1.08;
   if (a === "ENCOURAGER") mult *= 1 + Math.min(0.12, attacker.statCharisma / 700);
+  if (a === "DUELIST") mult *= 1.08;
+  if (a === "SABOTEUR" && (d === "ENCOURAGER" || d === "HEALER")) mult *= 1.10;
+  if (a === "SCOUT") mult *= 1 + Math.min(0.06, (attacker.statAgility + attacker.statInstinct) / 1200);
+  if (a === "PROVOKER") mult *= 1 + Math.min(0.08, attacker.statCharisma / 800);
+  if (a === "GUARDIAN") mult *= 0.92;
+  if (a === "HEALER") mult *= 0.85;
+  if (a === "SURVIVOR") mult *= 1.04;
+  if (a === "SPECIALIST") {
+    const maxS = Math.max(attacker.statForce, attacker.statAgility, attacker.statVitality, attacker.statInstinct, attacker.statCharisma);
+    mult *= 1 + Math.min(0.10, maxS / 800);
+  }
   return mult;
 }
 
