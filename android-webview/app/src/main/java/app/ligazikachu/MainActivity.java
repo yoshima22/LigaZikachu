@@ -26,7 +26,6 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingUrl = null;
-    private boolean hasResumedOnce = false;
 
     // JavaScript bridge para comunicação WebView ↔ Android
     public class AndroidBridge {
@@ -76,6 +75,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                CookieManager.getInstance().flush();
                 // Após carregar a página, registrar o token FCM no servidor
                 registerFcmToken();
             }
@@ -115,19 +115,26 @@ public class MainActivity extends Activity {
             webView.loadUrl(APP_URL);
         } else {
             webView.restoreState(savedInstanceState);
-            // restoreState pode exibir uma arvore de paginas inteiramente em cache.
-            // Revalidar imediatamente garante que manutencao passe pelo middleware.
-            webView.post(() -> webView.reload());
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (hasResumedOnce && webView != null) {
-            webView.reload();
-        }
-        hasResumedOnce = true;
+        if (webView != null) webView.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        CookieManager.getInstance().flush();
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        CookieManager.getInstance().flush();
+        super.onStop();
     }
 
     private void registerFcmToken() {
