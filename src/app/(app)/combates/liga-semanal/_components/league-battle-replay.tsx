@@ -136,10 +136,7 @@ export function LeagueBattleReplayModal({
 
   useEffect(() => {
     if (!autoPlay) return;
-    if (turnIdx >= replay.length) {
-      const t = setTimeout(() => onFinishRef.current(), 2000 / speed);
-      return () => clearTimeout(t);
-    }
+    if (turnIdx >= replay.length) return;
 
     const t = setTimeout(() => {
       setTurnIdx(prev => {
