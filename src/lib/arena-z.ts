@@ -161,9 +161,11 @@ export type ArenaTurnLog = {
   actorId: string;
   actorName: string;
   actorOwnerId: string | null;
+  actorPokemonId?: number;
   targetId: string;
   targetName: string;
   targetOwnerId: string | null;
+  targetPokemonId?: number;
   action: "ATTACK" | "DEFEND";
   damage: number;
   attackerType: string;

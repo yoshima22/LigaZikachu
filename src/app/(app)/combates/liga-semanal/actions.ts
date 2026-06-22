@@ -878,6 +878,69 @@ export async function resetAndResimulateAction(leagueId: string, slots: number[]
   }
 }
 
+// ── Full league reset: zero standings + regenerate + simulate all ────────
+
+export async function fullLeagueResetAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const league = await prisma.weeklyMascotLeague.findUnique({ where: { id: leagueId } });
+    if (!league) return { error: "Liga não encontrada" };
+
+    await prisma.$transaction(async (tx) => {
+      // Delete ALL matches, stats, items
+      await tx.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueMascotStats.deleteMany({ where: { leagueId } });
+      await tx.weeklyMascotLeagueBattleItem.deleteMany({ where: { leagueId } });
+
+      // Zero ALL participant stats
+      await tx.weeklyMascotLeagueParticipant.updateMany({
+        where: { leagueId },
+        data: {
+          points: 0, wins: 0, losses: 0, draws: 0, woLosses: 0, byes: 0,
+          survivorsScore: 0, damageDealt: 0, damageTaken: 0,
+          finalRank: null, rewardGranted: false, updatedAt: new Date(),
+        },
+      });
+
+      // Purge inactive/deleted players
+      const validPlayers = await tx.player.findMany({
+        where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } },
+        select: { id: true },
+      });
+      const validIds = new Set(validPlayers.map(p => p.id));
+      const participants = await tx.weeklyMascotLeagueParticipant.findMany({
+        where: { leagueId }, select: { id: true, playerId: true },
+      });
+      const toDelete = participants.filter(p => !validIds.has(p.playerId));
+      if (toDelete.length > 0) {
+        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: { in: toDelete.map(p => p.playerId) } } });
+        await tx.weeklyMascotLeagueParticipant.deleteMany({ where: { id: { in: toDelete.map(p => p.id) } } });
+      }
+
+      // Ensure league is ACTIVE
+      await tx.weeklyMascotLeague.update({ where: { id: leagueId }, data: { status: "ACTIVE", updatedAt: new Date() } });
+    });
+
+    // Generate matchups
+    const genResult = await generateDailyMatchupsAction(leagueId, true);
+    if ("error" in genResult) return { error: `Reset OK mas matchups falharam: ${genResult.error}` };
+
+    // Simulate all 3 slots
+    const results = [];
+    for (const slot of [1, 2, 3]) {
+      results.push({ slot, result: await simulateRoundAction(leagueId, slot) });
+    }
+
+    revalidatePath(PATH);
+    return { success: true, purged: 0, matchups: (genResult as any).matchups, results };
+  } catch (err) {
+    return { error: `Erro no reset: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Seed shop items ───────────────────────────────────────────────────────
 
 export async function seedLeagueItemsAction() {

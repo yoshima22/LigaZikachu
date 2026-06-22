@@ -21,8 +21,9 @@ import {
   generateDailyMatchupsAction,
   purgeInactivePlayersAction,
   resetAndResimulateAction,
+  fullLeagueResetAction,
 } from "../actions";
-import { LeagueBattleReplayModal, type ArenaTurnLog } from "./league-battle-replay";
+import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
@@ -513,7 +514,7 @@ function ResultsTab({ data }: { data: PageData }) {
         <LeagueBattleReplayModal
           playerAName={replayMatch.playerAName}
           playerBName={replayMatch.playerBName ?? "???"}
-          replay={replayMatch.replayJson as ArenaTurnLog[]}
+          replay={replayMatch.replayJson as TurnLog[]}
           onFinish={() => setReplayMatch(null)}
         />
       )}
@@ -906,6 +907,31 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <p className="text-[10px] text-slate-400">Remove todas as contas admin do chaveamento, partidas e ranking da liga atual.</p>
           <button onClick={purgeAdmins} disabled={pending} className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-xs font-bold text-orange-300 hover:bg-orange-500/20 disabled:opacity-40 transition-colors">
             Remover Admins
+          </button>
+        </div>
+      )}
+
+      {/* Full league reset */}
+      {data.currentLeague && (
+        <div className="rounded-xl border border-red-600/30 bg-red-600/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-red-300">⚡ Zerar Tabela e Resimular Tudo</p>
+          <p className="text-[10px] text-slate-400">Zera TODOS os pontos/vitórias/derrotas, remove inativos, gera nova chave diversificada e simula os 3 rounds com as equipes registradas.</p>
+          <button
+            onClick={() => {
+              if (!confirm("ATENÇÃO: Isso vai zerar TODA a tabela e resimular os 3 rounds do zero. Continuar?")) return;
+              startTransition(async () => {
+                try {
+                  const res = await fullLeagueResetAction(data.currentLeague.id);
+                  if (res && "error" in res) { toast.error(res.error); return; }
+                  toast.success(`Reset completo! ${(res as any).matchups ?? 0} confrontos, 3 rounds simulados.`);
+                  refresh();
+                } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+              });
+            }}
+            disabled={pending}
+            className="rounded-xl border border-red-600/30 bg-red-600/10 px-4 py-2 text-xs font-bold text-red-300 hover:bg-red-600/20 disabled:opacity-40 transition-colors"
+          >
+            {pending ? "Processando..." : "Zerar e Resimular Tudo"}
           </button>
         </div>
       )}
