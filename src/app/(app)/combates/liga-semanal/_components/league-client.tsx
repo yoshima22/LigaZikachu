@@ -11,6 +11,7 @@ import {
   setModifierAction,
   simulateRoundAction,
   seedLeagueItemsAction,
+  saveDailyTeamAction,
 } from "../actions";
 
 function pokeImg(id: number) {
@@ -74,7 +75,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
 
       <div>
         {tab === "liga" && <LeagueTab data={data} />}
-        {tab === "times" && <TeamsTab data={data} />}
+        {tab === "times" && <TeamsTab data={data} refresh={refresh} />}
         {tab === "resultados" && <ResultsTab data={data} />}
         {tab === "colinha" && <ColinhaTab />}
         {tab === "itens" && <ItemsTab />}
@@ -154,7 +155,96 @@ function LeagueTab({ data }: { data: PageData }) {
 
 // ── Meus Times ─────────────────────────────────────────────────────────────
 
-function TeamsTab({ data }: { data: PageData }) {
+function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [editingSlot, setEditingSlot] = useState<number | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [roles, setRoles] = useState<Record<string, string>>({});
+
+  const usedInOtherSlots = (slot: number) => {
+    const otherTeams = data.myTeams.filter((t: any) => t.battleSlot !== slot);
+    return new Set(otherTeams.flatMap((t: any) => (t.mascotIdsJson as string[]) ?? []));
+  };
+
+  const startEditing = (slot: number) => {
+    const existing = data.myTeams.find((t: any) => t.battleSlot === slot);
+    setEditingSlot(slot);
+    setSelected(existing ? (existing.mascotIdsJson as string[] ?? []) : []);
+    setRoles(existing?.rolesJson ? (existing.rolesJson as Record<string, string>) : {});
+  };
+
+  const toggleMascot = (id: string) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 6 ? [...prev, id] : prev);
+  };
+
+  const saveTeam = () => {
+    if (!data.currentLeague || !editingSlot) return;
+    startTransition(async () => {
+      try {
+        const res = await saveDailyTeamAction(data.currentLeague.id, editingSlot, selected, roles);
+        if (res && "error" in res) { toast.error(res.error); return; }
+        toast.success(`Time ${editingSlot} salvo!`);
+        setEditingSlot(null);
+        refresh();
+      } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+    });
+  };
+
+  if (!data.currentLeague) {
+    return <div className="py-10 text-center text-sm text-slate-500">Crie uma liga na aba Admin primeiro.</div>;
+  }
+
+  if (editingSlot) {
+    const used = usedInOtherSlots(editingSlot);
+    const available = data.availableMascots.filter((m: any) => !used.has(m.id));
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-100">Montando Time {editingSlot} — {BATTLE_TIMES_BRT[editingSlot - 1]}</h3>
+          <button onClick={() => setEditingSlot(null)} className="text-xs text-slate-400 hover:text-slate-200">← Voltar</button>
+        </div>
+
+        <p className="text-xs text-slate-400">Selecione 6 mascotes ({selected.length}/6). Toque para selecionar/remover.</p>
+
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {available.map((m: any) => {
+            const isSelected = selected.includes(m.id);
+            return (
+              <button key={m.id} onClick={() => toggleMascot(m.id)} className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-colors ${
+                isSelected ? "border-yellow-500/50 bg-yellow-500/10" : "border-border bg-slate-900/60 hover:border-slate-600"
+              } ${!isSelected && selected.length >= 6 ? "opacity-30" : ""}`}>
+                <Image src={pokeImg(m.pokemonId)} alt="" width={40} height={40} unoptimized className="pixelated" />
+                <span className="text-[10px] text-slate-300">{m.nickname || `#${m.pokemonId}`}</span>
+                <span className="text-[9px] text-slate-500">Nv.{m.level}</span>
+                {isSelected && (
+                  <select
+                    value={roles[m.id] ?? "ATTACKER"}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => { e.stopPropagation(); setRoles(prev => ({ ...prev, [m.id]: e.target.value })); }}
+                    className="mt-0.5 w-full rounded bg-slate-800 px-1 py-0.5 text-[9px] text-yellow-300 border border-border"
+                  >
+                    {COMBAT_ROLE_OPTIONS.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {available.length === 0 && (
+          <p className="text-xs text-red-400">Nenhum mascote disponível (todos já usados em outros times hoje).</p>
+        )}
+
+        <button onClick={saveTeam} disabled={pending || selected.length !== 6} className="w-full rounded-xl bg-yellow-500/20 border border-yellow-500/30 py-2.5 text-sm font-bold text-yellow-300 hover:bg-yellow-500/30 disabled:opacity-40 transition-colors">
+          {pending ? "Salvando..." : `Salvar Time ${editingSlot} (${selected.length}/6)`}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-400">Monte até 3 times por dia (6 mascotes cada, sem repetição entre times).</p>
@@ -165,36 +255,44 @@ function TeamsTab({ data }: { data: PageData }) {
           <div key={slot} className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>
-              {team ? (
-                <span className="text-[10px] text-green-400">✓ Montado</span>
-              ) : (
-                <span className="text-[10px] text-orange-400">Não montado</span>
-              )}
+              <div className="flex items-center gap-2">
+                {team ? (
+                  <span className="text-[10px] text-green-400">✓ Montado</span>
+                ) : (
+                  <span className="text-[10px] text-orange-400">Não montado</span>
+                )}
+                <button onClick={() => startEditing(slot)} className="rounded-lg border border-border bg-slate-800 px-2 py-1 text-[10px] text-slate-300 hover:text-yellow-300 transition-colors">
+                  {team ? "Editar" : "Montar"}
+                </button>
+              </div>
             </div>
-            {team ? (
+            {team && (
               <div className="flex gap-1 flex-wrap">
                 {(team.mascotIdsJson as string[] ?? []).map((id: string) => {
                   const m = data.availableMascots.find((x: any) => x.id === id);
+                  const role = team.rolesJson ? (team.rolesJson as Record<string, string>)[id] : null;
                   return m ? (
                     <div key={id} className="flex items-center gap-1 rounded-lg bg-slate-800 px-2 py-1">
                       <Image src={pokeImg(m.pokemonId)} alt="" width={24} height={24} unoptimized className="pixelated" />
-                      <span className="text-[10px] text-slate-300">Nv.{m.level}</span>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-300">Nv.{m.level}</span>
+                        {role && <span className="text-[8px] text-yellow-400">{COMBAT_ROLE_OPTIONS.find(r => r.value === role)?.label ?? role}</span>}
+                      </div>
                     </div>
                   ) : (
                     <span key={id} className="text-[10px] text-slate-500">{id.slice(0, 6)}</span>
                   );
                 })}
               </div>
-            ) : (
-              <p className="text-[10px] text-slate-500">Sistema usará auto-preenchimento (favoritos → coleção).</p>
             )}
+            {!team && <p className="text-[10px] text-slate-500">Clique "Montar" para selecionar mascotes. Sem time, o sistema usará auto-preenchimento.</p>}
           </div>
         );
       })}
 
       <div className="text-[10px] text-slate-500">
         <p>Mascotes disponíveis: {data.availableMascots.length}</p>
-        <p>Precisar de 18 mascotes diferentes para os 3 combates.</p>
+        <p>Precisa de 18 mascotes diferentes para os 3 combates do dia.</p>
       </div>
     </div>
   );

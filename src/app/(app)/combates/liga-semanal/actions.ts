@@ -119,6 +119,73 @@ export async function joinLeagueAction(leagueId: string) {
   return { success: true };
 }
 
+// ── Save daily team ───────────────────────────────────────────────────────
+
+export async function saveDailyTeamAction(
+  leagueId: string,
+  battleSlot: number,
+  mascotIds: string[],
+  roles: Record<string, string>,
+) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+
+  if (mascotIds.length !== 6) return { error: "Selecione exatamente 6 mascotes." };
+  if (battleSlot < 1 || battleSlot > 3) return { error: "Slot inválido." };
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Check no mascot is used in other slots today
+    const otherTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
+      where: { leagueId, playerId: player.id, battleDate: today, battleSlot: { not: battleSlot } },
+    });
+    const usedIds = new Set(otherTeams.flatMap(t => (t.mascotIdsJson as string[]) ?? []));
+    const conflict = mascotIds.find(id => usedIds.has(id));
+    if (conflict) return { error: "Um mascote já está em outro time de hoje. Mascotes não podem repetir no mesmo dia." };
+
+    // Verify mascots belong to player
+    const owned = await prisma.mascot.findMany({
+      where: { id: { in: mascotIds }, playerId: player.id },
+      select: { id: true },
+    });
+    if (owned.length !== 6) return { error: "Algum mascote selecionado não pertence a você." };
+
+    await prisma.weeklyMascotLeagueDailyTeam.upsert({
+      where: {
+        leagueId_playerId_battleDate_battleSlot: {
+          leagueId, playerId: player.id, battleDate: today, battleSlot,
+        },
+      },
+      create: {
+        id: createId(),
+        leagueId,
+        playerId: player.id,
+        battleDate: today,
+        battleSlot,
+        mascotIdsJson: mascotIds,
+        rolesJson: roles,
+        lockedAt: new Date(),
+        updatedAt: new Date(),
+      },
+      update: {
+        mascotIdsJson: mascotIds,
+        rolesJson: roles,
+        lockedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao salvar time: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Set modifier ──────────────────────────────────────────────────────────
 
 export async function setModifierAction(leagueId: string, modifierId: string) {
