@@ -114,6 +114,7 @@ function LeagueTab({ data }: { data: PageData }) {
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
             league.status === "ACTIVE" ? "bg-green-500/20 text-green-300" :
             league.status === "REGISTRATION" ? "bg-yellow-500/20 text-yellow-300" :
+            league.status === "FINISHED" ? "bg-blue-500/20 text-blue-300" :
             "bg-slate-700 text-slate-400"
           }`}>{league.status}</span>
         </div>
@@ -129,30 +130,84 @@ function LeagueTab({ data }: { data: PageData }) {
         <div className="text-[10px] text-slate-500">
           <p>Combates diários: {BATTLE_TIMES_BRT.join(" · ")} BRT</p>
           <p>Pontuação: Vitória {POINTS.WIN}pts · Empate {POINTS.DRAW}pt · Derrota {POINTS.LOSS}pts</p>
+          <p>Desempate: Pontos → Vitórias → Saldo de Sobreviventes → Dano Causado → Dano Recebido (menor)</p>
         </div>
       </div>
 
-      {/* Standings */}
+      {/* Standings table */}
       <div className="rounded-2xl border border-border bg-slate-900/60 p-4">
-        <h3 className="text-xs font-bold text-slate-300 mb-2">Classificação</h3>
+        <h3 className="text-xs font-bold text-slate-300 mb-3">Classificação ({data.participants.length} jogadores)</h3>
         {data.participants.length === 0 ? (
           <p className="text-[11px] text-slate-500">Nenhum participante ainda.</p>
         ) : (
-          <div className="space-y-1">
-            {data.participants.map((p: any, i: number) => (
-              <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-800/50 px-3 py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className={`w-5 text-center text-[10px] font-bold ${i < 3 ? "text-yellow-300" : "text-slate-500"}`}>{i + 1}°</span>
-                  <span className="text-xs text-slate-200">{p.playerName ?? "Jogador"}</span>
-                </div>
-                <div className="flex items-center gap-3 text-[10px] text-slate-400">
-                  <span>{p.points}pts</span>
-                  <span>{p.wins}V {p.losses}D {p.draws}E</span>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] text-slate-500 border-b border-slate-700/50">
+                  <th className="pb-2 pr-2 font-semibold">#</th>
+                  <th className="pb-2 pr-2 font-semibold">Jogador</th>
+                  <th className="pb-2 pr-2 font-semibold text-center">Pts</th>
+                  <th className="pb-2 pr-2 font-semibold text-center">V</th>
+                  <th className="pb-2 pr-2 font-semibold text-center">D</th>
+                  <th className="pb-2 pr-2 font-semibold text-center">E</th>
+                  <th className="pb-2 pr-2 font-semibold text-center" title="W/O recebidos">WO</th>
+                  <th className="pb-2 pr-2 font-semibold text-center" title="Byes recebidos">Bye</th>
+                  <th className="pb-2 pr-2 font-semibold text-center" title="Saldo de mascotes sobreviventes">Sobr</th>
+                  <th className="pb-2 pr-2 font-semibold text-center" title="Dano total causado">Dano+</th>
+                  <th className="pb-2 pr-2 font-semibold text-center" title="Dano total recebido (menor é melhor)">Dano−</th>
+                  <th className="pb-2 font-semibold text-center" title="Times registrados hoje">Hoje</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.participants.map((p: any, i: number) => {
+                  const isMe = p.playerId === data.player.id;
+                  const rankColor = i === 0 ? "text-yellow-300" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-slate-500";
+                  const teamsToday = p.teamsToday ?? 0;
+                  return (
+                    <tr key={p.id} className={`text-[11px] border-b border-slate-800/30 ${isMe ? "bg-yellow-500/5" : ""}`}>
+                      <td className={`py-1.5 pr-2 font-bold ${rankColor}`}>{i + 1}°</td>
+                      <td className="py-1.5 pr-2">
+                        <span className={`font-semibold ${isMe ? "text-yellow-300" : "text-slate-200"}`}>{p.playerName}</span>
+                        {isMe && <span className="ml-1 text-[9px] text-yellow-500">(você)</span>}
+                      </td>
+                      <td className="py-1.5 pr-2 text-center font-bold text-slate-100">{p.points}</td>
+                      <td className="py-1.5 pr-2 text-center text-green-400">{p.wins}</td>
+                      <td className="py-1.5 pr-2 text-center text-red-400">{p.losses}</td>
+                      <td className="py-1.5 pr-2 text-center text-slate-400">{p.draws}</td>
+                      <td className="py-1.5 pr-2 text-center text-orange-400">{p.woLosses || "–"}</td>
+                      <td className="py-1.5 pr-2 text-center text-slate-500">{p.byes || "–"}</td>
+                      <td className="py-1.5 pr-2 text-center text-cyan-400">{p.survivorsScore}</td>
+                      <td className="py-1.5 pr-2 text-center text-slate-300">{p.damageDealt.toLocaleString()}</td>
+                      <td className="py-1.5 pr-2 text-center text-slate-500">{(p.damageTaken ?? 0).toLocaleString()}</td>
+                      <td className="py-1.5 text-center">
+                        {teamsToday >= 3 ? (
+                          <span className="text-green-400" title="3/3 times registrados">✓✓✓</span>
+                        ) : teamsToday > 0 ? (
+                          <span className="text-yellow-400" title={`${teamsToday}/3 times registrados`}>{"✓".repeat(teamsToday)}{"·".repeat(3 - teamsToday)}</span>
+                        ) : (
+                          <span className="text-slate-600" title="Nenhum time registrado hoje">···</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
+
+        {/* Legend */}
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-slate-600">
+          <span>Pts = Pontos</span>
+          <span>V = Vitórias</span>
+          <span>D = Derrotas</span>
+          <span>E = Empates</span>
+          <span>WO = W/O recebido</span>
+          <span>Sobr = Saldo sobreviventes</span>
+          <span>Dano+ = Causado</span>
+          <span>Dano− = Recebido</span>
+          <span>Hoje = Times registrados</span>
+        </div>
       </div>
     </div>
   );

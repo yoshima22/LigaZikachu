@@ -57,7 +57,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     try {
       participants = await (prisma as any).weeklyMascotLeagueParticipant.findMany({
         where: { leagueId: (currentLeague as any).id },
-        select: { id: true, playerId: true, points: true, wins: true, losses: true, draws: true, woLosses: true, byes: true, survivorsScore: true, damageDealt: true, finalRank: true, rewardGranted: true },
+        select: { id: true, playerId: true, points: true, wins: true, losses: true, draws: true, woLosses: true, byes: true, survivorsScore: true, damageDealt: true, damageTaken: true, finalRank: true, rewardGranted: true },
         orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
       });
       const playerIds = (participants as Array<{ playerId: string }>).map((entry) => entry.playerId);
@@ -79,6 +79,24 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         orderBy: { battleSlot: "asc" },
       });
     } catch { /* table may not exist yet */ }
+
+    // Load which players registered teams today
+    try {
+      const todayTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
+        where: { leagueId: (currentLeague as any).id, battleDate: today },
+        select: { playerId: true, battleSlot: true },
+      });
+      const teamsByPlayer = new Map<string, number[]>();
+      for (const t of todayTeams as Array<{ playerId: string; battleSlot: number }>) {
+        const slots = teamsByPlayer.get(t.playerId) ?? [];
+        slots.push(t.battleSlot);
+        teamsByPlayer.set(t.playerId, slots);
+      }
+      participants = (participants as Array<Record<string, unknown> & { playerId: string }>).map((entry) => ({
+        ...entry,
+        teamsToday: teamsByPlayer.get(entry.playerId)?.length ?? 0,
+      }));
+    } catch {}
 
     try {
       todayMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
