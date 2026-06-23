@@ -22,6 +22,7 @@ import {
   purgeInactivePlayersAction,
   resetAndResimulateAction,
   fullLeagueResetAction,
+  regenerateReplaysAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
 
@@ -1063,6 +1064,30 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           </button>
         </div>
       </div>
+
+      {/* Regenerate replays only */}
+      {data.currentLeague && (
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
+          <p className="text-xs font-bold text-indigo-300">Regenerar Replays</p>
+          <p className="text-[10px] text-slate-400">Resimula os combates de hoje apenas para atualizar as animações de replay. Ranking e resultados não são alterados.</p>
+          <button
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  const res = await regenerateReplaysAction(data.currentLeague.id);
+                  if (res && "error" in res) { toast.error(res.error); return; }
+                  toast.success(`${(res as any).updated ?? 0} replay(s) regenerado(s)!`);
+                  refresh();
+                } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+              });
+            }}
+            disabled={pending}
+            className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 disabled:opacity-40 transition-colors"
+          >
+            {pending ? "Regenerando..." : "Regenerar Replays (sem alterar ranking)"}
+          </button>
+        </div>
+      )}
 
       {/* Simulate round */}
       <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4 space-y-3">

@@ -786,6 +786,73 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
   }
 }
 
+// ── Regenerate replays only (no ranking changes) ────────────────────────
+
+export async function regenerateReplaysAction(leagueId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const today = getTodayBrt();
+    const matches = await prisma.weeklyMascotLeagueMatch.findMany({
+      where: { leagueId, battleDate: today, status: "RESOLVED" },
+    });
+
+    if (matches.length === 0) return { error: "Nenhum combate resolvido hoje." };
+
+    const league = await prisma.weeklyMascotLeague.findUnique({ where: { id: leagueId } });
+    const modifier = league?.modifierJson as unknown as WeeklyModifier | null;
+    let updated = 0;
+
+    for (const match of matches) {
+      if (!match.playerBId) continue;
+
+      async function loadTeamForReplay(playerId: string, slot: number) {
+        let dailyTeam = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId, battleDate: today, battleSlot: slot } },
+        });
+        if (!dailyTeam) {
+          dailyTeam = await prisma.weeklyMascotLeagueDailyTeam.findFirst({
+            where: { leagueId, playerId, battleSlot: slot },
+            orderBy: { battleDate: "desc" },
+          });
+        }
+        if (dailyTeam) {
+          const ids = dailyTeam.mascotIdsJson as string[];
+          const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
+          const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
+          const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
+          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, roles[m!.id]));
+        }
+        const mascots = await prisma.mascot.findMany({ where: { playerId }, orderBy: { level: "desc" }, take: 6 });
+        return mascots.map((m, i) => toLeagueMascot(m, i + 1));
+      }
+
+      const [teamA, teamB] = await Promise.all([
+        loadTeamForReplay(match.playerAId, match.battleSlot),
+        loadTeamForReplay(match.playerBId, match.battleSlot),
+      ]);
+
+      if (teamA.length < 6 || teamB.length < 6) continue;
+
+      const result = runLeagueCombat(teamA, teamB, modifier);
+
+      // Only update replay — keep winner, points, everything else untouched
+      await prisma.weeklyMascotLeagueMatch.update({
+        where: { id: match.id },
+        data: { replayJson: result.log as unknown as any },
+      });
+      updated++;
+    }
+
+    revalidatePath(PATH);
+    return { success: true, updated };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Reset and re-simulate specific slots ─────────────────────────────────
 
 export async function resetAndResimulateAction(leagueId: string, slots: number[]) {
