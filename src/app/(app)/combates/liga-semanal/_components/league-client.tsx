@@ -359,16 +359,24 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     }
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const saveTeam = () => {
+    setSaveError(null);
     if (!data.currentLeague || !editingSlot) return;
     startTransition(async () => {
       try {
         const res = await saveDailyTeamAction(data.currentLeague.id, editingSlot, selected, roles);
-        if (res && "error" in res) { toast.error(res.error); return; }
+        if (res && "error" in res) { setSaveError(res.error ?? "Erro desconhecido"); toast.error(res.error); return; }
+        setSaveError(null);
         toast.success(`Time ${editingSlot} salvo!`);
         setEditingSlot(null);
         refresh();
-      } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+      } catch (err) {
+        const msg = `Erro: ${String(err).slice(0, 200)}`;
+        setSaveError(msg);
+        toast.error(msg);
+      }
     });
   };
 
@@ -518,6 +526,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <button onClick={saveTeam} disabled={pending || selected.length !== 6} className="w-full rounded-xl bg-yellow-500/20 border border-yellow-500/30 py-2.5 text-sm font-bold text-yellow-300 hover:bg-yellow-500/30 disabled:opacity-40 transition-colors">
           {pending ? "Salvando..." : `Salvar Time ${editingSlot} (${selected.length}/6)`}
         </button>
+        {saveError && <p className="text-xs text-red-400 text-center mt-1">{saveError}</p>}
       </div>
     );
   }
