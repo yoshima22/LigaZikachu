@@ -47,7 +47,7 @@ export default async function ZikaBetPage() {
             include: {
               playerA: { select: { id: true, displayName: true } },
               playerB: { select: { id: true, displayName: true } },
-              bets: player ? { where: { playerId: player.id } } : false
+              bets: player ? { where: { playerId: player.id, status: { notIn: ["CANCELLED", "REFUNDED"] } } } : false
             }
           }
         }
@@ -86,7 +86,7 @@ export default async function ZikaBetPage() {
       resultJson: true,
       playerAId: true,
       playerBId: true,
-      bets: player ? { where: { playerId: player.id } } : false,
+      bets: player ? { where: { playerId: player.id, status: { notIn: ["CANCELLED", "REFUNDED"] } } } : false,
       league: { select: { weekKey: true, status: true } },
     },
     orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
