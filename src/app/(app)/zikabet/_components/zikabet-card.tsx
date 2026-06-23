@@ -55,6 +55,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
     if (amount < config.minBet || amount > config.maxBet) {
       toast.error(`Aposta entre ${config.minBet} e ${config.maxBet} ZC.`); return;
     }
+    if (amount > balance) { toast.error(`Saldo insuficiente. Você tem ${balance} ZC.`); return; }
     startTransition(async () => {
       try {
         const result = source === "weekly"
@@ -63,7 +64,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
         if (result.error) { toast.error(result.error); return; }
         toast.success(`Aposta de ${amount} ZC registrada! Retorno potencial: ${potentialReturn} ZC`);
         setSelectedPlayer(null);
-      } catch { toast.error("Erro ao registrar aposta."); }
+      } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
     });
   };
 
@@ -177,12 +178,9 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
       )}
 
       {/* Debug: remove after fixing */}
-      {myBet && (
-        <p className="text-[9px] text-red-400/60 text-center">
-          Bloqueado: aposta {myBet.status} (id existente) — odds {myBet.odds}x · {myBet.amount} ZC
-        </p>
-      )}
-      {!isLoggedIn && <p className="text-[9px] text-red-400/60 text-center">Bloqueado: não logado</p>}
+      <p className="text-[8px] text-slate-600 text-center mt-1">
+        bet:{myBet ? `${myBet.status}` : "null"} · sel:{selectedPlayer?.slice(0,6) ?? "—"} · bal:{balance} · min:{config.minBet} · max:{config.maxBet} · logged:{isLoggedIn ? "Y" : "N"} · src:{source}
+      </p>
     </div>
   );
 }
