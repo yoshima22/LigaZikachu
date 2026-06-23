@@ -44,6 +44,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
   const [pending, startTransition] = useTransition();
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [amount, setAmount] = useState(config.minBet);
+  const [betError, setBetError] = useState<string | null>(null);
 
   const selectedOdds = selectedPlayer === match.playerA.id
     ? (match.playerAOdds ?? 1.5)
@@ -51,20 +52,26 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
   const potentialReturn = Math.floor(amount * selectedOdds);
 
   const handleBet = () => {
-    if (!selectedPlayer) { toast.error("Selecione um jogador."); return; }
+    setBetError(null);
+    if (!selectedPlayer) { setBetError("Selecione um jogador."); return; }
     if (amount < config.minBet || amount > config.maxBet) {
-      toast.error(`Aposta entre ${config.minBet} e ${config.maxBet} ZC.`); return;
+      setBetError(`Aposta entre ${config.minBet} e ${config.maxBet} ZC.`); return;
     }
-    if (amount > balance) { toast.error(`Saldo insuficiente. Você tem ${balance} ZC.`); return; }
+    if (amount > balance) { setBetError(`Saldo insuficiente. Você tem ${balance} ZC.`); return; }
     startTransition(async () => {
       try {
         const result = source === "weekly"
           ? await placeWeeklyLeagueBet({ weeklyMatchId: match.id, betOnPlayerId: selectedPlayer, amount })
           : await placeBet({ matchId: match.id, betOnPlayerId: selectedPlayer, amount });
-        if (result.error) { toast.error(result.error); return; }
+        if (result.error) { setBetError(result.error); toast.error(result.error); return; }
+        setBetError(null);
         toast.success(`Aposta de ${amount} ZC registrada! Retorno potencial: ${potentialReturn} ZC`);
         setSelectedPlayer(null);
-      } catch (err) { toast.error(`Erro: ${String(err).slice(0, 150)}`); }
+      } catch (err) {
+        const msg = `Erro: ${String(err).slice(0, 150)}`;
+        setBetError(msg);
+        toast.error(msg);
+      }
     });
   };
 
@@ -170,6 +177,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
               {pending ? "Apostando…" : "Confirmar aposta"}
             </button>
           </div>
+          {betError && <p className="text-xs text-red-400 text-center">{betError}</p>}
         </div>
       )}
 

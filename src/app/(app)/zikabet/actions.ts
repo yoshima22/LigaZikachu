@@ -12,7 +12,7 @@ const WEEKLY_LEAGUE_BET_CONFIG = {
   minBet: 10,
   maxBet: 500,
   maxDailyBet: 2000,
-  allowBetOnSelf: false,
+  allowBetOnSelf: true,
 };
 
 // ── Config de apostas ─────────────────────────────────────────────────────────
