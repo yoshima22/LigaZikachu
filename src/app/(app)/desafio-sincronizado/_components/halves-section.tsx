@@ -25,7 +25,7 @@ type PlayerOption = {
 const ITEMS_PER_PAGE = 4;
 
 function getSideLabel(side: string) { return side === "LEFT" ? "Metade Esquerda (Fogo)" : "Metade Direita (Água)"; }
-function getSideImage(side: string) { return side === "LEFT" ? "/events/desafio-sincronizado/ticket-metade-fogo.webp" : "/events/desafio-sincronizado/ticket-metade-agua.webp"; }
+function getSideImage(side: string) { return side === "LEFT" ? "/events/desafio-sincronizado/ticket-esquerda-fogo.webp" : "/events/desafio-sincronizado/ticket-direita-agua.webp"; }
 
 export function HalvesSection({
   halves,
