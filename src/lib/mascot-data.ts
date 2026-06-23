@@ -532,7 +532,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 996, to: 997, level: 35 }, { from: 997, to: 998, level: 54 },
   { from: 999, to: 1000, level: 45 }, // Gimmighoul (Chest) → Gholdengo
   { from: 1011, to: 1019, level: 45 }, // Dipplin → Hydrapple
-  { from: 1012, to: 1013, level: 30 }, // Poltchageist → Sinistcha (Unremarkable/Masterpiece Tea)
+  { from: 1012, to: 1013, toOptions: [1013, 10013], level: 30 }, // Poltchageist → Sinistcha Unremarkable/Masterpiece
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
   { from: 10091, to: 10092, level: 20 }, // Rattata-Alola → Raticate-Alola
   { from: 10101, to: 10102, level: 22 }, // Sandshrew-Alola → Sandslash-Alola (Ice Stone)
@@ -603,6 +603,7 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   10155, // Lycanroc-Dusk (Rockruff → toOptions)
   // Gen 9 — evoluções não mapeadas
   983,  // Annihilape (Primeape + Rage Fist)
+  10013, // Sinistcha Masterpiece (Poltchageist → toOptions)
   // Formas Alolan — finais sem base própria ou pré-evolução externa
   10100, // Raichu-Alola (evolui de Pikachu, não de Raichu base)
   10114, // Exeggutor-Alola (evolui de Exeggcute com Leaf Stone)
@@ -961,6 +962,7 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
   10174: 10177, // Darmanitan-Galar
   10175: 10179, // Yamask-Galar
   10176: 10180, // Stunfisk-Galar
+  10013: 1013,  // Sinistcha Masterpiece → same sprite as Sinistcha
 };
 
 export function getSpriteUrl(pokemonId: number, animated = false): string {
@@ -1431,7 +1433,7 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   1005:"Roaring Moon",1006:"Iron Valiant",
   1007:"Koraidon",1008:"Miraidon",
   1009:"Walking Wake",1010:"Iron Leaves",
-  1011:"Dipplin",1012:"Poltchageist",1013:"Sinistcha",
+  1011:"Dipplin",1012:"Poltchageist",1013:"Sinistcha",10013:"Sinistcha Masterpiece",
   1014:"Okidogi",1015:"Munkidori",1016:"Fezandipiti",
   1017:"Ogerpon",1018:"Archaludon",1019:"Hydrapple",1020:"Gouging Fire",1021:"Raging Bolt",
   1022:"Iron Boulder",1023:"Iron Crown",
@@ -1831,7 +1833,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   992:"fighting/electric",993:"dark/flying",994:"fire/poison",995:"rock/electric",
   996:"dragon/ice",997:"dragon/ice",998:"dragon/ice",
   999:"ghost",1000:"steel/ghost",
-  1011:"grass/dragon",1012:"grass/ghost",1013:"grass/ghost",
+  1011:"grass/dragon",1012:"grass/ghost",1013:"grass/ghost",10013:"grass/ghost",
   // Gen 9 legendaries / DLC
   1001:"dark/grass",1002:"dark/ice",1003:"dark/rock",1004:"dark/fire",
   1005:"dragon/dark",1006:"fairy/fighting",
