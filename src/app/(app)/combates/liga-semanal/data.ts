@@ -78,21 +78,23 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
 
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     try {
-      myTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
+      const todayTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
         where: { leagueId: (currentLeague as any).id, playerId, battleDate: today },
         orderBy: { battleSlot: "asc" },
       });
-      // Se não tem times hoje, carregar do último dia registrado (persistência entre dias)
-      if ((myTeams as any[]).length === 0) {
-        const lastTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
-          where: { leagueId: (currentLeague as any).id, playerId },
-          orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }],
-          take: 3,
+      const todaySlots = new Set((todayTeams as any[]).map((t: any) => t.battleSlot));
+      const result = [...todayTeams] as any[];
+
+      // Herdar slots faltantes do último dia registrado
+      for (const slot of [1, 2, 3]) {
+        if (todaySlots.has(slot)) continue;
+        const lastTeam = await (prisma as any).weeklyMascotLeagueDailyTeam.findFirst({
+          where: { leagueId: (currentLeague as any).id, playerId, battleSlot: slot },
+          orderBy: { battleDate: "desc" },
         });
-        if ((lastTeams as any[]).length > 0) {
-          myTeams = (lastTeams as any[]).map((t: any) => ({ ...t, battleDate: today, inherited: true }));
-        }
+        if (lastTeam) result.push({ ...lastTeam, battleDate: today, inherited: true });
       }
+      myTeams = result.sort((a: any, b: any) => a.battleSlot - b.battleSlot);
     } catch { /* table may not exist yet */ }
 
     // Load which players registered teams today
