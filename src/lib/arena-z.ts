@@ -109,6 +109,33 @@ export function applyMultiplierToVault(
   };
 }
 
+export function estimateVaultClaim(
+  vault: { coins: number; exp: number; food: number; sweet: number },
+  enteredAt: Date | string,
+  memberCount: number,
+  pveEarnedToday = 0,
+): { coins: number; exp: number; food: number; sweet: number } {
+  const mult = getTeamTimeMultiplier(new Date(enteredAt));
+  const hoursActive = (Date.now() - new Date(enteredAt).getTime()) / 3_600_000;
+  const cappedHours = Math.min(hoursActive, PASSIVE_MAX_HOURS);
+  const estimatedPvpCoins = Math.floor(cappedHours * memberCount * PASSIVE_COINS_PER_MASCOT_PER_H);
+  const estimatedPvpExp   = Math.floor(cappedHours * memberCount * PASSIVE_EXP_PER_MASCOT_PER_H);
+  const pvpCoins = Math.min(vault.coins, estimatedPvpCoins);
+  const pvpExp   = Math.min(vault.exp, estimatedPvpExp);
+  const pveCoins = Math.max(0, vault.coins - pvpCoins);
+  const pveExp   = Math.max(0, vault.exp - pvpExp);
+  const pvpCoinsFinal = Math.floor(pvpCoins * mult);
+  const pvpExpFinal   = Math.floor(pvpExp * mult);
+  const pveAvailable = Math.max(0, PVE_DAILY_COINS_CAP - pveEarnedToday);
+  const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
+  return {
+    coins: pveCoinsCapped + pvpCoinsFinal,
+    exp:   pveExp + pvpExpFinal,
+    food:  vault.food,
+    sweet: vault.sweet,
+  };
+}
+
 // Dificuldades: modificam a faixa de nível do bot
 export const DIFFICULTY_CONFIG = {
   easy:   { levelOffset: -3, rewardMult: 0.8, injuryChanceMult: 0.6, label: "Facil",  color: "green", desc: "Bot abaixo da forca real do time. Menos loot e risco menor." },

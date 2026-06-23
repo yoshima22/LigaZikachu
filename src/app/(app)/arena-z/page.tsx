@@ -9,7 +9,7 @@ import {
   ARENA_Z_CONFIG, ARENA_ROOMS, ARENA_MAX_TEAMS, PVE_DAILY_COINS_CAP,
   PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H,
   RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog,
-  getTeamTimeMultiplier, applyMultiplierToVault,
+  getTeamTimeMultiplier, applyMultiplierToVault, estimateVaultClaim,
   getArenaDebuffPct, getRoomsData, getTopArenaPlayers,
   getCachedDbReady, getCachedOpponentTeams, cleanupExpiredArenaResting,
 } from "@/lib/arena-z";
@@ -715,9 +715,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             const debuffDisplay = Math.round(debuffPct * 100);
             const mult = getTeamTimeMultiplier(team.enteredAt);
             const multPct = Math.round((mult - 1) * 100);
-            const vaultNow = applyMultiplierToVault(
+            const vaultNow = estimateVaultClaim(
               { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
-              mult, false
+              team.enteredAt, team.members.length,
             );
             return (
               <div key={team.id} className="rounded-2xl border border-border bg-slate-950/60 p-4">
