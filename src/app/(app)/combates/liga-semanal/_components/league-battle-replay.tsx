@@ -22,6 +22,53 @@ export type TurnLog = {
   effect?: string;
 };
 
+function splitDamage(total: number, parts: number) {
+  const safeTotal = Math.max(0, Math.round(total));
+  const safeParts = Math.max(1, Math.min(parts, Math.max(1, safeTotal)));
+  const base = Math.floor(safeTotal / safeParts);
+  let remainder = safeTotal % safeParts;
+
+  return Array.from({ length: safeParts }, () => {
+    const value = base + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(0, remainder - 1);
+    return value;
+  });
+}
+
+function buildCinematicReplay(replay: TurnLog[]) {
+  if (replay.length === 0) return replay;
+
+  const minSteps = 54;
+  const maxSteps = 110;
+  const expansion = Math.max(1, Math.min(4, Math.ceil(minSteps / replay.length)));
+
+  if (expansion === 1) return replay.map((turn, index) => ({ ...turn, turn: index + 1 }));
+
+  const expanded: TurnLog[] = [];
+  for (const turn of replay) {
+    if (expanded.length >= maxSteps) break;
+
+    if (turn.action !== "ATTACK" || turn.damage <= 1) {
+      expanded.push({ ...turn, turn: expanded.length + 1 });
+      continue;
+    }
+
+    const remainingSlots = Math.max(1, maxSteps - expanded.length);
+    const chunks = splitDamage(turn.damage, Math.min(expansion, remainingSlots));
+
+    chunks.forEach((damage, index) => {
+      expanded.push({
+        ...turn,
+        turn: expanded.length + 1,
+        damage,
+        effect: index === chunks.length - 1 ? turn.effect : undefined,
+      });
+    });
+  }
+
+  return expanded;
+}
+
 interface Fighter {
   id: string;
   name: string;
@@ -145,39 +192,40 @@ export function LeagueBattleReplayModal({
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
   const onFinishRef = useRef(onFinish);
+  const cinematicReplay = useMemo(() => buildCinematicReplay(replay), [replay]);
   useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
-    setBaseFighters(buildFighters(replay, playerAId));
+    setBaseFighters(buildFighters(cinematicReplay, playerAId));
     setTurnIdx(-1);
-  }, [replay, playerAId]);
+  }, [cinematicReplay, playerAId]);
 
   // Derive current HP state from baseFighters + all turns up to turnIdx
   const fighters = useMemo(() => {
     const state = baseFighters.map(f => ({ ...f }));
-    for (let i = 0; i <= turnIdx && i < replay.length; i++) {
-      const t = replay[i];
+    for (let i = 0; i <= turnIdx && i < cinematicReplay.length; i++) {
+      const t = cinematicReplay[i];
       if (t.action === "ATTACK") {
         const target = state.find(f => f.id === t.targetId);
         if (target) target.hp = Math.max(0, target.hp - t.damage);
       }
     }
     return state;
-  }, [baseFighters, turnIdx, replay]);
+  }, [baseFighters, turnIdx, cinematicReplay]);
 
-  const baseDelay = 1800;
+  const baseDelay = 2100;
   const delay = Math.round(baseDelay / speed);
 
   useEffect(() => {
     if (!autoPlay) return;
-    if (turnIdx >= replay.length) return;
+    if (turnIdx >= cinematicReplay.length) return;
     const t = setTimeout(() => setTurnIdx(prev => prev + 1), turnIdx < 0 ? 600 / speed : delay);
     return () => clearTimeout(t);
-  }, [turnIdx, autoPlay, replay, delay, speed]);
+  }, [turnIdx, autoPlay, cinematicReplay, delay, speed]);
 
-  const current = turnIdx >= 0 && turnIdx < replay.length ? replay[turnIdx] : null;
-  const finished = turnIdx >= replay.length;
-  const progress = replay.length > 0 ? Math.round(((turnIdx + 1) / replay.length) * 100) : 0;
+  const current = turnIdx >= 0 && turnIdx < cinematicReplay.length ? cinematicReplay[turnIdx] : null;
+  const finished = turnIdx >= cinematicReplay.length;
+  const progress = cinematicReplay.length > 0 ? Math.round(((turnIdx + 1) / cinematicReplay.length) * 100) : 0;
 
   const teamA = fighters.filter(c => c.side === "A");
   const teamB = fighters.filter(c => c.side === "B");
@@ -227,7 +275,7 @@ export function LeagueBattleReplayModal({
           {/* Team headers */}
           <div className="mx-5 mb-3 flex justify-between text-sm font-bold">
             <span className="text-blue-300">{playerAName} ({aliveA}/{teamA.length})</span>
-            <span className="text-xs text-slate-600">Turno {Math.max(0, turnIdx + 1)}/{replay.length}</span>
+            <span className="text-xs text-slate-600">Turno {Math.max(0, turnIdx + 1)}/{cinematicReplay.length}</span>
             <span className="text-red-300">{playerBName} ({aliveB}/{teamB.length})</span>
           </div>
 
@@ -284,9 +332,9 @@ export function LeagueBattleReplayModal({
           <div className="flex items-center justify-center gap-3 px-5 pb-5">
             <button onClick={() => { setAutoPlay(false); setTurnIdx(i => Math.max(-1, i - 1)); }} disabled={turnIdx <= 0}
               className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white disabled:opacity-30">← Anterior</button>
-            <button onClick={() => { setAutoPlay(false); setTurnIdx(i => Math.min(replay.length, i + 1)); }} disabled={finished}
+            <button onClick={() => { setAutoPlay(false); setTurnIdx(i => Math.min(cinematicReplay.length, i + 1)); }} disabled={finished}
               className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white disabled:opacity-30">Próximo →</button>
-            <button onClick={() => { setAutoPlay(false); setTurnIdx(replay.length); }}
+            <button onClick={() => { setAutoPlay(false); setTurnIdx(cinematicReplay.length); }}
               className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white">Pular</button>
           </div>
         </div>
