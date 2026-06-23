@@ -8,6 +8,7 @@ import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, ZikaCoinTxType } from "@prisma/client";
+import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -778,6 +779,12 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       });
     }
   }
+
+  const settledMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+    where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO", "BYE"] } },
+    select: { id: true },
+  });
+  await Promise.all(settledMatches.map((match) => settleWeeklyLeagueBets(match.id)));
 
   revalidatePath(PATH);
   return { success: true, matches: pairings.length };

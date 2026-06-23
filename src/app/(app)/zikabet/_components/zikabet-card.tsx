@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Coins, CheckCircle } from "lucide-react";
-import { placeBet } from "../actions";
+import { placeBet, placeWeeklyLeagueBet } from "../actions";
 
 const betStatusLabel: Record<string, string> = {
   OPEN: "Aberta", CLOSED: "Fechada", WON: "Vencida",
@@ -37,9 +37,10 @@ interface Props {
   balance: number;
   config: { minBet: number; maxBet: number };
   isLoggedIn: boolean;
+  source?: "tcg" | "weekly";
 }
 
-export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn }: Props) {
+export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source = "tcg" }: Props) {
   const [pending, startTransition] = useTransition();
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [amount, setAmount] = useState(config.minBet);
@@ -56,7 +57,9 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn }: Props
     }
     startTransition(async () => {
       try {
-        const result = await placeBet({ matchId: match.id, betOnPlayerId: selectedPlayer, amount });
+        const result = source === "weekly"
+          ? await placeWeeklyLeagueBet({ weeklyMatchId: match.id, betOnPlayerId: selectedPlayer, amount })
+          : await placeBet({ matchId: match.id, betOnPlayerId: selectedPlayer, amount });
         if (result.error) { toast.error(result.error); return; }
         toast.success(`Aposta de ${amount} ZC registrada! Retorno potencial: ${potentialReturn} ZC`);
         setSelectedPlayer(null);

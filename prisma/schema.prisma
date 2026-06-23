@@ -238,6 +238,8 @@ model Player {
   inventory               PlayerInventory[]
   betsPlaced              ZikaBet[]             @relation("ZkBetByPlayer")
   betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
+  weeklyLeagueBetsPlaced  WeeklyMascotLeagueBet[] @relation("WeeklyLeagueBetByPlayer")
+  weeklyLeagueBetsOn      WeeklyMascotLeagueBet[] @relation("WeeklyLeagueBetOnPlayer")
   stickers                PlayerSticker[]
   achievementEvents       AchievementEvent[]
   zikalootWins            ZikaLoot[]            @relation("ZikaLootWinner")
@@ -1103,6 +1105,27 @@ model ZikaBet {
 }
 
 // ── ZikaCoins ──────────────────────────────────────────────────────────────────
+
+model WeeklyMascotLeagueBet {
+  id              String        @id @default(cuid())
+  playerId        String
+  weeklyMatchId   String
+  betOnPlayerId   String
+  amount          Int
+  odds            Decimal       @db.Decimal(6,2)
+  potentialReturn Int
+  status          ZikaBetStatus @default(OPEN)
+  placedAt        DateTime      @default(now())
+  settledAt       DateTime?
+  player          Player        @relation("WeeklyLeagueBetByPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  weeklyMatch     WeeklyMascotLeagueMatch @relation(fields: [weeklyMatchId], references: [id], onDelete: Cascade)
+  betOnPlayer     Player        @relation("WeeklyLeagueBetOnPlayer", fields: [betOnPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, weeklyMatchId])
+  @@index([playerId])
+  @@index([weeklyMatchId])
+  @@map("weekly_mascot_league_bets")
+}
 
 enum ZikaBetStatus {
   OPEN
@@ -2505,6 +2528,7 @@ model WeeklyMascotLeagueMatch {
   createdAt           DateTime           @default(now())
   league              WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   battleItems         WeeklyMascotLeagueBattleItem[]
+  bets                WeeklyMascotLeagueBet[]
 
   @@index([leagueId, battleDate])
   @@index([playerAId])

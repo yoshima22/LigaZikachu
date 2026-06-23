@@ -8,6 +8,12 @@ import { getSessionPlayer } from "@/lib/session";
 import { ZikaBetStatus, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { parseBetConfig } from "@/lib/zikabet";
+const WEEKLY_LEAGUE_BET_CONFIG = {
+  minBet: 10,
+  maxBet: 500,
+  maxDailyBet: 2000,
+  allowBetOnSelf: false,
+};
 
 // ── Config de apostas ─────────────────────────────────────────────────────────
 
@@ -70,6 +76,12 @@ export async function setMatchOdds(
 
 const placeBetSchema = z.object({
   matchId: z.string().min(1),
+  betOnPlayerId: z.string().min(1),
+  amount: z.number().int().min(1)
+});
+
+const placeWeeklyLeagueBetSchema = z.object({
+  weeklyMatchId: z.string().min(1),
   betOnPlayerId: z.string().min(1),
   amount: z.number().int().min(1)
 });
@@ -169,6 +181,86 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
 }
 
 // ── Liquidar apostas do dia (chamado pelo closeWeek) ─────────────────────────
+
+export async function placeWeeklyLeagueBet(raw: z.infer<typeof placeWeeklyLeagueBetSchema>): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Nao autenticado." };
+    const data = placeWeeklyLeagueBetSchema.parse(raw);
+
+    const player = await getSessionPlayer(actor.id);
+    if (!player) return { error: "Jogador nao encontrado." };
+
+    const match = await prisma.weeklyMascotLeagueMatch.findUnique({
+      where: { id: data.weeklyMatchId },
+      select: { id: true, playerAId: true, playerBId: true, status: true, resultJson: true },
+    });
+    if (!match) return { error: "Combate da Liga Semanal nao encontrado." };
+    if (match.status !== "SCHEDULED") return { error: "Este combate ja nao aceita apostas." };
+    if (!match.playerBId) return { error: "Combate sem adversario nao aceita apostas." };
+    if (data.betOnPlayerId !== match.playerAId && data.betOnPlayerId !== match.playerBId) return { error: "Jogador invalido para este combate." };
+    if (!WEEKLY_LEAGUE_BET_CONFIG.allowBetOnSelf && (match.playerAId === player.id || match.playerBId === player.id)) return { error: "Nao e permitido apostar em sua propria luta da Liga Semanal." };
+    if (data.amount < WEEKLY_LEAGUE_BET_CONFIG.minBet) return { error: `Aposta minima: ${WEEKLY_LEAGUE_BET_CONFIG.minBet} ZC.` };
+    if (data.amount > WEEKLY_LEAGUE_BET_CONFIG.maxBet) return { error: `Aposta maxima: ${WEEKLY_LEAGUE_BET_CONFIG.maxBet} ZC.` };
+
+    const existing = await prisma.weeklyMascotLeagueBet.findUnique({ where: { playerId_weeklyMatchId: { playerId: player.id, weeklyMatchId: data.weeklyMatchId } } });
+    if (existing) return { error: "Voce ja fez uma aposta neste combate." };
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const [dailyTcgSpent, dailyWeeklySpent] = await Promise.all([
+      prisma.zikaBet.aggregate({ where: { playerId: player.id, placedAt: { gte: startOfDay }, status: { notIn: [ZikaBetStatus.REFUNDED, ZikaBetStatus.CANCELLED] } }, _sum: { amount: true } }),
+      prisma.weeklyMascotLeagueBet.aggregate({ where: { playerId: player.id, placedAt: { gte: startOfDay }, status: { notIn: [ZikaBetStatus.REFUNDED, ZikaBetStatus.CANCELLED] } }, _sum: { amount: true } }),
+    ]);
+    const dailySpent = (dailyTcgSpent._sum.amount ?? 0) + (dailyWeeklySpent._sum.amount ?? 0);
+    if (dailySpent + data.amount > WEEKLY_LEAGUE_BET_CONFIG.maxDailyBet) return { error: `Limite diario de apostas: ${WEEKLY_LEAGUE_BET_CONFIG.maxDailyBet} ZC.` };
+
+    const oddsJson = (match.resultJson ?? {}) as Record<string, unknown>;
+    const odds = data.betOnPlayerId === match.playerAId ? Number(oddsJson.oddsA ?? 1.9) : Number(oddsJson.oddsB ?? 1.9);
+    const potentialReturn = Math.floor(data.amount * odds);
+
+    await prisma.$transaction(async (tx) => {
+      const wallet = await getOrCreateWallet(player.id);
+      if (wallet.balance < data.amount) throw new Error(`Saldo insuficiente. Voce tem ${wallet.balance} ZC.`);
+      await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.BET_PLACED, amount: -data.amount, description: "Aposta na Liga Semanal dos Mascotes" });
+      await tx.weeklyMascotLeagueBet.create({ data: { playerId: player.id, weeklyMatchId: data.weeklyMatchId, betOnPlayerId: data.betOnPlayerId, amount: data.amount, odds, potentialReturn, status: ZikaBetStatus.OPEN } });
+    });
+
+    revalidatePath("/zikabet");
+    revalidatePath("/zikabet/minhas-apostas");
+    revalidatePath("/carteira");
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) return { error: err.issues[0].message };
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function settleWeeklyLeagueBets(weeklyMatchId: string): Promise<void> {
+  const match = await prisma.weeklyMascotLeagueMatch.findUnique({ where: { id: weeklyMatchId }, select: { status: true, winnerId: true, isDraw: true } });
+  if (!match || match.status === "SCHEDULED") return;
+
+  const bets = await prisma.weeklyMascotLeagueBet.findMany({ where: { weeklyMatchId, status: { in: [ZikaBetStatus.OPEN, ZikaBetStatus.CLOSED] } } });
+  if (bets.length === 0) return;
+
+  await prisma.$transaction(async (tx) => {
+    for (const bet of bets) {
+      if (match.isDraw || !match.winnerId) {
+        await creditCoins(tx, { playerId: bet.playerId, type: ZikaCoinTxType.BET_REFUNDED, amount: bet.amount, description: "Reembolso de aposta na Liga Semanal (empate)" });
+        await tx.weeklyMascotLeagueBet.update({ where: { id: bet.id }, data: { status: ZikaBetStatus.REFUNDED, settledAt: new Date() } });
+      } else if (bet.betOnPlayerId === match.winnerId) {
+        await creditCoins(tx, { playerId: bet.playerId, type: ZikaCoinTxType.BET_WON, amount: bet.potentialReturn, description: `Aposta vencida na Liga Semanal (${Number(bet.odds)}x)` });
+        await tx.weeklyMascotLeagueBet.update({ where: { id: bet.id }, data: { status: ZikaBetStatus.WON, settledAt: new Date() } });
+      } else {
+        await tx.weeklyMascotLeagueBet.update({ where: { id: bet.id }, data: { status: ZikaBetStatus.LOST, settledAt: new Date() } });
+      }
+    }
+  });
+
+  revalidatePath("/zikabet");
+  revalidatePath("/zikabet/minhas-apostas");
+  revalidatePath("/carteira");
+}
 
 export async function settleDayBets(weekId: string, adminId: string): Promise<void> {
   const bets = await prisma.zikaBet.findMany({

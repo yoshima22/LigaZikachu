@@ -73,8 +73,30 @@ export default async function ZikaBetPage() {
 
   // My bets summary
   const myOpenBets = player
-    ? await prisma.zikaBet.count({ where: { playerId: player.id, status: "OPEN" } })
+    ? (await prisma.zikaBet.count({ where: { playerId: player.id, status: "OPEN" } })) +
+      (await prisma.weeklyMascotLeagueBet.count({ where: { playerId: player.id, status: "OPEN" } }))
     : 0;
+
+  const todayBrt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const weeklyLeagueMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+    where: { battleDate: todayBrt, status: "SCHEDULED", playerBId: { not: null } },
+    select: {
+      id: true,
+      battleSlot: true,
+      resultJson: true,
+      playerAId: true,
+      playerBId: true,
+      bets: player ? { where: { playerId: player.id } } : false,
+      league: { select: { weekKey: true, status: true } },
+    },
+    orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
+    take: 30,
+  }).catch(() => []);
+  const weeklyPlayerIds = Array.from(new Set(weeklyLeagueMatches.flatMap((m) => [m.playerAId, m.playerBId].filter(Boolean) as string[])));
+  const weeklyPlayers = weeklyPlayerIds.length
+    ? await prisma.player.findMany({ where: { id: { in: weeklyPlayerIds } }, select: { id: true, displayName: true } })
+    : [];
+  const weeklyPlayerNames = new Map(weeklyPlayers.map((entry) => [entry.id, entry.displayName]));
 
   const myStats = player
     ? await prisma.zikaBet.groupBy({
@@ -138,6 +160,48 @@ export default async function ZikaBetPage() {
             pendingBets: w.matches.reduce((sum, m) => sum + m._count.bets, 0),
           }))}
         />
+      )}
+
+      {weeklyLeagueMatches.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="font-semibold text-slate-200">Liga Semanal dos Mascotes</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Odds automáticas liberadas quando a chave diária aparece. Apostas fecham quando cada combate começa.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {weeklyLeagueMatches.map((m) => {
+              if (!m.playerBId) return null;
+              const odds = (m.resultJson ?? {}) as Record<string, unknown>;
+              const myBet = Array.isArray(m.bets) && m.bets.length > 0 ? m.bets[0] : null;
+              return (
+                <ZikaBetCard
+                  key={m.id}
+                  source="weekly"
+                  match={{
+                    id: m.id,
+                    playerA: { id: m.playerAId, displayName: weeklyPlayerNames.get(m.playerAId) ?? "Jogador" },
+                    playerB: { id: m.playerBId, displayName: weeklyPlayerNames.get(m.playerBId) ?? "Jogador" },
+                    playerAOdds: Number(odds.oddsA ?? 1.9),
+                    playerBOdds: Number(odds.oddsB ?? 1.9),
+                    weekLabel: `Liga Semanal - Combate ${m.battleSlot}`,
+                  }}
+                  myBet={myBet ? {
+                    betOnPlayerId: myBet.betOnPlayerId,
+                    amount: myBet.amount,
+                    odds: Number(myBet.odds),
+                    potentialReturn: myBet.potentialReturn,
+                    status: myBet.status,
+                  } : null}
+                  balance={wallet?.balance ?? 0}
+                  config={{ minBet: 10, maxBet: 500 }}
+                  isLoggedIn={!!player}
+                />
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Admin: config global */}
