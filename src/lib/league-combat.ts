@@ -252,11 +252,12 @@ export function runLeagueCombat(
   const healCount = new Map<string, number>();
   const survivorUsed = new Set<string>();
   const duelistLock = new Map<string, string>();
-  let turn = 1;
+  let round = 1;
+  let actionNum = 1;
   let totalDmgA = 0;
   let totalDmgB = 0;
 
-  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && turn <= 80) {
+  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= 50) {
     const aAlive = alive(a, hp);
     const bAlive = alive(b, hp);
     const all = [
@@ -285,7 +286,7 @@ export function runLeagueCombat(
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({
-              turn, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
+              turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
               targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId,
               action: "DEFEND", damage: 0,
               attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(target.pokemonId),
@@ -293,7 +294,7 @@ export function runLeagueCombat(
               actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
               effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP.`,
             });
-            turn++;
+            actionNum++;
             continue;
           }
         }
@@ -388,14 +389,15 @@ export function runLeagueCombat(
       ].filter(Boolean).join(" ") || undefined;
 
       log.push({
-        turn, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
+        turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
         targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId,
         action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: multiplier > 1,
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
         effect: effects,
       });
-      turn++;
+      actionNum++;
     }
+    round++;
   }
 
   const aSurvivors = alive(a, hp).length;
@@ -413,7 +415,7 @@ export function runLeagueCombat(
     teamADamageTaken: totalDmgB,
     teamBDamageTaken: totalDmgA,
     log,
-    rounds: turn - 1,
+    rounds: round - 1,
   };
 }
 
