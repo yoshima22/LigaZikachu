@@ -107,8 +107,8 @@ export function PokemonWishlist({
   }
 
   function addPokemon(option: PokemonOption) {
-    if (wishlist.length >= 10) {
-      toast.error("A wishlist aceita ate 10 Pokemon.");
+    if (wishlist.length >= 9) {
+      toast.error("A wishlist aceita ate 9 Pokemon.");
       return;
     }
     persist([...wishlist, { pokemonId: option.id, name: option.name }]);
@@ -178,7 +178,7 @@ export function PokemonWishlist({
                 </div>
               )}
               <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500">
-                {isPending && <Loader2 size={11} className="animate-spin" />} {wishlist.length}/10 Pokemon na wishlist.
+                {isPending && <Loader2 size={11} className="animate-spin" />} {wishlist.length}/9 Pokemon na wishlist.
               </p>
             </div>
           )}

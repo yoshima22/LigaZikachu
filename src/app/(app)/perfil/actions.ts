@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 
-const MAX_WISHLIST_POKEMON = 10;
+const MAX_WISHLIST_POKEMON = 9;
 
 const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(60),
