@@ -2,9 +2,9 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { RotateCcw } from "lucide-react";
-import { undoBet } from "../../actions";
+import { undoBet, undoWeeklyLeagueBet } from "../../actions";
 
-export function UndoBetButton({ betId }: { betId: string }) {
+export function UndoBetButton({ betId, isLeague = false }: { betId: string; isLeague?: boolean }) {
   const [pending, startTransition] = useTransition();
   return (
     <button
@@ -14,7 +14,7 @@ export function UndoBetButton({ betId }: { betId: string }) {
         if (!confirm("Desfazer esta aposta? Suas ZikaCoins serão devolvidas.")) return;
         startTransition(async () => {
           try {
-            const result = await undoBet(betId);
+            const result = isLeague ? await undoWeeklyLeagueBet(betId) : await undoBet(betId);
             if (result.error) { toast.error(result.error); return; }
             toast.success("Aposta desfeita. ZikaCoins reembolsadas!");
           } catch { toast.error("Erro ao desfazer aposta."); }

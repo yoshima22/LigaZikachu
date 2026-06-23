@@ -262,6 +262,44 @@ export async function settleWeeklyLeagueBets(weeklyMatchId: string): Promise<voi
   revalidatePath("/carteira");
 }
 
+export async function undoWeeklyLeagueBet(betId: string): Promise<{ error?: string }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(actor.id);
+    if (!player) return { error: "Jogador nao encontrado." };
+
+    const bet = await prisma.weeklyMascotLeagueBet.findUnique({ where: { id: betId } });
+    if (!bet) return { error: "Aposta não encontrada." };
+    if (bet.playerId !== player.id) return { error: "Esta aposta não pertence a você." };
+    if (bet.status !== ZikaBetStatus.OPEN) return { error: "Só é possível cancelar apostas abertas." };
+
+    // Check match not yet resolved
+    const match = await prisma.weeklyMascotLeagueMatch.findUnique({ where: { id: bet.weeklyMatchId } });
+    if (!match || match.status !== "SCHEDULED") return { error: "O combate já aconteceu. Não é possível cancelar." };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.weeklyMascotLeagueBet.update({
+        where: { id: betId },
+        data: { status: ZikaBetStatus.CANCELLED, settledAt: new Date() },
+      });
+      await creditCoins(tx, {
+        playerId: player.id,
+        type: ZikaCoinTxType.BET_REFUNDED,
+        amount: bet.amount,
+        description: "Aposta Liga Semanal cancelada",
+      });
+    });
+
+    revalidatePath("/zikabet");
+    revalidatePath("/zikabet/minhas-apostas");
+    revalidatePath("/carteira");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao cancelar aposta." };
+  }
+}
+
 export async function settleDayBets(weekId: string, adminId: string): Promise<void> {
   const bets = await prisma.zikaBet.findMany({
     where: {

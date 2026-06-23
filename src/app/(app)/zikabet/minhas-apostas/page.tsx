@@ -30,23 +30,78 @@ export default async function MinhasApostasPage() {
   });
   if (!player) return null;
 
-  const bets = await prisma.zikaBet.findMany({
-    where: { playerId: player.id },
-    orderBy: { placedAt: "desc" },
-    include: {
-      match: {
-        include: {
-          playerA: { select: { displayName: true } },
-          playerB: { select: { displayName: true } },
-          winnerPlayer: { select: { displayName: true } },
-          tournamentWeek: {
-            include: { tournament: { select: { name: true, slug: true } } }
+  const [tournamentBets, leagueBets] = await Promise.all([
+    prisma.zikaBet.findMany({
+      where: { playerId: player.id },
+      orderBy: { placedAt: "desc" },
+      include: {
+        match: {
+          include: {
+            playerA: { select: { displayName: true } },
+            playerB: { select: { displayName: true } },
+            winnerPlayer: { select: { displayName: true } },
+            tournamentWeek: {
+              include: { tournament: { select: { name: true, slug: true } } }
+            }
           }
-        }
+        },
+        betOnPlayer: { select: { displayName: true } }
+      }
+    }),
+    prisma.weeklyMascotLeagueBet.findMany({
+      where: { playerId: player.id },
+      orderBy: { placedAt: "desc" },
+      include: {
+        weeklyMatch: { select: { playerAId: true, playerBId: true, winnerId: true, status: true, battleDate: true, battleSlot: true } },
+        betOnPlayer: { select: { displayName: true } },
       },
-      betOnPlayer: { select: { displayName: true } }
-    }
-  });
+    }).catch(() => [] as any[]),
+  ]);
+
+  // Enrich league bets with player names
+  const leaguePlayerIds = new Set<string>();
+  for (const b of leagueBets) {
+    leaguePlayerIds.add(b.weeklyMatch.playerAId);
+    if (b.weeklyMatch.playerBId) leaguePlayerIds.add(b.weeklyMatch.playerBId);
+  }
+  const leaguePlayers = leaguePlayerIds.size > 0
+    ? await prisma.player.findMany({ where: { id: { in: [...leaguePlayerIds] } }, select: { id: true, displayName: true } })
+    : [];
+  const lpNames = new Map(leaguePlayers.map(p => [p.id, p.displayName]));
+
+  // Unified list
+  type UnifiedBet = {
+    id: string; source: "TOURNAMENT" | "LEAGUE"; status: string;
+    amount: number; odds: number; potentialReturn: number; placedAt: Date;
+    playerAName: string; playerBName: string; betOnName: string;
+    winnerName: string | null; context: string;
+    canCancel: boolean;
+  };
+
+  const bets: UnifiedBet[] = [
+    ...tournamentBets.map((b): UnifiedBet => ({
+      id: b.id, source: "TOURNAMENT", status: b.status,
+      amount: b.amount, odds: Number(b.odds), potentialReturn: b.potentialReturn,
+      placedAt: b.placedAt,
+      playerAName: b.match.playerA?.displayName ?? "?",
+      playerBName: b.match.playerB?.displayName ?? "BYE",
+      betOnName: b.betOnPlayer.displayName,
+      winnerName: b.match.winnerPlayer?.displayName ?? null,
+      context: b.match.tournamentWeek?.tournament?.name ?? "Torneio",
+      canCancel: b.status === "OPEN" && ["OPEN", "PLANNED"].includes(b.match.tournamentWeek?.status ?? ""),
+    })),
+    ...leagueBets.map((b: any): UnifiedBet => ({
+      id: b.id, source: "LEAGUE", status: b.status,
+      amount: b.amount, odds: Number(b.odds), potentialReturn: b.potentialReturn,
+      placedAt: b.placedAt,
+      playerAName: lpNames.get(b.weeklyMatch.playerAId) ?? "?",
+      playerBName: b.weeklyMatch.playerBId ? (lpNames.get(b.weeklyMatch.playerBId) ?? "?") : "BYE",
+      betOnName: b.betOnPlayer.displayName,
+      winnerName: b.weeklyMatch.winnerId ? (lpNames.get(b.weeklyMatch.winnerId) ?? null) : null,
+      context: `Liga Semanal · ${b.weeklyMatch.battleDate} Slot ${b.weeklyMatch.battleSlot}`,
+      canCancel: b.status === "OPEN" && b.weeklyMatch.status === "SCHEDULED",
+    })),
+  ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
   const totalWon  = bets.filter((b) => b.status === "WON").reduce((s, b) => s + b.potentialReturn, 0);
   const totalLost = bets.filter((b) => b.status === "LOST").reduce((s, b) => s + b.amount, 0);
@@ -84,31 +139,24 @@ export default async function MinhasApostasPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {bets.map((bet) => {
-            const t = bet.match.tournamentWeek?.tournament;
-            const week = bet.match.tournamentWeek;
-            return (
+          {bets.map((bet) => (
               <div key={bet.id} className="rounded-xl border border-border bg-slate-950/60 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
-                    {t && (
-                      <p className="text-[10px] text-slate-500">
-                        {t.name} · {week?.label ?? `Semana ${week?.weekNumber}`}
-                      </p>
-                    )}
+                    <p className="text-[10px] text-slate-500">
+                      {bet.source === "LEAGUE" ? "🏆 " : ""}{bet.context}
+                    </p>
                     <p className="text-sm text-slate-200">
-                      <span className="font-semibold text-white">{bet.match.playerA?.displayName}</span>
+                      <span className="font-semibold text-white">{bet.playerAName}</span>
                       <span className="text-slate-500"> vs </span>
-                      <span className="font-semibold text-white">{bet.match.playerB?.displayName ?? "BYE"}</span>
+                      <span className="font-semibold text-white">{bet.playerBName}</span>
                     </p>
                     <p className="text-xs text-slate-400">
-                      Apostei em <span className="font-semibold text-white">{bet.betOnPlayer.displayName}</span>
-                      {" "}@ <span className="text-[#FFCB05]">{Number(bet.odds)}x</span>
+                      Apostei em <span className="font-semibold text-white">{bet.betOnName}</span>
+                      {" "}@ <span className="text-[#FFCB05]">{bet.odds}x</span>
                     </p>
-                    {bet.match.winnerPlayer && (
-                      <p className="text-xs text-slate-500">
-                        Resultado: {bet.match.winnerPlayer.displayName} venceu
-                      </p>
+                    {bet.winnerName && (
+                      <p className="text-xs text-slate-500">Resultado: {bet.winnerName} venceu</p>
                     )}
                     <p className="text-[10px] text-slate-600">
                       {new Date(bet.placedAt).toLocaleString("pt-BR")}
@@ -118,9 +166,9 @@ export default async function MinhasApostasPage() {
                     <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusColor[bet.status]}`}>
                       {statusLabel[bet.status]}
                     </span>
-                    {bet.status === "OPEN" && ["OPEN","PLANNED"].includes(bet.match.tournamentWeek?.status ?? "") && (
+                    {bet.canCancel && (
                       <div className="flex justify-end">
-                        <UndoBetButton betId={bet.id} />
+                        <UndoBetButton betId={bet.id} isLeague={bet.source === "LEAGUE"} />
                       </div>
                     )}
                     <p className="text-sm font-bold text-slate-200">{bet.amount.toLocaleString("pt-BR")} ZC</p>
@@ -136,8 +184,7 @@ export default async function MinhasApostasPage() {
                   </div>
                 </div>
               </div>
-            );
-          })}
+          ))}
         </div>
       )}
     </div>
