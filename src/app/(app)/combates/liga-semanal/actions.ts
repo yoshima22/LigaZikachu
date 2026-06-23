@@ -425,7 +425,7 @@ function calculateLeagueOdds(
   const probA = scoreA / total;
   const probB = scoreB / total;
   const margin = 0.92;
-  const round5 = (v: number) => Math.round(v / 0.05) * 0.05;
+  const round5 = (v: number) => Math.round(Math.round(v / 0.05) * 5) / 100;
   return {
     oddsA: Math.max(1.10, round5(probA > 0.02 ? margin / probA : 8)),
     oddsB: Math.max(1.10, round5(probB > 0.02 ? margin / probB : 8)),

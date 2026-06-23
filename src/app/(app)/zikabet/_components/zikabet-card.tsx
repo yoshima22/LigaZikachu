@@ -99,7 +99,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
             >
               <p className="font-semibold text-white text-sm truncate">{player.displayName}</p>
               <p className="mt-1 text-xl font-bold text-[#FFCB05]">
-                {odds ? `${odds}x` : "—"}
+                {odds ? `${Number(odds).toFixed(2)}x` : "—"}
               </p>
               {isMyBetOn && (
                 <p className="mt-1 flex items-center gap-1 text-[10px] text-[#7AC74C]">
@@ -154,7 +154,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
             <div className="text-right">
               <p className="text-[10px] text-slate-500">Retorno se ganhar</p>
               <p className="text-sm font-bold text-[#7AC74C]">{potentialReturn.toLocaleString("pt-BR")} ZC</p>
-              <p className="text-[10px] text-slate-600">({selectedOdds}x)</p>
+              <p className="text-[10px] text-slate-600">({Number(selectedOdds).toFixed(2)}x)</p>
             </div>
           </div>
           <div className="flex items-center justify-between">
@@ -177,10 +177,6 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
         <p className="text-xs text-slate-500 text-center">Faça login para apostar.</p>
       )}
 
-      {/* Debug: remove after fixing */}
-      <p className="text-[8px] text-slate-600 text-center mt-1">
-        bet:{myBet ? `${myBet.status}` : "null"} · sel:{selectedPlayer?.slice(0,6) ?? "—"} · bal:{balance} · min:{config.minBet} · max:{config.maxBet} · logged:{isLoggedIn ? "Y" : "N"} · src:{source}
-      </p>
     </div>
   );
 }
