@@ -543,7 +543,7 @@ export async function saveDailyTeamAction(
     const today = getTodayBrt();
 
     const resolvedMatch = await prisma.weeklyMascotLeagueMatch.findFirst({
-      where: { leagueId, battleDate: today, battleSlot },
+      where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
       select: { id: true },
     });
     if (resolvedMatch) return { error: "Este combate ja aconteceu e o time esta travado." };
