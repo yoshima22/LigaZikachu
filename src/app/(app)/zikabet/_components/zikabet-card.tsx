@@ -175,6 +175,14 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
       {!isLoggedIn && (
         <p className="text-xs text-slate-500 text-center">Faça login para apostar.</p>
       )}
+
+      {/* Debug: remove after fixing */}
+      {myBet && (
+        <p className="text-[9px] text-red-400/60 text-center">
+          Bloqueado: aposta {myBet.status} (id existente) — odds {myBet.odds}x · {myBet.amount} ZC
+        </p>
+      )}
+      {!isLoggedIn && <p className="text-[9px] text-red-400/60 text-center">Bloqueado: não logado</p>}
     </div>
   );
 }
