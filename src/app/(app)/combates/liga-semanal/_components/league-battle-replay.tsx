@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 
 export type TurnLog = {
@@ -127,26 +127,43 @@ export function LeagueBattleReplayModal({
   playerAName,
   playerBName,
   playerAId,
+  winnerId,
+  isDraw,
   replay,
   onFinish,
 }: {
   playerAName: string;
   playerBName: string;
   playerAId?: string;
+  winnerId?: string | null;
+  isDraw?: boolean;
   replay: TurnLog[];
   onFinish: () => void;
 }) {
   const [turnIdx, setTurnIdx] = useState(-1);
-  const [fighters, setFighters] = useState<Fighter[]>([]);
+  const [baseFighters, setBaseFighters] = useState<Fighter[]>([]);
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
   const onFinishRef = useRef(onFinish);
   useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
-    setFighters(buildFighters(replay, playerAId));
+    setBaseFighters(buildFighters(replay, playerAId));
     setTurnIdx(-1);
   }, [replay, playerAId]);
+
+  // Derive current HP state from baseFighters + all turns up to turnIdx
+  const fighters = useMemo(() => {
+    const state = baseFighters.map(f => ({ ...f }));
+    for (let i = 0; i <= turnIdx && i < replay.length; i++) {
+      const t = replay[i];
+      if (t.action === "ATTACK") {
+        const target = state.find(f => f.id === t.targetId);
+        if (target) target.hp = Math.max(0, target.hp - t.damage);
+      }
+    }
+    return state;
+  }, [baseFighters, turnIdx, replay]);
 
   const baseDelay = 1800;
   const delay = Math.round(baseDelay / speed);
@@ -154,35 +171,9 @@ export function LeagueBattleReplayModal({
   useEffect(() => {
     if (!autoPlay) return;
     if (turnIdx >= replay.length) return;
-
-    const t = setTimeout(() => {
-      setTurnIdx(prev => {
-        const next = prev + 1;
-        if (next < replay.length) {
-          const turn = replay[next];
-          setFighters(prev => prev.map(c => {
-            if (c.id === turn.targetId && turn.action === "ATTACK") {
-              return { ...c, hp: Math.max(0, c.hp - turn.damage) };
-            }
-            return c;
-          }));
-        }
-        return next;
-      });
-    }, turnIdx < 0 ? 600 / speed : delay);
-
+    const t = setTimeout(() => setTurnIdx(prev => prev + 1), turnIdx < 0 ? 600 / speed : delay);
     return () => clearTimeout(t);
   }, [turnIdx, autoPlay, replay, delay, speed]);
-
-  const advanceTurn = () => {
-    setAutoPlay(false);
-    const next = turnIdx + 1;
-    if (next < replay.length) {
-      const t = replay[next];
-      setFighters(p => p.map(c => c.id === t.targetId && t.action === "ATTACK" ? { ...c, hp: Math.max(0, c.hp - t.damage) } : c));
-    }
-    setTurnIdx(next);
-  };
 
   const current = turnIdx >= 0 && turnIdx < replay.length ? replay[turnIdx] : null;
   const finished = turnIdx >= replay.length;
@@ -192,6 +183,12 @@ export function LeagueBattleReplayModal({
   const teamB = fighters.filter(c => c.side === "B");
   const aliveA = teamA.filter(c => c.hp > 0).length;
   const aliveB = teamB.filter(c => c.hp > 0).length;
+
+  // Use actual match result, not animated HP state
+  const resultText = isDraw ? "Empate!"
+    : winnerId === playerAId ? `${playerAName} venceu!`
+    : winnerId ? `${playerBName} venceu!`
+    : aliveA > aliveB ? `${playerAName} venceu!` : aliveB > aliveA ? `${playerBName} venceu!` : "Empate!";
 
   const resolvedActorName = current ? resolveName(current.actorName, current.actorPokemonId) : "";
   const resolvedTargetName = current ? resolveName(current.targetName, current.targetPokemonId) : "";
@@ -276,9 +273,7 @@ export function LeagueBattleReplayModal({
             ) : finished ? (
               <div>
                 <p className="text-lg font-bold text-[#FFCB05]">🏁 Batalha Encerrada!</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {aliveA > aliveB ? `${playerAName} venceu!` : aliveB > aliveA ? `${playerBName} venceu!` : "Empate!"}
-                </p>
+                <p className="text-xs text-slate-400 mt-1">{resultText}</p>
               </div>
             ) : (
               <p className="text-sm text-slate-500">Preparando batalha...</p>
@@ -289,7 +284,7 @@ export function LeagueBattleReplayModal({
           <div className="flex items-center justify-center gap-3 px-5 pb-5">
             <button onClick={() => { setAutoPlay(false); setTurnIdx(i => Math.max(-1, i - 1)); }} disabled={turnIdx <= 0}
               className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white disabled:opacity-30">← Anterior</button>
-            <button onClick={advanceTurn} disabled={finished}
+            <button onClick={() => { setAutoPlay(false); setTurnIdx(i => Math.min(replay.length, i + 1)); }} disabled={finished}
               className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white disabled:opacity-30">Próximo →</button>
             <button onClick={() => { setAutoPlay(false); setTurnIdx(replay.length); }}
               className="rounded-lg border border-border bg-slate-900 px-4 py-1.5 text-xs text-slate-400 hover:text-white">Pular</button>

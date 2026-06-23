@@ -515,6 +515,8 @@ function ResultsTab({ data }: { data: PageData }) {
           playerAName={replayMatch.playerAName}
           playerBName={replayMatch.playerBName ?? "???"}
           playerAId={replayMatch.playerAId}
+          winnerId={replayMatch.winnerId}
+          isDraw={replayMatch.isDraw}
           replay={replayMatch.replayJson as TurnLog[]}
           onFinish={() => setReplayMatch(null)}
         />
