@@ -204,7 +204,10 @@ export async function placeWeeklyLeagueBet(raw: z.infer<typeof placeWeeklyLeague
     if (data.amount > WEEKLY_LEAGUE_BET_CONFIG.maxBet) return { error: `Aposta maxima: ${WEEKLY_LEAGUE_BET_CONFIG.maxBet} ZC.` };
 
     const existing = await prisma.weeklyMascotLeagueBet.findUnique({ where: { playerId_weeklyMatchId: { playerId: player.id, weeklyMatchId: data.weeklyMatchId } } });
-    if (existing) return { error: "Voce ja fez uma aposta neste combate." };
+    if (existing && existing.status !== "CANCELLED" && existing.status !== "REFUNDED") return { error: "Voce ja fez uma aposta neste combate." };
+    if (existing && (existing.status === "CANCELLED" || existing.status === "REFUNDED")) {
+      await prisma.weeklyMascotLeagueBet.delete({ where: { id: existing.id } });
+    }
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
