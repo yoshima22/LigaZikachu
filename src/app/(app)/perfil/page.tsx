@@ -13,7 +13,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
-import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
+import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 
 
 type ProfileMascot = {
@@ -238,7 +239,7 @@ export default async function PerfilPage() {
     );
   }
 
-  const [ranking, recentMatches, dreamTeam, equippedItems, profileMascots] = await Promise.all([
+  const [ranking, recentMatches, dreamTeam, equippedItems, profileMascots, wishlistRows] = await Promise.all([
     getCachedGlobalRanking(),
     prisma.match.findMany({
       where: {
@@ -279,8 +280,19 @@ export default async function PerfilPage() {
       },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
       take: 500,
-    }).catch(() => [] as ProfileMascot[])
+    }).catch(() => [] as ProfileMascot[]),
+    prisma.playerPokemonWishlist.findMany({
+      where: { playerId: player.id },
+      select: { pokemonId: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }).catch(() => [] as { pokemonId: number }[])
   ]);
+
+  const wishlist = wishlistRows.map((entry) => ({
+    pokemonId: entry.pokemonId,
+    name: getPokemonName(entry.pokemonId),
+  }));
+  const pokemonOptions = getWishlistPokemonOptions();
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
   const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
@@ -385,6 +397,13 @@ export default async function PerfilPage() {
         <h2 className="mb-4 text-sm font-semibold text-white">Editar perfil e senha</h2>
         <EditProfileForm player={player} />
       </Card>
+
+      <PokemonWishlist
+        initialWishlist={wishlist}
+        pokemonOptions={pokemonOptions}
+        editable
+        ownerName={player.displayName}
+      />
 
       {dreamTeam.length > 0 && (
         <Card className="p-6">

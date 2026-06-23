@@ -6,6 +6,8 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 
+const MAX_WISHLIST_POKEMON = 30;
+
 const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(60),
   ptcglNick: z.string().max(60).optional(),
@@ -22,6 +24,10 @@ const updateProfileSchema = z.object({
       "Use uma imagem valida."
     )
     .optional(),
+});
+
+const updatePokemonWishlistSchema = z.object({
+  pokemonIds: z.array(z.number().int().min(1).max(1025)).max(MAX_WISHLIST_POKEMON),
 });
 
 const updatePasswordSchema = z.object({
@@ -115,5 +121,37 @@ export async function updateOwnPassword(input: z.infer<typeof updatePasswordSche
     })
   ]);
 
+  return { success: true };
+}
+
+export async function updatePokemonWishlist(input: z.infer<typeof updatePokemonWishlistSchema>) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Nao autenticado" };
+
+  const player = await prisma.player.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+  if (!player) return { error: "Jogador nao encontrado" };
+
+  const data = updatePokemonWishlistSchema.parse(input);
+  const pokemonIds = Array.from(new Set(data.pokemonIds));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.playerPokemonWishlist.deleteMany({
+      where: { playerId: player.id, pokemonId: { notIn: pokemonIds.length ? pokemonIds : [0] } },
+    });
+
+    for (const [index, pokemonId] of pokemonIds.entries()) {
+      await tx.playerPokemonWishlist.upsert({
+        where: { playerId_pokemonId: { playerId: player.id, pokemonId } },
+        create: { playerId: player.id, pokemonId, sortOrder: index },
+        update: { sortOrder: index },
+      });
+    }
+  });
+
+  revalidatePath("/perfil");
+  revalidatePath(`/jogadores/${player.id}`);
   return { success: true };
 }

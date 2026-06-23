@@ -245,6 +245,7 @@ model Player {
   savedDecks              SavedDeck[]
   mascots                 Mascot[]
   pokemonDex              PlayerPokemonDex[]
+  pokemonWishlist         PlayerPokemonWishlist[]
   ownedMascotSocialEvents MascotSocialEvent[]  @relation("MascotSocialEventOwner")
   resolvedMascotSocialEvents MascotSocialEvent[] @relation("MascotSocialEventResolver")
   mascotSocialDecisionLogs MascotSocialDecisionLog[]
@@ -1888,6 +1889,22 @@ model PlayerPokemonDex {
   @@index([playerId])
   @@index([pokemonId])
   @@map("player_pokemon_dex")
+}
+
+model PlayerPokemonWishlist {
+  id        String   @id @default(cuid())
+  playerId  String
+  pokemonId Int
+  note      String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, pokemonId])
+  @@index([playerId, sortOrder])
+  @@index([pokemonId])
+  @@map("player_pokemon_wishlist")
 }
 
 enum MascotRelationType {

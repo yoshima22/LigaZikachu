@@ -19,9 +19,10 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
-import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
+import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 
 export default async function PlayerDetailPage({
   params
@@ -80,7 +81,7 @@ export default async function PlayerDetailPage({
     await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
   }
 
-  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, wishlistRows] = await Promise.all([
     activeSeason ? getCachedPlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -149,7 +150,17 @@ export default async function PlayerDetailPage({
           select: { itemId: true, quantity: true, item: { select: { name: true, type: true, rarity: true } } },
         })
       : [],
+    prisma.playerPokemonWishlist.findMany({
+      where: { playerId },
+      select: { pokemonId: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }).catch(() => [] as { pokemonId: number }[]),
   ]);
+  const wishlist = wishlistRows.map((entry) => ({
+    pokemonId: entry.pokemonId,
+    name: getPokemonName(entry.pokemonId),
+  }));
+  const pokemonOptions = isSelf ? getWishlistPokemonOptions() : [];
 
   // Sync tickets (admin only) — busca em tabelas dedicadas
   const syncOwnedItems: { id: string; name: string; type: string; rarity: string; quantity: number }[] = [];
@@ -423,6 +434,15 @@ export default async function PlayerDetailPage({
             ))}
           </div>
         </Card>
+      )}
+
+      {(wishlist.length > 0 || isSelf) && (
+        <PokemonWishlist
+          initialWishlist={wishlist}
+          pokemonOptions={pokemonOptions}
+          editable={isSelf}
+          ownerName={player.displayName}
+        />
       )}
 
       {/* Stats da temporada ativa */}

@@ -2102,3 +2102,12 @@ EGG_POOLS.RANDOM = [
   ...EGG_POOLS.EGG_GEN6, ...EGG_POOLS.EGG_GEN7, ...EGG_POOLS.EGG_GEN8, ...EGG_POOLS.EGG_GEN9,
   ...EGG_POOLS.EGG_ALOLA, ...EGG_POOLS.EGG_GALAR, ...EGG_POOLS.EGG_HISUI,
 ];
+
+export const WISHLIST_POKEMON_IDS = Array.from({ length: 1025 }, (_, index) => index + 1);
+
+export function getWishlistPokemonOptions() {
+  return WISHLIST_POKEMON_IDS.map((id) => ({
+    id,
+    name: getPokemonName(id),
+  }));
+}
