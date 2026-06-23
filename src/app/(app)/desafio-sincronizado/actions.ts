@@ -50,6 +50,40 @@ export async function transferSyncTicketHalfAction(formData: FormData): Promise<
   }
 }
 
+// ── Discard half ──────────────────────────────────────────────────────────
+
+export async function discardSyncTicketHalfAction(halfId: string): Promise<{ error?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const half = await prisma.syncTicketHalf.findUnique({ where: { id: halfId } });
+    if (!half || half.ownerId !== player.id) return { error: "Metade não encontrada ou não pertence a você." };
+    if (half.status !== "AVAILABLE" && half.status !== "SENT") return { error: "Metade não pode ser descartada neste estado." };
+    await prisma.syncTicketHalf.update({ where: { id: halfId }, data: { status: "EXPIRED" } });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao descartar." };
+  }
+}
+
+// ── Swap half side (own-generated only) ───────────────────────────────────
+
+export async function swapSyncTicketHalfSideAction(halfId: string): Promise<{ error?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const half = await prisma.syncTicketHalf.findUnique({ where: { id: halfId } });
+    if (!half || half.ownerId !== player.id) return { error: "Metade não encontrada ou não pertence a você." };
+    if (half.generatedByPlayerId !== player.id) return { error: "Só pode trocar o lado de metades geradas por você." };
+    if (half.status !== "AVAILABLE" && half.status !== "SENT") return { error: "Metade não pode ser trocada neste estado." };
+    const newSide = half.side === "LEFT" ? "RIGHT" : "LEFT";
+    await prisma.syncTicketHalf.update({ where: { id: halfId }, data: { side: newSide as any } });
+    revalidatePath("/desafio-sincronizado");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao trocar lado." };
+  }
+}
+
 const combineSchema = z.object({
   leftHalfId: z.string().min(1),
   rightHalfId: z.string().min(1),

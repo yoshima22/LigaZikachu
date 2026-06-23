@@ -13,6 +13,7 @@ import { ModifierPanel } from "./_components/modifier-panel";
 import { EventPreview } from "./_components/event-preview";
 import { SimulationButton } from "./_components/simulation-button";
 import { UndoSimulationButton } from "./_components/undo-simulation-button";
+import { HalvesSection } from "./_components/halves-section";
 import {
   leaveTeamAction,
   confirmTeamAction,
@@ -421,54 +422,13 @@ export default async function DesafioSincronizadoPage() {
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
           <Ticket size={18} className="text-[#FFCB05]" />
-          <h2 className="font-semibold text-slate-100">Minhas metades</h2>
+          <h2 className="font-semibold text-slate-100">Minhas metades ({halves.length})</h2>
         </div>
-        <p className="mb-4 text-sm text-slate-400">
-          Metades nao podem ser vendidas. Elas so circulam por presente/envio direto. A origem sempre fica gravada.
-        </p>
-        {halves.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-slate-500">
-            Voce ainda nao possui metades. Elas podem cair em Arena, expedicoes, reciclagem e vitorias TCG validadas.
-          </p>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {halves.map((half) => (
-              <div key={half.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
-                <div className="flex gap-3">
-                  <Image src={getSideImage(half.side)} alt={getSideLabel(half.side)} width={72} height={96} className="h-24 w-16 object-contain" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-slate-100">{getSideLabel(half.side)}</p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Gerada por: <span className="text-slate-200">{half.generatedByPlayer.displayName}</span>
-                    </p>
-                    <p className="text-xs text-slate-500">Origem: {half.sourceAction}</p>
-                    {half.generatedByPlayerId === player.id && (
-                      <p className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 px-2 py-1 text-xs text-red-200">
-                        Voce gerou esta metade. Envie para outro jogador; voce nao pode usa-la.
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <form action={async (formData) => {
-                  "use server";
-                  await transferSyncTicketHalfAction(formData);
-                }} className="mt-3 flex gap-2">
-                  <input type="hidden" name="halfId" value={half.id} />
-                  <select name="targetPlayerId" className="min-w-0 flex-1 rounded-lg border border-border bg-slate-950 px-2 py-2 text-xs text-slate-100">
-                    {players.map((target) => (
-                      <option key={target.id} value={target.id}>
-                        {target.displayName}{target.ptcglNick ? ` (${target.ptcglNick})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100">
-                    <Send size={13} /> Enviar
-                  </button>
-                </form>
-              </div>
-            ))}
-          </div>
-        )}
+        <HalvesSection
+          halves={halves.map(h => ({ ...h, side: h.side as "LEFT" | "RIGHT" }))}
+          players={players}
+          myPlayerId={player.id}
+        />
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
