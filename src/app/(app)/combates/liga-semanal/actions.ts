@@ -320,6 +320,100 @@ export async function joinLeagueAction(leagueId: string) {
 
 // ── Generate daily matchups (preview before battles) ──────────────────────
 
+// ── Swiss pairing engine ──────────────────────────────────────────────────
+
+type PairingPlayer = { playerId: string; points: number; wins: number; damageDealt: number };
+type PairingResult = Array<{ aId: string; bId: string | null }>;
+
+function swissPairSlot(
+  players: PairingPlayer[],
+  faced: Map<string, Set<string>>,
+  todayPaired: Map<string, Set<string>>,
+  byeCount: Map<string, number>,
+  slotIndex: number,
+): PairingResult {
+  const result: PairingResult = [];
+  const paired = new Set<string>();
+
+  // Sort with shuffle within similar score tiers + BYE priority
+  const sorted = [...players].sort((a, b) => {
+    const aB = byeCount.get(a.playerId) ?? 0;
+    const bB = byeCount.get(b.playerId) ?? 0;
+    if (aB !== bB) return bB - aB;
+    const scoreDiff = (b.points - a.points) || (b.wins - a.wins);
+    if (scoreDiff !== 0) return scoreDiff;
+    // Same tier: shuffle to avoid deterministic pairing
+    return (hashStr(a.playerId + slotIndex) & 0xff) - (hashStr(b.playerId + slotIndex) & 0xff);
+  });
+
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i];
+    if (paired.has(p.playerId)) continue;
+
+    const prevOpps = faced.get(p.playerId) ?? new Set();
+    const todayOpps = todayPaired.get(p.playerId) ?? new Set();
+
+    // Build candidate list: score by proximity + penalty for faced
+    const candidates: Array<{ player: PairingPlayer; score: number }> = [];
+    for (let j = 0; j < sorted.length; j++) {
+      if (j === i || paired.has(sorted[j].playerId)) continue;
+      const c = sorted[j];
+      const pointDist = Math.abs(p.points - c.points);
+      const facedBefore = prevOpps.has(c.playerId);
+      const facedToday = todayOpps.has(c.playerId);
+      // Lower score = better match
+      let score = pointDist;
+      if (facedToday) score += 1000;  // heavy penalty for same-day repeat
+      if (facedBefore) score += 200;  // moderate penalty for week repeat
+      // Slight randomness to break ties
+      score += (hashStr(p.playerId + c.playerId + slotIndex) % 20);
+      candidates.push({ player: c, score });
+    }
+
+    candidates.sort((a, b) => a.score - b.score);
+    const opp = candidates[0]?.player ?? null;
+
+    if (opp) {
+      result.push({ aId: p.playerId, bId: opp.playerId });
+      paired.add(p.playerId);
+      paired.add(opp.playerId);
+      // Track
+      if (!todayPaired.has(p.playerId)) todayPaired.set(p.playerId, new Set());
+      if (!todayPaired.has(opp.playerId)) todayPaired.set(opp.playerId, new Set());
+      todayPaired.get(p.playerId)!.add(opp.playerId);
+      todayPaired.get(opp.playerId)!.add(p.playerId);
+    } else {
+      // BYE
+      result.push({ aId: p.playerId, bId: null });
+      byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
+      paired.add(p.playerId);
+    }
+  }
+  return result;
+}
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+async function loadFacedOpponents(leagueId: string) {
+  const prevMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+    where: { leagueId, status: { in: ["RESOLVED", "WO", "SCHEDULED"] } },
+    select: { playerAId: true, playerBId: true },
+  });
+  const faced = new Map<string, Set<string>>();
+  for (const m of prevMatches) {
+    if (!m.playerBId) continue;
+    if (!faced.has(m.playerAId)) faced.set(m.playerAId, new Set());
+    if (!faced.has(m.playerBId)) faced.set(m.playerBId, new Set());
+    faced.get(m.playerAId)!.add(m.playerBId);
+    faced.get(m.playerBId)!.add(m.playerAId);
+  }
+  return faced;
+}
+
 function calculateLeagueOdds(
   pA: { points: number; wins: number; damageDealt: number },
   pB: { points: number; wins: number; damageDealt: number },
@@ -374,98 +468,50 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
     if (participants.length < 2) return { error: "Menos de 2 participantes" };
 
     const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId } });
-    const byeCount = new Map<string, number>(); // track BYEs across slots
+    const faced = await loadFacedOpponents(leagueId);
+    const todayPaired = new Map<string, Set<string>>();
+    const byeCount = new Map<string, number>();
     let created = 0;
 
-    // Track all previous opponents this week to avoid repeated matchups
-    const previousMatches = await prisma.weeklyMascotLeagueMatch.findMany({
-      where: { leagueId, status: { in: ["RESOLVED", "WO", "SCHEDULED"] } },
-      select: { playerAId: true, playerBId: true },
-    });
-    const previousOpponents = new Map<string, Set<string>>();
-    for (const m of previousMatches) {
-      if (!m.playerBId) continue;
-      if (!previousOpponents.has(m.playerAId)) previousOpponents.set(m.playerAId, new Set());
-      if (!previousOpponents.has(m.playerBId)) previousOpponents.set(m.playerBId, new Set());
-      previousOpponents.get(m.playerAId)!.add(m.playerBId);
-      previousOpponents.get(m.playerBId)!.add(m.playerAId);
-    }
-    // Also track today's pairings as we generate them
-    const todayOpponents = new Map<string, Set<string>>();
-
     for (const battleSlot of [1, 2, 3]) {
-      // Sort: players who already got BYE today go to the FRONT (paired first)
-      const sorted = [...participants].sort((a, b) => {
-        const aB = byeCount.get(a.playerId) ?? 0;
-        const bB = byeCount.get(b.playerId) ?? 0;
-        if (aB !== bB) return bB - aB; // more BYEs = higher priority to be paired
-        return (b.points - a.points) || (b.wins - a.wins);
-      });
+      const pairings = swissPairSlot(participants, faced, todayPaired, byeCount, battleSlot);
 
-      const paired = new Set<string>();
-
-      for (let i = 0; i < sorted.length; i++) {
-        const p = sorted[i];
-        if (paired.has(p.playerId)) continue;
-
-        const prevOpps = previousOpponents.get(p.playerId) ?? new Set();
-        const todayOpps = todayOpponents.get(p.playerId) ?? new Set();
-
-        // Try to find opponent not yet faced this week, closest in score
-        let opp: typeof p | null = null;
-        let fallbackOpp: typeof p | null = null;
-        for (let j = i + 1; j < sorted.length; j++) {
-          if (paired.has(sorted[j].playerId)) continue;
-          if (!fallbackOpp) fallbackOpp = sorted[j];
-          if (!prevOpps.has(sorted[j].playerId) && !todayOpps.has(sorted[j].playerId)) {
-            opp = sorted[j];
-            break;
-          }
-        }
-        // Last resort: repeat an opponent
-        if (!opp) opp = fallbackOpp;
-
-        if (opp) {
-          // Track today's pairing
-          if (!todayOpponents.has(p.playerId)) todayOpponents.set(p.playerId, new Set());
-          if (!todayOpponents.has(opp.playerId)) todayOpponents.set(opp.playerId, new Set());
-          todayOpponents.get(p.playerId)!.add(opp.playerId);
-          todayOpponents.get(opp.playerId)!.add(p.playerId);
-          const { oddsA, oddsB } = calculateLeagueOdds(p, opp);
+      for (const pair of pairings) {
+        if (pair.bId) {
+          const pA = participants.find(p => p.playerId === pair.aId)!;
+          const pB = participants.find(p => p.playerId === pair.bId)!;
+          const { oddsA, oddsB } = calculateLeagueOdds(pA, pB);
           await prisma.weeklyMascotLeagueMatch.create({
             data: {
               id: createId(), leagueId,
               roundNumber: roundBase + battleSlot,
               battleDate: today, battleSlot,
               scheduledAt: new Date(),
-              playerAId: p.playerId,
-              playerBId: opp.playerId,
+              playerAId: pair.aId, playerBId: pair.bId,
               status: "SCHEDULED",
               resultJson: { oddsA, oddsB },
             },
           });
-          paired.add(p.playerId);
-          paired.add(opp.playerId);
+          if (!faced.has(pair.aId)) faced.set(pair.aId, new Set());
+          if (!faced.has(pair.bId)) faced.set(pair.bId, new Set());
+          faced.get(pair.aId)!.add(pair.bId);
+          faced.get(pair.bId)!.add(pair.aId);
           created++;
         } else {
-          // BYE — give to this player
           await prisma.weeklyMascotLeagueMatch.create({
             data: {
               id: createId(), leagueId,
               roundNumber: roundBase + battleSlot,
               battleDate: today, battleSlot,
               scheduledAt: new Date(),
-              playerAId: p.playerId,
-              status: "BYE",
-              resolvedAt: new Date(),
+              playerAId: pair.aId,
+              status: "BYE", resolvedAt: new Date(),
             },
           });
           await prisma.weeklyMascotLeagueParticipant.updateMany({
-            where: { leagueId, playerId: p.playerId },
+            where: { leagueId, playerId: pair.aId },
             data: { points: { increment: 3 }, byes: { increment: 1 }, updatedAt: new Date() },
           });
-          byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
-          paired.add(p.playerId);
         }
       }
     }
@@ -1296,57 +1342,33 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
         orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
       });
       if (participants.length >= 2) {
-        const prevMatches = await prisma.weeklyMascotLeagueMatch.findMany({
-          where: { leagueId: league.id, status: { in: ["RESOLVED", "WO"] } },
-          select: { playerAId: true, playerBId: true },
-        });
-        const faced = new Map<string, Set<string>>();
-        for (const m of prevMatches) {
-          if (!m.playerBId) continue;
-          if (!faced.has(m.playerAId)) faced.set(m.playerAId, new Set());
-          if (!faced.has(m.playerBId)) faced.set(m.playerBId, new Set());
-          faced.get(m.playerAId)!.add(m.playerBId);
-          faced.get(m.playerBId)!.add(m.playerAId);
-        }
-        const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId: league.id } });
+        const faced = await loadFacedOpponents(league.id);
+        const todayPaired = new Map<string, Set<string>>();
         const byeCount = new Map<string, number>();
+        const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId: league.id } });
 
         for (const battleSlot of [1, 2, 3]) {
-          const sorted = [...participants].sort((a, b) => {
-            const aB = byeCount.get(a.playerId) ?? 0;
-            const bB = byeCount.get(b.playerId) ?? 0;
-            if (aB !== bB) return bB - aB;
-            return (b.points - a.points) || (b.wins - a.wins);
-          });
-          const paired = new Set<string>();
-
-          for (let i = 0; i < sorted.length; i++) {
-            const p = sorted[i];
-            if (paired.has(p.playerId)) continue;
-            let opp: typeof p | null = null;
-            for (let j = i + 1; j < sorted.length; j++) {
-              if (!paired.has(sorted[j].playerId)) {
-                const alreadyFaced = faced.get(p.playerId)?.has(sorted[j].playerId);
-                if (!alreadyFaced || !opp) { opp = sorted[j]; if (!alreadyFaced) break; }
-              }
-            }
-            if (opp) {
-              const { oddsA, oddsB } = calculateLeagueOdds(p, opp);
+          const pairings = swissPairSlot(participants, faced, todayPaired, byeCount, battleSlot);
+          for (const pair of pairings) {
+            if (pair.bId) {
+              const pA = participants.find(p => p.playerId === pair.aId)!;
+              const pB = participants.find(p => p.playerId === pair.bId)!;
+              const { oddsA, oddsB } = calculateLeagueOdds(pA, pB);
               await prisma.weeklyMascotLeagueMatch.create({
-                data: { id: createId(), leagueId: league.id, roundNumber: roundBase + battleSlot, battleDate, battleSlot, scheduledAt: now, playerAId: p.playerId, playerBId: opp.playerId, status: "SCHEDULED", resultJson: { oddsA, oddsB } },
+                data: { id: createId(), leagueId: league.id, roundNumber: roundBase + battleSlot, battleDate, battleSlot, scheduledAt: now, playerAId: pair.aId, playerBId: pair.bId, status: "SCHEDULED", resultJson: { oddsA, oddsB } },
               });
-              paired.add(p.playerId);
-              paired.add(opp.playerId);
+              if (!faced.has(pair.aId)) faced.set(pair.aId, new Set());
+              if (!faced.has(pair.bId)) faced.set(pair.bId, new Set());
+              faced.get(pair.aId)!.add(pair.bId);
+              faced.get(pair.bId)!.add(pair.aId);
             } else {
               await prisma.weeklyMascotLeagueMatch.create({
-                data: { id: createId(), leagueId: league.id, roundNumber: roundBase + battleSlot, battleDate, battleSlot, scheduledAt: now, playerAId: p.playerId, status: "BYE", resolvedAt: now },
+                data: { id: createId(), leagueId: league.id, roundNumber: roundBase + battleSlot, battleDate, battleSlot, scheduledAt: now, playerAId: pair.aId, status: "BYE", resolvedAt: now },
               });
               await prisma.weeklyMascotLeagueParticipant.updateMany({
-                where: { leagueId: league.id, playerId: p.playerId },
+                where: { leagueId: league.id, playerId: pair.aId },
                 data: { points: { increment: 3 }, byes: { increment: 1 }, updatedAt: now },
               });
-              byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
-              paired.add(p.playerId);
             }
           }
         }
