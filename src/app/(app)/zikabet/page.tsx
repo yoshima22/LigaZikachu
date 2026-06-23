@@ -12,7 +12,11 @@ import { OddsForm } from "./_components/odds-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function ZikaBetPage() {
+const MATCHES_PER_PAGE = 6;
+
+export default async function ZikaBetPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const params = await searchParams;
+  const currentPage = Math.max(1, parseInt(params.page ?? "1", 10));
   const session = await getAppSession();
   if (!session?.user) return null;
 
@@ -110,6 +114,16 @@ export default async function ZikaBetPage() {
   const wonStat = myStats.find((s) => s.status === "WON");
   const lostStat = myStats.find((s) => s.status === "LOST");
 
+  // Daily bet spending
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const [dailyTcg, dailyWeekly] = player ? await Promise.all([
+    prisma.zikaBet.aggregate({ where: { playerId: player.id, placedAt: { gte: startOfDay }, status: { notIn: ["REFUNDED", "CANCELLED"] } }, _sum: { amount: true } }),
+    prisma.weeklyMascotLeagueBet.aggregate({ where: { playerId: player.id, placedAt: { gte: startOfDay }, status: { notIn: ["REFUNDED", "CANCELLED"] } }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: null } })),
+  ]) : [{ _sum: { amount: null } }, { _sum: { amount: null } }];
+  const dailySpent = (dailyTcg._sum.amount ?? 0) + (dailyWeekly._sum.amount ?? 0);
+  const dailyLimit = 2000;
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -135,17 +149,38 @@ export default async function ZikaBetPage() {
           </div>
         </div>
 
-        {/* Mini stats */}
-        {player && (wonStat || lostStat) && (
-          <div className="mt-4 flex flex-wrap gap-4 border-t border-border/50 pt-4">
-            <div className="flex items-center gap-2 text-sm">
-              <TrendingUp size={14} className="text-[#7AC74C]" />
-              <span className="text-slate-400">{wonStat?._count ?? 0} apostas ganhas</span>
+        {/* Daily limit + mini stats */}
+        {player && (
+          <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Limite diário de apostas</span>
+                <span className={`font-bold ${dailySpent >= dailyLimit ? "text-red-400" : "text-[#FFCB05]"}`}>
+                  {dailySpent.toLocaleString("pt-BR")} / {dailyLimit.toLocaleString("pt-BR")} ZC
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className={`h-full rounded-full transition-all ${dailySpent >= dailyLimit ? "bg-red-500" : dailySpent >= dailyLimit * 0.75 ? "bg-yellow-500" : "bg-[#FFCB05]"}`}
+                  style={{ width: `${Math.min(100, (dailySpent / dailyLimit) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-600">
+                Disponível hoje: {Math.max(0, dailyLimit - dailySpent).toLocaleString("pt-BR")} ZC
+              </p>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Swords size={14} className="text-red-400" />
-              <span className="text-slate-400">{lostStat?._count ?? 0} perdidas</span>
-            </div>
+            {(wonStat || lostStat) && (
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingUp size={14} className="text-[#7AC74C]" />
+                  <span className="text-slate-400">{wonStat?._count ?? 0} ganhas</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Swords size={14} className="text-red-400" />
+                  <span className="text-slate-400">{lostStat?._count ?? 0} perdidas</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -162,7 +197,11 @@ export default async function ZikaBetPage() {
         />
       )}
 
-      {weeklyLeagueMatches.length > 0 && (
+      {weeklyLeagueMatches.length > 0 && (() => {
+        const totalPages = Math.max(1, Math.ceil(weeklyLeagueMatches.length / MATCHES_PER_PAGE));
+        const page = Math.min(currentPage, totalPages);
+        const paginated = weeklyLeagueMatches.slice((page - 1) * MATCHES_PER_PAGE, page * MATCHES_PER_PAGE);
+        return (
         <div className="space-y-4">
           <div>
             <h2 className="font-semibold text-slate-200">Liga Semanal dos Mascotes</h2>
@@ -171,7 +210,7 @@ export default async function ZikaBetPage() {
             </p>
           </div>
           <div className="space-y-3">
-            {weeklyLeagueMatches.map((m) => {
+            {paginated.map((m) => {
               if (!m.playerBId) return null;
               const odds = (m.resultJson ?? {}) as Record<string, unknown>;
               const myBet = Array.isArray(m.bets) && m.bets.length > 0 ? m.bets[0] : null;
@@ -201,8 +240,24 @@ export default async function ZikaBetPage() {
               );
             })}
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3">
+              {page > 1 ? (
+                <Link href={`/zikabet?page=${page - 1}`} className="rounded-lg border border-border bg-slate-800 px-4 py-1.5 text-xs text-slate-300 hover:text-white">← Anterior</Link>
+              ) : (
+                <span className="rounded-lg border border-border bg-slate-800 px-4 py-1.5 text-xs text-slate-600 opacity-30">← Anterior</span>
+              )}
+              <span className="text-xs text-slate-500">{page}/{totalPages}</span>
+              {page < totalPages ? (
+                <Link href={`/zikabet?page=${page + 1}`} className="rounded-lg border border-border bg-slate-800 px-4 py-1.5 text-xs text-slate-300 hover:text-white">Próxima →</Link>
+              ) : (
+                <span className="rounded-lg border border-border bg-slate-800 px-4 py-1.5 text-xs text-slate-600 opacity-30">Próxima →</span>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Admin: config global */}
       {admin && (
