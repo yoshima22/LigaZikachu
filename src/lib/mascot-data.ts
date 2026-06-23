@@ -462,6 +462,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 837, to: 838, level: 18 }, { from: 838, to: 839, level: 34 },
   { from: 843, to: 844, level: 36 },
   { from: 846, to: 847, level: 26 },
+  { from: 848, to: 849, toOptions: [849, 10184], level: 30 }, // Toxel → Toxtricity Amped/Low Key
   { from: 850, to: 851, level: 28 },
   { from: 852, to: 853, level: 35 },
   { from: 856, to: 857, level: 29 }, { from: 857, to: 858, level: 42 },
@@ -604,6 +605,7 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   // Gen 9 — evoluções não mapeadas
   983,  // Annihilape (Primeape + Rage Fist)
   10013, // Sinistcha Masterpiece (Poltchageist → toOptions)
+  10184, // Toxtricity Low Key (Toxel → toOptions)
   // Formas Alolan — finais sem base própria ou pré-evolução externa
   10100, // Raichu-Alola (evolui de Pikachu, não de Raichu base)
   10114, // Exeggutor-Alola (evolui de Exeggcute com Leaf Stone)
@@ -1364,7 +1366,7 @@ const POKEMON_GEN8_NAMES: Record<number, string> = {
   843:"Silicobra",844:"Sandaconda",
   845:"Cramorant",
   846:"Arrokuda",847:"Barraskewda",
-  848:"Toxel",849:"Toxtricity",
+  848:"Toxel",849:"Toxtricity",10184:"Toxtricity Low Key",
   850:"Sizzlipede",851:"Centiskorch",
   852:"Clobbopus",853:"Grapploct",
   854:"Sinistea",855:"Polteageist",
@@ -1790,7 +1792,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   835:"electric",836:"electric",837:"rock",838:"rock/fire",839:"rock/fire",
   840:"grass/dragon",841:"grass/dragon",842:"grass/dragon",
   843:"ground",844:"ground",845:"flying/water",
-  846:"water",847:"water",848:"electric/poison",849:"electric/poison",
+  846:"water",847:"water",848:"electric/poison",849:"electric/poison",10184:"electric/poison",
   850:"fire/bug",851:"fire/bug",852:"fighting",853:"fighting",
   854:"ghost",855:"ghost",856:"psychic",857:"psychic",858:"psychic/fairy",
   859:"dark/fairy",860:"dark/fairy",861:"dark/fairy",
