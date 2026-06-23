@@ -37,6 +37,7 @@ type PageData = {
   availableMascots: any[];
   leagueInventory: { type: string; quantity: number }[];
   selectedBattleItems: { battleSlot: number; effectType: string }[];
+  weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -215,6 +216,93 @@ function LeagueTab({ data }: { data: PageData }) {
           <span>Hoje = Times registrados</span>
         </div>
       </div>
+
+      {/* Highlights */}
+      {data.weekHighlights.length > 0 && <WeekHighlights highlights={data.weekHighlights} />}
+    </div>
+  );
+}
+
+// ── Destaques da Semana ────────────────────────────────────────────────────
+
+type HighlightEntry = PageData["weekHighlights"][number];
+
+const HIGHLIGHT_CATEGORIES: Array<{
+  title: string;
+  emoji: string;
+  color: string;
+  sortFn: (a: HighlightEntry, b: HighlightEntry) => number;
+  valueFn: (h: HighlightEntry) => string;
+  filterFn?: (h: HighlightEntry) => boolean;
+}> = [
+  { title: "Maior Dano Causado", emoji: "⚔️", color: "text-red-400", sortFn: (a, b) => b.damageDealt - a.damageDealt, valueFn: h => `${h.damageDealt.toLocaleString()} dano` },
+  { title: "Mais KOs", emoji: "💀", color: "text-orange-400", sortFn: (a, b) => b.kosDealt - a.kosDealt, valueFn: h => `${h.kosDealt} KOs`, filterFn: h => h.kosDealt > 0 },
+  { title: "Mais Resistente", emoji: "🛡️", color: "text-green-400", sortFn: (a, b) => b.damageTaken - a.damageTaken, valueFn: h => `${h.damageTaken.toLocaleString()} dano absorvido` },
+  { title: "Melhor Cuidador", emoji: "💚", color: "text-cyan-400", sortFn: (a, b) => b.heals - a.heals, valueFn: h => `${h.heals} curas`, filterFn: h => h.heals > 0 },
+  { title: "Maior Taxa de Vitória", emoji: "🏆", color: "text-yellow-400", sortFn: (a, b) => (b.wins / Math.max(1, b.matches)) - (a.wins / Math.max(1, a.matches)), valueFn: h => `${Math.round((h.wins / Math.max(1, h.matches)) * 100)}% (${h.wins}V/${h.matches}P)`, filterFn: h => h.matches >= 2 },
+];
+
+function WeekHighlights({ highlights }: { highlights: HighlightEntry[] }) {
+  if (highlights.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-4">
+      <h3 className="text-sm font-bold text-[#FFCB05]">🌟 Destaques da Semana</h3>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {HIGHLIGHT_CATEGORIES.map(cat => {
+          const filtered = cat.filterFn ? highlights.filter(cat.filterFn) : highlights.filter(h => h.damageDealt > 0);
+          if (filtered.length === 0) return null;
+          const sorted = [...filtered].sort(cat.sortFn);
+          const top = sorted[0];
+          if (!top) return null;
+
+          return (
+            <div key={cat.title} className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-3 flex items-center gap-3">
+              {top.pokemonId ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={getStaticSpriteUrl(top.pokemonId)} alt="" className="h-12 w-12 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+              ) : (
+                <span className="text-2xl">{cat.emoji}</span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] text-slate-500">{cat.emoji} {cat.title}</p>
+                <p className={`text-sm font-bold ${cat.color}`}>{getPokemonName(top.pokemonId) || top.name}</p>
+                <p className="text-[10px] text-slate-400">{top.name !== getPokemonName(top.pokemonId) ? `"${top.name}" · ` : ""}{cat.valueFn(top)}</p>
+                <p className="text-[9px] text-slate-500">{top.role}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Top 3 per category */}
+      <details className="group">
+        <summary className="cursor-pointer text-[10px] text-slate-500 hover:text-slate-300">Ver ranking completo por categoria ▾</summary>
+        <div className="mt-3 space-y-3">
+          {HIGHLIGHT_CATEGORIES.map(cat => {
+            const filtered = cat.filterFn ? highlights.filter(cat.filterFn) : highlights.filter(h => h.damageDealt > 0);
+            const sorted = [...filtered].sort(cat.sortFn).slice(0, 5);
+            if (sorted.length === 0) return null;
+            return (
+              <div key={cat.title}>
+                <p className="text-[10px] font-bold text-slate-400 mb-1">{cat.emoji} {cat.title}</p>
+                {sorted.map((h, i) => (
+                  <div key={h.id} className="flex items-center gap-2 py-0.5">
+                    <span className={`w-4 text-right text-[10px] font-bold ${i === 0 ? "text-yellow-300" : "text-slate-500"}`}>{i + 1}.</span>
+                    {h.pokemonId ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={getStaticSpriteUrl(h.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                    ) : null}
+                    <span className="text-[10px] text-slate-300 truncate">{getPokemonName(h.pokemonId) || h.name}{h.name !== getPokemonName(h.pokemonId) ? ` "${h.name}"` : ""}</span>
+                    <span className={`ml-auto text-[10px] font-semibold ${cat.color}`}>{cat.valueFn(h)}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </details>
     </div>
   );
 }

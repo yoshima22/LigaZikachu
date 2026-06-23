@@ -44,6 +44,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   let myTeams: unknown[] = [];
   let todayMatches: unknown[] = [];
   let allMascots: unknown[] = [];
+  let weekHighlights: any[] = [];
 
   try {
     currentLeague = await (prisma as any).weeklyMascotLeague.findFirst({
@@ -129,6 +130,62 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         playerBName: m.playerBId ? (mpNames.get(m.playerBId) ?? "Jogador") : null,
       }));
     } catch { /* table may not exist yet */ }
+
+    // Load ALL resolved matches this week for highlights
+    try {
+      const allMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
+        where: { leagueId: (currentLeague as any).id, status: "RESOLVED" },
+        select: { replayJson: true, playerAId: true, playerBId: true, winnerId: true },
+      });
+      // Compute per-mascot stats from replay logs
+      const mascotStats = new Map<string, { id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>();
+
+      for (const match of allMatches as any[]) {
+        if (!match.replayJson || !Array.isArray(match.replayJson)) continue;
+        const hpTracker = new Map<string, number>();
+        const seen = new Map<string, { name: string; pokemonId?: number; ownerId?: string; role?: string }>();
+
+        for (const t of match.replayJson as any[]) {
+          if (!seen.has(t.actorId)) seen.set(t.actorId, { name: t.actorName, pokemonId: t.actorPokemonId, ownerId: t.actorOwnerId, role: t.actorRole });
+          if (!seen.has(t.targetId)) seen.set(t.targetId, { name: t.targetName, pokemonId: t.targetPokemonId, ownerId: t.targetOwnerId, role: t.targetRole });
+
+          if (t.action === "ATTACK" && t.damage > 0) {
+            const prev = hpTracker.get(t.targetId) ?? 9999;
+            const newHp = prev - t.damage;
+            hpTracker.set(t.targetId, newHp);
+
+            const key = t.actorId;
+            const stat = mascotStats.get(key) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, matches: 0, wins: 0 };
+            stat.damageDealt += t.damage;
+            if (newHp <= 0) stat.kosDealt++;
+            mascotStats.set(key, stat);
+
+            const tgtStat = mascotStats.get(t.targetId) ?? { id: t.targetId, name: t.targetName, pokemonId: t.targetPokemonId ?? 0, ownerId: t.targetOwnerId ?? "", role: t.targetRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, matches: 0, wins: 0 };
+            tgtStat.damageTaken += t.damage;
+            mascotStats.set(t.targetId, tgtStat);
+          }
+
+          if (t.action === "DEFEND" && t.effect?.includes("curou")) {
+            const stat = mascotStats.get(t.actorId) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Cuidador", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, matches: 0, wins: 0 };
+            stat.heals++;
+            mascotStats.set(t.actorId, stat);
+          }
+        }
+
+        // Mark matches played and wins
+        for (const [id, info] of seen) {
+          const stat = mascotStats.get(id);
+          if (stat) {
+            stat.matches++;
+            if (info.ownerId === match.winnerId) stat.wins++;
+            if (info.pokemonId && !stat.pokemonId) stat.pokemonId = info.pokemonId;
+            if (info.name && (stat.name.startsWith("#") || !stat.name)) stat.name = info.name;
+          }
+        }
+      }
+
+      weekHighlights = [...mascotStats.values()];
+    } catch { /* ok */ }
   }
 
   let walletBalance = 0;
@@ -190,5 +247,6 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     availableMascots: allMascots,
     leagueInventory,
     selectedBattleItems,
+    weekHighlights,
   };
 }
