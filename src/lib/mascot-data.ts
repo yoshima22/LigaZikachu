@@ -526,6 +526,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 955, to: 956, level: 30 },
   { from: 957, to: 958, level: 30 }, { from: 958, to: 959, level: 38 },
   { from: 960, to: 961, level: 30 },
+  { from: 963, to: 964, level: 38 }, // Finizen → Palafin
   { from: 965, to: 966, level: 40 },
   { from: 969, to: 970, level: 35 },
   { from: 971, to: 972, level: 30 },
