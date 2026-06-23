@@ -823,14 +823,33 @@ function ItemsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
             {[1, 2, 3].map((slot) => <button key={slot} onClick={() => changeSlot(slot)} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] ${battleSlot === slot ? "border-yellow-400 bg-yellow-400/15 text-yellow-200" : "border-border text-slate-400"}`}>Combate {slot}<br />{BATTLE_TIMES_BRT[slot - 1]}</button>)}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            {LEAGUE_ITEMS.filter((item) => getOwned(item.type) > 0 || selectedItems.includes(item.type)).map((item) => (
-              <button key={item.type} onClick={() => toggleSelected(item.type)} className={`rounded-lg border p-2 text-left ${selectedItems.includes(item.type) ? "border-yellow-400 bg-yellow-400/10" : "border-border bg-slate-900/60"}`}>
-                <span className="text-[10px] font-semibold text-slate-200">{item.name}</span>
-                <span className="ml-2 text-[9px] text-slate-500">x{getOwned(item.type) + (selectedItems.includes(item.type) ? 1 : 0)}</span>
-              </button>
-            ))}
+            {LEAGUE_ITEMS.map((item) => {
+              const owned = getOwned(item.type);
+              const isSelected = selectedItems.includes(item.type);
+              const available = owned + (isSelected ? 1 : 0);
+              const canSelect = available > 0 && !isSelected && selectedItems.length < 2;
+              return (
+                <button key={item.type} onClick={() => { if (isSelected || canSelect) toggleSelected(item.type); }}
+                  disabled={!isSelected && !canSelect}
+                  className={`rounded-lg border p-2 text-left transition-colors ${
+                    isSelected ? "border-yellow-400 bg-yellow-400/10" :
+                    available > 0 ? "border-border bg-slate-900/60 hover:border-slate-600" :
+                    "border-border/30 bg-slate-950/30 opacity-40"
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-slate-200">{item.name}</span>
+                    {available > 0 ? (
+                      <span className="rounded-full bg-green-500/20 px-1.5 py-px text-[8px] font-bold text-green-400">×{available}</span>
+                    ) : (
+                      <span className="text-[8px] text-slate-600">sem estoque</span>
+                    )}
+                  </div>
+                  <p className="text-[8px] text-slate-500 mt-0.5">{item.effectType === "POSITIVE" ? "✨" : "💀"} {item.description.slice(0, 60)}...</p>
+                  {isSelected && <p className="text-[8px] text-yellow-300 mt-0.5 font-semibold">✓ Selecionado para este combate</p>}
+                </button>
+              );
+            })}
           </div>
-          {data.leagueInventory.length === 0 && selectedItems.length === 0 && <p className="text-center text-[10px] text-slate-500">Nenhum item disponível para selecionar.</p>}
           <button onClick={saveSelection} disabled={pending} className="w-full rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Salvar itens ({selectedItems.length}/2)</button>
         </div>
       )}
