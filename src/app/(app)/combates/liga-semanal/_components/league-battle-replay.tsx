@@ -38,13 +38,13 @@ function resolveName(name: string, pokemonId?: number) {
   return name;
 }
 
-function buildFighters(turns: TurnLog[]): Fighter[] {
+function buildFighters(turns: TurnLog[], playerAId?: string): Fighter[] {
   const seen = new Map<string, Fighter>();
 
-  // First pass: determine which ownerId is "A" (first actor in turn 1)
-  let ownerA: string | null = null;
-  for (const t of turns) {
-    if (t.actorOwnerId) { ownerA = t.actorOwnerId; break; }
+  // Use the match's playerAId to determine sides, not turn order
+  let ownerA: string | null = playerAId ?? null;
+  if (!ownerA) {
+    for (const t of turns) { if (t.actorOwnerId) { ownerA = t.actorOwnerId; break; } }
   }
 
   function getSide(ownerId?: string | null): "A" | "B" {
@@ -126,11 +126,13 @@ function FighterRow({ f, isActor, isTarget, isAttack }: { f: Fighter; isActor: b
 export function LeagueBattleReplayModal({
   playerAName,
   playerBName,
+  playerAId,
   replay,
   onFinish,
 }: {
   playerAName: string;
   playerBName: string;
+  playerAId?: string;
   replay: TurnLog[];
   onFinish: () => void;
 }) {
@@ -142,9 +144,9 @@ export function LeagueBattleReplayModal({
   useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
-    setFighters(buildFighters(replay));
+    setFighters(buildFighters(replay, playerAId));
     setTurnIdx(-1);
-  }, [replay]);
+  }, [replay, playerAId]);
 
   const baseDelay = 1800;
   const delay = Math.round(baseDelay / speed);

@@ -514,6 +514,7 @@ function ResultsTab({ data }: { data: PageData }) {
         <LeagueBattleReplayModal
           playerAName={replayMatch.playerAName}
           playerBName={replayMatch.playerBName ?? "???"}
+          playerAId={replayMatch.playerAId}
           replay={replayMatch.replayJson as TurnLog[]}
           onFinish={() => setReplayMatch(null)}
         />
