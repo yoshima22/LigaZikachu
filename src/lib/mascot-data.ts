@@ -532,6 +532,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 996, to: 997, level: 35 }, { from: 997, to: 998, level: 54 },
   { from: 999, to: 1000, level: 45 }, // Gimmighoul (Chest) → Gholdengo
   { from: 1011, to: 1019, level: 45 }, // Dipplin → Hydrapple
+  { from: 1012, to: 1013, level: 30 }, // Poltchageist → Sinistcha (Unremarkable/Masterpiece Tea)
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
   { from: 10091, to: 10092, level: 20 }, // Rattata-Alola → Raticate-Alola
   { from: 10101, to: 10102, level: 22 }, // Sandshrew-Alola → Sandslash-Alola (Ice Stone)
