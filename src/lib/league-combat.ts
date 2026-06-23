@@ -257,7 +257,7 @@ export function runLeagueCombat(
   let totalDmgA = 0;
   let totalDmgB = 0;
 
-  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= 50) {
+  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= 100) {
     const aAlive = alive(a, hp);
     const bAlive = alive(b, hp);
     const all = [
