@@ -595,6 +595,33 @@ export async function saveDailyTeamAction(
   }
 }
 
+// ── Clear single team slot ───────────────────────────────────────────────
+
+export async function clearTeamSlotAction(leagueId: string, battleSlot: number) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+  if (battleSlot < 1 || battleSlot > 3) return { error: "Slot inválido" };
+
+  try {
+    const today = getTodayBrt();
+    const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
+      where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
+    });
+    if (resolved) return { error: "Este combate já aconteceu. Não é possível limpar." };
+
+    await prisma.weeklyMascotLeagueDailyTeam.deleteMany({
+      where: { leagueId, playerId: player.id, battleDate: today, battleSlot },
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Swap team slots ──────────────────────────────────────────────────────
 
 export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB: number) {

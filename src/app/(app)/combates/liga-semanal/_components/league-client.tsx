@@ -13,6 +13,7 @@ import {
   seedLeagueItemsAction,
   saveDailyTeamAction,
   swapTeamSlotsAction,
+  clearTeamSlotAction,
   buyLeagueItemAction,
   finalizeLeagueAction,
   selectBattleItemsAction,
@@ -556,6 +557,25 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                 <button onClick={() => startEditing(slot)} className="rounded-lg border border-border bg-slate-800 px-2 py-1 text-[10px] text-slate-300 hover:text-yellow-300 transition-colors">
                   {team ? "Editar" : "Montar"}
                 </button>
+                {team && (
+                  <button
+                    onClick={() => {
+                      if (!confirm(`Limpar Time ${slot}? Os mascotes ficarão livres e o sistema usará auto-preenchimento.`)) return;
+                      startTransition(async () => {
+                        try {
+                          const res = await clearTeamSlotAction(data.currentLeague.id, slot);
+                          if (res && "error" in res) { toast.error(res.error); return; }
+                          toast.success(`Time ${slot} limpo.`);
+                          refresh();
+                        } catch (err) { toast.error(`Erro: ${String(err).slice(0, 100)}`); }
+                      });
+                    }}
+                    disabled={pending}
+                    className="rounded-lg border border-red-500/30 bg-red-500/5 px-2 py-1 text-[10px] text-red-400 hover:bg-red-500/10 disabled:opacity-30 transition-colors"
+                  >
+                    Limpar
+                  </button>
+                )}
               </div>
             </div>
             {team && (
