@@ -65,9 +65,14 @@ export default async function MinhasApostasPage() {
     if (b.weeklyMatch.playerBId) leaguePlayerIds.add(b.weeklyMatch.playerBId);
   }
   const leaguePlayers = leaguePlayerIds.size > 0
-    ? await prisma.player.findMany({ where: { id: { in: [...leaguePlayerIds] } }, select: { id: true, displayName: true } })
+    ? await prisma.player.findMany({ where: { id: { in: [...leaguePlayerIds] } }, select: { id: true, displayName: true, ptcglNick: true, user: { select: { email: true } } } })
     : [];
-  const lpNames = new Map(leaguePlayers.map(p => [p.id, p.displayName]));
+  const lpNames = new Map(leaguePlayers.map(p => {
+    const base = p.displayName;
+    if (p.ptcglNick) return [p.id, `${base} (${p.ptcglNick})`] as const;
+    if (p.user?.email) return [p.id, `${base} (${p.user.email.split("@")[0]})`] as const;
+    return [p.id, base] as const;
+  }));
 
   // Unified list
   type UnifiedBet = {

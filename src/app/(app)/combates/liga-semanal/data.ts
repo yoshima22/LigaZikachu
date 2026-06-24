@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { WEEKLY_MODIFIERS } from "./constants";
 
+function formatPlayerLabel(p: { displayName: string; ptcglNick?: string | null; user?: { email?: string | null } | null }): string {
+  const base = p.displayName;
+  if (p.ptcglNick) return `${base} (${p.ptcglNick})`;
+  if (p.user?.email) return `${base} (${p.user.email.split("@")[0]})`;
+  return base;
+}
+
 function currentWeekKey() {
   const now = new Date();
   const jan1 = new Date(now.getFullYear(), 0, 1);
@@ -64,10 +71,10 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       const playerIds = (participants as Array<{ playerId: string }>).map((entry) => entry.playerId);
       const players = await prisma.player.findMany({
         where: { id: { in: playerIds } },
-        select: { id: true, displayName: true, ptcglNick: true, active: true, user: { select: { role: true, status: true } } },
+        select: { id: true, displayName: true, ptcglNick: true, active: true, user: { select: { role: true, status: true, email: true } } },
       });
       const validPlayerIds = new Set(players.filter(p => p.active && p.user.status === "ACTIVE" && !["ADMIN", "SUPER_ADMIN"].includes(p.user.role)).map(p => p.id));
-      const nameById = new Map(players.map((entry) => [entry.id, entry.displayName || entry.ptcglNick]));
+      const nameById = new Map(players.map((entry) => [entry.id, formatPlayerLabel(entry)]));
       participants = (participants as Array<Record<string, unknown> & { playerId: string }>)
         .filter((entry) => validPlayerIds.has(entry.playerId))
         .map((entry) => ({
@@ -124,8 +131,8 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       // Enrich with player names
       const matchPlayerIds = new Set<string>();
       for (const m of rawMatches as any[]) { matchPlayerIds.add(m.playerAId); if (m.playerBId) matchPlayerIds.add(m.playerBId); }
-      const matchPlayers = await prisma.player.findMany({ where: { id: { in: [...matchPlayerIds] } }, select: { id: true, displayName: true } });
-      const mpNames = new Map(matchPlayers.map(p => [p.id, p.displayName]));
+      const matchPlayers = await prisma.player.findMany({ where: { id: { in: [...matchPlayerIds] } }, select: { id: true, displayName: true, ptcglNick: true, user: { select: { email: true } } } });
+      const mpNames = new Map(matchPlayers.map(p => [p.id, formatPlayerLabel(p)]));
       todayMatches = (rawMatches as any[]).map(m => ({
         ...m,
         playerAName: mpNames.get(m.playerAId) ?? "Jogador",

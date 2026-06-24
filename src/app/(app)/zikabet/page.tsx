@@ -98,9 +98,14 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
   }).catch(() => []);
   const weeklyPlayerIds = Array.from(new Set(weeklyLeagueMatches.flatMap((m) => [m.playerAId, m.playerBId].filter(Boolean) as string[])));
   const weeklyPlayers = weeklyPlayerIds.length
-    ? await prisma.player.findMany({ where: { id: { in: weeklyPlayerIds } }, select: { id: true, displayName: true } })
+    ? await prisma.player.findMany({ where: { id: { in: weeklyPlayerIds } }, select: { id: true, displayName: true, ptcglNick: true, user: { select: { email: true } } } })
     : [];
-  const weeklyPlayerNames = new Map(weeklyPlayers.map((entry) => [entry.id, entry.displayName]));
+  const weeklyPlayerNames = new Map(weeklyPlayers.map((entry) => {
+    const base = entry.displayName;
+    if (entry.ptcglNick) return [entry.id, `${base} (${entry.ptcglNick})`] as const;
+    if (entry.user?.email) return [entry.id, `${base} (${entry.user.email.split("@")[0]})`] as const;
+    return [entry.id, base] as const;
+  }));
 
   const myStats = player
     ? await prisma.zikaBet.groupBy({
