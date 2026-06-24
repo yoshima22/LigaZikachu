@@ -595,6 +595,75 @@ export async function saveDailyTeamAction(
   }
 }
 
+// ── Swap team slots ──────────────────────────────────────────────────────
+
+export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB: number) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+
+  if (slotA === slotB || slotA < 1 || slotA > 3 || slotB < 1 || slotB > 3) return { error: "Slots inválidos" };
+
+  try {
+    const today = getTodayBrt();
+
+    // Check no resolved matches for these slots
+    const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
+      where: { leagueId, battleDate: today, battleSlot: { in: [slotA, slotB] }, status: { in: ["RESOLVED", "WO"] } },
+    });
+    if (resolved) return { error: "Um dos combates já aconteceu. Não é possível trocar." };
+
+    // Load both teams (today or inherited)
+    async function getTeam(slot: number) {
+      let team = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slot } },
+      });
+      if (!team) {
+        team = await prisma.weeklyMascotLeagueDailyTeam.findFirst({
+          where: { leagueId, playerId: player!.id, battleSlot: slot },
+          orderBy: { battleDate: "desc" },
+        });
+      }
+      return team;
+    }
+
+    const teamA = await getTeam(slotA);
+    const teamB = await getTeam(slotB);
+
+    if (!teamA && !teamB) return { error: "Nenhum dos dois slots tem time." };
+
+    await prisma.$transaction(async (tx) => {
+      // Upsert slot A with team B's data (or clear if B is empty)
+      if (teamB) {
+        await tx.weeklyMascotLeagueDailyTeam.upsert({
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotA } },
+          create: { id: createId(), leagueId, playerId: player!.id, battleDate: today, battleSlot: slotA, mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
+          update: { mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, updatedAt: new Date() },
+        });
+      } else {
+        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotA } });
+      }
+
+      // Upsert slot B with team A's data (or clear if A is empty)
+      if (teamA) {
+        await tx.weeklyMascotLeagueDailyTeam.upsert({
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotB } },
+          create: { id: createId(), leagueId, playerId: player!.id, battleDate: today, battleSlot: slotB, mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
+          update: { mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, updatedAt: new Date() },
+        });
+      } else {
+        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotB } });
+      }
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao trocar: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Set modifier ──────────────────────────────────────────────────────────
 
 export async function setModifierAction(leagueId: string, modifierId: string) {

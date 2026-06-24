@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
@@ -12,6 +12,7 @@ import {
   simulateRoundAction,
   seedLeagueItemsAction,
   saveDailyTeamAction,
+  swapTeamSlotsAction,
   buyLeagueItemAction,
   finalizeLeagueAction,
   selectBattleItemsAction,
@@ -536,12 +537,14 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     <div className="space-y-4">
       <p className="text-sm text-slate-400">Monte até 3 times por dia (6 mascotes cada, sem repetição entre times).</p>
 
-      {[1, 2, 3].map(slot => {
+      {[1, 2, 3].map((slot, idx) => {
+        const nextSlot = slot < 3 ? slot + 1 : null;
         const team = data.myTeams.find((t: any) => t.battleSlot === slot);
         const mascotIds = team ? (team.mascotIdsJson as string[] ?? []) : [];
         const teamRoles = team?.rolesJson as Record<string, string> | undefined;
         return (
-          <div key={slot} className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
+          <React.Fragment key={slot}>
+          <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>
               <div className="flex items-center gap-2">
@@ -579,7 +582,28 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
               </div>
             )}
             {!team && <p className="text-[10px] text-slate-500">Clique "Montar" para selecionar mascotes. Sem time, o sistema usará auto-preenchimento.</p>}
-          </div>
+          </div> {/* end team card */}
+          {nextSlot && (
+            <div className="flex justify-center -my-1">
+              <button
+                onClick={() => {
+                  startTransition(async () => {
+                    try {
+                      const res = await swapTeamSlotsAction(data.currentLeague.id, slot, nextSlot);
+                      if (res && "error" in res) { toast.error(res.error); return; }
+                      toast.success(`Time ${slot} ↔ Time ${nextSlot} trocados!`);
+                      refresh();
+                    } catch (err) { toast.error(`Erro: ${String(err).slice(0, 100)}`); }
+                  });
+                }}
+                disabled={pending}
+                className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[10px] text-slate-400 hover:text-yellow-300 hover:border-yellow-500/30 disabled:opacity-30 transition-colors"
+              >
+                ↕ Trocar Time {slot} ↔ {nextSlot}
+              </button>
+            </div>
+          )}
+          </React.Fragment>
         );
       })}
 
