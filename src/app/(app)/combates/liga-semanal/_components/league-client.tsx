@@ -542,6 +542,8 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         const nextSlot = slot < 3 ? slot + 1 : null;
         const team = data.myTeams.find((t: any) => t.battleSlot === slot);
         const mascotIds = team ? (team.mascotIdsJson as string[] ?? []) : [];
+        const isCleared = team?.source === "CLEARED" || (team && mascotIds.length === 0);
+        const hasTeam = team && mascotIds.length > 0;
         const teamRoles = team?.rolesJson as Record<string, string> | undefined;
         return (
           <React.Fragment key={slot}>
@@ -549,15 +551,17 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>
               <div className="flex items-center gap-2">
-                {team ? (
+                {isCleared ? (
+                  <span className="text-[10px] text-slate-500">🗑 Limpo</span>
+                ) : hasTeam ? (
                   team.inherited
                     ? <span className="text-[10px] text-cyan-400">↩ Herdado</span>
                     : <span className="text-[10px] text-green-400">✓ Montado</span>
                 ) : <span className="text-[10px] text-orange-400">Não montado</span>}
                 <button onClick={() => startEditing(slot)} className="rounded-lg border border-border bg-slate-800 px-2 py-1 text-[10px] text-slate-300 hover:text-yellow-300 transition-colors">
-                  {team ? "Editar" : "Montar"}
+                  {hasTeam ? "Editar" : "Montar"}
                 </button>
-                {team && (
+                {hasTeam && (
                   <button
                     onClick={() => {
                       if (!confirm(`Limpar Time ${slot}? Os mascotes ficarão livres e o sistema usará auto-preenchimento.`)) return;
@@ -578,7 +582,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                 )}
               </div>
             </div>
-            {team && (
+            {hasTeam && (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                 {mascotIds.map((id: string, i: number) => {
                   const m = data.availableMascots.find((x: any) => x.id === id) as any;
@@ -601,7 +605,8 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                 })}
               </div>
             )}
-            {!team && <p className="text-[10px] text-slate-500">Clique "Montar" para selecionar mascotes. Sem time, o sistema usará auto-preenchimento.</p>}
+            {isCleared && <p className="text-[10px] text-slate-500">Time limpo. O sistema usará auto-preenchimento no horário do combate, ou monte um novo time.</p>}
+            {!hasTeam && !isCleared && <p className="text-[10px] text-slate-500">Clique "Montar" para selecionar mascotes. Sem time, o sistema usará auto-preenchimento.</p>}
           </div> {/* end team card */}
           {nextSlot && (
             <div className="flex justify-center -my-1">

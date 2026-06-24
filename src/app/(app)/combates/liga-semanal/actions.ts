@@ -611,8 +611,11 @@ export async function clearTeamSlotAction(leagueId: string, battleSlot: number) 
     });
     if (resolved) return { error: "Este combate já aconteceu. Não é possível limpar." };
 
-    await prisma.weeklyMascotLeagueDailyTeam.deleteMany({
-      where: { leagueId, playerId: player.id, battleDate: today, battleSlot },
+    // Save empty array to mark as intentionally cleared (prevents inheritance)
+    await prisma.weeklyMascotLeagueDailyTeam.upsert({
+      where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate: today, battleSlot } },
+      create: { id: createId(), leagueId, playerId: player.id, battleDate: today, battleSlot, source: "CLEARED", mascotIdsJson: [], rolesJson: {}, updatedAt: new Date() },
+      update: { mascotIdsJson: [], rolesJson: {}, source: "CLEARED", updatedAt: new Date() },
     });
 
     revalidatePath(PATH);
