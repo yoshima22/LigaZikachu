@@ -80,15 +80,33 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
 
   const PADDING = 8;
   const hasTarget = targetRect && step?.position !== "center";
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
   // Card position calculation
   let cardStyle: React.CSSProperties = {};
+  let spotlightRect: { x: number; y: number; width: number; height: number } | null = null;
   if (hasTarget && targetRect) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const isMobile = vw < 640;
     const cardW = isMobile ? Math.max(280, vw - 32) : 320;
-    const cardH = isMobile ? 190 : 160;
+    const cardH = isMobile ? 220 : 190;
+    const gap = PADDING + 8;
+
+    const rawSpotlight = {
+      x: targetRect.left - PADDING,
+      y: targetRect.top - PADDING,
+      width: targetRect.width + PADDING * 2,
+      height: targetRect.height + PADDING * 2,
+    };
+    spotlightRect = {
+      x: clamp(rawSpotlight.x, 8, Math.max(8, vw - 16)),
+      y: clamp(rawSpotlight.y, 8, Math.max(8, vh - 16)),
+      width: Math.min(rawSpotlight.width, vw - 16),
+      height: Math.min(rawSpotlight.height, vh - 16),
+    };
+    spotlightRect.width = Math.max(24, Math.min(spotlightRect.width, vw - spotlightRect.x - 8));
+    spotlightRect.height = Math.max(24, Math.min(spotlightRect.height, vh - spotlightRect.y - 8));
 
     if (isMobile) {
       cardStyle = {
@@ -99,31 +117,39 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
         width: "auto"
       };
     } else if (step.position === "bottom" || !step.position) {
+      const preferredTop = targetRect.bottom + gap;
+      const fallbackTop = targetRect.top - cardH - gap;
       cardStyle = {
         position: "fixed",
-        top: Math.min(targetRect.bottom + PADDING + 8, vh - cardH - 16),
-        left: Math.min(Math.max(targetRect.left, 16), vw - cardW - 16),
+        top: clamp(preferredTop <= vh - cardH - 16 ? preferredTop : fallbackTop, 16, vh - cardH - 16),
+        left: clamp(targetRect.left, 16, vw - cardW - 16),
         width: cardW
       };
     } else if (step.position === "top") {
+      const preferredTop = targetRect.top - cardH - gap;
+      const fallbackTop = targetRect.bottom + gap;
       cardStyle = {
         position: "fixed",
-        top: Math.max(targetRect.top - cardH - PADDING - 8, 16),
-        left: Math.min(Math.max(targetRect.left, 16), vw - cardW - 16),
+        top: clamp(preferredTop >= 16 ? preferredTop : fallbackTop, 16, vh - cardH - 16),
+        left: clamp(targetRect.left, 16, vw - cardW - 16),
         width: cardW
       };
     } else if (step.position === "right") {
+      const preferredLeft = targetRect.right + gap;
+      const fallbackLeft = targetRect.left - cardW - gap;
       cardStyle = {
         position: "fixed",
-        top: Math.min(Math.max(targetRect.top, 16), vh - cardH - 16),
-        left: Math.min(targetRect.right + PADDING + 8, vw - cardW - 16),
+        top: clamp(targetRect.top, 16, vh - cardH - 16),
+        left: clamp(preferredLeft <= vw - cardW - 16 ? preferredLeft : fallbackLeft, 16, vw - cardW - 16),
         width: cardW
       };
     } else if (step.position === "left") {
+      const preferredLeft = targetRect.left - cardW - gap;
+      const fallbackLeft = targetRect.right + gap;
       cardStyle = {
         position: "fixed",
-        top: Math.min(Math.max(targetRect.top, 16), vh - cardH - 16),
-        left: Math.max(targetRect.left - cardW - PADDING - 8, 16),
+        top: clamp(targetRect.top, 16, vh - cardH - 16),
+        left: clamp(preferredLeft >= 16 ? preferredLeft : fallbackLeft, 16, vw - cardW - 16),
         width: cardW
       };
     }
@@ -147,7 +173,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
   return (
     <div className="fixed inset-0 z-[9999]" style={{ pointerEvents: "auto" }} onClick={handleBackdropClick}>
       {/* Overlay */}
-      {hasTarget && targetRect ? (
+      {hasTarget && spotlightRect ? (
         // Spotlight overlay using SVG clip path
         <svg
           className="fixed inset-0 w-full h-full"
@@ -157,10 +183,10 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
             <mask id="tutorial-mask">
               <rect width="100%" height="100%" fill="white" />
               <rect
-                x={targetRect.left - PADDING}
-                y={targetRect.top - PADDING}
-                width={targetRect.width + PADDING * 2}
-                height={targetRect.height + PADDING * 2}
+                x={spotlightRect.x}
+                y={spotlightRect.y}
+                width={spotlightRect.width}
+                height={spotlightRect.height}
                 rx="8"
                 fill="black"
               />
@@ -174,10 +200,10 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
           />
           {/* Highlight border around target */}
           <rect
-            x={targetRect.left - PADDING}
-            y={targetRect.top - PADDING}
-            width={targetRect.width + PADDING * 2}
-            height={targetRect.height + PADDING * 2}
+            x={spotlightRect.x}
+            y={spotlightRect.y}
+            width={spotlightRect.width}
+            height={spotlightRect.height}
             rx="8"
             fill="none"
             stroke="#FFCB05"

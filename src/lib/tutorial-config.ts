@@ -205,7 +205,7 @@ export const TUTORIALS: Record<string, PageTutorial> = {
     steps: [
       {
         title: "Bazar",
-        description: "Aqui os jogadores anunciam itens, mascotes e ofertas para troca. Confira o que esta em escrow antes de propor ou aceitar uma troca.",
+        description: "Aqui os jogadores anunciam itens, mascotes e ofertas para troca. Confira o que ficara reservado antes de propor ou aceitar uma troca.",
         target: "[data-tutorial='page-content']",
         position: "top"
       },
