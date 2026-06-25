@@ -1021,6 +1021,9 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
   10163: 10166, // Farfetch'd-Galar
   10164: 10167, // Weezing-Galar
   10165: 10168, // Mr. Mime-Galar
+  10166: 10169, // Articuno-Galar
+  10167: 10170, // Zapdos-Galar
+  10168: 10171, // Moltres-Galar
   10169: 10172, // Slowking-Galar
   10170: 10173, // Corsola-Galar
   10171: 10174, // Zigzagoon-Galar
