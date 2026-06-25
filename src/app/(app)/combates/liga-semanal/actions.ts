@@ -9,6 +9,7 @@ import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, ZikaCoinTxType } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
+import { creditCoins } from "@/lib/zikacoins";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -711,9 +712,36 @@ export async function toggleLeagueBetsAction(leagueId: string, enabled: boolean)
       data: { modifierJson: { ...current, betsEnabled: enabled }, updatedAt: new Date() },
     });
 
+    // When disabling: refund ALL open league bets and delete them
+    if (!enabled) {
+      const openBets = await prisma.weeklyMascotLeagueBet.findMany({
+        where: {
+          weeklyMatch: { leagueId },
+          status: { in: ["OPEN", "CLOSED"] },
+        },
+      });
+      if (openBets.length > 0) {
+        await prisma.$transaction(async (tx) => {
+          for (const bet of openBets) {
+            await creditCoins(tx, {
+              playerId: bet.playerId,
+              type: ZikaCoinTxType.BET_REFUNDED,
+              amount: bet.amount,
+              description: "Reembolso: apostas da Liga Semanal desabilitadas pelo admin",
+            });
+          }
+          await tx.weeklyMascotLeagueBet.deleteMany({
+            where: { id: { in: openBets.map(b => b.id) } },
+          });
+        });
+      }
+    }
+
     revalidatePath(PATH);
     revalidatePath("/zikabet");
-    return { success: true, enabled };
+    revalidatePath("/zikabet/minhas-apostas");
+    revalidatePath("/carteira");
+    return { success: true, enabled, refunded: enabled ? 0 : undefined };
   } catch (err) {
     return { error: `Erro: ${String(err).slice(0, 200)}` };
   }

@@ -1205,7 +1205,7 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   try {
                     const res = await toggleLeagueBetsAction(data.currentLeague.id, !betsOn);
                     if (res && "error" in res) { toast.error(res.error); return; }
-                    toast.success(betsOn ? "Apostas desabilitadas." : "Apostas habilitadas!");
+                    toast.success(betsOn ? "Apostas desabilitadas. Todas as apostas abertas foram reembolsadas." : "Apostas habilitadas!");
                     refresh();
                   } catch (err) { toast.error(`Erro: ${String(err).slice(0, 100)}`); }
                 });
