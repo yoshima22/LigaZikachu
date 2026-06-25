@@ -18,6 +18,7 @@ import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export function rollLabEggChoice(): number {
 }
 
 export function rollPokemonFromEgg(eggType: string): number {
+  return rollPokemonIdFromEgg(eggType);
   // Pool aleatório (COMMON sem gen específica) = todas as 9 gerações
   const pool = eggType === "COMMON" || eggType === "EVENT"
     ? (EGG_POOLS.RANDOM.length > 0 ? EGG_POOLS.RANDOM : EGG_POOLS.COMMON)

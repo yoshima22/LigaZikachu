@@ -66,7 +66,7 @@ export const EGG_POOLS: Record<string, number[]> = {
     296, 298, 300, 302, 304, 307, 309, 311, 312, 315, 316, 318, 320,
     322, 325, 327, 328, 331, 333, 335, 336, 337, 338, 339, 341, 343,
     345, 347, 349, 351, 352, 353, 355, 357, 358, 359, 361, 363, 366,
-    369, 370, 371, 374, 387, // Bagon, Beldum
+    369, 370, 371, 374, // Bagon, Beldum
   ],
 
   // Gen 4 (Sinnoh) — formas iniciais selecionadas
@@ -240,7 +240,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 50,  to: 51,  level: 26 },
   { from: 52,  to: 53,  level: 28 },
   { from: 54,  to: 55,  level: 33 },
-  { from: 56,  to: 57,  level: 28 },
+  { from: 56,  to: 57,  level: 28 }, { from: 57, to: 979, level: 42 }, // Primeape -> Annihilape
   { from: 58,  to: 59,  level: 36 },
   { from: 60,  to: 61,  level: 25 }, { from: 61,  to: 62,  level: 36 },
   { from: 63,  to: 64,  level: 16 }, { from: 64,  to: 65,  level: 36 },
@@ -401,7 +401,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 610, to: 611, level: 38 }, { from: 611, to: 612, level: 48 },
   { from: 613, to: 614, level: 37 },
   { from: 619, to: 620, level: 50 },
-  { from: 624, to: 625, level: 52 },
+  { from: 624, to: 625, level: 52 }, { from: 625, to: 983, level: 52 }, // Bisharp -> Kingambit
   { from: 633, to: 634, level: 50 }, { from: 634, to: 635, level: 64 },
   { from: 636, to: 637, level: 59 },
   // Gen 6
@@ -604,7 +604,6 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   10152, // Lycanroc-Midnight (Rockruff → toOptions, `to` é Lycanroc-Midday 745)
   10155, // Lycanroc-Dusk (Rockruff → toOptions)
   // Gen 9 — evoluções não mapeadas
-  983,  // Annihilape (Primeape + Rage Fist)
   10013, // Sinistcha Masterpiece (Poltchageist → toOptions)
   10184, // Toxtricity Low Key (Toxel → toOptions)
   // Formas Alolan — finais sem base própria ou pré-evolução externa
@@ -2043,7 +2042,7 @@ for (const pokemonId of EXTRA_LEGENDARY_AND_MYTHICAL_IDS) {
   if (!LEGENDARY_POOL.includes(pokemonId)) LEGENDARY_POOL.push(pokemonId);
 }
 
-const uniquePokemonIds = (ids: number[]) => Array.from(new Set(ids)).filter((id) => id >= 1 && id <= 1025);
+const uniquePokemonIds = (ids: number[]) => Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id >= 1);
 
 const ALL_STANDARD_POKEMON_IDS = uniquePokemonIds(
   Array.from({ length: 1025 }, (_, index) => index + 1)
@@ -2082,12 +2081,35 @@ const SPECIAL_COVETED_IDS = [
 const isBaseForm = (id: number) =>
   !LEGENDARY_POOL.includes(id) && !ALL_EVOLVED_IDS.has(id);
 
+const addMissingBaseFormsToGenerationPools = () => {
+  const generationRanges: Record<string, [number, number]> = {
+    EGG_GEN1: [1, 151],
+    EGG_GEN2: [152, 251],
+    EGG_GEN3: [252, 386],
+    EGG_GEN4: [387, 493],
+    EGG_GEN5: [494, 649],
+    EGG_GEN6: [650, 721],
+    EGG_GEN7: [722, 809],
+    EGG_GEN8: [810, 905],
+    EGG_GEN9: [906, 1025],
+  };
+
+  for (const [key, [start, end]] of Object.entries(generationRanges)) {
+    const existing = EGG_POOLS[key] ?? [];
+    const baseForms = Array.from({ length: end - start + 1 }, (_, index) => start + index)
+      .filter(isBaseForm);
+    EGG_POOLS[key] = uniquePokemonIds([...existing, ...baseForms]).filter(isBaseForm);
+  }
+};
+
 // COMMON e RANDOM: apenas formas base das gerações curadas (não usa ALL_STANDARD 1-1025)
 // A listagem manual nos pools EGG_GEN1-9 garante controle sobre o que entra
 EGG_POOLS.RARE = uniquePokemonIds([...ALL_STARTER_IDS, ...RARE_FAN_FAVORITES])
   .filter(isBaseForm);
 EGG_POOLS.SPECIAL = uniquePokemonIds([...SPECIAL_COVETED_IDS, ...RARE_FAN_FAVORITES])
   .filter(isBaseForm);
+
+addMissingBaseFormsToGenerationPools();
 
 // Reaplica filtro completo em TODOS os pools de geração
 for (const key of Object.keys(EGG_POOLS)) {
@@ -2103,6 +2125,10 @@ EGG_POOLS.RANDOM = [
   ...EGG_POOLS.EGG_GEN6, ...EGG_POOLS.EGG_GEN7, ...EGG_POOLS.EGG_GEN8, ...EGG_POOLS.EGG_GEN9,
   ...EGG_POOLS.EGG_ALOLA, ...EGG_POOLS.EGG_GALAR, ...EGG_POOLS.EGG_HISUI,
 ];
+EGG_POOLS.RANDOM = uniquePokemonIds(EGG_POOLS.RANDOM).filter(isBaseForm);
+
+// Ovo comum sem geração específica deve representar o pool aleatório completo.
+EGG_POOLS.COMMON = uniquePokemonIds(EGG_POOLS.RANDOM).filter(isBaseForm);
 
 export const WISHLIST_POKEMON_IDS = Array.from({ length: 1025 }, (_, index) => index + 1);
 

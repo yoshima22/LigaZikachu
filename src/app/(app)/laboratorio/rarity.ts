@@ -1,3 +1,5 @@
+import { LEGENDARY_POOL } from "@/lib/mascot-data";
+
 const SPECIAL_IDS = new Set([
   129, 131, 132, 133, 137, 138, 140, 143, 147, 215, 227, 233, 236, 241,
   246, 280, 302, 303, 349, 352, 359, 371, 374, 408, 410, 425, 442, 443,
@@ -25,6 +27,7 @@ const RARE_IDS = new Set([
 export type MascotRarity = "COMMON" | "RARE" | "SPECIAL";
 
 export function getMascotRarity(pokemonId: number): MascotRarity {
+  if (LEGENDARY_POOL.includes(pokemonId)) return "SPECIAL";
   if (SPECIAL_IDS.has(pokemonId)) return "SPECIAL";
   if (RARE_IDS.has(pokemonId)) return "RARE";
   return "COMMON";
