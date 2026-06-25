@@ -234,7 +234,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 37,  to: 38,  level: 36 },
   { from: 39,  to: 40,  level: 36 },
   { from: 41,  to: 42,  level: 22 },
-  { from: 43,  to: 44,  level: 21 }, { from: 44,  to: 45,  level: 36 },
+  { from: 43,  to: 44,  level: 21 }, { from: 44,  to: 45,  toOptions: [45, 182], level: 36 },
   { from: 46,  to: 47,  level: 24 },
   { from: 48,  to: 49,  level: 31 },
   { from: 50,  to: 51,  level: 26 },
@@ -242,14 +242,14 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 54,  to: 55,  level: 33 },
   { from: 56,  to: 57,  level: 28 }, { from: 57, to: 979, level: 42 }, // Primeape -> Annihilape
   { from: 58,  to: 59,  level: 36 },
-  { from: 60,  to: 61,  level: 25 }, { from: 61,  to: 62,  level: 36 },
+  { from: 60,  to: 61,  level: 25 }, { from: 61,  to: 62,  toOptions: [62, 186], level: 36 },
   { from: 63,  to: 64,  level: 16 }, { from: 64,  to: 65,  level: 36 },
   { from: 66,  to: 67,  level: 28 }, { from: 67,  to: 68,  level: 36 },
   { from: 69,  to: 70,  level: 21 }, { from: 70,  to: 71,  level: 36 },
   { from: 72,  to: 73,  level: 30 },
   { from: 74,  to: 75,  level: 25 }, { from: 75,  to: 76,  level: 36 },
   { from: 77,  to: 78,  level: 40 },
-  { from: 79,  to: 80,  level: 37 },
+  { from: 79,  to: 80,  toOptions: [80, 199], level: 37 },
   { from: 81,  to: 82,  level: 30 },
   { from: 84,  to: 85,  level: 31 },
   { from: 86,  to: 87,  level: 34 },
@@ -309,12 +309,13 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 258, to: 259, level: 16 }, { from: 259, to: 260, level: 36 },
   { from: 261, to: 262, level: 18 },
   { from: 263, to: 264, level: 20 },
-  { from: 265, to: 266, level: 7  }, { from: 266, to: 267, level: 10 },
+  { from: 265, to: 266, toOptions: [266, 268], level: 7  }, { from: 266, to: 267, level: 10 },
+  { from: 268, to: 269, level: 10 },
   { from: 270, to: 271, level: 14 }, { from: 271, to: 272, level: 30 },
   { from: 273, to: 274, level: 14 }, { from: 274, to: 275, level: 30 },
   { from: 276, to: 277, level: 22 },
   { from: 278, to: 279, level: 25 },
-  { from: 280, to: 281, level: 20 }, { from: 281, to: 282, level: 30 },
+  { from: 280, to: 281, level: 20 }, { from: 281, to: 282, toOptions: [282, 475], level: 30 },
   { from: 285, to: 286, level: 23 },
   { from: 287, to: 288, level: 18 }, { from: 288, to: 289, level: 36 },
   { from: 293, to: 294, level: 20 }, { from: 294, to: 295, level: 40 },
@@ -339,7 +340,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 349, to: 350, level: 30 }, // Feebas → Milotic (Prism Scale/beleza)
   { from: 353, to: 354, level: 37 },
   { from: 355, to: 356, level: 37 },
-  { from: 361, to: 362, level: 42 },
+  { from: 361, to: 362, toOptions: [362, 478], level: 42 },
   { from: 363, to: 364, level: 32 }, { from: 364, to: 365, level: 44 },
   { from: 371, to: 372, level: 30 }, { from: 372, to: 373, level: 50 },
   { from: 374, to: 375, level: 20 }, { from: 375, to: 376, level: 45 },
@@ -499,7 +500,7 @@ export const EVOLUTIONS: Evolution[] = [
   // Gen 6 — pedra/item
   { from: 680, to: 681, level: 40 }, // Doublade → Aegislash (Dawn Stone)
   { from: 714, to: 715, level: 48 }, // Noibat → Noivern (level)
-  { from: 840, to: 841, level: 30 }, // Applin → Flapple (Tart Apple)
+  { from: 840, to: 841, toOptions: [841, 842, 1011], level: 30 }, // Applin → Flapple/Appletun/Dipplin
   // Gen 7 — item
   { from: 868, to: 869, level: 30 }, // Milcery → Alcremie (Sweet item)
   // Gen 9
@@ -535,6 +536,63 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 999, to: 1000, level: 45 }, // Gimmighoul (Chest) → Gholdengo
   { from: 1011, to: 1019, level: 45 }, // Dipplin → Hydrapple
   { from: 1012, to: 1013, toOptions: [1013, 10013], level: 30 }, // Poltchageist → Sinistcha Unremarkable/Masterpiece
+  // Linhas complementares auditadas contra a PokéAPI. Métodos especiais foram
+  // simplificados para nível para manter consistência com o sistema de mascotes.
+  { from: 42, to: 169, level: 35 }, // Golbat -> Crobat
+  { from: 113, to: 242, level: 45 }, // Chansey -> Blissey
+  { from: 123, to: 212, toOptions: [212, 900], level: 38 }, // Scyther -> Scizor/Kleavor
+  { from: 177, to: 178, level: 25 }, // Natu -> Xatu
+  { from: 179, to: 180, level: 15 }, { from: 180, to: 181, level: 30 }, // Mareep line
+  { from: 236, to: 106, toOptions: [106, 107, 237], level: 30 }, // Tyrogue -> Hitmons
+  { from: 298, to: 183, level: 18 }, // Azurill -> Marill
+  { from: 360, to: 202, level: 18 }, // Wynaut -> Wobbuffet
+  { from: 203, to: 981, level: 40 }, // Girafarig -> Farigiraf
+  { from: 206, to: 982, level: 40 }, // Dunsparce -> Dudunsparce
+  { from: 234, to: 899, level: 40 }, // Stantler -> Wyrdeer
+  { from: 283, to: 284, level: 22 }, // Surskit -> Masquerain
+  { from: 290, to: 291, toOptions: [291, 292], level: 20 }, // Nincada -> Ninjask/Shedinja
+  { from: 366, to: 367, toOptions: [367, 368], level: 30 }, // Clamperl -> Huntail/Gorebyss
+  { from: 401, to: 402, level: 20 }, // Kricketot -> Kricketune
+  { from: 412, to: 413, toOptions: [413, 414], level: 20 }, // Burmy -> Wormadam/Mothim
+  { from: 415, to: 416, level: 21 }, // Combee -> Vespiquen
+  { from: 422, to: 423, level: 30 }, // Shellos -> Gastrodon
+  { from: 511, to: 512, level: 30 }, // Pansage -> Simisage
+  { from: 513, to: 514, level: 30 }, // Pansear -> Simisear
+  { from: 515, to: 516, level: 30 }, // Panpour -> Simipour
+  { from: 517, to: 518, level: 30 }, // Munna -> Musharna
+  { from: 527, to: 528, level: 25 }, // Woobat -> Swoobat
+  { from: 540, to: 541, level: 20 }, { from: 541, to: 542, level: 32 }, // Sewaddle line
+  { from: 546, to: 547, level: 30 }, // Cottonee -> Whimsicott
+  { from: 548, to: 549, level: 30 }, // Petilil -> Lilligant
+  { from: 557, to: 558, level: 34 }, // Dwebble -> Crustle
+  { from: 562, to: 563, level: 34 }, // Yamask -> Cofagrigus
+  { from: 564, to: 565, level: 37 }, // Tirtouga -> Carracosta
+  { from: 566, to: 567, level: 37 }, // Archen -> Archeops
+  { from: 568, to: 569, level: 36 }, // Trubbish -> Garbodor
+  { from: 572, to: 573, level: 30 }, // Minccino -> Cinccino
+  { from: 580, to: 581, level: 35 }, // Ducklett -> Swanna
+  { from: 582, to: 583, level: 35 }, { from: 583, to: 584, level: 47 }, // Vanillite line
+  { from: 585, to: 586, level: 34 }, // Deerling -> Sawsbuck
+  { from: 588, to: 589, level: 35 }, // Karrablast -> Escavalier
+  { from: 592, to: 593, level: 40 }, // Frillish -> Jellicent
+  { from: 597, to: 598, level: 40 }, // Ferroseed -> Ferrothorn
+  { from: 602, to: 603, level: 39 }, { from: 603, to: 604, level: 50 }, // Tynamo line
+  { from: 605, to: 606, level: 42 }, // Elgyem -> Beheeyem
+  { from: 616, to: 617, level: 35 }, // Shelmet -> Accelgor
+  { from: 622, to: 623, level: 43 }, // Golett -> Golurk
+  { from: 627, to: 628, level: 45 }, // Rufflet -> Braviary
+  { from: 629, to: 630, level: 45 }, // Vullaby -> Mandibuzz
+  { from: 659, to: 660, level: 20 }, // Bunnelby -> Diggersby
+  { from: 664, to: 665, level: 9 }, { from: 665, to: 666, level: 12 }, // Scatterbug line
+  { from: 669, to: 670, level: 19 }, { from: 670, to: 671, level: 35 }, // Flabebe line
+  { from: 710, to: 711, level: 32 }, // Pumpkaboo -> Gourgeist
+  { from: 739, to: 740, level: 35 }, // Crabrawler -> Crabominable
+  { from: 767, to: 768, level: 30 }, // Wimpod -> Golisopod
+  { from: 803, to: 804, level: 40 }, // Poipole -> Naganadel
+  { from: 772, to: 773, level: 40 }, // Type: Null -> Silvally
+  { from: 831, to: 832, level: 24 }, // Wooloo -> Dubwool
+  { from: 854, to: 855, level: 30 }, // Sinistea -> Polteageist
+  { from: 884, to: 1018, level: 45 }, // Duraludon -> Archaludon
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
   { from: 10091, to: 10092, level: 20 }, // Rattata-Alola → Raticate-Alola
   { from: 10101, to: 10102, level: 22 }, // Sandshrew-Alola → Sandslash-Alola (Ice Stone)
@@ -579,7 +637,9 @@ for (const evolution of EVOLUTIONS) {
 }
 
 // IDs de formas evoluídas via level-up (mapeadas em EVOLUTIONS)
-export const EVOLVED_IDS = new Set(EVOLUTIONS.map(e => e.to));
+export const EVOLVED_IDS = new Set(
+  EVOLUTIONS.flatMap(e => e.toOptions?.length ? e.toOptions : [e.to])
+);
 
 // Formas evoluídas por pedra/troca/amizade/regional NÃO mapeadas em EVOLUTIONS
 // Nunca devem aparecer em ovos, mas não têm level-up no sistema do jogo
@@ -599,6 +659,11 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   865,  // Sirfetch'd (Farfetch'd-Galar + moveset)
   866,  // Mr. Rime (Mr. Mime-Galar + level)
   867,  // Runerigus (Yamask-Galar + local)
+  // Evoluções regionais/especiais mantidas fora dos ovos sem forçar a linha base
+  902,  // Basculegion (Basculin-White-Striped)
+  980,  // Clodsire (Wooper-Paldea)
+  // Phione não evolui para Manaphy nos jogos principais, apesar da cadeia da PokéAPI
+  490,
   // Ramificações não mapeadas via `to` (apenas em `toOptions`)
   792,  // Lunala (Cosmoem → toOptions, `to` é Solgaleo 791)
   10152, // Lycanroc-Midnight (Rockruff → toOptions, `to` é Lycanroc-Midday 745)
@@ -1386,7 +1451,8 @@ const POKEMON_GEN8_NAMES: Record<number, string> = {
   891:"Kubfu",892:"Urshifu",893:"Zarude",
   894:"Regieleki",895:"Regidrago",
   896:"Glastrier",897:"Spectrier",898:"Calyrex",
-  901:"Ursaluna",
+  899:"Wyrdeer",900:"Kleavor",901:"Ursaluna",
+  902:"Basculegion",903:"Sneasler",904:"Overqwil",
 };
 
 // Gen 9 (Paldea)
@@ -1806,8 +1872,9 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   // Gen 8 legendaries
   888:"fairy/steel",889:"dark/steel",890:"poison/dragon",
   891:"fighting",892:"fighting/dark",893:"grass/dark",  // 892 = Urshifu Single Strike
-  894:"electric",895:"ice",896:"ice",897:"ghost",898:"psychic",
-  901:"ground/normal",
+  894:"electric",895:"dragon",896:"ice",897:"ghost",898:"psychic/grass",
+  899:"normal/psychic",900:"bug/rock",901:"ground/normal",
+  902:"water/ghost",903:"fighting/poison",904:"dark/poison",
   // ── Gen 9 ──────────────────────────────────────────────────────────────────
   906:"grass",907:"grass",908:"grass/dark",
   909:"fire",910:"fire",911:"fire/ghost",
