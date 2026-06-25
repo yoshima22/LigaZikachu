@@ -92,7 +92,7 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
       playerAId: true,
       playerBId: true,
       bets: player ? { where: { playerId: player.id, status: { notIn: ["CANCELLED", "REFUNDED"] } } } : false,
-      league: { select: { weekKey: true, status: true } },
+      league: { select: { weekKey: true, status: true, modifierJson: true } },
     },
     orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
     take: 30,
@@ -207,6 +207,8 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
       {admin && <SettleLeagueBetsButton />}
 
       {weeklyLeagueMatches.length > 0 && (() => {
+        const leagueBetsEnabled = weeklyLeagueMatches[0]?.league?.modifierJson && typeof weeklyLeagueMatches[0].league.modifierJson === "object" && (weeklyLeagueMatches[0].league.modifierJson as any).betsEnabled !== false;
+        if (!leagueBetsEnabled && !admin) return null;
         const totalPages = Math.max(1, Math.ceil(weeklyLeagueMatches.length / MATCHES_PER_PAGE));
         const page = Math.min(currentPage, totalPages);
         const paginated = weeklyLeagueMatches.slice((page - 1) * MATCHES_PER_PAGE, page * MATCHES_PER_PAGE);

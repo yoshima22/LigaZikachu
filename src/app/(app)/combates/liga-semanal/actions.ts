@@ -694,6 +694,31 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
   }
 }
 
+// ── Toggle league bets ───────────────────────────────────────────────────
+
+export async function toggleLeagueBetsAction(leagueId: string, enabled: boolean) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  if (!isAdmin(session.user.role)) return { error: "Acesso restrito" };
+
+  try {
+    const league = await prisma.weeklyMascotLeague.findUnique({ where: { id: leagueId } });
+    if (!league) return { error: "Liga não encontrada" };
+
+    const current = (league.modifierJson ?? {}) as Record<string, unknown>;
+    await prisma.weeklyMascotLeague.update({
+      where: { id: leagueId },
+      data: { modifierJson: { ...current, betsEnabled: enabled }, updatedAt: new Date() },
+    });
+
+    revalidatePath(PATH);
+    revalidatePath("/zikabet");
+    return { success: true, enabled };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
+}
+
 // ── Set modifier ──────────────────────────────────────────────────────────
 
 export async function setModifierAction(leagueId: string, modifierId: string) {

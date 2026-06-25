@@ -20,6 +20,7 @@ import {
   cancelLeagueAction,
   deleteLeagueAction,
   purgeAdminsFromLeagueAction,
+  toggleLeagueBetsAction,
   generateDailyMatchupsAction,
   purgeInactivePlayersAction,
   resetAndResimulateAction,
@@ -1189,6 +1190,35 @@ function AdminTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           </div>
         </div>
       )}
+      {/* Toggle bets */}
+      {data.currentLeague && (() => {
+        const betsOn = (data.currentLeague.modifierJson as any)?.betsEnabled !== false;
+        return (
+          <div className="rounded-xl border border-slate-600/30 bg-slate-800/30 p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-200">Apostas da Liga no ZikaBet</p>
+              <p className="text-[10px] text-slate-500">{betsOn ? "Jogadores podem apostar nos combates da liga." : "Apostas desabilitadas. Combates não aparecem no ZikaBet."}</p>
+            </div>
+            <button
+              onClick={() => {
+                startTransition(async () => {
+                  try {
+                    const res = await toggleLeagueBetsAction(data.currentLeague.id, !betsOn);
+                    if (res && "error" in res) { toast.error(res.error); return; }
+                    toast.success(betsOn ? "Apostas desabilitadas." : "Apostas habilitadas!");
+                    refresh();
+                  } catch (err) { toast.error(`Erro: ${String(err).slice(0, 100)}`); }
+                });
+              }}
+              disabled={pending}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${betsOn ? "bg-green-500" : "bg-slate-600"}`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${betsOn ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Create league */}
       <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
         <p className="text-xs font-bold text-blue-300">Contingência do cron</p>
