@@ -9,6 +9,7 @@ import { ZikaBetCard } from "./_components/zikabet-card";
 import { SettleBetsButton } from "./_components/settle-bets-button";
 import { BetConfigForm } from "./_components/bet-config-form";
 import { OddsForm } from "./_components/odds-form";
+import { SettleLeagueBetsButton } from "./_components/settle-league-bets-button";
 
 export const dynamic = "force-dynamic";
 
@@ -201,6 +202,9 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
           }))}
         />
       )}
+
+      {/* Admin: liquidar apostas da liga semanal */}
+      {admin && <SettleLeagueBetsButton />}
 
       {weeklyLeagueMatches.length > 0 && (() => {
         const totalPages = Math.max(1, Math.ceil(weeklyLeagueMatches.length / MATCHES_PER_PAGE));

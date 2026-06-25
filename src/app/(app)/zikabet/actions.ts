@@ -265,6 +265,43 @@ export async function settleWeeklyLeagueBets(weeklyMatchId: string): Promise<voi
   revalidatePath("/carteira");
 }
 
+export async function settleAllPendingLeagueBets(): Promise<{ error?: string; settled?: number }> {
+  try {
+    const actor = await getSessionUser();
+    if (!actor) return { error: "Não autenticado." };
+    const admin = await prisma.user.findUnique({ where: { id: actor.id }, select: { role: true } });
+    if (!admin || !["ADMIN", "SUPER_ADMIN"].includes(admin.role)) return { error: "Acesso restrito." };
+
+    const pendingBets = await prisma.weeklyMascotLeagueBet.findMany({
+      where: { status: { in: [ZikaBetStatus.OPEN, ZikaBetStatus.CLOSED] } },
+      select: { weeklyMatchId: true },
+      distinct: ["weeklyMatchId"],
+    });
+
+    const resolvedMatchIds = new Set<string>();
+    for (const bet of pendingBets) {
+      const match = await prisma.weeklyMascotLeagueMatch.findUnique({
+        where: { id: bet.weeklyMatchId },
+        select: { status: true },
+      });
+      if (match && match.status !== "SCHEDULED") resolvedMatchIds.add(bet.weeklyMatchId);
+    }
+
+    let settled = 0;
+    for (const matchId of resolvedMatchIds) {
+      await settleWeeklyLeagueBets(matchId);
+      settled++;
+    }
+
+    revalidatePath("/zikabet");
+    revalidatePath("/zikabet/minhas-apostas");
+    revalidatePath("/carteira");
+    return { settled };
+  } catch (err) {
+    return { error: `Erro: ${String(err).slice(0, 200)}` };
+  }
+}
+
 export async function undoWeeklyLeagueBet(betId: string): Promise<{ error?: string }> {
   try {
     const actor = await getSessionUser();
