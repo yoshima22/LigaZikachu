@@ -324,6 +324,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [filter, setFilter] = useState<FilterKey>("available");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
+  const [mascotPage, setMascotPage] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [levelError, setLevelError] = useState<string | null>(null);
 
@@ -479,7 +480,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setMascotPage(0); }}
             placeholder="Buscar por nome…"
             className="w-full rounded-lg border border-border bg-slate-900 pl-7 pr-8 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
           />
@@ -499,7 +500,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
               all:       `Todos (${counts.all})`,
             };
             return (
-              <button key={f} type="button" onClick={() => setFilter(f)}
+              <button key={f} type="button" onClick={() => { setFilter(f); setMascotPage(0); }}
                 className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
                   filter === f
                     ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
@@ -536,7 +537,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
             <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest shrink-0">Tipo:</span>
             <button
               type="button"
-              onClick={() => setTypeFilter(null)}
+              onClick={() => { setTypeFilter(null); setMascotPage(0); }}
               className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold transition-colors ${
                 !typeFilter ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-500 hover:text-slate-300"
               }`}
@@ -550,7 +551,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setTypeFilter(active ? null : type)}
+                  onClick={() => { setTypeFilter(active ? null : type); setMascotPage(0); }}
                   className={`rounded-full border px-2 py-0.5 text-[9px] font-bold transition-all ${
                     active ? cls : "border-border text-slate-500 hover:text-slate-300"
                   }`}
@@ -569,33 +570,51 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         )}
       </div>
 
-      {/* ── Grade de mascotes ── */}
-      <div className="max-h-[440px] overflow-y-auto rounded-xl">
-        {displayed.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-slate-500">
-            {search ? `Nenhum resultado para "${search}"` :
-              typeFilter ? `Nenhum mascote do tipo ${TYPE_LABELS[typeFilter] ?? typeFilter} disponível.` :
-              filter === "available" ? "Nenhum mascote livre agora — veja \"Cooldown\" ou \"Todos\"." :
-              filter === "cooldown"  ? "Nenhum mascote em cooldown." :
-              "Nenhum mascote disponível."}
+      {/* ── Grade de mascotes (paginada) ── */}
+      {(() => {
+        const PER_PAGE = compact ? 16 : 12;
+        const totalPages = Math.max(1, Math.ceil(displayed.length / PER_PAGE));
+        const safePage = Math.min(mascotPage, totalPages - 1);
+        const paginated = displayed.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+
+        return (
+          <div className="space-y-2">
+            {displayed.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-slate-500">
+                {search ? `Nenhum resultado para "${search}"` :
+                  typeFilter ? `Nenhum mascote do tipo ${TYPE_LABELS[typeFilter] ?? typeFilter} disponível.` :
+                  filter === "available" ? "Nenhum mascote livre agora — veja \"Cooldown\" ou \"Todos\"." :
+                  filter === "cooldown"  ? "Nenhum mascote em cooldown." :
+                  "Nenhum mascote disponível."}
+              </div>
+            ) : (
+              <div className={`grid gap-1.5 ${compact ? "grid-cols-3 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}>
+                {paginated.map(m => (
+                  <MascotPick
+                    key={m.id}
+                    m={m}
+                    selected={selected.has(m.id)}
+                    maxReached={!selected.has(m.id) && selected.size >= MAX_MASCOTS}
+                    onToggle={() => toggle(m.id)}
+                    now={now}
+                    compact={compact}
+                    roomLevel={roomLevel}
+                  />
+                ))}
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3">
+                <button type="button" onClick={() => setMascotPage(p => Math.max(0, p - 1))} disabled={safePage === 0}
+                  className="rounded-lg border border-border bg-slate-800 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30">← Anterior</button>
+                <span className="text-xs text-slate-500">{safePage + 1}/{totalPages} ({displayed.length} mascotes)</span>
+                <button type="button" onClick={() => setMascotPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1}
+                  className="rounded-lg border border-border bg-slate-800 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30">Próxima →</button>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className={`grid gap-1.5 ${compact ? "grid-cols-3 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}>
-            {displayed.map(m => (
-              <MascotPick
-                key={m.id}
-                m={m}
-                selected={selected.has(m.id)}
-                maxReached={!selected.has(m.id) && selected.size >= MAX_MASCOTS}
-                onToggle={() => toggle(m.id)}
-                now={now}
-                compact={compact}
-                roomLevel={roomLevel}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* ── Submit ── */}
       <button
