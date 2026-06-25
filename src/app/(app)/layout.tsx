@@ -15,6 +15,7 @@ import { AppNav } from "./_components/app-nav";
 import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
 import { AchievementNotifier } from "@/components/achievement-notifier";
 import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
+import { RouteTutorialHelpButton } from "@/components/tutorial/route-tutorial-help-button";
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
 import { LogoutButton } from "@/components/logout-button";
@@ -105,6 +106,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
+              <RouteTutorialHelpButton />
               <Link href={player ? `/jogadores/${player.id}` : "/perfil"} className="hidden items-center gap-2.5 hover:opacity-80 transition-opacity sm:flex">
                 {/* Texto à esquerda */}
                 <div className="text-right">
@@ -162,7 +164,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         </header>
 
         {/* Main content */}
-        <main className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-8">{children}</main>
+        <main data-tutorial="page-content" className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-8">{children}</main>
         <FcmTokenRegistrar />
         <AchievementNotifier />
         {!admin && <WelcomeTutorial />}

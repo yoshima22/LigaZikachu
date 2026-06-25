@@ -199,5 +199,280 @@ export const TUTORIALS: Record<string, PageTutorial> = {
         position: "top"
       }
     ]
+  },
+  bazar: {
+    pageId: "bazar",
+    steps: [
+      {
+        title: "Bazar",
+        description: "Aqui os jogadores anunciam itens, mascotes e ofertas para troca. Confira o que esta em escrow antes de propor ou aceitar uma troca.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Ofertas e propostas",
+        description: "Ao criar uma proposta, os itens oferecidos ficam reservados. Se a troca for recusada ou cancelada, eles voltam para voce.",
+        position: "center"
+      },
+      {
+        title: "Miauvadao",
+        description: "As ofertas especiais do Miauvadao mudam com o tempo e podem esgotar. Use o botao de atualizar quando quiser conferir o estado mais recente.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  mascotes: {
+    pageId: "mascotes",
+    steps: [
+      {
+        title: "Seus mascotes",
+        description: "Esta pagina concentra mascotes equipados, favoritos, banco, ovos, incubadoras, expedicoes e interacoes como carinho e brincar.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Cooldowns e status",
+        description: "Mascotes podem ficar em expedicao, repouso, arena ou recuperacao. Quando um botao estiver apagado, aguarde o timer ou confira o status do mascote.",
+        position: "center"
+      },
+      {
+        title: "Banco sob demanda",
+        description: "Mascotes guardados carregam aos poucos para economizar dados. Use filtros e paginacao para achar um mascote sem puxar tudo de uma vez.",
+        position: "center"
+      }
+    ]
+  },
+  "arena-z": {
+    pageId: "arena-z",
+    steps: [
+      {
+        title: "Arena Z",
+        description: "Monte uma equipe para PvE, PvP ou modo misto. O cofre da equipe acumula ZikaCoins, EXP e espolios enquanto ela permanece ativa.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Cooldowns por equipe",
+        description: "Cada equipe tem seus proprios timers de PvE, PvP e retirada. Depois de atacar ou ser atacado, confira os avisos antes de tentar sair da arena.",
+        position: "center"
+      },
+      {
+        title: "Recuperacao",
+        description: "Mascotes nocauteados vao para recuperacao. Se apenas alguns cairem, troque os slots livres para manter a posicao sem prender o time inteiro.",
+        position: "center"
+      }
+    ]
+  },
+  "liga-semanal": {
+    pageId: "liga-semanal",
+    steps: [
+      {
+        title: "Liga Semanal dos Mascotes",
+        description: "A liga cria chaves diarias, aplica modificadores e executa combates automaticamente pelos horarios da semana.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Escalacao e itens",
+        description: "Escolha mascotes e use itens do inventario quando o modo permitir. Itens comprados, dropados ou recebidos tambem devem aparecer para uso.",
+        position: "center"
+      },
+      {
+        title: "Combates e recompensas",
+        description: "Os resultados alimentam ranking e recompensas semanais. As previsualizacoes mostram mais turnos para explicar a luta sem alterar o resultado.",
+        position: "center"
+      }
+    ]
+  },
+  "desafio-sincronizado": {
+    pageId: "desafio-sincronizado",
+    steps: [
+      {
+        title: "Arena Sincronizada",
+        description: "Junte os tickets de fogo e agua, forme dupla e trave os 9 mascotes do evento. O sistema organiza a arena unica e avanca as rodadas.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Rodadas automaticas",
+        description: "Cada rodada revela o modificador antes da escolha dos 3 mascotes. Se uma dupla nao travar a equipe a tempo, o sistema seleciona automaticamente.",
+        position: "center"
+      },
+      {
+        title: "Tickets e bans",
+        description: "Tickets gerados pelo proprio jogador nao contam para ele mesmo. Ao entrar no evento, o ticket completo e consumido e as regras de ban passam a valer.",
+        position: "center"
+      }
+    ]
+  },
+  "cacada-de-rastros": {
+    pageId: "cacada-de-rastros",
+    steps: [
+      {
+        title: "Cacada de Rastros",
+        description: "Modo oculto de teste para admin. Um jogador se esconde em uma rota e outro tenta seguir pistas, usar itens e reduzir a distancia.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Esconder ou cacar",
+        description: "Na simulacao admin, crie uma sala, escolha a rota do escondido e depois teste os movimentos do cacador com feedback de acerto, erro e evento.",
+        position: "center"
+      }
+    ]
+  },
+  laboratorio: {
+    pageId: "laboratorio",
+    steps: [
+      {
+        title: "Laboratorio",
+        description: "Transforme mascotes em po de criacao e use recursos para gerar novos ovos. Mascotes raros entregam mais po conforme a raridade configurada.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Historico da Pokedex",
+        description: "Mesmo ao descartar um mascote, o historico pode registrar que voce ja teve aquela especie para progresso de colecao.",
+        position: "center"
+      }
+    ]
+  },
+  zikaloot: {
+    pageId: "zikaloot",
+    steps: [
+      {
+        title: "ZikaLoot",
+        description: "Use tickets para abrir sorteios de premios. Confira chances, historico e limites antes de gastar seus recursos.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  inventario: {
+    pageId: "inventario",
+    steps: [
+      {
+        title: "Inventario",
+        description: "Aqui ficam itens consumiveis, tickets, ovos e recursos especiais usados em modos como mascotes, arena, eventos e liga semanal.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  codigos: {
+    pageId: "codigos",
+    steps: [
+      {
+        title: "Codigos e recompensas",
+        description: "Jogadores veem seus codigos resgatados; admins gerenciam banco, envio, revogacao e correcao de codigos invalidos.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  presentes: {
+    pageId: "presentes",
+    steps: [
+      {
+        title: "Caixa de Presentes",
+        description: "Premios chegam aqui antes de irem para seu inventario. Resgate individualmente ou use receber todos para pegar tudo de uma vez.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  lacos: {
+    pageId: "lacos",
+    steps: [
+      {
+        title: "Lacos dos mascotes",
+        description: "Acompanhe relacoes, rivalidades e escolhas narrativas entre mascotes de jogadores diferentes. Decisoes podem afetar eventos e combate.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  torneio: {
+    pageId: "torneio",
+    steps: [
+      {
+        title: "Detalhes do torneio",
+        description: "Veja inscricoes, dias de jogo, rankings internos, decks liberados e resultados. Torneios online e presenciais seguem fluxos diferentes.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      },
+      {
+        title: "Decks e dias",
+        description: "No online, decks respeitam prazo de envio e bloqueio. No presencial, o fluxo e mais rapido e sem confirmacao dupla de resultado.",
+        position: "center"
+      }
+    ]
+  },
+  "torneio-dia": {
+    pageId: "torneio-dia",
+    steps: [
+      {
+        title: "Dia de torneio",
+        description: "Aqui ficam partidas, decks do dia, times ou duplas, bonus manuais e Top do Dia. Resultados validados alimentam ranking e premios.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  partidas: {
+    pageId: "partidas",
+    steps: [
+      {
+        title: "Partidas",
+        description: "Reporte, confirme ou corrija resultados. Quando ambos confirmam ou o admin valida, a partida passa a contar no ranking.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
+  },
+  professor: {
+    pageId: "professor",
+    steps: [
+      {
+        title: "Professor",
+        description: "Use esta area para interacoes especiais, ferias, testes e eventos ligados aos mascotes quando estiverem disponiveis.",
+        target: "[data-tutorial='page-content']",
+        position: "top"
+      }
+    ]
   }
 };
+
+const ROUTE_TUTORIALS: Array<[RegExp, string]> = [
+  [/^\/bazar(\/|$)/, "bazar"],
+  [/^\/mascotes\/ranking(\/|$)/, "ranking"],
+  [/^\/mascotes(\/|$)/, "mascotes"],
+  [/^\/arena-z(\/|$)/, "arena-z"],
+  [/^\/combates\/liga-semanal(\/|$)/, "liga-semanal"],
+  [/^\/desafio-sincronizado(\/|$)/, "desafio-sincronizado"],
+  [/^\/combates\/cacada-de-rastros(\/|$)/, "cacada-de-rastros"],
+  [/^\/laboratorio(\/|$)/, "laboratorio"],
+  [/^\/zikaloot(\/|$)/, "zikaloot"],
+  [/^\/zikabet(\/|$)/, "bet"],
+  [/^\/shop(\/|$)/, "shop"],
+  [/^\/album(\/|$)/, "album"],
+  [/^\/inventario(\/|$)/, "inventario"],
+  [/^\/codigos(\/|$)/, "codigos"],
+  [/^\/caixa-de-presentes(\/|$)/, "presentes"],
+  [/^\/lacos(\/|$)/, "lacos"],
+  [/^\/conquistas(\/|$)/, "conquistas"],
+  [/^\/ranking(\/|$)/, "ranking"],
+  [/^\/torneios\/[^/]+\/semanas\/[^/]+\/partidas(\/|$)/, "partidas"],
+  [/^\/torneios\/[^/]+\/semanas\/[^/]+(\/|$)/, "torneio-dia"],
+  [/^\/torneios\/[^/]+(\/|$)/, "torneio"],
+  [/^\/torneios(\/|$)/, "torneios"],
+  [/^\/professor(\/|$)/, "professor"],
+  [/^\/jogadores\/[^/]+(\/|$)/, "perfil"],
+  [/^\/perfil(\/|$)/, "perfil"],
+];
+
+export function getTutorialIdForPath(pathname: string | null): string | null {
+  if (!pathname) return null;
+  return ROUTE_TUTORIALS.find(([pattern]) => pattern.test(pathname))?.[1] ?? null;
+}

@@ -35,10 +35,22 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
     // Slight delay to let the page render
     const timeout = setTimeout(() => {
       setVisible(true);
+      if (step?.target && step.position !== "center") {
+        const el = document.querySelector(step.target);
+        el?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
       updateTargetRect();
     }, 300);
     return () => clearTimeout(timeout);
-  }, [updateTargetRect]);
+  }, [step?.target, step?.position, updateTargetRect]);
+
+  useEffect(() => {
+    if (!visible || !step?.target || step.position === "center") return;
+    const el = document.querySelector(step.target);
+    el?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    const timeout = setTimeout(updateTargetRect, 360);
+    return () => clearTimeout(timeout);
+  }, [currentStep, step?.target, step?.position, updateTargetRect, visible]);
 
   useEffect(() => {
     updateTargetRect();
@@ -74,10 +86,19 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
   if (hasTarget && targetRect) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const cardW = 320;
-    const cardH = 160;
+    const isMobile = vw < 640;
+    const cardW = isMobile ? Math.max(280, vw - 32) : 320;
+    const cardH = isMobile ? 190 : 160;
 
-    if (step.position === "bottom" || !step.position) {
+    if (isMobile) {
+      cardStyle = {
+        position: "fixed",
+        left: 16,
+        right: 16,
+        bottom: "calc(16px + env(safe-area-inset-bottom))",
+        width: "auto"
+      };
+    } else if (step.position === "bottom" || !step.position) {
       cardStyle = {
         position: "fixed",
         top: Math.min(targetRect.bottom + PADDING + 8, vh - cardH - 16),
