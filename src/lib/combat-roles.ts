@@ -41,7 +41,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Intercepta de 15% a 40% do dano de um aliado e recebe de 5% a 20% menos dano; causa 10% menos dano.",
   DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",
   SABOTEUR: "Atributos diretos: Instinto e Agilidade. Prioriza suportes e reduz em 15% a 40% os bônus dos Encorajadores inimigos enquanto estiver ativo.",
-  HEALER: "Atributos diretos: Carisma e Vitalidade. Cura até duas vezes usando 30% do Carisma + 20% da Vitalidade; causa 20% menos dano.",
+  HEALER: "Atributos diretos: Carisma e Vitalidade. Cura aliados usando 35% do Carisma + 25% da Vitalidade. Número de curas escala com stats (2 a 5 por combate). Causa 20% menos dano.",
   SCOUT: "Atributos diretos: Agilidade e Instinto. Concede até +8% de dano à equipe, tem 35% a 82% de chance de focar o alvo mais frágil e causa 5% menos dano.",
   PROVOKER: "Atributos diretos: Carisma e Instinto. Tem 20% a 55% de chance de redirecionar ataques para si e reduz o dano desviado em 8%; causa 8% menos dano.",
   SPECIALIST: "Atributo direto: o maior entre Força, Agilidade, Instinto, Vitalidade e Carisma. Recebe de +6% a +20% de dano.",

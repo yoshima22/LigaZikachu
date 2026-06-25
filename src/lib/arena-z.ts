@@ -404,16 +404,17 @@ function trySaboteurDisrupt(actor: ArenaMascot, opponents: ArenaMascot[], hp: Ma
 function tryHealerAction(actor: ArenaMascot, allies: ArenaMascot[], hp: Map<string, number>, healCount: Map<string, number>): string | null {
   if (actor.combatRole !== "HEALER") return null;
   const count = healCount.get(actor.id) ?? 0;
-  if (count >= 2) return null;
+  const maxHeals = 2 + Math.floor((actor.charisma + actor.vitality) / 40);
+  if (count >= maxHeals) return null;
   const wounded = allies.filter(m => m.id !== actor.id && (hp.get(m.id) ?? 0) > 0 && (hp.get(m.id) ?? 0) < m.hp);
   if (wounded.length === 0) return null;
   wounded.sort((a, b) => (hp.get(a.id) ?? 0) - (hp.get(b.id) ?? 0));
   const target = wounded[0];
-  const heal = Math.max(5, Math.round(actor.charisma * 0.3 + actor.vitality * 0.2));
+  const heal = Math.max(5, Math.round(actor.charisma * 0.35 + actor.vitality * 0.25));
   const currentHp = hp.get(target.id) ?? 0;
   hp.set(target.id, Math.min(target.hp, currentHp + heal));
   healCount.set(actor.id, count + 1);
-  return `Cuidador ${actor.name} curou ${target.name} em ${heal} HP.`;
+  return `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).`;
 }
 
 function tryGuardianIntercept(target: ArenaMascot, allies: ArenaMascot[], hp: Map<string, number>, damage: number): { newDamage: number; guardianDamage: number; guardianId: string; effect: string } | null {

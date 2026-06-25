@@ -277,12 +277,13 @@ export function runLeagueCombat(
       // HEALER action
       if (actor.combatRole === "HEALER") {
         const count = healCount.get(actor.id) ?? 0;
-        if (count < 2) {
+        const maxHeals = 2 + Math.floor((actor.charisma + actor.vitality) / 40);
+        if (count < maxHeals) {
           const wounded = allies.filter(m => m.id !== actor.id && (hp.get(m.id) ?? 0) > 0 && (hp.get(m.id) ?? 0) < m.hp);
           if (wounded.length > 0) {
             wounded.sort((x, y) => (hp.get(x.id) ?? 0) - (hp.get(y.id) ?? 0));
             const target = wounded[0];
-            const heal = Math.max(5, Math.round(actor.charisma * 0.3 + actor.vitality * 0.2));
+            const heal = Math.max(5, Math.round(actor.charisma * 0.35 + actor.vitality * 0.25));
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({
@@ -292,7 +293,7 @@ export function runLeagueCombat(
               attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(target.pokemonId),
               multiplier: 1, advantageApplied: false,
               actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
-              effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP.`,
+              effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).`,
             });
             actionNum++;
             continue;
