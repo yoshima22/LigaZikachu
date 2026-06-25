@@ -135,7 +135,8 @@ export default async function PlayerDetailPage({
     prisma.savedDeck.findMany({
       where: { playerId, isPublic: true },
       select: { id: true, name: true, archetype: true, deckList: true, updatedAt: true },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updatedAt: "desc" },
+      take: 6,
     }).catch(() => [] as { id: string; name: string; archetype: string | null; deckList: string; updatedAt: Date }[]),
     isAdminUser
       ? prisma.shopItem.findMany({

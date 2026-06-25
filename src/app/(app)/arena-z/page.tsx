@@ -146,19 +146,26 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     );
   }
 
-  const [wallet, mascots, teams, allActiveTeams, battles, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
+  const needsMascotRoster = activeTab === "equipes" || activeTab === "montar" || activeTab === "sus";
+  const needsBattleHistory = activeTab === "historico";
+  const needsSusData = activeTab === "sus";
+
+  const [wallet, mascots, injuredMascotCount, teams, allActiveTeams, battles, recentIncomingBattle, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
-    prisma.mascot.findMany({
-      where: { playerId: player.id },
-      select: {
-        id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
-        arenaState: true, restingUntil: true, injuredAt: true,
-        bazarListed: true, happiness: true,
-        statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
-        expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
-      },
-      orderBy: [{ level: "desc" }],
-    }),
+    needsMascotRoster
+      ? prisma.mascot.findMany({
+          where: { playerId: player.id },
+          select: {
+            id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
+            arenaState: true, restingUntil: true, injuredAt: true,
+            bazarListed: true, happiness: true,
+            statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
+            expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
+          },
+          orderBy: [{ level: "desc" }],
+        })
+      : Promise.resolve([]),
+    prisma.mascot.count({ where: { playerId: player.id, arenaState: "INJURED" } }),
     prisma.arenaTeam.findMany({
       where: { playerId: player.id, status: { in: ["ACTIVE", "DEFEATED"] } },
       include: {
@@ -178,65 +185,84 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       orderBy: { createdAt: "desc" },
     }),
     getCachedOpponentTeams(),
-    Promise.all([
-      prisma.arenaBattle.findMany({
-        where: { attackerPlayerId: player.id },
-        select: {
-          id: true, type: true, status: true, result: true,
-          attackerPlayerId: true, defenderPlayerId: true,
-          attackTeamId: true, defenseTeamId: true,
-          botName: true, levelBandMin: true, levelBandMax: true,
-          winnerPlayerId: true, loserPlayerId: true,
-          lootResult: true, injuredMascotIds: true,
-          createdAt: true,
-          attackerPlayer: { select: { displayName: true, ptcglNick: true } },
-          defenderPlayer: { select: { displayName: true, ptcglNick: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 15,
-      }),
-      prisma.arenaBattle.findMany({
-        where: { defenderPlayerId: player.id },
-        select: {
-          id: true, type: true, status: true, result: true,
-          attackerPlayerId: true, defenderPlayerId: true,
-          attackTeamId: true, defenseTeamId: true,
-          botName: true, levelBandMin: true, levelBandMax: true,
-          winnerPlayerId: true, loserPlayerId: true,
-          lootResult: true, injuredMascotIds: true,
-          createdAt: true,
-          attackerPlayer: { select: { displayName: true, ptcglNick: true } },
-          defenderPlayer: { select: { displayName: true, ptcglNick: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 15,
-      }),
-    ]).then(([asAttacker, asDefender]) =>
-      [...asAttacker, ...asDefender]
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .slice(0, 15)
-    ),
+    needsBattleHistory
+      ? Promise.all([
+          prisma.arenaBattle.findMany({
+            where: { attackerPlayerId: player.id },
+            select: {
+              id: true, type: true, status: true, result: true,
+              attackerPlayerId: true, defenderPlayerId: true,
+              attackTeamId: true, defenseTeamId: true,
+              botName: true, levelBandMin: true, levelBandMax: true,
+              winnerPlayerId: true, loserPlayerId: true,
+              lootResult: true, injuredMascotIds: true,
+              createdAt: true,
+              attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+              defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 15,
+          }),
+          prisma.arenaBattle.findMany({
+            where: { defenderPlayerId: player.id },
+            select: {
+              id: true, type: true, status: true, result: true,
+              attackerPlayerId: true, defenderPlayerId: true,
+              attackTeamId: true, defenseTeamId: true,
+              botName: true, levelBandMin: true, levelBandMax: true,
+              winnerPlayerId: true, loserPlayerId: true,
+              lootResult: true, injuredMascotIds: true,
+              createdAt: true,
+              attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+              defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 15,
+          }),
+        ]).then(([asAttacker, asDefender]) =>
+          [...asAttacker, ...asDefender]
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .slice(0, 15)
+        )
+      : Promise.resolve([]),
+    prisma.arenaBattle.findFirst({
+      where: {
+        type: "PVP",
+        defenderPlayerId: player.id,
+        createdAt: { gt: new Date(Date.now() - 30 * 60_000) },
+      },
+      select: {
+        id: true,
+        type: true,
+        defenderPlayerId: true,
+        createdAt: true,
+        attackerPlayer: { select: { displayName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
     getArenaRanking(20),
     prisma.arenaTeam.findFirst({
       where: { playerId: player.id, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
       orderBy: { retiredAt: "desc" },
       select: { retiredAt: true },
     }),
-    prisma.mascot.findMany({
-      where: {
-        arenaState: "INJURED",
-        playerId: { not: player.id },
-        relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } },
-      },
-      include: { player: { select: { displayName: true } } },
-      take: 10,
-    }),
+    needsSusData
+      ? prisma.mascot.findMany({
+          where: {
+            arenaState: "INJURED",
+            playerId: { not: player.id },
+            relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } },
+          },
+          include: { player: { select: { displayName: true } } },
+          take: 10,
+        })
+      : Promise.resolve([]),
     getRoomsData(player.id).catch(() => ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] }))),
     getTopArenaPlayers().catch(() => [] as never[]),
   ]);
 
   // Mascotes feridos de jogadores aliados (amizade entre mascotes)
-  const friendPlayerIds = await Promise.all([
+  const friendPlayerIds = needsSusData ? await Promise.all([
     prisma.mascotRelation.findMany({
       where: { type: "FRIEND", mascotA: { playerId: player.id } },
       select: { mascotB: { select: { playerId: true } } },
@@ -252,7 +278,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     for (const r of asA) if (r.mascotB.playerId !== player.id) ids.add(r.mascotB.playerId);
     for (const r of asB) if (r.mascotA.playerId !== player.id) ids.add(r.mascotA.playerId);
     return [...ids];
-  }).catch(() => [] as string[]);
+  }).catch(() => [] as string[]) : [];
 
   const injuredFriends = friendPlayerIds.length > 0
     ? await prisma.mascot.findMany({
@@ -281,7 +307,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const readyOpponentTeams = opponentTeams.filter(t => !getTeamBlockedReason(t));
 
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
-  for (const team of readyActiveTeams) {
+  for (const team of activeTab === "equipes" ? readyActiveTeams : []) {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
   }
   const pvpCooldowns = new Map<string, Date | null>();
@@ -306,9 +332,6 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     opportunisticBattles
       .filter(b => { const rival = injuredRivals.find(m => m.playerId === b.defenderPlayerId); return rival?.injuredAt ? b.createdAt >= rival.injuredAt : true; })
       .map(b => b.defenderPlayerId).filter(Boolean) as string[]
-  );
-  const recentIncomingBattle = battles.find(b =>
-    b.type === "PVP" && b.defenderPlayerId === player.id && Date.now() - b.createdAt.getTime() < 30 * 60_000
   );
   const recentIncomingName = recentIncomingBattle
     ? recentIncomingBattle.attackerPlayer?.displayName ?? "Outro jogador"
@@ -406,8 +429,8 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             }`}
           >
             {TAB_LABELS[t]}
-            {t === "sus" && injuredMascots.length > 0 && (
-              <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] text-white">{injuredMascots.length}</span>
+            {t === "sus" && injuredMascotCount > 0 && (
+              <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] text-white">{injuredMascotCount}</span>
             )}
             {t === "equipes" && activeTeams.length > 0 && (
               <span className="ml-1 rounded-full bg-slate-700 px-1.5 py-0.5 text-[9px] text-slate-300">{activeTeams.length}</span>

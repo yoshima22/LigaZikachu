@@ -2007,7 +2007,7 @@ export const getCachedDbReady = unstable_cache(
   { revalidate: 300, tags: ["arena-db-ready"] },
 );
 
-/** Todos os times ACTIVE com stats completos de mascotes para PvP — cacheado 60s */
+/** Times ACTIVE resumidos para exibição PvP — combate real busca stats completos sob demanda. */
 export const getCachedOpponentTeams = unstable_cache(
   () =>
     prisma.arenaTeam.findMany({
@@ -2019,8 +2019,7 @@ export const getCachedOpponentTeams = unstable_cache(
             mascot: {
               select: {
                 id: true, pokemonId: true, nickname: true, level: true,
-                arenaState: true, restingUntil: true, isShiny: true,
-                statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true,
+                arenaState: true, restingUntil: true,
               },
             },
           },

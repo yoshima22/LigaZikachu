@@ -330,6 +330,7 @@ export async function pollNewMessagesAction(otherPlayerId: string, afterIso: str
       ],
     },
     orderBy: { createdAt: "asc" },
+    take: 50,
     select: {
       id: true, content: true, createdAt: true, senderId: true,
       attachmentType: true, attachmentData: true,
