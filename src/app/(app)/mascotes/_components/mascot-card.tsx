@@ -27,7 +27,7 @@ import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, E
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
-import { PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
+import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } from "@/lib/mascot-data";
 
 interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
 interface MascotRelation {
@@ -647,6 +647,18 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           ✨ Shiny
         </div>
       )}
+
+      {/* Rarity tag */}
+      {(() => {
+        const rarity = getMascotRarity(mascot.pokemonId);
+        if (rarity === "COMMON") return null;
+        return (
+          <div className={`border-b px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-wider ${RARITY_COLOR[rarity]}`}>
+            {rarity === "LEGENDARY" && "⭐ "}{rarity === "MYTHICAL" && "🌟 "}{rarity === "ULTRA_BEAST" && "🌀 "}{rarity === "PSEUDO_LEGENDARY" && "💎 "}
+            {RARITY_LABEL[rarity]}
+          </div>
+        );
+      })()}
 
       {/* Status badges */}
       {(mascot.bazarListed || mascot.arenaState !== "FREE" || (mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date())) && (

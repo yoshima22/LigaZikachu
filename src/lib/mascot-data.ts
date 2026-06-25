@@ -717,7 +717,7 @@ export const ALL_EVOLVED_IDS = new Set<number>([...EVOLVED_IDS, ...EXTRA_EVOLVED
 // ── EXP necessária por nível ──────────────────────────────────────────────────
 // Curva linear suave: jogável mesmo nos níveis altos.
 // Nível 1→2: 120 EXP | Nível 50→51: 1.100 EXP | Nível 100→101: 2.100 EXP
-const PSEUDO_LEGENDARY_LINE_IDS = new Set([
+export const PSEUDO_LEGENDARY_LINE_IDS = new Set([
   147, 148, 149,
   246, 247, 248,
   371, 372, 373,
@@ -2100,6 +2100,42 @@ export const LEGENDARY_POOL: number[] = [
   10006, 10007,  // Shaymin-Sky, Giratina-Origin
   10166, 10167, 10168, // Articuno/Zapdos/Moltres-Galar
 ];
+
+export const ULTRA_BEAST_IDS = new Set([
+  793, 794, 795, 796, 797, 798, 799, 803, 804, 805, 806,
+]);
+
+export const MYTHICAL_IDS = new Set([
+  151, 251, 385, 386, 489, 490, 491, 492, 493, 647, 648, 649,
+  719, 720, 721, 801, 802, 807, 808, 809, 893,
+  1001, 1002, 1003, 1004,
+]);
+
+export type MascotRarity = "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST" | "PSEUDO_LEGENDARY" | "COMMON";
+
+export function getMascotRarity(pokemonId: number): MascotRarity {
+  if (MYTHICAL_IDS.has(pokemonId)) return "MYTHICAL";
+  if (ULTRA_BEAST_IDS.has(pokemonId)) return "ULTRA_BEAST";
+  if (LEGENDARY_POOL.includes(pokemonId) && !MYTHICAL_IDS.has(pokemonId) && !ULTRA_BEAST_IDS.has(pokemonId)) return "LEGENDARY";
+  if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return "PSEUDO_LEGENDARY";
+  return "COMMON";
+}
+
+export const RARITY_LABEL: Record<MascotRarity, string> = {
+  LEGENDARY: "Lendário",
+  MYTHICAL: "Mítico",
+  ULTRA_BEAST: "Ultra Besta",
+  PSEUDO_LEGENDARY: "Pseudo-Lendário",
+  COMMON: "",
+};
+
+export const RARITY_COLOR: Record<MascotRarity, string> = {
+  LEGENDARY: "border-yellow-400/50 bg-yellow-400/10 text-yellow-300",
+  MYTHICAL: "border-pink-400/50 bg-pink-400/10 text-pink-300",
+  ULTRA_BEAST: "border-purple-400/50 bg-purple-400/10 text-purple-300",
+  PSEUDO_LEGENDARY: "border-cyan-400/50 bg-cyan-400/10 text-cyan-300",
+  COMMON: "",
+};
 
 const EXTRA_LEGENDARY_AND_MYTHICAL_IDS = [
   // Gen 7 Ultra Beasts / Poipole line
