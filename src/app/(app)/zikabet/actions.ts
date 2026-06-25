@@ -193,9 +193,18 @@ export async function placeWeeklyLeagueBet(raw: z.infer<typeof placeWeeklyLeague
 
     const match = await prisma.weeklyMascotLeagueMatch.findUnique({
       where: { id: data.weeklyMatchId },
-      select: { id: true, playerAId: true, playerBId: true, status: true, resultJson: true },
+      select: {
+        id: true,
+        playerAId: true,
+        playerBId: true,
+        status: true,
+        resultJson: true,
+        league: { select: { modifierJson: true } },
+      },
     });
     if (!match) return { error: "Combate da Liga Semanal nao encontrado." };
+    const leagueConfig = (match.league?.modifierJson ?? {}) as Record<string, unknown>;
+    if (leagueConfig.betsEnabled !== true) return { error: "Apostas da Liga Semanal estao desabilitadas." };
     if (match.status !== "SCHEDULED") return { error: "Este combate ja nao aceita apostas." };
     if (!match.playerBId) return { error: "Combate sem adversario nao aceita apostas." };
     if (data.betOnPlayerId !== match.playerAId && data.betOnPlayerId !== match.playerBId) return { error: "Jogador invalido para este combate." };

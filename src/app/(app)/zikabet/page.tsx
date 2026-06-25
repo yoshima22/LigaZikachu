@@ -84,7 +84,12 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
 
   const todayBrt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   const weeklyLeagueMatches = await prisma.weeklyMascotLeagueMatch.findMany({
-    where: { battleDate: todayBrt, status: "SCHEDULED", playerBId: { not: null } },
+    where: {
+      battleDate: todayBrt,
+      status: "SCHEDULED",
+      playerBId: { not: null },
+      ...(admin ? {} : { league: { modifierJson: { path: ["betsEnabled"], equals: true } } }),
+    },
     select: {
       id: true,
       battleSlot: true,
@@ -207,8 +212,18 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
       {admin && <SettleLeagueBetsButton />}
 
       {weeklyLeagueMatches.length > 0 && (() => {
-        const leagueBetsEnabled = weeklyLeagueMatches[0]?.league?.modifierJson && typeof weeklyLeagueMatches[0].league.modifierJson === "object" && (weeklyLeagueMatches[0].league.modifierJson as any).betsEnabled !== false;
+        const leagueBetsEnabled = weeklyLeagueMatches[0]?.league?.modifierJson && typeof weeklyLeagueMatches[0].league.modifierJson === "object" && (weeklyLeagueMatches[0].league.modifierJson as any).betsEnabled === true;
         if (!leagueBetsEnabled && !admin) return null;
+        if (!leagueBetsEnabled && admin) {
+          return (
+            <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+              <h2 className="font-semibold text-slate-200">Liga Semanal dos Mascotes</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Existem combates agendados para hoje, mas as apostas da Liga Semanal estao desligadas no painel da liga.
+              </p>
+            </div>
+          );
+        }
         const totalPages = Math.max(1, Math.ceil(weeklyLeagueMatches.length / MATCHES_PER_PAGE));
         const page = Math.min(currentPage, totalPages);
         const paginated = weeklyLeagueMatches.slice((page - 1) * MATCHES_PER_PAGE, page * MATCHES_PER_PAGE);
