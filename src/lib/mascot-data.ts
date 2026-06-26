@@ -618,7 +618,8 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 10231, to: 10232, level: 30 }, // Voltorb-Hisui → Electrode-Hisui (Leaf Stone)
   { from: 10234, to: 904,   level: 40 }, // Qwilfish-Hisui → Overqwil (Barb Barrage)
   { from: 10235, to: 903,   level: 40 }, // Sneasel-Hisui → Sneasler (Razor Claw)
-  { from: 10238, to: 10239, level: 30 }, // Zorua-Hisui → Zoroark-Hisui
+  { from: 10238, to: 10239, level: 30 }, // Zorua-Hisui -> Zoroark-Hisui
+  { from: 808, to: 809, level: 50 }, // Meltan -> Melmetal
 ];
 
 // Mapa de acesso rápido: pokemonId → evolução
@@ -664,8 +665,13 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   980,  // Clodsire (Wooper-Paldea)
   // Phione não evolui para Manaphy nos jogos principais, apesar da cadeia da PokéAPI
   490,
+  // Linhas lendarias/miticas com pre-evolucao propria; ovos devem usar a forma inicial.
+  790,  // Cosmoem (Cosmog -> Cosmoem)
+  791,  // Solgaleo (Cosmoem -> Solgaleo)
   // Ramificações não mapeadas via `to` (apenas em `toOptions`)
   792,  // Lunala (Cosmoem → toOptions, `to` é Solgaleo 791)
+  804,  // Naganadel (Poipole -> Naganadel)
+  892,  // Urshifu (Kubfu -> Urshifu)
   10152, // Lycanroc-Midnight (Rockruff → toOptions, `to` é Lycanroc-Midday 745)
   10155, // Lycanroc-Dusk (Rockruff → toOptions)
   // Gen 9 — evoluções não mapeadas
@@ -1268,6 +1274,7 @@ const POKEMON_GEN4_NAMES: Record<number, string> = {
 
 // Gen 5 (Unova)
 const POKEMON_GEN5_NAMES: Record<number, string> = {
+  494:"Victini",
   495:"Snivy",496:"Servine",497:"Serperior",
   498:"Tepig",499:"Pignite",500:"Emboar",
   501:"Oshawott",502:"Dewott",503:"Samurott",
@@ -1456,6 +1463,7 @@ const POKEMON_GEN8_NAMES: Record<number, string> = {
   896:"Glastrier",897:"Spectrier",898:"Calyrex",
   899:"Wyrdeer",900:"Kleavor",901:"Ursaluna",
   902:"Basculegion",903:"Sneasler",904:"Overqwil",
+  905:"Enamorus",
 };
 
 // Gen 9 (Paldea)
@@ -1745,6 +1753,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   483:"steel/dragon",484:"water/dragon",485:"fire/steel",
   486:"psychic",487:"ghost/dragon",488:"psychic",
   489:"water",490:"water",491:"dark",492:"grass",493:"normal",
+  494:"psychic/fire",
   // ── Gen 5 ──────────────────────────────────────────────────────────────────
   495:"grass",496:"grass",497:"grass",
   498:"fire",499:"fire/fighting",500:"fire/fighting",
@@ -1849,7 +1858,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   797:"bug/fighting",798:"electric/flying",799:"poison/steel",
   800:"psychic",801:"steel/fairy",802:"dark/fighting",
   803:"poison/dragon",804:"poison/dragon",805:"bug/fighting",806:"bug/fire",
-  807:"electric/steel",808:"steel/ghost",809:"steel/ghost",
+  807:"electric",808:"steel",809:"steel",
   // ── Gen 8 ──────────────────────────────────────────────────────────────────
   810:"grass",811:"grass",812:"grass",
   813:"fire",814:"fire",815:"fire",
@@ -1877,7 +1886,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   891:"fighting",892:"fighting/dark",893:"grass/dark",  // 892 = Urshifu Single Strike
   894:"electric",895:"dragon",896:"ice",897:"ghost",898:"psychic/grass",
   899:"normal/psychic",900:"bug/rock",901:"ground/normal",
-  902:"water/ghost",903:"fighting/poison",904:"dark/poison",
+  902:"water/ghost",903:"fighting/poison",904:"dark/poison",905:"fairy/flying",
   // ── Gen 9 ──────────────────────────────────────────────────────────────────
   906:"grass",907:"grass",908:"grass/dark",
   909:"fire",910:"fire",911:"fire/ghost",
@@ -2085,7 +2094,7 @@ export const LEGENDARY_POOL: number[] = [
   // Gen 3
   377, 378, 379, 380, 381, 382, 383, 384, 385, 386,
   // Gen 4
-  480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493,
+  480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494,
   // Gen 5
   638, 639, 640, 641, 642, 643, 644, 645, 646, 647, 648, 649,
   // Gen 6
@@ -2093,7 +2102,7 @@ export const LEGENDARY_POOL: number[] = [
   // Gen 7
   785, 786, 787, 788, 789, 790, 791, 792, 800, 801, 802, 807, 808, 809,
   // Gen 8
-  888, 889, 890, 891, 892, 893, 894, 895, 896, 897, 898,
+  888, 889, 890, 891, 892, 893, 894, 895, 896, 897, 898, 905,
   // Gen 9
   1001, 1002, 1003, 1004, 1007, 1008,
   // Formas especiais lendárias (IDs PokeAPI)
@@ -2101,12 +2110,16 @@ export const LEGENDARY_POOL: number[] = [
   10166, 10167, 10168, // Articuno/Zapdos/Moltres-Galar
 ];
 
+export const LEGENDARY_HATCH_BASE_OVERRIDES: Record<number, number> = {
+  809: 808, // Melmetal e evolucao do Meltan; ovos nunca chocam Melmetal direto.
+};
+
 export const ULTRA_BEAST_IDS = new Set([
   793, 794, 795, 796, 797, 798, 799, 803, 804, 805, 806,
 ]);
 
 export const MYTHICAL_IDS = new Set([
-  151, 251, 385, 386, 489, 490, 491, 492, 493, 647, 648, 649,
+  151, 251, 385, 386, 489, 490, 491, 492, 493, 494, 647, 648, 649,
   719, 720, 721, 801, 802, 807, 808, 809, 893,
   1001, 1002, 1003, 1004,
 ]);
