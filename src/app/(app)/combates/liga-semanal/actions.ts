@@ -1424,7 +1424,7 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
         granted++;
       }
       await tx.weeklyMascotLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: participants[0].playerId } });
-    });
+    }, { timeout: 20000, maxWait: 10000 });
 
     revalidatePath(PATH);
     revalidatePath("/caixa-de-presentes");

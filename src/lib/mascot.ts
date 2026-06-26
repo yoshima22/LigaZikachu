@@ -1377,7 +1377,7 @@ export async function claimExpedition(
         }).catch(() => null);
       }
     }
-  });
+  }, { timeout: 20000, maxWait: 10000 });
 
   if (expeditionExp > 0) {
     // ignoreBenchPenalty: expedição é esforço do mascote, não interação presencial
