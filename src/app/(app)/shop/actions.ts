@@ -95,7 +95,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
     description: "Restaura humor e felicidade do seu mascote.",
     imageUrl: null,
     rarity: ShopItemRarity.COMMON,
-    price: 20,
+    price: 120,
     sortOrder: 40,
   },
   {

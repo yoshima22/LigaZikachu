@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { activateAccountStandby, updateOwnPassword, updatePlayerProfile } from "../actions";
+import { updateOwnPassword, updatePlayerProfile } from "../actions";
 
 interface EditProfileFormProps {
   player: {
@@ -13,7 +13,6 @@ interface EditProfileFormProps {
     ptcglNick: string | null;
     popId: string | null;
     avatarUrl: string | null;
-    standbyUntil: Date | string | null;
   };
 }
 
@@ -25,8 +24,6 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [standbyLoading, setStandbyLoading] = useState(false);
-  const [standbyDays, setStandbyDays] = useState<7 | 14 | 30 | 60 | 90>(7);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -96,27 +93,6 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
       setPasswordLoading(false);
     }
   }
-
-  async function handleStandbySubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setStandbyLoading(true);
-    try {
-      const result = await activateAccountStandby({ days: standbyDays });
-      if (result?.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Conta colocada em standby.");
-      router.refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao ativar standby");
-    } finally {
-      setStandbyLoading(false);
-    }
-  }
-
-  const standbyUntil = player.standbyUntil ? new Date(player.standbyUntil) : null;
-  const standbyActive = !!standbyUntil && standbyUntil > new Date();
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -194,7 +170,6 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
       </Button>
     </form>
 
-    <div className="space-y-4">
     <form onSubmit={handlePasswordSubmit} className="space-y-4 rounded-2xl border border-border bg-slate-950/50 p-4">
       <div>
         <h3 className="text-sm font-semibold text-white">Trocar senha</h3>
@@ -242,39 +217,6 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
         {passwordLoading ? "Salvando..." : "Atualizar senha"}
       </Button>
     </form>
-
-    <form onSubmit={handleStandbySubmit} className="space-y-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-      <div>
-        <h3 className="text-sm font-semibold text-amber-100">Desativar conta temporariamente</h3>
-        <p className="mt-1 text-xs leading-relaxed text-amber-100/70">
-          Use quando ficar alguns dias afastado. Durante o standby sua conta nao entra na Liga Semanal e seus mascotes nao perdem fome/felicidade. Depois de ativar, nao e possivel cancelar antes da data.
-        </p>
-      </div>
-      {standbyActive ? (
-        <div className="rounded-xl border border-amber-500/30 bg-slate-950/50 p-3 text-xs text-amber-100">
-          Standby ativo ate {standbyUntil.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
-        </div>
-      ) : (
-        <>
-          <label className="block text-xs font-medium uppercase tracking-widest text-slate-500">
-            Periodo
-          </label>
-          <select
-            value={standbyDays}
-            onChange={(event) => setStandbyDays(Number(event.target.value) as 7 | 14 | 30 | 60 | 90)}
-            className="w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100"
-          >
-            {[7, 14, 30, 60, 90].map((days) => (
-              <option key={days} value={days}>{days} dias</option>
-            ))}
-          </select>
-          <Button type="submit" disabled={standbyLoading} className="border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20">
-            {standbyLoading ? "Ativando..." : "Ativar standby"}
-          </Button>
-        </>
-      )}
-    </form>
-    </div>
     </div>
   );
 }

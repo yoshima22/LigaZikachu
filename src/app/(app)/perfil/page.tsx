@@ -15,7 +15,6 @@ import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
-import { getStandbyUntilFromNotes } from "@/lib/account-standby";
 
 
 type ProfileMascot = {
@@ -190,7 +189,6 @@ export default async function PerfilPage() {
       ptcglNick: true,
       popId: true,
       avatarUrl: true,
-      notes: true,
       deckSubmissions: {
         orderBy: { submittedAt: "desc" },
         take: 20,
@@ -397,7 +395,7 @@ export default async function PerfilPage() {
 
       <Card className="p-6">
         <h2 className="mb-4 text-sm font-semibold text-white">Editar perfil e senha</h2>
-        <EditProfileForm player={{ ...player, standbyUntil: getStandbyUntilFromNotes(player.notes) }} />
+        <EditProfileForm player={player} />
       </Card>
 
       <PokemonWishlist

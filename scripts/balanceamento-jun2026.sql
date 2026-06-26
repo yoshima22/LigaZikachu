@@ -74,7 +74,7 @@ WHERE type = 'EGG_SPECIAL';
 
 -- Comida de Mascote
 UPDATE shop_items SET
-  price = 20,
+  price = 35,
   description = 'Alimenta o mascote e melhora sua rotina de cuidado. Ideal para manter a fome controlada e evitar penalidades em treino e expedições.'
 WHERE type = 'MASCOT_FOOD';
 

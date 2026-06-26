@@ -9,7 +9,6 @@ import {
   autoResolveExpiredBondEvents,
   createBondEventForPlayer,
   effectiveRelationScore,
-  ensureRunawayWarningsForPlayer,
   normalizeBondOptions,
   relationTier,
   type BondBehavior,
@@ -29,21 +28,17 @@ function timeLeft(date: Date | null) {
 }
 
 function withAvailability(option: BondOption, counts: { food: number; sweet: number; coins: number }) {
-  const costs = option.costs ?? (option.cost ? [option.cost] : []);
-  if (costs.length === 0) return option;
-  const missing = costs.find((cost) => {
-    const available =
-      cost.kind === "FOOD" ? counts.food :
-      cost.kind === "SWEET" ? counts.sweet :
-      counts.coins;
-    return available < cost.quantity;
-  });
-  if (!missing) return option;
+  if (!option.cost) return option;
+  const available =
+    option.cost.kind === "FOOD" ? counts.food :
+    option.cost.kind === "SWEET" ? counts.sweet :
+    counts.coins;
+  if (available >= option.cost.quantity) return option;
   return {
     ...option,
-    blockedReason: missing.kind === "FOOD"
+    blockedReason: option.cost.kind === "FOOD"
       ? "Voce precisa de Comida de Mascote."
-      : missing.kind === "SWEET"
+      : option.cost.kind === "SWEET"
         ? "Voce precisa de Doce de Mascote."
         : "ZikaCoins insuficientes.",
   };
@@ -64,7 +59,6 @@ export default async function LacosPage({
   if (!player) redirect("/dashboard");
 
   await autoResolveExpiredBondEvents(player.id);
-  await ensureRunawayWarningsForPlayer(player.id).catch(() => {});
 
   // Auto-criar eventos cadenciados: min 4h entre criações, preenche até 5 pendentes
   const [lastEvent, currentPending] = await Promise.all([

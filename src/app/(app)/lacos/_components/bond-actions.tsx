@@ -90,10 +90,6 @@ export function RelationsFilter({ defaultSearch, defaultSort }: { defaultSearch:
 export function ResolveBondOptionButton({ eventId, option, disabled }: { eventId: string; option: BondOption; disabled?: boolean }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const costs = option.costs ?? (option.cost ? [option.cost] : []);
-  const costLabel = costs.length
-    ? costs.map((cost) => `${cost.quantity} ${cost.kind === "FOOD" ? "Comida" : cost.kind === "SWEET" ? "Doce" : "ZC"}`).join(" + ")
-    : "Sem custo";
   const tone =
     option.type === "POSITIVE"
       ? "border-green-500/40 bg-green-500/10 text-green-200 hover:bg-green-500/20"
@@ -118,7 +114,7 @@ export function ResolveBondOptionButton({ eventId, option, disabled }: { eventId
       <span className="block font-bold">{pending ? "Aplicando..." : option.label}</span>
       <span className="mt-1 block text-[10px] opacity-75">
         {option.type === "POSITIVE" ? "Positiva" : option.type === "AGGRESSIVE" ? "Rivalidade" : "Neutra"}
-        {` | Custo: ${costLabel}`}
+        {option.cost ? ` | Custo: ${option.cost.quantity} ${option.cost.kind === "FOOD" ? "Comida" : option.cost.kind === "SWEET" ? "Doce" : "ZC"}` : " | Sem custo"}
         {` | Relacao ${option.scoreDelta >= 0 ? "+" : ""}${option.scoreDelta}`}
       </span>
       {disabled && option.blockedReason && <span className="mt-1 block text-[10px] text-red-200">{option.blockedReason}</span>}
