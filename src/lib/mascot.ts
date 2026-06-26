@@ -1319,11 +1319,6 @@ export async function claimExpedition(
       const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
       const allyPlayerId = rel.mascotB.playerId;
 
-      // EXP para o mascote aliado também (participação remota) — sem bench penalty
-      if (mode !== "ITEMS") {
-        await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3), { ignoreBenchPenalty: true }).catch(() => {});
-      }
-
       // Presente para o dono do aliado: moedas ou comida dependendo do carisma
       const charisma = rel.mascotB.statCharisma;
       if (charisma >= 15) {
@@ -1361,9 +1356,6 @@ export async function claimExpedition(
         });
       }
 
-      // Log de evento nos dois mascotes
-      await logEvent(rel.mascotB.id, "🤝", `Apoiou ${expeditorName} em expedição de ${dur.label} e ganhou recompensa!`).catch(() => {});
-      await logEvent(expedition.mascotId, "💚", `${friendName} apoiou e turbinou a expedição! (+${Math.round(allyExpBonus * 100 - 100)}% EXP)`).catch(() => {});
     }
     if (durationKey === "3h" || durationKey === "6h") {
       const syncDrop = await maybeDropSyncTicket(tx, playerId, durationKey === "3h" ? "expedition-3h" : "expedition-6h");
@@ -1378,6 +1370,15 @@ export async function claimExpedition(
       }
     }
   }, { timeout: 20000, maxWait: 10000 });
+
+  for (const rel of friends) {
+    const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
+    if (mode !== "ITEMS") {
+      await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3), { ignoreBenchPenalty: true }).catch(() => {});
+    }
+    await logEvent(rel.mascotB.id, "ALLY", `Apoiou ${expeditorName} em expedicao de ${dur.label} e ganhou recompensa!`).catch(() => {});
+    await logEvent(expedition.mascotId, "ALLY", `${friendName} apoiou e turbinou a expedicao! (+${Math.round(allyExpBonus * 100 - 100)}% EXP)`).catch(() => {});
+  }
 
   if (expeditionExp > 0) {
     // ignoreBenchPenalty: expedição é esforço do mascote, não interação presencial
