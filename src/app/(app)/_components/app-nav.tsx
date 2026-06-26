@@ -121,7 +121,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
         {mainLinks
           .filter((link) => !link.adminOnly || admin)
           .map(({ href, label, icon: Icon, tutorialId }) => (
-            <Link key={href} href={href} onClick={() => setOpenMenu(null)} {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
+            <Link key={href} href={href} prefetch={false} onClick={() => setOpenMenu(null)} {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
               <Button
                 variant="ghost"
                 size="sm"
@@ -183,7 +183,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
         {adminLinks
           .filter((link) => !link.adminOnly || admin)
           .map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} onClick={() => setOpenMenu(null)}>
+            <Link key={href} href={href} prefetch={false} onClick={() => setOpenMenu(null)}>
               <Button
                 variant="ghost"
                 size="sm"
@@ -203,7 +203,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
             .map(({ href, label, icon: Icon, tutorialId }) => (
-              <Link key={href} href={href} onClick={() => setOpenMenu(null)} {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
+              <Link key={href} href={href} prefetch={false} onClick={() => setOpenMenu(null)} {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -262,7 +262,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
             badgeHrefs={{ "/caixa-de-presentes": giftCount }}
           />
           {admin && (
-            <Link href="/admin" onClick={() => setOpenMenu(null)}>
+            <Link href="/admin" prefetch={false} onClick={() => setOpenMenu(null)}>
               <Button variant="ghost" size="sm" className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
                 <ShieldCheck size={13} className="mr-1" />
                 Admin
@@ -304,7 +304,7 @@ function NavDropdown({
       {open && (
         <div className="absolute right-0 top-10 z-50 min-w-48 rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
-            <Link key={href} href={href} onClick={() => setOpenMenu(null)}
+            <Link key={href} href={href} prefetch={false} onClick={() => setOpenMenu(null)}
               className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]">
               <span className="flex items-center gap-2"><ItemIcon size={14} />{itemLabel}</span>
               {badgeHrefs[href] > 0 && (
@@ -348,7 +348,7 @@ function MobileNavGroup({
       {open && (
         <div className="absolute left-0 top-9 z-[60] min-w-44 max-h-[60vh] overflow-y-auto rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
           {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
-            <Link key={href} href={href} onClick={() => setOpenMenu(null)}
+            <Link key={href} href={href} prefetch={false} onClick={() => setOpenMenu(null)}
               className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]">
               <span className="flex items-center gap-2"><ItemIcon size={13} />{itemLabel}</span>
               {badgeHrefs[href] > 0 && (
