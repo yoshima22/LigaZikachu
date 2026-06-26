@@ -63,5 +63,8 @@ export const getSessionPlayer = cache(async (userId: string) => {
   return prisma.player.findUnique({
     where: { userId },
     select: { id: true, displayName: true, ptcglNick: true, avatarUrl: true },
+  }).catch((error) => {
+    console.error("[Session] player lookup failed", { userId, error });
+    return null;
   });
 });

@@ -47,36 +47,42 @@ export default async function DashboardPage() {
 
   const admin = isAdmin(user.role);
 
-  const [allSeasons, activeSeason] = await Promise.all([
-    getCachedSeasons(),
-    getCachedActiveSeason(),
-  ]);
+  const allSeasons = await getCachedSeasons().catch((error) => {
+    console.error("[Dashboard] seasons lookup failed", { userId: user.id, error });
+    return [];
+  });
+  const activeSeason = await getCachedActiveSeason().catch((error) => {
+    console.error("[Dashboard] active season lookup failed", { userId: user.id, error });
+    return null;
+  });
 
   // ===== ADMIN =====
   if (admin) {
     const seasonId = activeSeason?.id;
     const currentWeek = activeSeason?.weeks[0] ?? null;
 
-    const [pendingMatchCount, disputedCount, availableCodesCount, recentMatches] = await Promise.all([
-      seasonId ? prisma.match.count({ where: { seasonId, status: MatchStatus.PENDING_CONFIRMATION } }) : 0,
-      seasonId ? prisma.match.count({ where: { seasonId, status: MatchStatus.DISPUTED } }) : 0,
-      prisma.boosterCode.count({ where: { status: "AVAILABLE", ...(seasonId ? { seasonId } : {}) } }),
-      seasonId ? prisma.match.findMany({
-        where: { seasonId, status: MatchStatus.CONFIRMED },
-        orderBy: { playedAt: "desc" }, take: 5,
-        include: {
-          playerA: { select: { displayName: true } },
-          playerB: { select: { displayName: true } },
-          winnerPlayer: { select: { displayName: true } },
-          week: { select: { number: true } },
-          tournamentWeek: { select: { weekNumber: true, tournament: { select: { slug: true, name: true } } } }
-        }
-      }) : []
-    ]);
+    const pendingMatchCount = seasonId
+      ? await prisma.match.count({ where: { seasonId, status: MatchStatus.PENDING_CONFIRMATION } }).catch(() => 0)
+      : 0;
+    const disputedCount = seasonId
+      ? await prisma.match.count({ where: { seasonId, status: MatchStatus.DISPUTED } }).catch(() => 0)
+      : 0;
+    const availableCodesCount = await prisma.boosterCode.count({ where: { status: "AVAILABLE", ...(seasonId ? { seasonId } : {}) } }).catch(() => 0);
+    const recentMatches = seasonId ? await prisma.match.findMany({
+      where: { seasonId, status: MatchStatus.CONFIRMED },
+      orderBy: { playedAt: "desc" }, take: 5,
+      include: {
+        playerA: { select: { displayName: true } },
+        playerB: { select: { displayName: true } },
+        winnerPlayer: { select: { displayName: true } },
+        week: { select: { number: true } },
+        tournamentWeek: { select: { weekNumber: true, tournament: { select: { slug: true, name: true } } } }
+      }
+    }).catch(() => []) : [];
 
     let playersWithoutDeck = 0;
     if (currentWeek && seasonId) {
-      const withDeck = await prisma.deckSubmission.count({ where: { seasonId, weekId: currentWeek.id } });
+      const withDeck = await prisma.deckSubmission.count({ where: { seasonId, weekId: currentWeek.id } }).catch(() => 0);
       playersWithoutDeck = (activeSeason?.seasonPlayers.length ?? 0) - withDeck;
     }
 
@@ -152,6 +158,9 @@ export default async function DashboardPage() {
   const player = await prisma.player.findUnique({
     where: { userId: user.id },
     select: { id: true, displayName: true }
+  }).catch((error) => {
+    console.error("[Dashboard] player lookup failed", { userId: user.id, error });
+    return null;
   });
 
   if (!player) {

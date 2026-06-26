@@ -215,6 +215,9 @@ export default async function MascotesPage() {
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
     select: { id: true }
+  }).catch((error) => {
+    console.error("[Mascotes] player lookup failed", { userId: session.user.id, error });
+    return null;
   });
   if (!player) return notFound();
 

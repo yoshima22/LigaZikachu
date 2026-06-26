@@ -29,23 +29,25 @@ const getNavData = (userId: string) =>
       const player = await prisma.player.findUnique({
         where: { userId },
         select: { id: true, ptcglNick: true, avatarUrl: true },
+      }).catch((error) => {
+        console.error("[Layout] nav player lookup failed", { userId, error });
+        return null;
       });
-      if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0 };
-      const [giftCount, wallet, unreadDms, bazarAlerts] = await Promise.all([
-        prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch(() => 0),
-        prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null),
-        prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0),
-        prisma.bazarProposal.count({
-          where: {
-            OR: [
-              // Propostas recebidas que ainda não respondi (sou o vendedor)
-              { listing: { playerId: player.id, status: "ACTIVE", expiresAt: { gt: new Date() } }, status: "PENDING" },
-              // Minhas propostas respondidas que ainda não vi no bazar
-              { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
-            ],
-          },
-        }).catch(() => 0),
-      ]);
+
+      if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0 };
+
+      const giftCount = await prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch(() => 0);
+      const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null);
+      const unreadDms = await prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0);
+      const bazarAlerts = await prisma.bazarProposal.count({
+        where: {
+          OR: [
+            { listing: { playerId: player.id, status: "ACTIVE", expiresAt: { gt: new Date() } }, status: "PENDING" },
+            { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
+          ],
+        },
+      }).catch(() => 0);
+
       return { player, giftCount, wallet, unreadDms, bazarAlerts };
     },
     [`nav-data-${userId}`],
@@ -59,10 +61,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   const admin = isAdmin(user.role);
 
-  const [{ player, giftCount, wallet, unreadDms, bazarAlerts }, globalNotice] = await Promise.all([
-    getNavData(user.id),
-    getGlobalNotice(),
-  ]);
+  const navData = await getNavData(user.id).catch((error) => {
+    console.error("[Layout] nav data failed", { userId: user.id, error });
+    return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0 };
+  });
+  const globalNotice = await getGlobalNotice();
+  const { player, giftCount, wallet, unreadDms, bazarAlerts } = navData;
 
   return (
     <>
