@@ -8,7 +8,12 @@
  * Important rule: normal eggs should never hatch evolved forms.
  */
 
-import { ALL_EVOLVED_IDS, EGG_POOLS, LEGENDARY_POOL } from "@/lib/mascot-data";
+import {
+  ALL_EVOLVED_IDS,
+  EGG_POOLS,
+  LEGENDARY_HATCH_BASE_OVERRIDES,
+  LEGENDARY_POOL,
+} from "@/lib/mascot-data";
 
 type WeightedEggBucket = {
   label: string;
@@ -240,6 +245,12 @@ function uniquePokemonIds(ids: number[]): number[] {
   return [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
 }
 
+function hatchableLegendaryPool(): number[] {
+  return uniquePokemonIds(
+    LEGENDARY_POOL.map((id) => LEGENDARY_HATCH_BASE_OVERRIDES[id] ?? id)
+  ).filter((id) => !ALL_EVOLVED_IDS.has(id));
+}
+
 function sanitizeNormalEggPool(ids: number[]): number[] {
   return uniquePokemonIds(ids).filter((id) => {
     if (LEGENDARY_POOL.includes(id)) return false;
@@ -301,7 +312,7 @@ function fallbackPoolForEgg(eggType: string): number[] {
  */
 export function rollPokemonIdFromEgg(eggType: string): number {
   if (Math.random() < legendaryChanceForEgg(eggType)) {
-    return randomFrom(LEGENDARY_POOL);
+    return randomFrom(hatchableLegendaryPool());
   }
 
   const profile = EGG_RATE_PROFILES[eggType];

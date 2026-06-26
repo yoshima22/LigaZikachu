@@ -8,7 +8,8 @@ import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { getShopItemMeta } from "@/lib/shop-cache";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
-  EGG_POOLS, LEGENDARY_POOL, EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
+  ALL_EVOLVED_IDS, EGG_POOLS, LEGENDARY_HATCH_BASE_OVERRIDES, LEGENDARY_POOL,
+  EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
@@ -41,7 +42,12 @@ function randomPersonality(): MascotPersonality {
  * acima do ovo SPECIAL normal (6%), recompensando o custo em pó de criação.
  */
 export function rollLabEggChoice(): number {
-  if (Math.random() < 0.07) return randomFrom(LEGENDARY_POOL);
+  if (Math.random() < 0.07) {
+    const hatchableLegendaryPool = Array.from(
+      new Set(LEGENDARY_POOL.map((id) => LEGENDARY_HATCH_BASE_OVERRIDES[id] ?? id)),
+    ).filter((id) => !ALL_EVOLVED_IDS.has(id));
+    return randomFrom(hatchableLegendaryPool);
+  }
   const pool = EGG_POOLS.SPECIAL?.length ? EGG_POOLS.SPECIAL : EGG_POOLS.RARE;
   return randomFrom(pool);
 }
