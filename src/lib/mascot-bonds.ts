@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addExp } from "@/lib/mascot";
 import { getPokemonName } from "@/lib/mascot-data";
+import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 
 export type BondBehavior =
   | "FREE"
@@ -20,6 +21,7 @@ export type BondOption = {
   label: string;
   type: "POSITIVE" | "NEUTRAL" | "AGGRESSIVE";
   cost?: { kind: "FOOD" | "SWEET" | "COINS"; quantity: number };
+  costs?: { kind: "FOOD" | "SWEET" | "COINS"; quantity: number }[];
   scoreDelta: number;
   happinessA?: number;
   happinessB?: number;
@@ -29,6 +31,13 @@ export type BondOption = {
   publicEligible?: boolean;
   blockedReason?: string;
 };
+
+const RUNAWAY_WARNING_TYPE = "RUNAWAY_WARNING";
+const RUNAWAY_RESCUE_TYPE = "RUNAWAY_RESCUE";
+const RUNAWAY_WARNING_MS = 2 * 24 * 60 * 60_000;
+const RUNAWAY_RESCUE_MS = 3 * 24 * 60 * 60_000;
+
+type BondCost = NonNullable<BondOption["cost"]>;
 
 export const BOND_BEHAVIOR_LABEL: Record<BondBehavior, string> = {
   FREE: "Temperamento Livre",
@@ -86,6 +95,62 @@ export function normalizeBondOptions(options: unknown): BondOption[] {
 }
 
 export function defaultBondOptions(eventType: string): BondOption[] {
+  if (eventType === RUNAWAY_WARNING_TYPE) {
+    return [
+      {
+        id: "care_food",
+        label: "Cuidar com carinho, brincadeira e comida",
+        type: "POSITIVE",
+        costs: [{ kind: "FOOD", quantity: 1 }],
+        scoreDelta: 0,
+        happinessA: 55,
+      },
+      {
+        id: "care_sweet",
+        label: "Cuidar com carinho, brincadeira e doce",
+        type: "POSITIVE",
+        costs: [{ kind: "SWEET", quantity: 1 }],
+        scoreDelta: 0,
+        happinessA: 65,
+      },
+      {
+        id: "let_run",
+        label: "Deixar fugir",
+        type: "NEUTRAL",
+        scoreDelta: 0,
+        happinessA: -5,
+        publicEligible: true,
+      },
+    ];
+  }
+  if (eventType === RUNAWAY_RESCUE_TYPE) {
+    return [
+      {
+        id: "rescue_food",
+        label: "Acolher com carinho, brincadeira e comida",
+        type: "POSITIVE",
+        costs: [{ kind: "FOOD", quantity: 1 }],
+        scoreDelta: 0,
+        happinessA: 55,
+        publicEligible: true,
+      },
+      {
+        id: "rescue_sweet",
+        label: "Acolher com carinho, brincadeira e doce",
+        type: "POSITIVE",
+        costs: [{ kind: "SWEET", quantity: 1 }],
+        scoreDelta: 0,
+        happinessA: 65,
+        publicEligible: true,
+      },
+      {
+        id: "leave_alone",
+        label: "Deixar seguir caminho",
+        type: "NEUTRAL",
+        scoreDelta: 0,
+      },
+    ];
+  }
   if (eventType === "SHARE_SNACK") {
     return [
       { id: "share_food", label: "Dividir o lanche", type: "POSITIVE", cost: { kind: "FOOD", quantity: 2 }, scoreDelta: 12, happinessA: 4, happinessB: 10 },
@@ -224,13 +289,72 @@ export async function createBondEventForPlayer(playerId: string) {
   });
 }
 
+export async function ensureRunawayWarningsForPlayer(playerId: string) {
+  const staleFoodAt = new Date(Date.now() - 48 * 60 * 60_000);
+  const candidates = await prisma.mascot.findMany({
+    where: {
+      playerId,
+      arenaState: "FREE",
+      bazarListed: false,
+      expeditions: { none: { status: "ACTIVE" } },
+      OR: [
+        { happiness: { lt: 20 } },
+        { mood: "HUNGRY" },
+        { lastFedAt: null },
+        { lastFedAt: { lt: staleFoodAt } },
+      ],
+    },
+    select: {
+      id: true,
+      pokemonId: true,
+      nickname: true,
+      playerId: true,
+      player: { select: { displayName: true } },
+    },
+    orderBy: [{ isEquipped: "desc" }, { happiness: "asc" }, { lastFedAt: "asc" }],
+    take: 4,
+  });
+
+  for (const mascot of candidates) {
+    const existing = await prisma.mascotSocialEvent.findFirst({
+      where: {
+        mascotAId: mascot.id,
+        eventType: { in: [RUNAWAY_WARNING_TYPE, RUNAWAY_RESCUE_TYPE] },
+        status: "PENDING",
+      },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+    await prisma.mascotSocialEvent.create({
+      data: {
+        ownerId: playerId,
+        mascotAId: mascot.id,
+        eventType: RUNAWAY_WARNING_TYPE,
+        title: "Risco de fuga",
+        description: `${name} esta faminto ou muito triste. Ele ficara 2 dias nesta aba antes de fugir. Para manter o mascote, faca o combo de carinho + brincadeira + comida ou doce.`,
+        optionsJson: defaultBondOptions(RUNAWAY_WARNING_TYPE) as unknown as Prisma.InputJsonValue,
+        visibility: "PRIVATE",
+        affectedPlayerIds: [playerId] as unknown as Prisma.InputJsonValue,
+        publicEligible: false,
+        expiresAt: new Date(Date.now() + RUNAWAY_WARNING_MS),
+      },
+    });
+    await prisma.mascot.update({
+      where: { id: mascot.id },
+      data: { socialCooldownUntil: new Date(Date.now() + RUNAWAY_WARNING_MS) },
+    });
+  }
+}
+
 export async function applyBondOption(eventId: string, playerId: string, optionId: string, resolvedBy: "USER" | "AUTO" = "USER") {
   return prisma.$transaction(async (tx) => {
     const event = await tx.mascotSocialEvent.findUnique({
       where: { id: eventId },
       include: {
         owner: { select: { id: true, mascotBondBehavior: true } },
-        mascotA: { select: { id: true, playerId: true } },
+        mascotA: { select: { id: true, playerId: true, pokemonId: true } },
         mascotB: { select: { id: true, playerId: true } },
       },
     });
@@ -243,10 +367,13 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
       ? pickAutoOption(options, event.owner.mascotBondBehavior as BondBehavior)
       : options.find((o) => o.id === optionId);
     if (!option) throw new Error("Opcao invalida.");
-    if (resolvedBy === "AUTO" && option.cost) throw new Error("Resolucao automatica nao pode consumir recursos.");
+    if (resolvedBy === "AUTO" && (option.cost || option.costs?.length)) throw new Error("Resolucao automatica nao pode consumir recursos.");
 
-    if (option.cost && resolvedBy === "USER") {
-      await consumeBondCost(tx, playerId, option.cost);
+    const optionCosts = option.costs ?? (option.cost ? [option.cost] : []);
+    if (optionCosts.length > 0 && resolvedBy === "USER") {
+      for (const cost of optionCosts) {
+        await consumeBondCost(tx, playerId, cost);
+      }
     }
 
     const mascotBId = event.mascotBId;
@@ -271,7 +398,58 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
       happinessB: option.happinessB ?? 0,
       expA: option.expA ?? 0,
       expB: option.expB ?? 0,
+      special: event.eventType,
     };
+
+    if (event.eventType === RUNAWAY_WARNING_TYPE) {
+      if (option.id === "care_food" || option.id === "care_sweet") {
+        await tx.mascot.update({
+          where: { id: event.mascotAId },
+          data: {
+            happiness: 85,
+            mood: "HAPPY",
+            lastInteractedAt: new Date(),
+            lastPlayedAt: new Date(),
+            lastPettedAt: new Date(),
+            lastFedAt: new Date(),
+            socialCooldownUntil: null,
+          },
+        });
+      }
+    }
+
+    if (event.eventType === RUNAWAY_RESCUE_TYPE && (option.id === "rescue_food" || option.id === "rescue_sweet")) {
+      await tx.mascotExpedition.deleteMany({ where: { mascotId: event.mascotAId, status: "ACTIVE" } });
+      await tx.mascot.update({
+        where: { id: event.mascotAId },
+        data: {
+          playerId,
+          isEquipped: false,
+          isFavorite: false,
+          bazarListed: false,
+          arenaState: "FREE",
+          expLocked: false,
+          happiness: 75,
+          mood: "HAPPY",
+          lastInteractedAt: new Date(),
+          lastPlayedAt: new Date(),
+          lastPettedAt: new Date(),
+          lastFedAt: new Date(),
+          socialCooldownUntil: null,
+          restingUntil: null,
+          injuredAt: null,
+        },
+      });
+      await tx.mascotRelation.deleteMany({
+        where: { OR: [{ mascotAId: event.mascotAId }, { mascotBId: event.mascotAId }] },
+      });
+      await registerPokemonDiscovery({
+        playerId,
+        pokemonId: event.mascotA.pokemonId,
+        source: "Resgate em Lacos",
+        obtainedAt: new Date(),
+      }, tx);
+    }
 
     await tx.mascotSocialDecisionLog.create({
       data: {
@@ -284,7 +462,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
         optionLabel: option.label,
         optionType: option.type,
         resolvedBy,
-        costJson: (option.cost ?? null) as Prisma.InputJsonValue,
+        costJson: (optionCosts.length ? optionCosts : null) as Prisma.InputJsonValue,
         resultJson: resultJson as Prisma.InputJsonValue,
         visibility: option.publicEligible ? "PUBLIC" : event.visibility,
       },
@@ -303,8 +481,11 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
       },
     });
 
-    return { option, resultJson };
+    return { option, resultJson, eventType: event.eventType, mascotAId: event.mascotAId, ownerId: event.ownerId };
   }).then(async (result) => {
+    if (result.eventType === RUNAWAY_WARNING_TYPE && result.option.id === "let_run") {
+      await createRunawayRescueEvent(result.mascotAId, result.ownerId).catch(() => null);
+    }
     if (result.option.expA) await addExp((await prisma.mascotSocialEvent.findUnique({ where: { id: eventId }, select: { mascotAId: true } }))!.mascotAId, result.option.expA);
     if (result.option.expB) {
       const e = await prisma.mascotSocialEvent.findUnique({ where: { id: eventId }, select: { mascotBId: true } });
@@ -315,7 +496,9 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
 }
 
 function pickAutoOption(options: BondOption[], behavior: BondBehavior) {
-  const freeOptions = options.filter((o) => !o.cost);
+  const runaway = options.find((o) => o.id === "let_run") ?? options.find((o) => o.id === "leave_alone");
+  if (runaway) return runaway;
+  const freeOptions = options.filter((o) => !o.cost && !o.costs?.length);
   const neutral = freeOptions.filter((o) => o.type === "NEUTRAL");
   const aggressive = freeOptions.filter((o) => o.type === "AGGRESSIVE");
   if (behavior === "COMPETITIVE" && aggressive[0]) return aggressive[0];
@@ -324,7 +507,46 @@ function pickAutoOption(options: BondOption[], behavior: BondBehavior) {
   return neutral[0] ?? aggressive[0] ?? freeOptions[0];
 }
 
-async function consumeBondCost(tx: Prisma.TransactionClient, playerId: string, cost: NonNullable<BondOption["cost"]>) {
+async function createRunawayRescueEvent(mascotId: string, previousOwnerId: string) {
+  const [mascot, target] = await Promise.all([
+    prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } },
+    }),
+    prisma.player.findFirst({
+      where: { id: { not: previousOwnerId }, user: { role: "PLAYER" } },
+      select: { id: true, displayName: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+  if (!mascot || !target) return;
+
+  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  await prisma.mascot.update({
+    where: { id: mascotId },
+    data: {
+      socialCooldownUntil: new Date(Date.now() + RUNAWAY_RESCUE_MS),
+      isEquipped: false,
+      isFavorite: false,
+    },
+  });
+  await prisma.mascotSocialEvent.create({
+    data: {
+      ownerId: target.id,
+      mascotAId: mascotId,
+      eventType: RUNAWAY_RESCUE_TYPE,
+      title: "Mascote perdido encontrado",
+      description: `${name} fugiu de ${mascot.player.displayName} e apareceu perto de voce. Se ajudar com carinho + brincadeira + comida ou doce, ele passa a morar com voce.`,
+      optionsJson: defaultBondOptions(RUNAWAY_RESCUE_TYPE) as unknown as Prisma.InputJsonValue,
+      visibility: "INVOLVED_PLAYERS",
+      affectedPlayerIds: [previousOwnerId, target.id] as unknown as Prisma.InputJsonValue,
+      publicEligible: true,
+      expiresAt: new Date(Date.now() + RUNAWAY_RESCUE_MS),
+    },
+  });
+}
+
+async function consumeBondCost(tx: Prisma.TransactionClient, playerId: string, cost: BondCost) {
   if (cost.kind === "FOOD" || cost.kind === "SWEET") {
     const item = await tx.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: cost.kind } } });
     if (!item || item.quantity < cost.quantity) throw new Error(cost.kind === "FOOD" ? "Voce precisa de Comida de Mascote." : "Voce precisa de Doce de Mascote.");

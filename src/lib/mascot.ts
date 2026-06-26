@@ -953,8 +953,8 @@ async function rollExpeditionReward(
   const cumCoin  = cumFood + coinWeight;
 
   if (roll < cumEgg)   return { type: "EGG",   eggType };
-  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty };
-  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) };
+  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty * 2 };
+  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) * 2 };
   if (roll < cumCoin)  return { type: "COINS", amount: randomInt(coinMin, coinMax) };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
@@ -999,8 +999,8 @@ async function rollItemExpeditionReward(
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
   if (roll < eggWeight)                         return { type: "EGG", eggType };
-  if (roll < eggWeight + sweetWeight)           return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) };
-  if (roll < eggWeight + sweetWeight + foodWeight) return { type: "FOOD", foodType: "FOOD", quantity };
+  if (roll < eggWeight + sweetWeight)           return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
+  if (roll < eggWeight + sweetWeight + foodWeight) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
@@ -1325,7 +1325,7 @@ export async function claimExpedition(
             payload: {
               rewardKind: "MASCOT_FOOD",
               foodType,
-              quantity: 1,
+              quantity: 2,
               rewardLabel: foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote",
             }
           }
