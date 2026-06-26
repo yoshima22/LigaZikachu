@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { prisma } from "@/lib/prisma";
 
-export const revalidate = 300; // 5 min — dados de temporadas mudam raramente
+export const dynamic = "force-dynamic";
 
 const statusMap = {
   DRAFT: { label: "Rascunho", variant: "draft" as const },
