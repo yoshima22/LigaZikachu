@@ -29,9 +29,6 @@ const getNavData = (userId: string) =>
       const player = await prisma.player.findUnique({
         where: { userId },
         select: { id: true, ptcglNick: true, avatarUrl: true },
-      }).catch((error) => {
-        console.error("[Layout] nav player lookup failed", { userId, error });
-        return null;
       });
 
       if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0 };
@@ -50,8 +47,8 @@ const getNavData = (userId: string) =>
 
       return { player, giftCount, wallet, unreadDms, bazarAlerts };
     },
-    [`nav-data-${userId}`],
-    { revalidate: 180, tags: [`nav-${userId}`] },
+    [`nav-data-v2-${userId}`],
+    { revalidate: 60, tags: [`nav-${userId}`] },
   )();
 
 export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
