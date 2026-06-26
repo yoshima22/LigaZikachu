@@ -804,13 +804,21 @@ export async function interactWithMascot(
 
 // ── Mood decay (recalcula humor baseado em última interação) ──────────────────
 
+const _standbyCache = new Map<string, { until: number; active: boolean }>();
+
 export async function recalculateMood(mascotId: string): Promise<void> {
-  const mascot = await prisma.mascot.findUnique({
-    where: { id: mascotId },
-    include: { player: { select: { notes: true } } },
-  });
+  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) return;
-  if (isStandbyActive(mascot.player.notes)) return;
+
+  // Cache standby check per player (avoids N+1 on batch mood recalc)
+  let standby = _standbyCache.get(mascot.playerId);
+  if (!standby || Date.now() > standby.until) {
+    const player = await prisma.player.findUnique({ where: { id: mascot.playerId }, select: { notes: true } });
+    const active = isStandbyActive(player?.notes);
+    _standbyCache.set(mascot.playerId, { until: Date.now() + 60_000, active });
+    standby = { until: Date.now() + 60_000, active };
+  }
+  if (standby.active) return;
 
   const now = Date.now();
   const decayMultiplier = mascot.isEquipped ? 0.5 : 0.125;
