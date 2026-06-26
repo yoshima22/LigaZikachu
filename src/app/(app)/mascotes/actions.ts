@@ -12,6 +12,7 @@ import {
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
 } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
+import { clearRunawayWarningIfRecovered } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import type { Prisma } from "@prisma/client";
@@ -219,6 +220,9 @@ export async function interactAction(
 
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);
+    if (result.success && (type === "FEED_FOOD" || type === "FEED_SWEET")) {
+      await clearRunawayWarningIfRecovered(player.id, mascotId).catch(() => false);
+    }
 
     revalidate(player.id);
     return { result };
@@ -998,7 +1002,7 @@ export async function feedAllAction(): Promise<{
         arenaState: { notIn: ["INJURED", "ARENA"] },
         OR: [{ lastFedAt: null }, { lastFedAt: { lt: twoHoursAgo } }],
       },
-      select: { id: true, pokemonId: true },
+      select: { id: true, pokemonId: true, happiness: true },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
     });
 
@@ -1020,11 +1024,13 @@ export async function feedAllAction(): Promise<{
         tx.mascot.update({
           where: { id: m.id },
           data: {
-            happiness: { increment: 20 },
+            happiness: Math.min(100, m.happiness + 20),
+            mood: "HAPPY",
             lastFedAt: now,
           },
         })
       ));
+      await Promise.all(toFeed.map(m => clearRunawayWarningIfRecovered(player.id, m.id, tx)));
     });
 
     revalidate(player.id);

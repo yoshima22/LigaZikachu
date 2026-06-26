@@ -290,6 +290,19 @@ export async function createBondEventForPlayer(playerId: string) {
 }
 
 export async function ensureRunawayWarningsForPlayer(playerId: string) {
+  const pendingWarnings = await prisma.mascotSocialEvent.findMany({
+    where: {
+      ownerId: playerId,
+      eventType: RUNAWAY_WARNING_TYPE,
+      status: "PENDING",
+    },
+    select: { mascotAId: true },
+    take: 20,
+  });
+  for (const warning of pendingWarnings) {
+    await clearRunawayWarningIfRecovered(playerId, warning.mascotAId).catch(() => false);
+  }
+
   const staleFoodAt = new Date(Date.now() - 48 * 60 * 60_000);
   const candidates = await prisma.mascot.findMany({
     where: {
@@ -346,6 +359,49 @@ export async function ensureRunawayWarningsForPlayer(playerId: string) {
       data: { socialCooldownUntil: new Date(Date.now() + RUNAWAY_WARNING_MS) },
     });
   }
+}
+
+export async function clearRunawayWarningIfRecovered(playerId: string, mascotId: string, client: Prisma.TransactionClient | typeof prisma = prisma) {
+  const mascot = await client.mascot.findFirst({
+    where: { id: mascotId, playerId },
+    select: { id: true, happiness: true, lastFedAt: true },
+  });
+  if (!mascot?.lastFedAt) return false;
+
+  const fedRecently = Date.now() - mascot.lastFedAt.getTime() < 24 * 60 * 60_000;
+  const recovered = fedRecently && mascot.happiness >= 20;
+  if (!recovered) return false;
+
+  const result = await client.mascotSocialEvent.updateMany({
+    where: {
+      ownerId: playerId,
+      mascotAId: mascotId,
+      eventType: RUNAWAY_WARNING_TYPE,
+      status: "PENDING",
+    },
+    data: {
+      status: "RESOLVED",
+      resolvedBy: "SYSTEM",
+      resolvedOptionId: "recovered_by_feeding",
+      resolvedAt: new Date(),
+      resultJson: {
+        special: RUNAWAY_WARNING_TYPE,
+        recoveredBy: "DIRECT_FEEDING",
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  if (result.count > 0) {
+    await client.mascot.update({
+      where: { id: mascotId },
+      data: {
+        mood: "HAPPY",
+        socialCooldownUntil: null,
+      },
+    });
+  }
+
+  return result.count > 0;
 }
 
 export async function applyBondOption(eventId: string, playerId: string, optionId: string, resolvedBy: "USER" | "AUTO" = "USER") {
