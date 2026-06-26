@@ -7,10 +7,9 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import type { WeeklyModifier } from "./constants";
-import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType } from "@prisma/client";
+import { EggType, GiftType, ZikaCoinTxType } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
 import { creditCoins } from "@/lib/zikacoins";
-import { isStandbyActive } from "@/lib/account-standby";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -46,20 +45,6 @@ function getTodayBrt() {
 
 const PATH = "/combates/liga-semanal";
 const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
-function activeWeeklyPlayerWhere(now = new Date()) {
-  return {
-    active: true,
-    user: { role: { notIn: [Role.ADMIN, Role.SUPER_ADMIN] }, status: UserStatus.ACTIVE },
-  };
-}
-
-async function findActiveWeeklyPlayers(client: Pick<typeof prisma, "player">, now = new Date()) {
-  const players = await client.player.findMany({
-    where: activeWeeklyPlayerWhere(now),
-    select: { id: true, notes: true },
-  });
-  return players.filter((player) => !isStandbyActive(player.notes, now)).map((player) => ({ id: player.id }));
-}
 
 // ── Read action (client refresh) ──────────────────────────────────────────
 
@@ -102,7 +87,10 @@ export async function createLeagueAction() {
         },
       });
 
-      const allPlayers = await findActiveWeeklyPlayers(tx);
+      const allPlayers = await tx.player.findMany({
+        where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } },
+        select: { id: true },
+      });
 
       for (const p of allPlayers) {
         await tx.weeklyMascotLeagueParticipant.create({
@@ -148,7 +136,7 @@ export async function startWeeklyLeagueNowAction() {
         const stored = (league.modifierJson ?? {}) as Record<string, unknown>;
         league = await tx.weeklyMascotLeague.update({ where: { id: league.id }, data: { status: "ACTIVE", modifierJson: stored.dailyDate === battleDate ? undefined : { ...modifier, dailyDate: battleDate, dailyHistory: [...(Array.isArray(stored.dailyHistory) ? stored.dailyHistory : []), modifier.id].slice(-5) }, updatedAt: new Date() } });
       }
-      const activePlayers = await findActiveWeeklyPlayers(tx);
+      const activePlayers = await tx.player.findMany({ where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } }, select: { id: true } });
       if (activePlayers.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: activePlayers.map((player) => ({ id: createId(), leagueId: league!.id, playerId: player.id, updatedAt: new Date() })), skipDuplicates: true });
       return { leagueId: league.id, participants: activePlayers.length, modifier: modifier.name };
     });
@@ -271,11 +259,10 @@ export async function purgeInactivePlayersAction(leagueId: string) {
     if (playerIds.length === 0) return { success: true, removed: 0 };
 
     // Find players that still exist and are valid
-    const validPlayersRaw = await prisma.player.findMany({
-      where: { id: { in: playerIds }, ...activeWeeklyPlayerWhere() },
-      select: { id: true, notes: true },
+    const validPlayers = await prisma.player.findMany({
+      where: { id: { in: playerIds }, active: true, user: { status: "ACTIVE", role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
+      select: { id: true },
     });
-    const validPlayers = validPlayersRaw.filter((player) => !isStandbyActive(player.notes));
     const validIds = new Set(validPlayers.map(p => p.id));
     const invalidIds = playerIds.filter(id => !validIds.has(id));
 
@@ -1191,7 +1178,10 @@ export async function fullLeagueResetAction(leagueId: string) {
       });
 
       // Purge inactive/deleted players
-      const validPlayers = await findActiveWeeklyPlayers(tx);
+      const validPlayers = await tx.player.findMany({
+        where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } },
+        select: { id: true },
+      });
       const validIds = new Set(validPlayers.map(p => p.id));
       const participants = await tx.weeklyMascotLeagueParticipant.findMany({
         where: { leagueId }, select: { id: true, playerId: true },
@@ -1471,7 +1461,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
     const { weekStart, weekEnd } = getWeekBounds();
     league = await prisma.$transaction(async (tx) => {
       const created = await tx.weeklyMascotLeague.create({ data: { id: createId(), weekKey, weekStart, weekEnd, status: "REGISTRATION", updatedAt: now } });
-      const players = await findActiveWeeklyPlayers(tx, now);
+      const players = await tx.player.findMany({ where: { active: true, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } }, select: { id: true } });
       if (players.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: players.map((player) => ({ id: createId(), leagueId: created.id, playerId: player.id, updatedAt: now })), skipDuplicates: true });
       return created;
     });
