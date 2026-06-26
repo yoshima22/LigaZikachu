@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { addExp } from "@/lib/mascot";
 import { getPokemonName } from "@/lib/mascot-data";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
+import { isStandbyActive } from "@/lib/account-standby";
 
 export type BondBehavior =
   | "FREE"
@@ -290,6 +291,24 @@ export async function createBondEventForPlayer(playerId: string) {
 }
 
 export async function ensureRunawayWarningsForPlayer(playerId: string) {
+  const player = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { notes: true },
+  });
+  if (isStandbyActive(player?.notes)) {
+    await prisma.mascotSocialEvent.updateMany({
+      where: { ownerId: playerId, eventType: RUNAWAY_WARNING_TYPE, status: "PENDING" },
+      data: {
+        status: "RESOLVED",
+        resolvedBy: "SYSTEM",
+        resolvedOptionId: "account_standby",
+        resolvedAt: new Date(),
+        resultJson: { special: RUNAWAY_WARNING_TYPE, recoveredBy: "ACCOUNT_STANDBY" } as Prisma.InputJsonValue,
+      },
+    });
+    return;
+  }
+
   const pendingWarnings = await prisma.mascotSocialEvent.findMany({
     where: {
       ownerId: playerId,
@@ -329,15 +348,36 @@ export async function ensureRunawayWarningsForPlayer(playerId: string) {
   });
 
   for (const mascot of candidates) {
-    const existing = await prisma.mascotSocialEvent.findFirst({
+    const existingWarnings = await prisma.mascotSocialEvent.findMany({
       where: {
         mascotAId: mascot.id,
-        eventType: { in: [RUNAWAY_WARNING_TYPE, RUNAWAY_RESCUE_TYPE] },
+        eventType: RUNAWAY_WARNING_TYPE,
         status: "PENDING",
       },
       select: { id: true },
+      orderBy: { createdAt: "asc" },
     });
-    if (existing) continue;
+    if (existingWarnings.length > 0) {
+      const [, ...duplicates] = existingWarnings;
+      if (duplicates.length > 0) {
+        await prisma.mascotSocialEvent.updateMany({
+          where: { id: { in: duplicates.map((event) => event.id) } },
+          data: {
+            status: "RESOLVED",
+            resolvedBy: "SYSTEM",
+            resolvedOptionId: "duplicate_runaway_warning",
+            resolvedAt: new Date(),
+          },
+        });
+      }
+      continue;
+    }
+
+    const rescueExisting = await prisma.mascotSocialEvent.findFirst({
+      where: { mascotAId: mascot.id, eventType: RUNAWAY_RESCUE_TYPE, status: "PENDING" },
+      select: { id: true },
+    });
+    if (rescueExisting) continue;
 
     const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
     await prisma.mascotSocialEvent.create({
@@ -353,10 +393,6 @@ export async function ensureRunawayWarningsForPlayer(playerId: string) {
         publicEligible: false,
         expiresAt: new Date(Date.now() + RUNAWAY_WARNING_MS),
       },
-    });
-    await prisma.mascot.update({
-      where: { id: mascot.id },
-      data: { socialCooldownUntil: new Date(Date.now() + RUNAWAY_WARNING_MS) },
     });
   }
 }

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
+import { getStandbyUntilFromNotes, setStandbyUntilInNotes } from "@/lib/account-standby";
 
 const MAX_WISHLIST_POKEMON = 9;
 
@@ -37,6 +38,10 @@ const updatePasswordSchema = z.object({
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "A confirmacao nao confere com a nova senha.",
   path: ["confirmPassword"]
+});
+
+const standbySchema = z.object({
+  days: z.union([z.literal(7), z.literal(14), z.literal(30), z.literal(60), z.literal(90)]),
 });
 
 export async function updatePlayerProfile(input: z.infer<typeof updateProfileSchema>) {
@@ -154,4 +159,60 @@ export async function updatePokemonWishlist(input: z.infer<typeof updatePokemonW
   revalidatePath("/perfil");
   revalidatePath(`/jogadores/${player.id}`);
   return { success: true };
+}
+
+export async function activateAccountStandby(input: z.infer<typeof standbySchema>) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Nao autenticado" };
+
+  const player = await prisma.player.findUnique({
+    where: { userId: user.id },
+    select: { id: true, notes: true },
+  });
+  if (!player) return { error: "Jogador nao encontrado" };
+  const currentStandbyUntil = getStandbyUntilFromNotes(player.notes);
+  if (currentStandbyUntil && currentStandbyUntil > new Date()) {
+    return { error: "Sua conta ja esta em standby. Nao e possivel encerrar antes da data definida." };
+  }
+
+  const data = standbySchema.parse(input);
+  const standbyUntil = new Date(Date.now() + data.days * 24 * 60 * 60_000);
+
+  await prisma.$transaction([
+    prisma.player.update({
+      where: { id: player.id },
+      data: { notes: setStandbyUntilInNotes(player.notes, standbyUntil) },
+    }),
+    prisma.mascot.updateMany({
+      where: { playerId: player.id },
+      data: {
+        lastFedAt: standbyUntil,
+        lastInteractedAt: standbyUntil,
+        mood: "HAPPY",
+      },
+    }),
+    prisma.mascotSocialEvent.updateMany({
+      where: { ownerId: player.id, eventType: "RUNAWAY_WARNING", status: "PENDING" },
+      data: {
+        status: "RESOLVED",
+        resolvedBy: "SYSTEM",
+        resolvedOptionId: "account_standby",
+        resolvedAt: new Date(),
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        entityType: "player",
+        entityId: player.id,
+        action: "player.account_standby",
+        metadata: { days: data.days, standbyUntil: standbyUntil.toISOString() },
+      },
+    }),
+  ]);
+
+  revalidatePath("/perfil");
+  revalidatePath("/mascotes");
+  revalidatePath("/lacos");
+  return { success: true, standbyUntil };
 }

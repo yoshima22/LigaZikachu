@@ -20,6 +20,7 @@ import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
+import { isStandbyActive } from "@/lib/account-standby";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -804,12 +805,16 @@ export async function interactWithMascot(
 // ── Mood decay (recalcula humor baseado em última interação) ──────────────────
 
 export async function recalculateMood(mascotId: string): Promise<void> {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId },
+    include: { player: { select: { notes: true } } },
+  });
   if (!mascot) return;
+  if (isStandbyActive(mascot.player.notes)) return;
 
   const now = Date.now();
-  const decayMultiplier = mascot.isEquipped ? 1 : 0.25;
-  const thresholdMultiplier = mascot.isEquipped ? 1 : 4;
+  const decayMultiplier = mascot.isEquipped ? 0.5 : 0.125;
+  const thresholdMultiplier = mascot.isEquipped ? 2 : 8;
   const hoursSinceInteraction = mascot.lastInteractedAt
     ? (now - mascot.lastInteractedAt.getTime()) / (1000 * 60 * 60)
     : 999;
@@ -828,7 +833,7 @@ export async function recalculateMood(mascotId: string): Promise<void> {
     happinessDecay = Math.max(happinessDecay, Math.ceil(2 * decayMultiplier));
   }
 
-  if (hoursSinceFed > 36 * thresholdMultiplier) {
+  if (hoursSinceFed > 48 * thresholdMultiplier) {
     newMood = "HUNGRY";
     happinessDecay = Math.max(happinessDecay, Math.ceil(4 * decayMultiplier));
   }
