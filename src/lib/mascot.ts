@@ -20,7 +20,6 @@ import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
-import { isStandbyActive } from "@/lib/account-standby";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,10 +43,10 @@ function randomPersonality(): MascotPersonality {
  */
 export function rollLabEggChoice(): number {
   if (Math.random() < 0.07) {
-    const hatchableLegendaryPool = Array.from(
+    const hatchablePool = Array.from(
       new Set(LEGENDARY_POOL.map((id) => LEGENDARY_HATCH_BASE_OVERRIDES[id] ?? id)),
     ).filter((id) => !ALL_EVOLVED_IDS.has(id));
-    return randomFrom(hatchableLegendaryPool);
+    return randomFrom(hatchablePool);
   }
   const pool = EGG_POOLS.SPECIAL?.length ? EGG_POOLS.SPECIAL : EGG_POOLS.RARE;
   return randomFrom(pool);
@@ -804,25 +803,13 @@ export async function interactWithMascot(
 
 // ── Mood decay (recalcula humor baseado em última interação) ──────────────────
 
-const _standbyCache = new Map<string, { until: number; active: boolean }>();
-
 export async function recalculateMood(mascotId: string): Promise<void> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) return;
 
-  // Cache standby check per player (avoids N+1 on batch mood recalc)
-  let standby = _standbyCache.get(mascot.playerId);
-  if (!standby || Date.now() > standby.until) {
-    const player = await prisma.player.findUnique({ where: { id: mascot.playerId }, select: { notes: true } });
-    const active = isStandbyActive(player?.notes);
-    _standbyCache.set(mascot.playerId, { until: Date.now() + 60_000, active });
-    standby = { until: Date.now() + 60_000, active };
-  }
-  if (standby.active) return;
-
   const now = Date.now();
-  const decayMultiplier = mascot.isEquipped ? 0.5 : 0.125;
-  const thresholdMultiplier = mascot.isEquipped ? 2 : 8;
+  const decayMultiplier = mascot.isEquipped ? 1 : 0.25;
+  const thresholdMultiplier = mascot.isEquipped ? 1 : 4;
   const hoursSinceInteraction = mascot.lastInteractedAt
     ? (now - mascot.lastInteractedAt.getTime()) / (1000 * 60 * 60)
     : 999;
@@ -841,7 +828,7 @@ export async function recalculateMood(mascotId: string): Promise<void> {
     happinessDecay = Math.max(happinessDecay, Math.ceil(2 * decayMultiplier));
   }
 
-  if (hoursSinceFed > 48 * thresholdMultiplier) {
+  if (hoursSinceFed > 36 * thresholdMultiplier) {
     newMood = "HUNGRY";
     happinessDecay = Math.max(happinessDecay, Math.ceil(4 * decayMultiplier));
   }
@@ -966,8 +953,8 @@ async function rollExpeditionReward(
   const cumCoin  = cumFood + coinWeight;
 
   if (roll < cumEgg)   return { type: "EGG",   eggType };
-  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty * 2 };
-  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) * 2 };
+  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty };
+  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) };
   if (roll < cumCoin)  return { type: "COINS", amount: randomInt(coinMin, coinMax) };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
@@ -1012,8 +999,8 @@ async function rollItemExpeditionReward(
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
   if (roll < eggWeight)                         return { type: "EGG", eggType };
-  if (roll < eggWeight + sweetWeight)           return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
-  if (roll < eggWeight + sweetWeight + foodWeight) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
+  if (roll < eggWeight + sweetWeight)           return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) };
+  if (roll < eggWeight + sweetWeight + foodWeight) return { type: "FOOD", foodType: "FOOD", quantity };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
@@ -1338,7 +1325,7 @@ export async function claimExpedition(
             payload: {
               rewardKind: "MASCOT_FOOD",
               foodType,
-              quantity: 2,
+              quantity: 1,
               rewardLabel: foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote",
             }
           }
