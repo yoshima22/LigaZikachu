@@ -10,7 +10,7 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { getMiauvadaoConfig, markBazarProposalsViewed } from "./actions";
+import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, markBazarProposalsViewed } from "./actions";
 import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
@@ -47,13 +47,19 @@ export default async function BazarPage({
     getCachedRecentTransactions(6),
     getMiauvadaoConfig(),
   ]);
+
+  // Auto-refresh ofertas do Miauvadão se o timer expirou
+  await autoRefreshMiauvadaoIfNeeded().catch(() => {});
+  // Re-fetch config after potential refresh
+  const freshMiauvadao = await getMiauvadaoConfig().catch(() => miauvadao);
+
   const { listings, total, page, totalPages } = listingsResult;
 
-  const dailyOffers = (miauvadao.dailyOffers as unknown[]) ?? [];
+  const dailyOffers = (freshMiauvadao.dailyOffers as unknown[]) ?? [];
 
   const REFRESH_DAILY_LIMIT = 3;
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const refreshData = (miauvadao.playerRefreshData ?? {}) as Record<string, { date?: string; count?: number }>;
+  const refreshData = (freshMiauvadao.playerRefreshData ?? {}) as Record<string, { date?: string; count?: number }>;
   const globalRefreshCount = refreshData["__global__"]?.date === todayBRT ? (refreshData["__global__"]?.count ?? 0) : 0;
   const refreshesRemaining = Math.max(0, REFRESH_DAILY_LIMIT - globalRefreshCount);
 
@@ -165,10 +171,10 @@ export default async function BazarPage({
       {/* Miauvadão */}
       <MiauvadaoPanel
         offers={dailyOffers as never}
-        vaultBalance={miauvadao.vaultBalance}
+        vaultBalance={freshMiauvadao.vaultBalance}
         balance={wallet?.balance ?? 0}
         playerId={playerId}
-        lastNpcMessage={miauvadao.lastNpcMessage ?? miauvadao.lastWinnerMessage ?? null}
+        lastNpcMessage={freshMiauvadao.lastNpcMessage ?? freshMiauvadao.lastWinnerMessage ?? null}
         refreshesRemaining={refreshesRemaining}
         refreshDailyLimit={REFRESH_DAILY_LIMIT}
       />
@@ -177,8 +183,8 @@ export default async function BazarPage({
       <ShellGame
         balance={wallet?.balance ?? 0}
         playerId={playerId}
-        vaultBalance={miauvadao.vaultBalance}
-        lastWinnerMessage={miauvadao.lastWinnerMessage ?? null}
+        vaultBalance={freshMiauvadao.vaultBalance}
+        lastWinnerMessage={freshMiauvadao.lastWinnerMessage ?? null}
         isAdmin={admin}
       />
 
