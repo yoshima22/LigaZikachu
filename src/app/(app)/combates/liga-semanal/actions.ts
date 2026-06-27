@@ -885,10 +885,26 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
 
       if (dailyTeam) {
         const ids = dailyTeam.mascotIdsJson as string[];
-        const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
-        const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
-        const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
-        return ordered.map((m, i) => toLeagueMascot(m!, i + 1, roles[m!.id]));
+        if (ids.length === 0) {
+          // CLEARED slot — skip to auto-fill
+        } else {
+          const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
+          const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
+          const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
+
+          // If mascots were lost (sold/transferred), fill remaining slots
+          if (ordered.length < 6) {
+            const existingIds = new Set(ordered.map(m => m!.id));
+            const fillers = await prisma.mascot.findMany({
+              where: { playerId, id: { notIn: [...existingIds] } },
+              orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
+              take: 6 - ordered.length,
+            });
+            ordered.push(...fillers);
+          }
+
+          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, roles[m!.id]));
+        }
       }
 
       // 3. Auto-fill: favorites first, then by level

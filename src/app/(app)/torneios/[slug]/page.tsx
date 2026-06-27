@@ -159,7 +159,7 @@ export default async function TorneioDetailPage({
               </span>
               {tournament.matchesPerPlayer && (
                 <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2.5 py-0.5 text-xs font-semibold text-[#FFCB05]">
-                  {Math.max(1, tournament.matchesPerPlayer - 2)}~{tournament.matchesPerPlayer} partidas por jogador/semana
+                  {tournament.matchesPerPlayer} partidas por jogador/dia
                 </span>
               )}
             </div>

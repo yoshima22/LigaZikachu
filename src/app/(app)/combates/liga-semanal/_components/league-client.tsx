@@ -341,8 +341,18 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const startEditing = (slot: number) => {
     const existing = data.myTeams.find((t: any) => t.battleSlot === slot);
     setEditingSlot(slot);
-    setSelected(existing ? (existing.mascotIdsJson as string[] ?? []) : []);
-    setRoles(existing?.rolesJson ? (existing.rolesJson as Record<string, string>) : {});
+    const ids = existing ? (existing.mascotIdsJson as string[] ?? []) : [];
+    setSelected(ids);
+    // Restore saved roles + auto-recommend for any mascot without a saved role
+    const savedRoles = (existing?.rolesJson as Record<string, string>) ?? {};
+    const mergedRoles: Record<string, string> = { ...savedRoles };
+    for (const id of ids) {
+      if (!mergedRoles[id]) {
+        const m = data.availableMascots.find((x: any) => x.id === id);
+        if (m) mergedRoles[id] = recommendCombatRole(m as any);
+      }
+    }
+    setRoles(mergedRoles);
     setSearch("");
     setTypeFilter(null);
     setPage(0);
@@ -589,7 +599,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   const m = data.availableMascots.find((x: any) => x.id === id) as any;
                   if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
                   const types = getPokemonTypes(m.pokemonId);
-                  const role = teamRoles?.[id];
+                  const role = teamRoles?.[id] || recommendCombatRole(m as any);
                   return (
                     <div key={id} className="relative rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-2 flex flex-col items-center gap-0.5">
                       <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
@@ -600,7 +610,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                       <div className="flex gap-0.5">
                         {types.map(t => <span key={t} className={`rounded-full px-1 py-px text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
                       </div>
-                      {role && <p className="text-[7px] font-semibold text-yellow-400">{getCombatRoleLabel(role)}</p>}
+                      <p className={`text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
                     </div>
                   );
                 })}

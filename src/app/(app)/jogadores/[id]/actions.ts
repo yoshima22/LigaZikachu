@@ -151,3 +151,84 @@ export async function revokeItemFromPlayer(
     return { error: err instanceof Error ? err.message : "Erro desconhecido." };
   }
 }
+
+// ── Admin: grant/revoke eggs ─────────────────────────────────────────────
+
+export async function grantEggToPlayer(playerId: string, eggType: string, quantity = 1): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const mapped = EGG_TYPE_MAP[eggType] ?? (Object.values(EggType).includes(eggType as EggType) ? eggType as EggType : null);
+    if (!mapped) return { error: `Tipo de ovo inválido: ${eggType}` };
+
+    for (let i = 0; i < Math.min(quantity, 20); i++) {
+      await prisma.mascotEgg.create({
+        data: { playerId, type: mapped as EggType, origin: "ADMIN_GRANT" },
+      });
+    }
+
+    revalidatePath(`/jogadores/${playerId}`);
+    revalidatePath("/mascotes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao conceder ovo." };
+  }
+}
+
+export async function revokeEggFromPlayer(playerId: string, eggId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const egg = await prisma.mascotEgg.findUnique({ where: { id: eggId } });
+    if (!egg || egg.playerId !== playerId) return { error: "Ovo não encontrado." };
+
+    // Check not incubating
+    const incubating = await prisma.mascotIncubator.findFirst({ where: { eggId } });
+    if (incubating) return { error: "Este ovo está na incubadora. Remova primeiro." };
+
+    await prisma.mascotEgg.delete({ where: { id: eggId } });
+    revalidatePath(`/jogadores/${playerId}`);
+    revalidatePath("/mascotes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao remover ovo." };
+  }
+}
+
+// ── Admin: grant/revoke food ─────────────────────────────────────────────
+
+export async function grantFoodToPlayer(playerId: string, foodType: "FOOD" | "SWEET", quantity = 1): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.mascotFoodItem.upsert({
+      where: { playerId_type: { playerId, type: foodType as FoodType } },
+      create: { playerId, type: foodType as FoodType, quantity },
+      update: { quantity: { increment: quantity } },
+    });
+    revalidatePath(`/jogadores/${playerId}`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao conceder comida." };
+  }
+}
+
+export async function revokeFoodFromPlayer(playerId: string, foodType: "FOOD" | "SWEET", quantity = 1): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const item = await prisma.mascotFoodItem.findUnique({
+      where: { playerId_type: { playerId, type: foodType as FoodType } },
+    });
+    if (!item || item.quantity <= 0) return { error: "Jogador não possui este item." };
+    const newQty = item.quantity - quantity;
+    if (newQty <= 0) {
+      await prisma.mascotFoodItem.delete({ where: { playerId_type: { playerId, type: foodType as FoodType } } });
+    } else {
+      await prisma.mascotFoodItem.update({
+        where: { playerId_type: { playerId, type: foodType as FoodType } },
+        data: { quantity: newQty },
+      });
+    }
+    revalidatePath(`/jogadores/${playerId}`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao remover comida." };
+  }
+}

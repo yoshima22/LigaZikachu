@@ -15,6 +15,7 @@ import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
 import { AdminResetPanel } from "./_components/admin-reset-panel";
 import { GrantItemPanel } from "./_components/grant-item-panel";
+import { AdminEggFoodPanel } from "./_components/admin-egg-food-panel";
 import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
@@ -786,6 +787,18 @@ export default async function PlayerDetailPage({
 
       {isAdminUser && (
         <div className="space-y-4">
+          <AdminEggFoodPanel
+            playerId={playerId}
+            eggs={await prisma.mascotEgg.findMany({
+              where: { playerId },
+              select: { id: true, type: true, obtainedAt: true, origin: true },
+              orderBy: { obtainedAt: "desc" },
+            }).then(eggs => eggs.map(e => ({ ...e, obtainedAt: e.obtainedAt.toISOString() })))}
+            foods={await prisma.mascotFoodItem.findMany({
+              where: { playerId },
+              select: { type: true, quantity: true },
+            })}
+          />
           <GrantItemPanel
             playerId={playerId}
             shopItems={uniqueShopItems}
