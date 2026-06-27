@@ -38,11 +38,11 @@ export default async function TourneiosPage({
       : undefined
     : statusFilter && statusFilter !== "ALL" && statusFilter !== "DRAFT"
       ? { status: statusFilter as TournamentStatus }
-      : { status: { not: "DRAFT" as const } };
+      : user
+        ? { OR: [{ status: { not: "DRAFT" as const } }, { status: "DRAFT" as const, createdById: user.id }] }
+        : { status: { not: "DRAFT" as const } };
 
-  const statusFilterEntries = Object.entries(STATUS_FILTER_LABELS).filter(
-    ([key]) => admin || key !== "DRAFT"
-  );
+  const statusFilterEntries = Object.entries(STATUS_FILTER_LABELS);
 
   const tournaments = await prisma.tournament.findMany({
     where,

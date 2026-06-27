@@ -33,10 +33,11 @@ export default async function WeekDetailPage({
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
-    select: { id: true, name: true, slug: true, status: true, seasonId: true, format: true }
+    select: { id: true, name: true, slug: true, status: true, seasonId: true, format: true, createdById: true }
   });
   if (!tournament) notFound();
-  if (!admin && tournament.status === "DRAFT") notFound();
+  const canManage = admin || (user && tournament.createdById === user.id);
+  if (!canManage && tournament.status === "DRAFT") notFound();
   const isInPerson = tournament.format === "IN_PERSON";
 
   const week = await prisma.tournamentWeek.findUnique({
