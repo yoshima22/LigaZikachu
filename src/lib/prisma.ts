@@ -8,7 +8,7 @@ function withServerlessPoolLimit(url: string | undefined) {
   if (!url) return url;
   if (url.includes("connection_limit=")) return url;
   const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}connection_limit=1&pool_timeout=20`;
+  return `${url}${separator}connection_limit=2&pool_timeout=20`;
 }
 
 export const prisma =

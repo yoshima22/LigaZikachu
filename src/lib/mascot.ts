@@ -153,7 +153,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
     }
 
     return { m, isShiny, isStatBuffed, eggTypeKey };
-  });
+  }, { timeout: 15000, maxWait: 10000 });
 
   const { m, isShiny, isStatBuffed, eggTypeKey } = mascot as {
     m: { id: string; statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number };
@@ -1412,9 +1412,6 @@ export async function claimExpedition(
       }
     }
   }
-
-  // Roda eventos sociais automaticamente ao coletar expedição (fire-and-forget)
-  triggerSocialEvents().catch(() => {});
 
   return { reward, mascotId: expedition.mascotId };
 }
