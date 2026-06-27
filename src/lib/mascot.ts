@@ -821,8 +821,8 @@ export async function recalculateMood(mascotId: string): Promise<void> {
   if (standby.active) return;
 
   const now = Date.now();
-  const decayMultiplier = mascot.isEquipped ? 0.5 : 0.125;
-  const thresholdMultiplier = mascot.isEquipped ? 2 : 8;
+  const decayMultiplier = mascot.isEquipped ? 0.5 : 0.0625;
+  const thresholdMultiplier = mascot.isEquipped ? 2 : 16;
   const hoursSinceInteraction = mascot.lastInteractedAt
     ? (now - mascot.lastInteractedAt.getTime()) / (1000 * 60 * 60)
     : 999;
