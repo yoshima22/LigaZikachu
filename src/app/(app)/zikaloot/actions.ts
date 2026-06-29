@@ -401,3 +401,58 @@ export async function cancelZikaLoot(lootId: string): Promise<{ error?: string }
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+
+export async function seedSpecialTicketAndRetroGrant(): Promise<{ error?: string; seeded?: boolean; granted?: number }> {
+  try {
+    await requireAdmin();
+
+    // 1. Ensure ShopItem exists
+    let shopItem = await prisma.shopItem.findFirst({ where: { type: "ZIKALOOT_TICKET_SPECIAL" as ShopItemType } });
+    const seeded = !shopItem;
+    if (!shopItem) {
+      shopItem = await prisma.shopItem.create({
+        data: {
+          name: "Ticket ZikaLoot Especial",
+          type: "ZIKALOOT_TICKET_SPECIAL" as ShopItemType,
+          description: "Ao usar na ZikaLoot, receba 5 tickets comuns de volta após o sorteio.",
+          price: 0,
+          active: false,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // 2. Find players who claimed day 21 gift (special ticket) but don't have inventory
+    const claimedGifts = await prisma.playerGift.findMany({
+      where: {
+        status: "CLAIMED",
+        title: { contains: "Especial" },
+        payload: { path: ["rewardKind"], equals: "ZIKALOOT_TICKET" },
+      },
+      select: { playerId: true },
+    });
+
+    const uniquePlayerIds = [...new Set(claimedGifts.map(g => g.playerId))];
+    let granted = 0;
+
+    for (const playerId of uniquePlayerIds) {
+      const existing = await prisma.playerInventory.findUnique({
+        where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+      });
+      if (!existing || existing.quantity <= 0) {
+        await prisma.playerInventory.upsert({
+          where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+          create: { playerId, itemId: shopItem.id, quantity: 1, source: "RETROACTIVE_VIP_PASS" },
+          update: { quantity: { increment: 1 } },
+        });
+        granted++;
+      }
+    }
+
+    revalidatePath("/zikaloot");
+    return { seeded, granted };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro" };
+  }
+}

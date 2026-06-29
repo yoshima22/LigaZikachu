@@ -7,6 +7,7 @@ import type { PrizeConfig } from "@/lib/zikaloot-types";
 import { Card } from "@/components/ui/card";
 import { LootBoard } from "./_components/loot-board";
 import { AdminLootPanel } from "./_components/admin-loot-panel";
+import { SeedSpecialTicketButton } from "./_components/seed-special-ticket-button";
 import { checkAndRunPendingDraws } from "./actions";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
@@ -114,12 +115,17 @@ export default async function ZikaLootPage() {
           </div>
           <div className="flex items-center gap-3">
             <ManualRefreshButton label="Atualizar ZikaLoot" />
-            <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2">
-              <Ticket size={16} className="text-[#FFCB05]" />
-              <span className="text-sm font-bold text-[#FFCB05]">{ticketCount} 🎟️</span>
-              {specialTicketCount > 0 && (
-                <span className="text-sm font-bold text-purple-300">+ {specialTicketCount} ⭐</span>
-              )}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2">
+                <Ticket size={14} className="text-[#FFCB05]" />
+                <span className="text-sm font-bold text-[#FFCB05]">{ticketCount}</span>
+                <span className="text-[10px] text-[#FFCB05]/60">comum</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2">
+                <span className="text-sm">⭐</span>
+                <span className="text-sm font-bold text-purple-300">{specialTicketCount}</span>
+                <span className="text-[10px] text-purple-300/60">especial</span>
+              </div>
             </div>
           </div>
         </div>
@@ -239,6 +245,9 @@ export default async function ZikaLootPage() {
         prizeConfig: l.prizeConfig,
         picks: l.picks.map((p) => ({ id: p.id, number: p.number, playerId: p.playerId, playerName: p.player.displayName }))
       }))} />}
+
+      {/* Admin: seed special ticket */}
+      {admin && <SeedSpecialTicketButton />}
 
       {/* Histórico */}
       <div className="space-y-3">
