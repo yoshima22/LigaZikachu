@@ -1030,7 +1030,7 @@ export async function feedAllAction(): Promise<{
           },
         })
       ));
-      await Promise.all(toFeed.map(m => clearRunawayWarningIfRecovered(player.id, m.id, tx)));
+      await Promise.all(toFeed.map(m => clearRunawayWarningIfRecovered(player.id, m.id, tx).catch(() => {})));
     });
 
     revalidate(player.id);

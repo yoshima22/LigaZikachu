@@ -877,12 +877,14 @@ export type HungerStatus = "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" | "ST
 export type HappinessStatus = "DEPRESSED" | "SAD" | "NEUTRAL" | "CONTENT" | "HAPPY";
 export type ChallengeStatus = "ANGRY" | "CALM" | "EAGER" | "CHALLENGER";
 
-export function getHungerStatus(lastFedAt: Date | null): HungerStatus {
+export function getHungerStatus(lastFedAt: Date | null, isEquipped = true): HungerStatus {
   const hours = lastFedAt ? (Date.now() - new Date(lastFedAt).getTime()) / 3_600_000 : 999;
-  if (hours < 2)  return "STUFFED";
-  if (hours < 6)  return "SATISFIED";
-  if (hours < 12) return "NEUTRAL";
-  if (hours < 24) return "HUNGRY";
+  // Mascotes no banco perdem fome 5x mais lentamente
+  const m = isEquipped ? 1 : 5;
+  if (hours < 2 * m)  return "STUFFED";
+  if (hours < 6 * m)  return "SATISFIED";
+  if (hours < 12 * m) return "NEUTRAL";
+  if (hours < 24 * m) return "HUNGRY";
   return "STARVING";
 }
 
