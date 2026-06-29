@@ -44,7 +44,8 @@ export async function createZikaLoot(raw: z.infer<typeof createSchema>): Promise
 
 export async function pickLootNumber(
   lootId: string,
-  number: number
+  number: number,
+  useSpecialTicket = false,
 ): Promise<{ error?: string }> {
   try {
     const actor = await getSessionUser();
@@ -63,18 +64,22 @@ export async function pickLootNumber(
     if (new Date() >= loot.drawAt) return { error: "O prazo para escolher números expirou." };
 
     // Verificar se tem ticket disponível
+    const ticketType = useSpecialTicket ? "ZIKALOOT_TICKET_SPECIAL" : "ZIKALOOT_TICKET";
     const ticket = await prisma.playerInventory.findFirst({
-      where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET } },
+      where: { playerId: player.id, item: { type: ticketType as ShopItemType } },
       select: { id: true, quantity: true }
     });
-    if (!ticket || ticket.quantity < 1) return { error: "Você não possui um Ticket ZikaLoot. Compre um na ZikaShop ou ganhe pela Caixa de Presentes." };
+    if (!ticket || ticket.quantity < 1) {
+      return { error: useSpecialTicket
+        ? "Você não possui um Ticket ZikaLoot Especial."
+        : "Você não possui um Ticket ZikaLoot. Compre um na ZikaShop ou ganhe pela Caixa de Presentes." };
+    }
 
     // Verificar quantos números o jogador já escolheu nesta loteria
     const existingPicks = await prisma.zikaLootPick.findMany({
       where: { lootId, playerId: player.id },
       select: { number: true }
     });
-    // Não permite escolher o mesmo número duas vezes
     if (existingPicks.some(p => p.number === number)) {
       return { error: `Você já escolheu o número ${number} nesta loteria.` };
     }
@@ -86,13 +91,25 @@ export async function pickLootNumber(
     if (taken) return { error: "Este número já foi escolhido por outro jogador." };
 
     await prisma.$transaction(async (tx) => {
-      // Decrementar ticket (ou remover se última unidade)
+      // Decrementar ticket
       if (ticket.quantity > 1) {
         await tx.playerInventory.update({ where: { id: ticket.id }, data: { quantity: { decrement: 1 } } });
       } else {
         await tx.playerInventory.delete({ where: { id: ticket.id } });
       }
       await tx.zikaLootPick.create({ data: { lootId, playerId: player.id, number } });
+
+      // Se ticket especial: conceder 5 tickets comuns de volta
+      if (useSpecialTicket) {
+        const commonTicket = await tx.shopItem.findFirst({ where: { type: "ZIKALOOT_TICKET" } });
+        if (commonTicket) {
+          await tx.playerInventory.upsert({
+            where: { playerId_itemId: { playerId: player.id, itemId: commonTicket.id } },
+            create: { playerId: player.id, itemId: commonTicket.id, quantity: 5, source: "SPECIAL_TICKET" },
+            update: { quantity: { increment: 5 } },
+          });
+        }
+      }
     });
 
     revalidatePath("/zikaloot");

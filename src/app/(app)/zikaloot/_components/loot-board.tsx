@@ -12,16 +12,18 @@ interface Props {
   blockedNumbers?: number[];
   myNumbers: number[];
   hasTicket: boolean;
+  hasSpecialTicket?: boolean;
   isLoggedIn: boolean;
   drawAt: string;
   previousDraws?: number[];
   maxPicks?: number;
 }
 
-export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTicket, isLoggedIn, drawAt, previousDraws = [], maxPicks = 200 }: Props) {
+export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTicket, hasSpecialTicket = false, isLoggedIn, drawAt, previousDraws = [], maxPicks = 200 }: Props) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [useSpecial, setUseSpecial] = useState(false);
 
   const takenMap   = new Map(picks.map((p) => [p.number, { name: p.playerName, playerId: p.playerId }]));
   const blockedSet = new Set(blockedNumbers);
@@ -39,9 +41,9 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
     if (!selected) return;
     startTransition(async () => {
       try {
-        const result = await pickLootNumber(lootId, selected);
+        const result = await pickLootNumber(lootId, selected, useSpecial);
         if (result.error) { toast.error(result.error); return; }
-        toast.success(`🍀 Número ${selected} reservado! Boa sorte!`);
+        toast.success(useSpecial ? `⭐ Número ${selected} reservado com Ticket Especial! Boa sorte!` : `🍀 Número ${selected} reservado! Boa sorte!`);
         setSelected(null);
         setShowConfirm(false);
       } catch { toast.error("Erro ao escolher número."); }
@@ -69,15 +71,31 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
               <p className="text-xs text-slate-400 mt-1">Seu número escolhido</p>
             </div>
 
+            {hasSpecialTicket && (
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2.5">
+                  <input type="checkbox" checked={useSpecial} onChange={e => setUseSpecial(e.target.checked)}
+                    className="h-4 w-4 rounded border-purple-500 accent-purple-500" />
+                  <div>
+                    <p className="text-xs font-bold text-purple-300">⭐ Usar Ticket Especial</p>
+                    <p className="text-[10px] text-purple-300/70">Ao final do sorteio, receba 5 tickets comuns de volta!</p>
+                  </div>
+                </label>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 rounded-lg bg-slate-900/60 border border-border px-3 py-2 text-xs text-slate-400">
-              <Ticket size={12} className="text-[#FFCB05] shrink-0" />
-              Isso consumirá <strong className="text-white mx-1">1 Ticket ZikaLoot</strong> do seu inventário.
+              <Ticket size={12} className={useSpecial ? "text-purple-400 shrink-0" : "text-[#FFCB05] shrink-0"} />
+              {useSpecial
+                ? <>Consumirá <strong className="text-purple-300 mx-1">1 Ticket Especial ⭐</strong> — você receberá <strong className="text-green-400 mx-1">5 tickets comuns</strong> após o sorteio.</>
+                : <>Consumirá <strong className="text-white mx-1">1 Ticket ZikaLoot</strong> do seu inventário.</>
+              }
             </div>
 
             <div className="flex gap-3">
               <button type="button" disabled={pending} onClick={handleConfirm}
-                className="flex-1 rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
-                {pending ? "Confirmando…" : "Confirmar número"}
+                className={`flex-1 rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 ${useSpecial ? "bg-purple-500 text-white hover:bg-purple-400" : "bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]"}`}>
+                {pending ? "Confirmando…" : useSpecial ? "⭐ Confirmar com Especial" : "Confirmar número"}
               </button>
               <button type="button" onClick={() => { setShowConfirm(false); setSelected(null); }}
                 className="rounded-xl border border-border px-4 py-2.5 text-sm text-slate-400 hover:text-slate-200">

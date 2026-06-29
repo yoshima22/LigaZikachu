@@ -96,6 +96,20 @@ async function applyGiftReward(
     return {};
   }
 
+  if (rewardKind === "ZIKALOOT_TICKET") {
+    const isSpecial = payload.special === true;
+    const itemType = isSpecial ? "ZIKALOOT_TICKET_SPECIAL" : "ZIKALOOT_TICKET";
+    const shopItem = await tx.shopItem.findFirst({ where: { type: itemType } });
+    if (shopItem) {
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+        create: { playerId, itemId: shopItem.id, quantity: 1, source: "VIP_PASS" },
+        update: { quantity: { increment: 1 } },
+      });
+    }
+    return {};
+  }
+
   if (rewardKind === "MASCOT_BUFF") {
     const buffType = typeof payload.buffType === "string" ? payload.buffType : null;
     const quantity = typeof payload.quantity === "number" && payload.quantity > 0

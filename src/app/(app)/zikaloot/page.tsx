@@ -33,7 +33,7 @@ export default async function ZikaLootPage() {
     select: { id: true }
   });
 
-  const [loots, myPicks, ticketCount] = await Promise.all([
+  const [loots, myPicks, ticketCount, specialTicketCount] = await Promise.all([
     prisma.zikaLoot.findMany({
       orderBy: { drawAt: "desc" },
       take: 10,
@@ -52,6 +52,12 @@ export default async function ZikaLootPage() {
           where: { playerId: player.id, item: { type: ShopItemType.ZIKALOOT_TICKET } },
           select: { quantity: true }
         }).then((r) => r?.quantity ?? 0)
+      : 0,
+    player
+      ? prisma.playerInventory.findFirst({
+          where: { playerId: player.id, item: { type: "ZIKALOOT_TICKET_SPECIAL" as ShopItemType } },
+          select: { quantity: true }
+        }).then((r) => r?.quantity ?? 0).catch(() => 0)
       : 0
   ]);
 
@@ -110,7 +116,10 @@ export default async function ZikaLootPage() {
             <ManualRefreshButton label="Atualizar ZikaLoot" />
             <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2">
               <Ticket size={16} className="text-[#FFCB05]" />
-              <span className="text-sm font-bold text-[#FFCB05]">{ticketCount} ticket{ticketCount !== 1 ? "s" : ""}</span>
+              <span className="text-sm font-bold text-[#FFCB05]">{ticketCount} 🎟️</span>
+              {specialTicketCount > 0 && (
+                <span className="text-sm font-bold text-purple-300">+ {specialTicketCount} ⭐</span>
+              )}
             </div>
           </div>
         </div>
@@ -208,6 +217,7 @@ export default async function ZikaLootPage() {
           blockedNumbers={activeLoot.drawnNumbers}
           myNumbers={myPickMap.get(activeLoot.id) ?? []}
           hasTicket={ticketCount > 0}
+          hasSpecialTicket={specialTicketCount > 0}
           isLoggedIn={!!player}
           drawAt={activeLoot.drawAt.toISOString()}
           previousDraws={activeLoot.drawnNumbers}

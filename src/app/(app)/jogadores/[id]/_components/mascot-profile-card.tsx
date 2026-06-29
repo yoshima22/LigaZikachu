@@ -84,7 +84,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
   const expNeeded = expToNextLevel(mascot.level);
   const expPct = Math.min(100, Math.round((mascot.exp / expNeeded) * 100));
 
-  const hungerStatus    = getHungerStatus(mascot.lastFedAt);
+  const hungerStatus    = getHungerStatus(mascot.lastFedAt, mascot.isEquipped);
   const happinessStatus = getHappinessStatus(mascot.happiness);
   const challengeStatus = getChallengeStatus(mascot.mood);
   const relations = Array.isArray(mascot.relations) ? mascot.relations : [];
