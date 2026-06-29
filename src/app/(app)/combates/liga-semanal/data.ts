@@ -18,7 +18,7 @@ function currentWeekKey() {
 async function ensureCurrentLeague() {
   const weekKey = currentWeekKey();
   const existing = await prisma.weeklyMascotLeague.findUnique({ where: { weekKey } });
-  if (existing) return existing.status === "FINISHED" ? null : existing;
+  if (existing) return existing;
 
   const now = new Date();
   const day = now.getDay();
@@ -137,7 +137,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
 
   try {
     currentLeague = await (prisma as any).weeklyMascotLeague.findFirst({
-      where: { status: { in: ["REGISTRATION", "ACTIVE"] } },
+      where: { status: { in: ["REGISTRATION", "ACTIVE", "FINISHED"] } },
       orderBy: { createdAt: "desc" },
     });
     if (!currentLeague) currentLeague = await ensureCurrentLeague();
@@ -205,8 +205,20 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     } catch {}
 
     try {
-      const rawMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
+      let matchDate = today;
+      const todayCount = await (prisma as any).weeklyMascotLeagueMatch.count({
         where: { leagueId: (currentLeague as any).id, battleDate: today },
+      });
+      if (!todayCount) {
+        const lastMatch = await (prisma as any).weeklyMascotLeagueMatch.findFirst({
+          where: { leagueId: (currentLeague as any).id },
+          orderBy: { battleDate: "desc" },
+          select: { battleDate: true },
+        });
+        if (lastMatch) matchDate = lastMatch.battleDate;
+      }
+      const rawMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
+        where: { leagueId: (currentLeague as any).id, battleDate: matchDate },
         select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true, resultJson: true, replayJson: true },
         orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
       });
