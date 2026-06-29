@@ -41,6 +41,7 @@ type PageData = {
   leagueInventory: { type: string; quantity: number }[];
   selectedBattleItems: { battleSlot: number; effectType: string }[];
   weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
+  lastChampion: { playerName: string; weekKey: string; points: number; wins: number; losses: number } | null;
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -105,7 +106,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
 function LeagueTab({ data }: { data: PageData }) {
   const league = data.currentLeague;
 
-  if (!league) {
+  if (!league && !data.lastChampion) {
     return (
       <div className="py-10 text-center text-sm text-slate-500">
         Nenhuma liga ativa nesta semana. A próxima liga será criada automaticamente.
@@ -113,10 +114,40 @@ function LeagueTab({ data }: { data: PageData }) {
     );
   }
 
-  const mod = league.modifierJson as any;
+  const mod = league?.modifierJson as any;
 
   return (
     <div className="space-y-4">
+      {/* Champion banner */}
+      {data.lastChampion && (
+        <div className="relative overflow-hidden rounded-2xl border border-[#FFCB05]/40 bg-gradient-to-r from-[#1a1400] via-[#2a1d00] to-[#1a1400] p-5">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, transparent, transparent 20px, #FFCB05 20px, #FFCB05 21px)" }} />
+          </div>
+          <div className="relative flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#FFCB05]/20 border-2 border-[#FFCB05]/50 text-3xl">
+              👑
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-[#FFCB05]/60">Campeão da Semana</p>
+              <p className="text-lg font-black text-[#FFCB05] drop-shadow-[0_0_12px_rgba(255,203,5,0.3)]">
+                {data.lastChampion.playerName}
+              </p>
+              <p className="text-xs text-slate-400">
+                {data.lastChampion.weekKey} · {data.lastChampion.wins}V {data.lastChampion.losses}D · {data.lastChampion.points} pts
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!league && data.lastChampion && (
+        <div className="py-6 text-center text-sm text-slate-500">
+          A próxima liga será criada automaticamente na segunda-feira.
+        </div>
+      )}
+
+      {league && (<>
       {/* League status */}
       <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -222,6 +253,7 @@ function LeagueTab({ data }: { data: PageData }) {
 
       {/* Highlights */}
       {data.weekHighlights.length > 0 && <WeekHighlights highlights={data.weekHighlights} />}
+      </>)}
     </div>
   );
 }

@@ -52,6 +52,35 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   let todayMatches: unknown[] = [];
   let allMascots: unknown[] = [];
   let weekHighlights: any[] = [];
+  let lastChampion: { playerName: string; weekKey: string; points: number; wins: number; losses: number } | null = null;
+
+  // Load last finished league champion
+  try {
+    const lastFinished = await (prisma as any).weeklyMascotLeague.findFirst({
+      where: { status: "FINISHED", championPlayerId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { weekKey: true, championPlayerId: true },
+    });
+    if (lastFinished?.championPlayerId) {
+      const champ = await prisma.player.findUnique({
+        where: { id: lastFinished.championPlayerId },
+        select: { displayName: true, ptcglNick: true },
+      });
+      const champParticipant = await (prisma as any).weeklyMascotLeagueParticipant.findFirst({
+        where: { leagueId: (await (prisma as any).weeklyMascotLeague.findFirst({ where: { weekKey: lastFinished.weekKey } }))?.id, playerId: lastFinished.championPlayerId },
+        select: { points: true, wins: true, losses: true },
+      });
+      if (champ) {
+        lastChampion = {
+          playerName: champ.ptcglNick ? `${champ.displayName} (${champ.ptcglNick})` : champ.displayName,
+          weekKey: lastFinished.weekKey,
+          points: champParticipant?.points ?? 0,
+          wins: champParticipant?.wins ?? 0,
+          losses: champParticipant?.losses ?? 0,
+        };
+      }
+    }
+  } catch {}
 
   try {
     currentLeague = await (prisma as any).weeklyMascotLeague.findFirst({
@@ -257,5 +286,6 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     leagueInventory,
     selectedBattleItems,
     weekHighlights,
+    lastChampion,
   };
 }
