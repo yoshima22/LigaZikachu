@@ -380,10 +380,15 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
             where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } },
             data: { quantity: { decrement: qty } },
           });
-        } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(input.itemType)) {
-          // Ovos — conta quantos tem
+        } else if (["COMMON","RARE","SPECIAL","EVENT","LAB","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(input.itemType)) {
+          // Ovos — conta quantos tem (exclui ovos já em escrow do bazar)
           const eggs = await tx.mascotEgg.findMany({
-            where: { playerId: player.id, type: input.itemType as never, incubation: null },
+            where: {
+              playerId: player.id,
+              type: input.itemType as never,
+              incubation: null,
+              NOT: { origin: { startsWith: "bazar:" } },
+            },
           });
           if (eggs.length < qty) throw new Error("Ovos insuficientes no inventário.");
           // Remove qty ovos do inventário (escrow)
@@ -1304,7 +1309,7 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
         update: { quantity: { increment: qty } },
         create: { playerId: ownerId, type: itemType as "FOOD" | "SWEET", quantity: qty },
       });
-    } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(itemType)) {
+    } else if (["COMMON","RARE","SPECIAL","EVENT","LAB","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(itemType)) {
       const eggIds = payload.escrowed_egg_ids as string[] | undefined;
       if (eggIds && eggIds.length > 0) {
         await tx.mascotEgg.updateMany({
