@@ -41,7 +41,13 @@ type PageData = {
   leagueInventory: { type: string; quantity: number }[];
   selectedBattleItems: { battleSlot: number; effectType: string }[];
   weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
-  lastChampion: { playerName: string; weekKey: string; points: number; wins: number; losses: number } | null;
+  lastChampion: {
+    playerName: string; weekKey: string; points: number; wins: number; losses: number;
+    avatarUrl: string | null; playerId: string;
+    topAttacker: { name: string; pokemonId: number; damageDealt: number } | null;
+    topDefender: { name: string; pokemonId: number; damageTaken: number } | null;
+    topSupport: { name: string; pokemonId: number; heals: number } | null;
+  } | null;
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -124,19 +130,63 @@ function LeagueTab({ data }: { data: PageData }) {
           <div className="absolute inset-0 opacity-10">
             <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, transparent, transparent 20px, #FFCB05 20px, #FFCB05 21px)" }} />
           </div>
-          <div className="relative flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#FFCB05]/20 border-2 border-[#FFCB05]/50 text-3xl">
-              👑
+          <div className="relative space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="relative shrink-0">
+                {data.lastChampion.avatarUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={data.lastChampion.avatarUrl} alt="" className="h-16 w-16 rounded-full border-2 border-[#FFCB05]/50 object-cover" />
+                    <span className="absolute -top-2 -right-1 text-xl drop-shadow-lg">👑</span>
+                  </>
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#FFCB05]/20 border-2 border-[#FFCB05]/50 text-3xl">
+                    👑
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-[#FFCB05]/60">Campeão da Semana</p>
+                <p className="text-lg font-black text-[#FFCB05] drop-shadow-[0_0_12px_rgba(255,203,5,0.3)]">
+                  {data.lastChampion.playerName}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {data.lastChampion.weekKey} · {data.lastChampion.wins}V {data.lastChampion.losses}D · {data.lastChampion.points} pts
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-[#FFCB05]/60">Campeão da Semana</p>
-              <p className="text-lg font-black text-[#FFCB05] drop-shadow-[0_0_12px_rgba(255,203,5,0.3)]">
-                {data.lastChampion.playerName}
-              </p>
-              <p className="text-xs text-slate-400">
-                {data.lastChampion.weekKey} · {data.lastChampion.wins}V {data.lastChampion.losses}D · {data.lastChampion.points} pts
-              </p>
-            </div>
+
+            {(data.lastChampion.topAttacker || data.lastChampion.topDefender || data.lastChampion.topSupport) && (
+              <div className="grid grid-cols-3 gap-2">
+                {data.lastChampion.topAttacker && (
+                  <div className="flex flex-col items-center gap-1 rounded-xl border border-red-500/20 bg-red-500/5 p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getStaticSpriteUrl(data.lastChampion.topAttacker.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <p className="text-[9px] font-bold text-red-400">⚔️ Atacante</p>
+                    <p className="text-[10px] font-semibold text-slate-200 text-center truncate w-full">{getPokemonName(data.lastChampion.topAttacker.pokemonId) || data.lastChampion.topAttacker.name}</p>
+                    <p className="text-[9px] text-slate-500">{data.lastChampion.topAttacker.damageDealt.toLocaleString()} dano</p>
+                  </div>
+                )}
+                {data.lastChampion.topDefender && (
+                  <div className="flex flex-col items-center gap-1 rounded-xl border border-green-500/20 bg-green-500/5 p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getStaticSpriteUrl(data.lastChampion.topDefender.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <p className="text-[9px] font-bold text-green-400">🛡️ Defensor</p>
+                    <p className="text-[10px] font-semibold text-slate-200 text-center truncate w-full">{getPokemonName(data.lastChampion.topDefender.pokemonId) || data.lastChampion.topDefender.name}</p>
+                    <p className="text-[9px] text-slate-500">{data.lastChampion.topDefender.damageTaken.toLocaleString()} absorvido</p>
+                  </div>
+                )}
+                {data.lastChampion.topSupport && (
+                  <div className="flex flex-col items-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getStaticSpriteUrl(data.lastChampion.topSupport.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <p className="text-[9px] font-bold text-cyan-400">💚 Suporte</p>
+                    <p className="text-[10px] font-semibold text-slate-200 text-center truncate w-full">{getPokemonName(data.lastChampion.topSupport.pokemonId) || data.lastChampion.topSupport.name}</p>
+                    <p className="text-[9px] text-slate-500">{data.lastChampion.topSupport.heals} curas</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

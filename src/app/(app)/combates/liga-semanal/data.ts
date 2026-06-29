@@ -52,7 +52,13 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   let todayMatches: unknown[] = [];
   let allMascots: unknown[] = [];
   let weekHighlights: any[] = [];
-  let lastChampion: { playerName: string; weekKey: string; points: number; wins: number; losses: number } | null = null;
+  let lastChampion: {
+    playerName: string; weekKey: string; points: number; wins: number; losses: number;
+    avatarUrl: string | null; playerId: string;
+    topAttacker: { name: string; pokemonId: number; damageDealt: number } | null;
+    topDefender: { name: string; pokemonId: number; damageTaken: number } | null;
+    topSupport: { name: string; pokemonId: number; heals: number } | null;
+  } | null = null;
 
   // Load last finished league champion
   try {
@@ -64,19 +70,66 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     if (lastFinished?.championPlayerId) {
       const champ = await prisma.player.findUnique({
         where: { id: lastFinished.championPlayerId },
-        select: { displayName: true, ptcglNick: true },
+        select: { displayName: true, ptcglNick: true, avatarUrl: true },
       });
       const champParticipant = await (prisma as any).weeklyMascotLeagueParticipant.findFirst({
         where: { leagueId: (await (prisma as any).weeklyMascotLeague.findFirst({ where: { weekKey: lastFinished.weekKey } }))?.id, playerId: lastFinished.championPlayerId },
         select: { points: true, wins: true, losses: true },
       });
       if (champ) {
+        let topAttacker: { name: string; pokemonId: number; damageDealt: number } | null = null;
+        let topDefender: { name: string; pokemonId: number; damageTaken: number } | null = null;
+        let topSupport: { name: string; pokemonId: number; heals: number } | null = null;
+
+        try {
+          const champLeague = await (prisma as any).weeklyMascotLeague.findFirst({ where: { weekKey: lastFinished.weekKey } });
+          if (champLeague) {
+            const champMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
+              where: { leagueId: champLeague.id, replayJson: { not: null } },
+              select: { replayJson: true },
+            });
+            const champStats = new Map<string, { name: string; pokemonId: number; damageDealt: number; damageTaken: number; heals: number }>();
+            for (const m of champMatches) {
+              const turns = (m.replayJson ?? []) as any[];
+              for (const t of turns) {
+                if (t.actorOwnerId === lastFinished.championPlayerId && t.action === "ATTACK" && t.damage > 0) {
+                  const s = champStats.get(t.actorId) ?? { name: t.actorName, pokemonId: t.actorPokemonId ?? 0, damageDealt: 0, damageTaken: 0, heals: 0 };
+                  s.damageDealt += t.damage;
+                  champStats.set(t.actorId, s);
+                }
+                if (t.targetOwnerId === lastFinished.championPlayerId && t.action === "ATTACK" && t.damage > 0) {
+                  const s = champStats.get(t.targetId) ?? { name: t.targetName, pokemonId: t.targetPokemonId ?? 0, damageDealt: 0, damageTaken: 0, heals: 0 };
+                  s.damageTaken += t.damage;
+                  champStats.set(t.targetId, s);
+                }
+                if (t.actorOwnerId === lastFinished.championPlayerId && t.action === "DEFEND" && t.effect?.includes("curou")) {
+                  const s = champStats.get(t.actorId) ?? { name: t.actorName, pokemonId: t.actorPokemonId ?? 0, damageDealt: 0, damageTaken: 0, heals: 0 };
+                  s.heals++;
+                  champStats.set(t.actorId, s);
+                }
+              }
+            }
+            const statsArr = [...champStats.values()];
+            const byDmg = statsArr.filter(s => s.damageDealt > 0).sort((a, b) => b.damageDealt - a.damageDealt);
+            const byTank = statsArr.filter(s => s.damageTaken > 0).sort((a, b) => b.damageTaken - a.damageTaken);
+            const byHeal = statsArr.filter(s => s.heals > 0).sort((a, b) => b.heals - a.heals);
+            if (byDmg[0]) topAttacker = { name: byDmg[0].name, pokemonId: byDmg[0].pokemonId, damageDealt: byDmg[0].damageDealt };
+            if (byTank[0]) topDefender = { name: byTank[0].name, pokemonId: byTank[0].pokemonId, damageTaken: byTank[0].damageTaken };
+            if (byHeal[0]) topSupport = { name: byHeal[0].name, pokemonId: byHeal[0].pokemonId, heals: byHeal[0].heals };
+          }
+        } catch {}
+
         lastChampion = {
           playerName: champ.ptcglNick ? `${champ.displayName} (${champ.ptcglNick})` : champ.displayName,
           weekKey: lastFinished.weekKey,
           points: champParticipant?.points ?? 0,
           wins: champParticipant?.wins ?? 0,
           losses: champParticipant?.losses ?? 0,
+          avatarUrl: champ.avatarUrl ?? null,
+          playerId: lastFinished.championPlayerId,
+          topAttacker,
+          topDefender,
+          topSupport,
         };
       }
     }
