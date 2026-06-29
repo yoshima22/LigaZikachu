@@ -1012,16 +1012,14 @@ export async function feedAllAction(): Promise<{
     }
 
     // Alimenta em batch
-    await prisma.$transaction(async (tx) => {
-      // Decrementa estoque
-      await tx.mascotFoodItem.update({
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.mascotFoodItem.update({
         where: { playerId_type: { playerId: player.id, type: "FOOD" } },
         data: { quantity: { decrement: toFeed.length } },
-      });
-      // Atualiza cada mascote individualmente para poder clampar happiness
-      const now = new Date();
-      await Promise.all(toFeed.map(m =>
-        tx.mascot.update({
+      }),
+      ...toFeed.map(m =>
+        prisma.mascot.update({
           where: { id: m.id },
           data: {
             happiness: Math.min(100, m.happiness + 20),
@@ -1029,9 +1027,13 @@ export async function feedAllAction(): Promise<{
             lastFedAt: now,
           },
         })
-      ));
-      await Promise.all(toFeed.map(m => clearRunawayWarningIfRecovered(player.id, m.id, tx).catch(() => {})));
-    });
+      ),
+    ]);
+
+    // Clear runaway warnings fora da transaction (não-crítico)
+    for (const m of toFeed) {
+      await clearRunawayWarningIfRecovered(player.id, m.id).catch(() => {});
+    }
 
     revalidate(player.id);
     return { fed: toFeed.length, skipped: mascots.length - toFeed.length, noFood: false };

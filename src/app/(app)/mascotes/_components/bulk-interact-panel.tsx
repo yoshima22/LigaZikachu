@@ -68,17 +68,21 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
 
   const handleFeedAll = () => {
     startFeedAll(async () => {
-      const res = await feedAllAction();
-      if (res.error) { toast.error(res.error); return; }
-      if (res.noFood) { toast.warning("Sem comida no estoque para alimentar os mascotes."); return; }
-      if (res.fed === 0) {
-        toast.info("Todos os mascotes já estão satisfeitos.");
-      } else {
-        const msg = res.skipped > 0
-          ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. ${res.skipped} já estava${res.skipped !== 1 ? "m" : ""} satisfeito${res.skipped !== 1 ? "s" : ""}.`
-          : `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}!`;
-        toast.success(msg);
-        router.refresh();
+      try {
+        const res = await feedAllAction();
+        if (res.error) { toast.error(res.error); return; }
+        if (res.noFood) { toast.warning("Sem comida no estoque para alimentar os mascotes."); return; }
+        if (res.fed === 0) {
+          toast.info("Todos os mascotes já estão satisfeitos.");
+        } else {
+          const msg = res.skipped > 0
+            ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. ${res.skipped} já estava${res.skipped !== 1 ? "m" : ""} satisfeito${res.skipped !== 1 ? "s" : ""}.`
+            : `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}!`;
+          toast.success(msg);
+          router.refresh();
+        }
+      } catch (err) {
+        toast.error(`Erro ao alimentar: ${String(err).slice(0, 150)}`);
       }
     });
   };

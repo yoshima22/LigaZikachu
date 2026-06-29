@@ -399,7 +399,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const expPct     = Math.min(100, Math.max(0, Math.round((localExp / expNeeded) * 100)));
 
   // Derived status — usa estado local otimista
-  const hungerStatus    = getHungerStatus(localLastFed);
+  const hungerStatus    = getHungerStatus(localLastFed, mascot.isEquipped);
   const happinessStatus = getHappinessStatus(localHappiness);
   const challengeStatus = getChallengeStatus(localMood);
   const arena = arenaStatus(mascot);
