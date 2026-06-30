@@ -815,6 +815,12 @@ export default async function PlayerDetailPage({
             ]}
           />
           <AdminResetPanel playerId={playerId} userId={player.user.id} />
+          <Link
+            href={`/arena-z?tab=historico&viewAs=${playerId}`}
+            className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm font-semibold text-amber-300 hover:bg-amber-500/10 transition-colors"
+          >
+            📜 Ver histórico de combates na Arena Z
+          </Link>
         </div>
       )}
     </div>

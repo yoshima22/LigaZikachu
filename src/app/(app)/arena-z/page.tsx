@@ -24,6 +24,7 @@ import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { CombatRoleSelect } from "./_components/combat-role-select";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
+import { AdminArenaHistorySelector } from "./_components/admin-arena-history-selector";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,7 @@ function getTeamBlockedReason(team: TeamReadiness): string | null {
 export default async function ArenaZPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; viewAs?: string }>;
 }) {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
@@ -113,6 +114,12 @@ export default async function ArenaZPage({
     select: { id: true, displayName: true },
   });
   if (!player) redirect("/dashboard");
+
+  // Admin pode visualizar o histórico de outro jogador via ?viewAs=<playerId>
+  const viewAsPlayer = admin && params.viewAs && params.viewAs !== player.id
+    ? await prisma.player.findUnique({ where: { id: params.viewAs }, select: { id: true, displayName: true } }).catch(() => null)
+    : null;
+  const historyPlayerId = viewAsPlayer?.id ?? player.id;
 
   await cleanupExpiredArenaResting(player.id).catch(() => null);
 
@@ -188,7 +195,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     needsBattleHistory
       ? Promise.all([
           prisma.arenaBattle.findMany({
-            where: { attackerPlayerId: player.id },
+            where: { attackerPlayerId: historyPlayerId },
             select: {
               id: true, type: true, status: true, result: true,
               attackerPlayerId: true, defenderPlayerId: true,
@@ -204,7 +211,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             take: 15,
           }),
           prisma.arenaBattle.findMany({
-            where: { defenderPlayerId: player.id },
+            where: { defenderPlayerId: historyPlayerId },
             select: {
               id: true, type: true, status: true, result: true,
               attackerPlayerId: true, defenderPlayerId: true,
@@ -1032,9 +1039,15 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       {/* ══ TAB: HISTÓRICO ══ */}
       {activeTab === "historico" && (
         <div className="rounded-2xl border border-border bg-slate-950/60 p-5">
-          <h2 className="flex items-center gap-2 font-semibold text-slate-200">
-            <History size={16} /> Histórico de Combates
-          </h2>
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-200">
+              <History size={16} /> Histórico de Combates
+              {viewAsPlayer && <span className="text-xs font-normal text-amber-300">— {viewAsPlayer.displayName}</span>}
+            </h2>
+            {admin && (
+              <AdminArenaHistorySelector currentViewAs={params.viewAs ?? ""} />
+            )}
+          </div>
           <div className="mt-4 space-y-3">
             {battles.length === 0 ? (
               <p className="text-sm text-slate-500">Nenhum combate registrado.</p>
