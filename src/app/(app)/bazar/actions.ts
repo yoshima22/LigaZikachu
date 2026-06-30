@@ -118,16 +118,14 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 }
 
 /** Checa se as ofertas expiraram e gera novas automaticamente a partir do shop */
-// Retorna as novas ofertas se rolou, null se não precisou, para evitar re-fetch cacheado
+// Retorna freshConfig quando rolou novas ofertas (evita re-fetch pelo cache no mesmo request)
 export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awaited<ReturnType<typeof prisma.miauvadaoConfig.findUniqueOrThrow>> } | null> {
   try {
-    // Lê direto do banco para ter certeza do estado real (sem cache)
-    const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } })
-      ?? await prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
+    // Usa o cache para checar — sem egress extra na maioria dos page loads
+    const config = await getMiauvadaoConfig();
 
     const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const firstOffer = offers[0];
-    // Expirou OU é oferta antiga sem shopItemId (gerada pelo catálogo estático anterior)
     const expired = !firstOffer
       || new Date() > new Date(firstOffer.validUntil)
       || !firstOffer.shopItemId;
@@ -139,6 +137,7 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awa
 
     const currentRefreshData = (config.playerRefreshData ?? {}) as Record<string, unknown>;
     const resetRefreshData = { ...currentRefreshData, "__global__": { date: "", count: 0 } };
+    // Retorna o resultado do update diretamente — sem precisar re-buscar pelo cache
     const freshConfig = await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
       data: {
