@@ -2034,7 +2034,9 @@ export const PERSONALITY_DESCRIPTION: Record<string, string> = {
 };
 
 // ── Balão de diálogo ──────────────────────────────────────────────────────────
-export function generateMascotSpeech(params: {
+
+export interface MascotSpeechParams {
+  // Campos originais (mantidos para compatibilidade)
   mood: string;
   happiness: number;
   personality: string;
@@ -2043,47 +2045,346 @@ export function generateMascotSpeech(params: {
   battleWins?: number;
   battleLosses?: number;
   recentTrainerWins?: number;
-}): string {
-  const hunger = getHungerStatus(params.lastFedAt);
-  const h = getHappinessStatus(params.happiness);
-  const hoursAlone = params.lastInteractedAt
-    ? (Date.now() - new Date(params.lastInteractedAt).getTime()) / 3_600_000
-    : 999;
+  // Novos campos (opcionais — já existem no objeto mascot, sem custo de egress)
+  id?: string;
+  isEquipped?: boolean;
+  arenaState?: string;
+  restingUntil?: Date | null;
+  lastPlayedAt?: Date | null;
+  lastPettedAt?: Date | null;
+  level?: number;
+  exp?: number;
+  isShiny?: boolean;
+  statForce?: number;
+  statAgility?: number;
+  statVitality?: number;
+  statCharisma?: number;
+  statInstinct?: number;
+  combatRole?: string | null;
+  relations?: { type: string }[];
+}
 
-  if (hunger === "STARVING") return "Por favor! Estou desmaiando de fome! 🍖";
-  if (params.mood === "ANGRY") return "Tô procurando briga! Me manda pra uma batalha! 😤";
-  if (hunger === "HUNGRY") return "Meu estômago tá roncando... tem comida? 😋";
-  if (params.mood === "CONFIDENT") {
-    if ((params.recentTrainerWins ?? 0) > 0)
-      return `${params.recentTrainerWins} vitórias seguidas! Meu treinador é imbatível! 🏆`;
-    return "Me sinto no topo do mundo! Ninguém me para! 💪";
+function _strHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+export function generateMascotSpeech(params: MascotSpeechParams): string {
+  // Seed determinístico: varia por mascote e muda quando estado muda (sem Date.now() → sem hydration mismatch)
+  const seed = Math.abs(
+    _strHash(params.id ?? params.personality) ^
+    (params.happiness * 13) ^
+    ((params.battleWins ?? 0) * 7) ^
+    ((params.battleLosses ?? 0) * 11) ^
+    ((params.level ?? 1) * 17)
+  );
+  function pick(lines: string[]): string { return lines[seed % lines.length]; }
+
+  const hunger = getHungerStatus(params.lastFedAt, params.isEquipped ?? true);
+  const hoursAlone = params.lastInteractedAt
+    ? (Date.now() - new Date(params.lastInteractedAt).getTime()) / 3_600_000 : 999;
+  const hoursWithoutPet = params.lastPettedAt
+    ? (Date.now() - new Date(params.lastPettedAt).getTime()) / 3_600_000 : 999;
+  const hoursWithoutPlay = params.lastPlayedAt
+    ? (Date.now() - new Date(params.lastPlayedAt).getTime()) / 3_600_000 : 999;
+  const restingActive = params.restingUntil && new Date(params.restingUntil) > new Date();
+
+  // ── Prioridade 1: Ferido ──────────────────────────────────────────────────
+  if (params.arenaState === "INJURED") return pick([
+    "Ainda estou doendo… 🤕",
+    "Preciso de cuidado antes de voltar. 🩹",
+    "Não foi só arranhão, tá? 😣",
+    "Vou melhorar, mas agora preciso descansar. 😔",
+    "Essa batalha me deixou quebrado. 💢",
+  ]);
+
+  // ── Prioridade 1b: Descansando ────────────────────────────────────────────
+  if (params.arenaState === "RESTING" || restingActive) return pick([
+    "Mais um pouco e estou de volta. 😴",
+    "Estou recuperando energia. 💤",
+    "Descanso também é estratégia. 🌙",
+    "Não me acorda ainda. 🛌",
+    "Estou juntando forças. ✨",
+  ]);
+
+  // ── Prioridade 2: Fome crítica ────────────────────────────────────────────
+  if (hunger === "STARVING") return pick([
+    "Por favor! Estou desmaiando de fome! 🍖",
+    "Minha barriga está fazendo barulho de novo… 😩",
+    "Se tiver um petisco sobrando, eu aceito agora. 🥺",
+    "Estou tentando ser forte, mas a fome está vencendo. 😮‍💨",
+    "Uma comidinha resolveria 90% dos meus problemas. 🍗",
+    "Se eu cair, diga que foi fome. 💀",
+    "Acho que meu estômago acabou de usar Rugido. 🐾",
+    "Não estou dramático. Estou faminto mesmo. 😤",
+    "Meu humor está preso dentro da geladeira. 🥶",
+    "Eu lutaria melhor se tivesse comido alguma coisa. ⚔️",
+  ]);
+
+  // ── Prioridade 3: Felicidade muito baixa ─────────────────────────────────
+  if (params.happiness <= 25) return pick([
+    "Você ainda lembra de mim, né? 🥺",
+    "Estou meio apagado hoje… 😔",
+    "Acho que preciso de atenção. 💙",
+    "Um carinho resolveria bastante coisa. 🫂",
+    "Fiquei esperando você aparecer. 😞",
+    "Queria me sentir mais parte do time. 😶",
+    "Hoje eu não estou no meu melhor dia. 😟",
+    "Não estou bravo, só meio esquecido. 👻",
+    "Talvez eu precise de uma pausa. 🌧️",
+    "Eu estava com saudade. 💛",
+  ]);
+
+  // ── Prioridade 4: Humores negativos ──────────────────────────────────────
+  if (params.mood === "ANGRY") return pick([
+    "Hoje eu estou sem paciência. 😤",
+    "Não cutuca, que eu estou irritado. 🔥",
+    "Meu olhar já deveria explicar tudo. 😠",
+    "Se tiver combate, talvez eu desconte. ⚔️",
+    "Estou bravo, mas ainda aceito comida. 🍗",
+    "Tô procurando briga! Me manda pra uma batalha! 💢",
+  ]);
+  if (params.mood === "TIRED") return pick([
+    "Estou cansado até para reclamar. 😴",
+    "Preciso descansar um pouco. 💤",
+    "Hoje meu ritmo está mais lento. 🐢",
+    "Se der para evitar confusão, eu agradeço. 🙏",
+    "Acho que gastei energia demais. 😮‍💨",
+    "Cansadinho... só mais uns minutinhos... 😴",
+  ]);
+  if (hunger === "HUNGRY") return pick([
+    "Minha barriga está comandando minhas decisões. 🍽️",
+    "Tudo me lembra comida agora. 🍗",
+    "Estou faminto e ficando dramático. 😩",
+    "Prometo melhorar depois de comer. 🤝",
+    "A fome está afetando minha pose. 😓",
+    "Meu estômago tá roncando... tem comida? 😋",
+  ]);
+  if (params.mood === "NEEDY" || hoursAlone > 48) return pick([
+    "Você pode ficar mais um pouco? 🥺",
+    "Eu queria um carinho agora. 💛",
+    "Não me deixa esquecido no card. 👻",
+    "Estou precisando de atenção. 💙",
+    "Prometo fazer pose se você cuidar de mim. 🐾",
+    "Oi! Você tá aí? Estava com saudade! 👋",
+    "Você sumiu! Estava com tanta saudade! 🥺",
+  ]);
+
+  // ── Prioridade 5: Arena e Rastros ─────────────────────────────────────────
+  if (params.arenaState === "ARENA") return pick([
+    "Estou em batalha agora! ⚔️",
+    "Não posso conversar, estou no meio da ação. 🔥",
+    "Depois da luta eu reclamo da fome. 😤",
+    "Estou focado no combate. 🎯",
+    "Torça por mim daqui! 📣",
+  ]);
+  if (params.arenaState === "TRACE_HIDING") return pick([
+    "Fica quieto… estou escondido. 🤫",
+    "Meu rastro está bem desenhado. 🗺️",
+    "Será que alguém consegue me achar? 👁️",
+    "Estou ouvindo passos por perto… 👂",
+    "Se me acharem, finjo que era parte do plano. 😏",
+  ]);
+  if (params.arenaState === "TRACE_HUNTING") return pick([
+    "Estou seguindo um rastro agora. 🔍",
+    "Acho que vi uma pegada suspeita. 👣",
+    "Se esse caminho for falso, eu vou reclamar. 😤",
+    "Estou quase encontrando alguém. 🏃",
+    "Meu instinto diz que tem coisa por aqui. 🐾",
+  ]);
+
+  // ── Prioridade 5b: Falta de carinho / brincadeira ────────────────────────
+  if (hoursWithoutPet > 24 && (params.lastPettedAt !== undefined)) return pick([
+    "Faz tempo que não recebo carinho… 🥺",
+    "Um carinho resolveria bastante coisa. 💛",
+    "Minha pelagem precisa de atenção. 🐾",
+    "Carinho também é treino, sabia? 💙",
+  ]);
+  if (hoursWithoutPlay > 48 && (params.lastPlayedAt !== undefined)) return pick([
+    "Tô com vontade de brincar! 🎮",
+    "Faz tempo que não a gente não brinca juntos. 🎯",
+    "Brincaaa! Vamos jogar! 🎮",
+    "Estou com energia sobrando aqui. ⚡",
+  ]);
+
+  // ── Prioridade 6: Quase subindo de nível ─────────────────────────────────
+  const expNeeded = expToNextLevel(params.level ?? 1);
+  if (expNeeded > 0 && (params.exp ?? 0) / expNeeded >= 0.85) return pick([
+    "Estou quase ficando mais forte! 💪",
+    "Falta pouco para eu subir de nível. ⭐",
+    "Dá para sentir o próximo nível chegando. 🌟",
+    "Treina comigo, estou quase lá. 🏋️",
+    "Meu próximo nível está logo ali. 🚀",
+  ]);
+
+  // ── Prioridade 7: Vitórias e derrotas ────────────────────────────────────
+  const wins = params.battleWins ?? 0;
+  const losses = params.battleLosses ?? 0;
+  if (losses >= 2 && losses > wins) return pick([
+    "Preciso treinar mais… 💪",
+    "A última derrota ainda está na cabeça. 😔",
+    "Não gostei daquele resultado. 😤",
+    "Na próxima eu vou melhor. 🔥",
+    "Perder faz parte, mas eu não gostei. 😣",
+    "Acho que preciso de um plano novo. 🧠",
+    "Não estou numa fase boa. 📉",
+    "Essa sequência está me incomodando. 😒",
+  ]);
+  if (wins > 3) return pick([
+    `Já venci ${wins} batalhas! Respeita! ⚔️`,
+    "Já venci algumas batalhas. Só dizendo. 😎",
+    "Minha sequência está ficando bonita. 🏆",
+    "Vitória combina comigo. 🥇",
+    "Eu tenho histórico de respeito. ⚔️",
+    "Se precisar de experiência, chama. 💪",
+  ]);
+
+  // ── Prioridade 8: Relações sociais ───────────────────────────────────────
+  const hasRival  = params.relations?.some(r => r.type === "RIVAL");
+  const hasFriend = params.relations?.some(r => r.type === "FRIEND");
+  if (hasRival) return pick([
+    "Meu rival vai me pagar. 😤",
+    "Se meu rival aparecer, eu quero entrar. ⚔️",
+    "Ainda não esqueci aquela disputa. 🔥",
+    "Hoje eu queria uma revanche. 💢",
+    "Rivalidade também é motivação. 💪",
+  ]);
+  if (hasFriend) return pick([
+    "Sinto falta do meu amigo. 💛",
+    "Com meu amigo por perto, eu jogo melhor. 🤝",
+    "Será que meu parceiro aparece hoje? 👀",
+    "Lutar junto de amigo é mais divertido. ⚔️",
+    "A gente se entende até sem falar. 🫂",
+  ]);
+
+  // ── Prioridade 9: Postura de combate ─────────────────────────────────────
+  const combatRolePhrases: Record<string, string[]> = {
+    ATTACKER:    ["Me coloca para atacar e eu resolvo. 💥","Meu lugar é pressionando o adversário. 🔥","Se abrir espaço, eu avanço. ⚔️","Hoje eu quero causar dano. 💢","Atacar primeiro parece um bom plano. 🎯"],
+    DEFENDER:    ["Pode deixar que eu seguro a linha. 🛡️","Se vier ataque, eu entro na frente. 💪","Proteger o time também ganha combate. 🤝","Eu aguento a pressão. 😤","Enquanto eu estiver de pé, o time respira. 🫂"],
+    FLANK:       ["Eu prefiro pegar pelo lado. 🐾","Defesa demais só me dá vontade de contornar. 😏","Se piscarem, eu chego no alvo frágil. 🎯","Meu caminho nunca é o óbvio. 🌀","Eu gosto de aparecer onde não esperam. 👻"],
+    ENCOURAGER:  ["Meu time luta melhor quando eu estou junto. 📣","Eu não bato mais forte, eu faço todos baterem melhor. ⭐","Hoje eu vou levantar o moral do time. 🔥","Um bom incentivo muda a luta. 💪","Se o time acreditar, já começa ganhando. 🏆"],
+    OPPORTUNIST: ["Eu espero o erro certo. 👁️","Toda fraqueza deixa uma pista. 🔍","Se alguém vacilar, eu aproveito. 😏","Eu não preciso bater primeiro. Só preciso bater na hora certa. ⚔️","O adversário sempre entrega alguma coisa. 🎭"],
+    GUARDIAN:    ["Eu já escolhi quem vou proteger. 🛡️","Se tentarem passar, vão ter que lidar comigo. 💢","Meu foco é manter alguém de pé. 🤝","Proteção bem feita muda combate. 💪","Eu seguro o perigo longe do alvo. 🔒"],
+    DUELIST:     ["Um alvo por vez. Do meu jeito. 🎯","Se for duelo, eu não recuo. ⚔️","Eu gosto de resolver no mano a mano. 👊","Escolhi meu alvo e vou até o fim. 🔥","Duelar é questão de orgulho. 😤"],
+    SABOTEUR:    ["Eu adoro atrapalhar plano bonito. 😈","Se o inimigo depender de buff, melhor ainda. 😏","Vou mexer onde mais incomoda. 🌀","Estratégia deles? Vamos desmontar. 💥","Nada como causar um pequeno caos. 🎭"],
+    HEALER:      ["Eu fico de olho em quem precisa. 💙","Nem toda vitória vem de dano. 🌿","Se alguém cair demais, eu ajudo. 🩹","Cuidar do time também é estratégia. 🤝","Eu prefiro manter todo mundo lutando. 💪"],
+    SCOUT:       ["Eu observo antes de agir. 👁️","Alvo errado é desperdício. 🎯","Vou achar o melhor caminho. 🗺️","Informação também vence batalha. 🧠","Eu vejo detalhe onde os outros veem confusão. 🔍"],
+    PROVOKER:    ["Se eu irritar o adversário, já comecei bem. 😏","Às vezes, a melhor defesa é uma boa provocação. 🎭","Eu consigo chamar atenção sem levantar a voz. 👀","O alvo certo é aquele que perde a paciência. 😤","Confusão bem feita parece estratégia. 🌀"],
+    SPECIALIST:  ["Meu melhor atributo vai resolver isso. 💥","Eu sei exatamente no que sou bom. 🎯","Não preciso fazer tudo. Só fazer bem feito. ✅","Especialista não improvisa. Executa. 🔥","Meu ponto forte é forte por um motivo. 💪"],
+    SURVIVOR:    ["Enquanto eu respirar, ainda tem jogo. 💪","Eu sou difícil de finalizar. 🛡️","Vida baixa não significa fim. 🔥","Quanto pior fica, mais eu insisto. 😤","Eu já sobrevivi a coisa pior. ⭐"],
+  };
+  if (params.combatRole && combatRolePhrases[params.combatRole]) {
+    return pick(combatRolePhrases[params.combatRole]);
   }
-  if (params.mood === "EXCITED") return "Que energia! Bora jogar! ⚡";
-  if (hoursAlone > 48) return "Você sumiu! Estava com tanta saudade! 🥺";
-  if (h === "HAPPY") return "Estou muito feliz hoje! Obrigado por cuidar de mim! 💛";
-  if (params.mood === "TIRED") return "Cansadinho... só mais uns minutinhos... 😴";
-  if (h === "DEPRESSED") return "Estou me sentindo muito para baixo... 😢";
-  if (h === "SAD") return "Preciso de atenção... 🥺";
-  if (params.mood === "NEEDY") return "Oi! Você tá aí? Estava com saudade! 👋";
-  if (hunger === "STUFFED") return "Não consigo mais! Tô empanturrado! 😌";
-  if ((params.battleWins ?? 0) > 3) return `Já venci ${params.battleWins} batalhas! Respeita! ⚔️`;
+
+  // ── Prioridade 10: Stat mais alto ─────────────────────────────────────────
+  const stats = {
+    statForce:    params.statForce    ?? 0,
+    statAgility:  params.statAgility  ?? 0,
+    statVitality: params.statVitality ?? 0,
+    statCharisma: params.statCharisma ?? 0,
+    statInstinct: params.statInstinct ?? 0,
+  };
+  const maxStat = Math.max(...Object.values(stats));
+  if (maxStat >= 14) {
+    const highestKey = (Object.keys(stats) as (keyof typeof stats)[]).find(k => stats[k] === maxStat);
+    const statPhrases: Partial<Record<keyof typeof stats, string[]>> = {
+      statForce:    ["Minha Força está pedindo combate. 💪","Hoje eu estou batendo pesado. 🥊","Dá para resolver muita coisa com força. 💥","Minha pancada está calibrada. 🔥","Força alta, paciência baixa. 😤"],
+      statAgility:  ["Pisca e eu já mudei de lugar. ⚡","Hoje ninguém acompanha meu ritmo. 🏃","Meu rastro deve ser difícil de seguir. 🐾","Desviar também é uma arte. 🌀","Eu não fujo. Eu reposiciono com estilo. 😏"],
+      statVitality: ["Pode demorar. Eu aguento. 💪","Eu sou difícil de derrubar. 🛡️","Se a luta for longa, melhor para mim. ⚔️","Hoje estou firme como muralha. 🏔️","Meu plano é simples: continuar de pé. 😤"],
+      statCharisma: ["Meu charme também conta como estratégia. 😎","Carisma alto, pose impecável. 🌟","Tem batalha que começa no olhar. 👁️","O time luta melhor quando eu estou por perto. 📣","Não é só poder. É presença. 💫"],
+      statInstinct: ["Estou sentindo que tem algo acontecendo. 🔮","Meu Instinto diz que hoje vem surpresa. 👁️","Eu percebo detalhes que os outros ignoram. 🧠","Se tiver armadilha, eu vou desconfiar primeiro. 🐾","Eu não sei explicar, mas eu sei. ✨"],
+    };
+    if (highestKey && statPhrases[highestKey]) return pick(statPhrases[highestKey]!);
+  }
+
+  // ── Prioridade 11: Shiny e nível ──────────────────────────────────────────
+  if (params.isShiny) return pick([
+    "Eu brilho até quando estou parado. ✨",
+    "Não é sujeira, é brilho especial. 💎",
+    "Ser brilhante dá trabalho. 🌟",
+    "Meu brilho merece atenção. 💫",
+    "Hoje eu estou reluzente. ✨",
+  ]);
+  const lv = params.level ?? 1;
+  if (lv >= 20) return pick([
+    "Experiência não falta por aqui. 🏆",
+    "Meu nível fala por mim. ⭐",
+    "Eu não cheguei até aqui por sorte. 💪",
+    "Se precisar de veterano, estou aqui. 🎖️",
+    "Nível alto, responsabilidade alta. 😤",
+  ]);
+  if (lv <= 3) return pick([
+    "Ainda sou pequeno, mas tenho potencial. 🌱",
+    "Estou aprendendo do meu jeito. 📚",
+    "Todo campeão começou de algum lugar. ⭐",
+    "Me dá tempo que eu cresço. 🚀",
+    "Ainda estou pegando o ritmo. 🐣",
+  ]);
+
+  // ── Prioridade 12: Fome leve, felicidade alta, humores positivos, personalidade ──
+
+  if (hunger === "NEUTRAL") return pick([
+    "Estou bem, mas um petisco cairia muito bem. 🍗",
+    "Não estou faminto, só estrategicamente interessado em comida. 😏",
+    "Comida agora seria um bônus de felicidade. 😊",
+    "Será que petisco conta como preparação de batalha? 🤔",
+    "Hoje eu aceitaria um lanchinho sem reclamar. 😌",
+    "Estou normal, mas meu estômago discorda um pouco. 😅",
+  ]);
+
+  if (params.happiness >= 80) return pick([
+    "Hoje eu estou me sentindo incrível! 🌟",
+    "Fico feliz quando você lembra de mim. 💛",
+    "Estou pronto para qualquer aventura! 🚀",
+    "A felicidade está no máximo e a pose também. 😎",
+    "Hoje eu ganho até no carisma. ✨",
+    "Eu gosto quando fico por aqui com você. 🥰",
+    "Estou feliz o suficiente para dividir petisco. Talvez. 🍗",
+    "Hoje tudo parece dar certo. 🌈",
+    "Estou muito feliz hoje! Obrigado por cuidar de mim! 💛",
+    "Meu card está até mais bonito hoje. 💫",
+  ]);
+
+  const moodPhrases: Record<string, string[]> = {
+    HAPPY:       ["Estou de ótimo humor hoje! 😄","Hoje até o treino parece divertido. 🏋️","Pode chamar, estou pronto. ⚡","Acho que hoje eu brilho mais. 🌟","Feliz, alimentado e perigoso. 😎"],
+    EXCITED:     ["Vamos fazer alguma coisa agora! 🚀","Estou elétrico de animação! ⚡","Não consigo ficar parado. 🏃","Se tiver aventura, eu vou primeiro. 🎯","Hoje eu acordei em modo evento. 🎉","Que energia! Bora jogar! ⚡"],
+    COMPETITIVE: ["Quero ver quem vai me parar. 😤","Hoje eu quero provar um ponto. 💪","Me coloca contra alguém forte. ⚔️","Não vim aqui para ficar bonito no card. 🔥","Desafio aceito antes mesmo de ser feito. 😎","Quando é a próxima batalha? 😤"],
+    PROUD:       ["Eu sei que estou indo bem. 😎","Pode admitir, eu estou impressionante. 👑","Meu histórico fala por mim. 🏆","Estou orgulhoso do meu desempenho. 💪","Hoje eu caminho como campeão. 🥇","Sou o melhor mascote! 😎"],
+    CONFIDENT:   ["Confia em mim. Eu confio em mim também. 💪","Hoje ninguém segura esse time. 🔥","Estou com postura de campeão. 👑","Meu olhar diz tudo: eu estou pronto. 😏","Se tiver combate, eu quero participar. ⚔️","Me sinto no topo do mundo! Ninguém me para! 💪"],
+    NEUTRAL:     ["Estou observando tudo por aqui. 👁️","Nada suspeito acontecendo. Ainda. 😐","Se precisar, é só me chamar. 🤝","Hoje parece um dia normal. 😌","Estou quieto, mas atento. 🐾"],
+    HUNGRY:      ["Minha barriga está comandando minhas decisões. 🍽️","Tudo me lembra comida agora. 🍗","Prometo melhorar depois de comer. 🤝","A fome está afetando minha pose. 😓"],
+  };
+  if (moodPhrases[params.mood]) return pick(moodPhrases[params.mood]);
 
   const personalityLines: Record<string, string[]> = {
-    COMPETITIVE: ["Quando é a próxima batalha? 😤","Tô pronto pra qualquer desafio! ⚔️"],
-    LAZY:        ["...zzz... me deixa... 😴","Hoje não tô com vontade... 🛋️"],
-    MISCHIEVOUS: ["Vamos aprontar alguma! 😈","Psiu! Tô tramando algo... 🤫"],
-    DRAMATIC:    ["A vida de mascote é uma aventura! 🎭","Cada dia é uma história nova! ✨"],
-    TIMID:       ["*olha timidamente* ...oi... 👀","É... estou aqui... 🌸"],
-    PLAYFUL:     ["Brincaaa! Vamos jogar! 🎮","Faz alguma coisa! Estou entediado! 😅"],
-    LOYAL:       ["Sempre estarei do seu lado! 🤝","Conte comigo, treinador! 💪"],
-    ELECTRIC:    ["Carregado de energia! ⚡","Pronto pra qualquer coisa! 🔋"],
-    PROUD:       ["Sou o melhor mascote! 😎","Ninguém tem mais classe que eu! 👑"],
-    CHAOTIC:     ["...","BOOOM! 💥","Tudo bem? Nada. 🌀"],
+    COMPETITIVE: ["Se tiver ranking, eu quero subir. 📊","Competir me deixa acordado. ⚡","Hoje eu quero resultado. 🏆"],
+    LAZY:        ["Dá para vencer deitado? 😴","Eu ajudo… depois de um cochilo. 🛋️","A pressa é inimiga do descanso. 😌","...zzz... me deixa... 😴"],
+    MISCHIEVOUS: ["Prometo não aprontar. Muito. 😈","Tenho uma ideia. Talvez péssima. 🤔","Se algo sumir, não fui eu. 🤫","Vamos aprontar alguma! 😈"],
+    DRAMATIC:    ["Ninguém entende a profundidade da minha fome. 🎭","Se eu perder, será uma tragédia em três atos. 😩","Meu sofrimento merece trilha sonora. 🎵","Cada dia é uma história nova! ✨"],
+    PLAYFUL:     ["Vamos brincar antes de lutar? 🎮","Se virar jogo, eu participo. 🎯","Tudo fica melhor com bagunça. 🌀","Brincaaa! Vamos jogar! 🎮"],
+    ELECTRIC:    ["Estou ligado no 220. ⚡","Energia não falta. 🔋","Acho que soltei faísca. ⚡","Carregado de energia! ⚡"],
+    TIMID:       ["Eu posso tentar… se você quiser. 🌸","Não gosto de muita atenção. 👀","Vou fazer meu melhor, baixinho. 🤫","*olha timidamente* ...oi... 👀"],
+    CHAOTIC:     ["Tenho um plano. Ele muda a cada segundo. 🌀","A ordem é superestimada. 💥","Se der errado, pelo menos foi divertido. 😅","BOOOM! 💥"],
+    LOYAL:       ["Eu fico do seu lado. 🤝","Se você chamar, eu venho. 💪","Time bom é time junto. 🫂","Sempre estarei do seu lado! 🤝"],
+    PROUD:       ["Eu tenho uma reputação a manter. 👑","Minha pose não é por acaso. 😎","Orgulho também treina. 💪","Ninguém tem mais classe que eu! 👑"],
   };
-  const lines = personalityLines[params.personality] ?? ["Tudo tranquilo! 😐"];
-  // Usa hash determinístico do mood+personality para evitar hydration mismatch
-  const idx = (params.mood.length + params.personality.length + params.happiness) % lines.length;
-  return lines[idx];
+  if (personalityLines[params.personality]) return pick(personalityLines[params.personality]);
+
+  // ── Prioridade 13: Genérica ───────────────────────────────────────────────
+  return pick([
+    "Estou esperando sua próxima decisão. 🤔",
+    "Será que hoje tem aventura? 🌟",
+    "Me deixa no time certo e eu resolvo. 💪",
+    "Nada suspeito acontecendo. Ainda. 😐",
+    "Eu estava quieto, mas atento. 👁️",
+    "Acho que alguém olhou para meu card. 👀",
+    "Hoje parece um bom dia para fazer alguma coisa. ✨",
+    "Se precisar, é só me chamar. 🤝",
+    "Estou pronto para o que vier. 🎯",
+    "Só não esquece de cuidar de mim depois. 💛",
+  ]);
 }
 
 

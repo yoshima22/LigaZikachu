@@ -1,24 +1,11 @@
 "use client";
 
-import { generateMascotSpeech } from "@/lib/mascot-data";
+import { generateMascotSpeech, type MascotSpeechParams } from "@/lib/mascot-data";
 
-interface Props {
-  mood: string;
-  happiness: number;
-  personality: string;
-  lastFedAt: Date | null;
-  lastInteractedAt: Date | null;
-  battleWins?: number;
-  recentTrainerWins?: number;
-}
+type Props = MascotSpeechParams;
 
-export function MascotSpeechBubble({ mood, happiness, personality, lastFedAt, lastInteractedAt, battleWins, recentTrainerWins }: Props) {
-  const speech = generateMascotSpeech({
-    mood, happiness, personality,
-    lastFedAt: lastFedAt ? new Date(lastFedAt) : null,
-    lastInteractedAt: lastInteractedAt ? new Date(lastInteractedAt) : null,
-    battleWins, recentTrainerWins,
-  });
+export function MascotSpeechBubble(params: Props) {
+  const speech = generateMascotSpeech(params);
 
   return (
     <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 -translate-x-1/2 w-max max-w-[180px] opacity-0 group-hover:opacity-100 transition-opacity duration-200">

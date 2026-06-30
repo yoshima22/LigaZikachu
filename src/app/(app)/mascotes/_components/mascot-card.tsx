@@ -697,10 +697,28 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           <div className="group relative shrink-0 flex h-[72px] w-[72px] cursor-help items-center justify-center">
             {/* Speech bubble on hover */}
             <MascotSpeechBubble
-              mood={mascot.mood} happiness={mascot.happiness}
+              id={mascot.id}
+              mood={mascot.mood}
+              happiness={mascot.happiness}
               personality={mascot.personality}
-              lastFedAt={mascot.lastFedAt} lastInteractedAt={mascot.lastInteractedAt}
+              isEquipped={mascot.isEquipped}
+              lastFedAt={mascot.lastFedAt}
+              lastInteractedAt={mascot.lastInteractedAt}
+              lastPlayedAt={mascot.lastPlayedAt}
+              lastPettedAt={mascot.lastPettedAt}
               battleWins={mascot.battleWins}
+              battleLosses={mascot.battleLosses}
+              arenaState={mascot.arenaState}
+              restingUntil={mascot.restingUntil}
+              level={mascot.level}
+              exp={mascot.exp}
+              isShiny={mascot.isShiny}
+              statForce={mascot.statForce}
+              statAgility={mascot.statAgility}
+              statVitality={mascot.statVitality}
+              statCharisma={mascot.statCharisma}
+              statInstinct={mascot.statInstinct}
+              relations={mascot.relations}
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

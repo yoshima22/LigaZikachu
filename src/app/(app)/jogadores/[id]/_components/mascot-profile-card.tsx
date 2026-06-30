@@ -104,10 +104,23 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
   const expSecs = Math.floor((expRemaining % 60000) / 1000);
 
   const speech = generateMascotSpeech({
-    mood: mascot.mood, happiness: mascot.happiness,
+    id: mascot.id,
+    mood: mascot.mood,
+    happiness: mascot.happiness,
     personality: mascot.personality,
-    lastFedAt: mascot.lastFedAt, lastInteractedAt: mascot.lastInteractedAt,
+    isEquipped: mascot.isEquipped,
+    lastFedAt: mascot.lastFedAt,
+    lastInteractedAt: mascot.lastInteractedAt,
     battleWins: mascot.battleWins,
+    battleLosses: mascot.battleLosses,
+    level: mascot.level,
+    exp: mascot.exp,
+    statForce: mascot.statForce,
+    statAgility: mascot.statAgility,
+    statVitality: mascot.statVitality,
+    statCharisma: mascot.statCharisma,
+    statInstinct: mascot.statInstinct,
+    relations: mascot.relations.map(r => ({ type: r.type })),
   });
 
   const friends = relations.filter(r => r.type === "FRIEND");
