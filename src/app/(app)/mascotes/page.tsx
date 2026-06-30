@@ -66,7 +66,15 @@ async function fetchMascotPageData(playerId: string) {
     buffInventory,
   ] = await retryMascotLoad(() => Promise.all([
     prisma.mascot.findMany({
-      where: { playerId, OR: [{ isFavorite: true }, { isEquipped: true }] },
+      where: {
+        playerId,
+        OR: [
+          { isFavorite: true },
+          { isEquipped: true },
+          // Mascotes em férias aparecem nos atalhos mesmo que estejam no banco
+          { expeditions: { some: { status: "ACTIVE", rewardJson: { path: ["mode"], equals: "VACATION" } } } },
+        ],
+      },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
         happiness: true, mood: true, personality: true,

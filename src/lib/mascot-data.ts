@@ -737,10 +737,32 @@ export const PSEUDO_LEGENDARY_LINE_IDS = new Set([
   996, 997, 998,
 ]);
 
+// Paradox Pokémon de Gen 9 (Scarlet/Violet) — não são lendários, mas têm crescimento acelerado
+export const PARADOX_IDS = new Set([
+  // Paradoxos do passado (Ancient)
+  984,  // Great Tusk
+  985,  // Scream Tail
+  986,  // Brute Bonnet
+  987,  // Flutter Mane
+  988,  // Slither Wing
+  989,  // Sandy Shocks
+  1005, // Roaring Moon
+  // Paradoxos do futuro (Iron)
+  990,  // Iron Treads
+  991,  // Iron Bundle
+  992,  // Iron Hands
+  993,  // Iron Jugulis
+  994,  // Iron Moth
+  995,  // Iron Thorns
+  1006, // Iron Valiant
+  // DLC Indigo Disk (Walking Wake e Iron Leaves são lendários — já estão no LEGENDARY_POOL)
+]);
+
 export function getMascotStatusGrowthMultiplier(pokemonId?: number | null): number {
   if (!pokemonId) return 1;
   if (LEGENDARY_POOL.includes(pokemonId)) return 1.3;
   if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return 1.1;
+  if (PARADOX_IDS.has(pokemonId)) return 1.1;
   return 1;
 }
 
@@ -2427,13 +2449,14 @@ export const MYTHICAL_IDS = new Set([
   1001, 1002, 1003, 1004,
 ]);
 
-export type MascotRarity = "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST" | "PSEUDO_LEGENDARY" | "COMMON";
+export type MascotRarity = "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST" | "PSEUDO_LEGENDARY" | "PARADOX" | "COMMON";
 
 export function getMascotRarity(pokemonId: number): MascotRarity {
   if (MYTHICAL_IDS.has(pokemonId)) return "MYTHICAL";
   if (ULTRA_BEAST_IDS.has(pokemonId)) return "ULTRA_BEAST";
   if (LEGENDARY_POOL.includes(pokemonId) && !MYTHICAL_IDS.has(pokemonId) && !ULTRA_BEAST_IDS.has(pokemonId)) return "LEGENDARY";
   if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return "PSEUDO_LEGENDARY";
+  if (PARADOX_IDS.has(pokemonId)) return "PARADOX";
   return "COMMON";
 }
 
@@ -2442,6 +2465,7 @@ export const RARITY_LABEL: Record<MascotRarity, string> = {
   MYTHICAL: "Mítico",
   ULTRA_BEAST: "Ultra Besta",
   PSEUDO_LEGENDARY: "Pseudo-Lendário",
+  PARADOX: "Paradoxal",
   COMMON: "",
 };
 
@@ -2450,6 +2474,7 @@ export const RARITY_COLOR: Record<MascotRarity, string> = {
   MYTHICAL: "border-pink-400/50 bg-pink-400/10 text-pink-300",
   ULTRA_BEAST: "border-purple-400/50 bg-purple-400/10 text-purple-300",
   PSEUDO_LEGENDARY: "border-cyan-400/50 bg-cyan-400/10 text-cyan-300",
+  PARADOX: "border-violet-400/50 bg-violet-400/10 text-violet-300",
   COMMON: "",
 };
 
