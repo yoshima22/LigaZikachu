@@ -755,7 +755,13 @@ export const PARADOX_IDS = new Set([
   994,  // Iron Moth
   995,  // Iron Thorns
   1006, // Iron Valiant
-  // DLC Indigo Disk (Walking Wake e Iron Leaves são lendários — já estão no LEGENDARY_POOL)
+  // DLC Indigo Disk — também são Paradoxos de Raid, não Lendários
+  1009, // Walking Wake (Paradox Suicune)
+  1010, // Iron Leaves (Paradox Virizion)
+  1020, // Gouging Fire (Paradox Entei)
+  1021, // Raging Bolt (Paradox Raikou)
+  1022, // Iron Boulder (Paradox Terrakion)
+  1023, // Iron Crown (Paradox Cobalion)
 ]);
 
 export function getMascotStatusGrowthMultiplier(pokemonId?: number | null): number {
@@ -2446,7 +2452,8 @@ export const ULTRA_BEAST_IDS = new Set([
 export const MYTHICAL_IDS = new Set([
   151, 251, 385, 386, 489, 490, 491, 492, 493, 494, 647, 648, 649,
   719, 720, 721, 801, 802, 807, 808, 809, 893,
-  1001, 1002, 1003, 1004,
+  // 1001–1004 são Sub-Lendários (Treasures of Ruin), não Míticos — ficam só em LEGENDARY_POOL
+  1025, // Pecharunt — Mítico de distribuição de evento
 ]);
 
 export type MascotRarity = "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST" | "PSEUDO_LEGENDARY" | "PARADOX" | "COMMON";
@@ -2479,10 +2486,14 @@ export const RARITY_COLOR: Record<MascotRarity, string> = {
 };
 
 const EXTRA_LEGENDARY_AND_MYTHICAL_IDS = [
-  // Gen 7 Ultra Beasts / Poipole line
+  // Gen 7 Ultra Beasts / Poipole line (classificados como UB, mas recebem bônus de lendário)
   793, 794, 795, 796, 797, 798, 799, 803, 804, 805, 806,
-  // Gen 9 DLC legendary/mythical/paradox legends
-  1009, 1010, 1014, 1015, 1016, 1017, 1020, 1021, 1022, 1023, 1024, 1025,
+  // Gen 9 DLC — verdadeiros Lendários e Míticos
+  1014, 1015, 1016, // Okidogi, Munkidori, Fezandipiti (Loyal Three)
+  1017,             // Ogerpon
+  1024,             // Terapagos
+  1025,             // Pecharunt (Mítico — também está em MYTHICAL_IDS)
+  // 1009, 1010, 1020–1023 são Paradoxos de Raid — movidos para PARADOX_IDS
 ];
 
 for (const pokemonId of EXTRA_LEGENDARY_AND_MYTHICAL_IDS) {
