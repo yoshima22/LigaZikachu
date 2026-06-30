@@ -118,10 +118,12 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 }
 
 /** Checa se as ofertas expiraram e gera novas automaticamente a partir do shop */
-export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
+// Retorna as novas ofertas se rolou, null se não precisou, para evitar re-fetch cacheado
+export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awaited<ReturnType<typeof prisma.miauvadaoConfig.findUniqueOrThrow>> } | null> {
   try {
-    // Usa o cache (60s TTL) para não bater no banco a cada page load
-    const config = await getMiauvadaoConfig();
+    // Lê direto do banco para ter certeza do estado real (sem cache)
+    const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } })
+      ?? await prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
 
     const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const firstOffer = offers[0];
@@ -130,25 +132,25 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<void> {
       || new Date() > new Date(firstOffer.validUntil)
       || !firstOffer.shopItemId;
 
-    if (expired) {
-      const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
-      if (newOffers.length > 0) {
-        // Reset global manual refresh counter when auto-refresh fires
-        const currentRefreshData = (config.playerRefreshData ?? {}) as Record<string, unknown>;
-        const resetRefreshData = { ...currentRefreshData, "__global__": { date: "", count: 0 } };
-        await prisma.miauvadaoConfig.update({
-          where: { id: "singleton" },
-          data: {
-            dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-            offersRefreshedAt: new Date(),
-            playerRefreshData: resetRefreshData as unknown as import("@prisma/client").Prisma.InputJsonValue,
-          },
-        });
-        revalidateTag("miauvadao-config");
-      }
-    }
+    if (!expired) return null;
+
+    const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
+    if (newOffers.length === 0) return null;
+
+    const currentRefreshData = (config.playerRefreshData ?? {}) as Record<string, unknown>;
+    const resetRefreshData = { ...currentRefreshData, "__global__": { date: "", count: 0 } };
+    const freshConfig = await prisma.miauvadaoConfig.update({
+      where: { id: "singleton" },
+      data: {
+        dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        offersRefreshedAt: new Date(),
+        playerRefreshData: resetRefreshData as unknown as import("@prisma/client").Prisma.InputJsonValue,
+      },
+    });
+    revalidateTag("miauvadao-config");
+    return { freshConfig };
   } catch {
-    // silencioso — não bloqueia o render da página
+    return null;
   }
 }
 

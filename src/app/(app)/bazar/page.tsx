@@ -48,10 +48,10 @@ export default async function BazarPage({
     getMiauvadaoConfig(),
   ]);
 
-  // Auto-refresh ofertas do Miauvadão se o timer expirou
-  await autoRefreshMiauvadaoIfNeeded().catch(() => {});
-  // Re-fetch config after potential refresh
-  const freshMiauvadao = await getMiauvadaoConfig().catch(() => miauvadao);
+  // Auto-refresh ofertas do Miauvadão se o timer expirou.
+  // Usa o config retornado diretamente (sem passar pelo cache) quando houve roll.
+  const refreshResult = await autoRefreshMiauvadaoIfNeeded().catch(() => null);
+  const freshMiauvadao = refreshResult?.freshConfig ?? miauvadao;
 
   const { listings, total, page, totalPages } = listingsResult;
 
