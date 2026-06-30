@@ -247,7 +247,12 @@ export function MascotList({
     expeditionFilter === "ALL" || expedition.mode === expeditionFilter
   );
 
+  const isVacationBankMascot = (m: MascotData) =>
+    !m.isEquipped && !m.isFavorite &&
+    m.expeditions.some(e => e.status === "ACTIVE" && e.mode === "VACATION");
+
   const filtered = mascots.filter(m => {
+    if (isVacationBankMascot(m)) return false;
     const displayName = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
     const query = search.toLowerCase();
     const matchSearch = !query || displayName.includes(query) || String(m.pokemonId).includes(query) || getPokemonName(m.pokemonId).toLowerCase().includes(query);
@@ -320,6 +325,7 @@ export function MascotList({
               <option value="TRAINING">Treinamento</option>
               <option value="STANDARD">Padrao</option>
               <option value="ITEMS">Itens</option>
+              <option value="VACATION">Férias</option>
             </select>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
