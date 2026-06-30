@@ -102,30 +102,27 @@ type ActiveExpedition = MascotData["expeditions"][number] & {
   mascot: MascotData;
 };
 
-function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExpedition; isAdmin: boolean }) {
+function ExpeditionProgressCard({
+  expedition,
+  isAdmin,
+  onReward,
+}: {
+  expedition: ActiveExpedition;
+  isAdmin: boolean;
+  onReward: (reward: ExpeditionRewardDisplay) => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [reward, setReward] = useState<ExpeditionRewardDisplay | null>(null);
-  const [pendingRefresh, setPendingRefresh] = useState(false);
   const { expired, remaining } = useTimerExpiry(expedition.finishAt);
   const ready = expired;
   const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
-
-  const closeReward = () => {
-    setReward(null);
-    if (pendingRefresh) {
-      setPendingRefresh(false);
-      router.refresh();
-    }
-  };
 
   const collectExpedition = () => {
     startTransition(async () => {
       const result = await claimExpeditionAction(expedition.id);
       if (result.error) { toast.error(result.error); return; }
       if (result.result?.reward) {
-        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
-        setPendingRefresh(true);
+        onReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
       } else {
         router.refresh();
       }
@@ -139,8 +136,7 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
       const result = await claimExpeditionAction(expedition.id);
       if (result.error) { toast.error(result.error); return; }
       if (result.result?.reward) {
-        setReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
-        setPendingRefresh(true);
+        onReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
       } else {
         router.refresh();
       }
@@ -148,26 +144,6 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
   };
 
   return (
-    <>
-      {/* Modal de recompensa */}
-      {reward && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeReward}>
-          <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="text-6xl">{reward.emoji}</div>
-            <div className="space-y-1">
-              <p className="text-lg font-bold text-white">{reward.title}</p>
-              <p className="text-sm text-slate-400">{reward.description}</p>
-            </div>
-            <button
-              onClick={closeReward}
-              className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -209,7 +185,6 @@ function ExpeditionProgressCard({ expedition, isAdmin }: { expedition: ActiveExp
           )}
         </div>
       </div>
-    </>
   );
 }
 
@@ -228,11 +203,18 @@ export function MascotList({
   hasSweet?: boolean;
   isAdmin?: boolean;
 }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [expeditionFilter, setExpeditionFilter] = useState("ALL");
   const [companionOnly, setCompanionOnly] = useState(false);
+  const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
+
+  const closeExpeditionReward = () => {
+    setExpeditionReward(null);
+    router.refresh();
+  };
 
   const activeExpeditions = mascots.flatMap(mascot =>
     mascot.expeditions
@@ -272,6 +254,25 @@ export function MascotList({
   const updateType   = (value: string) => { setTypeFilter(value); };
 
   return (
+    <>
+    {/* Modal de recompensa de expedição — fora dos cards para sobreviver ao desmonte */}
+    {expeditionReward && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeExpeditionReward}>
+        <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="text-6xl">{expeditionReward.emoji}</div>
+          <div className="space-y-1">
+            <p className="text-lg font-bold text-white">{expeditionReward.title}</p>
+            <p className="text-sm text-slate-400">{expeditionReward.description}</p>
+          </div>
+          <button
+            onClick={closeExpeditionReward}
+            className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    )}
     <div className="space-y-5">
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 text-xs text-slate-400">
         <p className="font-semibold text-[#FFCB05]">Mascote Companheiro e Equipe Favorita</p>
@@ -334,6 +335,7 @@ export function MascotList({
                 key={expedition.id}
                 expedition={expedition}
                 isAdmin={isAdmin}
+                onReward={setExpeditionReward}
               />
             ))}
           </div>
@@ -382,6 +384,7 @@ export function MascotList({
         </>
       )}
     </div>
+    </>
   );
 }
 
