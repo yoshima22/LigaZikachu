@@ -193,7 +193,7 @@ export type ArenaTurnLog = {
   targetName: string;
   targetOwnerId: string | null;
   targetPokemonId?: number;
-  action: "ATTACK" | "DEFEND";
+  action: "ATTACK" | "DEFEND" | "HEAL";
   damage: number;
   attackerType: string;
   defenderType: string;
@@ -401,7 +401,7 @@ function trySaboteurDisrupt(actor: ArenaMascot, opponents: ArenaMascot[], hp: Ma
   return `Sabotador ${actor.name} bloqueou efeitos de suporte de ${target.name} neste turno.`;
 }
 
-function tryHealerAction(actor: ArenaMascot, allies: ArenaMascot[], hp: Map<string, number>, healCount: Map<string, number>): string | null {
+function tryHealerAction(actor: ArenaMascot, allies: ArenaMascot[], hp: Map<string, number>, healCount: Map<string, number>): { effect: string; targetId: string; targetName: string; healAmount: number } | null {
   if (actor.combatRole !== "HEALER") return null;
   const count = healCount.get(actor.id) ?? 0;
   const maxHeals = 2 + Math.floor((actor.charisma + actor.vitality) / 40);
@@ -414,7 +414,7 @@ function tryHealerAction(actor: ArenaMascot, allies: ArenaMascot[], hp: Map<stri
   const currentHp = hp.get(target.id) ?? 0;
   hp.set(target.id, Math.min(target.hp, currentHp + heal));
   healCount.set(actor.id, count + 1);
-  return `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).`;
+  return { effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).`, targetId: target.id, targetName: target.name, healAmount: heal };
 }
 
 function tryGuardianIntercept(target: ArenaMascot, allies: ArenaMascot[], hp: Map<string, number>, damage: number): { newDamage: number; guardianDamage: number; guardianId: string; effect: string } | null {
@@ -487,15 +487,15 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const actor = entry.mascot;
 
       // HEALER: may heal instead of attacking
-      const healEffect = tryHealerAction(actor, allies, hp, healCount);
-      if (healEffect) {
+      const healResult = tryHealerAction(actor, allies, hp, healCount);
+      if (healResult) {
         log.push({
           turn, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId,
-          targetId: actor.id, targetName: actor.name, targetOwnerId: actor.ownerId,
-          action: "DEFEND", damage: 0, attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(actor.pokemonId),
+          targetId: healResult.targetId, targetName: healResult.targetName, targetOwnerId: actor.ownerId,
+          action: "HEAL", damage: healResult.healAmount, attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(actor.pokemonId),
           multiplier: 1, advantageApplied: false,
           actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(actor.combatRole),
-          effect: healEffect,
+          effect: healResult.effect,
         });
         turn++;
         continue;
@@ -1584,7 +1584,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       botMascots: bot.defenders.map(m => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp, type: getPokemonElement(m.pokemonId) })),
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
       battleAnimation: combat.log
-        .filter(t => t.action === "ATTACK" || t.action === "DEFEND")
+        .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
         .slice(0, 28)
         .map(t => ({
           turn: t.turn,
@@ -1849,7 +1849,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     battleAnimation: (() => {
       const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
       return combat.log
-        .filter(t => t.action === "ATTACK" || t.action === "DEFEND")
+        .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
         .slice(0, 28) // cap para animação não ficar longa demais
         .map(t => ({
           turn: t.turn,
@@ -2541,7 +2541,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       maxHp: m.hp,
     })),
     battleAnimation: combat.log
-      .filter(t => t.action === "ATTACK" || t.action === "DEFEND")
+      .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
       .slice(0, 28)
       .map(t => ({
         turn: t.turn,

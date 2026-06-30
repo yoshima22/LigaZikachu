@@ -69,7 +69,7 @@ type ArenaStaleNotice = NonNullable<Awaited<ReturnType<typeof lockBotAction>>["s
 
 type AnimTurn = {
   turn: number;
-  action?: "ATTACK" | "DEFEND";
+  action?: "ATTACK" | "DEFEND" | "HEAL";
   attackerId: string;
   attackerName: string;
   attackerPokemonId: number;
@@ -196,6 +196,13 @@ function BattleAnimationModal({
         setHpMap(prev => ({
           ...prev,
           [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
+        }));
+      } else if (turn.action === "HEAL") {
+        const allMascots = [...playerMascots, ...botMascots];
+        const healed = allMascots.find(m => m.id === turn.defenderId);
+        setHpMap(prev => ({
+          ...prev,
+          [turn.defenderId]: Math.min(healed?.maxHp ?? Infinity, (prev[turn.defenderId] ?? 0) + turn.damage),
         }));
       }
     }, 600);

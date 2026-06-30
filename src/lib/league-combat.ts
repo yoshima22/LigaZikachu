@@ -289,7 +289,7 @@ export function runLeagueCombat(
             log.push({
               turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
               targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId,
-              action: "DEFEND", damage: 0,
+              action: "HEAL", damage: heal,
               attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(target.pokemonId),
               multiplier: 1, advantageApplied: false,
               actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
