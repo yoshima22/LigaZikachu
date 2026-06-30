@@ -199,7 +199,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             type="button"
             disabled={feedAllDisabled}
             onClick={handleFeedAll}
-            className="flex items-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
             Alimentar Todos
