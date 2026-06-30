@@ -977,7 +977,17 @@ export async function toggleEvolutionLockAction(mascotId: string, lock: boolean)
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function feedAllAction(): Promise<{
+// Retorna o nível mínimo de horas desde a última refeição para um dado status de fome,
+// considerando o multiplicador de banco (isEquipped=false → 5x mais lento)
+function hungerMinHours(status: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED", isEquipped: boolean): number {
+  const m = isEquipped ? 1 : 5;
+  if (status === "STARVING")  return 24 * m;
+  if (status === "HUNGRY")    return 12 * m;
+  if (status === "NEUTRAL")   return 6 * m;
+  return 2 * m; // SATISFIED
+}
+
+export async function feedAllAction(minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL"): Promise<{
   error?: string; fed: number; skipped: number; noFood: boolean;
 }> {
   try {
@@ -994,16 +1004,20 @@ export async function feedAllAction(): Promise<{
       return { fed: 0, skipped: 0, noFood: true };
     }
 
-    // Busca todos os mascotes não empanturrados (lastFedAt <= 2h atrás = disponível)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    const mascots = await prisma.mascot.findMany({
+    // Busca todos os mascotes que não estão feridos/na arena
+    const allMascots = await prisma.mascot.findMany({
       where: {
         playerId: player.id,
         arenaState: { notIn: ["INJURED", "ARENA"] },
-        OR: [{ lastFedAt: null }, { lastFedAt: { lt: twoHoursAgo } }],
       },
-      select: { id: true, pokemonId: true, happiness: true },
+      select: { id: true, happiness: true, lastFedAt: true, isEquipped: true },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
+    });
+
+    // Filtra em memória respeitando multiplicador de banco por mascote
+    const mascots = allMascots.filter(m => {
+      const hours = m.lastFedAt ? (Date.now() - new Date(m.lastFedAt).getTime()) / 3_600_000 : 999;
+      return hours >= hungerMinHours(minHunger, m.isEquipped);
     });
 
     const toFeed = mascots.slice(0, food.quantity); // não alimenta mais do que tem no estoque
