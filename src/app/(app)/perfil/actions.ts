@@ -44,6 +44,25 @@ const standbySchema = z.object({
   days: z.union([z.literal(7), z.literal(14), z.literal(30), z.literal(60), z.literal(90)]),
 });
 
+export async function setCasualModeAction(enabled: boolean): Promise<{ error?: string; success?: boolean }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Nao autenticado" };
+
+  const player = await prisma.player.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+  if (!player) return { error: "Jogador nao encontrado" };
+
+  await prisma.player.update({
+    where: { id: player.id },
+    data: { casualMode: enabled },
+  });
+
+  revalidatePath("/perfil");
+  return { success: true };
+}
+
 export async function updatePlayerProfile(input: z.infer<typeof updateProfileSchema>) {
   const user = await getSessionUser();
   if (!user) return { error: "Nao autenticado" };

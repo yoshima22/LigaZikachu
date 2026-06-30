@@ -157,6 +157,35 @@ export async function editPlayerAction(
   }
 }
 
+export async function setCasualModeAdminAction(
+  playerId: string,
+  enabled: boolean
+): Promise<{ error?: string }> {
+  try {
+    const actor = await getAdminActor();
+
+    await prisma.$transaction([
+      prisma.player.update({ where: { id: playerId }, data: { casualMode: enabled } }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "player",
+          entityId: playerId,
+          action: "player.casual_mode_changed",
+          after: { casualMode: enabled }
+        }
+      })
+    ]);
+
+    revalidatePath("/jogadores");
+    revalidatePath(`/jogadores/${playerId}`);
+    revalidatePath("/perfil");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 export async function updateUserEmailAction(
   userId: string,
   newEmail: string

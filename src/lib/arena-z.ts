@@ -753,7 +753,7 @@ const getActiveArenaTeams = unstable_cache(
       select: {
         id: true, name: true, roomLevel: true, vaultCoins: true, enteredAt: true,
         playerId: true,
-        player: { select: { id: true, displayName: true } },
+        player: { select: { id: true, displayName: true, casualMode: true } },
         members: {
           select: {
             slot: true,
@@ -798,6 +798,7 @@ export async function getRoomsData(viewerPlayerId?: string) {
           name: t.name,
           playerName: t.player.displayName,
           playerId: t.player.id,
+          isCasual: t.player.casualMode,
           isOwn,
           vaultCoins: isOwn ? t.vaultCoins : null,
           enteredAt: t.enteredAt,
@@ -2242,21 +2243,27 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE") throw new Error("As duas equipes precisam estar ativas.");
   if (attackTeam.members.length === 0 || defenseTeam.members.length === 0) throw new Error("As equipes precisam ter mascotes.");
 
-  // Cooldown PvP: 10 min entre ataques PvP da mesma equipe atacante
-  const lastPvp = await prisma.arenaBattle.findFirst({
-    where: { type: "PVP", attackTeamId: attackTeamId },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  });
-  if (lastPvp) {
-    const elapsed = Date.now() - lastPvp.createdAt.getTime();
-    const pvpCooldown = ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000;
-    if (elapsed < pvpCooldown) {
-      const rem = Math.ceil((pvpCooldown - elapsed) / 1000);
-      throw new Error(`Aguarde ${rem}s antes do proximo ataque PvP.`);
+  // Batalha casual: sem cooldown nem movimentação de cofre quando qualquer jogador está no Modo Casual
+  const isCasualBattle = !!(attackUser?.casualMode || defenseUser?.casualMode);
+
+  // Cooldown PvP: 10 min entre ataques PvP da mesma equipe atacante (pulado em batalhas casuais)
+  if (!isCasualBattle) {
+    const lastPvp = await prisma.arenaBattle.findFirst({
+      where: { type: "PVP", attackTeamId: attackTeamId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    if (lastPvp) {
+      const elapsed = Date.now() - lastPvp.createdAt.getTime();
+      const pvpCooldown = ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000;
+      if (elapsed < pvpCooldown) {
+        const rem = Math.ceil((pvpCooldown - elapsed) / 1000);
+        throw new Error(`Aguarde ${rem}s antes do proximo ataque PvP.`);
+      }
     }
   }
-  // Anti-spam: impede atacar o mesmo time várias vezes seguidas
+  // Anti-spam: impede atacar o mesmo time várias vezes seguidas (pulado em batalhas casuais)
+  if (!isCasualBattle) {
   const lastVsSameTeam = await prisma.arenaBattle.findFirst({
     where: { type: "PVP", attackTeamId, defenseTeamId },
     orderBy: { createdAt: "desc" },
@@ -2268,6 +2275,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       throw new Error("Aguarde 30 min antes de atacar o mesmo time novamente.");
     }
   }
+  } // end !isCasualBattle anti-spam
 
   assertTeamReady(attackTeam);
   assertTeamReady(defenseTeam);
@@ -2400,7 +2408,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       },
     });
 
-    if (winnerTeam && lootSplit) {
+    if (!isCasualBattle && winnerTeam && lootSplit) {
       await tx.arenaTeam.update({
         where: { id: winnerTeam.id },
         data: {
@@ -2415,8 +2423,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       foundGroundSpoils = await maybeFindArenaGroundSpoils(tx, winnerTeam.playerId, winnerTeam.id);
     }
 
-    // Recompensa ZC de defesa bem-sucedida → adicionada ao cofre do defensor
-    if (defenseRewardCoins > 0 && defenseTeam.status === "ACTIVE") {
+    // Recompensa ZC de defesa bem-sucedida → adicionada ao cofre do defensor (pulado em batalhas casuais)
+    if (!isCasualBattle && defenseRewardCoins > 0 && defenseTeam.status === "ACTIVE") {
       await tx.arenaTeam.update({
         where: { id: defenseTeam.id },
         data: { vaultCoins: { increment: defenseRewardCoins } },

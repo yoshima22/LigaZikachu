@@ -286,6 +286,7 @@ model Player {
   traceRoomsAsHider       TraceRoom[]          @relation("TraceRoomHider")
   traceRoomsAsHunter      TraceRoom[]          @relation("TraceRoomHunter")
   goldenPawTransactions   GoldenPawTransaction[]
+  casualMode              Boolean              @default(false)
 
   @@map("players")
 }

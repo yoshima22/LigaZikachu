@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { activateAccountStandby, updateOwnPassword, updatePlayerProfile } from "../actions";
+import { activateAccountStandby, setCasualModeAction, updateOwnPassword, updatePlayerProfile } from "../actions";
 
 interface EditProfileFormProps {
   player: {
@@ -14,6 +14,7 @@ interface EditProfileFormProps {
     popId: string | null;
     avatarUrl: string | null;
     standbyUntil: Date | string | null;
+    casualMode: boolean;
   };
 }
 
@@ -27,6 +28,8 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [standbyLoading, setStandbyLoading] = useState(false);
   const [standbyDays, setStandbyDays] = useState<7 | 14 | 30 | 60 | 90>(7);
+  const [casualMode, setCasualMode] = useState(player.casualMode);
+  const [casualLoading, setCasualLoading] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -112,6 +115,20 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
       toast.error(err instanceof Error ? err.message : "Erro ao ativar standby");
     } finally {
       setStandbyLoading(false);
+    }
+  }
+
+  async function handleCasualToggle(enabled: boolean) {
+    setCasualLoading(true);
+    try {
+      const result = await setCasualModeAction(enabled);
+      if (result?.error) { toast.error(result.error); return; }
+      setCasualMode(enabled);
+      toast.success(enabled ? "Modo Casual ativado." : "Modo Casual desativado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao alterar Modo Casual");
+    } finally {
+      setCasualLoading(false);
     }
   }
 
@@ -274,6 +291,29 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
         </>
       )}
     </form>
+    <div className="rounded-2xl border border-slate-700/50 bg-slate-950/50 p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-white">Modo Casual</h3>
+        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+          No Modo Casual voce continua jogando, mas fica fora das Ligas Semanais, batalhas na Arena Z nao movimentam cofres nem geram cooldown para nenhum dos envolvidos, e voce nao pode participar do Desafio Sincronizado. Uma tag &quot;Casual&quot; aparece para todos na arena.
+        </p>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-slate-300">{casualMode ? "Modo Casual ativo" : "Modo Casual inativo"}</span>
+        <button
+          type="button"
+          disabled={casualLoading}
+          onClick={() => handleCasualToggle(!casualMode)}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${casualMode ? "bg-sky-500" : "bg-slate-700"}`}
+          aria-checked={casualMode}
+          role="switch"
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${casualMode ? "translate-x-5" : "translate-x-0"}`}
+          />
+        </button>
+      </div>
+    </div>
     </div>
     </div>
   );

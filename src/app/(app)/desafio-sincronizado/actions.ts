@@ -111,6 +111,8 @@ export async function combineSyncTicketsAction(formData: FormData): Promise<{ er
 export async function createOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
     const { user, player } = await requireCurrentPlayer();
+    const playerFull = await prisma.player.findUnique({ where: { id: player.id }, select: { casualMode: true } });
+    if (playerFull?.casualMode) return { error: "Jogadores no Modo Casual não podem criar salas no Desafio Sincronizado. Desative o Modo Casual no seu perfil para participar." };
     const ticketId = z.string().min(1).parse(formData.get("ticketId"));
     await prisma.$transaction((tx) => createOpenSyncTeam(tx, player.id, ticketId, { adminBypass: isAdmin(user.role) }));
     revalidatePath("/desafio-sincronizado");
@@ -123,6 +125,8 @@ export async function createOpenSyncTeamAction(formData: FormData): Promise<{ er
 export async function joinOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
     const { user, player } = await requireCurrentPlayer();
+    const playerFull = await prisma.player.findUnique({ where: { id: player.id }, select: { casualMode: true } });
+    if (playerFull?.casualMode) return { error: "Jogadores no Modo Casual não podem entrar em salas no Desafio Sincronizado. Desative o Modo Casual no seu perfil para participar." };
     const data = z.object({
       teamId: z.string().min(1),
       ticketId: z.string().min(1),

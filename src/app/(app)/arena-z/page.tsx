@@ -585,7 +585,14 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
                                         <p className="truncate text-xs font-semibold text-slate-200">{t.name}</p>
-                                        <p className="text-[10px] text-slate-500">{t.playerName}</p>
+                                        <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                                          {t.playerName}
+                                          {t.isCasual && (
+                                            <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-bold text-sky-300" title="Jogador Casual: sem movimentação de cofre ou cooldown nestas batalhas">
+                                              Casual
+                                            </span>
+                                          )}
+                                        </p>
                                       </div>
                                       {isAttackable && (
                                         <span className="shrink-0 rounded-full border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-300">

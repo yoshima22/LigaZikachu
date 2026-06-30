@@ -49,6 +49,7 @@ const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
 function activeWeeklyPlayerWhere(now = new Date()) {
   return {
     active: true,
+    casualMode: false,
     user: { role: { notIn: [Role.ADMIN, Role.SUPER_ADMIN] }, status: UserStatus.ACTIVE },
   };
 }
