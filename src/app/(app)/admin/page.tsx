@@ -9,6 +9,7 @@ import { UserAccountPanel } from "./_components/user-account-panel";
 import { MigrateImagesPanel } from "./_components/migrate-images-panel";
 import { VipSchedulePanel } from "./_components/vip-schedule-panel";
 import { AdminCommunicationPanel } from "./_components/admin-communication-panel";
+import { RunawayRevertPanel } from "./_components/runaway-revert-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -253,6 +254,7 @@ export default async function AdminPage() {
 
       <UserAccountPanel users={allUsers} />
       <AdminCommunicationPanel initialNotice={globalNotice.message} />
+      <RunawayRevertPanel />
       <MascotSocialPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <AdminExpeditionPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />

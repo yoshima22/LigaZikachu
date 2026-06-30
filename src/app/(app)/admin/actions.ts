@@ -16,6 +16,153 @@ import {
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
+// ── Reversão de fugas por fome ───────────────────────────────────────────────
+
+const RUNAWAY_RESCUE_TYPE = "RUNAWAY_RESCUE";
+
+export async function listHungerRunaways(since?: string): Promise<{
+  error?: string;
+  items?: Array<{
+    eventId: string;
+    mascotId: string;
+    mascotName: string;
+    pokemonId: number;
+    originalOwnerId: string;
+    originalOwnerName: string;
+    currentOwnerId: string;
+    currentOwnerName: string;
+    transferred: boolean;
+    eventStatus: string;
+    createdAt: string;
+  }>;
+}> {
+  try {
+    await requireAdmin();
+    const sinceDate = since ? new Date(since) : new Date("2026-06-28T00:00:00Z");
+    const events = await prisma.mascotSocialEvent.findMany({
+      where: { eventType: RUNAWAY_RESCUE_TYPE, createdAt: { gte: sinceDate } },
+      select: {
+        id: true, status: true, createdAt: true,
+        mascotAId: true, affectedPlayerIds: true,
+        mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, player: { select: { id: true, displayName: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    const playerIds = new Set<string>();
+    for (const ev of events) {
+      const ids = ev.affectedPlayerIds as string[];
+      if (ids[0]) playerIds.add(ids[0]);
+    }
+    const players = await prisma.player.findMany({ where: { id: { in: [...playerIds] } }, select: { id: true, displayName: true } });
+    const playerMap = new Map(players.map(p => [p.id, p.displayName]));
+
+    return {
+      items: events.map(ev => {
+        const affectedIds = ev.affectedPlayerIds as string[];
+        const originalOwnerId = affectedIds[0] ?? "";
+        const currentOwnerId = ev.mascotA?.playerId ?? "";
+        return {
+          eventId: ev.id,
+          mascotId: ev.mascotAId,
+          mascotName: ev.mascotA?.nickname ?? `#${ev.mascotA?.pokemonId}`,
+          pokemonId: ev.mascotA?.pokemonId ?? 0,
+          originalOwnerId,
+          originalOwnerName: playerMap.get(originalOwnerId) ?? originalOwnerId,
+          currentOwnerId,
+          currentOwnerName: ev.mascotA?.player?.displayName ?? currentOwnerId,
+          transferred: currentOwnerId !== originalOwnerId,
+          eventStatus: ev.status,
+          createdAt: ev.createdAt.toISOString(),
+        };
+      }),
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function revertHungerRunaway(eventId: string): Promise<{ error?: string; success?: boolean; mascotName?: string; ownerName?: string }> {
+  try {
+    await requireAdmin();
+    const event = await prisma.mascotSocialEvent.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true, status: true, eventType: true, affectedPlayerIds: true,
+        mascotAId: true,
+        mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true } },
+      },
+    });
+
+    if (!event || event.eventType !== RUNAWAY_RESCUE_TYPE) return { error: "Evento não encontrado ou tipo inválido." };
+
+    const affectedIds = event.affectedPlayerIds as string[];
+    const originalOwnerId = affectedIds[0];
+    if (!originalOwnerId) return { error: "Dono original não identificado no evento." };
+
+    const originalOwner = await prisma.player.findUnique({ where: { id: originalOwnerId }, select: { id: true, displayName: true } });
+    if (!originalOwner) return { error: "Jogador original não encontrado." };
+
+    const mascotName = event.mascotA?.nickname ?? `#${event.mascotA?.pokemonId}`;
+
+    await prisma.$transaction(async (tx) => {
+      // Fechar evento pendente se ainda aberto
+      if (event.status === "PENDING") {
+        await tx.mascotSocialEvent.update({
+          where: { id: eventId },
+          data: { status: "RESOLVED", resultJson: { resolvedBy: "ADMIN_REVERT", reason: "hunger_bug_weekend" } as Prisma.InputJsonValue },
+        });
+      }
+
+      // Devolver mascote ao dono original e restaurar stats
+      await tx.mascot.update({
+        where: { id: event.mascotAId },
+        data: {
+          playerId: originalOwnerId,
+          isEquipped: false,
+          isFavorite: false,
+          bazarListed: false,
+          arenaState: "FREE",
+          happiness: 80,
+          mood: "HAPPY",
+          lastFedAt: new Date(),
+          lastInteractedAt: new Date(),
+          socialCooldownUntil: null,
+          restingUntil: null,
+        },
+      });
+
+      // Cancelar outros eventos de resgate pendentes deste mascote
+      await tx.mascotSocialEvent.updateMany({
+        where: { mascotAId: event.mascotAId, eventType: RUNAWAY_RESCUE_TYPE, status: "PENDING", id: { not: eventId } },
+        data: { status: "RESOLVED", resultJson: { resolvedBy: "ADMIN_REVERT", reason: "hunger_bug_weekend" } as Prisma.InputJsonValue },
+      });
+    });
+
+    return { success: true, mascotName, ownerName: originalOwner.displayName };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function revertAllHungerRunaways(since?: string): Promise<{ error?: string; reverted?: number; skipped?: number }> {
+  try {
+    await requireAdmin();
+    const list = await listHungerRunaways(since);
+    if (list.error) return { error: list.error };
+    let reverted = 0, skipped = 0;
+    for (const item of list.items ?? []) {
+      const res = await revertHungerRunaway(item.eventId);
+      if (res.error) skipped++;
+      else reverted++;
+    }
+    return { reverted, skipped };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function updateGlobalNotice(message: string): Promise<{ error?: string; message?: string }> {
   try {
     await requireAdmin();
