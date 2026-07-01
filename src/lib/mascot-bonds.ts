@@ -401,12 +401,14 @@ export async function ensureRunawayWarningsForPlayer(playerId: string) {
 export async function clearRunawayWarningIfRecovered(playerId: string, mascotId: string, client: Prisma.TransactionClient | typeof prisma = prisma) {
   const mascot = await client.mascot.findFirst({
     where: { id: mascotId, playerId },
-    select: { id: true, happiness: true, lastFedAt: true },
+    select: { id: true, happiness: true, mood: true, lastFedAt: true },
   });
-  if (!mascot?.lastFedAt) return false;
+  if (!mascot) return false;
 
-  const fedRecently = Date.now() - mascot.lastFedAt.getTime() < 24 * 60 * 60_000;
-  const recovered = fedRecently && mascot.happiness >= 25;
+  const staleFoodAt = new Date(Date.now() - 48 * 60 * 60_000);
+  const isHungry = mascot.mood === "HUNGRY" || !mascot.lastFedAt || mascot.lastFedAt < staleFoodAt;
+  // Recuperado = não se encaixa mais nos critérios de fuga (feliz OU não faminto)
+  const recovered = mascot.happiness >= 25 || !isHungry;
   if (!recovered) return false;
 
   const result = await client.mascotSocialEvent.updateMany({
