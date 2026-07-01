@@ -1629,6 +1629,41 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     };
   }
 
+  // Equipe de treino: combate em memória apenas (sem recompensas, lesões, ranking ou cooldown)
+  if (team.isTraining) {
+    const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
+    const bot = buildBotOpponent(attackers, difficulty);
+    const combat = runCombat(attackers, bot.defenders);
+    const won = combat.result === "ATTACKER_WIN";
+    const allMascots = new Map([...attackers, ...bot.defenders].map(m => [m.id, m]));
+    return {
+      won, result: combat.result, botName: bot.botName,
+      reward: { coins: 0, exp: 0, food: 0, sweet: 0 },
+      rounds: combat.rounds,
+      difficulty, difficultyLabel: DIFFICULTY_CONFIG[difficulty].label,
+      teamDefeated: false,
+      preservedLoot: null, burnedLoot: null, stolenByBotLoot: null,
+      injuredMascotIds: [], injuredMascots: [],
+      playerMascots: attackers.map(m => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp })),
+      botMascots: bot.defenders.map(m => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.hp, type: getPokemonElement(m.pokemonId) })),
+      highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
+      battleAnimation: combat.log
+        .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
+        .slice(0, 28)
+        .map(t => ({
+          turn: t.turn, action: t.action,
+          attackerId: t.actorId, attackerName: t.actorName,
+          attackerPokemonId: allMascots.get(t.actorId)?.pokemonId ?? 0,
+          defenderId: t.targetId, defenderName: t.targetName,
+          defenderPokemonId: allMascots.get(t.targetId)?.pokemonId ?? 0,
+          damage: t.damage, advantageApplied: t.advantageApplied,
+          actorRole: t.actorRole, targetRole: t.targetRole, effect: t.effect,
+          isPlayerAttacker: t.actorOwnerId !== null,
+        })),
+      debugMode: true,
+    };
+  }
+
   // Se esta equipe foi atacada por PvP e o defensor ainda não viu — bloqueia o PvE
   const unseenPvp = await getUnseenPvpAttack(teamId);
   if (unseenPvp) {
