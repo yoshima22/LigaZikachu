@@ -2364,9 +2364,9 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   const perfectDefense = defenderWon && attackerStronger; // defensor venceu sendo mais fraco
   const defenseScenario: "defense" | "perfect_defense" = perfectDefense ? "perfect_defense" : "defense";
 
-  // Drops de ovo: quem ganhou rola para ovo
-  const attackerEgg = attackerWon ? rollPvpEggDrop(attackScenario) : null;
-  const defenderEgg = defenderWon ? rollPvpEggDrop(defenseScenario) : null;
+  // Drops de ovo: apenas em batalhas não-treino
+  const attackerEgg = !isTrainingBattle && attackerWon ? rollPvpEggDrop(attackScenario) : null;
+  const defenderEgg = !isTrainingBattle && defenderWon ? rollPvpEggDrop(defenseScenario) : null;
 
   // Recompensas ZC de defesa bem-sucedida (vão para o cofre do defensor)
   let defenseRewardCoins = 0;
@@ -2424,8 +2424,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
         defenderPlayerId: defenseTeam.playerId,
         attackTeamId: attackTeam.id,
         defenseTeamId: defenseTeam.id,
-        winnerPlayerId: winnerTeam?.playerId ?? null,
-        loserPlayerId: loserTeam?.playerId ?? null,
+        winnerPlayerId: isTrainingBattle ? null : (winnerTeam?.playerId ?? null),
+        loserPlayerId: isTrainingBattle ? null : (loserTeam?.playerId ?? null),
         rounds: combat.rounds,
         turnLog: combat.log as unknown as Prisma.InputJsonValue,
         lootResult: {
@@ -2463,19 +2463,21 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       });
     }
 
-    // Drops de ovo (fora da transação de loot principal, entrega direta ao inventário)
-    if (attackerEgg) {
-      await tx.mascotEgg.create({
-        data: { playerId: attackTeam.playerId, type: attackerEgg, origin: `Vitória PvP contra ${defenseTeam.player.displayName}` },
-      });
-    }
-    if (defenderEgg) {
-      await tx.mascotEgg.create({
-        data: { playerId: defenseTeam.playerId, type: defenderEgg, origin: `Defesa PvP contra ${attackTeam.player.displayName}` },
-      });
-    }
-    if (winnerTeam) {
-      await maybeDropSyncTicket(tx, winnerTeam.playerId, "arena-pvp");
+    // Drops de ovo e ticket de sync: apenas em batalhas não-treino
+    if (!isTrainingBattle) {
+      if (attackerEgg) {
+        await tx.mascotEgg.create({
+          data: { playerId: attackTeam.playerId, type: attackerEgg, origin: `Vitória PvP contra ${defenseTeam.player.displayName}` },
+        });
+      }
+      if (defenderEgg) {
+        await tx.mascotEgg.create({
+          data: { playerId: defenseTeam.playerId, type: defenderEgg, origin: `Defesa PvP contra ${attackTeam.player.displayName}` },
+        });
+      }
+      if (winnerTeam) {
+        await maybeDropSyncTicket(tx, winnerTeam.playerId, "arena-pvp");
+      }
     }
 
     if (!isTrainingBattle && loserTeam && preserved) {
