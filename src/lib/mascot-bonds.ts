@@ -329,8 +329,9 @@ export async function ensureRunawayWarningsForPlayer(playerId: string) {
       arenaState: "FREE",
       bazarListed: false,
       expeditions: { none: { status: "ACTIVE" } },
+      // Só entra em fuga se estiver faminto E com felicidade baixa
+      happiness: { lt: 25 },
       OR: [
-        { happiness: { lt: 20 } },
         { mood: "HUNGRY" },
         { lastFedAt: null },
         { lastFedAt: { lt: staleFoodAt } },
@@ -405,7 +406,7 @@ export async function clearRunawayWarningIfRecovered(playerId: string, mascotId:
   if (!mascot?.lastFedAt) return false;
 
   const fedRecently = Date.now() - mascot.lastFedAt.getTime() < 24 * 60 * 60_000;
-  const recovered = fedRecently && mascot.happiness >= 20;
+  const recovered = fedRecently && mascot.happiness >= 25;
   if (!recovered) return false;
 
   const result = await client.mascotSocialEvent.updateMany({
