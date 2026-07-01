@@ -201,6 +201,7 @@ export async function getListings(filters?: {
     id: true, category: true, listingType: true, status: true,
     payload: true, priceCoins: true, description: true, wantedDesc: true,
     expiresAt: true, createdAt: true, views: true,
+    minBidCoins: true, currentBidCoins: true, auctionEndsAt: true,
     player: { select: { id: true, displayName: true, avatarUrl: true } },
     _count: { select: { proposals: true, favorites: true } },
   };
