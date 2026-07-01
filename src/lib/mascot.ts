@@ -503,7 +503,7 @@ export async function addExp(
   // Auto-kick da arena se o nível ultrapassou o limite da sala
   if (leveled) {
     const membership = await prisma.arenaTeamMember.findFirst({
-      where: { mascotId },
+      where: { mascotId, team: { status: "ACTIVE", isTraining: false } },
       include: {
         team: {
           select: {
@@ -514,7 +514,7 @@ export async function addExp(
         },
       },
     });
-    if (membership && membership.team.roomLevel !== null && level > membership.team.roomLevel) {
+    if (membership && membership.team.roomLevel !== null && membership.team.roomLevel > 0 && level > membership.team.roomLevel) {
       const team = membership.team;
       // Membros restantes com nível válido (excluindo este mascote)
       const remainingValid = team.members.filter(
