@@ -218,12 +218,13 @@ function MascotPick({
       </div>
 
       {!compact && (
-        <div className="px-2 pb-2 grid grid-cols-4 gap-0.5 text-center text-[9px]">
+        <div className="px-2 pb-2 grid grid-cols-5 gap-0.5 text-center text-[9px]">
           {[
             { k: "For", v: m.statForce,    c: "text-red-400" },
             { k: "Vel", v: m.statAgility,  c: "text-yellow-400" },
             { k: "Ins", v: m.statInstinct, c: "text-blue-400" },
             { k: "Vit", v: m.statVitality, c: "text-green-400" },
+            { k: "Car", v: m.statCharisma, c: "text-pink-400" },
           ].map(s => (
             <div key={s.k} className="rounded bg-slate-800/60 py-0.5">
               <div className="text-slate-600">{s.k}</div>

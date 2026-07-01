@@ -230,6 +230,11 @@ export async function getListing(id: string) {
         },
         orderBy: { createdAt: "desc" },
       },
+      auctionBids: {
+        include: { player: { select: { id: true, displayName: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      },
       _count: { select: { favorites: true } },
     },
   });
@@ -471,6 +476,10 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
     if (!listing || listing.playerId !== player.id) return { error: "Anúncio não encontrado." };
     if (listing.status !== "ACTIVE" && listing.status !== "RESERVED") {
       return { error: "Este anúncio não pode ser cancelado." };
+    }
+    // Leilão com lances não pode ser cancelado
+    if (listing.listingType === "AUCTION" && listing.currentBidPlayerId) {
+      return { error: "Leilões com lances não podem ser cancelados." };
     }
 
     let rejectedProposerUserIds: string[] = [];
@@ -1650,6 +1659,267 @@ export async function adminCleanupStaleBazarListings(): Promise<{ error?: string
   }
 }
 
+
+// ── Leilão ────────────────────────────────────────────────────────────────────
+
+export interface CreateAuctionInput {
+  category: BazarItemCategory;
+  minBidCoins: number;
+  auctionDuration: "12h" | "1d";
+  description?: string;
+  // Mascot
+  mascotId?: string;
+  // Item
+  itemType?: string;
+  shopItemId?: string;
+  imageUrl?: string;
+  quantity?: number;
+  displayName?: string;
+}
+
+export async function createAuctionListing(input: CreateAuctionInput): Promise<{ error?: string; id?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    if (!input.minBidCoins || input.minBidCoins < 1) return { error: "Lance mínimo inválido." };
+
+    const MAX_ACTIVE_LISTINGS = 8;
+    const activeCount = await prisma.bazarListing.count({
+      where: { playerId: player.id, status: { in: ["ACTIVE", "RESERVED"] } },
+    });
+    if (activeCount >= MAX_ACTIVE_LISTINGS) {
+      return { error: `Você já possui ${MAX_ACTIVE_LISTINGS} anúncios ativos.` };
+    }
+
+    const config = await getMiauvadaoConfig();
+    const fee = config.listingFee;
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    if (!wallet || wallet.balance < fee) {
+      return { error: `Saldo insuficiente para a taxa de anúncio (${fee} ZC).` };
+    }
+
+    const durationMs = input.auctionDuration === "12h" ? 12 * 3600_000 : 24 * 3600_000;
+    const auctionEndsAt = new Date(Date.now() + durationMs);
+
+    let payload: Record<string, unknown> = {};
+
+    await prisma.$transaction(async (tx) => {
+      await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: fee } } });
+      await tx.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: fee } } });
+
+      if (input.category === "MASCOT" && input.mascotId) {
+        const mascot = await tx.mascot.findUnique({ where: { id: input.mascotId } });
+        if (!mascot || mascot.playerId !== player.id) throw new Error("Mascote não encontrado.");
+        if (mascot.bazarListed) throw new Error("Mascote já está anunciado.");
+        if (mascot.isEquipped) throw new Error("Desequipe o mascote antes de anunciá-lo.");
+        const activeExp = await tx.mascotExpedition.findFirst({ where: { mascotId: mascot.id, status: "ACTIVE" } });
+        if (activeExp) throw new Error("Mascote está em expedição.");
+        await tx.mascot.update({ where: { id: input.mascotId }, data: { bazarListed: true } });
+        payload = {
+          mascotId: mascot.id, pokemonId: mascot.pokemonId,
+          pokemonName: getPokemonName(mascot.pokemonId), nickname: mascot.nickname,
+          level: mascot.level, personality: mascot.personality,
+          stats: { force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality },
+          battleWins: mascot.battleWins,
+        };
+      } else if (input.category === "ITEM") {
+        const qty = input.quantity ?? 1;
+        if (!input.itemType) throw new Error("Tipo de item não especificado.");
+        if (HIDDEN_BAZAR_ITEM_TYPES.has(input.itemType)) throw new Error("Este item não pode ser leiloado.");
+        if (input.itemType === "FOOD" || input.itemType === "SWEET") {
+          const food = await tx.mascotFoodItem.findUnique({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } } });
+          if (!food || food.quantity < qty) throw new Error("Itens insuficientes.");
+          await tx.mascotFoodItem.update({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } }, data: { quantity: { decrement: qty } } });
+        } else if (["COMMON","RARE","SPECIAL","EVENT","LAB","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(input.itemType)) {
+          const eggs = await tx.mascotEgg.findMany({ where: { playerId: player.id, type: input.itemType as never, incubation: null, NOT: { origin: { startsWith: "bazar:" } } } });
+          if (eggs.length < qty) throw new Error("Ovos insuficientes.");
+          await tx.mascotEgg.updateMany({ where: { id: { in: eggs.slice(0, qty).map(e => e.id) } }, data: { origin: `bazar:${player.id}` } });
+          payload = { ...payload, escrowed_egg_ids: eggs.slice(0, qty).map(e => e.id) };
+        } else {
+          const inv = input.shopItemId
+            ? await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: input.shopItemId } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } })
+            : await tx.playerInventory.findFirst({ where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } });
+          if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: qty } } });
+          payload = { ...payload, shopItemId: inv.itemId, imageUrl: inv.item.imageUrl ?? input.imageUrl ?? null };
+        }
+        payload = { ...payload, itemType: input.itemType, quantity: qty, displayName: input.displayName ?? `${qty}x ${input.itemType}` };
+      }
+
+      await tx.bazarListing.create({
+        data: {
+          playerId: player.id, category: input.category,
+          listingType: "AUCTION", payload: payload as unknown as import("@prisma/client").Prisma.InputJsonValue,
+          priceCoins: null, description: input.description,
+          feeCharged: fee, expiresAt: auctionEndsAt,
+          minBidCoins: input.minBidCoins, auctionEndsAt,
+        },
+      });
+    });
+
+    revalidateBazar();
+    revalidateTag(`nav-${user.id}`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao criar leilão." };
+  }
+}
+
+async function _sendBazarSystemDM(receiverId: string, content: string): Promise<void> {
+  try {
+    const admin = await prisma.player.findFirst({ where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } }, select: { id: true } });
+    if (!admin || admin.id === receiverId) return;
+    await prisma.directMessage.create({ data: { senderId: admin.id, receiverId, content } });
+  } catch { /* silencioso */ }
+}
+
+export async function placeBid(listingId: string, amount: number): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const listing = await prisma.bazarListing.findUnique({
+      where: { id: listingId },
+      include: { player: { select: { id: true, displayName: true } } },
+    });
+    if (!listing) return { error: "Anúncio não encontrado." };
+    if (listing.listingType !== "AUCTION") return { error: "Este anúncio não é um leilão." };
+    if (listing.status !== "ACTIVE") return { error: "Este leilão não está mais ativo." };
+    if (listing.playerId === player.id) return { error: "Você não pode dar lance no próprio leilão." };
+
+    const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
+    if (new Date() >= endsAt) return { error: "Este leilão já encerrou." };
+
+    const minBid = listing.currentBidCoins
+      ? listing.currentBidCoins + 1
+      : (listing.minBidCoins ?? 1);
+    if (amount < minBid) return { error: `Lance mínimo é ${minBid} ZC.` };
+    if (listing.currentBidPlayerId === player.id) return { error: "Você já é o maior lance." };
+
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    if (!wallet || wallet.balance < amount) return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).` };
+
+    const prevBidderId = listing.currentBidPlayerId;
+    const prevBidAmount = listing.currentBidCoins ?? 0;
+
+    // Extensão: se faltam menos de 5 min, extender em 30 min
+    const msLeft = endsAt.getTime() - Date.now();
+    const newEndsAt = msLeft < 5 * 60_000 ? new Date(endsAt.getTime() + 30 * 60_000) : endsAt;
+
+    await prisma.$transaction(async (tx) => {
+      // Debita coins do novo licitante
+      await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: amount } } });
+
+      // Devolve coins ao licitante anterior
+      if (prevBidderId && prevBidAmount > 0) {
+        await tx.zikaCoinWallet.upsert({
+          where: { playerId: prevBidderId },
+          update: { balance: { increment: prevBidAmount } },
+          create: { playerId: prevBidderId, balance: prevBidAmount, totalEarned: prevBidAmount },
+        });
+      }
+
+      // Registra o lance
+      await tx.bazarAuctionBid.create({ data: { listingId, playerId: player.id, amount } });
+
+      // Atualiza listing
+      await tx.bazarListing.update({
+        where: { id: listingId },
+        data: { currentBidCoins: amount, currentBidPlayerId: player.id, auctionEndsAt: newEndsAt, expiresAt: newEndsAt },
+      });
+    });
+
+    // Notifica o licitante anterior por mensagem privada
+    if (prevBidderId && prevBidderId !== player.id) {
+      const desc = listing.category === "MASCOT"
+        ? `${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName}`
+        : `${(listing.payload as Record<string, unknown>).displayName}`;
+      await _sendBazarSystemDM(prevBidderId, `Seu lance de ${prevBidAmount} ZC no leilão de "${desc}" foi superado por um lance de ${amount} ZC. Os seus ZC foram devolvidos à carteira.`);
+      revalidateTag(`nav-${user.id}`);
+    }
+
+    revalidateBazar();
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao dar lance." };
+  }
+}
+
+export async function finalizeAuction(listingId: string): Promise<{ error?: string; finalized?: boolean }> {
+  try {
+    const listing = await prisma.bazarListing.findUnique({
+      where: { id: listingId },
+      include: { player: { select: { id: true, displayName: true, userId: true } } },
+    });
+    if (!listing) return { error: "Anúncio não encontrado." };
+    if (listing.listingType !== "AUCTION") return {};
+    if (listing.status !== "ACTIVE") return { finalized: false };
+
+    const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
+    if (new Date() < endsAt) return { finalized: false }; // ainda não encerrou
+
+    const winnerId = listing.currentBidPlayerId;
+    const winnerBid = listing.currentBidCoins ?? 0;
+
+    if (!winnerId || winnerBid === 0) {
+      // Sem lances: expira e devolve item
+      await prisma.$transaction(async (tx) => {
+        await tx.bazarListing.update({ where: { id: listingId }, data: { status: "EXPIRED" } });
+        await _returnEscrow(tx, listing, listing.playerId);
+      });
+      revalidateBazar();
+      return { finalized: true };
+    }
+
+    // Com vencedor: transfere item, credita coins ao vendedor
+    const winner = await prisma.player.findUnique({ where: { id: winnerId }, select: { id: true, displayName: true, userId: true } });
+    if (!winner) return { error: "Vencedor não encontrado." };
+
+    const sellerName = listing.player.displayName;
+    const buyerName = winner.displayName;
+    const payloadDesc = listing.category === "MASCOT"
+      ? `${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName} Nv.${(listing.payload as Record<string, unknown>).level} leiloado por ${winnerBid} ZC`
+      : `${(listing.payload as Record<string, unknown>).displayName} leiloado por ${winnerBid} ZC`;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.bazarListing.update({ where: { id: listingId }, data: { status: "SOLD" } });
+
+      // Transfere coins (já foram debitados do vencedor ao dar lance)
+      await tx.zikaCoinWallet.upsert({
+        where: { playerId: listing.playerId },
+        update: { balance: { increment: winnerBid } },
+        create: { playerId: listing.playerId, balance: winnerBid, totalEarned: winnerBid },
+      });
+
+      // Transfere item ao vencedor
+      await _transferItem(tx, listing, winnerId);
+
+      await tx.bazarTransaction.create({
+        data: {
+          listingId, sellerId: listing.playerId, buyerId: winnerId,
+          sellerName, buyerName, description: payloadDesc,
+          coinsAmount: winnerBid, category: listing.category,
+        },
+      });
+    });
+
+    revalidateBazar();
+    if (listing.player.userId) revalidateTag(`nav-${listing.player.userId}`);
+    if (winner.userId) revalidateTag(`nav-${winner.userId}`);
+
+    // Notifica o vencedor
+    await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName ?? (listing.payload as Record<string, unknown>).displayName}" com ${winnerBid} ZC. O item foi transferido para você.`);
+
+    return { finalized: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao finalizar leilão." };
+  }
+}
 
 export async function markBazarProposalsViewed(): Promise<void> {
   try {

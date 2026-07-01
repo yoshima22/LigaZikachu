@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Coins, Info } from "lucide-react";
 import Link from "next/link";
-import { createListing } from "../actions";
+import { createListing, createAuctionListing } from "../actions";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
+import { Gavel } from "lucide-react";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 
 interface InventoryItem {
@@ -57,6 +58,8 @@ function CreateListingForm() {
   const [wantedDesc, setWantedDesc] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState<7 | 14 | 30>(7);
+  const [auctionDuration, setAuctionDuration] = useState<"12h" | "1d">("1d");
+  const [minBid, setMinBid] = useState("");
   const [selectedMascotId, setSelectedMascotId] = useState("");
   const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string; maxQty: number } | null>(null);
   const [itemQuantity, setItemQuantity] = useState(1);
@@ -73,23 +76,41 @@ function CreateListingForm() {
     setLoadingInventory(false);
   };
 
+  const isAuction = listingType === ("AUCTION" as BazarListingType);
+
   const handleSubmit = () => {
     startTransition(async () => {
-      const r = await createListing({
-        category: category as BazarItemCategory,
-        listingType,
-        priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
-        wantedDesc: wantedDesc || undefined,
-        description: description || undefined,
-        durationDays: duration,
-        mascotId: category === "MASCOT" ? selectedMascotId : undefined,
-        itemType: category === "ITEM" ? selectedItem?.type : undefined,
-        shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
-        imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
-        quantity: category === "ITEM" ? itemQuantity : undefined,
-        displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
-      });
-      if (r.error) { toast.error(r.error); return; }
+      if (isAuction) {
+        const r = await createAuctionListing({
+          category: category as BazarItemCategory,
+          minBidCoins: parseInt(minBid) || 0,
+          auctionDuration,
+          description: description || undefined,
+          mascotId: category === "MASCOT" ? selectedMascotId : undefined,
+          itemType: category === "ITEM" ? selectedItem?.type : undefined,
+          shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
+          imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
+          quantity: category === "ITEM" ? itemQuantity : undefined,
+          displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
+        });
+        if (r.error) { toast.error(r.error); return; }
+      } else {
+        const r = await createListing({
+          category: category as BazarItemCategory,
+          listingType,
+          priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
+          wantedDesc: wantedDesc || undefined,
+          description: description || undefined,
+          durationDays: duration,
+          mascotId: category === "MASCOT" ? selectedMascotId : undefined,
+          itemType: category === "ITEM" ? selectedItem?.type : undefined,
+          shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
+          imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
+          quantity: category === "ITEM" ? itemQuantity : undefined,
+          displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
+        });
+        if (r.error) { toast.error(r.error); return; }
+      }
       toast.success("Anúncio criado com sucesso!");
       router.push("/bazar/meu-bazar");
     });
@@ -99,6 +120,7 @@ function CreateListingForm() {
     if (!category) return false;
     if (category === "MASCOT" && !selectedMascotId) return false;
     if (category === "ITEM" && (!selectedItem || itemQuantity < 1)) return false;
+    if (isAuction) return !!minBid && parseInt(minBid) >= 1;
     if (listingType !== "TRADE" && (!priceCoins || parseInt(priceCoins) < 1)) return false;
     return true;
   };
@@ -158,24 +180,34 @@ function CreateListingForm() {
         {category && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Tipo de anúncio</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {([
-                { value: "SALE", label: "Venda", color: "green" },
-                { value: "TRADE", label: "Troca", color: "blue" },
-                { value: "SALE_OR_TRADE", label: "Venda/Troca", color: "purple" },
+                { value: "SALE",         label: "Venda",       color: "green" },
+                { value: "TRADE",        label: "Troca",       color: "blue" },
+                { value: "SALE_OR_TRADE",label: "Venda/Troca", color: "purple" },
+                { value: "AUCTION",      label: "🔨 Leilão",   color: "amber" },
               ] as const).map(t => (
-                <button key={t.value} type="button" onClick={() => setListingType(t.value)}
+                <button key={t.value} type="button" onClick={() => setListingType(t.value as BazarListingType)}
                   className={`rounded-xl border py-2 text-xs font-semibold transition-colors ${
                     listingType === t.value
-                      ? t.color === "green" ? "border-green-500/50 bg-green-500/10 text-green-400"
-                      : t.color === "blue"  ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
-                      : "border-purple-500/50 bg-purple-500/10 text-purple-400"
+                      ? t.color === "green"  ? "border-green-500/50 bg-green-500/10 text-green-400"
+                      : t.color === "blue"   ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
+                      : t.color === "purple" ? "border-purple-500/50 bg-purple-500/10 text-purple-400"
+                      : "border-amber-500/50 bg-amber-500/10 text-amber-400"
                       : "border-border text-slate-500"
                   }`}>
                   {t.label}
                 </button>
               ))}
             </div>
+            {isAuction && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300/80 space-y-0.5">
+                <p className="flex items-center gap-1"><Gavel size={11}/> <strong>Leilão:</strong> o item vai para quem der o maior lance ao encerrar.</p>
+                <p>• Leilões com lances não podem ser cancelados.</p>
+                <p>• Lance nos últimos 5 min estende o prazo em 30 min.</p>
+                <p>• Lance superado? Os ZC são devolvidos automaticamente.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -313,8 +345,36 @@ function CreateListingForm() {
           </div>
         )}
 
-        {/* Preço */}
-        {category && listingType !== "TRADE" && (
+        {/* Campos específicos de leilão */}
+        {category && isAuction && (
+          <>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Gavel size={14}/> Lance mínimo (ZikaCoins)
+              </label>
+              <input type="number" min={1} inputMode="numeric" pattern="[0-9]*"
+                value={minBid} onChange={e => setMinBid(e.target.value.replace(/\D/g, ""))}
+                placeholder="Ex: 500"
+                className="w-full rounded-xl border border-amber-500/30 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-amber-400/60" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-200">Duração do leilão</label>
+              <div className="flex gap-2">
+                {(["12h", "1d"] as const).map(d => (
+                  <button key={d} type="button" onClick={() => setAuctionDuration(d)}
+                    className={`flex-1 rounded-xl border py-2 text-xs font-semibold transition-colors ${
+                      auctionDuration === d ? "border-amber-500/50 bg-amber-500/10 text-amber-400" : "border-border text-slate-500"
+                    }`}>
+                    {d === "12h" ? "12 horas" : "1 dia"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Preço (apenas anúncios normais) */}
+        {category && !isAuction && listingType !== "TRADE" && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <Coins size={14}/> Preço (ZikaCoins)
@@ -327,7 +387,7 @@ function CreateListingForm() {
         )}
 
         {/* O que quer em troca */}
-        {category && listingType !== "SALE" && (
+        {category && !isAuction && listingType !== "SALE" && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">O que você quer em troca?</label>
             <textarea value={wantedDesc} onChange={e => setWantedDesc(e.target.value)}
@@ -346,8 +406,8 @@ function CreateListingForm() {
           </div>
         )}
 
-        {/* Duração */}
-        {category && (
+        {/* Duração (apenas anúncios normais) */}
+        {category && !isAuction && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Duração do anúncio</label>
             <div className="flex gap-2">

@@ -3,13 +3,13 @@
 import { useState, useTransition, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart } from "lucide-react";
+import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock } from "lucide-react";
 import Link from "next/link";
 import { getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import {
   getListing, buyListing, createProposal, acceptProposal,
-  rejectProposal, toggleFavorite, editListing,
+  rejectProposal, toggleFavorite, editListing, placeBid, finalizeAuction,
 } from "../actions";
 
 // ── Tipos explícitos para evitar inferência unknown do Prisma ─────────────────
@@ -33,6 +33,13 @@ interface ProposalItem {
   itemsOffer?: ProposalOfferedItem[] | null;
 }
 
+interface AuctionBidItem {
+  id: string;
+  amount: number;
+  createdAt: Date;
+  player: { id: string; displayName: string };
+}
+
 interface ListingDetail {
   id: string;
   playerId: string;
@@ -46,7 +53,13 @@ interface ListingDetail {
   expiresAt: Date;
   player: { id: string; displayName: string; avatarUrl: string | null };
   proposals: ProposalItem[];
+  auctionBids?: AuctionBidItem[];
   _count: { favorites: number };
+  // Auction fields
+  minBidCoins?: number | null;
+  currentBidCoins?: number | null;
+  currentBidPlayerId?: string | null;
+  auctionEndsAt?: Date | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,6 +115,8 @@ export default function BazarListingPage(): React.JSX.Element {
   const [editPrice, setEditPrice] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editWanted, setEditWanted] = useState("");
+  const [bidAmount, setBidAmount] = useState("");
+  const [auctionTimeLeft, setAuctionTimeLeft] = useState("");
 
   const reloadListing = useCallback(() => {
     getListing(id).then(raw => {
@@ -130,7 +145,14 @@ export default function BazarListingPage(): React.JSX.Element {
             ? (p.itemsOffer as unknown as ProposalOfferedItem[])
             : null,
         })),
+        auctionBids: (raw.auctionBids ?? []).map(b => ({
+          id: b.id, amount: b.amount, createdAt: b.createdAt, player: b.player,
+        })),
         _count: { favorites: raw._count.favorites },
+        minBidCoins: raw.minBidCoins,
+        currentBidCoins: raw.currentBidCoins,
+        currentBidPlayerId: raw.currentBidPlayerId,
+        auctionEndsAt: raw.auctionEndsAt,
       });
     }).finally(() => setLoading(false));
   }, [id]);
@@ -141,6 +163,43 @@ export default function BazarListingPage(): React.JSX.Element {
       .then(r => r.ok ? r.json() : null)
       .then((d: { playerId?: string } | null) => { if (d?.playerId) setCurrentPlayerId(d.playerId); });
   }, [reloadListing]);
+
+  // Auto-finalizar leilão encerrado e countdown
+  useEffect(() => {
+    if (!listing || listing.listingType !== "AUCTION") return;
+    const endsAt = listing.auctionEndsAt ? new Date(listing.auctionEndsAt) : null;
+    if (!endsAt) return;
+
+    const update = () => {
+      const ms = endsAt.getTime() - Date.now();
+      if (ms <= 0) {
+        setAuctionTimeLeft("Encerrado");
+        if (listing.status === "ACTIVE") {
+          finalizeAuction(listing.id).then(() => reloadListing());
+        }
+      } else {
+        const h = Math.floor(ms / 3_600_000);
+        const m = Math.floor((ms % 3_600_000) / 60_000);
+        const s = Math.floor((ms % 60_000) / 1_000);
+        setAuctionTimeLeft(h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`);
+      }
+    };
+    update();
+    const iv = setInterval(update, 1000);
+    return () => clearInterval(iv);
+  }, [listing, reloadListing]);
+
+  const handleBid = () => {
+    const amount = parseInt(bidAmount);
+    if (!amount || amount < 1) { toast.error("Lance inválido."); return; }
+    startTransition(async () => {
+      const r = await placeBid(id, amount);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success("Lance registrado!");
+      setBidAmount("");
+      reloadListing();
+    });
+  };
 
   const handleBuy = () => {
     if (!listing?.priceCoins) return;
@@ -230,9 +289,14 @@ export default function BazarListingPage(): React.JSX.Element {
 
   const payload = listing.payload;
   const isOwner = listing.playerId === currentPlayerId;
+  const isAuction = listing.listingType === "AUCTION";
   const isMascot = listing.category === "MASCOT";
-  const isSale = listing.listingType === "SALE" || listing.listingType === "SALE_OR_TRADE";
-  const isTrade = listing.listingType === "TRADE" || listing.listingType === "SALE_OR_TRADE";
+  const isSale = !isAuction && (listing.listingType === "SALE" || listing.listingType === "SALE_OR_TRADE");
+  const isTrade = !isAuction && (listing.listingType === "TRADE" || listing.listingType === "SALE_OR_TRADE");
+  const isTopBidder = isAuction && listing.currentBidPlayerId === currentPlayerId;
+  const minNextBid = isAuction
+    ? (listing.currentBidCoins ? listing.currentBidCoins + 1 : (listing.minBidCoins ?? 1))
+    : 0;
   const pokemonId = payload.pokemonId as number | undefined;
   const pokemonName = pokemonId ? getPokemonName(pokemonId) : "";
   const nickname = payload.nickname as string | undefined;
@@ -333,13 +397,82 @@ export default function BazarListingPage(): React.JSX.Element {
             <span>{listing._count.favorites} ♥ · {listing.proposals.length} propostas</span>
           </div>
 
-          {/* Price */}
-          {listing.priceCoins !== null && listing.priceCoins !== undefined && (
+          {/* Price (anúncios normais) */}
+          {!isAuction && listing.priceCoins !== null && listing.priceCoins !== undefined && (
             <div className="flex items-center gap-2 rounded-xl bg-[#FFCB05]/10 border border-[#FFCB05]/30 px-4 py-3">
               <Coins size={18} className="text-[#FFCB05]"/>
               <span className="text-xl font-bold text-[#FFCB05]">
                 {listing.priceCoins.toLocaleString("pt-BR")} ZC
               </span>
+            </div>
+          )}
+
+          {/* Bloco de leilão */}
+          {isAuction && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                  <Gavel size={13}/> Leilão
+                </p>
+                <span className={`text-xs font-mono ${auctionTimeLeft === "Encerrado" ? "text-red-400" : "text-amber-300"}`}>
+                  <Clock size={10} className="inline mr-0.5"/>
+                  {auctionTimeLeft || "…"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-slate-900/60 px-3 py-2">
+                  <p className="text-[9px] text-slate-500 uppercase">Lance mínimo</p>
+                  <p className="text-sm font-bold text-slate-200">{(listing.minBidCoins ?? 0).toLocaleString("pt-BR")} ZC</p>
+                </div>
+                <div className="rounded-lg bg-slate-900/60 px-3 py-2">
+                  <p className="text-[9px] text-slate-500 uppercase">Lance atual</p>
+                  <p className="text-sm font-bold text-amber-400">
+                    {listing.currentBidCoins ? `${listing.currentBidCoins.toLocaleString("pt-BR")} ZC` : "Sem lances"}
+                  </p>
+                </div>
+              </div>
+
+              {isTopBidder && listing.status === "ACTIVE" && (
+                <p className="text-xs text-green-400 text-center">✓ Você é o maior licitante!</p>
+              )}
+
+              {/* Form de lance — visitante, leilão ativo, não é o top bidder */}
+              {listing.status === "ACTIVE" && !isOwner && !isTopBidder && (
+                <div className="space-y-2 pt-1 border-t border-amber-500/20">
+                  <p className="text-[10px] text-slate-500">Mínimo para novo lance: <strong className="text-amber-300">{minNextBid.toLocaleString("pt-BR")} ZC</strong></p>
+                  <div className="flex gap-2">
+                    <input
+                      type="number" min={minNextBid} inputMode="numeric" pattern="[0-9]*"
+                      value={bidAmount}
+                      onChange={e => setBidAmount(e.target.value.replace(/\D/g, ""))}
+                      placeholder={`${minNextBid} ZC ou mais`}
+                      className="flex-1 rounded-lg border border-amber-500/30 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-400/60"
+                    />
+                    <button
+                      type="button" disabled={pending || !bidAmount || parseInt(bidAmount) < minNextBid}
+                      onClick={handleBid}
+                      className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-400 hover:bg-amber-500/20 disabled:opacity-40"
+                    >
+                      <Gavel size={12} className="inline mr-1"/>Dar Lance
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-600">Os ZC são debitados ao dar lance e devolvidos se você for superado.</p>
+                </div>
+              )}
+
+              {/* Histórico de lances */}
+              {(listing.auctionBids ?? []).length > 0 && (
+                <div className="space-y-1 pt-2 border-t border-amber-500/20">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">Histórico de lances</p>
+                  {(listing.auctionBids ?? []).map((b, i) => (
+                    <div key={b.id} className={`flex items-center justify-between text-xs ${i === 0 ? "text-amber-300 font-semibold" : "text-slate-500"}`}>
+                      <span>{b.player.displayName}</span>
+                      <span>{b.amount.toLocaleString("pt-BR")} ZC</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

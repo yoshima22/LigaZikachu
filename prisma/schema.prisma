@@ -287,6 +287,7 @@ model Player {
   traceRoomsAsHunter      TraceRoom[]          @relation("TraceRoomHunter")
   goldenPawTransactions   GoldenPawTransaction[]
   casualMode              Boolean              @default(false)
+  auctionBids             BazarAuctionBid[]
 
   @@map("players")
 }
@@ -2238,6 +2239,7 @@ enum BazarListingType {
   SALE
   TRADE
   SALE_OR_TRADE
+  AUCTION
 }
 
 enum BazarListingStatus {
@@ -2283,16 +2285,37 @@ model BazarListing {
   views        Int      @default(0)
   expiresAt    DateTime
 
+  // Campos de leilão (null para anúncios normais)
+  minBidCoins        Int?
+  currentBidCoins    Int?
+  currentBidPlayerId String?
+  auctionEndsAt      DateTime?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   player       Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
   proposals    BazarProposal[]
   favorites    BazarFavorite[]
+  auctionBids  BazarAuctionBid[]
 
   @@index([category, status, createdAt])
   @@index([playerId])
   @@map("bazar_listings")
+}
+
+model BazarAuctionBid {
+  id        String   @id @default(cuid())
+  listingId String
+  playerId  String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  listing   BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  player    Player       @relation(fields: [playerId], references: [id])
+
+  @@index([listingId, createdAt])
+  @@map("bazar_auction_bids")
 }
 
 // Proposta de troca/compra
