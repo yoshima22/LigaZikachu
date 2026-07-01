@@ -53,7 +53,7 @@ export async function applyPassiveIncome(teamId: string): Promise<{ coins: numbe
     include: { members: { select: { id: true } } },
   });
   if (!team || team.status !== "ACTIVE" || team.members.length === 0) return null;
-  // Renda passiva é para todas as equipes (PvP passivo)
+  if (team.isTraining) return null; // Treino: sem renda passiva
 
   const lastAt = team.lastPassiveIncomeAt ?? team.enteredAt;
   const hoursElapsed = (Date.now() - new Date(lastAt).getTime()) / 3_600_000;
@@ -1223,8 +1223,8 @@ export async function addMascotToArenaTeam(playerId: string, teamId: string, mas
 
   const [mascot] = await validateArenaMascots(playerId, [mascotId]);
 
-  // Respeita o limite de nível da sala
-  if (mascot.level > (team.roomLevel ?? 999)) {
+  // Respeita o limite de nível da sala (treino não tem teto)
+  if (!team.isTraining && mascot.level > (team.roomLevel ?? 999)) {
     throw new Error(`${mascot.nickname ?? getPokemonName(mascot.pokemonId)} (nível ${mascot.level}) está acima do limite desta sala (nível ${team.roomLevel}). Escolha um mascote dentro do limite.`);
   }
   const usedSlots = new Set(team.members.map(member => member.slot));
@@ -2440,7 +2440,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       },
     });
 
-    if (!isCasualBattle && winnerTeam && lootSplit) {
+    if (!isTrainingBattle && !isCasualBattle && winnerTeam && lootSplit) {
       await tx.arenaTeam.update({
         where: { id: winnerTeam.id },
         data: {
@@ -2456,7 +2456,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     }
 
     // Recompensa ZC de defesa bem-sucedida → adicionada ao cofre do defensor (pulado em batalhas casuais)
-    if (!isCasualBattle && defenseRewardCoins > 0 && defenseTeam.status === "ACTIVE") {
+    if (!isTrainingBattle && !isCasualBattle && defenseRewardCoins > 0 && defenseTeam.status === "ACTIVE") {
       await tx.arenaTeam.update({
         where: { id: defenseTeam.id },
         data: { vaultCoins: { increment: defenseRewardCoins } },
