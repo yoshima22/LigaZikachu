@@ -121,10 +121,38 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   async function handleCasualToggle(enabled: boolean) {
     setCasualLoading(true);
     try {
-      const result = await setCasualModeAction(enabled);
-      if (result?.error) { toast.error(result.error); return; }
-      setCasualMode(enabled);
-      toast.success(enabled ? "Modo Casual ativado." : "Modo Casual desativado.");
+      if (!enabled) {
+        const result = await setCasualModeAction(false);
+        if (result?.error) { toast.error(result.error); return; }
+        setCasualMode(false);
+        toast.success("Modo Casual desativado.");
+        return;
+      }
+
+      const check = await setCasualModeAction(true);
+      if (check?.error) { toast.error(check.error); return; }
+
+      if (check?.requiresConfirm) {
+        const parts: string[] = [];
+        if (check.arenaTeamCount) {
+          parts.push(`${check.arenaTeamCount} equipe(s) na Arena Z — cofres serão coletados quando possível e times retirados (cofres bloqueados por lock PvP serão abandonados)`);
+        }
+        if (check.syncTeamCount) {
+          parts.push(`${check.syncTeamCount} dupla(s) no Desafio Sincronizado — serão canceladas e os tickets devolvidos`);
+        }
+        const ok = window.confirm(
+          `Ativar o Modo Casual vai remover:\n\n• ${parts.join("\n• ")}\n\nDeseja continuar?`
+        );
+        if (!ok) return;
+
+        const result = await setCasualModeAction(true, true);
+        if (result?.error) { toast.error(result.error); return; }
+        setCasualMode(true);
+        toast.success("Modo Casual ativado. Times e duplas removidos.");
+      } else {
+        setCasualMode(true);
+        toast.success("Modo Casual ativado.");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao alterar Modo Casual");
     } finally {

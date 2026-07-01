@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { getStandbyUntilFromNotes, setStandbyUntilInNotes } from "@/lib/account-standby";
+import { retireArenaTeam } from "@/lib/arena-z";
 
 const MAX_WISHLIST_POKEMON = 9;
 
@@ -44,7 +45,12 @@ const standbySchema = z.object({
   days: z.union([z.literal(7), z.literal(14), z.literal(30), z.literal(60), z.literal(90)]),
 });
 
-export async function setCasualModeAction(enabled: boolean): Promise<{ error?: string; success?: boolean }> {
+const SYNC_CANCELLABLE = ["OPEN", "COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] as const;
+
+export async function setCasualModeAction(
+  enabled: boolean,
+  force?: boolean
+): Promise<{ error?: string; success?: boolean; requiresConfirm?: boolean; arenaTeamCount?: number; syncTeamCount?: number }> {
   const user = await getSessionUser();
   if (!user) return { error: "Nao autenticado" };
 
@@ -54,12 +60,87 @@ export async function setCasualModeAction(enabled: boolean): Promise<{ error?: s
   });
   if (!player) return { error: "Jogador nao encontrado" };
 
+  if (enabled && !force) {
+    const [arenaTeamCount, syncTeamCount] = await Promise.all([
+      prisma.arenaTeam.count({
+        where: { playerId: player.id, status: { in: ["ACTIVE", "DEFEATED"] } },
+      }),
+      prisma.syncEventTeam.count({
+        where: {
+          OR: [{ playerAId: player.id }, { playerBId: player.id }],
+          status: { in: [...SYNC_CANCELLABLE] },
+        },
+      }),
+    ]);
+    if (arenaTeamCount > 0 || syncTeamCount > 0) {
+      return { requiresConfirm: true, arenaTeamCount, syncTeamCount };
+    }
+  }
+
+  if (enabled && force) {
+    // Retire all arena teams — collect vault when possible, force-abandon otherwise
+    const arenaTeams = await prisma.arenaTeam.findMany({
+      where: { playerId: player.id, status: { in: ["ACTIVE", "DEFEATED"] } },
+      select: { id: true },
+    });
+    for (const team of arenaTeams) {
+      try {
+        await retireArenaTeam(player.id, team.id);
+      } catch {
+        // Exit locked or unseen PvP: force-retire with zero loot
+        const members = await prisma.arenaTeamMember.findMany({
+          where: { teamId: team.id },
+          select: { mascotId: true },
+        });
+        await prisma.$transaction(async (tx) => {
+          if (members.length > 0) {
+            await tx.mascot.updateMany({
+              where: { id: { in: members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
+              data: { arenaState: "FREE", restingUntil: null },
+            });
+          }
+          await tx.arenaTeam.update({
+            where: { id: team.id },
+            data: { status: "RETIRED", vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0 },
+          });
+        });
+      }
+    }
+
+    // Cancel all active sync teams and return tickets
+    const syncTeams = await prisma.syncEventTeam.findMany({
+      where: {
+        OR: [{ playerAId: player.id }, { playerBId: player.id }],
+        status: { in: [...SYNC_CANCELLABLE] },
+      },
+      select: { id: true, ticketAId: true, ticketBId: true },
+    });
+    for (const team of syncTeams) {
+      const ticketIds = [team.ticketAId, team.ticketBId].filter(Boolean) as string[];
+      await prisma.$transaction(async (tx) => {
+        await tx.syncEventLineup.deleteMany({ where: { teamId: team.id } });
+        await tx.syncEventTeam.update({
+          where: { id: team.id },
+          data: { status: "CANCELLED", cancelledAt: new Date() },
+        });
+        if (ticketIds.length > 0) {
+          await tx.syncTicket.updateMany({
+            where: { id: { in: ticketIds }, status: "RESERVED" },
+            data: { status: "AVAILABLE" },
+          });
+        }
+      });
+    }
+  }
+
   await prisma.player.update({
     where: { id: player.id },
     data: { casualMode: enabled },
   });
 
   revalidatePath("/perfil");
+  revalidatePath("/arena-z");
+  revalidatePath("/desafio-sincronizado");
   return { success: true };
 }
 
