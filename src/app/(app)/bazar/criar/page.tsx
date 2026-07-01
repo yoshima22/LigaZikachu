@@ -80,39 +80,43 @@ function CreateListingForm() {
 
   const handleSubmit = () => {
     startTransition(async () => {
-      if (isAuction) {
-        const r = await createAuctionListing({
-          category: category as BazarItemCategory,
-          minBidCoins: parseInt(minBid) || 0,
-          auctionDuration,
-          description: description || undefined,
-          mascotId: category === "MASCOT" ? selectedMascotId : undefined,
-          itemType: category === "ITEM" ? selectedItem?.type : undefined,
-          shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
-          imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
-          quantity: category === "ITEM" ? itemQuantity : undefined,
-          displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
-        });
-        if (r.error) { toast.error(r.error); return; }
-      } else {
-        const r = await createListing({
-          category: category as BazarItemCategory,
-          listingType,
-          priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
-          wantedDesc: wantedDesc || undefined,
-          description: description || undefined,
-          durationDays: duration,
-          mascotId: category === "MASCOT" ? selectedMascotId : undefined,
-          itemType: category === "ITEM" ? selectedItem?.type : undefined,
-          shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
-          imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
-          quantity: category === "ITEM" ? itemQuantity : undefined,
-          displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
-        });
-        if (r.error) { toast.error(r.error); return; }
+      try {
+        if (isAuction) {
+          const r = await createAuctionListing({
+            category: category as BazarItemCategory,
+            minBidCoins: parseInt(minBid) || 0,
+            auctionDuration,
+            description: description || undefined,
+            mascotId: category === "MASCOT" ? selectedMascotId : undefined,
+            itemType: category === "ITEM" ? selectedItem?.type : undefined,
+            shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
+            imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
+            quantity: category === "ITEM" ? itemQuantity : undefined,
+            displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
+          });
+          if (r.error) { toast.error(r.error); return; }
+        } else {
+          const r = await createListing({
+            category: category as BazarItemCategory,
+            listingType,
+            priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
+            wantedDesc: wantedDesc || undefined,
+            description: description || undefined,
+            durationDays: duration,
+            mascotId: category === "MASCOT" ? selectedMascotId : undefined,
+            itemType: category === "ITEM" ? selectedItem?.type : undefined,
+            shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
+            imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
+            quantity: category === "ITEM" ? itemQuantity : undefined,
+            displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
+          });
+          if (r.error) { toast.error(r.error); return; }
+        }
+        toast.success("Anúncio criado com sucesso!");
+        router.push("/bazar/meu-bazar");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro inesperado ao criar anúncio.");
       }
-      toast.success("Anúncio criado com sucesso!");
-      router.push("/bazar/meu-bazar");
     });
   };
 
