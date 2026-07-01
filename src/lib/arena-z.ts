@@ -751,7 +751,7 @@ const getActiveArenaTeams = unstable_cache(
     return prisma.arenaTeam.findMany({
       where: { status: "ACTIVE" },
       select: {
-        id: true, name: true, roomLevel: true, vaultCoins: true, enteredAt: true,
+        id: true, name: true, roomLevel: true, isTraining: true, vaultCoins: true, enteredAt: true,
         playerId: true,
         player: { select: { id: true, displayName: true, casualMode: true } },
         members: {
@@ -785,35 +785,38 @@ export async function getRoomsData(viewerPlayerId?: string) {
     foughtBattles.forEach(b => { if (b.defenseTeamId) revealedTeamIds.add(b.defenseTeamId); });
   }
 
-  const rooms = ARENA_ROOMS.map(roomLevel => {
-    const roomTeams = teams.filter(t => t.roomLevel === roomLevel);
+  function mapTeam(t: typeof teams[number], viewerId?: string) {
+    const isOwn = viewerId ? t.playerId === viewerId : false;
+    const revealed = isOwn || revealedTeamIds.has(t.id);
     return {
-      roomLevel,
-      teamCount: roomTeams.length,
-      teams: roomTeams.map(t => {
-        const isOwn = viewerPlayerId ? t.playerId === viewerPlayerId : false;
-        const revealed = isOwn || revealedTeamIds.has(t.id);
-        return {
-          id: t.id,
-          name: t.name,
-          playerName: t.player.displayName,
-          playerId: t.player.id,
-          isCasual: t.player.casualMode,
-          isOwn,
-          vaultCoins: isOwn ? t.vaultCoins : null,
-          enteredAt: t.enteredAt,
-          members: t.members.map(m => ({
-            slot: m.slot,
-            pokemonId: m.mascot.pokemonId,
-            level: m.mascot.level,
-            name: revealed ? (m.mascot.nickname ?? getPokemonName(m.mascot.pokemonId)) : null,
-          })),
-        };
-      }),
+      id: t.id,
+      name: t.name,
+      playerName: t.player.displayName,
+      playerId: t.player.id,
+      isCasual: t.player.casualMode,
+      isTraining: t.isTraining,
+      isOwn,
+      vaultCoins: isOwn ? t.vaultCoins : null,
+      enteredAt: t.enteredAt,
+      members: t.members.map(m => ({
+        slot: m.slot,
+        pokemonId: m.mascot.pokemonId,
+        level: m.mascot.level,
+        name: revealed ? (m.mascot.nickname ?? getPokemonName(m.mascot.pokemonId)) : null,
+      })),
     };
+  }
+
+  const rooms = ARENA_ROOMS.map(roomLevel => {
+    const roomTeams = teams.filter(t => !t.isTraining && t.roomLevel === roomLevel);
+    return { roomLevel, teamCount: roomTeams.length, teams: roomTeams.map(t => mapTeam(t, viewerPlayerId)) };
   });
 
-  return rooms;
+  // Sala de Treinamento — separada das salas por nível
+  const trainingTeams = teams.filter(t => t.isTraining);
+  const trainingRoom = { roomLevel: 0, isTraining: true, teamCount: trainingTeams.length, teams: trainingTeams.map(t => mapTeam(t, viewerPlayerId)) };
+
+  return { rooms, trainingRoom };
 }
 
 /** Top 2 jogadores — reutiliza o cache de times ativos, sem query extra */
@@ -1122,20 +1125,22 @@ async function assertPvpExitUnlocked(teamId: string): Promise<void> {
   throw new Error(`Esta equipe atacou outro jogador recentemente. Aguarde ${min}:${sec.toString().padStart(2, "0")} para abandonar ou coletar recompensas.`);
 }
 
-export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], roomLevel: ArenaRoom = 100, combatRoles?: Record<string, string>) {
+export async function createArenaTeam(playerId: string, name: string, mascotIds: string[], roomLevel: ArenaRoom = 100, combatRoles?: Record<string, string>, isTraining = false) {
   if (mascotIds.length > 6) throw new Error("Máximo de 6 mascotes por equipe.");
-  if (!ARENA_ROOMS.includes(roomLevel as ArenaRoom)) throw new Error("Sala inválida.");
+  if (!isTraining && !ARENA_ROOMS.includes(roomLevel as ArenaRoom)) throw new Error("Sala inválida.");
 
   const mascots = await validateArenaMascots(playerId, mascotIds);
 
-  // Valida que todos os mascotes têm nível <= roomLevel
-  for (const m of mascots) {
-    if (m.level > roomLevel) {
-      throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} (nível ${m.level}) está acima do máximo da sala (nível ${roomLevel}).`);
+  // Valida nível apenas para salas normais (treino não tem teto de nível)
+  if (!isTraining) {
+    for (const m of mascots) {
+      if (m.level > roomLevel) {
+        throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} (nível ${m.level}) está acima do máximo da sala (nível ${roomLevel}).`);
+      }
     }
   }
 
-  // Limite de 3 equipes simultâneas por jogador
+  // Limite de 3 equipes simultâneas por jogador (treinamento conta no mesmo limite)
   const activeCount = await prisma.arenaTeam.count({ where: { playerId, status: "ACTIVE" } });
   if (activeCount >= ARENA_MAX_TEAMS) {
     throw new Error(`Você já tem ${ARENA_MAX_TEAMS} equipes ativas na Arena. Retire uma antes de criar uma nova.`);
@@ -1189,7 +1194,8 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
       data: {
         playerId,
         name: teamName,
-        roomLevel,
+        roomLevel: isTraining ? 0 : roomLevel,
+        isTraining,
         members: {
           create: mascots.map((m, index) => ({
             mascotId: m.id,
@@ -1334,6 +1340,22 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (!["ACTIVE", "DEFEATED"].includes(team.status)) throw new Error("Equipe ja retirada.");
+
+  // Equipes de treinamento: sem vault, sem EXP, sem checks de PvP — apenas libera os mascotes
+  if (team.isTraining) {
+    await prisma.$transaction(async (tx) => {
+      await tx.mascot.updateMany({
+        where: { id: { in: team.members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
+        data: { arenaState: "FREE", restingUntil: null },
+      });
+      await tx.arenaTeam.update({
+        where: { id: team.id },
+        data: { status: "RETIRED", vaultCoins: 0, vaultExp: 0, vaultFood: 0, vaultSweet: 0 },
+      });
+    });
+    return { coins: 0, exp: 0, food: 0, sweet: 0, effectiveMult: 1, pveCapReached: false, pveCoinsCapped: 0, pveCoinsBeyondCap: 0, hadPenalty: false };
+  }
+
   if (team.status === "ACTIVE") await assertPvpExitUnlocked(teamId);
 
   // Bloqueia saída se há ataque PvP não visto — defensor precisa visualizar primeiro
@@ -2224,30 +2246,43 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
   if (!attackTeam || attackTeam.playerId !== playerId) throw new Error("Equipe atacante nao encontrada.");
   if (!defenseTeam) throw new Error("Equipe defensora nao encontrada.");
-  if (defenseTeam.playerId === playerId) throw new Error("PvP precisa desafiar uma equipe de outro jogador.");
 
-  // Regra de sala: só pode atacar salas iguais ou superiores (mais altas)
-  const atkRoom = attackTeam.roomLevel ?? 0;
-  const defRoom = defenseTeam.roomLevel ?? 0;
-  if (atkRoom > defRoom) {
-    throw new Error(`Sua equipe está na Sala ${atkRoom} e não pode atacar a Sala ${defRoom}. Equipes de salas mais altas só podem ser atacadas por salas iguais ou inferiores.`);
+  // Treino: ambos os times devem ser de treinamento; pode atacar o próprio time
+  const isTrainingBattle = attackTeam.isTraining && defenseTeam.isTraining;
+  if (!isTrainingBattle) {
+    // Fora do treino, ambos devem ser do modo normal E de jogadores diferentes
+    if (attackTeam.isTraining || defenseTeam.isTraining) {
+      throw new Error("Equipes de treinamento só podem combater entre si. Ambas as equipes precisam ser de treino.");
+    }
+    if (defenseTeam.playerId === playerId) throw new Error("PvP precisa desafiar uma equipe de outro jogador.");
   }
 
-  // Bloqueia admins de participar de PvP real (para não contaminar rankings/loot)
+  // Regra de sala: só pode atacar salas iguais ou superiores (não se aplica ao treino)
+  if (!isTrainingBattle) {
+    const atkRoom = attackTeam.roomLevel ?? 0;
+    const defRoom = defenseTeam.roomLevel ?? 0;
+    if (atkRoom > defRoom) {
+      throw new Error(`Sua equipe está na Sala ${atkRoom} e não pode atacar a Sala ${defRoom}. Equipes de salas mais altas só podem ser atacadas por salas iguais ou inferiores.`);
+    }
+  }
+
+  // Bloqueia admins de participar de PvP real (não se aplica ao treino)
   const [attackUser, defenseUser] = await Promise.all([
     prisma.player.findUnique({ where: { id: attackTeam.playerId }, include: { user: { select: { role: true } } } }),
     prisma.player.findUnique({ where: { id: defenseTeam.playerId }, include: { user: { select: { role: true } } } }),
   ]);
-  const isAdminBattle = ["ADMIN","SUPER_ADMIN"].includes(attackUser?.user.role ?? "") || ["ADMIN","SUPER_ADMIN"].includes(defenseUser?.user.role ?? "");
-  if (isAdminBattle) throw new Error("Contas admin nao participam de PvP real. Use o modo debug para testes.");
+  if (!isTrainingBattle) {
+    const isAdminBattle = ["ADMIN","SUPER_ADMIN"].includes(attackUser?.user.role ?? "") || ["ADMIN","SUPER_ADMIN"].includes(defenseUser?.user.role ?? "");
+    if (isAdminBattle) throw new Error("Contas admin nao participam de PvP real. Use o modo debug para testes.");
+  }
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE") throw new Error("As duas equipes precisam estar ativas.");
   if (attackTeam.members.length === 0 || defenseTeam.members.length === 0) throw new Error("As equipes precisam ter mascotes.");
 
   // Batalha casual: sem cooldown nem movimentação de cofre quando qualquer jogador está no Modo Casual
-  const isCasualBattle = !!(attackUser?.casualMode || defenseUser?.casualMode);
+  const isCasualBattle = !isTrainingBattle && !!(attackUser?.casualMode || defenseUser?.casualMode);
 
-  // Cooldown PvP: 10 min entre ataques PvP da mesma equipe atacante (pulado em batalhas casuais)
-  if (!isCasualBattle) {
+  // Cooldown e anti-spam (pulados em batalhas de treino e casuais)
+  if (!isTrainingBattle && !isCasualBattle) {
     const lastPvp = await prisma.arenaBattle.findFirst({
       where: { type: "PVP", attackTeamId: attackTeamId },
       orderBy: { createdAt: "desc" },
@@ -2261,21 +2296,18 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
         throw new Error(`Aguarde ${rem}s antes do proximo ataque PvP.`);
       }
     }
-  }
-  // Anti-spam: impede atacar o mesmo time várias vezes seguidas (pulado em batalhas casuais)
-  if (!isCasualBattle) {
-  const lastVsSameTeam = await prisma.arenaBattle.findFirst({
-    where: { type: "PVP", attackTeamId, defenseTeamId },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  });
-  if (lastVsSameTeam) {
-    const elapsed = Date.now() - lastVsSameTeam.createdAt.getTime();
-    if (elapsed < 30 * 60_000) { // 30 min entre ataques ao mesmo time
-      throw new Error("Aguarde 30 min antes de atacar o mesmo time novamente.");
+    const lastVsSameTeam = await prisma.arenaBattle.findFirst({
+      where: { type: "PVP", attackTeamId, defenseTeamId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    if (lastVsSameTeam) {
+      const elapsed = Date.now() - lastVsSameTeam.createdAt.getTime();
+      if (elapsed < 30 * 60_000) {
+        throw new Error("Aguarde 30 min antes de atacar o mesmo time novamente.");
+      }
     }
   }
-  } // end !isCasualBattle anti-spam
 
   assertTeamReady(attackTeam);
   assertTeamReady(defenseTeam);
@@ -2446,7 +2478,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       await maybeDropSyncTicket(tx, winnerTeam.playerId, "arena-pvp");
     }
 
-    if (loserTeam && preserved) {
+    if (!isTrainingBattle && loserTeam && preserved) {
       if (loserTeamDefeated) {
         await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP");
         await tx.arenaTeam.delete({ where: { id: loserTeam.id } });
@@ -2464,7 +2496,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       }
     }
 
-    if (draw) {
+    if (draw || isTrainingBattle) {
       await tx.arenaTeam.updateMany({
         where: { id: { in: [attackTeam.id, defenseTeam.id] } },
         data: { lastBattleAt: new Date() },
@@ -2472,44 +2504,58 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     }
 
     const allMembers = [...attackTeam.members, ...defenseTeam.members];
-    if (loserTeam && injuredMascotIds.length > 0) {
-      await tx.arenaTeamMember.deleteMany({
-        where: { teamId: loserTeam.id, mascotId: { in: injuredMascotIds } },
-      });
-    }
-    // Feridos do time vencedor também saem da equipe (mas o time continua ativo)
-    if (winnerTeam && winnerInjuredIds.length > 0) {
-      await tx.arenaTeamMember.deleteMany({
-        where: { teamId: winnerTeam.id, mascotId: { in: winnerInjuredIds } },
-      });
-    }
-    for (const member of allMembers) {
-      const isLoserInjured = injuredMascotIds.includes(member.mascotId);
-      const isWinnerInjured = winnerInjuredIds.includes(member.mascotId);
-      const injured = isLoserInjured || isWinnerInjured;
-      const won = winnerTeam?.id === member.teamId;
-      await tx.mascot.update({
-        where: { id: member.mascotId },
-        data: injured
-          ? { arenaState: "INJURED", injuredAt: new Date(), restingUntil: null, isEquipped: false, battleLosses: { increment: 1 } }
-          : { arenaState: "ARENA", restingUntil: null, battleWins: won ? { increment: 1 } : undefined },
-      });
-      await tx.mascotEvent.create({
-        data: {
-          mascotId: member.mascotId,
-          emoji: injured ? "PVP!" : "PVP",
-          description: injured
-            ? "Saiu ferido de um combate PvP da Arena Z e precisa de Atendimento SUS."
-            : `Participou de um combate PvP da Arena Z${won ? " e protegeu/roubou loot." : "."}`,
-        },
-      });
+
+    if (isTrainingBattle) {
+      // Treino: mascotes permanecem no time, sem lesões, sem stats de vitória/derrota
+      for (const member of allMembers) {
+        await tx.mascotEvent.create({
+          data: {
+            mascotId: member.mascotId,
+            emoji: "🥊",
+            description: "Participou de um combate de treinamento na Arena Z.",
+          },
+        });
+      }
+    } else {
+      if (loserTeam && injuredMascotIds.length > 0) {
+        await tx.arenaTeamMember.deleteMany({
+          where: { teamId: loserTeam.id, mascotId: { in: injuredMascotIds } },
+        });
+      }
+      // Feridos do time vencedor também saem da equipe (mas o time continua ativo)
+      if (winnerTeam && winnerInjuredIds.length > 0) {
+        await tx.arenaTeamMember.deleteMany({
+          where: { teamId: winnerTeam.id, mascotId: { in: winnerInjuredIds } },
+        });
+      }
+      for (const member of allMembers) {
+        const isLoserInjured = injuredMascotIds.includes(member.mascotId);
+        const isWinnerInjured = winnerInjuredIds.includes(member.mascotId);
+        const injured = isLoserInjured || isWinnerInjured;
+        const won = winnerTeam?.id === member.teamId;
+        await tx.mascot.update({
+          where: { id: member.mascotId },
+          data: injured
+            ? { arenaState: "INJURED", injuredAt: new Date(), restingUntil: null, isEquipped: false, battleLosses: { increment: 1 } }
+            : { arenaState: "ARENA", restingUntil: null, battleWins: won ? { increment: 1 } : undefined },
+        });
+        await tx.mascotEvent.create({
+          data: {
+            mascotId: member.mascotId,
+            emoji: injured ? "PVP!" : "PVP",
+            description: injured
+              ? "Saiu ferido de um combate PvP da Arena Z e precisa de Atendimento SUS."
+              : `Participou de um combate PvP da Arena Z${won ? " e protegeu/roubou loot." : "."}`,
+          },
+        });
+      }
     }
   });
 
-  if (loserTeamDefeated && preserved) await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
+  if (!isTrainingBattle && loserTeamDefeated && preserved) await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
 
-  // EXP de defesa para mascotes defensores sobreviventes (30 EXP base + 20 extra se perfeita)
-  if (survivingDefenderMascotIds.length > 0) {
+  // EXP de defesa para mascotes defensores sobreviventes (30 EXP base + 20 extra se perfeita) — não no treino
+  if (!isTrainingBattle && survivingDefenderMascotIds.length > 0) {
     const defenseExp = perfectDefense ? 50 : 30;
     await Promise.all(
       survivingDefenderMascotIds.map(id =>
@@ -2523,15 +2569,15 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   return {
     result: combat.result,
     attackerWon,
+    isTrainingBattle,
     winnerName: winnerTeam?.player.displayName ?? null,
     loserName: loserTeam?.player.displayName ?? null,
-    // stolen e foundGroundSpoils só visíveis para quem venceu (atacante)
-    stolen: attackerWon ? (lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 }) : { coins: 0, exp: 0, food: 0, sweet: 0 },
-    defenseRewardCoins,
-    defenderEgg,
-    attackerEgg,
-    foundGroundSpoils: attackerWon ? foundGroundSpoils : null,
-    loserTeamDefeated,
+    stolen: attackerWon && !isTrainingBattle ? (lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 }) : { coins: 0, exp: 0, food: 0, sweet: 0 },
+    defenseRewardCoins: isTrainingBattle ? 0 : defenseRewardCoins,
+    defenderEgg: isTrainingBattle ? null : defenderEgg,
+    attackerEgg: isTrainingBattle ? null : attackerEgg,
+    foundGroundSpoils: attackerWon && !isTrainingBattle ? foundGroundSpoils : null,
+    loserTeamDefeated: isTrainingBattle ? false : loserTeamDefeated,
     playerTeamName: attackTeam.player.displayName,
     botName: defenseTeam.player.displayName,
     playerMascots: attackers.map(m => ({

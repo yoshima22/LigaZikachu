@@ -84,12 +84,12 @@ async function checkTeamStaleFromIncomingAttack(
   };
 }
 
-export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number, combatRoles?: Record<string, string>): Promise<{ error?: string }> {
+export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number, combatRoles?: Record<string, string>, isTraining = false): Promise<{ error?: string }> {
   try {
     const playerId = await getCurrentPlayerId();
     const { ARENA_ROOMS } = await import("@/lib/arena-z");
-    if (!ARENA_ROOMS.includes(roomLevel as typeof ARENA_ROOMS[number])) return { error: "Sala inválida." };
-    await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number], combatRoles);
+    if (!isTraining && !ARENA_ROOMS.includes(roomLevel as typeof ARENA_ROOMS[number])) return { error: "Sala inválida." };
+    await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number], combatRoles, isTraining);
     revalidateTag("arena-active-teams");
     return {};
   } catch (err) {

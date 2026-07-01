@@ -264,7 +264,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           take: 10,
         })
       : Promise.resolve([]),
-    getRoomsData(player.id).catch(() => ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] }))),
+    getRoomsData(player.id).catch(() => ({ rooms: ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] })), trainingRoom: { roomLevel: 0, isTraining: true, teamCount: 0, teams: [] as never[] } })),
     getTopArenaPlayers().catch(() => [] as never[]),
   ]);
 
@@ -455,8 +455,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           if (!opponentsBySala.has(lvl)) opponentsBySala.set(lvl, []);
           opponentsBySala.get(lvl)!.push(t);
         }
-        const activeRooms = roomsData.filter(r => r.teamCount > 0);
-        const emptyRooms = roomsData.filter(r => r.teamCount === 0);
+        const { rooms: levelRooms, trainingRoom } = roomsData;
+        const activeRooms = levelRooms.filter(r => r.teamCount > 0);
+        const emptyRooms = levelRooms.filter(r => r.teamCount === 0);
 
         return (
           <div className="space-y-4">
@@ -691,6 +692,118 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 </div>
               </details>
             )}
+
+            {/* Sala de Treinamento */}
+            <details className="group rounded-2xl border border-sky-500/20 bg-sky-500/5 overflow-hidden" open={trainingRoom.teamCount > 0}>
+              <summary className="flex cursor-pointer select-none items-center justify-between gap-3 px-5 py-4 font-semibold text-sky-100 hover:text-white">
+                <span className="flex items-center gap-2">
+                  🥊 Sala de Treinamento
+                  {trainingRoom.teamCount > 0 && (
+                    <span className="rounded-full bg-sky-500/30 px-2 py-0.5 text-[9px] font-bold text-sky-200">{trainingRoom.teamCount} equipe{trainingRoom.teamCount !== 1 ? "s" : ""}</span>
+                  )}
+                </span>
+                <ChevronDown size={14} className="text-sky-400 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-sky-500/20 px-5 py-4 space-y-4">
+                <p className="text-xs leading-relaxed text-sky-100/70">
+                  Combates de treino não geram cofre (ZC ou EXP), não afetam ranking, não lesionam mascotes e não os expulsam da equipe. Um jogador pode atacar suas próprias equipes. Equipes de treino contam no limite de equipes simultâneas.
+                </p>
+                {trainingRoom.teams.length === 0 ? (
+                  <p className="text-xs text-sky-400/60">Nenhuma equipe de treinamento na arena.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Equipes próprias de treino */}
+                    {(() => {
+                      const myTrainingTeams = trainingRoom.teams.filter(t => t.isOwn);
+                      const otherTrainingTeams = trainingRoom.teams.filter(t => !t.isOwn);
+                      return (
+                        <>
+                          {myTrainingTeams.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400 mb-2">Minhas equipes de treino</p>
+                              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {myTrainingTeams.map(t => (
+                                  <div key={t.id} className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
+                                    <p className="text-xs font-semibold text-slate-200">{t.name}</p>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {t.members.map((m, i) => (
+                                        <span key={i} className="rounded border border-slate-700/60 bg-slate-800/50 px-1.5 py-0.5 text-[9px] text-slate-400">
+                                          {m.name ? <>{m.name} <span className="text-slate-600">Nv.{m.level}</span></> : <span className="text-slate-600">??? Nv.{m.level}</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Seção de treinar: atacar qualquer equipe de treino (inclusive as próprias) */}
+                          {readyActiveTeams.filter(t => t.isTraining).length > 0 && trainingRoom.teams.length > 0 && (
+                            <div className="rounded-xl border border-sky-500/20 bg-sky-950/40 p-3 space-y-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400">🥊 Iniciar treino</p>
+                              {readyActiveTeams.filter(t => t.isTraining).map(attackTeam => (
+                                <div key={attackTeam.id}>
+                                  <p className="text-[11px] font-semibold text-slate-300 mb-2">
+                                    Atacando com: <span className="text-slate-100">{attackTeam.name}</span>
+                                  </p>
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    {trainingRoom.teams.filter(t => t.id !== attackTeam.id).map(defenseTeam => (
+                                      <div key={defenseTeam.id} className="rounded-xl border border-slate-700/60 bg-slate-950/60 p-3">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                          <div>
+                                            <p className="text-[11px] font-bold text-slate-100">{defenseTeam.name}</p>
+                                            <p className="text-[10px] text-slate-500">{defenseTeam.playerName}</p>
+                                          </div>
+                                          <PvpBattleButton
+                                            attackTeamId={attackTeam.id}
+                                            defenseTeamId={defenseTeam.id}
+                                            attackTeamUpdatedAt={attackTeam.updatedAt.toISOString()}
+                                            pvpCooldownUntil={null}
+                                            label="🥊 Treinar"
+                                            confirmMessage="Iniciar combate de treino? Sem loot, sem lesões, sem impacto no ranking."
+                                          />
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {defenseTeam.members.map((m, i) => (
+                                            <span key={i} className="rounded border border-slate-700/60 bg-slate-800/50 px-1.5 py-0.5 text-[9px] text-slate-400">
+                                              {m.name ? <>{m.name} <span className="text-slate-600">Nv.{m.level}</span></> : <span className="text-slate-600">??? Nv.{m.level}</span>}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {otherTrainingTeams.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Outros jogadores treinando</p>
+                              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {otherTrainingTeams.map(t => (
+                                  <div key={t.id} className="rounded-xl border border-slate-700/50 bg-slate-900/30 p-3">
+                                    <p className="text-xs font-semibold text-slate-200">{t.name}</p>
+                                    <p className="text-[10px] text-slate-500">{t.playerName}</p>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {t.members.map((m, i) => (
+                                        <span key={i} className="rounded border border-slate-700/60 bg-slate-800/50 px-1.5 py-0.5 text-[9px] text-slate-400">
+                                          {m.name ? <>{m.name} <span className="text-slate-600">Nv.{m.level}</span></> : <span className="text-slate-600">??? Nv.{m.level}</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </details>
 
             {/* Ranking */}
             <details className="group rounded-2xl border border-border bg-slate-950/60 overflow-hidden">

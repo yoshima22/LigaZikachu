@@ -807,11 +807,15 @@ export function PvpBattleButton({
   defenseTeamId,
   attackTeamUpdatedAt,
   pvpCooldownUntil,
+  label,
+  confirmMessage,
 }: {
   attackTeamId: string;
   defenseTeamId: string;
   attackTeamUpdatedAt?: string;
   pvpCooldownUntil?: Date | null;
+  label?: string;
+  confirmMessage?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -830,7 +834,8 @@ export function PvpBattleButton({
         disabled={pending || onCooldown}
         title={onCooldown ? "Cooldown PvP desta equipe ainda ativo." : undefined}
         onClick={() => {
-          if (!confirm("Atacar esta equipe? Você pode ganhar ou perder loot do cofre.")) return;
+          const msg = confirmMessage ?? "Atacar esta equipe? Você pode ganhar ou perder loot do cofre.";
+          if (!confirm(msg)) return;
           startTransition(async () => {
             const r = await runPvpBattleAction(attackTeamId, defenseTeamId, attackTeamUpdatedAt);
             if (r.stale) { setStaleNotice(r.stale); toast.error("Voce foi atacado antes desta acao."); return; }
@@ -842,15 +847,16 @@ export function PvpBattleButton({
                 setResult(r.result);
               }
               const won = r.result.winnerName !== null;
-              toast.success(won ? "Vitória no PvP! 🏆" : "Derrota no PvP.");
+              const isTraining = r.result.isTrainingBattle;
+              toast.success(isTraining ? (won ? "Treino concluído! Vitória 🥊" : "Treino concluído! Derrota.") : (won ? "Vitória no PvP! 🏆" : "Derrota no PvP."));
             } else {
               router.refresh();
             }
           });
         }}
-        className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:border-red-300 disabled:opacity-50"
+        className={`rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-50 ${label ? "border-sky-400/40 bg-sky-500/10 text-sky-200 hover:border-sky-300" : "border-red-400/40 bg-red-500/10 text-red-200 hover:border-red-300"}`}
       >
-        {pending ? "Combatendo..." : onCooldown ? "Cooldown" : "⚔️ Atacar"}
+        {pending ? "Combatendo..." : onCooldown ? "Cooldown" : (label ?? "⚔️ Atacar")}
       </button>
 
       {animatingResult && (
@@ -872,10 +878,15 @@ export function PvpBattleButton({
           <div className="max-w-sm rounded-2xl border border-red-500/30 bg-slate-950 p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs uppercase tracking-widest text-red-400">Arena PvP</p>
+                <p className={`text-xs uppercase tracking-widest ${result.isTrainingBattle ? "text-sky-400" : "text-red-400"}`}>
+                  {result.isTrainingBattle ? "🥊 Treino" : "Arena PvP"}
+                </p>
                 <h3 className="mt-1 text-lg font-bold text-white">
-                  {result.winnerName ? `🏆 ${result.winnerName} venceu!` : "Empate"}
+                  {result.winnerName ? `${result.isTrainingBattle ? "🥊" : "🏆"} ${result.winnerName} venceu!` : "Empate"}
                 </h3>
+                {result.isTrainingBattle && (
+                  <p className="text-xs text-sky-400/80 mt-0.5">Sem loot, lesões ou impacto no ranking.</p>
+                )}
                 {result.loserName && (
                   <p className="text-sm text-slate-400">Perdedor: {result.loserName}</p>
                 )}

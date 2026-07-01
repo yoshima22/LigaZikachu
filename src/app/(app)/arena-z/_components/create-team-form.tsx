@@ -319,6 +319,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [roles, setRoles] = useState<Record<string, CombatRole>>({});
   const [name, setName] = useState("");
   const [roomLevel, setRoomLevel] = useState<ArenaRoomLevel>(100);
+  const [isTraining, setIsTraining] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("level_desc");
   const [filter, setFilter] = useState<FilterKey>("available");
@@ -395,8 +396,8 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   }, [mascots, filter, search, sort, typeFilter, now]);
 
   const overLevelSelected = useMemo(
-    () => mascots.filter(m => selected.has(m.id) && m.level > roomLevel),
-    [mascots, selected, roomLevel]
+    () => isTraining ? [] : mascots.filter(m => selected.has(m.id) && m.level > roomLevel),
+    [mascots, selected, roomLevel, isTraining]
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -414,7 +415,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         const mascot = mascots.find(m => m.id === id);
         return [id, roles[id] ?? (mascot ? recommendedRoleForMascot(mascot) : "ATTACKER")];
       }));
-      const r = await createArenaTeamAction([...selected], name.trim(), roomLevel, rolePayload);
+      const r = await createArenaTeamAction([...selected], name.trim(), roomLevel, rolePayload, isTraining);
       if (r.error) toast.error(r.error);
       else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setRoles({}); setName(""); }
     });
@@ -425,7 +426,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
 
       {/* ── Barra de seleção ── */}
       {selected.size > 0 && (
-        <SelectedBar mascots={mascots} selected={selected} roles={roles} onRoleChange={changeRole} onRemove={toggle} roomLevel={roomLevel} />
+        <SelectedBar mascots={mascots} selected={selected} roles={roles} onRoleChange={changeRole} onRemove={toggle} roomLevel={isTraining ? 100 : roomLevel} />
       )}
 
       {/* ── Configurações fixas (nome + sala) ── */}
@@ -437,12 +438,20 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
           className="w-full rounded-lg border border-border bg-slate-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60"
         />
         <div>
-          <p className="mb-1.5 text-[10px] text-slate-500 font-semibold">Sala (nível máximo dos mascotes):</p>
+          <p className="mb-1.5 text-[10px] text-slate-500 font-semibold">Sala:</p>
           <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setIsTraining(true)}
+              className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
+                isTraining
+                  ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
+                  : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
+              }`}>
+              🥊 Treino
+            </button>
             {ARENA_ROOM_OPTIONS.map(lvl => (
-              <button key={lvl} type="button" onClick={() => setRoomLevel(lvl)}
+              <button key={lvl} type="button" onClick={() => { setIsTraining(false); setRoomLevel(lvl); }}
                 className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
-                  roomLevel === lvl
+                  !isTraining && roomLevel === lvl
                     ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
                     : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
                 }`}>
@@ -450,7 +459,10 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
               </button>
             ))}
           </div>
-          <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
+          {isTraining
+            ? <p className="mt-1.5 text-[9px] text-sky-500">Treino: sem limite de nível, sem loot, sem lesões, sem impacto no ranking.</p>
+            : <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
+          }
         </div>
       </div>
 

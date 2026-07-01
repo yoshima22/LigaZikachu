@@ -2124,6 +2124,7 @@ model ArenaTeam {
   vaultSweet     Int             @default(0)
   multiplier     Decimal         @default(1) @db.Decimal(5, 2)
   roomLevel      Int             @default(0)       // sala: 10, 20, ..., 100 (max nível permitido)
+  isTraining     Boolean         @default(false)   // sala de treinamento: sem lesões, sem loot, sem ranking
   pendingBotJson Json?
   pendingBotDifficulty String?
   lastPassiveIncomeAt DateTime    @default(now())
