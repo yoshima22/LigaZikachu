@@ -597,7 +597,7 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
                 if (response.error) { toast.error(response.error); return; }
                 if (response.result) {
                   setResult(response.result);
-                  setPostBattleCooldownUntil(new Date(Date.now() + cooldownAfterMs));
+                  if (!response.result.debugMode) setPostBattleCooldownUntil(new Date(Date.now() + cooldownAfterMs));
                   // Mostra animação primeiro, depois o modal de resultado
                   if (response.result.battleAnimation && response.result.battleAnimation.length > 0) {
                     setShowAnimation(true);
