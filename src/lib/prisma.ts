@@ -11,14 +11,16 @@ function withServerlessPoolLimit(url: string | undefined) {
   return `${url}${separator}connection_limit=2&pool_timeout=20`;
 }
 
+// Se DATABASE_URL estiver ausente (ex.: hiccup de env durante o build do Vercel),
+// não passa datasources — passar url: undefined faz o construtor lançar erro no
+// import do módulo e derruba o build no "Collecting page data". Sem o override,
+// o erro só aparece na primeira query em runtime.
+const pooledUrl = withServerlessPoolLimit(process.env.DATABASE_URL);
+
 export const prisma =
   global.prisma ??
   new PrismaClient({
-    datasources: {
-      db: {
-        url: withServerlessPoolLimit(process.env.DATABASE_URL),
-      },
-    },
+    ...(pooledUrl ? { datasources: { db: { url: pooledUrl } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"]
   });
 
