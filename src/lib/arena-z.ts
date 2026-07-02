@@ -2842,6 +2842,19 @@ export async function cleanupExpiredArenaResting(targetPlayerId?: string): Promi
   const now = new Date();
   const wherePlayer = targetPlayerId ? { playerId: targetPlayerId } : {};
 
+  // Checagem barata antes dos UPDATEs: esta função roda em todo load da página
+  // da Arena e quase nunca tem algo a limpar — disparar os updateMany sempre
+  // gerava churn de escrita e inchaço (bloat) na tabela mascots.
+  const hasExpired = await prisma.mascot.findFirst({
+    where: {
+      ...wherePlayer,
+      restingUntil: { lte: now },
+      arenaState: { in: ["RESTING", "FREE"] },
+    },
+    select: { id: true },
+  });
+  if (!hasExpired) return { releasedResting: 0, clearedCooldowns: 0 };
+
   const released = await prisma.mascot.updateMany({
     where: {
       ...wherePlayer,

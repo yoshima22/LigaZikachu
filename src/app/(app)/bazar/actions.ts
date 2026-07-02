@@ -53,6 +53,13 @@ const HIDDEN_BAZAR_ITEM_TYPES = new Set([
   "TRACE_SPECIAL_MAP",
 ]);
 
+/** Nunca gravar data-URL base64 no payload do anúncio — um snapshot de imagem
+ *  embutido chegou a 3,7MB e era transferido em toda listagem do Bazar. */
+function sanitizePayloadImageUrl(url: string | null | undefined): string | null {
+  if (!url || url.startsWith("data:")) return null;
+  return url;
+}
+
 // Tipos de shop que o Miauvadão pode oferecer (excluindo cosméticos únicos)
 const MIAUVADAO_ELIGIBLE_TYPES = [
   ...MASCOT_SHOP_ITEM_TYPES,
@@ -428,7 +435,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           payload = {
             ...payload,
             shopItemId: inv.itemId,
-            imageUrl: inv.item.imageUrl ?? input.imageUrl ?? null,
+            imageUrl: sanitizePayloadImageUrl(inv.item.imageUrl ?? input.imageUrl),
           };
         }
 
@@ -1745,7 +1752,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
             : await tx.playerInventory.findFirst({ where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } });
           if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
           await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: qty } } });
-          payload = { ...payload, shopItemId: inv.itemId, imageUrl: inv.item.imageUrl ?? input.imageUrl ?? null };
+          payload = { ...payload, shopItemId: inv.itemId, imageUrl: sanitizePayloadImageUrl(inv.item.imageUrl ?? input.imageUrl) };
         }
         payload = { ...payload, itemType: input.itemType, quantity: qty, displayName: input.displayName ?? `${qty}x ${input.itemType}` };
       }
