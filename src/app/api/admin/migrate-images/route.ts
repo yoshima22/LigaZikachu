@@ -46,13 +46,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Diagnóstico rápido — conta quantos registros têm base64
-  const [shopBase64, shopNull, shopUrl, packsBase64, packsNull, packsUrl] = await Promise.all([
+  const [shopBase64, shopNull, shopUrl, packsBase64, packsNull, packsUrl, avatarsBase64, avatarsUrl] = await Promise.all([
     prisma.shopItem.count({ where: { imageUrl: { startsWith: "data:" } } }),
     prisma.shopItem.count({ where: { imageUrl: null } }),
     prisma.shopItem.count({ where: { AND: [{ imageUrl: { not: null } }, { NOT: { imageUrl: { startsWith: "data:" } } }] } }),
     prisma.stickerPack.count({ where: { imageUrl: { startsWith: "data:" } } }),
     prisma.stickerPack.count({ where: { imageUrl: null } }),
     prisma.stickerPack.count({ where: { AND: [{ imageUrl: { not: null } }, { NOT: { imageUrl: { startsWith: "data:" } } }] } }),
+    prisma.player.count({ where: { avatarUrl: { startsWith: "data:" } } }),
+    prisma.player.count({ where: { AND: [{ avatarUrl: { not: null } }, { NOT: { avatarUrl: { startsWith: "data:" } } }] } }),
   ]);
 
   const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -62,7 +64,8 @@ export async function GET(req: NextRequest) {
     env: { SUPABASE_SERVICE_ROLE_KEY: hasServiceKey ? "✅ configurada" : "❌ AUSENTE" },
     shop_items: { base64: shopBase64, null: shopNull, url: shopUrl },
     sticker_packs: { base64: packsBase64, null: packsNull, url: packsUrl },
-    total_to_migrate: shopBase64 + packsBase64,
+    player_avatars: { base64: avatarsBase64, url: avatarsUrl },
+    total_to_migrate: shopBase64 + packsBase64 + avatarsBase64,
   });
 }
 
@@ -142,6 +145,40 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         results.push({ table: "sticker_packs", id: pack.id, name: pack.name, size: "?", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  }
+
+  // ── player avatars ──
+  if (!table || table === "avatars") {
+    const players = await prisma.player.findMany({
+      where: { avatarUrl: { startsWith: "data:" } },
+      select: { id: true, displayName: true, avatarUrl: true, userId: true },
+    });
+
+    for (const p of players) {
+      try {
+        const { buffer, mimeType, ext } = base64ToBuffer(p.avatarUrl!);
+        const storagePath = `avatars/${p.id}-${Date.now()}.${ext}`;
+        const sizeKb = (buffer.length / 1024).toFixed(0);
+
+        if (!dry) {
+          const { error: uploadError } = await supabase.storage
+            .from(BUCKET).upload(storagePath, buffer, { contentType: mimeType, upsert: true, cacheControl: "31536000" });
+          if (uploadError) throw new Error(uploadError.message);
+
+          const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+          await prisma.$transaction([
+            prisma.player.update({ where: { id: p.id }, data: { avatarUrl: data.publicUrl } }),
+            // users.image duplica o avatar — atualiza junto para não sobrar base64
+            prisma.user.update({ where: { id: p.userId }, data: { image: data.publicUrl } }),
+          ]);
+          results.push({ table: "players", id: p.id, name: p.displayName, size: `${sizeKb} kB`, url: data.publicUrl });
+        } else {
+          results.push({ table: "players", id: p.id, name: p.displayName, size: `${sizeKb} kB`, url: `[DRY] ${storagePath}` });
+        }
+      } catch (err) {
+        results.push({ table: "players", id: p.id, name: p.displayName, size: "?", error: err instanceof Error ? err.message : String(err) });
       }
     }
   }

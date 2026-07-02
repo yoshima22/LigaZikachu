@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { getStandbyUntilFromNotes, setStandbyUntilInNotes } from "@/lib/account-standby";
 import { retireArenaTeam } from "@/lib/arena-z";
+import { uploadAvatarToStorage } from "@/lib/avatar-storage";
 
 const MAX_WISHLIST_POKEMON = 9;
 
@@ -169,6 +170,18 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
     }
   }
 
+  // Avatar em base64 vai para o Storage — o banco guarda só a URL pública.
+  // Salvar o base64 direto na coluna multiplicava o egress em todo select.
+  let avatarUrl = data.avatarUrl || null;
+  if (avatarUrl?.startsWith("data:image/")) {
+    try {
+      avatarUrl = await uploadAvatarToStorage(player.id, avatarUrl);
+    } catch (err) {
+      console.error("[Perfil] avatar upload failed", { playerId: player.id, err });
+      return { error: "Falha ao enviar a imagem de avatar. Tente novamente." };
+    }
+  }
+
   await prisma.$transaction([
     prisma.player.update({
       where: { id: player.id },
@@ -176,14 +189,14 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
         displayName: data.displayName,
         ptcglNick: data.ptcglNick || null,
         popId: data.popId || null,
-        avatarUrl: data.avatarUrl || null,
+        avatarUrl,
       },
     }),
     prisma.user.update({
       where: { id: user.id },
       data: {
         name: data.displayName,
-        image: data.avatarUrl || null
+        image: avatarUrl
       }
     })
   ]);

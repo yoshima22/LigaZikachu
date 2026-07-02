@@ -1058,6 +1058,35 @@ export async function migrateImagesToStorageAction(dry: boolean): Promise<{
       }
     }
 
+    // player avatars — base64 na coluna avatarUrl multiplicava o egress em todo select
+    const avatarPlayers = await prisma.player.findMany({
+      where: { avatarUrl: { startsWith: "data:" } },
+      select: { id: true, displayName: true, avatarUrl: true, userId: true },
+    });
+
+    for (const p of avatarPlayers) {
+      try {
+        const { buffer, mimeType, ext } = parseBase64(p.avatarUrl!);
+        const storagePath = `avatars/${p.id}-${Date.now()}.${ext}`;
+        const sizeKb = `${(buffer.length / 1024).toFixed(0)} kB`;
+
+        if (!dry) {
+          const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, buffer, { contentType: mimeType, upsert: true, cacheControl: "31536000" });
+          if (uploadError) throw new Error(uploadError.message);
+          const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+          await prisma.$transaction([
+            prisma.player.update({ where: { id: p.id }, data: { avatarUrl: data.publicUrl } }),
+            prisma.user.update({ where: { id: p.userId }, data: { image: data.publicUrl } }),
+          ]);
+          results.push({ table: "players", id: p.id, name: p.displayName, size: sizeKb, url: data.publicUrl });
+        } else {
+          results.push({ table: "players", id: p.id, name: p.displayName, size: sizeKb, url: `[DRY] ${storagePath}` });
+        }
+      } catch (err) {
+        results.push({ table: "players", id: p.id, name: p.displayName, size: "?", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     return { dry, ok: results.filter(r => !r.error).length, errors: results.filter(r => r.error).length, results };
   } catch (err) {
     return { dry, ok: 0, errors: 0, results: [], error: err instanceof Error ? err.message : "Erro desconhecido" };
