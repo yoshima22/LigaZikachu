@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock } from "lucide-react";
@@ -117,6 +117,8 @@ export default function BazarListingPage(): React.JSX.Element {
   const [editWanted, setEditWanted] = useState("");
   const [bidAmount, setBidAmount] = useState("");
   const [auctionTimeLeft, setAuctionTimeLeft] = useState("");
+  // Evita chamar finalizeAuction repetidamente a cada tick do countdown
+  const finalizeRequestedRef = useRef(false);
 
   const reloadListing = useCallback(() => {
     getListing(id).then(raw => {
@@ -174,7 +176,8 @@ export default function BazarListingPage(): React.JSX.Element {
       const ms = endsAt.getTime() - Date.now();
       if (ms <= 0) {
         setAuctionTimeLeft("Encerrado");
-        if (listing.status === "ACTIVE") {
+        if (listing.status === "ACTIVE" && !finalizeRequestedRef.current) {
+          finalizeRequestedRef.current = true;
           finalizeAuction(listing.id).then(() => reloadListing());
         }
       } else {

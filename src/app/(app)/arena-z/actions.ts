@@ -207,7 +207,10 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
     const playerId = await getCurrentPlayerId();
     const battle = await prisma.arenaBattle.findUnique({
       where: { id: battleId },
-      include: {
+      select: {
+        result: true, rounds: true, createdAt: true,
+        attackerPlayerId: true, defenderPlayerId: true,
+        lootResult: true, turnLog: true, injuredMascotIds: true,
         attackerPlayer: { select: { displayName: true, ptcglNick: true } },
         defenderPlayer: { select: { displayName: true, ptcglNick: true } },
       },

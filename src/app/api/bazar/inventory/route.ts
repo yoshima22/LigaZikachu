@@ -28,7 +28,7 @@ export async function GET() {
     const session = await getAppSession();
     if (!session?.user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
-    const player = await prisma.player.findUnique({ where: { userId: session.user.id } });
+    const player = await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } });
     if (!player) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
 
     const [mascots, eggs, foods, inventoryItems, wallet, config] = await Promise.all([

@@ -775,12 +775,14 @@ export async function getRoomsData(viewerPlayerId?: string) {
   const teams = await getActiveArenaTeams();
 
   // Times que o viewer já lutou (para revelar nomes dos pokémons)
+  // distinct: uma linha por time enfrentado em vez de até 500 batalhas
   const revealedTeamIds = new Set<string>();
   if (viewerPlayerId) {
     const foughtBattles = await prisma.arenaBattle.findMany({
-      where: { attackerPlayerId: viewerPlayerId, type: { in: ["PVP"] } },
+      where: { attackerPlayerId: viewerPlayerId, type: { in: ["PVP"] }, defenseTeamId: { not: null } },
       select: { defenseTeamId: true },
-      take: 500,
+      distinct: ["defenseTeamId"],
+      take: 200,
     });
     foughtBattles.forEach(b => { if (b.defenseTeamId) revealedTeamIds.add(b.defenseTeamId); });
   }

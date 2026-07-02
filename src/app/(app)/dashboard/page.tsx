@@ -2,7 +2,7 @@ import { unstable_cache } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
-import { computePlayerRanking } from "@/lib/ranking";
+import { getCachedPlayerRanking } from "@/lib/ranking-cache";
 import { getManualSessionUser } from "@/lib/manual-session";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -289,10 +289,12 @@ export default async function DashboardPage() {
     : [];
 
   // ── RANKING (temporada ativa ou primeiro torneio) ─────────────────────────
+  // Cacheado 5 min (tag "ranking", invalidada ao confirmar partidas) —
+  // antes recomputava o ranking inteiro da temporada em todo load do dashboard
   const ranking = seasonId
-    ? await computePlayerRanking(seasonId).catch((error) => {
+    ? await getCachedPlayerRanking(seasonId).catch((error) => {
         console.error("[Dashboard] ranking compute failed", { userId: user.id, playerId: player.id, seasonId, error });
-        return [] as Awaited<ReturnType<typeof computePlayerRanking>>;
+        return [] as Awaited<ReturnType<typeof getCachedPlayerRanking>>;
       })
     : [];
   const myEntry = ranking.find(r => r.playerId === player.id);

@@ -156,6 +156,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const needsMascotRoster = activeTab === "equipes" || activeTab === "montar" || activeTab === "sus";
   const needsBattleHistory = activeTab === "historico";
   const needsSusData = activeTab === "sus";
+  // Salas, ranking e times oponentes só aparecem na tab "salas" — evita
+  // buscar esses dados (alguns não cacheados) nas outras 5 tabs.
+  const needsRoomsData = activeTab === "salas";
 
   const [wallet, mascots, injuredMascotCount, teams, allActiveTeams, battles, recentIncomingBattle, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
@@ -191,7 +194,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       },
       orderBy: { createdAt: "desc" },
     }),
-    getCachedOpponentTeams(),
+    needsRoomsData ? getCachedOpponentTeams() : Promise.resolve([] as Awaited<ReturnType<typeof getCachedOpponentTeams>>),
     needsBattleHistory
       ? Promise.all([
           prisma.arenaBattle.findMany({
@@ -247,7 +250,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       },
       orderBy: { createdAt: "desc" },
     }),
-    getArenaRanking(20),
+    needsRoomsData ? getArenaRanking(20) : Promise.resolve([] as Awaited<ReturnType<typeof getArenaRanking>>),
     prisma.arenaTeam.findFirst({
       where: { playerId: player.id, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
       orderBy: { retiredAt: "desc" },
@@ -264,7 +267,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           take: 10,
         })
       : Promise.resolve([]),
-    getRoomsData(player.id).catch(() => ({ rooms: ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] })), trainingRoom: { roomLevel: 0, isTraining: true, teamCount: 0, teams: [] as never[] } })),
+    needsRoomsData
+      ? getRoomsData(player.id).catch(() => ({ rooms: ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] })), trainingRoom: { roomLevel: 0, isTraining: true, teamCount: 0, teams: [] as never[] } }))
+      : Promise.resolve({ rooms: ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] })), trainingRoom: { roomLevel: 0, isTraining: true, teamCount: 0, teams: [] as never[] } }),
     getTopArenaPlayers().catch(() => [] as never[]),
   ]);
 
@@ -314,11 +319,12 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const readyOpponentTeams = opponentTeams.filter(t => !getTeamBlockedReason(t));
 
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
-  for (const team of activeTab === "equipes" ? readyActiveTeams : []) {
+  await Promise.all((activeTab === "equipes" ? readyActiveTeams : []).map(async (team) => {
     botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
-  }
+  }));
   const pvpCooldowns = new Map<string, Date | null>();
-  await Promise.all(readyActiveTeams.map(async (team) => {
+  // Só usado nos botões de ataque da tab "salas"
+  await Promise.all((needsRoomsData ? readyActiveTeams : []).map(async (team) => {
     const lastPvp = await prisma.arenaBattle.findFirst({
       where: { type: "PVP", attackTeamId: team.id },
       orderBy: { createdAt: "desc" },

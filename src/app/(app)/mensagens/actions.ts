@@ -76,10 +76,12 @@ export async function getConversationAction(otherPlayerId: string) {
       },
       orderBy: { createdAt: "asc" },
       take: 50,
+      // sender join removido: numa conversa 1-a-1 os dois participantes são
+      // conhecidos — repetir avatar (potencialmente base64) por mensagem
+      // multiplicava o egress por 50.
       select: {
         id: true, content: true, createdAt: true, readAt: true,
         senderId: true, attachmentType: true, attachmentData: true,
-        sender: { select: { displayName: true, avatarUrl: true } },
       },
     }),
     prisma.player.findUnique({
@@ -129,12 +131,28 @@ export async function sendMessageAction(
     select: {
       id: true, content: true, createdAt: true, senderId: true,
       attachmentType: true, attachmentData: true,
-      sender: { select: { displayName: true, avatarUrl: true } },
     },
   });
 
   const [message] = await hydrateItemAttachments([msg]);
-  return { ok: true as const, message };
+  return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
+}
+
+/** Busca dados dos remetentes uma única vez (em vez de repetir o join — e o
+ *  avatar potencialmente base64 — em cada linha de mensagem). */
+async function attachSenders<T extends { senderId: string }>(messages: T[]) {
+  const senderIds = [...new Set(messages.map((m) => m.senderId))];
+  const senders = senderIds.length > 0
+    ? await prisma.player.findMany({
+        where: { id: { in: senderIds } },
+        select: { id: true, displayName: true, avatarUrl: true },
+      })
+    : [];
+  const byId = new Map(senders.map((s) => [s.id, { displayName: s.displayName, avatarUrl: s.avatarUrl }]));
+  return messages.map((m) => ({
+    ...m,
+    sender: byId.get(m.senderId) ?? { displayName: "?", avatarUrl: null },
+  }));
 }
 
 export async function getGeneralChatAction() {
@@ -146,11 +164,10 @@ export async function getGeneralChatAction() {
       select: {
         id: true, content: true, createdAt: true, senderId: true,
         attachmentType: true, attachmentData: true,
-        sender: { select: { displayName: true, avatarUrl: true } },
       },
     });
 
-    return { ok: true as const, me, messages: await hydrateItemAttachments(messages) };
+    return { ok: true as const, me, messages: await hydrateItemAttachments(await attachSenders(messages)) };
   } catch {
     return { ok: true as const, me, messages: [] };
   }
@@ -173,12 +190,11 @@ export async function sendGeneralMessageAction(content: string, attachment?: Att
       select: {
         id: true, content: true, createdAt: true, senderId: true,
         attachmentType: true, attachmentData: true,
-        sender: { select: { displayName: true, avatarUrl: true } },
       },
     });
 
     const [message] = await hydrateItemAttachments([msg]);
-    return { ok: true as const, message };
+    return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
   } catch {
     return { ok: false as const, error: "Chat geral ainda nao esta disponivel. Aplique o schema do banco e tente novamente." };
   }
@@ -331,10 +347,10 @@ export async function pollNewMessagesAction(otherPlayerId: string, afterIso: str
     },
     orderBy: { createdAt: "asc" },
     take: 50,
+    // sender join removido: o cliente já conhece os dois participantes
     select: {
       id: true, content: true, createdAt: true, senderId: true,
       attachmentType: true, attachmentData: true,
-      sender: { select: { displayName: true, avatarUrl: true } },
     },
   });
 
@@ -363,11 +379,10 @@ export async function pollGeneralMessagesAction(afterIso: string) {
       select: {
         id: true, content: true, createdAt: true, senderId: true,
         attachmentType: true, attachmentData: true,
-        sender: { select: { displayName: true, avatarUrl: true } },
       },
     });
 
-    return { ok: true as const, messages: await hydrateItemAttachments(messages) };
+    return { ok: true as const, messages: await hydrateItemAttachments(await attachSenders(messages)) };
   } catch {
     return { ok: true as const, messages: [] };
   }

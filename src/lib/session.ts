@@ -60,9 +60,11 @@ export const getAppSession = cache(resolveAppSession);
  * Uso: `const player = await getSessionPlayer()` em qualquer server component ou action.
  */
 export const getSessionPlayer = cache(async (userId: string) => {
+  // avatarUrl removido do select: pode ser base64 de até 1,2MB e esta função
+  // roda em praticamente toda server action (egress desnecessário).
   return prisma.player.findUnique({
     where: { userId },
-    select: { id: true, displayName: true, ptcglNick: true, avatarUrl: true },
+    select: { id: true, displayName: true, ptcglNick: true },
   }).catch((error) => {
     console.error("[Session] player lookup failed", { userId, error });
     return null;
