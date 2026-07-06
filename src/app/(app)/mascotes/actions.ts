@@ -892,6 +892,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; isShiny: boolean;
+    ivRating: string | null; ivScore: number | null;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
@@ -937,6 +938,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         lastPettedAt: m.lastPettedAt,
         lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
         evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, isShiny: m.isShiny,
+        ivRating: m.ivRating, ivScore: m.ivScore,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,

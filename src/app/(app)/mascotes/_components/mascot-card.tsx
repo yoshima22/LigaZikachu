@@ -761,10 +761,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 <span className="font-bold text-white truncate">{name}</span>
                 {mascot.ivRating && (
                   <span
-                    className={`shrink-0 inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}
-                    title={`Análise do Laboratório: ranking ${mascot.ivRating} · potencial ${mascot.ivScore ?? "?"}%`}
+                    className={`shrink-0 inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}
+                    title={`Análise do Laboratório: ranking ${mascot.ivRating} · potencial ${mascot.ivScore ?? "?"}%. Reanalise no Laboratório para atualizar.`}
                   >
-                    {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}
+                    IV {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}
                   </span>
                 )}
                 <button
