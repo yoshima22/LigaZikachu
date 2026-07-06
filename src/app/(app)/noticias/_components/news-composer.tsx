@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ImageIcon, Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { ImageUpload } from "@/components/ui/image-upload";
@@ -36,6 +37,7 @@ function insertMarkup(body: string, setBody: (value: string) => void, markup: st
 }
 
 export function NewsComposer() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [body, setBody] = useState("");
@@ -56,30 +58,39 @@ export function NewsComposer() {
 
   function submit() {
     startTransition(async () => {
-      const result = await createNewsPost({
-        title,
-        subtitle,
-        body,
-        imageUrl,
-        published: true,
-        rewardKind,
-        rewardAmount,
-        rewardType,
-        rewardTitle,
-      });
-      if (result?.error) {
-        toast.error(result.error);
-        return;
+      try {
+        if (title.trim().length < 3 || body.trim().length < 10) {
+          toast.error("Preencha titulo e texto da noticia.");
+          return;
+        }
+        const result = await createNewsPost({
+          title,
+          subtitle,
+          body,
+          imageUrl,
+          published: true,
+          rewardKind,
+          rewardAmount,
+          rewardType,
+          rewardTitle,
+        });
+        if (result?.error) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Noticia publicada.");
+        setTitle("");
+        setSubtitle("");
+        setBody("");
+        setImageUrl("");
+        setRewardKind("NONE");
+        setRewardAmount(1);
+        setRewardType("");
+        setRewardTitle("");
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Erro ao publicar noticia.");
       }
-      toast.success("Noticia publicada.");
-      setTitle("");
-      setSubtitle("");
-      setBody("");
-      setImageUrl("");
-      setRewardKind("NONE");
-      setRewardAmount(1);
-      setRewardType("");
-      setRewardTitle("");
     });
   }
 

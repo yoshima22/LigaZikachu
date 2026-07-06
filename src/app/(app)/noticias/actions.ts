@@ -15,7 +15,7 @@ const newsSchema = z.object({
   title: z.string().trim().min(3, "Titulo muito curto.").max(120),
   subtitle: z.string().trim().max(180).optional().or(z.literal("")),
   body: z.string().trim().min(10, "Texto muito curto.").max(12000),
-  imageUrl: z.string().trim().max(600000).optional().or(z.literal("")),
+  imageUrl: z.string().trim().max(12_000_000, "Imagem muito grande. Tente uma imagem menor.").optional().or(z.literal("")),
   published: z.coerce.boolean().default(true),
   rewardKind: rewardKindSchema.default("NONE"),
   rewardAmount: z.coerce.number().int().min(0).max(100000).default(0),
@@ -93,6 +93,10 @@ export async function createNewsPost(raw: z.infer<typeof newsSchema>) {
     revalidateNews();
     return { ok: true };
   } catch (error) {
+    console.error("[News] create post failed", error);
+    if (error instanceof z.ZodError) {
+      return { error: error.errors.map((issue) => issue.message).join(" ") || "Dados invalidos." };
+    }
     return { error: error instanceof Error ? error.message : "Erro ao publicar noticia." };
   }
 }
