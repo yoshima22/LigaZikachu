@@ -1335,6 +1335,57 @@ export async function purgeAdminArenaData(): Promise<{ teams: number; battles: n
   return { teams: teamsRemoved, battles: deletedBattles.count };
 }
 
+/** Admin: lista todas as equipes (de qualquer jogador) para o painel de remoção. */
+export async function listAllArenaTeamsForAdmin() {
+  const teams = await prisma.arenaTeam.findMany({
+    where: { status: { in: ["ACTIVE", "DEFEATED"] } },
+    select: {
+      id: true, name: true, status: true, roomLevel: true, isTraining: true,
+      vaultCoins: true, enteredAt: true,
+      player: { select: { displayName: true } },
+      _count: { select: { members: true } },
+    },
+    orderBy: [{ isTraining: "asc" }, { roomLevel: "asc" }, { enteredAt: "asc" }],
+    take: 500,
+  });
+  return teams.map(t => ({
+    id: t.id,
+    name: t.name,
+    status: t.status,
+    roomLevel: t.roomLevel,
+    isTraining: t.isTraining,
+    vaultCoins: t.vaultCoins,
+    playerName: t.player.displayName,
+    memberCount: t._count.members,
+  }));
+}
+
+/** Admin: remove TODAS as equipes da arena (qualquer jogador), liberando mascotes.
+ *  Não credita cofres — é uma limpeza administrativa. */
+export async function deleteAllArenaTeams(): Promise<{ teams: number }> {
+  const teams = await prisma.arenaTeam.findMany({
+    where: { status: { in: ["ACTIVE", "DEFEATED"] } },
+    include: { members: { select: { mascotId: true } } },
+  });
+  let removed = 0;
+  // Processa em lotes para não estourar uma única transação
+  const BATCH = 20;
+  for (let i = 0; i < teams.length; i += BATCH) {
+    const batch = teams.slice(i, i + BATCH);
+    await prisma.$transaction(async (tx) => {
+      for (const team of batch) {
+        await tx.mascot.updateMany({
+          where: { id: { in: team.members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
+          data: { arenaState: "FREE", restingUntil: null },
+        });
+        await tx.arenaTeam.delete({ where: { id: team.id } });
+        removed++;
+      }
+    });
+  }
+  return { teams: removed };
+}
+
 export async function retireArenaTeam(playerId: string, teamId: string) {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },

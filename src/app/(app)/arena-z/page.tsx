@@ -14,7 +14,7 @@ import {
   getCachedDbReady, getCachedOpponentTeams, cleanupExpiredArenaResting,
 } from "@/lib/arena-z";
 import {
-  AdminMascotStateButton, BotBattleButton, DeleteTeamButton,
+  AdminMascotStateButton, AdminArenaTeamManager, BotBattleButton, DeleteTeamButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge,
   RetireTeamButton, SusButton, SusShieldButton,
@@ -1021,6 +1021,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               <div className="flex flex-wrap gap-2 mb-4">
                 <RepairArenaButton />
                 <PurgeAdminArenaButton />
+              </div>
+              <div className="mb-4">
+                <AdminArenaTeamManager />
               </div>
               <div className="max-h-72 space-y-2 overflow-y-auto">
                 {mascots.slice(0, 20).map(m => (

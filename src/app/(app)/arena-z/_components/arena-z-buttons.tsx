@@ -15,6 +15,8 @@ import {
   lockBotAction,
   markPvpDefenseSeenAction,
   purgeAdminArenaDataAction,
+  listAllArenaTeamsAction,
+  deleteAllArenaTeamsAction,
   retireArenaTeamAction,
   runBotBattleAction,
   runOpportunisticAttackAction,
@@ -1018,6 +1020,118 @@ export function PurgeAdminArenaButton() {
     >
       {pending ? "Limpando…" : "🧹 Limpar dados de admin da Arena"}
     </button>
+  );
+}
+
+type AdminArenaTeam = {
+  id: string; name: string; status: string; roomLevel: number | null;
+  isTraining: boolean; vaultCoins: number; playerName: string; memberCount: number;
+};
+
+export function AdminArenaTeamManager() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [loading, setLoading] = useState(false);
+  const [teams, setTeams] = useState<AdminArenaTeam[] | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    startTransition(async () => {
+      const r = await listAllArenaTeamsAction();
+      setLoading(false);
+      if (r.error) { toast.error(r.error); return; }
+      setTeams(r.teams ?? []);
+    });
+  };
+
+  const removeOne = (team: AdminArenaTeam) => {
+    if (!confirm(`Remover a equipe "${team.name}" de ${team.playerName}? Os mascotes voltam ao banco (feridos continuam feridos). O cofre não é creditado.`)) return;
+    startTransition(async () => {
+      const r = await deleteArenaTeamAction(team.id);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success("Equipe removida.");
+      setTeams(prev => prev?.filter(t => t.id !== team.id) ?? null);
+      router.refresh();
+    });
+  };
+
+  const removeAll = () => {
+    const count = teams?.length ?? 0;
+    if (!confirm(`Remover TODAS as ${count} equipes da Arena (de todos os jogadores)? Os mascotes voltam ao banco. Cofres NÃO são creditados. Ação irreversível.`)) return;
+    startTransition(async () => {
+      const r = await deleteAllArenaTeamsAction();
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(`${r.teams} equipe(s) removida(s) da Arena.`);
+      setTeams([]);
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className="space-y-2 w-full">
+      {teams === null ? (
+        <button
+          type="button"
+          disabled={loading || pending}
+          onClick={load}
+          className="w-full rounded-xl border border-slate-600/40 bg-slate-800/40 px-3 py-2 text-xs font-bold text-slate-300 hover:border-red-500/40 hover:text-red-300 disabled:opacity-50"
+        >
+          {loading ? "Carregando…" : "🗂 Gerenciar equipes da Arena (todos os jogadores)"}
+        </button>
+      ) : (
+        <div className="rounded-xl border border-border/60 bg-slate-900/40 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-200">{teams.length} equipe(s) na Arena</p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={load}
+                className="rounded-lg border border-slate-600/40 bg-slate-800/40 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-50"
+              >
+                ↻ Atualizar
+              </button>
+              {teams.length > 0 && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={removeAll}
+                  className="rounded-lg border border-red-600/40 bg-red-600/10 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-600/20 disabled:opacity-50"
+                >
+                  🗑 Remover todas
+                </button>
+              )}
+            </div>
+          </div>
+          {teams.length === 0 ? (
+            <p className="text-[11px] text-slate-500">Nenhuma equipe na Arena.</p>
+          ) : (
+            <div className="max-h-72 space-y-1.5 overflow-y-auto">
+              {teams.map(team => (
+                <div key={team.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-slate-950/40 px-2.5 py-1.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-semibold text-slate-200">{team.name}</p>
+                    <p className="truncate text-[10px] text-slate-500">
+                      {team.playerName} · {team.isTraining ? "Treino" : `Sala ${team.roomLevel}`} · {team.memberCount} mascote(s)
+                      {team.status === "DEFEATED" ? " · derrotada" : ""}
+                      {team.vaultCoins > 0 ? ` · ${team.vaultCoins} ZC no cofre` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => removeOne(team)}
+                    className="shrink-0 rounded-lg border border-slate-600/40 bg-slate-800/40 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:border-red-500/40 hover:text-red-400 disabled:opacity-50"
+                  >
+                    🗑 Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

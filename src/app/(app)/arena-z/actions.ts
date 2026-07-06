@@ -17,6 +17,8 @@ import {
   healMascotSus,
   lockBotForTeam,
   purgeAdminArenaData,
+  listAllArenaTeamsForAdmin,
+  deleteAllArenaTeams,
   retireArenaTeam,
   runBotBattle,
   runOpportunisticAttack,
@@ -335,6 +337,30 @@ export async function purgeAdminArenaDataAction(): Promise<{ error?: string; tea
     return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro na limpeza." };
+  }
+}
+
+export async function listAllArenaTeamsAction(): Promise<{
+  error?: string;
+  teams?: Awaited<ReturnType<typeof listAllArenaTeamsForAdmin>>;
+}> {
+  try {
+    await requireAdmin();
+    const teams = await listAllArenaTeamsForAdmin();
+    return { teams };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao listar equipes." };
+  }
+}
+
+export async function deleteAllArenaTeamsAction(): Promise<{ error?: string; teams?: number }> {
+  try {
+    await requireAdmin();
+    const result = await deleteAllArenaTeams();
+    revalidateTag("arena-active-teams");
+    return result;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao remover equipes." };
   }
 }
 
