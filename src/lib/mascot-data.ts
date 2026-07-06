@@ -402,7 +402,7 @@ export const EVOLUTIONS: Evolution[] = [
   { from: 610, to: 611, level: 38 }, { from: 611, to: 612, level: 48 },
   { from: 613, to: 614, level: 37 },
   { from: 619, to: 620, level: 50 },
-  { from: 624, to: 625, level: 52 }, { from: 625, to: 983, level: 52 }, // Bisharp -> Kingambit
+  { from: 624, to: 625, level: 52 }, { from: 625, to: 983, level: 64 }, // Pawniard -> Bisharp -> Kingambit
   { from: 633, to: 634, level: 50 }, { from: 634, to: 635, level: 64 },
   { from: 636, to: 637, level: 59 },
   // Gen 6
