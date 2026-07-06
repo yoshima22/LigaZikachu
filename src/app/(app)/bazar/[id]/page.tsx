@@ -177,8 +177,19 @@ export default function BazarListingPage(): React.JSX.Element {
       if (ms <= 0) {
         setAuctionTimeLeft("Encerrado");
         if (listing.status === "ACTIVE" && !finalizeRequestedRef.current) {
+          // Trava só enquanto a requisição está em voo. Se o servidor ainda não
+          // considerar o leilão encerrado (defasagem de relógio) ou der erro,
+          // libera o ref para tentar de novo no próximo tick de 1s.
           finalizeRequestedRef.current = true;
-          finalizeAuction(listing.id).then(() => reloadListing());
+          finalizeAuction(listing.id)
+            .then((r) => {
+              if (r?.finalized) {
+                reloadListing();
+              } else {
+                finalizeRequestedRef.current = false;
+              }
+            })
+            .catch(() => { finalizeRequestedRef.current = false; });
         }
       } else {
         const h = Math.floor(ms / 3_600_000);
