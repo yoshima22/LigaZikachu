@@ -30,11 +30,35 @@ export function RatingBadge({ rating, score, size = "md" }: { rating: string; sc
   );
 }
 
+// Bolha de explicação no hover. Coloque em qualquer elemento com "group/tip relative".
+function TipBubble({ text, align = "center" }: { text: string; align?: "left" | "center" | "right" }) {
+  const pos = align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2";
+  const arrow = align === "left" ? "left-4" : align === "right" ? "right-4" : "left-1/2 -translate-x-1/2";
+  return (
+    <span className={`pointer-events-none absolute bottom-full z-50 mb-1.5 w-56 rounded-lg border border-border bg-slate-900 px-2.5 py-1.5 text-left text-[10px] font-normal normal-case leading-relaxed text-slate-300 opacity-0 shadow-xl transition-opacity group-hover/tip:opacity-100 ${pos}`}>
+      {text}
+      <span className={`absolute top-full border-4 border-transparent border-t-slate-900 ${arrow}`} />
+    </span>
+  );
+}
+
+// Explicação de cada atributo (o que faz em combate)
+const STAT_TIPS: Record<string, string> = {
+  "Força": "Poder de ataque bruto. É a base do papel Atacante e aumenta o dano causado.",
+  "Agilidade": "Velocidade e evasão. Base do Flanco: ajuda a furar defesas e a agir primeiro.",
+  "Carisma": "Presença e liderança. Base do Encorajador: fortalece buffs de equipe e curas.",
+  "Instinto": "Percepção e reflexos. Base do Oportunista: melhora precisão, crítico e sabotagem.",
+  "Vitalidade": "Resistência e vida. Base do Defensor: reduz o dano recebido e aumenta o HP.",
+};
+
 function StatBar({ label, current, projected, delta }: { label: string; current: number; projected: number; delta: number }) {
   const max = Math.max(projected, 1);
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-16 shrink-0 text-slate-400">{label}</span>
+      <span className="group/tip relative w-16 shrink-0 cursor-help text-slate-400 underline decoration-dotted decoration-slate-600">
+        {label}
+        {STAT_TIPS[label] && <TipBubble text={STAT_TIPS[label]} align="left" />}
+      </span>
       <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-800">
         <div className="absolute inset-y-0 left-0 rounded-full bg-slate-600" style={{ width: `${(current / max) * 100}%` }} />
         <div className="absolute inset-y-0 rounded-full bg-cyan-500/70" style={{ left: `${(current / max) * 100}%`, width: `${(delta / max) * 100}%` }} />
@@ -225,21 +249,24 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
       {/* Rating + potencial + veredito */}
       <div className={`rounded-2xl border p-4 ${style.border} ${style.bg}`}>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <div className="text-center">
+          <div className="group/tip relative cursor-help text-center">
             <p className="text-[10px] uppercase tracking-widest text-slate-400">Ranking</p>
             <p className={`font-pixel text-3xl leading-tight ${style.text}`}>{a.ivRating}</p>
+            <TipBubble align="left" text="Nota geral de SSS (elite) a E (fraco). Resume o potencial do mascote combinando roll inicial, bônus da espécie e evoluções." />
           </div>
           <div className="hidden h-10 w-px bg-slate-700 sm:block" />
-          <div className="text-center">
+          <div className="group/tip relative cursor-help text-center">
             <p className="text-[10px] uppercase tracking-widest text-slate-400">Potencial (IV)</p>
             <p className={`text-2xl font-bold ${style.text}`}>{a.ivScore}%</p>
+            <TipBubble text="Pontuação de 0 a 100 do potencial futuro. É a base que define o ranking: quanto maior, melhor o teto do mascote." />
           </div>
           {typeof a.projectedPower === "number" && (
             <>
               <div className="hidden h-10 w-px bg-slate-700 sm:block" />
-              <div className="text-center">
+              <div className="group/tip relative cursor-help text-center">
                 <p className="text-[10px] uppercase tracking-widest text-slate-400">Poder Nv.{a.targetLevel}</p>
                 <p className="text-2xl font-bold text-slate-100">{a.projectedPower}</p>
+                <TipBubble text="Estimativa do poder de combate no nível-alvo, ponderando todos os atributos projetados (Força e Vitalidade pesam mais)." />
               </div>
             </>
           )}
@@ -249,17 +276,20 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
 
       {/* Detalhamento do potencial */}
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
-        <div className="rounded-xl border border-border bg-slate-950/40 p-2">
+        <div className="group/tip relative cursor-help rounded-xl border border-border bg-slate-950/40 p-2">
           <p className="text-slate-500">Roll inicial</p>
           <p className="font-bold text-slate-200">{a.rollQualityPct}%</p>
+          <TipBubble align="left" text="Qualidade dos atributos sorteados ao nascer, comparada ao máximo possível. Alto = o mascote teve 'sorte' na criação. É o fator individual — o único que varia entre mascotes da mesma espécie." />
         </div>
-        <div className="rounded-xl border border-border bg-slate-950/40 p-2">
+        <div className="group/tip relative cursor-help rounded-xl border border-border bg-slate-950/40 p-2">
           <p className="text-slate-500">Espécie</p>
           <p className="font-bold text-slate-200">{a.speciesPotentialPct}%</p>
+          <TipBubble text="Bônus de crescimento da espécie. Lendários crescem 30% mais rápido; pseudo-lendários e paradoxos 10%. Espécies comuns não têm bônus (0%)." />
         </div>
-        <div className="rounded-xl border border-border bg-slate-950/40 p-2">
+        <div className="group/tip relative cursor-help rounded-xl border border-border bg-slate-950/40 p-2">
           <p className="text-slate-500">Evoluções</p>
           <p className="font-bold text-slate-200">{a.evoPotentialPct}%</p>
+          <TipBubble align="right" text="Evoluções ainda restantes na linha. Cada evolução concede marcos de atributos, elevando o teto de poder. Linha completa de 3 estágios = 100%." />
         </div>
       </div>
 
@@ -277,7 +307,10 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
       <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
         <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
           <TrendingUp size={13} className="text-cyan-400" />
-          <span>Projeção Nv.{a.currentLevel} → Nv.{a.targetLevel}</span>
+          <span className="group/tip relative cursor-help underline decoration-dotted decoration-slate-600">
+            Projeção Nv.{a.currentLevel} → Nv.{a.targetLevel}
+            <TipBubble align="left" text="Como os atributos devem crescer do nível atual até o nível-alvo. A barra cinza é o valor atual; a parte ciano é o ganho estimado. Passe o mouse em cada atributo para ver o que ele faz." />
+          </span>
           <span className="ml-auto text-slate-500">Total {a.currentTotal} → <span className="text-cyan-300">{a.projectedTotal}</span></span>
         </div>
         <div className="space-y-1.5">
@@ -289,11 +322,15 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
       {roleSuggestions.length > 0 && (
         <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
-            <Swords size={13} className="text-red-400" /> Funções de combate recomendadas
+            <Swords size={13} className="text-red-400" />
+            <span className="group/tip relative cursor-help underline decoration-dotted decoration-slate-600">
+              Funções de combate recomendadas
+              <TipBubble align="left" text="Papéis da Arena que melhor aproveitam os atributos projetados deste mascote, do mais indicado ao menos. Passe o mouse em cada um para ver o efeito completo." />
+            </span>
           </p>
           <div className="grid gap-2 sm:grid-cols-3">
             {roleSuggestions.map((r, i) => (
-              <div key={r.role} className={`rounded-xl border p-3 ${i === 0 ? "border-purple-400/40 bg-purple-500/10" : "border-border bg-slate-900/40"}`}>
+              <div key={r.role} className={`group/tip relative cursor-help rounded-xl border p-3 ${i === 0 ? "border-purple-400/40 bg-purple-500/10" : "border-border bg-slate-900/40"}`}>
                 <div className="flex items-center justify-between">
                   <p className="flex items-center gap-1.5 text-sm font-bold text-slate-100">
                     {i === 0 && <Shield size={12} className="text-purple-300" />}{r.label}
@@ -301,6 +338,7 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
                   <span className="text-xs font-bold text-cyan-300">{r.value}</span>
                 </div>
                 <p className="text-[10px] text-slate-500">{r.statLabel} é o atributo principal.</p>
+                {r.description && <TipBubble align={i === 0 ? "left" : i === roleSuggestions.length - 1 ? "right" : "center"} text={r.description} />}
               </div>
             ))}
           </div>
