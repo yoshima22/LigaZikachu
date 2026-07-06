@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useTransition } from "react";
-import { CheckCircle2, Gift, Loader2, Newspaper } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { CheckCircle2, Edit3, Gift, Loader2, Newspaper, Save, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { claimNewsReward, markNewsPostsRead } from "../actions";
+import { ImageUpload } from "@/components/ui/image-upload";
+import { claimNewsReward, markNewsPostsRead, updateNewsPost } from "../actions";
 
 export type NewsPostView = {
   id: string;
@@ -15,9 +17,34 @@ export type NewsPostView = {
   rewardEnabled: boolean;
   rewardTitle: string | null;
   rewardSummary: string | null;
+  rewardForm: { rewardKind: string; rewardAmount: number; rewardType: string };
   rewardClaimed: boolean;
   unread: boolean;
 };
+
+const rewardKinds = [
+  { value: "NONE", label: "Sem recompensa" },
+  { value: "ZIKA_COINS", label: "ZikaCoins" },
+  { value: "MASCOT_EGG", label: "Ovo de mascote" },
+  { value: "MASCOT_FOOD", label: "Comida/Doce" },
+  { value: "MASCOT_BUFF", label: "Item da loja" },
+] as const;
+
+const eggTypes = ["COMMON", "RARE", "SPECIAL", "EVENT", "GEN1", "GEN2", "GEN3", "GEN4", "GEN5", "GEN6", "GEN7", "GEN8", "GEN9"];
+const foodTypes = [
+  { value: "FOOD", label: "Comida" },
+  { value: "SWEET", label: "Doce" },
+];
+const buffTypes = [
+  { value: "MASCOT_BUFF_EXP", label: "Buff de EXP" },
+  { value: "MASCOT_BUFF_STAT", label: "Buff de atributo" },
+  { value: "MASCOT_BUFF_HAPPY", label: "Buff de felicidade" },
+  { value: "MASCOT_BUFF_LUCK", label: "Buff de sorte" },
+  { value: "MASCOT_BUFF_MOOD", label: "Buff de humor" },
+  { value: "LUCKY_EGG", label: "Lucky Egg" },
+  { value: "PICNIC_BASKET", label: "Cesta de Picnic" },
+  { value: "XP_SHARE", label: "XP Share" },
+];
 
 function inlineParts(text: string) {
   const parts: Array<{ type: "text" | "bold" | "link"; value: string; href?: string }> = [];
@@ -74,8 +101,10 @@ function NewsBody({ body }: { body: string }) {
   );
 }
 
-export function NewsList({ posts }: { posts: NewsPostView[] }) {
+export function NewsList({ posts, admin = false }: { posts: NewsPostView[]; admin?: boolean }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const unreadIds = useMemo(() => posts.filter((post) => post.unread).map((post) => post.id), [posts]);
 
   useEffect(() => {
@@ -108,6 +137,10 @@ export function NewsList({ posts }: { posts: NewsPostView[] }) {
     <section className="space-y-4">
       {posts.map((post) => (
         <article key={post.id} className="overflow-hidden rounded-2xl border border-[#FFCB05]/15 bg-slate-950/75 shadow-lg shadow-black/20">
+          {editingId === post.id ? (
+            <NewsEditForm post={post} onCancel={() => setEditingId(null)} onSaved={() => { setEditingId(null); router.refresh(); }} />
+          ) : (
+          <>
           {post.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={post.imageUrl} alt="" className="max-h-[560px] w-full bg-slate-950 object-contain" loading="lazy" />
@@ -129,6 +162,16 @@ export function NewsList({ posts }: { posts: NewsPostView[] }) {
                   <CheckCircle2 className="h-3 w-3" />
                   Lida
                 </span>
+              )}
+              {admin && (
+                <button
+                  type="button"
+                  onClick={() => setEditingId(post.id)}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#FFCB05]/25 bg-[#FFCB05]/10 px-2 py-1 text-[11px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20"
+                >
+                  <Edit3 className="h-3 w-3" />
+                  Editar
+                </button>
               )}
             </div>
 
@@ -160,8 +203,98 @@ export function NewsList({ posts }: { posts: NewsPostView[] }) {
               </div>
             )}
           </div>
+          </>
+          )}
         </article>
       ))}
     </section>
+  );
+}
+
+function NewsEditForm({ post, onCancel, onSaved }: { post: NewsPostView; onCancel: () => void; onSaved: () => void }) {
+  const [title, setTitle] = useState(post.title);
+  const [subtitle, setSubtitle] = useState(post.subtitle ?? "");
+  const [body, setBody] = useState(post.body);
+  const [imageUrl, setImageUrl] = useState(post.imageUrl ?? "");
+  const [rewardKind, setRewardKind] = useState(post.rewardForm.rewardKind || "NONE");
+  const [rewardAmount, setRewardAmount] = useState(post.rewardForm.rewardAmount || 1);
+  const [rewardType, setRewardType] = useState(post.rewardForm.rewardType || "");
+  const [rewardTitle, setRewardTitle] = useState(post.rewardTitle ?? "");
+  const [isPending, startTransition] = useTransition();
+
+  const typeOptions = rewardKind === "MASCOT_EGG"
+    ? eggTypes.map((value) => ({ value, label: value }))
+    : rewardKind === "MASCOT_FOOD"
+      ? foodTypes
+      : rewardKind === "MASCOT_BUFF"
+        ? buffTypes
+        : [];
+
+  function save() {
+    startTransition(async () => {
+      const result = await updateNewsPost(post.id, {
+        title,
+        subtitle,
+        body,
+        imageUrl,
+        published: true,
+        rewardKind: rewardKind as "NONE" | "ZIKA_COINS" | "MASCOT_EGG" | "MASCOT_FOOD" | "MASCOT_BUFF",
+        rewardAmount,
+        rewardType,
+        rewardTitle,
+      });
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Noticia atualizada.");
+      onSaved();
+    });
+  }
+
+  return (
+    <div className="space-y-3 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-white">Editar noticia</h3>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-border p-2 text-slate-400 hover:text-white">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <input value={title} onChange={(event) => setTitle(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-[#FFCB05]" placeholder="Titulo" />
+        <input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-[#FFCB05]" placeholder="Subtitulo" />
+      </div>
+      <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={8} className="w-full rounded-2xl border border-border bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+      <ImageUpload value={imageUrl} onChange={setImageUrl} label="Imagem" compress maxWidth={1400} maxHeight={900} quality={0.82} />
+
+      <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-3">
+        <p className="mb-2 text-sm font-semibold text-purple-100">Recompensa</p>
+        <div className="grid gap-2 md:grid-cols-4">
+          <select value={rewardKind} onChange={(event) => { setRewardKind(event.target.value); setRewardType(""); }} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white">
+            {rewardKinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
+          </select>
+          {rewardKind !== "NONE" && (
+            <>
+              <input type="number" min={1} value={rewardAmount} onChange={(event) => setRewardAmount(Number(event.target.value))} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" />
+              {typeOptions.length > 0 && (
+                <select value={rewardType} onChange={(event) => setRewardType(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white">
+                  <option value="">Padrao</option>
+                  {typeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              )}
+              <input value={rewardTitle} onChange={(event) => setRewardTitle(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Nome exibido" />
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/5">Cancelar</button>
+        <button type="button" onClick={save} disabled={isPending} className="inline-flex items-center gap-2 rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-950 disabled:cursor-wait disabled:opacity-60">
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Salvar
+        </button>
+      </div>
+    </div>
   );
 }

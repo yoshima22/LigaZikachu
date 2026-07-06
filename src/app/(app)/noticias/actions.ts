@@ -101,6 +101,38 @@ export async function createNewsPost(raw: z.infer<typeof newsSchema>) {
   }
 }
 
+export async function updateNewsPost(postId: string, raw: z.infer<typeof newsSchema>) {
+  try {
+    const admin = await requireAdmin();
+    const data = newsSchema.parse(raw);
+    const uploadedImage = data.imageUrl?.startsWith("data:image/")
+      ? await uploadDataUrlAsset(data.imageUrl, "news", data.title)
+      : data.imageUrl || null;
+    const reward = buildRewardPayload(data);
+
+    await prisma.newsPost.update({
+      where: { id: postId },
+      data: {
+        title: data.title,
+        subtitle: data.subtitle || null,
+        body: data.body,
+        imageUrl: uploadedImage,
+        published: data.published,
+        createdById: admin.id,
+        ...reward,
+      },
+    });
+    revalidateNews();
+    return { ok: true };
+  } catch (error) {
+    console.error("[News] update post failed", error);
+    if (error instanceof z.ZodError) {
+      return { error: error.errors.map((issue) => issue.message).join(" ") || "Dados invalidos." };
+    }
+    return { error: error instanceof Error ? error.message : "Erro ao editar noticia." };
+  }
+}
+
 export async function markNewsRead(postId: string) {
   const user = await getSessionUser();
   if (!user) return { error: "Nao autenticado." };

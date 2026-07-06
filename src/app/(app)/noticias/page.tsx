@@ -23,6 +23,25 @@ function describeReward(payload: unknown) {
   return null;
 }
 
+function getRewardFormValues(payload: unknown) {
+  if (!payload || typeof payload !== "object") return { rewardKind: "NONE", rewardAmount: 1, rewardType: "" };
+  const data = payload as Record<string, unknown>;
+  const rewardKind = typeof data.rewardKind === "string" ? data.rewardKind : "NONE";
+  const rewardAmount = typeof data.amount === "number"
+    ? data.amount
+    : typeof data.quantity === "number"
+      ? data.quantity
+      : 1;
+  const rewardType = typeof data.eggType === "string"
+    ? data.eggType
+    : typeof data.foodType === "string"
+      ? data.foodType
+      : typeof data.buffType === "string"
+        ? data.buffType
+        : "";
+  return { rewardKind, rewardAmount, rewardType };
+}
+
 export default async function NoticiasPage() {
   const session = await getAppSession();
   const user = session?.user;
@@ -58,6 +77,7 @@ export default async function NoticiasPage() {
     rewardEnabled: post.rewardEnabled,
     rewardTitle: post.rewardTitle,
     rewardSummary: describeReward(post.rewardPayload),
+    rewardForm: getRewardFormValues(post.rewardPayload),
     rewardClaimed: "rewardClaims" in post && Array.isArray(post.rewardClaims) ? post.rewardClaims.length > 0 : false,
     unread: "reads" in post && Array.isArray(post.reads) ? post.reads.length === 0 : false,
   }));
@@ -83,7 +103,7 @@ export default async function NoticiasPage() {
       </div>
 
       {admin && <NewsComposer />}
-      <NewsList posts={viewPosts} />
+      <NewsList posts={viewPosts} admin={admin} />
     </div>
   );
 }
