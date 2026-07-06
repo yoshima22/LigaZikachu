@@ -6,6 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
+import { recommendCombatRole } from "@/lib/combat-roles";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
@@ -52,6 +53,23 @@ function activeWeeklyPlayerWhere(now = new Date()) {
     casualMode: false,
     user: { role: { notIn: [Role.ADMIN, Role.SUPER_ADMIN] }, status: UserStatus.ACTIVE },
   };
+}
+
+type RoleRecommendMascot = {
+  id: string;
+  statForce?: number | null;
+  statAgility?: number | null;
+  statVitality?: number | null;
+  statInstinct?: number | null;
+  statCharisma?: number | null;
+};
+
+function recommendedRolesForMascots(mascots: RoleRecommendMascot[]) {
+  return Object.fromEntries(mascots.map((mascot) => [mascot.id, recommendCombatRole(mascot)]));
+}
+
+function resolveMascotRole(mascot: RoleRecommendMascot, roles?: Record<string, string>) {
+  return roles?.[mascot.id] ?? recommendCombatRole(mascot);
 }
 
 async function findActiveWeeklyPlayers(client: Pick<typeof prisma, "player">, now = new Date()) {
@@ -904,7 +922,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
             ordered.push(...fillers);
           }
 
-          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, roles[m!.id]));
+          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, resolveMascotRole(m!, roles)));
         }
       }
 
@@ -914,7 +932,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         orderBy: { level: "desc" },
         take: 6,
       });
-      if (favs.length >= 6) return favs.slice(0, 6).map((m, i) => toLeagueMascot(m, i + 1));
+      if (favs.length >= 6) return favs.slice(0, 6).map((m, i) => toLeagueMascot(m, i + 1, recommendCombatRole(m)));
 
       const usedIds = new Set(favs.map(m => m.id));
       const rest = await prisma.mascot.findMany({
@@ -923,7 +941,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         take: 6 - favs.length,
       });
       const all = [...favs, ...rest];
-      return all.map((m, i) => toLeagueMascot(m, i + 1));
+      return all.map((m, i) => toLeagueMascot(m, i + 1, recommendCombatRole(m)));
     }
 
     // Load items for each player
@@ -1058,10 +1076,10 @@ export async function regenerateReplaysAction(leagueId: string) {
           const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
           const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
           const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
-          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, roles[m!.id]));
+          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, resolveMascotRole(m!, roles)));
         }
         const mascots = await prisma.mascot.findMany({ where: { playerId }, orderBy: { level: "desc" }, take: 6 });
-        return mascots.map((m, i) => toLeagueMascot(m, i + 1));
+        return mascots.map((m, i) => toLeagueMascot(m, i + 1, recommendCombatRole(m)));
       }
 
       const [teamA, teamB] = await Promise.all([
@@ -1574,11 +1592,35 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
   if (dueSlots.length) {
     const participants = await prisma.weeklyMascotLeagueParticipant.findMany({ where: { leagueId: league.id }, select: { playerId: true } });
     const playerIds = participants.map((participant) => participant.playerId);
-    const [existingTeams, mascots] = await Promise.all([
-      prisma.weeklyMascotLeagueDailyTeam.findMany({ where: { leagueId: league.id, battleDate, playerId: { in: playerIds } }, select: { playerId: true, battleSlot: true, mascotIdsJson: true } }),
-      prisma.mascot.findMany({ where: { playerId: { in: playerIds } }, select: { id: true, playerId: true, isFavorite: true, level: true }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }] }),
+    const [existingTeams, previousTeams, mascots] = await Promise.all([
+      prisma.weeklyMascotLeagueDailyTeam.findMany({ where: { leagueId: league.id, battleDate, playerId: { in: playerIds } }, select: { playerId: true, battleSlot: true, mascotIdsJson: true, rolesJson: true } }),
+      prisma.weeklyMascotLeagueDailyTeam.findMany({
+        where: { leagueId: league.id, battleDate: { lt: battleDate }, playerId: { in: playerIds }, battleSlot: { in: dueSlots.map((entry) => entry.slot) } },
+        select: { playerId: true, battleSlot: true, battleDate: true, mascotIdsJson: true, rolesJson: true },
+        orderBy: { battleDate: "desc" },
+      }),
+      prisma.mascot.findMany({
+        where: { playerId: { in: playerIds } },
+        select: {
+          id: true,
+          playerId: true,
+          isFavorite: true,
+          level: true,
+          statForce: true,
+          statAgility: true,
+          statVitality: true,
+          statInstinct: true,
+          statCharisma: true,
+        },
+        orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
+      }),
     ]);
     const teamKey = new Set(existingTeams.map((team) => `${team.playerId}:${team.battleSlot}`));
+    const previousByKey = new Map<string, typeof previousTeams[number]>();
+    for (const team of previousTeams) {
+      const key = `${team.playerId}:${team.battleSlot}`;
+      if (!previousByKey.has(key)) previousByKey.set(key, team);
+    }
     const usedByPlayer = new Map<string, Set<string>>();
     for (const team of existingTeams) {
       const used = usedByPlayer.get(team.playerId) ?? new Set<string>();
@@ -1587,15 +1629,45 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
     }
     const mascotsByPlayer = new Map<string, typeof mascots>();
     for (const mascot of mascots) mascotsByPlayer.set(mascot.playerId, [...(mascotsByPlayer.get(mascot.playerId) ?? []), mascot]);
+    const mascotById = new Map(mascots.map((mascot) => [mascot.id, mascot]));
 
     await prisma.$transaction(async (tx) => {
       for (const participant of participants) {
         const used = usedByPlayer.get(participant.playerId) ?? new Set<string>();
         for (const { slot } of dueSlots) {
           if (teamKey.has(`${participant.playerId}:${slot}`)) continue;
-          const selected = (mascotsByPlayer.get(participant.playerId) ?? []).filter((mascot) => !used.has(mascot.id)).slice(0, 6);
+          const previous = previousByKey.get(`${participant.playerId}:${slot}`);
+          const previousRoles = (previous?.rolesJson as Record<string, string> | null) ?? {};
+          const inherited = ((previous?.mascotIdsJson as string[] | undefined) ?? []).flatMap((id) => {
+            const mascot = mascotById.get(id);
+            return mascot && !used.has(mascot.id) ? [mascot] : [];
+          });
+          const selected = inherited.slice(0, 6);
+          if (selected.length < 6) {
+            const selectedIds = new Set(selected.map((mascot) => mascot.id));
+            selected.push(...(mascotsByPlayer.get(participant.playerId) ?? [])
+              .filter((mascot) => !used.has(mascot.id) && !selectedIds.has(mascot.id))
+              .slice(0, 6 - selected.length));
+          }
           for (const mascot of selected) used.add(mascot.id);
-          await tx.weeklyMascotLeagueDailyTeam.create({ data: { id: createId(), leagueId: league!.id, playerId: participant.playerId, battleDate, battleSlot: slot, source: "AUTO_FAVORITE", mascotIdsJson: selected.map((mascot) => mascot.id), rolesJson: {}, lockedAt: now, updatedAt: now } });
+          const rolesJson = {
+            ...recommendedRolesForMascots(selected),
+            ...Object.fromEntries(selected.filter((mascot) => previousRoles[mascot.id]).map((mascot) => [mascot.id, previousRoles[mascot.id]])),
+          };
+          await tx.weeklyMascotLeagueDailyTeam.create({
+            data: {
+              id: createId(),
+              leagueId: league!.id,
+              playerId: participant.playerId,
+              battleDate,
+              battleSlot: slot,
+              source: previous ? "INHERITED_AUTO" : "AUTO_FAVORITE",
+              mascotIdsJson: selected.map((mascot) => mascot.id),
+              rolesJson,
+              lockedAt: now,
+              updatedAt: now,
+            },
+          });
         }
       }
     });
