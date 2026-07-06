@@ -355,3 +355,19 @@ export async function analyzeMascotAction(
   const fresh = await getOrCreateWallet(me.id);
   return { ok: true as const, analysis, coinBalance: fresh.balance };
 }
+
+// ── Revisitar análise já feita (grátis) ─────────────────────────────────────────
+export async function getStoredAnalysisAction(
+  mascotId: string,
+): Promise<{ ok: false; error: string } | { ok: true; analysis: MascotAnalysis }> {
+  const me = await requirePlayer();
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId, playerId: me.id },
+    select: { analysisJson: true, analyzedAt: true },
+  });
+  if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
+  if (!mascot.analyzedAt || !mascot.analysisJson) {
+    return { ok: false as const, error: "Este mascote ainda não foi analisado." };
+  }
+  return { ok: true as const, analysis: mascot.analysisJson as unknown as MascotAnalysis };
+}

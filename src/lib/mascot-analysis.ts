@@ -4,6 +4,7 @@ import {
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, LEGENDARY_POOL,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getPokemonName,
 } from "@/lib/mascot-data";
+import { COMBAT_ROLE_LABELS, COMBAT_ROLE_DESCRIPTIONS } from "@/lib/combat-roles";
 
 // Mesmo fator usado em mascot.ts (LEVEL_STAT_GAIN_MULTIPLIER)
 const LEVEL_GAIN = 0.55;
@@ -47,6 +48,12 @@ export interface MascotAnalysis {
   evoPotentialPct: number;       // 0-100 — evoluções restantes
   verdict: string;
   evolutionNote: string | null;
+  // Dados extras da análise
+  dominantStatLabel: string;
+  balanceLabel: string;
+  personalityNote: string | null;
+  projectedPower: number;
+  roleSuggestions: { role: string; label: string; statLabel: string; value: number; description: string }[];
   analyzedAtIso: string;
 }
 
@@ -235,6 +242,47 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     delta: projectedStats[key] - currentStats[key],
   }));
 
+  // ── Dados extras ──
+  // Stat dominante e equilíbrio (com base na projeção)
+  const projValues = perStat.map(s => ({ label: s.label, value: s.projected }));
+  const dominant = projValues.reduce((a, b) => (b.value > a.value ? b : a), projValues[0]);
+  const maxV = Math.max(...projValues.map(v => v.value));
+  const minV = Math.min(...projValues.map(v => v.value));
+  const avgV = projectedTotal / 5;
+  const spread = avgV > 0 ? (maxV - minV) / avgV : 0;
+  const balanceLabel = spread < 0.22 ? "Equilibrado (stats parelhos)" : `Especializado em ${dominant.label}`;
+
+  // Sugestões de função de combate (papéis-base ligados a cada atributo)
+  const roleByStat: { role: string; statLabel: string; value: number }[] = [
+    { role: "ATTACKER",    statLabel: "Força",      value: projectedStats.force },
+    { role: "FLANK",       statLabel: "Agilidade",  value: projectedStats.agility },
+    { role: "DEFENDER",    statLabel: "Vitalidade", value: projectedStats.vitality },
+    { role: "OPPORTUNIST", statLabel: "Instinto",   value: projectedStats.instinct },
+    { role: "ENCOURAGER",  statLabel: "Carisma",    value: projectedStats.charisma },
+  ];
+  const roleSuggestions = roleByStat
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3)
+    .map(r => ({
+      role: r.role,
+      label: COMBAT_ROLE_LABELS[r.role as keyof typeof COMBAT_ROLE_LABELS],
+      statLabel: r.statLabel,
+      value: r.value,
+      description: COMBAT_ROLE_DESCRIPTIONS[r.role as keyof typeof COMBAT_ROLE_DESCRIPTIONS],
+    }));
+
+  // Poder de combate estimado (aproximação: soma ponderada dos atributos projetados)
+  const projectedPower = Math.round(
+    projectedStats.force * 1.1 + projectedStats.vitality * 1.0 + projectedStats.agility * 0.95 +
+    projectedStats.instinct * 0.95 + projectedStats.charisma * 0.9,
+  );
+
+  // Nota de personalidade (afeta o crescimento)
+  let personalityNote: string | null = null;
+  if (input.personality === "COMPETITIVE") personalityNote = "Personalidade Competitiva: cresce mais rápido e favorece Força.";
+  else if (input.personality === "LOYAL") personalityNote = "Personalidade Leal: cresce mais rápido e favorece Carisma.";
+  else if (input.personality === "DRAMATIC") personalityNote = "Personalidade Dramática: crescimento levemente menor e Vitalidade reduzida.";
+
   return {
     currentLevel,
     targetLevel,
@@ -254,6 +302,11 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     evoPotentialPct: Math.round(evoPotential * 100),
     verdict: verdictText(ivRating),
     evolutionNote,
+    dominantStatLabel: dominant.label,
+    balanceLabel,
+    personalityNote,
+    projectedPower,
+    roleSuggestions,
     analyzedAtIso: new Date().toISOString(),
   };
 }

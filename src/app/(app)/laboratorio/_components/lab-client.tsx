@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
 import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
 import type { MascotRarity } from "../rarity";
-import { MascotAnalyzer } from "./mascot-analyzer";
+import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
 
 type LabMascot = {
   id: string;
@@ -404,8 +404,11 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
                       key={m.id}
                       onClick={() => slotsLeft && addToSlot(m)}
                       disabled={!slotsLeft || isPending}
-                      className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-slate-900 p-3 text-center transition-colors hover:border-[#FFCB05]/40 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="relative flex flex-col items-center gap-1 rounded-2xl border border-border bg-slate-900 p-3 text-center transition-colors hover:border-[#FFCB05]/40 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     >
+                      {m.analyzed && m.ivRating && (
+                        <span className="absolute right-1.5 top-1.5"><RatingBadge rating={m.ivRating} size="sm" /></span>
+                      )}
                       <img src={m.spriteUrl} alt="" className="h-12 w-12 object-contain" />
                       <p className="line-clamp-1 text-xs font-bold text-white">{m.nickname || m.name}</p>
                       <p className="text-[10px] text-slate-500">Lv.{m.level}</p>

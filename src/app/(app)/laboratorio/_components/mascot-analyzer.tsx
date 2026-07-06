@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import { Search, Sparkles, Loader2, ArrowRight, TrendingUp } from "lucide-react";
-import { analyzeMascotAction } from "../actions";
+import { Search, Sparkles, Loader2, ArrowRight, TrendingUp, Eye, Swords, Shield } from "lucide-react";
+import { analyzeMascotAction, getStoredAnalysisAction } from "../actions";
 import { RATING_STYLE, type MascotAnalysis, type MascotRating } from "@/lib/mascot-analysis";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
@@ -60,7 +60,9 @@ export function MascotAnalyzer({
   const [targetLevel, setTargetLevel] = useState(50);
   const [analysis, setAnalysis] = useState<MascotAnalysis | null>(null);
   const [pending, start] = useTransition();
+  const [viewPending, startView] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -75,6 +77,7 @@ export function MascotAnalyzer({
     setSelected(m);
     setAnalysis(null);
     setError(null);
+    setFromCache(false);
     setTargetLevel(Math.max(m.level, Math.min(100, 50)));
   };
 
@@ -85,8 +88,21 @@ export function MascotAnalyzer({
       const res = await analyzeMascotAction(selected.id, targetLevel);
       if (!res.ok) { setError(res.error); return; }
       setAnalysis(res.analysis);
+      setFromCache(false);
       onBalanceChange(res.coinBalance);
       onAnalyzed(selected.id, res.analysis.ivRating, res.analysis.ivScore);
+    });
+  };
+
+  const viewStored = () => {
+    if (!selected) return;
+    setError(null);
+    startView(async () => {
+      const res = await getStoredAnalysisAction(selected.id);
+      if (!res.ok) { setError(res.error); return; }
+      setAnalysis(res.analysis);
+      setFromCache(true);
+      if (res.analysis.targetLevel) setTargetLevel(res.analysis.targetLevel);
     });
   };
 
@@ -123,15 +139,15 @@ export function MascotAnalyzer({
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {paged.map(m => (
             <button key={m.id} onClick={() => pick(m)}
-              className={`relative flex flex-col items-center rounded-xl border p-2 transition-colors ${
+              className={`relative flex flex-col items-center gap-0.5 rounded-xl border p-2 pt-2.5 transition-colors ${
                 selected?.id === m.id ? "border-purple-400/60 bg-purple-500/10" : "border-border bg-slate-800/30 hover:border-purple-400/40"
               }`}>
-              <img src={m.spriteUrl} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
-              <p className="mt-0.5 line-clamp-1 w-full text-center text-[9px] font-semibold text-white">{m.nickname || m.name}</p>
-              <p className="text-[9px] text-slate-500">Lv.{m.level}</p>
               {m.analyzed && m.ivRating && (
-                <span className="absolute -top-1 -right-1"><RatingBadge rating={m.ivRating} score={m.ivScore} size="sm" /></span>
+                <span className="absolute right-1 top-1"><RatingBadge rating={m.ivRating} size="sm" /></span>
               )}
+              <img src={m.spriteUrl} alt="" className="mt-1 h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+              <p className="line-clamp-1 w-full text-center text-[9px] font-semibold text-white">{m.nickname || m.name}</p>
+              <p className="text-[9px] text-slate-500">Lv.{m.level}</p>
             </button>
           ))}
           {paged.length === 0 && <p className="col-span-full py-6 text-center text-xs text-slate-500">Nenhum mascote encontrado.</p>}
@@ -162,44 +178,73 @@ export function MascotAnalyzer({
                 onChange={e => setTargetLevel(Math.max(selected.level, Math.min(100, Number(e.target.value) || selected.level)))}
                 className="w-16 rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
             </div>
-            <button onClick={runAnalysis} disabled={pending || coinBalance < analysisCost}
-              className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50">
-              {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              {pending ? "Analisando..." : `Analisar (${analysisCost} ZC)`}
-            </button>
+            <div className="flex items-center gap-2">
+              {selected.analyzed && (
+                <button onClick={viewStored} disabled={viewPending || pending}
+                  className="flex items-center gap-1.5 rounded-xl border border-purple-500/40 px-3 py-2 text-sm font-semibold text-purple-300 hover:bg-purple-500/10 disabled:opacity-50"
+                  title="Revisitar a última análise deste mascote (grátis)">
+                  {viewPending ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                  Ver análise salva
+                </button>
+              )}
+              <button onClick={runAnalysis} disabled={pending || coinBalance < analysisCost}
+                className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50">
+                {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                {pending ? "Analisando..." : selected.analyzed ? `Reanalisar (${analysisCost} ZC)` : `Analisar (${analysisCost} ZC)`}
+              </button>
+            </div>
           </div>
 
           {coinBalance < analysisCost && !analysis && (
-            <p className="text-xs text-red-400">Saldo insuficiente para analisar ({analysisCost} ZC).</p>
+            <p className="text-xs text-red-400">Saldo insuficiente para uma nova análise ({analysisCost} ZC){selected.analyzed ? " — mas você pode ver a análise salva de graça." : "."}</p>
           )}
           {error && <p className="text-xs text-red-400">{error}</p>}
 
-          {analysis && <AnalysisResult analysis={analysis} spriteUrl={selected.spriteUrl} />}
+          {analysis && (
+            <>
+              {fromCache && (
+                <p className="text-[11px] text-slate-500">
+                  📄 Mostrando a análise salva{analysis.analyzedAtIso ? ` de ${new Date(analysis.analyzedAtIso).toLocaleDateString("pt-BR")}` : ""} (Nv.{analysis.currentLevel} → Nv.{analysis.targetLevel}). Reanalise para atualizar com o nível atual.
+                </p>
+              )}
+              <AnalysisResult analysis={analysis} />
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function AnalysisResult({ analysis, spriteUrl }: { analysis: MascotAnalysis; spriteUrl: string }) {
+function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
   const a = analysis;
   const style = RATING_STYLE[a.ivRating];
+  const roleSuggestions = a.roleSuggestions ?? [];
   return (
     <div className="space-y-4 border-t border-border/50 pt-4">
-      {/* Rating + potencial */}
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <div className={`flex items-center gap-4 rounded-2xl border p-4 ${style.border} ${style.bg}`}>
+      {/* Rating + potencial + veredito */}
+      <div className={`rounded-2xl border p-4 ${style.border} ${style.bg}`}>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-widest text-slate-400">Ranking</p>
-            <p className={`font-pixel text-3xl ${style.text}`}>{a.ivRating}</p>
+            <p className={`font-pixel text-3xl leading-tight ${style.text}`}>{a.ivRating}</p>
           </div>
-          <div className="h-10 w-px bg-slate-700" />
-          <div>
+          <div className="hidden h-10 w-px bg-slate-700 sm:block" />
+          <div className="text-center">
             <p className="text-[10px] uppercase tracking-widest text-slate-400">Potencial (IV)</p>
             <p className={`text-2xl font-bold ${style.text}`}>{a.ivScore}%</p>
           </div>
-          <p className="ml-auto max-w-[52%] text-xs text-slate-300">{a.verdict}</p>
+          {typeof a.projectedPower === "number" && (
+            <>
+              <div className="hidden h-10 w-px bg-slate-700 sm:block" />
+              <div className="text-center">
+                <p className="text-[10px] uppercase tracking-widest text-slate-400">Poder Nv.{a.targetLevel}</p>
+                <p className="text-2xl font-bold text-slate-100">{a.projectedPower}</p>
+              </div>
+            </>
+          )}
         </div>
+        <p className="mt-3 border-t border-white/5 pt-3 text-sm text-slate-200">{a.verdict}</p>
       </div>
 
       {/* Detalhamento do potencial */}
@@ -218,17 +263,49 @@ function AnalysisResult({ analysis, spriteUrl }: { analysis: MascotAnalysis; spr
         </div>
       </div>
 
+      {/* Perfil: stat dominante, equilíbrio, personalidade */}
+      {(a.dominantStatLabel || a.balanceLabel || a.personalityNote) && (
+        <div className="rounded-2xl border border-border bg-slate-950/40 p-4 space-y-1.5 text-xs">
+          {a.dominantStatLabel && (
+            <p className="text-slate-300"><span className="text-slate-500">Atributo dominante:</span> <strong className="text-cyan-300">{a.dominantStatLabel}</strong> · {a.balanceLabel}</p>
+          )}
+          {a.personalityNote && <p className="text-slate-400">{a.personalityNote}</p>}
+        </div>
+      )}
+
       {/* Projeção de atributos */}
       <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
-        <p className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
           <TrendingUp size={13} className="text-cyan-400" />
-          Projeção Nv.{a.currentLevel} → Nv.{a.targetLevel}
+          <span>Projeção Nv.{a.currentLevel} → Nv.{a.targetLevel}</span>
           <span className="ml-auto text-slate-500">Total {a.currentTotal} → <span className="text-cyan-300">{a.projectedTotal}</span></span>
-        </p>
+        </div>
         <div className="space-y-1.5">
           {a.perStat.map(s => <StatBar key={s.key} label={s.label} current={s.current} projected={s.projected} delta={s.delta} />)}
         </div>
       </div>
+
+      {/* Sugestões de função de combate */}
+      {roleSuggestions.length > 0 && (
+        <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
+          <p className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
+            <Swords size={13} className="text-red-400" /> Funções de combate recomendadas
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {roleSuggestions.map((r, i) => (
+              <div key={r.role} className={`rounded-xl border p-3 ${i === 0 ? "border-purple-400/40 bg-purple-500/10" : "border-border bg-slate-900/40"}`}>
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-1.5 text-sm font-bold text-slate-100">
+                    {i === 0 && <Shield size={12} className="text-purple-300" />}{r.label}
+                  </p>
+                  <span className="text-xs font-bold text-cyan-300">{r.value}</span>
+                </div>
+                <p className="text-[10px] text-slate-500">{r.statLabel} é o atributo principal.</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Cadeia de evolução */}
       <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
@@ -244,7 +321,6 @@ function AnalysisResult({ analysis, spriteUrl }: { analysis: MascotAnalysis; spr
               </div>
             </div>
           ))}
-          <img src={spriteUrl} alt="" className="hidden" />
         </div>
         {a.evolutionNote && <p className="mt-3 text-xs text-purple-300">{a.evolutionNote}</p>}
       </div>
