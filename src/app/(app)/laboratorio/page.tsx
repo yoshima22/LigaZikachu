@@ -14,6 +14,8 @@ export default async function LaboratorioPage() {
       initialWeeklyUsage={data.weeklyUsage}
       limits={data.limits}
       costs={data.costs}
+      initialCoinBalance={data.coinBalance}
+      analysisCost={data.analysisCost}
     />
   );
 }

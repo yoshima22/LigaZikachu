@@ -1884,6 +1884,11 @@ model Mascot {
   arenaState           MascotArenaState  @default(FREE)
   injuredAt            DateTime?
   restingUntil         DateTime?         // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
+  // Análise de IV/potencial feita no Laboratório (200 ZC por análise)
+  analyzedAt           DateTime?         // última vez que foi analisado no Lab
+  ivScore              Int?              // 0-100 (potencial futuro)
+  ivRating             String?           // SSS, SS, S, A, B, C, D ou E
+  analysisJson         Json?             // snapshot completo da última análise
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
   arenaTeamMembers ArenaTeamMember[]

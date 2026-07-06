@@ -79,6 +79,7 @@ async function fetchMascotPageData(playerId: string) {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
         happiness: true, mood: true, personality: true,
         isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true,
+        ivRating: true, ivScore: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,

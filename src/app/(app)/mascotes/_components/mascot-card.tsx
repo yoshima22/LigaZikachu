@@ -69,6 +69,8 @@ interface MascotData {
   evolutionLocked: boolean;
   expLocked: boolean;
   isShiny: boolean;
+  ivRating?: string | null;
+  ivScore?: number | null;
   activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
   expeditions: Expedition[];
@@ -80,6 +82,17 @@ interface MascotData {
 }
 
 interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; onRefresh?: () => void }
+
+const IV_RATING_STYLE: Record<string, string> = {
+  SSS: "text-fuchsia-300 border-fuchsia-400/50 bg-fuchsia-500/15",
+  SS:  "text-purple-300 border-purple-400/50 bg-purple-500/15",
+  S:   "text-amber-300 border-amber-400/50 bg-amber-500/15",
+  A:   "text-emerald-300 border-emerald-400/50 bg-emerald-500/15",
+  B:   "text-sky-300 border-sky-400/50 bg-sky-500/15",
+  C:   "text-slate-300 border-slate-400/40 bg-slate-500/15",
+  D:   "text-orange-300 border-orange-400/40 bg-orange-500/10",
+  E:   "text-red-300 border-red-400/40 bg-red-500/10",
+};
 
 const TYPE_COLORS: Record<string, string> = {
   normal:"bg-slate-500/25 text-slate-300 border-slate-500/30", fire:"bg-orange-500/20 text-orange-300 border-orange-500/30",
@@ -746,6 +759,14 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             ) : (
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-white truncate">{name}</span>
+                {mascot.ivRating && (
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}
+                    title={`Análise do Laboratório: ranking ${mascot.ivRating} · potencial ${mascot.ivScore ?? "?"}%`}
+                  >
+                    {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleFavorite}

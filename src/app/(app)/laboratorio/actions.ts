@@ -3,10 +3,16 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
-import { EggType } from "@prisma/client";
+import { EggType, ZikaCoinTxType } from "@prisma/client";
+import { revalidateTag } from "next/cache";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
-import { creditCoins } from "@/lib/zikacoins";
+import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
+import { computeMascotAnalysis } from "@/lib/mascot-analysis";
+import type { MascotAnalysis } from "@/lib/mascot-analysis";
 import { getMascotRarity, getMascotBaseDust, type MascotRarity } from "./rarity";
+
+// Custo de cada análise de mascote no Laboratório (cada abertura recompra a análise)
+const ANALYSIS_COST = 200;
 
 export type { MascotRarity };
 
@@ -60,11 +66,14 @@ export async function getLabDataAction() {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         isFavorite: true, arenaState: true, bazarListed: true,
+        analyzedAt: true, ivRating: true, ivScore: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
     getOrCreateWeeklyUsage(me.id),
   ]);
+
+  const wallet = await getOrCreateWallet(me.id);
 
   // Build pokémonId → count map for duplicate multiplier
   const countMap = new Map<number, number>();
@@ -92,12 +101,17 @@ export async function getLabDataAction() {
       recyclable,
       isFavorite: m.isFavorite ?? false,
       bazarListed: m.bazarListed ?? false,
+      analyzed: !!m.analyzedAt,
+      ivRating: m.ivRating,
+      ivScore: m.ivScore,
     };
   });
 
   return {
     ok: true as const,
     creationDust: player?.creationDust ?? 0,
+    coinBalance: wallet.balance,
+    analysisCost: ANALYSIS_COST,
     mascots: mascotList,
     weeklyUsage: {
       coinsTraded: weeklyUsage.coinsTraded,
@@ -291,4 +305,53 @@ export async function tradeDustForEggAction(eggTier: "COMMON" | "RARE" | "SPECIA
   ]);
 
   return { ok: true as const };
+}
+
+// ── Análise de mascote (IV / potencial) ─────────────────────────────────────────
+export async function analyzeMascotAction(
+  mascotId: string,
+  targetLevel?: number,
+): Promise<{ ok: false; error: string } | { ok: true; analysis: MascotAnalysis; coinBalance: number }> {
+  const me = await requirePlayer();
+
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId, playerId: me.id },
+    select: {
+      id: true, pokemonId: true, level: true, personality: true, evolutionLocked: true,
+      statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+    },
+  });
+  if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
+
+  const wallet = await getOrCreateWallet(me.id);
+  if (wallet.balance < ANALYSIS_COST) {
+    return { ok: false as const, error: `Saldo insuficiente. A análise custa ${ANALYSIS_COST} ZC.` };
+  }
+
+  const clampedTarget = targetLevel ? Math.max(mascot.level, Math.min(100, Math.round(targetLevel))) : undefined;
+  const analysis = computeMascotAnalysis(mascot, clampedTarget);
+
+  await prisma.$transaction(async (tx) => {
+    await creditCoins(tx, {
+      playerId: me.id,
+      type: ZikaCoinTxType.LAB_TRADE,
+      amount: -ANALYSIS_COST,
+      description: `Laboratório: análise de ${getPokemonName(mascot.pokemonId)}`,
+    });
+    await tx.mascot.update({
+      where: { id: mascot.id },
+      data: {
+        analyzedAt: new Date(),
+        ivScore: analysis.ivScore,
+        ivRating: analysis.ivRating,
+        analysisJson: analysis as unknown as import("@prisma/client").Prisma.InputJsonValue,
+      },
+    });
+  });
+
+  // Atualiza o saldo mostrado no nav
+  const user = await getSessionUser();
+  if (user) revalidateTag(`nav-${user.id}`);
+  const fresh = await getOrCreateWallet(me.id);
+  return { ok: true as const, analysis, coinBalance: fresh.balance };
 }

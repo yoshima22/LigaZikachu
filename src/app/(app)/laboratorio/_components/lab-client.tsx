@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
 import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
 import type { MascotRarity } from "../rarity";
+import { MascotAnalyzer } from "./mascot-analyzer";
 
 type LabMascot = {
   id: string;
@@ -18,6 +19,9 @@ type LabMascot = {
   recyclable: boolean;
   isFavorite: boolean;
   bazarListed: boolean;
+  analyzed: boolean;
+  ivRating: string | null;
+  ivScore: number | null;
 };
 
 type WeeklyUsage = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
@@ -41,6 +45,8 @@ interface Props {
   initialWeeklyUsage: WeeklyUsage;
   limits: Limits;
   costs: Costs;
+  initialCoinBalance: number;
+  analysisCost: number;
 }
 
 // ── Guide section ─────────────────────────────────────────────────────────────
@@ -82,9 +88,10 @@ function calcSlotDust(slots: LabMascot[]): { total: number; breakdown: { mascot:
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, limits, costs }: Props) {
-  const [tab, setTab] = useState<"recycle" | "shop">("recycle");
+export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, limits, costs, initialCoinBalance, analysisCost }: Props) {
+  const [tab, setTab] = useState<"recycle" | "shop" | "analyze">("recycle");
   const [dust, setDust] = useState(initialDust);
+  const [coinBalance, setCoinBalance] = useState(initialCoinBalance);
   const [mascots, setMascots] = useState(initialMascots);
   const [weeklyUsage, setWeeklyUsage] = useState(initialWeeklyUsage);
   const [search, setSearch] = useState("");
@@ -234,17 +241,32 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
       )}
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-2">
-        {(["recycle", "shop"] as const).map((t) => (
+      <div className="mb-6 flex flex-wrap gap-2">
+        {(["recycle", "shop", "analyze"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
               tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : "border border-border text-slate-400 hover:text-white"
             }`}
           >
-            {t === "recycle" ? <><FlaskConical size={15} /> Reciclar Mascotes</> : <><ShoppingBag size={15} /> Loja de Pó de Criação</>}
+            {t === "recycle" ? <><FlaskConical size={15} /> Reciclar Mascotes</>
+              : t === "shop" ? <><ShoppingBag size={15} /> Loja de Pó de Criação</>
+              : <><Microscope size={15} /> Análise de Mascote</>}
           </button>
         ))}
       </div>
+
+      {/* ── ANALYZE TAB ── */}
+      {tab === "analyze" && (
+        <MascotAnalyzer
+          mascots={mascots}
+          coinBalance={coinBalance}
+          analysisCost={analysisCost}
+          onBalanceChange={setCoinBalance}
+          onAnalyzed={(mascotId, rating, score) =>
+            setMascots(prev => prev.map(m => m.id === mascotId ? { ...m, analyzed: true, ivRating: rating, ivScore: score } : m))
+          }
+        />
+      )}
 
       {/* ── RECYCLE TAB ── */}
       {tab === "recycle" && (
