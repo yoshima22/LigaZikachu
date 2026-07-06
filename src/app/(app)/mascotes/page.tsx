@@ -295,6 +295,8 @@ export default async function MascotesPage() {
     evolutionLocked: m.evolutionLocked,
     expLocked: m.expLocked,
     isShiny: m.isShiny,
+    ivRating: m.ivRating,
+    ivScore: m.ivScore,
     activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({
       id: e.id, finishAt: e.finishAt, status: e.status,
