@@ -81,7 +81,7 @@ export function MascotAnalyzer({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<AnalyzerMascot | null>(null);
-  const [targetLevel, setTargetLevel] = useState(50);
+  const [targetLevel, setTargetLevel] = useState(100);
   const [analysis, setAnalysis] = useState<MascotAnalysis | null>(null);
   const [pending, start] = useTransition();
   const [viewPending, startView] = useTransition();
@@ -102,7 +102,7 @@ export function MascotAnalyzer({
     setAnalysis(null);
     setError(null);
     setFromCache(false);
-    setTargetLevel(Math.max(m.level, Math.min(100, 50)));
+    setTargetLevel(100);
   };
 
   const runAnalysis = () => {
