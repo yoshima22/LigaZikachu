@@ -1,21 +1,21 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   Calendar, ChevronDown, ChevronUp, RotateCcw, Save,
-  Star, X, Check, AlertTriangle, Plus, Trash2, UserPlus, Clock, CheckCircle2
+  Star, X, Check, AlertTriangle, Plus, Trash2, UserPlus, Clock, CheckCircle2, UserMinus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
 import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
-  adminGrantVip, adminSetRetroactiveClaims,
+  adminGrantVip, adminSetRetroactiveClaims, adminRevokeVip,
   adminSetPassScheduleRetroactive, adminCreatePassSchedule,
 } from "@/app/(app)/passe-apoiador/actions";
 
-// â”€â”€ Tipos de slot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Tipos de slot ─────────────────────────────────────────────────────────────
 
 type SlotKind = "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
 
@@ -29,19 +29,19 @@ type Slot =
   | { id: string; kind: "ZIKALOOT"; special: boolean };
 
 const SLOT_META: Record<SlotKind, { label: string; emoji: string; color: string }> = {
-  COINS:       { label: "ZikaCoins",        emoji: "ðŸª™", color: "border-yellow-500/30 bg-yellow-950/10" },
-  EGG:         { label: "Ovo de Mascote",   emoji: "ðŸ¥š", color: "border-teal-500/30 bg-teal-950/10" },
-  FOOD:        { label: "Comida de Mascote",emoji: "ðŸ–", color: "border-orange-500/30 bg-orange-950/10" },
-  SWEET:       { label: "Doce de Mascote",  emoji: "ðŸ¬", color: "border-pink-500/30 bg-pink-950/10" },
-  STICKER_PACK:{ label: "Pacote Figurinha", emoji: "ðŸƒ", color: "border-blue-500/30 bg-blue-950/10" },
-  SHOP_ITEM:   { label: "Item do Shop",     emoji: "ðŸ“¦", color: "border-purple-500/30 bg-purple-950/10" },
-  ZIKALOOT:    { label: "Ticket ZikaLoot",  emoji: "ðŸŽŸï¸", color: "border-green-500/30 bg-green-950/10" },
+  COINS:       { label: "ZikaCoins",        emoji: "🪙", color: "border-yellow-500/30 bg-yellow-950/10" },
+  EGG:         { label: "Ovo de Mascote",   emoji: "🥚", color: "border-teal-500/30 bg-teal-950/10" },
+  FOOD:        { label: "Comida de Mascote",emoji: "🍖", color: "border-orange-500/30 bg-orange-950/10" },
+  SWEET:       { label: "Doce de Mascote",  emoji: "🍬", color: "border-pink-500/30 bg-pink-950/10" },
+  STICKER_PACK:{ label: "Pacote Figurinha", emoji: "🎴", color: "border-blue-500/30 bg-blue-950/10" },
+  SHOP_ITEM:   { label: "Item do Shop",     emoji: "📦", color: "border-purple-500/30 bg-purple-950/10" },
+  ZIKALOOT:    { label: "Ticket ZikaLoot",  emoji: "🎟️", color: "border-green-500/30 bg-green-950/10" },
 };
 
 let _slotCounter = 0;
 function uid() { return `slot-${++_slotCounter}-${Math.random().toString(36).slice(2)}`; }
 
-// â”€â”€ ConversÃ£o DayReward â†” Slots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Conversão DayReward ↔ Slots ───────────────────────────────────────────────
 
 function rewardToSlots(reward: DayReward): Slot[] {
   const slots: Slot[] = [];
@@ -79,7 +79,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
   const shop   = slots.find(s => s.kind === "SHOP_ITEM") as Extract<Slot, { kind: "SHOP_ITEM" }> | undefined;
   const loot   = slots.find(s => s.kind === "ZIKALOOT") as Extract<Slot, { kind: "ZIKALOOT" }> | undefined;
 
-  // Tipo primÃ¡rio por prioridade
+  // Tipo primário por prioridade
   const type: DayReward["type"] =
     pack  ? "STICKER_PACK" :
     loot  ? "ZIKALOOT" :
@@ -107,7 +107,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
   };
 }
 
-// â”€â”€ Estado local para um dia (slots + meta) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Estado local para um dia (slots + meta) ───────────────────────────────────
 
 type DayState = {
   emoji: string;
@@ -124,7 +124,7 @@ function dayStateToReward(day: number, ds: DayState): DayReward {
   return slotsToReward(day, ds.emoji, ds.label, ds.isMilestone, ds.slots);
 }
 
-// â”€â”€ Panel principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Painel principal ──────────────────────────────────────────────────────────
 
 interface ScheduleEntry {
   label: string;
@@ -173,6 +173,9 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [retroConfigPending, startRetroConfig] = useTransition();
   const [retroPassPending, startRetroPass] = useTransition();
   const [retroPassLoadingId, setRetroPassLoadingId] = useState<string | null>(null);
+  const [revokePending, startRevoke] = useTransition();
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokedPassIds, setRevokedPassIds] = useState<Set<string>>(new Set());
   const [vipRetroMap, setVipRetroMap] = useState<Record<string, boolean>>(
     () => Object.fromEntries(activeVips.map(v => [v.passId, v.allowRetroactiveClaims]))
   );
@@ -183,14 +186,14 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [showCreateTypeForm, setShowCreateTypeForm] = useState(false);
   const [newPassLabel, setNewPassLabel] = useState("");
 
-  // Form de criaÃ§Ã£o de passe
+  // Form de criação de passe
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [durationDays, setDurationDays] = useState(30);
   const [startDay, setStartDay] = useState(1);
   const [showGrantForm, setShowGrantForm] = useState(false);
 
-  // Sincroniza props â†’ state quando o servidor retorna dados atualizados,
-  // mas sÃ³ para labels que nÃ£o tÃªm ediÃ§Ãµes locais pendentes.
+  // Sincroniza props → state quando o servidor retorna dados atualizados,
+  // mas só para labels que não têm edições locais pendentes.
   useEffect(() => {
     setScheduleMap(prev => {
       const next = { ...prev };
@@ -224,7 +227,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const switchLabel = (label: string) => {
     setEditingDay(null);
     setActiveLabel(label);
-    // Se o schedule para esse label ainda nÃ£o foi carregado, busca do servidor
+    // Se o schedule para esse label ainda não foi carregado, busca do servidor
     if (!scheduleMap[label]) {
       startLoad(async () => {
         const result = await adminGetSchedule(label);
@@ -249,7 +252,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       try {
         const result = await adminSaveSchedule(schedule, activeLabel);
         if (result.ok) {
-          toast.success(`CalendÃ¡rio "${activeLabel}" salvo!`);
+          toast.success(`Calendário "${activeLabel}" salvo!`);
           setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
           setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
           setSaveError(null);
@@ -267,7 +270,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   };
 
   const labelVips = activeVips
-    .filter(v => v.passLabel === activeLabel)
+    .filter(v => v.passLabel === activeLabel && !revokedPassIds.has(v.passId))
     .map(v => ({ ...v, allowRetroactiveClaims: vipRetroMap[v.passId] ?? v.allowRetroactiveClaims }));
 
   const handleCreatePassType = () => {
@@ -309,6 +312,21 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
     });
   };
 
+  const handleRevokeVip = (passId: string, name: string) => {
+    if (!confirm(`Remover o passe de ${name}? O jogador perde o acesso às recompensas restantes e o título VIP é retirado do inventário.`)) return;
+    setRevokingId(passId);
+    startRevoke(async () => {
+      const result = await adminRevokeVip(passId);
+      setRevokingId(null);
+      if (result.ok) {
+        setRevokedPassIds(prev => new Set(prev).add(passId));
+        toast.success(`Passe de ${name} removido.`);
+      } else {
+        toast.error(result.error ?? "Erro ao remover passe.");
+      }
+    });
+  };
+
   const handleToggleRetroDefault = () => {
     const next = !passRetroDefault;
     startRetroConfig(async () => {
@@ -316,7 +334,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       if (result.ok) {
         setRetroConfigMap(prev => ({ ...prev, [activeLabel]: next }));
         setCustomMap(prev => ({ ...prev, [activeLabel]: true }));
-        toast.success(next ? `Novos passes "${activeLabel}" serao retroativos.` : `Novos passes "${activeLabel}" nao serao retroativos.`);
+        toast.success(next ? `Novos passes "${activeLabel}" serão retroativos.` : `Novos passes "${activeLabel}" não serão retroativos.`);
       } else {
         toast.error(result.error ?? "Erro ao alterar.");
       }
@@ -338,14 +356,14 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   };
 
   const handleReset = () => {
-    if (!confirm(`Resetar "${activeLabel}" para os prÃªmios padrÃ£o?`)) return;
+    if (!confirm(`Resetar "${activeLabel}" para os prêmios padrão?`)) return;
     startReset(async () => {
       const result = await adminResetSchedule(activeLabel);
       if (result.ok) {
-        toast.success("Resetado para o padrÃ£o.");
+        toast.success("Resetado para o padrão.");
         setDirtyMap(prev => ({ ...prev, [activeLabel]: false }));
         setCustomMap(prev => ({ ...prev, [activeLabel]: false }));
-        // Recarrega o schedule padrÃ£o desse label
+        // Recarrega o schedule padrão desse label
         const fresh = await adminGetSchedule(activeLabel);
         setScheduleMap(prev => ({ ...prev, [activeLabel]: fresh.schedule }));
         setRetroConfigMap(prev => ({ ...prev, [activeLabel]: fresh.allowRetroactiveClaims }));
@@ -364,7 +382,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       <button className="flex w-full items-center justify-between text-left" onClick={() => setOpen(v => !v)}>
         <div className="flex items-center gap-3">
           <Calendar size={18} className="text-purple-400" />
-          <CardTitle className="text-base">CalendÃ¡rio de PrÃªmios VIP</CardTitle>
+          <CardTitle className="text-base">Calendário de Prêmios VIP</CardTitle>
           {isCustom && (
             <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 text-xs text-purple-300 font-semibold">
               Customizado
@@ -372,7 +390,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
           )}
           {anyDirty && (
             <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-xs text-amber-300 font-semibold flex items-center gap-1">
-              <AlertTriangle size={10} /> NÃ£o salvo
+              <AlertTriangle size={10} /> Não salvo
             </span>
           )}
         </div>
@@ -431,16 +449,16 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                 </Button>
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                O novo tipo copia o calendario e a regra de retroativo do passe selecionado.
+                O novo tipo copia o calendário e a regra de retroativo do passe selecionado.
               </p>
             </div>
           )}
 
-          {/* â”€â”€ GestÃ£o de passes deste tipo â”€â”€ */}
+          {/* ── Gestão de passes deste tipo ── */}
           <div className="rounded-xl border border-purple-500/10 bg-purple-950/10 p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs font-semibold text-purple-300 uppercase tracking-widest">
-                Passes ativos â€” {activeLabel}
+                Passes ativos — {activeLabel}
                 {labelVips.length > 0 && (
                   <span className="ml-2 rounded-full bg-purple-500/20 px-2 py-0.5 text-purple-200 normal-case font-normal">
                     {labelVips.length} ativo{labelVips.length > 1 ? "s" : ""}
@@ -471,7 +489,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
               </div>
             </div>
 
-            {/* Form de criaÃ§Ã£o */}
+            {/* Form de criação */}
             {showGrantForm && (
               <div className="space-y-3 pt-2 border-t border-purple-500/10">
                 <div className="flex flex-wrap gap-3">
@@ -517,20 +535,33 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                       <span className="flex items-center gap-1 text-slate-500"><Clock size={9} />{vip.daysRemaining}d</span>
                       <span className="flex items-center gap-1 text-slate-500"><CheckCircle2 size={9} />{vip.claimedDays}/30</span>
                       {vip.allowRetroactiveClaims && (
-                        <span className="rounded-full bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 text-[9px] text-green-400">â†© retroativo</span>
+                        <span className="rounded-full bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 text-[9px] text-green-400">↩ retroativo</span>
                       )}
                     </div>
-                    <Button
-                      onClick={() => handleToggleRetroPass(vip.passId, !vip.allowRetroactiveClaims)}
-                      disabled={retroPassPending && retroPassLoadingId === vip.passId}
-                      variant="ghost"
-                      size="sm"
-                      className={`h-7 gap-1.5 border px-2 text-[10px] ${vip.allowRetroactiveClaims ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : "border-border text-slate-400 hover:bg-slate-800 hover:text-slate-200"}`}
-                      title="Altera retroatividade apenas deste passe ativo."
-                    >
-                      <RotateCcw size={10} />
-                      {retroPassPending && retroPassLoadingId === vip.passId ? "..." : vip.allowRetroactiveClaims ? "Retroativo ON" : "Retroativo OFF"}
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        onClick={() => handleToggleRetroPass(vip.passId, !vip.allowRetroactiveClaims)}
+                        disabled={retroPassPending && retroPassLoadingId === vip.passId}
+                        variant="ghost"
+                        size="sm"
+                        className={`h-7 gap-1.5 border px-2 text-[10px] ${vip.allowRetroactiveClaims ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : "border-border text-slate-400 hover:bg-slate-800 hover:text-slate-200"}`}
+                        title="Altera retroatividade apenas deste passe ativo."
+                      >
+                        <RotateCcw size={10} />
+                        {retroPassPending && retroPassLoadingId === vip.passId ? "..." : vip.allowRetroactiveClaims ? "Retroativo ON" : "Retroativo OFF"}
+                      </Button>
+                      <Button
+                        onClick={() => handleRevokeVip(vip.passId, vip.displayName)}
+                        disabled={revokePending && revokingId === vip.passId}
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 border border-red-500/30 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+                        title="Remove este passe do jogador (revoga o VIP)."
+                      >
+                        <UserMinus size={10} />
+                        {revokePending && revokingId === vip.passId ? "..." : "Remover"}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -551,13 +582,13 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                   <Button onClick={handleReset} disabled={resetPending} variant="ghost"
                     className="gap-2 text-xs text-slate-400 hover:text-red-400 h-8">
                     <RotateCcw size={12} />
-                    {resetPending ? "Resetando..." : "Resetar padrÃ£o"}
+                    {resetPending ? "Resetando..." : "Resetar padrão"}
                   </Button>
                 )}
                 <Button onClick={handleSave} disabled={savePending || !dirty}
                   className="gap-2 text-xs h-8 bg-purple-600 hover:bg-purple-500 text-white">
                   <Save size={12} />
-                  {savePending ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
+                  {savePending ? "Salvando..." : "Salvar alterações"}
                 </Button>
               </div>
             </div>
@@ -592,7 +623,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                     <Star size={6} className="text-white" fill="white" />
                   </div>
                 )}
-                <span className="text-[8px] text-slate-600">{reward.type === "COINS" ? "ðŸª™" : reward.type === "EGG" ? "ðŸ¥š" : reward.type === "STICKER_PACK" ? "ðŸƒ" : reward.type === "ZIKALOOT" ? "ðŸŽŸï¸" : reward.type === "SHOP_ITEM" ? "ðŸ“¦" : reward.type === "FOOD" ? "ðŸ–" : "ðŸ¬"}</span>
+                <span className="text-[8px] text-slate-600">{reward.type === "COINS" ? "🪙" : reward.type === "EGG" ? "🥚" : reward.type === "STICKER_PACK" ? "🎴" : reward.type === "ZIKALOOT" ? "🎟️" : reward.type === "SHOP_ITEM" ? "📦" : reward.type === "FOOD" ? "🍖" : "🍬"}</span>
               </button>
             ))}
           </div>
@@ -611,7 +642,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   );
 }
 
-// â”€â”€ Editor de um dia â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Editor de um dia ──────────────────────────────────────────────────────────
 
 function DayEditor({ reward, onChange, onClose }: {
   reward: DayReward;
@@ -655,7 +686,7 @@ function DayEditor({ reward, onChange, onClose }: {
     onChange(next);
   };
 
-  // Kinds jÃ¡ presentes (para desabilitar duplicatas onde faz sentido)
+  // Kinds já presentes (para desabilitar duplicatas onde faz sentido)
   const presentKinds = new Set(state.slots.map(s => s.kind));
 
   return (
@@ -681,7 +712,7 @@ function DayEditor({ reward, onChange, onClose }: {
             className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-widest">DescriÃ§Ã£o (label)</label>
+          <label className="text-xs font-medium text-slate-400 uppercase tracking-widest">Descrição (label)</label>
           <input type="text" value={state.label}
             onChange={e => update({ label: e.target.value })}
             className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50"
@@ -694,7 +725,7 @@ function DayEditor({ reward, onChange, onClose }: {
               className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${state.isMilestone ? "bg-purple-500" : "bg-slate-700"}`}>
               <div className={`w-4 h-4 rounded-full bg-white transition-transform ${state.isMilestone ? "translate-x-5" : ""}`} />
             </div>
-            <span className="text-sm text-slate-300">{state.isMilestone ? "â­ Marco" : "Normal"}</span>
+            <span className="text-sm text-slate-300">{state.isMilestone ? "⭐ Marco" : "Normal"}</span>
           </label>
         </div>
       </div>
@@ -704,7 +735,7 @@ function DayEditor({ reward, onChange, onClose }: {
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Itens da recompensa</p>
 
         {state.slots.length === 0 && (
-          <p className="text-xs text-slate-500 italic py-2">Nenhum item. Adicione pelo menos um abaixo.</p>
+          <p className="text-xs text-amber-400/80 italic py-2">Nenhum item. Adicione pelo menos um antes de salvar.</p>
         )}
 
         {state.slots.map(slot => (
@@ -713,7 +744,6 @@ function DayEditor({ reward, onChange, onClose }: {
             slot={slot}
             onUpdate={(patch) => updateSlot(slot.id, patch)}
             onRemove={() => removeSlot(slot.id)}
-            canRemove={state.slots.length > 1}
           />
         ))}
       </div>
@@ -740,7 +770,7 @@ function DayEditor({ reward, onChange, onClose }: {
                       ? "opacity-30 cursor-not-allowed text-slate-500"
                       : "hover:bg-slate-800 text-slate-200"}`}>
                   <span className="mr-1">{meta.emoji}</span>{meta.label}
-                  {alreadyHas && <span className="ml-1 text-slate-600">âœ“</span>}
+                  {alreadyHas && <span className="ml-1 text-slate-600">✓</span>}
                 </button>
               );
             })}
@@ -758,7 +788,7 @@ function DayEditor({ reward, onChange, onClose }: {
         <span className="text-slate-400">Preview:</span>
         <span className="text-lg">{state.emoji}</span>
         <span className="text-slate-200 font-medium">{state.label}</span>
-        {state.isMilestone && <span className="text-purple-400 text-xs">â­ Marco</span>}
+        {state.isMilestone && <span className="text-purple-400 text-xs">⭐ Marco</span>}
         <span className="text-slate-500 text-xs">
           [{state.slots.map(s => `${SLOT_META[s.kind].emoji} ${s.kind}`).join(", ")}]
         </span>
@@ -767,13 +797,12 @@ function DayEditor({ reward, onChange, onClose }: {
   );
 }
 
-// â”€â”€ Editor de um slot individual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Editor de um slot individual ──────────────────────────────────────────────
 
-function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
+function SlotEditor({ slot, onUpdate, onRemove }: {
   slot: Slot;
   onUpdate: (patch: Partial<Slot>) => void;
   onRemove: () => void;
-  canRemove: boolean;
 }) {
   const meta = SLOT_META[slot.kind];
 
@@ -784,11 +813,9 @@ function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
           <span>{meta.emoji}</span>
           <span className="text-xs font-semibold text-slate-300">{meta.label}</span>
         </div>
-        {canRemove && (
-          <button onClick={onRemove} className="text-slate-500 hover:text-red-400 transition-colors">
-            <Trash2 size={12} />
-          </button>
-        )}
+        <button onClick={onRemove} title="Remover este item" className="text-slate-500 hover:text-red-400 transition-colors">
+          <Trash2 size={12} />
+        </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -850,7 +877,7 @@ function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
             <input type="text" value={slot.itemName}
               onChange={e => onUpdate({ itemName: e.target.value })}
               className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50"
-              placeholder="Ex: PolÃ­tica de Fraqueza" />
+              placeholder="Ex: Política de Fraqueza" />
           </div>
         )}
 
@@ -862,7 +889,7 @@ function SlotEditor({ slot, onUpdate, onRemove, canRemove }: {
                 className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${slot.special ? "bg-yellow-500" : "bg-slate-700"}`}>
                 <div className={`w-4 h-4 rounded-full bg-white transition-transform ${slot.special ? "translate-x-5" : ""}`} />
               </div>
-              <span className="text-sm text-slate-300">{slot.special ? "â­ Especial" : "Normal"}</span>
+              <span className="text-sm text-slate-300">{slot.special ? "⭐ Especial" : "Normal"}</span>
             </label>
           </div>
         )}
