@@ -14,6 +14,7 @@ export type NewsPostView = {
   publishedAt: string;
   rewardEnabled: boolean;
   rewardTitle: string | null;
+  rewardSummary: string | null;
   rewardClaimed: boolean;
   unread: boolean;
 };
@@ -109,7 +110,7 @@ export function NewsList({ posts }: { posts: NewsPostView[] }) {
         <article key={post.id} className="overflow-hidden rounded-2xl border border-[#FFCB05]/15 bg-slate-950/75 shadow-lg shadow-black/20">
           {post.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.imageUrl} alt="" className="max-h-[360px] w-full object-cover" loading="lazy" />
+            <img src={post.imageUrl} alt="" className="max-h-[560px] w-full bg-slate-950 object-contain" loading="lazy" />
           )}
           <div className="p-4 sm:p-5">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -141,7 +142,10 @@ export function NewsList({ posts }: { posts: NewsPostView[] }) {
                   </div>
                   <div>
                     <p className="text-sm font-bold text-purple-100">{post.rewardTitle ?? "Recompensa da noticia"}</p>
-                    <p className="text-xs text-purple-200/70">Pode ser resgatada uma vez por jogador.</p>
+                    <p className="text-xs text-purple-200/80">
+                      {post.rewardSummary ? `Conteudo: ${post.rewardSummary}` : "Pode ser resgatada uma vez por jogador."}
+                    </p>
+                    {post.rewardSummary && <p className="mt-0.5 text-[11px] text-purple-200/60">Pode ser resgatada uma vez por jogador.</p>}
                   </div>
                 </div>
                 <button

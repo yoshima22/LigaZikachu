@@ -7,6 +7,22 @@ import { NewsList, type NewsPostView } from "./_components/news-list";
 
 export const dynamic = "force-dynamic";
 
+function describeReward(payload: unknown) {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  const amount = typeof data.amount === "number" ? data.amount : typeof data.quantity === "number" ? data.quantity : null;
+  if (data.rewardKind === "ZIKA_COINS") return `${amount ?? 0} ZikaCoins`;
+  if (data.rewardKind === "MASCOT_EGG") return `1 ovo ${String(data.eggType ?? "COMMON")}`;
+  if (data.rewardKind === "MASCOT_FOOD") {
+    const name = data.foodType === "SWEET" ? "Doce" : "Comida";
+    return `${amount ?? 1}x ${name}`;
+  }
+  if (data.rewardKind === "MASCOT_BUFF") {
+    return `${amount ?? 1}x ${String(data.buffType ?? "Item de mascote")}`;
+  }
+  return null;
+}
+
 export default async function NoticiasPage() {
   const session = await getAppSession();
   const user = session?.user;
@@ -26,6 +42,7 @@ export default async function NoticiasPage() {
       publishedAt: true,
       rewardEnabled: true,
       rewardTitle: true,
+      rewardPayload: true,
       reads: player ? { where: { playerId: player.id }, select: { id: true } } : false,
       rewardClaims: player ? { where: { playerId: player.id }, select: { id: true } } : false,
     },
@@ -40,6 +57,7 @@ export default async function NoticiasPage() {
     publishedAt: post.publishedAt.toISOString(),
     rewardEnabled: post.rewardEnabled,
     rewardTitle: post.rewardTitle,
+    rewardSummary: describeReward(post.rewardPayload),
     rewardClaimed: "rewardClaims" in post && Array.isArray(post.rewardClaims) ? post.rewardClaims.length > 0 : false,
     unread: "reads" in post && Array.isArray(post.reads) ? post.reads.length === 0 : false,
   }));
