@@ -13,6 +13,17 @@ type OcupFilter = "all" | "free" | "busy" | "expedition" | "bazar" | "arena" | "
 
 const PAGE_SIZE = 9;
 
+const IV_RATING_STYLE: Record<string, string> = {
+  SSS: "text-fuchsia-300 border-fuchsia-400/50 bg-fuchsia-500/15",
+  SS:  "text-purple-300 border-purple-400/50 bg-purple-500/15",
+  S:   "text-amber-300 border-amber-400/50 bg-amber-500/15",
+  A:   "text-emerald-300 border-emerald-400/50 bg-emerald-500/15",
+  B:   "text-sky-300 border-sky-400/50 bg-sky-500/15",
+  C:   "text-slate-300 border-slate-400/40 bg-slate-500/15",
+  D:   "text-orange-300 border-orange-400/40 bg-orange-500/10",
+  E:   "text-red-300 border-red-400/40 bg-red-500/10",
+};
+
 const TYPE_LABELS: Record<string, string> = {
   normal: "Normal", fire: "Fogo", water: "Agua", grass: "Grama", electric: "Eletrico",
   psychic: "Psiquico", fighting: "Lutador", dark: "Noturno", steel: "Metal",
@@ -248,6 +259,14 @@ function BankRow({
             <span className="flex min-w-0 items-center gap-1.5">
               <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
               {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}
+              {mascot.ivRating && (
+                <span
+                  className={`shrink-0 inline-flex items-center rounded border px-1 py-px text-[8px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}
+                  title={`Análise: ranking ${mascot.ivRating}${typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}`}
+                >
+                  {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` ${mascot.ivScore}%` : ""}
+                </span>
+              )}
             </span>
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
