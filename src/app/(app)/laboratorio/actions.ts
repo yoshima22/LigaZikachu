@@ -349,9 +349,12 @@ export async function analyzeMascotAction(
     });
   });
 
-  // Atualiza o saldo mostrado no nav
+  // Atualiza o saldo mostrado no nav e o cache da página de mascotes
+  // (os favoritos são cacheados por player-mascots-<id>; sem isso, a tag de
+  // IV só apareceria neles após o TTL de 60s do cache).
   const user = await getSessionUser();
   if (user) revalidateTag(`nav-${user.id}`);
+  revalidateTag(`player-mascots-${me.id}`);
   const fresh = await getOrCreateWallet(me.id);
   return { ok: true as const, analysis, coinBalance: fresh.balance };
 }

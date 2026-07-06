@@ -23,6 +23,8 @@ interface MascotData {
   evolutionLocked: boolean;
   expLocked: boolean;
   isShiny: boolean;
+  ivRating?: string | null;
+  ivScore?: number | null;
   activeBuffs: { type: string; expiresAt: Date }[];
   arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
   relations?: Array<{ type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }>;
