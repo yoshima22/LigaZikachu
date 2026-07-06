@@ -176,6 +176,7 @@ model User {
   createdZikaLoots         ZikaLoot[]           @relation("ZikaLootCreatedBy")
   tutorialProgress         UserTutorialProgress[]
   passwordResetTokens      PasswordResetToken[]
+  createdNewsPosts         NewsPost[]           @relation("NewsPostAuthor")
 
   @@map("users")
 }
@@ -288,6 +289,8 @@ model Player {
   goldenPawTransactions   GoldenPawTransaction[]
   casualMode              Boolean              @default(false)
   auctionBids             BazarAuctionBid[]
+  newsReads               NewsRead[]
+  newsRewardClaims        NewsRewardClaim[]
 
   @@map("players")
 }
@@ -963,6 +966,54 @@ model PlayerGift {
 
   @@index([playerId, status])
   @@map("player_gifts")
+}
+
+model NewsPost {
+  id            String            @id @default(cuid())
+  title         String
+  subtitle      String?
+  body          String            @db.Text
+  imageUrl      String?           @db.Text
+  published     Boolean           @default(true)
+  rewardEnabled Boolean           @default(false)
+  rewardTitle   String?
+  rewardPayload Json?
+  createdById   String?
+  publishedAt   DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  createdBy     User?             @relation("NewsPostAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  reads         NewsRead[]
+  rewardClaims  NewsRewardClaim[]
+
+  @@index([published, publishedAt])
+  @@map("news_posts")
+}
+
+model NewsRead {
+  id       String   @id @default(cuid())
+  postId   String
+  playerId String
+  readAt   DateTime @default(now())
+  post     NewsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, playerId])
+  @@index([playerId, readAt])
+  @@map("news_reads")
+}
+
+model NewsRewardClaim {
+  id        String   @id @default(cuid())
+  postId    String
+  playerId  String
+  claimedAt DateTime @default(now())
+  post      NewsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, playerId])
+  @@index([playerId, claimedAt])
+  @@map("news_reward_claims")
 }
 
 enum GiftType {

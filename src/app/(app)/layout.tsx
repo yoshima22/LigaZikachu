@@ -31,7 +31,7 @@ const getNavData = (userId: string) =>
         select: { id: true, ptcglNick: true, avatarUrl: true },
       });
 
-      if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0 };
+      if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0, unreadNews: 0 };
 
       const giftCount = await prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch(() => 0);
       const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null);
@@ -44,8 +44,19 @@ const getNavData = (userId: string) =>
           ],
         },
       }).catch(() => 0);
+      const latestNews = await prisma.newsPost.findMany({
+        where: { published: true },
+        orderBy: { publishedAt: "desc" },
+        take: 5,
+        select: { id: true },
+      }).catch(() => []);
+      const latestNewsIds = latestNews.map((news) => news.id);
+      const readNews = latestNewsIds.length > 0
+        ? await prisma.newsRead.count({ where: { playerId: player.id, postId: { in: latestNewsIds } } }).catch(() => 0)
+        : 0;
+      const unreadNews = Math.max(0, latestNewsIds.length - readNews);
 
-      return { player, giftCount, wallet, unreadDms, bazarAlerts };
+      return { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews };
     },
     [`nav-data-v2-${userId}`],
     { revalidate: 60, tags: [`nav-${userId}`] },
@@ -60,10 +71,10 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   const navData = await getNavData(user.id).catch((error) => {
     console.error("[Layout] nav data failed", { userId: user.id, error });
-    return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0 };
+    return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0, unreadNews: 0 };
   });
   const globalNotice = await getGlobalNotice();
-  const { player, giftCount, wallet, unreadDms, bazarAlerts } = navData;
+  const { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews } = navData;
 
   return (
     <>
@@ -103,7 +114,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} playerId={player?.id} />
+            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} />
 
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
@@ -147,7 +158,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} playerId={player?.id} />
+            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} />
           </div>
           {globalNotice.message && (
             <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">

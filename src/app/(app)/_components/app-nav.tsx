@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Medal,
   MessageSquare,
+  Newspaper,
   Package,
   Search,
   ShieldCheck,
@@ -34,7 +35,8 @@ import { Button } from "@/components/ui/button";
 
 const mainLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, tutorialId: undefined },
-  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" }
+  { href: "/torneios", label: "Torneios", icon: Trophy, adminOnly: false, tutorialId: "nav-torneios" },
+  { href: "/noticias", label: "Noticias", icon: Newspaper, adminOnly: false, tutorialId: undefined }
 ];
 
 const combatLinks = [
@@ -98,7 +100,7 @@ type NavLink = {
   tutorialId?: string;
 };
 
-export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, bazarAlerts = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; bazarAlerts?: number; playerId?: string }) {
+export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, bazarAlerts = 0, unreadNews = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; bazarAlerts?: number; unreadNews?: number; playerId?: string }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -125,10 +127,13 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+                className="relative text-xs text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
               >
                 <Icon size={14} className="mr-1.5" />
                 {label}
+                {href === "/noticias" && unreadNews > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+                )}
               </Button>
             </Link>
           ))}
@@ -207,10 +212,13 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+                  className="relative shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
                 >
                   <Icon size={13} className="mr-1" />
                   {label}
+                  {href === "/noticias" && unreadNews > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+                  )}
                 </Button>
               </Link>
             ))}
