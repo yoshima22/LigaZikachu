@@ -6,6 +6,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { Coins, TrendingDown, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AdjustCoinsForm } from "./_components/adjust-coins-form";
+import { BulkCoinsForm } from "./_components/bulk-coins-form";
 
 const txTypeLabels: Record<string, string> = {
   PARTICIPATION_REWARD: "Participacao em dia",
@@ -48,10 +49,13 @@ export default async function CarteiraPage({
           displayName: true,
           ptcglNick: true,
           wallet: { select: { balance: true, totalEarned: true, totalSpent: true } },
+          user: { select: { role: true } },
         },
         orderBy: { displayName: "asc" },
       })
     : [];
+
+  const nonAdminCount = players.filter((p) => p.user?.role === "PLAYER").length;
 
   const requestedPlayerId = admin && params?.playerId ? params.playerId : currentPlayer.id;
   const selectedPlayer =
@@ -158,6 +162,16 @@ export default async function CarteiraPage({
         <Card>
           <p className="mb-3 font-semibold text-slate-200">Ajuste manual de ZikaCoins</p>
           <AdjustCoinsForm players={adminPlayers} />
+        </Card>
+      )}
+
+      {admin && (
+        <Card>
+          <p className="font-semibold text-slate-200">Envio em massa de ZikaCoins</p>
+          <p className="mb-3 text-xs text-slate-500">
+            Credita o mesmo valor para todos os jogadores de uma só vez. Use para bônus de evento, compensações ou premiações coletivas.
+          </p>
+          <BulkCoinsForm playerCount={nonAdminCount} totalCount={players.length} />
         </Card>
       )}
 
