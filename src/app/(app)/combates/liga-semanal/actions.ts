@@ -45,6 +45,24 @@ function getTodayBrt() {
   }).format(new Date());
 }
 
+function getBrtMinuteOfDay(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+function isWeeklyTeamEditLocked(now = new Date()) {
+  return getBrtMinuteOfDay(now) >= 20 * 60;
+}
+
+const WEEKLY_TEAM_LOCK_MESSAGE = "Atualizacoes de time da Liga Semanal ficam travadas apos 20:00 (BRT).";
+
 const PATH = "/combates/liga-semanal";
 const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
 function activeWeeklyPlayerWhere(now = new Date()) {
@@ -574,6 +592,7 @@ export async function saveDailyTeamAction(
 
   try {
     const today = getTodayBrt();
+    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
 
     const resolvedMatch = await prisma.weeklyMascotLeagueMatch.findFirst({
       where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
@@ -639,6 +658,8 @@ export async function clearTeamSlotAction(leagueId: string, battleSlot: number) 
 
   try {
     const today = getTodayBrt();
+    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+
     const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
       where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
     });
@@ -670,6 +691,7 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
 
   try {
     const today = getTodayBrt();
+    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
 
     // Check no resolved matches for these slots
     const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
@@ -888,6 +910,14 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
 
     // Load daily teams (manual) or fallback to auto-select
     async function loadTeam(playerId: string) {
+      const earlierTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
+        where: { leagueId, playerId, battleDate: today, battleSlot: { lt: battleSlot } },
+        select: { mascotIdsJson: true },
+      });
+      const alreadyUsedToday = new Set(
+        earlierTeams.flatMap((team) => (team.mascotIdsJson as string[] | null) ?? []),
+      );
+
       // 1. Time de hoje
       let dailyTeam = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
         where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId, battleDate: today, battleSlot } },
@@ -909,13 +939,15 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         } else {
           const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
           const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
-          const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
+          const ordered = ids
+            .map(id => mascots.find(m => m.id === id))
+            .filter((mascot) => mascot && !alreadyUsedToday.has(mascot.id));
 
           // If mascots were lost (sold/transferred), fill remaining slots
           if (ordered.length < 6) {
             const existingIds = new Set(ordered.map(m => m!.id));
             const fillers = await prisma.mascot.findMany({
-              where: { playerId, id: { notIn: [...existingIds] } },
+              where: { playerId, id: { notIn: [...new Set([...alreadyUsedToday, ...existingIds])] } },
               orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
               take: 6 - ordered.length,
             });
@@ -928,7 +960,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
 
       // 3. Auto-fill: favorites first, then by level
       const favs = await prisma.mascot.findMany({
-        where: { playerId, isFavorite: true },
+        where: { playerId, isFavorite: true, id: { notIn: [...alreadyUsedToday] } },
         orderBy: { level: "desc" },
         take: 6,
       });
@@ -936,7 +968,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
 
       const usedIds = new Set(favs.map(m => m.id));
       const rest = await prisma.mascot.findMany({
-        where: { playerId, id: { notIn: [...usedIds] } },
+        where: { playerId, id: { notIn: [...new Set([...alreadyUsedToday, ...usedIds])] } },
         orderBy: { level: "desc" },
         take: 6 - favs.length,
       });
