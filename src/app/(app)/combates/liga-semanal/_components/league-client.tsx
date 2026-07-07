@@ -13,6 +13,7 @@ import {
   seedLeagueItemsAction,
   saveDailyTeamAction,
   swapTeamSlotsAction,
+  swapTeamMascotPositionsAction,
   clearTeamSlotAction,
   buyLeagueItemAction,
   finalizeLeagueAction,
@@ -409,6 +410,7 @@ const MASCOTS_PER_PAGE = 12;
 function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
+  const [movingMascot, setMovingMascot] = useState<{ slot: number; index: number; name: string } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [roles, setRoles] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
@@ -422,6 +424,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
   const startEditing = (slot: number) => {
     const existing = data.myTeams.find((t: any) => t.battleSlot === slot);
+    setMovingMascot(null);
     setEditingSlot(slot);
     const ids = existing ? (existing.mascotIdsJson as string[] ?? []) : [];
     setSelected(ids);
@@ -455,6 +458,34 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   };
 
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleMascotPositionClick = (slot: number, index: number, name: string) => {
+    if (!data.currentLeague) return;
+    if (!movingMascot) {
+      setMovingMascot({ slot, index, name });
+      return;
+    }
+    if (movingMascot.slot === slot && movingMascot.index === index) {
+      setMovingMascot(null);
+      return;
+    }
+
+    const from = movingMascot;
+    setMovingMascot(null);
+    startTransition(async () => {
+      try {
+        const res = await swapTeamMascotPositionsAction(data.currentLeague.id, from.slot, from.index, slot, index);
+        if (res && "error" in res) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(`${from.name} reposicionado.`);
+        refresh();
+      } catch (err) {
+        toast.error(`Erro: ${String(err).slice(0, 100)}`);
+      }
+    });
+  };
 
   const saveTeam = () => {
     setSaveError(null);
@@ -631,6 +662,19 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     <div className="space-y-4">
       <p className="text-sm text-slate-400">Monte até 3 times por dia (6 mascotes cada, sem repetição entre times).</p>
 
+      <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400">
+        {movingMascot ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span>Reposicionando <span className="font-bold text-yellow-300">{movingMascot.name}</span>. Clique em outro mascote para trocar de lugar.</span>
+            <button type="button" onClick={() => setMovingMascot(null)} className="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300 hover:text-white">
+              cancelar
+            </button>
+          </div>
+        ) : (
+          <span>Para reposicionar, clique em um mascote montado e depois em outro slot ocupado. A postura acompanha o mascote.</span>
+        )}
+      </div>
+
       {[1, 2, 3].map((slot, idx) => {
         const nextSlot = slot < 3 ? slot + 1 : null;
         const team = data.myTeams.find((t: any) => t.battleSlot === slot);
@@ -682,18 +726,31 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
                   const types = getPokemonTypes(m.pokemonId);
                   const role = teamRoles?.[id] || recommendCombatRole(m as any);
+                  const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
+                  const isMoving = movingMascot?.slot === slot && movingMascot.index === i;
                   return (
-                    <div key={id} className="relative rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-2 flex flex-col items-center gap-0.5">
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => handleMascotPositionClick(slot, i, mascotName)}
+                      title={isMoving ? "Clique novamente para cancelar" : "Clique para escolher este mascote para reposicionar"}
+                      className={`relative rounded-xl border p-2 flex flex-col items-center gap-0.5 text-left transition-all disabled:opacity-50 ${
+                        isMoving
+                          ? "border-yellow-300 bg-yellow-400/20 shadow-[0_0_18px_rgba(255,203,5,0.35)]"
+                          : "border-[#FFCB05]/20 bg-[#FFCB05]/5 hover:border-yellow-400/60 hover:bg-yellow-400/10"
+                      }`}
+                    >
                       <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
-                      <p className="text-[8px] text-slate-300 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                      <p className="text-[8px] text-slate-300 truncate w-full text-center">{mascotName}</p>
                       <p className="text-[8px] text-slate-500">Nv.{m.level}</p>
                       <div className="flex gap-0.5">
                         {types.map(t => <span key={t} className={`rounded-full px-1 py-px text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
                       </div>
                       <p className={`text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
-                    </div>
+                    </button>
                   );
                 })}
               </div>

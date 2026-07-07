@@ -769,6 +769,112 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
 
 // ── Toggle league bets ───────────────────────────────────────────────────
 
+export async function swapTeamMascotPositionsAction(
+  leagueId: string,
+  fromSlot: number,
+  fromIndex: number,
+  toSlot: number,
+  toIndex: number,
+) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "NÃ£o autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador nÃ£o encontrado" };
+
+  const invalidSlot = fromSlot < 1 || fromSlot > 3 || toSlot < 1 || toSlot > 3;
+  const invalidIndex = fromIndex < 0 || fromIndex > 5 || toIndex < 0 || toIndex > 5;
+  if (invalidSlot || invalidIndex) return { error: "PosiÃ§Ã£o invÃ¡lida." };
+  if (fromSlot === toSlot && fromIndex === toIndex) return { error: "Escolha duas posiÃ§Ãµes diferentes." };
+
+  try {
+    const today = getTodayBrt();
+    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+
+    const slots = Array.from(new Set([fromSlot, toSlot]));
+    const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
+      where: { leagueId, battleDate: today, battleSlot: { in: slots }, status: { in: ["RESOLVED", "WO"] } },
+    });
+    if (resolved) return { error: "Um dos combates jÃ¡ aconteceu. NÃ£o Ã© possÃ­vel reposicionar." };
+
+    async function getTeam(slot: number) {
+      let team = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slot } },
+      });
+      if (!team) {
+        team = await prisma.weeklyMascotLeagueDailyTeam.findFirst({
+          where: { leagueId, playerId: player!.id, battleSlot: slot },
+          orderBy: { battleDate: "desc" },
+        });
+      }
+      return team;
+    }
+
+    const sourceTeam = await getTeam(fromSlot);
+    const targetTeam = fromSlot === toSlot ? sourceTeam : await getTeam(toSlot);
+    if (!sourceTeam || !targetTeam) return { error: "Time nÃ£o encontrado." };
+
+    const sourceIds = [...(((sourceTeam.mascotIdsJson as string[]) ?? []))];
+    const targetIds = fromSlot === toSlot ? sourceIds : [...(((targetTeam.mascotIdsJson as string[]) ?? []))];
+    const sourceMascotId = sourceIds[fromIndex];
+    const targetMascotId = targetIds[toIndex];
+    if (!sourceMascotId || !targetMascotId) return { error: "SÃ³ Ã© possÃ­vel trocar posiÃ§Ãµes preenchidas." };
+
+    const sourceRoles = { ...(((sourceTeam.rolesJson as Record<string, string>) ?? {})) };
+    const targetRoles = fromSlot === toSlot ? sourceRoles : { ...(((targetTeam.rolesJson as Record<string, string>) ?? {})) };
+    const sourceRole = sourceRoles[sourceMascotId];
+    const targetRole = targetRoles[targetMascotId];
+
+    sourceIds[fromIndex] = targetMascotId;
+    targetIds[toIndex] = sourceMascotId;
+
+    delete sourceRoles[sourceMascotId];
+    delete targetRoles[targetMascotId];
+    if (targetRole) sourceRoles[targetMascotId] = targetRole;
+    if (sourceRole) targetRoles[sourceMascotId] = sourceRole;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.weeklyMascotLeagueDailyTeam.upsert({
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate: today, battleSlot: fromSlot } },
+        create: {
+          id: createId(),
+          leagueId,
+          playerId: player.id,
+          battleDate: today,
+          battleSlot: fromSlot,
+          mascotIdsJson: sourceIds,
+          rolesJson: sourceRoles,
+          lockedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        update: { mascotIdsJson: sourceIds, rolesJson: sourceRoles, lockedAt: new Date(), updatedAt: new Date() },
+      });
+
+      if (toSlot !== fromSlot) {
+        await tx.weeklyMascotLeagueDailyTeam.upsert({
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate: today, battleSlot: toSlot } },
+          create: {
+            id: createId(),
+            leagueId,
+            playerId: player.id,
+            battleDate: today,
+            battleSlot: toSlot,
+            mascotIdsJson: targetIds,
+            rolesJson: targetRoles,
+            lockedAt: new Date(),
+            updatedAt: new Date(),
+          },
+          update: { mascotIdsJson: targetIds, rolesJson: targetRoles, lockedAt: new Date(), updatedAt: new Date() },
+        });
+      }
+    });
+
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao reposicionar: ${String(err).slice(0, 200)}` };
+  }
+}
+
 export async function toggleLeagueBetsAction(leagueId: string, enabled: boolean) {
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado" };
