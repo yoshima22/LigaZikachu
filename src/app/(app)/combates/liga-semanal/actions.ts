@@ -373,8 +373,19 @@ export async function joinLeagueAction(leagueId: string) {
 
 // ── Swiss pairing engine ──────────────────────────────────────────────────
 
-type PairingPlayer = { playerId: string; points: number; wins: number; damageDealt: number };
+type PairingPlayer = { playerId: string; points: number; wins: number; damageDealt: number; byes: number };
 type PairingResult = Array<{ aId: string; bId: string | null }>;
+
+function pickByePlayer(players: PairingPlayer[], byeCount: Map<string, number>, slotIndex: number) {
+  return [...players].sort((a, b) => {
+    const aTotalByes = a.byes + (byeCount.get(a.playerId) ?? 0);
+    const bTotalByes = b.byes + (byeCount.get(b.playerId) ?? 0);
+    if (aTotalByes !== bTotalByes) return aTotalByes - bTotalByes;
+    const scoreDiff = (a.points - b.points) || (a.wins - b.wins) || (a.damageDealt - b.damageDealt);
+    if (scoreDiff !== 0) return scoreDiff;
+    return (hashStr(a.playerId + "bye" + slotIndex) & 0xff) - (hashStr(b.playerId + "bye" + slotIndex) & 0xff);
+  })[0] ?? null;
+}
 
 function swissPairSlot(
   players: PairingPlayer[],
@@ -385,12 +396,19 @@ function swissPairSlot(
 ): PairingResult {
   const result: PairingResult = [];
   const paired = new Set<string>();
+  const pool = [...players];
 
-  // Sort with shuffle within similar score tiers + BYE priority
-  const sorted = [...players].sort((a, b) => {
-    const aB = byeCount.get(a.playerId) ?? 0;
-    const bB = byeCount.get(b.playerId) ?? 0;
-    if (aB !== bB) return bB - aB;
+  if (pool.length % 2 === 1) {
+    const byePlayer = pickByePlayer(pool, byeCount, slotIndex);
+    if (byePlayer) {
+      result.push({ aId: byePlayer.playerId, bId: null });
+      byeCount.set(byePlayer.playerId, (byeCount.get(byePlayer.playerId) ?? 0) + 1);
+      paired.add(byePlayer.playerId);
+    }
+  }
+
+  // Sort with shuffle within similar score tiers
+  const sorted = pool.sort((a, b) => {
     const scoreDiff = (b.points - a.points) || (b.wins - a.wins);
     if (scoreDiff !== 0) return scoreDiff;
     // Same tier: shuffle to avoid deterministic pairing
@@ -434,7 +452,7 @@ function swissPairSlot(
       todayPaired.get(p.playerId)!.add(opp.playerId);
       todayPaired.get(opp.playerId)!.add(p.playerId);
     } else {
-      // BYE
+      // Fallback defensivo: só deve ocorrer se todos os candidatos estiverem indisponíveis.
       result.push({ aId: p.playerId, bId: null });
       byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
       paired.add(p.playerId);
