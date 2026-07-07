@@ -52,6 +52,17 @@ async function getOrCreateWeeklyUsage(playerId: string) {
   });
 }
 
+async function getWeeklyLeagueLockedMascotIds(playerId: string) {
+  const teams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
+    where: {
+      playerId,
+      league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
+    },
+    select: { mascotIdsJson: true },
+  });
+  return new Set(teams.flatMap((team) => (team.mascotIdsJson as string[] | null) ?? []));
+}
+
 // ── Page data ─────────────────────────────────────────────────────────────────
 export async function getLabDataAction() {
   const me = await requirePlayer();
@@ -73,7 +84,10 @@ export async function getLabDataAction() {
     getOrCreateWeeklyUsage(me.id),
   ]);
 
-  const wallet = await getOrCreateWallet(me.id);
+  const [wallet, weeklyLeagueLockedIds] = await Promise.all([
+    getOrCreateWallet(me.id),
+    getWeeklyLeagueLockedMascotIds(me.id),
+  ]);
 
   // Build pokémonId → count map for duplicate multiplier
   const countMap = new Map<number, number>();
@@ -86,7 +100,8 @@ export async function getLabDataAction() {
     const extras = copies - 1;
     const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
     const dust = Math.ceil(baseDust * multiplier);
-    const recyclable = !m.isFavorite && !m.bazarListed && (!m.arenaState || m.arenaState === "FREE");
+    const inWeeklyLeague = weeklyLeagueLockedIds.has(m.id);
+    const recyclable = !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
 
     return {
       id: m.id,
@@ -99,6 +114,7 @@ export async function getLabDataAction() {
       rarity,
       dust,
       recyclable,
+      inWeeklyLeague,
       isFavorite: m.isFavorite ?? false,
       bazarListed: m.bazarListed ?? false,
       analyzed: !!m.analyzedAt,
@@ -137,6 +153,10 @@ export async function recycleMascotAction(mascotId: string) {
   if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes de reciclar." };
   if (mascot.arenaState && mascot.arenaState !== "FREE") {
     return { ok: false as const, error: "Mascote esta em batalha ou descansando." };
+  }
+  const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(me.id);
+  if (weeklyLeagueLockedIds.has(mascot.id)) {
+    return { ok: false as const, error: "Mascote esta escalado na Liga Semanal. Remova ou altere o time antes de reciclar." };
   }
 
   const allMascots = await prisma.mascot.findMany({
@@ -186,6 +206,11 @@ export async function recycleMascotsAction(mascotIds: string[]) {
   if (blocked?.isFavorite) return { ok: false as const, error: "Nao e possivel reciclar mascotes favoritos." };
   if (blocked?.bazarListed) return { ok: false as const, error: "Retire mascotes do Bazar antes de reciclar." };
   if (blocked) return { ok: false as const, error: "Mascote esta em batalha ou descansando." };
+
+  const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(me.id);
+  if (mascots.some((mascot) => weeklyLeagueLockedIds.has(mascot.id))) {
+    return { ok: false as const, error: "Um dos mascotes esta escalado na Liga Semanal. Remova ou altere o time antes de reciclar." };
+  }
 
   const selectedCountMap = new Map<number, number>();
   for (const mascot of mascots) {
