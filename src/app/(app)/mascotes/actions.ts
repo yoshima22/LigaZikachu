@@ -25,6 +25,31 @@ function revalidate(playerId?: string) {
 
 const BANK_MASCOT_PAGE_SIZE = 9;
 const POKEMON_ID_POOL = Array.from({ length: 1025 }, (_, index) => index + 1);
+const EGG_GENERATION_TYPES = [
+  "EGG_GEN1",
+  "EGG_GEN2",
+  "EGG_GEN3",
+  "EGG_GEN4",
+  "EGG_GEN5",
+  "EGG_GEN6",
+  "EGG_GEN7",
+  "EGG_GEN8",
+  "EGG_GEN9",
+  "EGG_GEN6PLUS",
+] as const;
+
+function isEggGenerationType(value?: string | null): value is (typeof EGG_GENERATION_TYPES)[number] {
+  return !!value && EGG_GENERATION_TYPES.includes(value as (typeof EGG_GENERATION_TYPES)[number]);
+}
+
+function getLabEggGeneration(origin?: string | null) {
+  const value = origin?.startsWith("LAB_REGION:") ? origin.slice("LAB_REGION:".length) : null;
+  return isEggGenerationType(value) ? value : null;
+}
+
+function isLabChoiceEgg(type: string, origin?: string | null) {
+  return type === "LAB" || !!getLabEggGeneration(origin);
+}
 
 function findPokemonIdsBySearch(search: string) {
   const normalized = search.trim().toLowerCase();
@@ -49,16 +74,21 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
     if (!player) return { error: "Perfil não encontrado." };
 
     // Bloqueia ovos que estão em escrow no Bazar
-    const egg = await prisma.mascotEgg.findUnique({ where: { id: eggId }, select: { origin: true, playerId: true } });
+    const egg = await prisma.mascotEgg.findUnique({ where: { id: eggId }, select: { origin: true, playerId: true, type: true } });
     if (!egg || egg.playerId !== player.id) return { error: "Ovo não encontrado." };
     if (egg.origin?.startsWith("bazar:")) {
       return { error: "Este ovo está anunciado no Bazar. Cancele o anúncio antes de usá-lo." };
     }
 
-    // Se jogador escolheu uma geração específica, atualiza o tipo do ovo antes de incubar
-    if (genOverride) {
-      const validGens = ["EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS"];
-      if (validGens.includes(genOverride)) {
+    // Se jogador escolheu uma geração específica, ovos normais mudam de tipo.
+    // O ovo de laboratório guarda a região na origem para preservar os 3 escolhidos e os stats elevados.
+    if (isEggGenerationType(genOverride)) {
+      if (egg.type === "LAB") {
+        await prisma.mascotEgg.update({
+          where: { id: eggId },
+          data: { origin: `LAB_REGION:${genOverride}` }
+        });
+      } else {
         await prisma.mascotEgg.update({
           where: { id: eggId },
           data: { type: genOverride as import("@prisma/client").EggType }
@@ -89,12 +119,13 @@ export async function hatchEggAction(): Promise<{
       include: { egg: { select: { origin: true, type: true } } },
     });
     if (!incubator) return { error: "Sem ovo na incubadora." };
-    if (incubator.egg.type === "LAB") {
-      const { rollLabEggChoice } = await import("@/lib/mascot");
+    if (isLabChoiceEgg(incubator.egg.type, incubator.egg.origin)) {
+      const { rollLabEggChoice, rollPokemonFromEgg } = await import("@/lib/mascot");
+      const labGeneration = getLabEggGeneration(incubator.egg.origin);
       const seen = new Set<number>();
       const choices: number[] = [];
       while (choices.length < 3) {
-        const id = rollLabEggChoice();
+        const id = labGeneration ? rollPokemonFromEgg(labGeneration) : rollLabEggChoice();
         if (!seen.has(id)) { seen.add(id); choices.push(id); }
       }
       return { labChoices: choices };

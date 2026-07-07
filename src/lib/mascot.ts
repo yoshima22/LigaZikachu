@@ -36,6 +36,10 @@ function randomPersonality(): MascotPersonality {
   return randomFrom([...PERSONALITIES]) as MascotPersonality;
 }
 
+function getEggStatTypeKey(type: string, origin?: string | null) {
+  return type === "LAB" || origin?.startsWith("LAB_REGION:") ? "LAB" : type;
+}
+
 /** Sorteio de pokemonId a partir do tipo de ovo */
 /**
  * Rola uma opção para o ovo de laboratório.
@@ -109,7 +113,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
 
   const mascot = await prisma.$transaction(async (tx) => {
     // Stat range baseado no tipo do ovo (ovos mais raros = stats melhores)
-    const eggTypeKey = incubator.egg.type as string;
+    const eggTypeKey = getEggStatTypeKey(incubator.egg.type as string, incubator.egg.origin);
     const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? [8, 14];
     const isStatBuffed = statMin > 8; // ovos acima de COMMON/EVENT
 
