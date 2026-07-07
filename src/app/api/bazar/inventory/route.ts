@@ -23,6 +23,18 @@ const HIDDEN_BAZAR_ITEM_TYPES = [
   "TRACE_SPECIAL_MAP",
 ] as const;
 
+async function getWeeklyLeagueLockedMascotIds(playerId: string) {
+  const teams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
+    where: {
+      playerId,
+      league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
+    },
+    select: { mascotIdsJson: true },
+  });
+
+  return new Set(teams.flatMap((team) => (team.mascotIdsJson as string[] | null) ?? []));
+}
+
 export async function GET() {
   try {
     const session = await getAppSession();
@@ -30,6 +42,8 @@ export async function GET() {
 
     const player = await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } });
     if (!player) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
+
+    const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(player.id);
 
     const [mascots, eggs, foods, inventoryItems, wallet, config] = await Promise.all([
       // Mascotes disponíveis (não feridos, não em expedição, não no bazar, não em equipe de arena)
@@ -39,6 +53,7 @@ export async function GET() {
           bazarListed: false,
           isEquipped: false,
           arenaState: "FREE",
+          id: { notIn: [...weeklyLeagueLockedIds] },
           expeditions: { none: { status: "ACTIVE" } },
           arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
         },

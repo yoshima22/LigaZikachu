@@ -354,6 +354,9 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         if (!mascot || mascot.playerId !== player.id) throw new Error("Mascote não encontrado.");
         if (mascot.bazarListed) throw new Error("Mascote já está anunciado no Bazar.");
         if (mascot.isEquipped) throw new Error("Desequipe o mascote antes de anunciá-lo.");
+        if (await isMascotLockedInWeeklyLeague(tx, mascot.id, player.id)) {
+          throw new Error("Mascote está escalado na Liga Semanal e não pode ser anunciado no Bazar.");
+        }
 
         const activeExp = await tx.mascotExpedition.findFirst({
           where: { mascotId: mascot.id, status: "ACTIVE" },
@@ -1191,6 +1194,18 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
+async function isMascotLockedInWeeklyLeague(client: TxClient | typeof prisma, mascotId: string, playerId: string) {
+  const teams = await client.weeklyMascotLeagueDailyTeam.findMany({
+    where: {
+      playerId,
+      league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
+    },
+    select: { mascotIdsJson: true },
+  });
+
+  return teams.some((team) => ((team.mascotIdsJson as string[] | null) ?? []).includes(mascotId));
+}
+
 async function _reserveProposalOffers(tx: TxClient, playerId: string, items: ProposalOfferItem[]) {
   for (const item of items) {
     if (!item.mascotId) continue;
@@ -1204,6 +1219,9 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
     }
     if (mascot.isEquipped) {
       throw new Error(`Desequipe ${item.displayName} antes de oferecê-lo no Bazar.`);
+    }
+    if (await isMascotLockedInWeeklyLeague(tx, mascot.id, playerId)) {
+      throw new Error(`${item.displayName} está escalado na Liga Semanal e não pode ser oferecido no Bazar.`);
     }
 
     const activeExpedition = await tx.mascotExpedition.findFirst({
