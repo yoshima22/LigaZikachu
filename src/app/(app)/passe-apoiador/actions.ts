@@ -521,6 +521,17 @@ export async function adminRevokeVip(passId: string, reason?: string): Promise<{
     });
     if (!pass) return { ok: false, error: "Passe não encontrado." };
 
+    // O jogador mantém o título (com intro no perfil) enquanto tiver QUALQUER
+    // outro passe ativo e não expirado — o título é um brinde compartilhado
+    // por todos os passes, não exclusivo deste.
+    const otherActivePass = await prisma.supporterPass.findFirst({
+      where: { playerId: pass.playerId, active: true, id: { not: passId }, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    const titleItemId = pass.titleItemId
+      ?? (await prisma.shopItem.findFirst({ where: { name: "Pilar da Comunidade", type: "TITLE" }, select: { id: true } }))?.id
+      ?? null;
+
     await prisma.$transaction(async (tx) => {
       // Desativa passe
       await tx.supporterPass.update({
@@ -528,8 +539,10 @@ export async function adminRevokeVip(passId: string, reason?: string): Promise<{
         data: { active: false, revokedAt: new Date(), revokedByAdminId: admin?.id, revokeReason: reason ?? null },
       });
 
-      // Remove título VIP do inventário (e desequipa se equipado)
+      // Remove itens VIP do inventário (e desequipa se equipado).
+      // Preserva o título se houver outro passe ativo.
       for (const inv of pass.player.inventory) {
+        if (inv.itemId === titleItemId && otherActivePass) continue; // mantém o título
         if (inv.equipped) {
           await tx.playerInventory.update({ where: { id: inv.id }, data: { equipped: false } });
         }
