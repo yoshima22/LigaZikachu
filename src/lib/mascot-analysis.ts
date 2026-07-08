@@ -155,14 +155,32 @@ function distributeFaithful(total: number, weights: MascotStats): MascotStats {
   return dist;
 }
 
+// Peso suavizado (expoente < 1) — réplica de softWeight() de mascot.ts.
+const GROWTH_WEIGHT_EXPONENT = 0.85;
+const softWeight = (stat: number) => Math.pow(Math.max(0, stat), GROWTH_WEIGHT_EXPONENT);
+
+/** Distribui pontos com garantia anti-freeze — réplica de
+ *  distributeStatPointsAntiFreeze() de mascot.ts. */
+function distributeAntiFreeze(points: number, weights: MascotStats, currentStats: MascotStats, cadenceLevel: number): MascotStats {
+  const dist = distributeFaithful(points, weights);
+  if (points < 2) return dist;
+  const avg = STAT_KEYS.reduce((s, k) => s + currentStats[k], 0) / STAT_KEYS.length;
+  const weakest = STAT_KEYS.reduce((a, b) => (currentStats[b] < currentStats[a] ? b : a), STAT_KEYS[0]);
+  if (currentStats[weakest] < avg * 0.55 && cadenceLevel % 3 === 0 && dist[weakest] === 0) {
+    const top = STAT_KEYS.reduce((a, b) => (dist[b] > dist[a] ? b : a), STAT_KEYS[0]);
+    if (dist[top] > 0) { dist[top] -= 1; dist[weakest] += 1; }
+  }
+  return dist;
+}
+
 /** Ganho de atributos de UM nível — réplica de levelStatBonuses() de mascot.ts. */
 function levelBonus(pokemonId: number, level: number, personality: string, stats: MascotStats): MascotStats {
   const raw = rawPointsPerLevel(personality);
   const growthMult = getMascotStatusGrowthMultiplier(pokemonId);
   const points = Math.max(1, Math.round(raw * LEVEL_GAIN * growthMult));
   const weights: MascotStats = {
-    force: stats.force * 3, agility: stats.agility * 3, charisma: stats.charisma * 3,
-    instinct: stats.instinct * 3, vitality: stats.vitality * 3,
+    force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
+    instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
   };
   if (personality === "COMPETITIVE") weights.force *= 1.15;
   if (personality === "LOYAL") weights.charisma *= 1.15;
@@ -171,7 +189,7 @@ function levelBonus(pokemonId: number, level: number, personality: string, stats
     const wobble = 0.92 + (((pokemonId * (index + 3) + level * 11) % 17) / 100);
     weights[key] *= wobble;
   });
-  return distributeFaithful(points, weights);
+  return distributeAntiFreeze(points, weights, stats, level);
 }
 
 const addStats = (a: MascotStats, b: MascotStats): MascotStats => ({
@@ -212,10 +230,10 @@ function simulateGrowth(
       if (applied.has(m.key)) continue;
       applied.add(m.key);
       const w: MascotStats = {
-        force: stats.force * 3, agility: stats.agility * 3, charisma: stats.charisma * 3,
-        instinct: stats.instinct * 3, vitality: stats.vitality * 3,
+        force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
+        instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
       };
-      stats = addStats(stats, distributeFaithful(m.points, w));
+      stats = addStats(stats, distributeAntiFreeze(m.points, w, stats, m.level));
     }
   }
 

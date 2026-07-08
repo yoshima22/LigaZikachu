@@ -260,6 +260,41 @@ function distributeStatPoints(total: number, weights: Record<MascotStatKey, numb
   return distributed;
 }
 
+// Suaviza o peso do crescimento: expoente < 1 comprime a distância entre os
+// atributos altos e baixos, mantendo o foco (o mais alto ainda cresce mais)
+// mas evitando que os baixos fiquem com peso desprezível.
+const GROWTH_WEIGHT_EXPONENT = 0.85;
+function softWeight(stat: number): number {
+  return Math.pow(Math.max(0, stat), GROWTH_WEIGHT_EXPONENT);
+}
+
+/**
+ * Distribui pontos por peso e impede que um atributo fique PERMANENTEMENTE preso:
+ * se o atributo mais fraco receberia 0 neste ganho, está bem abaixo da média
+ * (< 55%) e caímos na cadência (a cada ~3 níveis), redireciona 1 ponto do que
+ * mais cresceu para ele. Mantém o foco (só 1 ponto, e só quando muito atrás),
+ * mas garante que nenhum atributo trave em "nunca mais sobe".
+ */
+function distributeStatPointsAntiFreeze(
+  points: number,
+  weights: Record<MascotStatKey, number>,
+  currentStats: Record<MascotStatKey, number>,
+  cadenceLevel: number,
+): Record<MascotStatKey, number> {
+  const dist = distributeStatPoints(points, weights);
+  if (points < 2) return dist;
+  const keys = Object.keys(currentStats) as MascotStatKey[];
+  const avg = keys.reduce((s, k) => s + currentStats[k], 0) / keys.length;
+  const weakest = keys.reduce((a, b) => (currentStats[b] < currentStats[a] ? b : a), keys[0]);
+  const laggingBadly = currentStats[weakest] < avg * 0.55;
+  const onCadence = cadenceLevel % 3 === 0;
+  if (laggingBadly && onCadence && dist[weakest] === 0) {
+    const topGainer = keys.reduce((a, b) => (dist[b] > dist[a] ? b : a), keys[0]);
+    if (dist[topGainer] > 0) { dist[topGainer] -= 1; dist[weakest] += 1; }
+  }
+  return dist;
+}
+
 function levelStatBonuses(
   mascot: {
     pokemonId: number;
@@ -283,11 +318,11 @@ function levelStatBonuses(
   const pointsToAdd = rawPoints > 0 ? Math.max(1, Math.round(rawPoints * LEVEL_STAT_GAIN_MULTIPLIER * growthMultiplier)) : 0;
 
   const weights: Record<MascotStatKey, number> = {
-    statForce: mascot.statForce * 3,
-    statAgility: mascot.statAgility * 3,
-    statCharisma: mascot.statCharisma * 3,
-    statInstinct: mascot.statInstinct * 3,
-    statVitality: mascot.statVitality * 3,
+    statForce: softWeight(mascot.statForce),
+    statAgility: softWeight(mascot.statAgility),
+    statCharisma: softWeight(mascot.statCharisma),
+    statInstinct: softWeight(mascot.statInstinct),
+    statVitality: softWeight(mascot.statVitality),
   };
 
   if (mascot.personality === "COMPETITIVE") weights.statForce *= 1.15;
@@ -299,7 +334,11 @@ function levelStatBonuses(
     weights[key] *= wobble;
   });
 
-  return distributeStatPoints(pointsToAdd, weights);
+  const currentStats: Record<MascotStatKey, number> = {
+    statForce: mascot.statForce, statAgility: mascot.statAgility, statCharisma: mascot.statCharisma,
+    statInstinct: mascot.statInstinct, statVitality: mascot.statVitality,
+  };
+  return distributeStatPointsAntiFreeze(pointsToAdd, weights, currentStats, mascot.level);
 }
 
 function addStatRecords(
@@ -458,13 +497,13 @@ export async function addExp(
   for (const milestone of newMilestones) {
     const currentStats = addStatRecords(baseAfterLevelBonuses, milestoneBonuses);
     const weights: Record<MascotStatKey, number> = {
-      statForce: currentStats.statForce * 3,
-      statAgility: currentStats.statAgility * 3,
-      statCharisma: currentStats.statCharisma * 3,
-      statInstinct: currentStats.statInstinct * 3,
-      statVitality: currentStats.statVitality * 3,
+      statForce: softWeight(currentStats.statForce),
+      statAgility: softWeight(currentStats.statAgility),
+      statCharisma: softWeight(currentStats.statCharisma),
+      statInstinct: softWeight(currentStats.statInstinct),
+      statVitality: softWeight(currentStats.statVitality),
     };
-    const points = distributeStatPoints(milestone.points, weights);
+    const points = distributeStatPointsAntiFreeze(milestone.points, weights, currentStats, milestone.level);
     milestoneBonuses = addStatRecords(milestoneBonuses, points);
     milestoneRows.push({
       mascotId,
