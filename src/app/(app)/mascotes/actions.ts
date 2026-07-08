@@ -769,6 +769,7 @@ export async function getBankMascotsPageAction(input?: {
   search?: string;
   type?: string;
   ocup?: string;
+  rank?: string;
 }): Promise<{
   error?: string;
   data?: {
@@ -813,6 +814,7 @@ export async function getBankMascotsPageAction(input?: {
     const search = (input?.search ?? "").trim();
     const type = (input?.type ?? "").trim().toLowerCase();
     const ocup = (input?.ocup ?? "all").trim().toLowerCase();
+    const rank = (input?.rank ?? "").trim();
     const now = new Date();
 
     const and: Prisma.MascotWhereInput[] = [
@@ -820,6 +822,11 @@ export async function getBankMascotsPageAction(input?: {
       { isFavorite: false },
       { isEquipped: false },
     ];
+
+    // Filtro de análise/ranking do Laboratório
+    if (rank === "analyzed") and.push({ analyzedAt: { not: null } });
+    else if (rank === "unanalyzed") and.push({ analyzedAt: null });
+    else if (["SSS", "SS", "S", "A", "B", "C", "D", "E"].includes(rank)) and.push({ ivRating: rank });
 
     if (search) {
       const pokemonIds = findPokemonIdsBySearch(search);

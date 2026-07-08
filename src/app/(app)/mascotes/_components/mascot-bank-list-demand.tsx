@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
@@ -402,7 +402,9 @@ export function MascotBankList({
   const [search, setSearch] = useState("");
   const [ocup, setOcup] = useState<OcupFilter>("all");
   const [typeFilter, setTypeFilter] = useState("");
+  const [rankFilter, setRankFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPage, startPageLoad] = useTransition();
   const didInitialLoad = useRef(false);
@@ -417,6 +419,7 @@ export function MascotBankList({
           search,
           type: typeFilter,
           ocup,
+          rank: rankFilter,
         });
         if (res.error || !res.data) {
           setLoadError(res.error ?? "Erro ao carregar banco de mascotes.");
@@ -425,9 +428,10 @@ export function MascotBankList({
         setRows(res.data.mascots);
         setKnownTotal(res.data.total);
         setPage(res.data.page);
+        setPageInput("");
       })();
     });
-  }, [ocup, search, typeFilter]);
+  }, [ocup, search, typeFilter, rankFilter]);
 
   useEffect(() => {
     if (didInitialLoad.current) return;
@@ -489,6 +493,18 @@ export function MascotBankList({
         >
           {OCUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
+        <select
+          value={rankFilter}
+          onChange={(event) => setRankFilter(event.target.value)}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="">Análise: todos</option>
+          <option value="analyzed">Analisados</option>
+          <option value="unanalyzed">Não analisados</option>
+          {["SSS", "SS", "S", "A", "B", "C", "D", "E"].map((r) => (
+            <option key={r} value={r}>Rank {r}</option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={() => loadPage(1)}
@@ -524,7 +540,15 @@ export function MascotBankList({
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+          <button
+            type="button" title="Primeira página"
+            disabled={safePage <= 1 || loadingPage}
+            onClick={() => loadPage(1)}
+            className="flex items-center rounded-xl border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronsLeft size={13} />
+          </button>
           <button
             type="button"
             disabled={safePage <= 1 || loadingPage}
@@ -534,9 +558,8 @@ export function MascotBankList({
             <ChevronLeft size={12} /> Anterior
           </button>
           <span className="text-xs text-slate-500">
-            Pagina <span className="font-semibold text-slate-300">{safePage}</span> de{" "}
+            Pág. <span className="font-semibold text-slate-300">{safePage}</span> de{" "}
             <span className="font-semibold text-slate-300">{totalPages}</span>
-            <span className="ml-1 text-slate-600">({knownTotal} mascotes)</span>
           </span>
           <button
             type="button"
@@ -544,8 +567,40 @@ export function MascotBankList({
             onClick={() => loadPage(safePage + 1)}
             className="flex items-center gap-1 rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Proxima <ChevronRight size={12} />
+            Próxima <ChevronRight size={12} />
           </button>
+          <button
+            type="button" title="Última página"
+            disabled={safePage >= totalPages || loadingPage}
+            onClick={() => loadPage(totalPages)}
+            className="flex items-center rounded-xl border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronsRight size={13} />
+          </button>
+          {/* Ir para página específica */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const n = parseInt(pageInput, 10);
+              if (!Number.isNaN(n)) loadPage(Math.max(1, Math.min(totalPages, n)));
+            }}
+            className="flex items-center gap-1"
+          >
+            <input
+              type="number" min={1} max={totalPages} inputMode="numeric"
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value.replace(/\D/g, ""))}
+              placeholder="Ir p/…"
+              className="w-16 rounded-xl border border-border bg-slate-900 px-2 py-1.5 text-center text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]"
+            />
+            <button
+              type="submit"
+              disabled={loadingPage || !pageInput}
+              className="rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-2.5 py-1.5 text-xs font-semibold text-[#FFCB05] transition-colors hover:bg-[#FFCB05]/15 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Ir
+            </button>
+          </form>
         </div>
       )}
     </section>
