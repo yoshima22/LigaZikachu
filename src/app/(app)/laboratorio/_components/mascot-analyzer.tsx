@@ -51,20 +51,35 @@ const STAT_TIPS: Record<string, string> = {
   "Vitalidade": "Resistência e vida. Base do Defensor: reduz o dano recebido e aumenta o HP.",
 };
 
-function StatBar({ label, current, projected, delta }: { label: string; current: number; projected: number; delta: number }) {
-  const max = Math.max(projected, 1);
+function StatBar({ label, current, projected, delta, max }: { label: string; current: number; projected: number; delta: number; max: number }) {
+  const scale = Math.max(max, 1);
+  const basePct = (current / scale) * 100;
+  const gainPct = (Math.max(0, delta) / scale) * 100;
+  const growthRatio = current > 0 ? Math.round((delta / current) * 100) : 0;
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="group/tip relative w-16 shrink-0 cursor-help text-slate-400 underline decoration-dotted decoration-slate-600">
-        {label}
-        {STAT_TIPS[label] && <TipBubble text={STAT_TIPS[label]} align="left" />}
-      </span>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-        <div className="absolute inset-y-0 left-0 rounded-full bg-slate-600" style={{ width: `${(current / max) * 100}%` }} />
-        <div className="absolute inset-y-0 rounded-full bg-cyan-500/70" style={{ left: `${(current / max) * 100}%`, width: `${(delta / max) * 100}%` }} />
+    <div className="space-y-1">
+      {/* Linha superior: nome + atual → projetado + ganho */}
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="group/tip relative cursor-help font-medium text-slate-300 underline decoration-dotted decoration-slate-600">
+          {label}
+          {STAT_TIPS[label] && <TipBubble text={STAT_TIPS[label]} align="left" />}
+        </span>
+        <span className="flex items-baseline gap-1.5 tabular-nums">
+          <span className="text-slate-500">{current}</span>
+          <span className="text-slate-600">→</span>
+          <span className="font-bold text-slate-100">{projected}</span>
+          {delta > 0 && (
+            <span className="rounded bg-emerald-500/15 px-1 text-[10px] font-semibold text-emerald-400">
+              +{delta}{growthRatio > 0 ? ` · +${growthRatio}%` : ""}
+            </span>
+          )}
+        </span>
       </div>
-      <span className="w-8 shrink-0 text-right text-slate-300">{projected}</span>
-      {delta > 0 && <span className="w-8 shrink-0 text-right text-emerald-400">+{delta}</span>}
+      {/* Barra: parte cinza = atual, parte verde = ganho estimado */}
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-800/80">
+        <div className="absolute inset-y-0 left-0 bg-slate-500" style={{ width: `${basePct}%` }} />
+        <div className="absolute inset-y-0 bg-emerald-500" style={{ left: `${basePct}%`, width: `${gainPct}%` }} />
+      </div>
     </div>
   );
 }
@@ -305,16 +320,26 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
 
       {/* Projeção de atributos */}
       <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
+        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-300">
           <TrendingUp size={13} className="text-cyan-400" />
           <span className="group/tip relative cursor-help underline decoration-dotted decoration-slate-600">
             Projeção Nv.{a.currentLevel} → Nv.{a.targetLevel}
-            <TipBubble align="left" text="Como os atributos devem crescer do nível atual até o nível-alvo. A barra cinza é o valor atual; a parte ciano é o ganho estimado. Passe o mouse em cada atributo para ver o que ele faz." />
+            <TipBubble align="left" text="Como os atributos devem crescer do nível atual até o nível-alvo. Em cada barra, a parte cinza é o valor atual e a parte verde é o ganho estimado. Passe o mouse no nome de cada atributo para ver o que ele faz." />
           </span>
-          <span className="ml-auto text-slate-500">Total {a.currentTotal} → <span className="text-cyan-300">{a.projectedTotal}</span></span>
+          <span className="ml-auto text-slate-400">Total <span className="text-slate-300">{a.currentTotal}</span> → <span className="font-bold text-cyan-300">{a.projectedTotal}</span></span>
         </div>
-        <div className="space-y-1.5">
-          {a.perStat.map(s => <StatBar key={s.key} label={s.label} current={s.current} projected={s.projected} delta={s.delta} />)}
+        {/* Legenda */}
+        <div className="mb-3 flex items-center gap-3 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-slate-500" /> Atual</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" /> Ganho estimado</span>
+        </div>
+        <div className="space-y-2.5">
+          {(() => {
+            const maxProj = Math.max(...a.perStat.map(s => s.projected), 1);
+            return a.perStat.map(s => (
+              <StatBar key={s.key} label={s.label} current={s.current} projected={s.projected} delta={s.delta} max={maxProj} />
+            ));
+          })()}
         </div>
       </div>
 

@@ -133,24 +133,93 @@ function milestonePointsUpTo(pokemonId: number, level: number): number {
   return getMascotProgressMilestones(pokemonId, level).reduce((sum, m) => sum + m.points, 0);
 }
 
-function distributeProportional(stats: MascotStats, totalToAdd: number): MascotStats {
-  const total = stats.force + stats.agility + stats.charisma + stats.instinct + stats.vitality;
-  if (totalToAdd <= 0 || total <= 0) return { ...stats };
-  const keys: StatKey[] = ["force", "agility", "charisma", "instinct", "vitality"];
-  const result = { ...stats };
-  let distributed = 0;
-  for (const k of keys) {
-    const add = Math.round(totalToAdd * (stats[k] / total));
-    result[k] = stats[k] + add;
-    distributed += add;
+// Ordem dos atributos igual à de mascot.ts (importa para o "wobble" por índice)
+const STAT_KEYS: StatKey[] = ["force", "agility", "charisma", "instinct", "vitality"];
+
+/** Distribui `total` pontos entre os atributos por peso — réplica exata de
+ *  distributeStatPoints() de mascot.ts (maior resto). */
+function distributeFaithful(total: number, weights: MascotStats): MascotStats {
+  const weightTotal = STAT_KEYS.reduce((s, k) => s + Math.max(1, weights[k]), 0);
+  const exact = STAT_KEYS.map((k) => {
+    const v = (Math.max(1, weights[k]) / weightTotal) * total;
+    const floor = Math.floor(v);
+    return { key: k, floor, remainder: v - floor };
+  });
+  const dist: MascotStats = { force: 0, agility: 0, charisma: 0, instinct: 0, vitality: 0 };
+  for (const e of exact) dist[e.key] += e.floor;
+  let leftover = total - STAT_KEYS.reduce((s, k) => s + dist[k], 0);
+  for (const e of [...exact].sort((a, b) => b.remainder - a.remainder)) {
+    if (leftover <= 0) break;
+    dist[e.key]++; leftover--;
   }
-  // Ajuste do resto no maior stat
-  const remainder = totalToAdd - distributed;
-  if (remainder !== 0) {
-    const biggest = keys.reduce((a, b) => (result[b] > result[a] ? b : a), keys[0]);
-    result[biggest] += remainder;
+  return dist;
+}
+
+/** Ganho de atributos de UM nível — réplica de levelStatBonuses() de mascot.ts. */
+function levelBonus(pokemonId: number, level: number, personality: string, stats: MascotStats): MascotStats {
+  const raw = rawPointsPerLevel(personality);
+  const growthMult = getMascotStatusGrowthMultiplier(pokemonId);
+  const points = Math.max(1, Math.round(raw * LEVEL_GAIN * growthMult));
+  const weights: MascotStats = {
+    force: stats.force * 3, agility: stats.agility * 3, charisma: stats.charisma * 3,
+    instinct: stats.instinct * 3, vitality: stats.vitality * 3,
+  };
+  if (personality === "COMPETITIVE") weights.force *= 1.15;
+  if (personality === "LOYAL") weights.charisma *= 1.15;
+  if (personality === "DRAMATIC") weights.vitality *= 0.85;
+  STAT_KEYS.forEach((key, index) => {
+    const wobble = 0.92 + (((pokemonId * (index + 3) + level * 11) % 17) / 100);
+    weights[key] *= wobble;
+  });
+  return distributeFaithful(points, weights);
+}
+
+const addStats = (a: MascotStats, b: MascotStats): MascotStats => ({
+  force: a.force + b.force, agility: a.agility + b.agility, charisma: a.charisma + b.charisma,
+  instinct: a.instinct + b.instinct, vitality: a.vitality + b.vitality,
+});
+
+/**
+ * Simula o crescimento nível a nível replicando fielmente addExp/levelStatBonuses
+ * (composição, peso de personalidade, wobble, evolução e marcos). Determinístico,
+ * então fica muito próximo da progressão real (assumindo ganho de 1 nível por vez).
+ */
+function simulateGrowth(
+  input: AnalysisInput, currentLevel: number, targetLevel: number, currentStats: MascotStats,
+): { finalPokemonId: number; projectedStats: MascotStats } {
+  const evolutionLocked = input.evolutionLocked ?? false;
+  let pokemonId = input.pokemonId;
+  let stats: MascotStats = { ...currentStats };
+
+  // Marcos já conquistados no nível atual — não reaplicar
+  const applied = new Set<string>();
+  for (const m of getMascotProgressMilestones(pokemonId, currentLevel, false)) applied.add(m.key);
+
+  for (let lvl = currentLevel; lvl < targetLevel; lvl++) {
+    // Ganho do nível lvl → lvl+1 (o wobble/peso usam o nível e stats de partida)
+    stats = addStats(stats, levelBonus(pokemonId, lvl, input.personality, stats));
+    const newLevel = lvl + 1;
+
+    // Evolução ao atingir o nível
+    let evolvedThisStep = false;
+    if (!evolutionLocked) {
+      const evo = EVOLUTION_MAP.get(pokemonId);
+      if (evo && newLevel >= evo.level) { pokemonId = evo.toOptions?.[0] ?? evo.to; evolvedThisStep = true; }
+    }
+
+    // Marcos de maturidade/evolução no novo nível
+    for (const m of getMascotProgressMilestones(pokemonId, newLevel, evolvedThisStep)) {
+      if (applied.has(m.key)) continue;
+      applied.add(m.key);
+      const w: MascotStats = {
+        force: stats.force * 3, agility: stats.agility * 3, charisma: stats.charisma * 3,
+        instinct: stats.instinct * 3, vitality: stats.vitality * 3,
+      };
+      stats = addStats(stats, distributeFaithful(m.points, w));
+    }
   }
-  return result;
+
+  return { finalPokemonId: pokemonId, projectedStats: stats };
 }
 
 function ratingFromScore(score: number): MascotRating {
@@ -188,21 +257,17 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
   };
   const currentTotal = currentStats.force + currentStats.agility + currentStats.charisma + currentStats.instinct + currentStats.vitality;
 
-  const finalPokemonId = finalFormAtLevel(input.pokemonId, targetLevel, evolutionLocked);
-  const growthMult = getMascotStatusGrowthMultiplier(finalPokemonId);
+  const growthMult = getMascotStatusGrowthMultiplier(finalFormAtLevel(input.pokemonId, targetLevel, evolutionLocked));
 
-  // Projeção de stats até targetLevel
-  const ppl = pointsPerLevel(input.personality, growthMult);
-  const levelPoints = (targetLevel - currentLevel) * ppl;
-  const milestoneNow = milestonePointsUpTo(input.pokemonId, currentLevel);
-  const milestoneTarget = milestonePointsUpTo(finalPokemonId, targetLevel);
-  const milestoneGain = Math.max(0, milestoneTarget - milestoneNow);
-  const totalAdded = levelPoints + milestoneGain;
-  const projectedStats = distributeProportional(currentStats, totalAdded);
+  // Projeção de stats até targetLevel — simulação fiel nível a nível
+  const sim = simulateGrowth(input, currentLevel, targetLevel, currentStats);
+  const finalPokemonId = sim.finalPokemonId;
+  const projectedStats = sim.projectedStats;
   const projectedTotal = projectedStats.force + projectedStats.agility + projectedStats.charisma + projectedStats.instinct + projectedStats.vitality;
 
   // ── IV / potencial futuro ──
   // 1) Qualidade do roll inicial: isola a contribuição do crescimento e compara com a banda base.
+  const milestoneNow = milestonePointsUpTo(input.pokemonId, currentLevel);
   const pplCurrent = pointsPerLevel(input.personality, getMascotStatusGrowthMultiplier(input.pokemonId));
   const growthContribution = (currentLevel - 1) * pplCurrent + milestoneNow;
   const estBase = Math.max(BASE_MIN_TOTAL, Math.min(BASE_MAX_TOTAL, currentTotal - growthContribution));
