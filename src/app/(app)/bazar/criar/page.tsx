@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Info } from "lucide-react";
+import { ArrowLeft, Coins, Info, Search } from "lucide-react";
 import Link from "next/link";
 import { createListing, createAuctionListing } from "../actions";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
@@ -65,6 +65,9 @@ function CreateListingForm() {
   const [itemQuantity, setItemQuantity] = useState(1);
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [loadingInventory, setLoadingInventory] = useState(false);
+  const [mascotSearch, setMascotSearch] = useState("");
+  const [mascotPage, setMascotPage] = useState(0);
+  const [itemSearch, setItemSearch] = useState("");
 
   const loadInventory = async () => {
     if (inventory) return;
@@ -215,30 +218,91 @@ function CreateListingForm() {
           </div>
         )}
 
-        {/* Seleção de mascote */}
+        {/* Seleção de mascote — busca, paginação e stats base */}
         {category === "MASCOT" && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Escolha o mascote</label>
             {loadingInventory ? <p className="text-xs text-slate-500">Carregando…</p>
              : !inventory ? <button onClick={loadInventory} className="text-xs text-[#FFCB05] underline">Carregar meus mascotes</button>
-             : (inventory.mascots.filter(m => !m.bazarListed && !m.isEquipped && m.arenaState === "FREE").length === 0
-               ? <p className="text-xs text-slate-500">Nenhum mascote disponível (desequipe, remova da Arena e de expedições primeiro).</p>
-               : <div className="grid gap-2 max-h-60 overflow-y-auto">
-                   {inventory.mascots.filter(m => !m.bazarListed && !m.isEquipped && m.arenaState === "FREE").map(m => (
-                     <button key={m.id} type="button" onClick={() => setSelectedMascotId(m.id)}
-                       className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-colors ${
-                         selectedMascotId === m.id ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-border hover:border-slate-600"
-                       }`}>
-                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                       <img src={getSpriteUrl(m.pokemonId)} alt="" width={40} height={40} className="object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
-                       <div>
-                         <p className="text-sm font-semibold text-white">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
-                         <p className="text-[10px] text-slate-500">Nv.{m.level} · #{m.pokemonId} · {m.battleWins}V</p>
+             : (() => {
+                 const available = inventory.mascots.filter(m => !m.bazarListed && !m.isEquipped && m.arenaState === "FREE");
+                 if (available.length === 0) {
+                   return <p className="text-xs text-slate-500">Nenhum mascote disponível (desequipe, remova da Arena e de expedições primeiro).</p>;
+                 }
+                 const q = mascotSearch.trim().toLowerCase();
+                 const filtered = q
+                   ? available.filter(m =>
+                       (m.nickname ?? "").toLowerCase().includes(q) ||
+                       getPokemonName(m.pokemonId).toLowerCase().includes(q) ||
+                       String(m.pokemonId).includes(q))
+                   : available;
+                 const PER_PAGE = 8;
+                 const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+                 const page = Math.min(mascotPage, totalPages - 1);
+                 const paged = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+                 return (
+                   <div className="space-y-2">
+                     {/* Busca */}
+                     <div className="relative">
+                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                       <input
+                         value={mascotSearch}
+                         onChange={e => { setMascotSearch(e.target.value); setMascotPage(0); }}
+                         placeholder="Buscar por nome, apelido ou #dex…"
+                         className="w-full rounded-lg border border-border bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/50"
+                       />
+                     </div>
+
+                     {filtered.length === 0 ? (
+                       <p className="text-xs text-slate-500 py-2">Nenhum mascote encontrado para “{mascotSearch}”.</p>
+                     ) : (
+                       <div className="grid gap-2 sm:grid-cols-2">
+                         {paged.map(m => (
+                           <button key={m.id} type="button" onClick={() => setSelectedMascotId(m.id)}
+                             className={`flex flex-col rounded-xl border p-2.5 text-left transition-colors ${
+                               selectedMascotId === m.id ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-border hover:border-slate-600"
+                             }`}>
+                             <div className="flex items-center gap-3">
+                               {/* eslint-disable-next-line @next/next/no-img-element */}
+                               <img src={getSpriteUrl(m.pokemonId)} alt="" width={40} height={40} className="object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                               <div className="min-w-0">
+                                 <p className="text-sm font-semibold text-white truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                                 <p className="text-[10px] text-slate-500">Nv.{m.level} · #{m.pokemonId} · {m.battleWins}V</p>
+                               </div>
+                             </div>
+                             {/* Stats base — mesmo estilo da Arena */}
+                             <div className="mt-2 grid grid-cols-5 gap-0.5 text-center text-[9px]">
+                               {[
+                                 { k: "For", v: m.statForce,    c: "text-red-400" },
+                                 { k: "Vel", v: m.statAgility,  c: "text-yellow-400" },
+                                 { k: "Ins", v: m.statInstinct, c: "text-blue-400" },
+                                 { k: "Vit", v: m.statVitality, c: "text-green-400" },
+                                 { k: "Car", v: m.statCharisma, c: "text-pink-400" },
+                               ].map(s => (
+                                 <div key={s.k} className="rounded bg-slate-800/60 py-0.5">
+                                   <div className="text-slate-600">{s.k}</div>
+                                   <div className={`font-bold ${s.c}`}>{s.v}</div>
+                                 </div>
+                               ))}
+                             </div>
+                           </button>
+                         ))}
                        </div>
-                     </button>
-                   ))}
-                 </div>
-             )}
+                     )}
+
+                     {/* Paginação */}
+                     {totalPages > 1 && (
+                       <div className="flex items-center justify-center gap-2 text-xs">
+                         <button type="button" onClick={() => setMascotPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                           className="rounded-lg border border-border px-3 py-1 text-slate-400 disabled:opacity-40 hover:text-slate-200">Anterior</button>
+                         <span className="text-slate-500">{page + 1}/{totalPages} · {filtered.length} mascote{filtered.length !== 1 ? "s" : ""}</span>
+                         <button type="button" onClick={() => setMascotPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                           className="rounded-lg border border-border px-3 py-1 text-slate-400 disabled:opacity-40 hover:text-slate-200">Próxima</button>
+                       </div>
+                     )}
+                   </div>
+                 );
+               })()}
           </div>
         )}
 
@@ -248,14 +312,27 @@ function CreateListingForm() {
             <label className="text-sm font-semibold text-slate-200">Escolha o item</label>
             {!inventory ? (
               <button onClick={loadInventory} className="text-xs text-[#FFCB05] underline">Carregar meus itens</button>
-            ) : (
-              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            ) : (() => {
+              const q = itemSearch.trim().toLowerCase();
+              const match = (s: string) => !q || s.toLowerCase().includes(q);
+              const fItems = tradeableInventory.filter(i => match(i.name) || match(i.description ?? ""));
+              const fEggs = eggGroups.filter(([type]) => match(EGG_LABELS[type] ?? type));
+              const fFoods = inventory.foods.filter(f => f.quantity > 0 && match(f.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote"));
+              return (
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input value={itemSearch} onChange={e => setItemSearch(e.target.value)}
+                    placeholder="Buscar item, ovo ou comida…"
+                    className="w-full rounded-lg border border-border bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/50" />
+                </div>
+                <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
 
                 {/* Itens do inventário (buffs, tickets, etc.) — dados diretos do shop */}
-                {tradeableInventory.length > 0 && (
+                {fItems.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide sticky top-0 bg-slate-950/80 py-0.5">Itens do Inventário</p>
-                    {tradeableInventory.map(item => {
+                    {fItems.map(item => {
                       const isSel = selectedItem?.shopItemId === item.shopItemId;
                       return (
                         <button key={item.shopItemId} type="button"
@@ -283,10 +360,10 @@ function CreateListingForm() {
                 )}
 
                 {/* Ovos */}
-                {eggGroups.length > 0 && (
+                {fEggs.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide sticky top-0 bg-slate-950/80 py-0.5">Ovos</p>
-                    {eggGroups.map(([type, count]) => {
+                    {fEggs.map(([type, count]) => {
                       const label = EGG_LABELS[type] ?? type;
                       const isSel = selectedItem?.type === type && !selectedItem?.shopItemId;
                       return (
@@ -305,10 +382,10 @@ function CreateListingForm() {
                 )}
 
                 {/* Comida / Doces */}
-                {inventory.foods.filter(f => f.quantity > 0).length > 0 && (
+                {fFoods.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide sticky top-0 bg-slate-950/80 py-0.5">Comida</p>
-                    {inventory.foods.filter(f => f.quantity > 0).map(food => {
+                    {fFoods.map(food => {
                       const label = food.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote";
                       const isSel = selectedItem?.type === food.type && !selectedItem?.shopItemId;
                       return (
@@ -326,11 +403,15 @@ function CreateListingForm() {
                   </div>
                 )}
 
-                {tradeableInventory.length === 0 && eggGroups.length === 0 && inventory.foods.filter(f => f.quantity > 0).length === 0 && (
-                  <p className="text-center text-xs text-slate-500 py-4">Nenhum item disponível para anunciar.</p>
+                {fItems.length === 0 && fEggs.length === 0 && fFoods.length === 0 && (
+                  <p className="text-center text-xs text-slate-500 py-4">
+                    {q ? `Nenhum item encontrado para “${itemSearch}”.` : "Nenhum item disponível para anunciar."}
+                  </p>
                 )}
+                </div>
               </div>
-            )}
+              );
+            })()}
 
             {selectedItem && (
               <div className="flex items-center gap-2">
