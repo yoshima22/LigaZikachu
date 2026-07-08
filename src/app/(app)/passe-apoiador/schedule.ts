@@ -59,8 +59,46 @@ export const PASS_SCHEDULE_VIP: DayReward[] = [
   ...PASS_SCHEDULE.slice(2), // dias 3-30 idênticos
 ];
 
+// Segundo passe de batalha — mesmo equilíbrio/pacing do primeiro, mas com
+// recompensas focadas em OVOS (sem ovos de lab), ZC progressivo ao longo dos
+// dias, 2 tickets ZikaLoot Especiais, Ovo da Sorte, Vitaminas Chocantes,
+// 1 Proteína Zika no fim e Ovo Especial no dia 1.
+export const PASS_SCHEDULE_BATTLE2: DayReward[] = [
+  { day:  1, label: "200 ZikaCoins + Ovo Especial",             type: "EGG",       eggType: "SPECIAL", coins: 200, foodQty: 1, emoji: "🥚", isMilestone: true },
+  { day:  2, label: "150 ZikaCoins",                            type: "COINS",     coins: 150,  emoji: "🪙" },
+  { day:  3, label: "1 Ovo Comum",                              type: "EGG",       eggType: "COMMON",  foodQty: 1, emoji: "🥚" },
+  { day:  4, label: "200 ZikaCoins + Vitamina Chocante",        type: "SHOP_ITEM", shopItemName: "Vitamina Chocante", coins: 200, emoji: "⚡" },
+  { day:  5, label: "250 ZikaCoins + 1 Ovo Comum",              type: "EGG",       eggType: "COMMON",  coins: 250, foodQty: 1, emoji: "🥚" },
+  { day:  6, label: "300 ZikaCoins + 3 Comidas de Mascote",     type: "FOOD",      foodType: "FOOD",   foodQty: 3, coins: 300, emoji: "🍖" },
+  { day:  7, label: "300 ZikaCoins + 1 Ovo Raro",              type: "EGG",       eggType: "RARE",    coins: 300, foodQty: 1, emoji: "🥚", isMilestone: true },
+  { day:  8, label: "350 ZikaCoins",                            type: "COINS",     coins: 350,  emoji: "🪙" },
+  { day:  9, label: "300 ZikaCoins + 2 Doces de Mascote",       type: "SWEET",     foodType: "SWEET",  foodQty: 2, coins: 300, emoji: "🍬" },
+  { day: 10, label: "350 ZikaCoins + Ticket ZikaLoot Especial", type: "ZIKALOOT",  zikalootSpecial: true, coins: 350, emoji: "⭐" },
+  { day: 11, label: "400 ZikaCoins + 1 Ovo Raro",              type: "EGG",       eggType: "RARE",    coins: 400, foodQty: 1, emoji: "🥚" },
+  { day: 12, label: "400 ZikaCoins",                            type: "COINS",     coins: 400,  emoji: "🪙" },
+  { day: 13, label: "400 ZikaCoins + 1 Ovo Comum",              type: "EGG",       eggType: "COMMON",  coins: 400, foodQty: 1, emoji: "🥚" },
+  { day: 14, label: "450 ZikaCoins + Ovo da Sorte",             type: "SHOP_ITEM", shopItemName: "Ovo da Sorte", coins: 450, emoji: "🍀", isMilestone: true },
+  { day: 15, label: "450 ZikaCoins + 1 Ovo Raro",              type: "EGG",       eggType: "RARE",    coins: 450, foodQty: 1, emoji: "🥚" },
+  { day: 16, label: "500 ZikaCoins + Vitamina Chocante",       type: "SHOP_ITEM", shopItemName: "Vitamina Chocante", coins: 500, emoji: "⚡" },
+  { day: 17, label: "500 ZikaCoins + 1 Ovo Comum",              type: "EGG",       eggType: "COMMON",  coins: 500, foodQty: 1, emoji: "🥚" },
+  { day: 18, label: "550 ZikaCoins",                            type: "COINS",     coins: 550,  emoji: "🪙" },
+  { day: 19, label: "550 ZikaCoins + 1 Ovo Raro",              type: "EGG",       eggType: "RARE",    coins: 550, foodQty: 1, emoji: "🥚" },
+  { day: 20, label: "600 ZikaCoins + Ovo Especial",            type: "EGG",       eggType: "SPECIAL", coins: 600, foodQty: 1, emoji: "🥚" },
+  { day: 21, label: "600 ZikaCoins + Ticket ZikaLoot Especial", type: "ZIKALOOT",  zikalootSpecial: true, coins: 600, emoji: "⭐", isMilestone: true },
+  { day: 22, label: "650 ZikaCoins",                            type: "COINS",     coins: 650,  emoji: "🪙" },
+  { day: 23, label: "650 ZikaCoins + 1 Ovo Raro",              type: "EGG",       eggType: "RARE",    coins: 650, foodQty: 1, emoji: "🥚" },
+  { day: 24, label: "650 ZikaCoins + 3 Comidas de Mascote",     type: "FOOD",      foodType: "FOOD",   foodQty: 3, coins: 650, emoji: "🍖" },
+  { day: 25, label: "700 ZikaCoins + Ovo Especial",            type: "EGG",       eggType: "SPECIAL", coins: 700, foodQty: 1, emoji: "🥚" },
+  { day: 26, label: "750 ZikaCoins + Proteína Zika",           type: "SHOP_ITEM", shopItemName: "Proteína Zika", coins: 750, emoji: "💪" },
+  { day: 27, label: "800 ZikaCoins + 1 Ovo Raro",             type: "EGG",       eggType: "RARE",    coins: 800, foodQty: 1, emoji: "🥚" },
+  { day: 28, label: "900 ZikaCoins + Ovo Especial",           type: "EGG",       eggType: "SPECIAL", coins: 900, foodQty: 1, emoji: "🥚", isMilestone: true },
+  { day: 29, label: "1.050 ZikaCoins",                          type: "COINS",     coins: 1050, emoji: "🪙" },
+  { day: 30, label: "1.200 ZikaCoins + Ovo Especial",          type: "EGG",       eggType: "SPECIAL", coins: 1200, foodQty: 1, emoji: "🌟", isMilestone: true },
+];
+
 // Mapa de schedules padrão por label (usado como fallback se DB não tiver)
-PASS_SCHEDULE_DEFAULTS["Passe Apoiador"] = PASS_SCHEDULE;
-PASS_SCHEDULE_DEFAULTS["Passe Gold"]     = PASS_SCHEDULE_VIP;
-PASS_SCHEDULE_DEFAULTS["Passe Diamante"] = PASS_SCHEDULE_VIP;
-PASS_SCHEDULE_DEFAULTS["Passe Especial"] = PASS_SCHEDULE_VIP;
+PASS_SCHEDULE_DEFAULTS["Passe Apoiador"]    = PASS_SCHEDULE;
+PASS_SCHEDULE_DEFAULTS["Passe Gold"]        = PASS_SCHEDULE_VIP;
+PASS_SCHEDULE_DEFAULTS["Passe Diamante"]    = PASS_SCHEDULE_VIP;
+PASS_SCHEDULE_DEFAULTS["Passe Especial"]    = PASS_SCHEDULE_VIP;
+PASS_SCHEDULE_DEFAULTS["Passe Apoiador II"] = PASS_SCHEDULE_BATTLE2;
