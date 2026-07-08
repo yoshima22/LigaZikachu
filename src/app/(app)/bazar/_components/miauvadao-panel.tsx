@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
@@ -251,6 +251,27 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
+
+  // Ao expirar o timer, recarrega a página para o servidor re-gerar as ofertas
+  // (autoRefreshMiauvadaoIfNeeded roda no load). Throttle de 4s cobre a
+  // defasagem de relógio entre cliente e servidor e evita refresh em loop.
+  const lastRefreshRef = useRef(0);
+  useEffect(() => {
+    const validUntil = offers[0]?.validUntil;
+    if (!validUntil) return;
+    const target = new Date(validUntil).getTime();
+    const check = () => {
+      if (Date.now() >= target) {
+        const now = Date.now();
+        if (now - lastRefreshRef.current > 4000) {
+          lastRefreshRef.current = now;
+          router.refresh();
+        }
+      }
+    };
+    const iv = setInterval(check, 1000);
+    return () => clearInterval(iv);
+  }, [offers, router]);
 
   const handleBuy = (idx: number) => {
     const offer = offers[idx];
