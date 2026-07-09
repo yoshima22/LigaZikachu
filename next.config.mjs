@@ -20,6 +20,11 @@ const nextConfig = {
     ];
   },
   images: {
+    // Desliga o Image Optimizer do Vercel. As imagens já estão em CDNs
+    // (Supabase Storage, Limitless e /sprites no CDN estático do Vercel), então
+    // otimizar só somava Fast Origin Transfer + cobrança de Image Optimization.
+    // Com unoptimized, o next/image carrega direto da fonte, sem passar pela origem.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
@@ -28,7 +33,6 @@ const nextConfig = {
       },
       {
         // Supabase Storage — avatars, itens de shop, badges, sticker packs
-        // Vercel baixa 1x, otimiza e serve via CDN próprio, reduzindo egress do Supabase
         protocol: "https",
         hostname: "fwxqywivezsixamietps.supabase.co",
         pathname: "/storage/v1/object/public/**"
