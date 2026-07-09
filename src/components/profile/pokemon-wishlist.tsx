@@ -24,7 +24,7 @@ function normalizeSearch(value: string) {
 }
 
 function spriteUrl(pokemonId: number) {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+  return `/sprites/pokemon/${pokemonId}.png`;
 }
 
 function PokemonPill({

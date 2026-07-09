@@ -1071,29 +1071,29 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
   10013: 1013,  // Sinistcha Masterpiece → same sprite as Sinistcha
 };
 
+// Sprites auto-hospedados em public/sprites (CDN estático do Vercel) — o
+// raw.githubusercontent.com sofria rate limit (HTTP 429) e quebrava imagens.
 export function getSpriteUrl(pokemonId: number, animated = false): string {
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
   // GIFs animados só existem para gen 1-5 (IDs 1-649).
   // Para IDs > 649 (gen 6+), usar sempre o PNG estático para evitar imagens quebradas.
   if (animated && spriteId <= MAX_ANIMATED_ID) {
-    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${spriteId}.gif`;
+    return `/sprites/pokemon/versions/generation-v/black-white/animated/${spriteId}.gif`;
   }
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${spriteId}.png`;
+  return `/sprites/pokemon/${spriteId}.png`;
 }
 
 // URL do sprite estático (sempre PNG, qualquer geração)
 export function getStaticSpriteUrl(pokemonId: number): string {
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${spriteId}.png`;
+  return `/sprites/pokemon/${spriteId}.png`;
 }
 
-// Sprites shiny (variante cromática)
-export function getShinySprite(pokemonId: number, animated = false): string {
+// Sprites shiny (variante cromática). Os GIFs shiny-animados não são
+// auto-hospedados (raros e pesados: ~57MB), então usamos sempre o PNG shiny.
+export function getShinySprite(pokemonId: number, _animated = false): string {
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
-  if (animated && spriteId <= 649) {
-    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${spriteId}.gif`;
-  }
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/${spriteId}.png`;
+  return `/sprites/pokemon/shiny/${spriteId}.png`;
 }
 
 // ── Stat ranges por tipo de ovo ───────────────────────────────────────────────

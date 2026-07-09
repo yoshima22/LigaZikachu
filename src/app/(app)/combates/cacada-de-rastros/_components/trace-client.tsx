@@ -140,7 +140,7 @@ function itemName(type: string) {
 }
 
 function pokeImgUrl(id: number) {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
+  return `/sprites/pokemon/${id}.png`;
 }
 
 function mascotLabel(m: { pokemonId: number; nickname: string | null }) {
