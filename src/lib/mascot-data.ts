@@ -1089,10 +1089,15 @@ export function getStaticSpriteUrl(pokemonId: number): string {
   return `/sprites/pokemon/${spriteId}.png`;
 }
 
-// Sprites shiny (variante cromática). Os GIFs shiny-animados não são
-// auto-hospedados (raros e pesados: ~57MB), então usamos sempre o PNG shiny.
-export function getShinySprite(pokemonId: number, _animated = false): string {
+// Sprites shiny (variante cromática). Os GIFs shiny-animados NÃO são
+// auto-hospedados (raros — 1/500 — e pesados: ~57MB): buscamos direto do
+// repositório do GitHub. Como shinies são raríssimos, o volume é ínfimo e o
+// 429 é improvável; e o card usa o PNG shiny local como fallback no onError.
+export function getShinySprite(pokemonId: number, animated = false): string {
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
+  if (animated && spriteId <= MAX_ANIMATED_ID) {
+    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${spriteId}.gif`;
+  }
   return `/sprites/pokemon/shiny/${spriteId}.png`;
 }
 
