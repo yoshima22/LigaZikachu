@@ -318,6 +318,21 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
         </div>
       )}
 
+      {(a.projectionMethod || typeof a.estimatedBaseTotal === "number") && (
+        <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-xs text-slate-300">
+          <p className="mb-1 font-semibold text-cyan-300">Leitura realista do Lab</p>
+          {a.projectionMethod && <p className="leading-relaxed text-slate-400">{a.projectionMethod}</p>}
+          {typeof a.estimatedBaseTotal === "number" && typeof a.estimatedGrowthTotal === "number" && (
+            <p className="mt-2 leading-relaxed">
+              <span className="text-slate-500">Estimativa atual:</span>{" "}
+              <strong className="text-slate-100">{a.estimatedBaseTotal}</strong> pts de nascimento +{" "}
+              <strong className="text-slate-100">{a.estimatedGrowthTotal}</strong> pts de crescimento/marcos ={" "}
+              <strong className="text-cyan-300">{a.currentTotal}</strong> pts atuais.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Projeção de atributos */}
       <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
         <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-300">
@@ -342,6 +357,34 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
           })()}
         </div>
       </div>
+
+      {a.statAnalysis?.length ? (
+        <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
+          <p className="mb-3 text-xs font-semibold text-slate-300">Análise por atributo</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {a.statAnalysis.map(stat => (
+              <div key={stat.key} className="rounded-xl border border-border bg-slate-900/45 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-100">
+                      #{stat.rank} {stat.label}
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {stat.current} → {stat.projected} · {stat.projectedSharePct}% do total projetado
+                    </p>
+                  </div>
+                  {stat.delta > 0 && (
+                    <span className="rounded-lg bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                      +{stat.delta}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{stat.assessment}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Sugestões de função de combate */}
       {roleSuggestions.length > 0 && (

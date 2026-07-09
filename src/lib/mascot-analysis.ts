@@ -54,6 +54,19 @@ export interface MascotAnalysis {
   personalityNote: string | null;
   projectedPower: number;
   roleSuggestions: { role: string; label: string; statLabel: string; value: number; description: string }[];
+  statAnalysis?: {
+    key: StatKey;
+    label: string;
+    current: number;
+    projected: number;
+    delta: number;
+    projectedSharePct: number;
+    rank: number;
+    assessment: string;
+  }[];
+  projectionMethod?: string;
+  estimatedBaseTotal?: number;
+  estimatedGrowthTotal?: number;
   analyzedAtIso: string;
 }
 
@@ -192,15 +205,38 @@ function levelBonus(pokemonId: number, level: number, personality: string, stats
   return distributeAntiFreeze(points, weights, stats, level);
 }
 
+/** Ganho de atributos para saltos de vários níveis.
+ *  Isto replica o comportamento real de addExp(): quando o mascote ganha vários níveis
+ *  de uma vez, os pontos de level-up são calculados em bloco usando os stats de partida.
+ */
+function levelBonusBatch(pokemonId: number, level: number, levelsGained: number, personality: string, stats: MascotStats): MascotStats {
+  const raw = rawPointsPerLevel(personality) * Math.max(0, levelsGained);
+  const growthMult = getMascotStatusGrowthMultiplier(pokemonId);
+  const points = raw > 0 ? Math.max(1, Math.round(raw * LEVEL_GAIN * growthMult)) : 0;
+  const weights: MascotStats = {
+    force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
+    instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
+  };
+  if (personality === "COMPETITIVE") weights.force *= 1.15;
+  if (personality === "LOYAL") weights.charisma *= 1.15;
+  if (personality === "DRAMATIC") weights.vitality *= 0.85;
+  STAT_KEYS.forEach((key, index) => {
+    const wobble = 0.92 + (((pokemonId * (index + 3) + level * 11) % 17) / 100);
+    weights[key] *= wobble;
+  });
+  return distributeAntiFreeze(points, weights, stats, level);
+}
+
 const addStats = (a: MascotStats, b: MascotStats): MascotStats => ({
   force: a.force + b.force, agility: a.agility + b.agility, charisma: a.charisma + b.charisma,
   instinct: a.instinct + b.instinct, vitality: a.vitality + b.vitality,
 });
 
 /**
- * Simula o crescimento nível a nível replicando fielmente addExp/levelStatBonuses
- * (composição, peso de personalidade, wobble, evolução e marcos). Determinístico,
- * então fica muito próximo da progressão real (assumindo ganho de 1 nível por vez).
+ * Simula a progressão usando a mesma ordem do addExp real:
+ * 1) descobre níveis/evolução;
+ * 2) aplica o ganho de level-up em bloco;
+ * 3) aplica marcos de maturidade/evolução ainda não conquistados.
  */
 function simulateGrowth(
   input: AnalysisInput, currentLevel: number, targetLevel: number, currentStats: MascotStats,
@@ -209,35 +245,85 @@ function simulateGrowth(
   let pokemonId = input.pokemonId;
   let stats: MascotStats = { ...currentStats };
 
-  // Marcos já conquistados no nível atual — não reaplicar
+  // Marcos já conquistados no nível atual — não reaplicar na projeção.
   const applied = new Set<string>();
   for (const m of getMascotProgressMilestones(pokemonId, currentLevel, false)) applied.add(m.key);
 
+  const levelsGained = Math.max(0, targetLevel - currentLevel);
+  let evolved = false;
   for (let lvl = currentLevel; lvl < targetLevel; lvl++) {
-    // Ganho do nível lvl → lvl+1 (o wobble/peso usam o nível e stats de partida)
-    stats = addStats(stats, levelBonus(pokemonId, lvl, input.personality, stats));
     const newLevel = lvl + 1;
-
-    // Evolução ao atingir o nível
-    let evolvedThisStep = false;
     if (!evolutionLocked) {
       const evo = EVOLUTION_MAP.get(pokemonId);
-      if (evo && newLevel >= evo.level) { pokemonId = evo.toOptions?.[0] ?? evo.to; evolvedThisStep = true; }
-    }
-
-    // Marcos de maturidade/evolução no novo nível
-    for (const m of getMascotProgressMilestones(pokemonId, newLevel, evolvedThisStep)) {
-      if (applied.has(m.key)) continue;
-      applied.add(m.key);
-      const w: MascotStats = {
-        force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
-        instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
-      };
-      stats = addStats(stats, distributeAntiFreeze(m.points, w, stats, m.level));
+      if (evo && newLevel >= evo.level) {
+        pokemonId = evo.toOptions?.[0] ?? evo.to;
+        evolved = true;
+      }
     }
   }
 
+  if (levelsGained > 0) {
+    stats = addStats(stats, levelBonusBatch(input.pokemonId, currentLevel, levelsGained, input.personality, stats));
+  }
+
+  for (const m of getMascotProgressMilestones(pokemonId, targetLevel, evolved)) {
+    if (applied.has(m.key)) continue;
+    applied.add(m.key);
+    const w: MascotStats = {
+      force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
+      instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
+    };
+    stats = addStats(stats, distributeAntiFreeze(m.points, w, stats, m.level));
+  }
+
   return { finalPokemonId: pokemonId, projectedStats: stats };
+}
+
+function baseFormForAnalysis(pokemonId: number): number {
+  let base = pokemonId;
+  const seen = new Set<number>();
+  while (!seen.has(base)) {
+    seen.add(base);
+    const prev = EVOLUTION_REVERSE_MAP.get(base)?.[0];
+    if (!prev) break;
+    base = prev.from;
+  }
+  return base;
+}
+
+function estimateAccumulatedGrowthTotal(input: AnalysisInput, currentLevel: number): number {
+  const evolutionLocked = input.evolutionLocked ?? false;
+  let pokemonId = evolutionLocked ? input.pokemonId : baseFormForAnalysis(input.pokemonId);
+  let total = 0;
+  const applied = new Set<string>();
+
+  for (let lvl = 1; lvl < currentLevel; lvl++) {
+    total += pointsPerLevel(input.personality, getMascotStatusGrowthMultiplier(pokemonId));
+    const newLevel = lvl + 1;
+    let evolvedThisStep = false;
+    if (!evolutionLocked) {
+      const evo = EVOLUTION_MAP.get(pokemonId);
+      if (evo && newLevel >= evo.level) {
+        pokemonId = evo.toOptions?.[0] ?? evo.to;
+        evolvedThisStep = true;
+      }
+    }
+    for (const milestone of getMascotProgressMilestones(pokemonId, newLevel, evolvedThisStep)) {
+      if (applied.has(milestone.key)) continue;
+      applied.add(milestone.key);
+      total += milestone.points;
+    }
+  }
+
+  return total;
+}
+
+function statAssessment(rank: number, sharePct: number, delta: number): string {
+  if (rank === 1 && sharePct >= 24) return "Atributo central do mascote; deve definir postura e função principal.";
+  if (rank <= 2 && sharePct >= 20) return "Ponto forte consistente, bom para compor a estratégia de combate.";
+  if (delta >= 12) return "Tende a crescer bastante na projeção, mesmo não sendo o maior atributo atual.";
+  if (rank >= 5 && sharePct <= 16) return "Atributo mais frágil; evite depender dele como plano principal.";
+  return "Atributo estável, útil como suporte ao estilo principal.";
 }
 
 function ratingFromScore(score: number): MascotRating {
@@ -284,12 +370,12 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
   const projectedTotal = projectedStats.force + projectedStats.agility + projectedStats.charisma + projectedStats.instinct + projectedStats.vitality;
 
   // ── IV / potencial futuro ──
-  // 1) Qualidade do roll inicial: isola a contribuição do crescimento e compara com a banda base.
-  const milestoneNow = milestonePointsUpTo(input.pokemonId, currentLevel);
-  const pplCurrent = pointsPerLevel(input.personality, getMascotStatusGrowthMultiplier(input.pokemonId));
-  const growthContribution = (currentLevel - 1) * pplCurrent + milestoneNow;
-  const estBase = Math.max(BASE_MIN_TOTAL, Math.min(BASE_MAX_TOTAL, currentTotal - growthContribution));
-  const rollQuality = (estBase - BASE_MIN_TOTAL) / (BASE_MAX_TOTAL - BASE_MIN_TOTAL);
+  // 1) Qualidade do roll inicial: estima o quanto dos stats atuais veio do nascimento.
+  // Como o histórico de cada ponto não é salvo, essa é uma estimativa conservadora
+  // usando as regras atuais de crescimento, evolução e marcos até o nível presente.
+  const estimatedGrowthTotal = estimateAccumulatedGrowthTotal(input, currentLevel);
+  const estimatedBaseTotal = Math.max(BASE_MIN_TOTAL, Math.min(BASE_MAX_TOTAL, currentTotal - estimatedGrowthTotal));
+  const rollQuality = (estimatedBaseTotal - BASE_MIN_TOTAL) / (BASE_MAX_TOTAL - BASE_MIN_TOTAL);
 
   // 2) Potencial de espécie (multiplicador de crescimento) e evoluções restantes.
   const speciesPotential = Math.max(0, Math.min(1, (growthMult - 1) / 0.3)); // 0, 0.33, 1
@@ -324,6 +410,19 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     projected: projectedStats[key],
     delta: projectedStats[key] - currentStats[key],
   }));
+  const rankedStats = [...perStat].sort((a, b) => b.projected - a.projected);
+  const statAnalysis = perStat
+    .map(s => {
+      const rank = rankedStats.findIndex(r => r.key === s.key) + 1;
+      const projectedSharePct = projectedTotal > 0 ? Math.round((s.projected / projectedTotal) * 100) : 0;
+      return {
+        ...s,
+        projectedSharePct,
+        rank,
+        assessment: statAssessment(rank, projectedSharePct, s.delta),
+      };
+    })
+    .sort((a, b) => a.rank - b.rank);
 
   // ── Dados extras ──
   // Stat dominante e equilíbrio (com base na projeção)
@@ -390,6 +489,10 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     personalityNote,
     projectedPower,
     roleSuggestions,
+    statAnalysis,
+    projectionMethod: "Projeção baseada no mesmo cálculo de level-up em bloco usado pelo jogo quando EXP faz o mascote pular níveis, incluindo evolução e marcos de progressão.",
+    estimatedBaseTotal,
+    estimatedGrowthTotal,
     analyzedAtIso: new Date().toISOString(),
   };
 }
