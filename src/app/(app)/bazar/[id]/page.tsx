@@ -309,7 +309,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const isTrade = !isAuction && (listing.listingType === "TRADE" || listing.listingType === "SALE_OR_TRADE");
   const isTopBidder = isAuction && listing.currentBidPlayerId === currentPlayerId;
   const minNextBid = isAuction
-    ? (listing.currentBidCoins ? listing.currentBidCoins + 1 : (listing.minBidCoins ?? 1))
+    ? (listing.currentBidCoins ? listing.currentBidCoins + 100 : (listing.minBidCoins ?? 1))
     : 0;
   const pokemonId = payload.pokemonId as number | undefined;
   const pokemonName = pokemonId ? getPokemonName(pokemonId) : "";

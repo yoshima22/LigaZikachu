@@ -1822,7 +1822,7 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
     if (new Date() >= endsAt) return { error: "Este leilão já encerrou." };
 
     const minBid = listing.currentBidCoins
-      ? listing.currentBidCoins + 1
+      ? listing.currentBidCoins + 100
       : (listing.minBidCoins ?? 1);
     if (amount < minBid) return { error: `Lance mínimo é ${minBid} ZC.` };
     if (listing.currentBidPlayerId === player.id) return { error: "Você já é o maior lance." };

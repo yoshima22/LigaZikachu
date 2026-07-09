@@ -1,5 +1,4 @@
-import { getMyPassStatus } from "./actions";
-import { PASS_SCHEDULE } from "./schedule";
+import { getActiveSchedule, getMyPassStatus } from "./actions";
 import { PassPageClient } from "./_components/pass-page-client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
@@ -16,11 +15,12 @@ export default async function PasseApoiadorPage({
 
   const searchParams = await searchParamsPromise;
   const status = await getMyPassStatus(searchParams.passId || undefined);
+  const schedule = await getActiveSchedule(status.pass?.passLabel);
 
   return (
     <PassPageClient
       status={status}
-      schedule={PASS_SCHEDULE}
+      schedule={schedule}
     />
   );
 }

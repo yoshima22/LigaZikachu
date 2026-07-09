@@ -175,6 +175,7 @@ export type PassStatus = {
     daysRemaining: number;
     isExpired: boolean;
     allowRetroactiveClaims: boolean;
+    passLabel: string;
   } | null;
   claims: { dayNumber: number; claimedAt: Date }[];
   todayDay: number | null; // null = não tem passe ativo
@@ -235,7 +236,7 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     const canClaimToday = !isExpired && !alreadyClaimed && todayDay >= 1 && todayDay <= 30;
 
     return {
-      pass: { id: pass.id, active: pass.active, startsAt: pass.startsAt, expiresAt: pass.expiresAt, daysElapsed, daysRemaining, isExpired, allowRetroactiveClaims: pass.allowRetroactiveClaims },
+      pass: { id: pass.id, active: pass.active, startsAt: pass.startsAt, expiresAt: pass.expiresAt, daysElapsed, daysRemaining, isExpired, allowRetroactiveClaims: pass.allowRetroactiveClaims, passLabel: pass.passLabel },
       claims: pass.claims,
       todayDay: isExpired ? null : todayDay,
       canClaimToday,
@@ -470,7 +471,7 @@ export async function adminGrantVip(opts: {
 
     // Pré-criar claims para dias anteriores ao startDay (sem entregar recompensas)
     if (startDay > 1) {
-      const activeSchedule = await getActiveSchedule();
+      const activeSchedule = await getActiveSchedule(passLabel);
       await prisma.supporterPassClaim.createMany({
         data: Array.from({ length: startDay - 1 }, (_, i) => {
           const day = i + 1;
