@@ -405,6 +405,7 @@ export function MascotBankList({
   const [ocup, setOcup] = useState<OcupFilter>("all");
   const [typeFilter, setTypeFilter] = useState("");
   const [rankFilter, setRankFilter] = useState("");
+  const [perfFilter, setPerfFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -422,6 +423,7 @@ export function MascotBankList({
           type: typeFilter,
           ocup,
           rank: rankFilter,
+          perf: perfFilter,
         });
         if (res.error || !res.data) {
           setLoadError(res.error ?? "Erro ao carregar banco de mascotes.");
@@ -433,7 +435,7 @@ export function MascotBankList({
         setPageInput("");
       })();
     });
-  }, [ocup, search, typeFilter, rankFilter]);
+  }, [ocup, search, typeFilter, rankFilter, perfFilter]);
 
   useEffect(() => {
     if (didInitialLoad.current) return;
@@ -506,6 +508,17 @@ export function MascotBankList({
           {["SSS", "SS", "S", "A", "B", "C", "D", "E"].map((r) => (
             <option key={r} value={r}>Rank {r}</option>
           ))}
+        </select>
+        <select
+          value={perfFilter}
+          onChange={(event) => setPerfFilter(event.target.value)}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="">Desempenho: todos</option>
+          <option value="FORTE">💪 Forte</option>
+          <option value="NEUTRO">⚖️ Neutro</option>
+          <option value="RUIM">👎 Ruim</option>
+          <option value="PESSIMO">🗑️ Péssimo</option>
         </select>
         <button
           type="button"
