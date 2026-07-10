@@ -29,10 +29,14 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
   const blockedSet = new Set(blockedNumbers);
   const mySet      = new Set(myNumbers);
   const isExpired  = new Date() >= new Date(drawAt);
-  const canPickMore = hasTicket && isLoggedIn && !isExpired;
+  // Só possui ticket especial (nenhum comum): o especial vira a única opção.
+  const onlySpecial = !hasTicket && hasSpecialTicket;
+  const canPickMore = (hasTicket || hasSpecialTicket) && isLoggedIn && !isExpired;
 
   const handleSelectNumber = (n: number) => {
     if (!canPickMore) return;
+    // Se o jogador só tem ticket especial, já deixa marcado (e travado no modal).
+    setUseSpecial(onlySpecial);
     setSelected(n);
     setShowConfirm(true);
   };
@@ -73,12 +77,17 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
 
             {hasSpecialTicket && (
               <div className="space-y-2">
-                <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2.5">
-                  <input type="checkbox" checked={useSpecial} onChange={e => setUseSpecial(e.target.checked)}
-                    className="h-4 w-4 rounded border-purple-500 accent-purple-500" />
+                <label className={`flex items-center gap-3 rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2.5 ${onlySpecial ? "cursor-default" : "cursor-pointer"}`}>
+                  <input type="checkbox" checked={useSpecial} disabled={onlySpecial}
+                    onChange={e => setUseSpecial(e.target.checked)}
+                    className="h-4 w-4 rounded border-purple-500 accent-purple-500 disabled:opacity-70" />
                   <div>
                     <p className="text-xs font-bold text-purple-300">⭐ Usar Ticket Especial</p>
-                    <p className="text-[10px] text-purple-300/70">Ao final do sorteio, receba 5 tickets comuns de volta!</p>
+                    <p className="text-[10px] text-purple-300/70">
+                      {onlySpecial
+                        ? "Você só tem ticket especial — ele será usado neste número. Receba 5 tickets comuns de volta após o sorteio!"
+                        : "Ao final do sorteio, receba 5 tickets comuns de volta!"}
+                    </p>
                   </div>
                 </label>
               </div>
@@ -116,15 +125,15 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
       </div>
 
       {!isLoggedIn && <p className="text-sm text-slate-500">Faça login para participar.</p>}
-      {isLoggedIn && !hasTicket && myNumbers.length === 0 && (
+      {isLoggedIn && !hasTicket && !hasSpecialTicket && myNumbers.length === 0 && (
         <p className="text-sm text-amber-400">Você precisa de um Ticket ZikaLoot. Compre na ZikaShop ou ganhe via Caixa de Presentes.</p>
       )}
-      {isLoggedIn && !hasTicket && myNumbers.length > 0 && (
+      {isLoggedIn && !hasTicket && !hasSpecialTicket && myNumbers.length > 0 && (
         <p className="text-xs text-slate-500 bg-slate-900/60 border border-border rounded-lg px-3 py-2">
           Todos os tickets usados neste sorteio. Seus números: <strong className="text-[#FFCB05]">{myNumbers.join(", ")}</strong>
         </p>
       )}
-      {isLoggedIn && hasTicket && myNumbers.length > 0 && (
+      {isLoggedIn && (hasTicket || hasSpecialTicket) && myNumbers.length > 0 && (
         <p className="text-xs text-green-400 bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2">
           🎟️ Você ainda tem tickets! Clique em um número para escolher. Números atuais: <strong>{myNumbers.join(", ")}</strong>
         </p>
