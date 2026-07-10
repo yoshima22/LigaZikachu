@@ -26,6 +26,7 @@ import {
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
+import { PerformanceTagPicker } from "./performance-tag-picker";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } from "@/lib/mascot-data";
 
@@ -71,6 +72,7 @@ interface MascotData {
   isShiny: boolean;
   ivRating?: string | null;
   ivScore?: number | null;
+  performanceTag?: string | null;
   activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
   expeditions: Expedition[];
@@ -792,6 +794,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   {TYPE_LABELS[t] ?? t}
                 </span>
               ))}
+              <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="md" />
             </div>
             {/* Battle record */}
             {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (

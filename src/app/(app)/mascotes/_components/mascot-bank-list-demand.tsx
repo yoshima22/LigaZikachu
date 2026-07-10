@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
 import { MascotCard, markPetted, markPlayed } from "./mascot-card";
+import { PerformanceTagPicker } from "./performance-tag-picker";
 import type { BankMascot } from "./mascot-bank-list";
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
@@ -281,6 +282,7 @@ function BankRow({
         </button>
         {/* Ações rápidas + chips + chevron */}
         <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="sm" align="right" />
           <QuickInteractButton
             mascotId={mascot.id}
             type="PET"

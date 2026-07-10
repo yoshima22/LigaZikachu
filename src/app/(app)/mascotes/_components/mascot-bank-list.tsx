@@ -26,6 +26,7 @@ export type BankMascot = {
   socialCooldownUntil: Date | null;
   ivRating?: string | null;
   ivScore?: number | null;
+  performanceTag?: string | null;
   statForce: number;
   statAgility: number;
   statCharisma: number;

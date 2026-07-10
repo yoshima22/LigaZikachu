@@ -5,6 +5,7 @@ import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, 
 import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
 import type { MascotRarity } from "../rarity";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
+import { PERFORMANCE_META, normalizePerformanceTag } from "@/lib/mascot-performance";
 
 type LabMascot = {
   id: string;
@@ -22,6 +23,7 @@ type LabMascot = {
   analyzed: boolean;
   ivRating: string | null;
   ivScore: number | null;
+  performanceTag?: string | null;
 };
 
 type WeeklyUsage = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
@@ -95,6 +97,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
   const [mascots, setMascots] = useState(initialMascots);
   const [weeklyUsage, setWeeklyUsage] = useState(initialWeeklyUsage);
   const [search, setSearch] = useState("");
+  const [perfFilter, setPerfFilter] = useState("");
   const [page, setPage] = useState(0);
   const [isPending, start] = useTransition();
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
@@ -106,11 +109,12 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
 
   const filtered = useMemo(() => {
     const inSlots = new Set(filledSlots.map((m) => m.id));
-    const base = mascots.filter((m) => m.recyclable && !inSlots.has(m.id));
-    if (!search.trim()) return base;
-    const q = search.toLowerCase();
-    return base.filter((m) => m.name.toLowerCase().includes(q) || (m.nickname ?? "").toLowerCase().includes(q));
-  }, [mascots, filledSlots, search]);
+    let base = mascots.filter((m) => m.recyclable && !inSlots.has(m.id));
+    if (perfFilter) base = base.filter((m) => (m.performanceTag ?? "NEUTRO") === perfFilter);
+    const q = search.trim().toLowerCase();
+    if (q) base = base.filter((m) => m.name.toLowerCase().includes(q) || (m.nickname ?? "").toLowerCase().includes(q));
+    return base;
+  }, [mascots, filledSlots, search, perfFilter]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -128,7 +132,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
       next[idx] = m;
       return next;
     });
-    setPage(0);
+    // Mantém a página atual — não volta pra primeira ao selecionar um mascote.
   };
 
   const removeSlot = (idx: number) => {
@@ -375,20 +379,33 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
             <p className="mb-2 text-xs text-slate-500">
               Clique em um mascote para adicioná-lo aos slots. Apenas mascotes recicláveis são mostrados.
             </p>
-            <div className="mb-3 flex items-center gap-2 rounded-xl border border-border bg-slate-900 px-3 py-2">
-              <Search size={14} className="shrink-0 text-slate-500" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                placeholder="Buscar mascote por nome ou apelido…"
-                className="w-full bg-transparent text-sm text-white placeholder:text-slate-600 outline-none"
-              />
-              {search && (
-                <button onClick={() => { setSearch(""); setPage(0); }} className="text-slate-500 hover:text-white">
-                  <X size={13} />
-                </button>
-              )}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="flex flex-1 min-w-48 items-center gap-2 rounded-xl border border-border bg-slate-900 px-3 py-2">
+                <Search size={14} className="shrink-0 text-slate-500" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                  placeholder="Buscar mascote por nome ou apelido…"
+                  className="w-full bg-transparent text-sm text-white placeholder:text-slate-600 outline-none"
+                />
+                {search && (
+                  <button onClick={() => { setSearch(""); setPage(0); }} className="text-slate-500 hover:text-white">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              <select
+                value={perfFilter}
+                onChange={(e) => { setPerfFilter(e.target.value); setPage(0); }}
+                className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-none focus:border-[#FFCB05]"
+              >
+                <option value="">Desempenho: todos</option>
+                <option value="FORTE">💪 Forte</option>
+                <option value="NEUTRO">⚖️ Neutro</option>
+                <option value="RUIM">👎 Ruim</option>
+                <option value="PESSIMO">🗑️ Péssimo</option>
+              </select>
             </div>
 
             {mascots.filter((m) => m.recyclable).length === 0 ? (
@@ -409,6 +426,14 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
                       {m.analyzed && m.ivRating && (
                         <span className="absolute right-1.5 top-1.5"><RatingBadge rating={m.ivRating} size="sm" /></span>
                       )}
+                      {(() => {
+                        const meta = PERFORMANCE_META[normalizePerformanceTag(m.performanceTag)];
+                        return (
+                          <span className={`absolute left-1.5 top-1.5 inline-flex items-center gap-0.5 rounded border px-1 py-px text-[8px] font-bold ${meta.badge}`}>
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
+                          </span>
+                        );
+                      })()}
                       <img src={m.spriteUrl} alt="" className="h-12 w-12 object-contain" />
                       <p className="line-clamp-1 text-xs font-bold text-white">{m.nickname || m.name}</p>
                       <p className="text-[10px] text-slate-500">Lv.{m.level}</p>

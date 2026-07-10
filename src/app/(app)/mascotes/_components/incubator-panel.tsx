@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Clock, Egg } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import { putEggInIncubator, hatchEggAction, confirmLabChoiceAction, skipIncubationAction } from "../actions";
+import { PerformanceTagPicker } from "./performance-tag-picker";
 import { getPokemonName } from "@/lib/mascot-data";
 
 interface IncubatorData {
@@ -89,6 +90,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
   const [pending, startTransition] = useTransition();
   const [hatchResult, setHatchResult] = useState<{
+    mascotId: string;
     pokemonId: number;
     name: string;
     isShiny?: boolean;
@@ -122,6 +124,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
 
   const applyHatchResult = (result: NonNullable<Awaited<ReturnType<typeof hatchEggAction>>["result"]>) => {
     setHatchResult({
+      mascotId: result.mascotId,
       pokemonId: result.pokemonId,
       name: result.name,
       isShiny: result.isShiny,
@@ -277,6 +280,12 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 </p>
               </div>
             )}
+
+            {/* Já marque o desempenho do recém-chocado */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-500">Marcar desempenho:</span>
+              <PerformanceTagPicker mascotId={hatchResult.mascotId} initial="NEUTRO" size="md" align="left" />
+            </div>
 
             <p className="text-xs text-slate-500">Vá até Meus Mascotes para interagir.</p>
             <button onClick={() => setHatchResult(null)} className="mt-1 text-xs text-[#FFCB05] underline">Fechar</button>

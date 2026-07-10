@@ -79,7 +79,7 @@ async function fetchMascotPageData(playerId: string) {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
         happiness: true, mood: true, personality: true,
         isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true,
-        ivRating: true, ivScore: true,
+        ivRating: true, ivScore: true, performanceTag: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
@@ -297,6 +297,7 @@ export default async function MascotesPage() {
     isShiny: m.isShiny,
     ivRating: m.ivRating,
     ivScore: m.ivScore,
+    performanceTag: m.performanceTag,
     activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({
       id: e.id, finishAt: e.finishAt, status: e.status,

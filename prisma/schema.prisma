@@ -177,6 +177,8 @@ model User {
   tutorialProgress         UserTutorialProgress[]
   passwordResetTokens      PasswordResetToken[]
   createdNewsPosts         NewsPost[]           @relation("NewsPostAuthor")
+  raidNotifications        UserRaidNotification[]
+  raidPasswordStamps       RaidPasswordStamp[]
 
   @@map("users")
 }
@@ -291,6 +293,8 @@ model Player {
   auctionBids             BazarAuctionBid[]
   newsReads               NewsRead[]
   newsRewardClaims        NewsRewardClaim[]
+  raidBattleAttempts      RaidBattleAttempt[]
+  raidDamageRankings      RaidDamageRanking[]
 
   @@map("players")
 }
@@ -1940,6 +1944,8 @@ model Mascot {
   ivScore              Int?              // 0-100 (potencial futuro)
   ivRating             String?           // SSS, SS, S, A, B, C, D ou E
   analysisJson         Json?             // snapshot completo da última análise
+  // Marcador pessoal de desempenho definido pelo jogador: FORTE, NEUTRO, RUIM, PESSIMO
+  performanceTag       String            @default("NEUTRO")
   player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions      MascotExpedition[]
   arenaTeamMembers ArenaTeamMember[]
@@ -2779,4 +2785,294 @@ model GoldenPawTransaction {
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   @@index([playerId])
   @@map("golden_paw_transactions")
+}
+
+// ── Evento Ordem da Trapaca / Raid Boss ──────────────────────────────────────
+
+enum RaidEventPhase {
+  ANNOUNCED
+  INVESTIGATION
+  HIDEOUT_UNLOCKING
+  HIDEOUT_FOUND
+  RAID_ACTIVE
+  RAID_DEFEATED
+  RAID_FAILED
+  ENDED
+}
+
+enum RaidSabotageSystem {
+  BAZAR
+  SUS
+  LABORATORY
+  ZIKASHOP
+  ZIKALOOT
+  PROFILE
+  MASCOTS
+  DASHBOARD
+  SYNC_CHALLENGE
+  MASCOT_LEAGUE
+}
+
+enum RaidSabotageType {
+  BLOCK_BAZAR_SLOT
+  INCREASE_PRICE
+  DISABLE_LAB_ANALYSIS
+  DISABLE_DUST_CONVERSION
+  ZIKALOOT_FAKE_NUMBER
+  PROFILE_GRAFFITI
+  HIDDEN_INTERACTION
+  MASCOT_SPEECH_OVERRIDE
+}
+
+enum RaidClueRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  VERY_RARE
+  FAKE
+}
+
+enum RaidClueQuality {
+  GOOD
+  OK
+  BAD
+  JOKE
+  MISLEADING
+}
+
+enum RaidInteractionType {
+  CLICK
+  MULTI_CLICK
+  DRAG
+  CLICK_SEQUENCE
+  HIDDEN_BUTTON
+}
+
+enum RaidBattleResult {
+  WIN
+  LOSS
+  DRAW
+}
+
+enum RaidNotificationType {
+  HIDEOUT_FOUND
+  MEGA_ACTIVATED
+  RAID_DEFEATED
+  RAID_FAILED
+}
+
+model RaidEvent {
+  id                     String          @id @default(cuid())
+  name                   String
+  slug                   String          @unique
+  villainGroupName       String          @default("Ordem da Trapaca")
+  phase                  RaidEventPhase  @default(ANNOUNCED)
+  startsAt               DateTime?
+  investigationStartsAt  DateTime?
+  hideoutFoundAt         DateTime?
+  hideoutFoundByUserId   String?
+  raidStartsAt           DateTime?
+  raidEndsAt             DateTime?
+  bossName               String          @default("Capitao Trambique")
+  bossMascotName         String          @default("Mega Sableye Trapaceiro")
+  bossPokemonId          Int             @default(302)
+  bossMegaPokemonId      Int             @default(10066)
+  bossHpMax              Int             @default(1000000)
+  bossHpCurrent          Int             @default(1000000)
+  megaActivatedAt        DateTime?
+  megaThresholdPercent   Int             @default(30)
+  bossConfigJson         Json?
+  active                 Boolean         @default(false)
+  localOnly              Boolean         @default(true)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  sabotages      RaidSabotage[]
+  clues          RaidClue[]
+  mysterySteps   RaidMysteryStep[]
+  interactions   RaidHiddenInteraction[]
+  battleAttempts RaidBattleAttempt[]
+  rankings       RaidDamageRanking[]
+  notifications  UserRaidNotification[]
+  passwords      RaidPassword[]
+  passwordStamps RaidPasswordStamp[]
+
+  @@index([active, phase])
+  @@map("raid_events")
+}
+
+model RaidSabotage {
+  id               String             @id @default(cuid())
+  raidEventId      String
+  systemKey        RaidSabotageSystem
+  sabotageType     RaidSabotageType
+  title            String
+  description      String?            @db.Text
+  effectJson       Json?
+  startsAt         DateTime?
+  endsAt           DateTime?
+  active           Boolean            @default(false)
+  visibleToPlayers Boolean            @default(true)
+  severity         Int                @default(1)
+  adminNotes       String?            @db.Text
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  event            RaidEvent          @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+
+  @@index([raidEventId, active, systemKey])
+  @@map("raid_sabotages")
+}
+
+model RaidClue {
+  id             String          @id @default(cuid())
+  raidEventId    String
+  clueText       String          @db.Text
+  rarity         RaidClueRarity  @default(COMMON)
+  quality        RaidClueQuality @default(OK)
+  relatedStepKey String?
+  visible        Boolean         @default(false)
+  releasedAt     DateTime?
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  event          RaidEvent       @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+
+  @@unique([raidEventId, sortOrder])
+  @@index([raidEventId, visible, releasedAt])
+  @@map("raid_clues")
+}
+
+model RaidMysteryStep {
+  id                      String              @id @default(cuid())
+  raidEventId             String
+  stepKey                 String
+  pageKey                 String
+  requiredVisibleClues    Int                 @default(0)
+  requiredPreviousStepKey String?
+  interactionType         RaidInteractionType
+  targetKey               String
+  successFeedback         String              @db.Text
+  earlyFeedback           String?             @db.Text
+  resolvedByUserId        String?
+  resolvedAt              DateTime?
+  active                  Boolean             @default(true)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  event                   RaidEvent           @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+
+  @@unique([raidEventId, stepKey])
+  @@index([raidEventId, active, pageKey])
+  @@map("raid_mystery_steps")
+}
+
+model RaidHiddenInteraction {
+  id                  String              @id @default(cuid())
+  raidEventId          String
+  stepKey              String
+  pageKey              String
+  interactionType      RaidInteractionType
+  targetSelectorOrKey  String
+  solutionJson         Json?
+  requiredVisibleClues Int                 @default(0)
+  foundByUserId        String?
+  foundAt              DateTime?
+  active               Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  event                RaidEvent           @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+
+  @@unique([raidEventId, stepKey, targetSelectorOrKey])
+  @@index([raidEventId, pageKey, active])
+  @@map("raid_hidden_interactions")
+}
+
+model RaidPassword {
+  id             String    @id @default(cuid())
+  raidEventId    String
+  passwordHash   String
+  passwordLength Int       @default(6)
+  debugPassword  String?
+  solvedByUserId String?
+  solvedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  event          RaidEvent @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+
+  @@index([raidEventId, createdAt])
+  @@map("raid_passwords")
+}
+
+model RaidPasswordStamp {
+  id            String    @id @default(cuid())
+  raidEventId   String
+  userId        String
+  displayedCode String
+  greenIndex    Int
+  greenDigit    String
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  event         RaidEvent @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([raidEventId, userId])
+  @@index([raidEventId, active])
+  @@map("raid_password_stamps")
+}
+
+model RaidBattleAttempt {
+  id                  String           @id @default(cuid())
+  raidEventId          String
+  playerId            String
+  teamSnapshotJson    Json
+  bossSnapshotJson    Json
+  damageToBoss        Int              @default(0)
+  participationPoints Int              @default(0)
+  result              RaidBattleResult
+  replayJson          Json?
+  startedAt           DateTime         @default(now())
+  resolvedAt          DateTime?
+  createdAt           DateTime         @default(now())
+  event               RaidEvent        @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+  player              Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([raidEventId, playerId, createdAt])
+  @@map("raid_battle_attempts")
+}
+
+model RaidDamageRanking {
+  id                  String    @id @default(cuid())
+  raidEventId          String
+  playerId            String
+  totalDamage         Int       @default(0)
+  battleCount         Int       @default(0)
+  highestSingleDamage Int       @default(0)
+  participationPoints Int       @default(0)
+  megaPhaseAttempts   Int       @default(0)
+  lastBattleAt        DateTime?
+  rank                Int?
+  rewardGranted       Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  event               RaidEvent @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+  player              Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([raidEventId, playerId])
+  @@index([raidEventId, totalDamage])
+  @@map("raid_damage_rankings")
+}
+
+model UserRaidNotification {
+  id               String               @id @default(cuid())
+  raidEventId       String
+  userId           String
+  notificationType RaidNotificationType
+  seenAt           DateTime?
+  createdAt        DateTime             @default(now())
+  event            RaidEvent            @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([raidEventId, userId, notificationType])
+  @@index([userId, seenAt])
+  @@map("user_raid_notifications")
 }

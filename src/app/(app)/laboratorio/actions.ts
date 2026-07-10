@@ -9,12 +9,10 @@ import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { computeMascotAnalysis } from "@/lib/mascot-analysis";
 import type { MascotAnalysis } from "@/lib/mascot-analysis";
-import { getMascotRarity, getMascotBaseDust, type MascotRarity } from "./rarity";
+import { getMascotRarity, getMascotBaseDust } from "./rarity";
 
 // Custo de cada análise de mascote no Laboratório (cada abertura recompra a análise)
 const ANALYSIS_COST = 200;
-
-export type { MascotRarity };
 
 // weekKey = "YYYY-Www" using ISO week number
 function getWeekKey(): string {
@@ -77,7 +75,7 @@ export async function getLabDataAction() {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         isFavorite: true, arenaState: true, bazarListed: true,
-        analyzedAt: true, ivRating: true, ivScore: true,
+        analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -120,6 +118,7 @@ export async function getLabDataAction() {
       analyzed: !!m.analyzedAt,
       ivRating: m.ivRating,
       ivScore: m.ivScore,
+      performanceTag: m.performanceTag,
     };
   });
 

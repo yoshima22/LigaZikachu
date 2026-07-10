@@ -15,12 +15,29 @@ import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import type { Prisma } from "@prisma/client";
 
 function revalidate(playerId?: string) {
   revalidatePath("/mascotes");
   revalidateTag("arena-active-teams");
   if (playerId) revalidateTag(`player-mascots-${playerId}`);
+}
+
+// Define o marcador pessoal de desempenho (FORTE/NEUTRO/RUIM/PESSIMO) de um mascote
+export async function setMascotPerformanceTagAction(mascotId: string, tag: string): Promise<{ ok: boolean; error?: string; tag?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Não autenticado." };
+  const player = await getSessionPlayer(user.id);
+  if (!player) return { ok: false, error: "Perfil não encontrado." };
+  const normalized = normalizePerformanceTag(tag);
+  const res = await prisma.mascot.updateMany({
+    where: { id: mascotId, playerId: player.id },
+    data: { performanceTag: normalized },
+  });
+  if (res.count === 0) return { ok: false, error: "Mascote não encontrado." };
+  revalidate(player.id);
+  return { ok: true, tag: normalized };
 }
 
 const BANK_MASCOT_PAGE_SIZE = 9;
@@ -790,6 +807,7 @@ export async function getBankMascotsPageAction(input?: {
       socialCooldownUntil: Date | null;
       ivRating: string | null;
       ivScore: number | null;
+      performanceTag: string;
       expeditions: { id: string; finishAt: Date; status: string }[];
       buffs: { id: string }[];
       statForce: number;
@@ -893,7 +911,7 @@ export async function getBankMascotsPageAction(input?: {
           id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
           arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
           lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
-          ivRating: true, ivScore: true,
+          ivRating: true, ivScore: true, performanceTag: true,
           statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
           expeditions: {
             where: { status: "ACTIVE" },
@@ -930,7 +948,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; isShiny: boolean;
-    ivRating: string | null; ivScore: number | null;
+    ivRating: string | null; ivScore: number | null; performanceTag: string;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
@@ -976,7 +994,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         lastPettedAt: m.lastPettedAt,
         lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
         evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, isShiny: m.isShiny,
-        ivRating: m.ivRating, ivScore: m.ivScore,
+        ivRating: m.ivRating, ivScore: m.ivScore, performanceTag: m.performanceTag,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,
