@@ -2,6 +2,7 @@ import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName } from "./mascot-data";
 import { normalizeCombatRole, getCombatRoleLabel, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
+import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,10 @@ export type LeagueBattleResult = {
   teamBDamageTaken: number;
   log: ArenaTurnLog[];
   rounds: number;
+};
+
+export type LeagueCombatOptions = {
+  weeklySabotage?: WeeklyLeagueSabotageConfig | null;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -121,6 +126,25 @@ export function applyModifier(team: LeagueMascot[], mod: WeeklyModifier | null):
       copy.charisma = Math.round(m.charisma * (1 + mod.bonusPct / 100));
     }
 
+    copy.hp = Math.max(10, Math.round(55 + copy.level * 6 + copy.vitality * 4));
+    return copy;
+  });
+}
+
+export function applyWeeklyLeagueSabotage(team: LeagueMascot[], sabotage: WeeklyLeagueSabotageConfig | null | undefined): LeagueMascot[] {
+  if (!sabotage) return team;
+  const affectedSlots = new Set(sabotage.affectedSlots);
+  const affectedStats = new Set(sabotage.affectedStats);
+
+  return team.map((m) => {
+    if (!affectedSlots.has(m.slot)) return m;
+    const copy = { ...m };
+
+    if (affectedStats.has("force")) copy.force = Math.max(1, Math.round(copy.force * sabotage.statMultiplier));
+    if (affectedStats.has("agility")) copy.agility = Math.max(1, Math.round(copy.agility * sabotage.statMultiplier));
+    if (affectedStats.has("instinct")) copy.instinct = Math.max(1, Math.round(copy.instinct * sabotage.statMultiplier));
+    if (affectedStats.has("vitality")) copy.vitality = Math.max(1, Math.round(copy.vitality * sabotage.statMultiplier));
+    if (affectedStats.has("charisma")) copy.charisma = Math.max(1, Math.round(copy.charisma * sabotage.statMultiplier));
     copy.hp = Math.max(10, Math.round(55 + copy.level * 6 + copy.vitality * 4));
     return copy;
   });
@@ -234,9 +258,10 @@ export function runLeagueCombat(
   modifier: WeeklyModifier | null = null,
   itemsA: LeagueItemDef[] = [],
   itemsB: LeagueItemDef[] = [],
+  options: LeagueCombatOptions = {},
 ): LeagueBattleResult {
-  let a = applyModifier(teamA, modifier);
-  let b = applyModifier(teamB, modifier);
+  let a = applyWeeklyLeagueSabotage(applyModifier(teamA, modifier), options.weeklySabotage);
+  let b = applyWeeklyLeagueSabotage(applyModifier(teamB, modifier), options.weeklySabotage);
 
   const appliedA = applyItems(a, b, itemsA, itemsB);
   a = appliedA.team;
@@ -244,10 +269,39 @@ export function runLeagueCombat(
   const appliedB = applyItems(b, a, itemsB, itemsA);
   b = appliedB.team;
 
+  const log: ArenaTurnLog[] = [];
+  if (options.weeklySabotage) {
+    const percent = Math.round((1 - options.weeklySabotage.statMultiplier) * 100);
+    const slots = options.weeklySabotage.affectedSlots.join(", ");
+    const effect = `Ordem da Trapaca: slots ${slots} lutam com -${percent}% nos atributos.`;
+    const affected = [...a, ...b].filter((mascot) => options.weeklySabotage?.affectedSlots.includes(mascot.slot));
+    for (const mascot of affected) {
+      log.push({
+        turn: 0,
+        actorId: mascot.id,
+        actorName: mascot.name,
+        actorOwnerId: mascot.ownerId,
+        actorPokemonId: mascot.pokemonId,
+        targetId: mascot.id,
+        targetName: mascot.name,
+        targetOwnerId: mascot.ownerId,
+        targetPokemonId: mascot.pokemonId,
+        action: "DEFEND",
+        damage: 0,
+        attackerType: getPokemonElement(mascot.pokemonId),
+        defenderType: getPokemonElement(mascot.pokemonId),
+        multiplier: 1,
+        advantageApplied: false,
+        actorRole: getCombatRoleLabel(mascot.combatRole),
+        targetRole: getCombatRoleLabel(mascot.combatRole),
+        effect,
+      });
+    }
+  }
+
   const hp = new Map<string, number>();
   for (const m of [...a, ...b]) hp.set(m.id, m.hp);
 
-  const log: ArenaTurnLog[] = [];
   const debuffs = new Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>();
   const healCount = new Map<string, number>();
   const survivorUsed = new Set<string>();

@@ -18,6 +18,7 @@ import {
   Package,
   Search,
   ShieldCheck,
+  ShieldAlert,
   ShoppingBag,
   Sparkles,
   Star,
@@ -45,6 +46,7 @@ const combatLinks = [
   { href: "/desafio-sincronizado", label: "Arena Sincronizada", icon: Ticket, adminOnly: false },
   { href: "/combates/cacada-de-rastros", label: "Caçada de Rastros", icon: Footprints, adminOnly: true },
   { href: "/combates/liga-semanal", label: "Liga Semanal", icon: Trophy, adminOnly: false },
+  { href: "/combates/ordem-da-trapaca", label: "Ordem da Trapaça", icon: ShieldAlert, adminOnly: false, eventOnly: true },
 ];
 
 const rankingLinks = [
@@ -72,7 +74,7 @@ const mercadoLinks = [
   { href: "/laboratorio", label: "Laboratório", icon: FlaskConical,  adminOnly: false },
 ];
 
-// profileLinks é dinâmico — usa playerId para o link do perfil público
+// profileLinks é dinâmico - usa playerId para o link do perfil público
 function buildProfileLinks(playerId?: string) {
   return [
     { href: playerId ? `/jogadores/${playerId}` : "/perfil", label: "Meu Perfil", icon: User, adminOnly: false },
@@ -98,9 +100,10 @@ type NavLink = {
   icon: typeof LayoutDashboard;
   adminOnly: boolean;
   tutorialId?: string;
+  eventOnly?: boolean;
 };
 
-export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, bazarAlerts = 0, unreadNews = 0, playerId }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; bazarAlerts?: number; unreadNews?: number; playerId?: string }) {
+export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 0, bazarAlerts = 0, unreadNews = 0, playerId, orderEventVisible = false }: { admin: boolean; variant?: "desktop" | "mobile"; giftCount?: number; unreadDms?: number; bazarAlerts?: number; unreadNews?: number; playerId?: string; orderEventVisible?: boolean }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -143,6 +146,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
           icon={Swords}
           links={combatLinks}
           admin={admin}
+          orderEventVisible={orderEventVisible}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
         />
@@ -228,6 +232,7 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
             icon={Swords}
             links={combatLinks}
             admin={admin}
+            orderEventVisible={orderEventVisible}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
           />
@@ -285,13 +290,13 @@ export function AppNav({ admin, variant = "desktop", giftCount = 0, unreadDms = 
 }
 
 function NavDropdown({
-  id, label, icon: Icon, links, admin, openMenu, setOpenMenu, badgeHrefs = {}, tutorialId
+  id, label, icon: Icon, links, admin, orderEventVisible = false, openMenu, setOpenMenu, badgeHrefs = {}, tutorialId
 }: {
   id: string; label: string; icon: typeof LayoutDashboard; links: NavLink[];
-  admin: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
+  admin: boolean; orderEventVisible?: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
   badgeHrefs?: Record<string, number>; tutorialId?: string;
 }) {
-  const visibleLinks = links.filter((link) => !link.adminOnly || admin);
+  const visibleLinks = links.filter((link) => (!link.adminOnly || admin) && (!link.eventOnly || admin || orderEventVisible));
   if (visibleLinks.length === 0) return null;
   const open = openMenu === id;
   const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);
@@ -329,13 +334,13 @@ function NavDropdown({
 }
 
 function MobileNavGroup({
-  id, label, icon: Icon, links, admin, openMenu, setOpenMenu, badgeHrefs = {}
+  id, label, icon: Icon, links, admin, orderEventVisible = false, openMenu, setOpenMenu, badgeHrefs = {}
 }: {
   id: string; label: string; icon: typeof LayoutDashboard; links: NavLink[];
-  admin: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
+  admin: boolean; orderEventVisible?: boolean; openMenu: string | null; setOpenMenu: (v: string | null) => void;
   badgeHrefs?: Record<string, number>;
 }) {
-  const visibleLinks = links.filter((link) => !link.adminOnly || admin);
+  const visibleLinks = links.filter((link) => (!link.adminOnly || admin) && (!link.eventOnly || admin || orderEventVisible));
   if (visibleLinks.length === 0) return null;
   const open = openMenu === id;
   const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);

@@ -12,6 +12,7 @@ import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType } from "@prisma/cli
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
 import { creditCoins } from "@/lib/zikacoins";
 import { isStandbyActive } from "@/lib/account-standby";
+import { getActiveWeeklyLeagueSabotage } from "@/lib/raid-event";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -983,6 +984,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
 
   const roundNumber = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId } }) + 1;
   const modifier = league.modifierJson as unknown as WeeklyModifier | null;
+  const weeklySabotage = await getActiveWeeklyLeagueSabotage();
 
   // Use pre-generated matchups or create Swiss pairings
   let pairings: Array<{ aId: string; bId: string | null; existingMatchId?: string }> = [];
@@ -1132,7 +1134,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
     }
 
     const [itemsA, itemsB] = await Promise.all([loadItems(pair.aId), loadItems(pair.bId!)]);
-    const result = runLeagueCombat(teamAMascots, teamBMascots, modifier, itemsA, itemsB);
+    const result = runLeagueCombat(teamAMascots, teamBMascots, modifier, itemsA, itemsB, { weeklySabotage });
 
     const winnerId = result.winner === "A" ? pair.aId : result.winner === "B" ? pair.bId : null;
     const loserId = result.winner === "A" ? pair.bId : result.winner === "B" ? pair.aId : null;
@@ -1212,6 +1214,7 @@ export async function regenerateReplaysAction(leagueId: string) {
 
     const league = await prisma.weeklyMascotLeague.findUnique({ where: { id: leagueId } });
     const modifier = league?.modifierJson as unknown as WeeklyModifier | null;
+    const weeklySabotage = await getActiveWeeklyLeagueSabotage();
     let updated = 0;
 
     for (const match of matches) {
@@ -1245,7 +1248,7 @@ export async function regenerateReplaysAction(leagueId: string) {
 
       if (teamA.length < 6 || teamB.length < 6) continue;
 
-      const result = runLeagueCombat(teamA, teamB, modifier);
+      const result = runLeagueCombat(teamA, teamB, modifier, [], [], { weeklySabotage });
 
       // Only update replay — keep winner, points, everything else untouched
       await prisma.weeklyMascotLeagueMatch.update({

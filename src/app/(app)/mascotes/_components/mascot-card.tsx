@@ -260,6 +260,10 @@ export interface ExpeditionRewardDisplay {
   emoji: string;
   title: string;
   description: string;
+  orderClue?: {
+    clueText: string;
+    relatedStepKey?: string | null;
+  };
 }
 
 const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
@@ -271,6 +275,19 @@ const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
   PICNIC_BASKET:   { emoji: "🧺",   label: "Cesta de Piquenique" },
   XP_SHARE:        { emoji: "📡",   label: "Compartilhador de XP" },
 };
+
+const ORDER_CLUE_STEP_LABELS: Record<string, string> = {
+  ZIKALOOT_FAKE_NUMBER: "Travessura: ZikaLoot roubada",
+  BAZAR_SLOT_SIX_CLICKS: "Travessura: Bazar sabotado",
+  LAB_SMOKE_TO_MACHINE: "Travessura: Laboratorio travado",
+  MASCOT_LEAGUE_LAST_PLACE_THREE_CLICKS: "Travessura: Liga Semanal adulterada",
+  MASCOTS_EQUIPPED_WHISPER: "Travessura: Mascotes atacados",
+};
+
+export function getOrderClueStepLabel(stepKey?: string | null) {
+  if (!stepKey) return "Pista geral da investigacao";
+  return ORDER_CLUE_STEP_LABELS[stepKey] ?? "Pista da investigacao";
+}
 
 export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; expBonus?: number; gotEgg?: boolean; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
   if (reward.type === "TRAINING") {
@@ -556,6 +573,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             <p className="text-lg font-bold text-white">{expeditionReward.title}</p>
             <p className="text-sm text-slate-400">{expeditionReward.description}</p>
           </div>
+          {expeditionReward.orderClue && (
+            <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 p-3 text-left">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-purple-200">
+                Pista da Ordem encontrada
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[#FFCB05]">
+                {getOrderClueStepLabel(expeditionReward.orderClue.relatedStepKey)}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-200">
+                {expeditionReward.orderClue.clueText}
+              </p>
+              <p className="mt-2 text-[10px] text-slate-500">
+                A pista entrou no painel público da investigação.
+              </p>
+            </div>
+          )}
           <button
             onClick={closeExpeditionReward}
             className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors">
@@ -922,7 +955,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 const r = await claimExpeditionAction(expedition.id);
                 if (r.error) { toast.error(r.error); return; }
                 if (r.result?.reward) {
-                  setExpeditionReward(rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; shopItemType?: string }));
+                  const display = rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; shopItemType?: string });
+                  if (r.result.orderClue) display.orderClue = r.result.orderClue;
+                  setExpeditionReward(display);
                   setExpeditionRewardPendingRefresh(true);
                 } else {
                   router.refresh();

@@ -113,7 +113,7 @@ const GOLD_D = "#5a4700";
 // ── Card TCG ──────────────────────────────────────────────────────────────────
 
 function MiauvadaoCard({
-  offer, idx, onBuy, pending, buying, balance,
+  offer, idx, onBuy, pending, buying, balance, sabotaged,
 }: {
   offer: MiauvadaoOffer;
   idx: number;
@@ -121,11 +121,12 @@ function MiauvadaoCard({
   pending: boolean;
   buying: boolean;
   balance: number;
+  sabotaged?: boolean;
 }) {
   const soldOut = offer.sold >= offer.stock;
   const expired = new Date() > new Date(offer.validUntil);
-  const canBuy  = !soldOut && !expired && balance >= offer.finalPrice;
-  const dimmed  = soldOut || expired;
+  const canBuy  = !sabotaged && !soldOut && !expired && balance >= offer.finalPrice;
+  const dimmed  = sabotaged || soldOut || expired;
 
   return (
     <div className={`relative flex flex-col select-none transition-opacity ${dimmed ? "opacity-50 grayscale" : ""}`}>
@@ -155,6 +156,14 @@ function MiauvadaoCard({
         {/* Área do item */}
         <div className="relative flex flex-col items-center justify-center"
           style={{ minHeight: 170, padding: "28px 16px 20px" }}>
+          {sabotaged && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-purple-950/70">
+              <div className="rounded-xl border border-purple-300/40 bg-slate-950/90 px-3 py-2 text-center shadow-[0_0_24px_rgba(168,85,247,0.35)]">
+                <p className="text-[10px] font-black uppercase tracking-widest text-purple-200">Slot sabotado</p>
+                <p className="mt-1 text-[10px] text-slate-400">Compra bloqueada pela Ordem</p>
+              </div>
+            </div>
+          )}
           {/* ⚡ cantos — confinados nesta área */}
           <span className="absolute top-2 left-2 text-[11px] leading-none select-none" style={{ color: GOLD }}>⚡</span>
           <span className="absolute top-2 right-2 text-[11px] leading-none select-none" style={{ color: GOLD }}>⚡</span>
@@ -184,7 +193,7 @@ function MiauvadaoCard({
             lineHeight: 1.2, overflow: "hidden",
             textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            {dimmed ? (soldOut ? "ESGOTADO" : "EXPIRADO") : offer.name}
+            {sabotaged ? "SLOT CORROMPIDO" : dimmed ? (soldOut ? "ESGOTADO" : "EXPIRADO") : offer.name}
           </p>
           {offer.description && !dimmed && (
             <p style={{
@@ -224,7 +233,8 @@ function MiauvadaoCard({
               boxShadow: canBuy ? "0 0 0 1px #5a4700, 0 2px 8px rgba(201,168,0,0.3)" : "none",
             }}
           >
-            {soldOut   ? "Esgotado" :
+            {sabotaged ? "Sabotado" :
+             soldOut   ? "Esgotado" :
              expired   ? <><Clock size={10}/> Expirado</> :
              buying && pending ? "Comprando…" :
              <><ShoppingCart size={11}/> Comprar</>}
@@ -245,9 +255,10 @@ interface Props {
   lastNpcMessage?: string | null;
   refreshesRemaining?: number;
   refreshDailyLimit?: number;
+  sabotagedOfferIndex?: number | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, refreshesRemaining = 3, refreshDailyLimit = 3 }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, refreshesRemaining = 3, refreshDailyLimit = 3, sabotagedOfferIndex = null }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -276,6 +287,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
   const handleBuy = (idx: number) => {
     const offer = offers[idx];
     if (!offer) return;
+    if (sabotagedOfferIndex === idx) { toast.error("Esse slot foi sabotado pela Ordem da Trapaca."); return; }
     if (!playerId) { toast.error("Faça login para comprar."); return; }
     if (!confirm(`Comprar "${offer.name}" por ${offer.finalPrice.toLocaleString("pt-BR")} ZC?`)) return;
     setBuyingIdx(idx);
@@ -430,6 +442,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
                   pending={pending}
                   buying={buyingIdx === idx}
                   balance={balance}
+                  sabotaged={sabotagedOfferIndex === idx}
                 />
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { WEEKLY_MODIFIERS } from "./constants";
+import { getActiveWeeklyLeagueSabotage, getOrderStepUnlockState } from "@/lib/raid-event";
 
 function formatPlayerLabel(p: { displayName: string; ptcglNick?: string | null; user?: { email?: string | null } | null }): string {
   const base = p.displayName;
@@ -294,6 +295,10 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   let walletBalance = 0;
   let leagueInventory: { type: string; quantity: number }[] = [];
   let selectedBattleItems: { battleSlot: number; effectType: string }[] = [];
+  const [orderSabotage, orderLeagueStepState] = await Promise.all([
+    getActiveWeeklyLeagueSabotage(),
+    getOrderStepUnlockState("MASCOT_LEAGUE_LAST_PLACE_THREE_CLICKS"),
+  ]);
 
   try {
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId }, select: { balance: true } });
@@ -350,6 +355,8 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     availableMascots: allMascots,
     leagueInventory,
     selectedBattleItems,
+    orderSabotage,
+    orderLeagueStepState,
     weekHighlights,
     lastChampion,
   };

@@ -25,6 +25,7 @@ import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI, getW
 import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
+import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 
 export default async function PlayerDetailPage({
   params
@@ -217,6 +218,8 @@ export default async function PlayerDetailPage({
   }
 
   const badge = statusBadge();
+  const profileGraffiti = (await getActiveRaidSabotages("PROFILE")).find((s) => s.sabotageType === "PROFILE_GRAFFITI");
+  const orderPasswordStamp = await getOrderPasswordStampForUser(player.userId);
 
   return (
     <div className="space-y-8">
@@ -251,10 +254,33 @@ export default async function PlayerDetailPage({
 
         return (
           <div data-tutorial="profile-avatar" className="relative rounded-2xl border border-border bg-slate-950">
+            {profileGraffiti && !orderPasswordStamp && (
+              <div className="pointer-events-none absolute right-4 top-4 z-30 rotate-6 rounded-xl border-2 border-purple-400/60 bg-purple-950/80 px-4 py-2 text-center shadow-[0_0_24px_rgba(168,85,247,0.35)]">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-purple-200">Ordem da Trapaça</p>
+                <p className="font-pixel text-lg text-[#FFCB05]">TRAPACEADO</p>
+              </div>
+            )}
 
             {/* ── Banner ── */}
             {/* No mobile usa altura fixa (180px). Em telas maiores usa aspect-ratio 4:1.
                 clamp garante mínimo de 180px e máximo de 280px em qualquer tela. */}
+            {orderPasswordStamp && (
+              <div className="absolute right-4 top-4 z-40 rotate-3 rounded-2xl border-2 border-[#FFCB05]/60 bg-slate-950/90 px-4 py-3 text-center shadow-[0_0_28px_rgba(255,203,5,0.28)]">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-purple-200">Ordem da Trapaça</p>
+                <p className="font-pixel text-lg leading-none text-[#FFCB05]">TRAPACEADO</p>
+                <div className="mt-2 flex items-center justify-center gap-1 font-pixel text-xl">
+                  {orderPasswordStamp.displayedCode.split("").map((digit, index) => (
+                    <span
+                      key={`${digit}-${index}`}
+                      className="text-[#FFCB05]"
+                      style={index === orderPasswordStamp.greenIndex ? { WebkitTextStroke: "1px #FFF4A3", textShadow: "0 0 8px rgba(255,203,5,0.65)" } : undefined}
+                    >
+                      {digit}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="relative overflow-hidden rounded-2xl"
               style={{
                 height: equippedBanner?.item.imageUrl

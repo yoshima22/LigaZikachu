@@ -6,10 +6,12 @@ import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
-import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getActiveShopItems, invalidateShopCache } from "@/lib/shop-cache";
+import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
 import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
+import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +38,7 @@ export default async function ShopPage() {
     select: { id: true }
   });
 
-  const [wallet, items, inventoryRows, eggCounts, foodItems] = await Promise.all([
+  const [wallet, rawItems, inventoryRows, eggCounts, foodItems, raidSabotages] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
     getActiveShopItems(),
     player
@@ -57,8 +59,24 @@ export default async function ShopPage() {
           where: { playerId: player.id },
           select: { type: true, quantity: true }
         })
-      : []
+      : [],
+    getActiveRaidSabotages("ZIKASHOP"),
   ]);
+  const priceSabotage = raidSabotages.find((s) => s.sabotageType === "INCREASE_PRICE");
+  const priceIncreasePct = priceSabotage ? readSabotageNumber(priceSabotage.effectJson, "priceIncreasePct", 10) : 0;
+  const megaUnlocked = await isMegaStoneShopUnlocked();
+  const safeRawItems = rawItems.filter((item) =>
+    admin ||
+    megaUnlocked ||
+    !MEGA_STONE_SHOP_ITEM_TYPES.includes(item.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number])
+  );
+  const items = priceIncreasePct > 0
+    ? safeRawItems.map((item) => ({
+        ...item,
+        price: Math.max(1, Math.ceil(item.price * (1 + priceIncreasePct / 100))),
+        description: `${item.description ?? ""}${item.description ? " " : ""}[Ordem da Trapaça: preço adulterado +${priceIncreasePct}%]`,
+      }))
+    : safeRawItems;
 
   const ownedIds = new Set(inventoryRows.map((r) => r.itemId));
   const countByItemId = new Map(inventoryRows.map((r) => [r.itemId, r.quantity]));
@@ -67,10 +85,12 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
+  const megaItems = items.filter((i) => MEGA_STONE_SHOP_ITEM_TYPES.includes(i.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number]));
   const leagueItems = items.filter((i) => LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]));
   const mascotItems = items.filter((i) =>
     MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number]) &&
-    !LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number])
+    !LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]) &&
+    !MEGA_STONE_SHOP_ITEM_TYPES.includes(i.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number])
   );
   // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
   const buffInventory = inventoryRows.filter(r => {
@@ -114,6 +134,16 @@ export default async function ShopPage() {
         </div>
       </div>
 
+      {priceSabotage && (
+        <div className="rounded-2xl border border-purple-500/35 bg-purple-500/10 p-4">
+          <p className="text-[10px] uppercase tracking-widest text-purple-300">Interferência na loja</p>
+          <p className="mt-1 text-sm font-bold text-slate-100">{priceSabotage.title}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {priceSabotage.description ?? `Os preços foram adulterados em +${priceIncreasePct}%.`}
+          </p>
+        </div>
+      )}
+
       {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-12 text-center">
           <ShoppingBag size={32} className="mx-auto mb-3 text-slate-600" />
@@ -156,6 +186,15 @@ export default async function ShopPage() {
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
             ) : null,
           },
+          ...((megaItems.length > 0 && (megaUnlocked || admin)) ? [{
+            id: "mega", label: "Mega Evolução", icon: TAB_ICONS.buffs,
+            count: megaItems.length,
+            content: (
+              <ShopGrid title="Pedras de Mega Evolução"
+                items={megaItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+            ),
+          }] : []),
           {
             id: "tickets", label: "Tickets ZikaLoot", icon: TAB_ICONS.tickets,
             count: tickets.length,

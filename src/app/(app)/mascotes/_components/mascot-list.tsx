@@ -9,7 +9,7 @@ import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascote
 import { MascotBankList } from "./mascot-bank-list-demand";
 import type { BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
-import { MascotCard, rewardToDisplay, type ExpeditionRewardDisplay } from "./mascot-card";
+import { MascotCard, getOrderClueStepLabel, rewardToDisplay, type ExpeditionRewardDisplay } from "./mascot-card";
 
 interface MascotData {
   id: string; pokemonId: number; nickname: string | null;
@@ -125,7 +125,9 @@ function ExpeditionProgressCard({
       const result = await claimExpeditionAction(expedition.id);
       if (result.error) { toast.error(result.error); return; }
       if (result.result?.reward) {
-        onReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
+        const display = rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string });
+        if (result.result.orderClue) display.orderClue = result.result.orderClue;
+        onReward(display);
       } else {
         router.refresh();
       }
@@ -139,7 +141,9 @@ function ExpeditionProgressCard({
       const result = await claimExpeditionAction(expedition.id);
       if (result.error) { toast.error(result.error); return; }
       if (result.result?.reward) {
-        onReward(rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }));
+        const display = rewardToDisplay(result.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string });
+        if (result.result.orderClue) display.orderClue = result.result.orderClue;
+        onReward(display);
       } else {
         router.refresh();
       }
@@ -267,6 +271,22 @@ export function MascotList({
             <p className="text-lg font-bold text-white">{expeditionReward.title}</p>
             <p className="text-sm text-slate-400">{expeditionReward.description}</p>
           </div>
+          {expeditionReward.orderClue && (
+            <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 p-3 text-left">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-purple-200">
+                Pista da Ordem encontrada
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[#FFCB05]">
+                {getOrderClueStepLabel(expeditionReward.orderClue.relatedStepKey)}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-200">
+                {expeditionReward.orderClue.clueText}
+              </p>
+              <p className="mt-2 text-[10px] text-slate-500">
+                A pista entrou no painel público da investigação.
+              </p>
+            </div>
+          )}
           <button
             onClick={closeExpeditionReward}
             className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-900 hover:bg-[#FFD700] transition-colors"

@@ -10,6 +10,7 @@ import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { computeMascotAnalysis } from "@/lib/mascot-analysis";
 import type { MascotAnalysis } from "@/lib/mascot-analysis";
 import { getMascotRarity, getMascotBaseDust } from "./rarity";
+import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 
 // Custo de cada análise de mascote no Laboratório (cada abertura recompra a análise)
 const ANALYSIS_COST = 200;
@@ -39,6 +40,20 @@ async function requirePlayer() {
   });
   if (!player) redirect("/dashboard");
   return player;
+}
+
+async function getLabLockReason() {
+  const [sabotages, stepState] = await Promise.all([
+    getActiveRaidSabotages("LABORATORY"),
+    getOrderStepUnlockState("LAB_SMOKE_TO_MACHINE"),
+  ]);
+  const activeSabotage = sabotages.find(
+    (s) => s.sabotageType === "DISABLE_LAB_ANALYSIS" || s.sabotageType === "DISABLE_DUST_CONVERSION",
+  );
+  if (activeSabotage || (stepState.active && stepState.unlocked && !stepState.resolved)) {
+    return "Laboratorio travado pela Ordem da Trapaca. Resolva a etapa da fumaca para usar esta acao.";
+  }
+  return null;
 }
 
 async function getOrCreateWeeklyUsage(playerId: string) {
@@ -142,6 +157,8 @@ export async function getLabDataAction() {
 // ── Recycle mascot ────────────────────────────────────────────────────────────
 export async function recycleMascotAction(mascotId: string) {
   const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
 
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
@@ -182,6 +199,8 @@ export async function recycleMascotAction(mascotId: string) {
 // ── Batch recycle mascot ──────────────────────────────────────────────────────
 export async function recycleMascotsAction(mascotIds: string[]) {
   const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
   const uniqueIds = [...new Set(mascotIds.filter(Boolean))].slice(0, 6);
 
   if (uniqueIds.length === 0) {
@@ -244,6 +263,8 @@ export async function recycleMascotsAction(mascotIds: string[]) {
 // ── Trade for ZikaCoins ───────────────────────────────────────────────────────
 export async function tradeDustForCoinsAction() {
   const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
   const weeklyUsage = await getOrCreateWeeklyUsage(me.id);
 
   if (weeklyUsage.coinsTraded >= WEEKLY_LIMITS.coinsTraded) {
@@ -284,6 +305,8 @@ export async function tradeDustForCoinsAction() {
 // ── Trade for Egg ─────────────────────────────────────────────────────────────
 export async function tradeDustForEggAction(eggTier: "COMMON" | "RARE" | "SPECIAL") {
   const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
   const weeklyUsage = await getOrCreateWeeklyUsage(me.id);
 
   const costMap = { COMMON: SHOP_COSTS.commonEgg, RARE: SHOP_COSTS.rareEgg, SPECIAL: SHOP_COSTS.specialEgg };
@@ -337,6 +360,8 @@ export async function analyzeMascotAction(
   targetLevel?: number,
 ): Promise<{ ok: false; error: string } | { ok: true; analysis: MascotAnalysis; coinBalance: number }> {
   const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
 
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
@@ -388,6 +413,8 @@ export async function getStoredAnalysisAction(
   mascotId: string,
 ): Promise<{ ok: false; error: string } | { ok: true; analysis: MascotAnalysis }> {
   const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
     select: { analysisJson: true, analyzedAt: true },

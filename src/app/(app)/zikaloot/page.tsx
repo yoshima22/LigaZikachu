@@ -2,7 +2,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ShopItemType } from "@prisma/client";
-import { Ticket, Trophy } from "lucide-react";
+import { AlertTriangle, LockKeyhole, Search, Ticket, Trophy } from "lucide-react";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
 import { Card } from "@/components/ui/card";
 import { LootBoard } from "./_components/loot-board";
@@ -10,6 +10,8 @@ import { AdminLootPanel } from "./_components/admin-loot-panel";
 import { SeedSpecialTicketButton } from "./_components/seed-special-ticket-button";
 import { checkAndRunPendingDraws } from "./actions";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
+import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
+import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +28,133 @@ export default async function ZikaLootPage() {
 
   const admin = isAdmin(session.user.role);
 
-  // Executar sorteios que passaram do horário automaticamente
-  await checkAndRunPendingDraws();
-
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
     select: { id: true }
   });
+
+  const [raidSabotages, zikaLootStepState] = await Promise.all([
+    getActiveRaidSabotages("ZIKALOOT"),
+    getOrderStepUnlockState("ZIKALOOT_FAKE_NUMBER"),
+  ]);
+  const zikaLootSabotage = raidSabotages.find((s) => s.sabotageType === "ZIKALOOT_FAKE_NUMBER");
+  const shouldLockZikaLoot =
+    Boolean(zikaLootSabotage) ||
+    (zikaLootStepState.active && zikaLootStepState.unlocked && !zikaLootStepState.resolved);
+
+  if (shouldLockZikaLoot) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-[#170d2c] via-[#12091f] to-[#1c102d] p-6 shadow-[0_0_40px_rgba(168,85,247,0.12)]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-purple-300">Ordem da Trapaca</p>
+              <h1 className="mt-2 font-pixel text-base text-[#FFCB05]">ZikaLoot roubada</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                A ZikaLoot foi trancada por uma travessura da Ordem. Os sorteios e compras de tickets
+                ficam bloqueados ate a Liga recuperar o controle desta etapa.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-purple-400/30 bg-purple-500/10 p-4 text-center">
+              <LockKeyhole className="mx-auto text-purple-200" size={28} />
+              <p className="mt-2 text-[10px] uppercase tracking-widest text-purple-300">Acesso bloqueado</p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-950/60 p-5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-[#FFCB05]" />
+                <h2 className="font-semibold text-white">Painel adulterado</h2>
+              </div>
+              <p className="mt-2 text-sm text-slate-400">
+                As recompensas foram desviadas e os controles da loteria foram lacrados.
+                O painel so volta a responder quando as pistas certas forem reunidas.
+              </p>
+              <div className="mt-4 rounded-xl border border-purple-400/25 bg-purple-950/30 p-4">
+                <p className="text-[10px] uppercase tracking-widest text-purple-300">Recompensas roubadas</p>
+                <p className="mt-1 font-pixel text-xl text-purple-100">Acesso selado</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Resolver esta etapa remove o bloqueio e devolve a ZikaLoot ao fluxo normal.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-950/60 p-5">
+              <div className="flex items-center gap-2">
+                <Search size={18} className="text-[#7AC74C]" />
+                <h2 className="font-semibold text-white">Investigacao</h2>
+              </div>
+              <div className="mt-4 space-y-3">
+                <div>
+                  <div className="mb-1 flex justify-between text-xs text-slate-400">
+                    <span>Pistas gerais</span>
+                    <span>{zikaLootStepState.generalClues}/{zikaLootStepState.requiredGeneralClues}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-purple-400"
+                      style={{
+                        width: `${Math.min(100, (zikaLootStepState.generalClues / Math.max(1, zikaLootStepState.requiredGeneralClues)) * 100)}%`
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 flex justify-between text-xs text-slate-400">
+                    <span>Pistas da ZikaLoot</span>
+                    <span>{zikaLootStepState.specificClues}/{zikaLootStepState.requiredSpecificClues}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-[#FFCB05]"
+                      style={{
+                        width: `${Math.min(100, (zikaLootStepState.specificClues / Math.max(1, zikaLootStepState.requiredSpecificClues)) * 100)}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {zikaLootStepState.unlocked ? (
+                <div className="mt-5">
+                  <MysteryStepButton
+                    stepKey="ZIKALOOT_FAKE_NUMBER"
+                    returnPath="/zikaloot"
+                    className="w-full rounded-xl border border-[#FFCB05]/60 bg-[#FFCB05] px-4 py-3 text-sm font-black text-slate-950 shadow-[0_0_22px_rgba(255,203,5,0.25)] transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
+                    showOnlySuccess
+                    pendingLabel="Recuperando..."
+                    title="Resolver a travessura da ZikaLoot"
+                  >
+                    Recuperar ZikaLoot
+                  </MysteryStepButton>
+                </div>
+              ) : (
+                <div className="mt-5 rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-300">
+                  Continue encontrando pistas na Arena, Liga Semanal e expedicoes curtas para liberar a solucao.
+                </div>
+              )}
+
+              <a
+                href="/combates/ordem-da-trapaca"
+                className="mt-4 inline-flex text-xs font-semibold text-purple-300 underline-offset-4 hover:underline"
+              >
+                Ver painel da Ordem da Trapaca
+              </a>
+              {admin && (
+                <p className="mt-3 text-[11px] text-slate-500">
+                  Admin: esta tela tambem serve para validar o fluxo real dos jogadores.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Executar sorteios que passaram do horario automaticamente somente quando a ZikaLoot esta liberada.
+  await checkAndRunPendingDraws();
 
   const [loots, myPicks, ticketCount, specialTicketCount] = await Promise.all([
     prisma.zikaLoot.findMany({
@@ -213,6 +335,7 @@ export default async function ZikaLootPage() {
             )}
           </div>
         )}
+
       </div>
 
       {/* Board de números */}

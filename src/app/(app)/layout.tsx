@@ -19,6 +19,10 @@ import { RouteTutorialHelpButton } from "@/components/tutorial/route-tutorial-he
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
 import { LogoutButton } from "@/components/logout-button";
+import { ORDER_EVENT_SLUG, ORDER_STEP_PUBLIC_REWARD_LABELS } from "@/lib/raid-event";
+import { OrderEventIntroModal } from "./_components/order-event-intro-modal";
+import { OrderEventRewardModal } from "./_components/order-event-reward-modal";
+import { markOrderIntroSeenAction, markOrderRewardSeenAction } from "./_components/order-event-intro-actions";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -74,6 +78,42 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0, unreadNews: 0 };
   });
   const globalNotice = await getGlobalNotice();
+  const orderIntro = await prisma.raidEvent.findUnique({
+    where: { slug: ORDER_EVENT_SLUG },
+    select: {
+      active: true,
+      phase: true,
+      notifications: {
+        where: { userId: user.id, notificationType: "ORDER_INTRO" },
+        select: { seenAt: true },
+        take: 1,
+      },
+    },
+  }).catch(() => null);
+  const shouldShowOrderIntro = Boolean(
+    orderIntro?.active &&
+    orderIntro.phase === "INVESTIGATION" &&
+    !orderIntro.notifications.some((notification) => notification.seenAt),
+  );
+  const orderEventVisible = Boolean(orderIntro?.active && orderIntro.phase !== "ENDED");
+  const pendingOrderReward = await prisma.userRaidNotification.findFirst({
+    where: {
+      userId: user.id,
+      seenAt: null,
+      notificationType: {
+        in: [
+          "ORDER_REWARD_ZIKALOOT",
+          "ORDER_REWARD_BAZAR",
+          "ORDER_REWARD_LAB",
+          "ORDER_REWARD_LEAGUE",
+          "ORDER_REWARD_MASCOTS",
+          "RAID_DEFEATED",
+        ],
+      },
+    },
+    select: { id: true, notificationType: true },
+    orderBy: { createdAt: "asc" },
+  }).catch(() => null);
   const { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews } = navData;
 
   return (
@@ -91,6 +131,14 @@ export default async function AppLayout({ children }: Readonly<{ children: React
       />
       <MaintenanceVisibilityGuard />
       <SessionPersistenceGuard />
+      {shouldShowOrderIntro && <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />}
+      {pendingOrderReward && (
+        <OrderEventRewardModal
+          notificationId={pendingOrderReward.id}
+          title={pendingOrderReward.notificationType === "RAID_DEFEATED" ? "Capitao Trambique derrotado" : ORDER_STEP_PUBLIC_REWARD_LABELS[pendingOrderReward.notificationType] ?? "Travessura da Ordem"}
+          onSeen={markOrderRewardSeenAction}
+        />
+      )}
       <div className="min-h-screen bg-[#0f0f1a]">
         {/* Header Pokemon Style */}
         <header className="sticky top-0 z-40 border-b border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#1e1e3a] to-[#1A1A2E] pt-[env(safe-area-inset-top)] backdrop-blur-md">
@@ -114,7 +162,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} />
+            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} orderEventVisible={orderEventVisible} />
 
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
@@ -158,7 +206,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} />
+            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} orderEventVisible={orderEventVisible} />
           </div>
           {globalNotice.message && (
             <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">

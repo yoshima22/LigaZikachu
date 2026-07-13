@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Zap } from "lucide-react";
-import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction } from "../actions";
+import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction } from "../actions";
+import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
   description?: string; imageUrl?: string;
 }
-interface MascotOption { id: string; name: string; isEquipped: boolean; isFavorite: boolean }
+interface MascotOption { id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean }
 
 const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_EXP:   "⚡",
@@ -73,6 +74,11 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const selectedBuffItem = buffs.find(b => b.id === selectedBuff);
   const isProtein = selectedBuffItem?.type === "MASCOT_BUFF_STAT";
   const isExpBuff = selectedBuffItem?.type === "MASCOT_BUFF_EXP";
+  const isMegaStone = selectedBuffItem ? isMegaStoneType(selectedBuffItem.type) : false;
+  const selectedMegaStone = selectedBuffItem ? getMegaStoneByType(selectedBuffItem.type) : null;
+  const mascotOptions = isMegaStone && selectedMegaStone
+    ? mascots.filter((m) => m.pokemonId === selectedMegaStone.compatiblePokemonId && m.level >= selectedMegaStone.minLevel)
+    : mascots;
   const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
 
@@ -86,6 +92,10 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     const isDestructive = DESTRUCTIVE_ITEMS.has(selectedBuffItem.type);
 
     if (!isPlayerLevel && !selectedMascot) { toast.error("Selecione um mascote."); return; }
+    if (isMegaStone && selectedMegaStone && !mascotOptions.some((m) => m.id === selectedMascot)) {
+      toast.error(`Selecione um ${selectedMegaStone.compatiblePokemonName} Nv.${selectedMegaStone.minLevel}+ compatível.`);
+      return;
+    }
 
     if (isProtein && proteinFull) {
       toast.error(`Este mascote já recebeu ${PROTEIN_LIMIT} doses de Proteína Zika (limite máximo).`); return;
@@ -108,7 +118,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (isDestructive && !confirm("Confirme novamente: isso não pode ser desfeito.")) return;
 
     startTransition(async () => {
-      let r: { error?: string; replacedExistingBuff?: boolean };
+      let r: { error?: string; replacedExistingBuff?: boolean; megaName?: string };
       const t = selectedBuffItem.type;
 
       if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
@@ -117,6 +127,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
       else if (t === "XP_SHARE") r = await useXpShareAction(selectedMascot);
       else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot);
+      else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
       else r = await useMascotBuffAction(selectedMascot, selectedBuff);
 
       if (r.error) toast.error(r.error);
@@ -131,6 +142,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         } else if (t === "RAINBOW_FEATHER") {
           toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);
+        } else if (isMegaStoneType(t)) {
+          toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
         } else if (t === "LUCKY_EGG") {
           toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
         } else if (t === "WEAKNESS_POLICY") {
@@ -153,7 +166,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       {/* Lista de buffs disponíveis */}
       <div className="grid gap-2 sm:grid-cols-2">
         {buffs.map(buff => {
-          const emoji = BUFF_EMOJI[buff.type] ?? "✨";
+          const emoji = BUFF_EMOJI[buff.type] ?? (isMegaStoneType(buff.type) ? "🔮" : "✨");
           const isThisProtein = buff.type === "MASCOT_BUFF_STAT";
           const areas = EXP_BUFF_AREAS[buff.type];
           return (
@@ -243,7 +256,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
             className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]"
           >
             <option value="">Selecione o mascote</option>
-            {mascots.map(m => {
+            {mascotOptions.map(m => {
               const doses = isProtein ? (proteinDoses[m.id] ?? 0) : 0;
               const maxed = isProtein && doses >= PROTEIN_LIMIT;
               const hasBoost = isExpBuff && (activeBuffsByMascot[m.id] ?? []).includes("EXP_BOOST");

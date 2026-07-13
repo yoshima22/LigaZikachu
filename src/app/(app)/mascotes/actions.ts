@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { getMegaStoneByType, isMegaStoneType, MEGA_STAT_BONUS } from "@/lib/mega-evolution";
 import { getSessionPlayer } from "@/lib/session";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
@@ -614,6 +615,80 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     revalidate(player.id);
     return { replacedExistingBuff };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function useMegaStoneAction(mascotId: string, itemId: string): Promise<{ error?: string; megaName?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "NÃ£o autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil nÃ£o encontrado." };
+
+    const [mascot, inventoryItem] = await Promise.all([
+      prisma.mascot.findUnique({
+        where: { id: mascotId },
+        select: {
+          id: true, playerId: true, pokemonId: true, nickname: true, level: true,
+          arenaState: true, megaEvolvedAt: true,
+          expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 },
+        },
+      }),
+      prisma.playerInventory.findUnique({
+        where: { playerId_itemId: { playerId: player.id, itemId } },
+        include: { item: true },
+      }),
+    ]);
+
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote nÃ£o encontrado." };
+    if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "VocÃª nÃ£o tem esta pedra." };
+    if (!isMegaStoneType(inventoryItem.item.type)) return { error: "Este item nÃ£o Ã© uma Pedra de Mega EvoluÃ§Ã£o." };
+    if (mascot.megaEvolvedAt) return { error: "Este mascote jÃ¡ despertou uma Mega EvoluÃ§Ã£o." };
+    if (mascot.arenaState !== "FREE" || mascot.expeditions.length > 0) {
+      return { error: "O mascote precisa estar livre para Mega Evoluir." };
+    }
+
+    const stone = getMegaStoneByType(inventoryItem.item.type);
+    if (!stone) return { error: "Pedra de Mega EvoluÃ§Ã£o nÃ£o configurada." };
+    if (mascot.pokemonId !== stone.compatiblePokemonId) {
+      return { error: `${inventoryItem.item.name} sÃ³ pode ser usada em ${stone.compatiblePokemonName}.` };
+    }
+    if (mascot.level < stone.minLevel) {
+      return { error: `${stone.compatiblePokemonName} precisa estar no Nv.${stone.minLevel} ou maior.` };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.playerInventory.update({
+        where: { playerId_itemId: { playerId: player.id, itemId } },
+        data: { quantity: { decrement: 1 } },
+      });
+      await tx.mascot.update({
+        where: { id: mascot.id },
+        data: {
+          pokemonId: stone.megaPokemonId,
+          megaEvolvedFromPokemonId: stone.compatiblePokemonId,
+          megaStoneItemId: itemId,
+          megaEvolvedAt: new Date(),
+          statForce: { increment: MEGA_STAT_BONUS },
+          statAgility: { increment: MEGA_STAT_BONUS },
+          statCharisma: { increment: MEGA_STAT_BONUS },
+          statInstinct: { increment: MEGA_STAT_BONUS },
+          statVitality: { increment: MEGA_STAT_BONUS },
+        },
+      });
+      await tx.mascotEvent.create({
+        data: {
+          mascotId: mascot.id,
+          emoji: "🔮",
+          description: `${mascot.nickname ?? stone.compatiblePokemonName} usou ${stone.stoneName} e despertou ${stone.megaPokemonName}: +${MEGA_STAT_BONUS} em todos os atributos.`,
+        },
+      });
+    });
+
+    revalidate(player.id);
+    return { megaName: stone.megaPokemonName };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao usar Pedra de Mega EvoluÃ§Ã£o." };
+  }
 }
 
 // ── Novos itens especiais ─────────────────────────────────────────────────────

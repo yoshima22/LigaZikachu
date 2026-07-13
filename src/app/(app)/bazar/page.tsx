@@ -14,6 +14,8 @@ import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, markBazarProposalsVie
 import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
+import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
+import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +36,7 @@ export default async function BazarPage({
   // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
   // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
   // Marcar propostas respondidas como vistas — invalida o badge do nav
-  const [, listingsResult, transactions, miauvadao] = await Promise.all([
+  const [, listingsResult, transactions, miauvadao, raidSabotages, bazarStepState] = await Promise.all([
     markBazarProposalsViewed(),
     getCachedListings({
       category: searchParams.cat as BazarItemCategory | undefined,
@@ -46,7 +48,11 @@ export default async function BazarPage({
     }),
     getCachedRecentTransactions(6),
     getMiauvadaoConfig(),
+    getActiveRaidSabotages("BAZAR"),
+    getOrderStepUnlockState("BAZAR_SLOT_SIX_CLICKS"),
   ]);
+  const blockedSlotSabotage = raidSabotages.find((s) => s.sabotageType === "BLOCK_BAZAR_SLOT");
+  const shouldShowBazarAnomaly = Boolean(blockedSlotSabotage) || (bazarStepState.active && bazarStepState.unlocked && !bazarStepState.resolved);
 
   // Auto-refresh ofertas do Miauvadão se o timer expirou.
   // Usa o config retornado diretamente (sem passar pelo cache) quando houve roll.
@@ -177,7 +183,45 @@ export default async function BazarPage({
         lastNpcMessage={freshMiauvadao.lastNpcMessage ?? freshMiauvadao.lastWinnerMessage ?? null}
         refreshesRemaining={refreshesRemaining}
         refreshDailyLimit={REFRESH_DAILY_LIMIT}
+        sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
       />
+
+      {shouldShowBazarAnomaly && (
+        <div className="rounded-2xl border border-purple-500/35 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.18),transparent_35%),rgba(15,23,42,0.85)] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-purple-300">Sinal estranho</p>
+              <p className="mt-1 text-sm font-bold text-slate-100">Uma oferta perdeu a sincronizacao.</p>
+              <p className="mt-1 text-xs text-slate-400">O Bazar continua funcionando, mas este slot parece responder de um jeito diferente.</p>
+            </div>
+            {bazarStepState.unlocked ? (
+            <MysteryStepButton
+              stepKey="BAZAR_SLOT_SIX_CLICKS"
+              returnPath="/bazar"
+              className="group relative min-h-20 w-full max-w-48 overflow-hidden rounded-xl border border-purple-400/40 bg-slate-950/80 px-4 py-3 text-left shadow-[0_0_18px_rgba(168,85,247,0.22)] transition hover:border-purple-300/70 disabled:opacity-60 sm:w-48"
+              showOnlySuccess
+              pendingLabel={null}
+              title="Oferta instável"
+            >
+              <span className="absolute inset-0 bg-[repeating-linear-gradient(90deg,rgba(168,85,247,0.12)_0px,rgba(168,85,247,0.12)_1px,transparent_1px,transparent_8px)] opacity-60 group-hover:opacity-90" />
+              <span className="relative block text-[10px] uppercase tracking-widest text-purple-300">Oferta instável</span>
+              <span className="relative mt-1 block text-xs font-black text-slate-100">???</span>
+              <span className="relative mt-1 block text-[10px] text-slate-500">dados corrompidos</span>
+            </MysteryStepButton>
+            ) : (
+              <div
+                className="group relative min-h-20 w-full max-w-48 overflow-hidden rounded-xl border border-purple-400/20 bg-slate-950/60 px-4 py-3 text-left shadow-[0_0_18px_rgba(168,85,247,0.12)] sm:w-48"
+                title={`Ainda faltam pistas: geral ${bazarStepState.generalClues}/${bazarStepState.requiredGeneralClues}, Bazar ${bazarStepState.specificClues}/${bazarStepState.requiredSpecificClues}`}
+              >
+                <span className="absolute inset-0 bg-[repeating-linear-gradient(90deg,rgba(168,85,247,0.08)_0px,rgba(168,85,247,0.08)_1px,transparent_1px,transparent_8px)] opacity-50" />
+                <span className="relative block text-[10px] uppercase tracking-widest text-purple-300/70">Oferta instavel</span>
+                <span className="relative mt-1 block text-xs font-black text-slate-300">???</span>
+                <span className="relative mt-1 block text-[10px] text-slate-600">ainda sem contexto</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Shell Game */}
       <ShellGame

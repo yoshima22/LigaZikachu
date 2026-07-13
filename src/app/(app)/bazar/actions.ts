@@ -9,6 +9,7 @@ import { MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
+import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -964,6 +965,14 @@ export async function toggleFavorite(listingId: string): Promise<{ error?: strin
 
 export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: string }> {
   try {
+    if (offerIndex === 1) {
+      const [sabotages, stepState] = await Promise.all([
+        getActiveRaidSabotages("BAZAR"),
+        getOrderStepUnlockState("BAZAR_SLOT_SIX_CLICKS"),
+      ]);
+      const bazarSabotaged = sabotages.some((s) => s.sabotageType === "BLOCK_BAZAR_SLOT") || (stepState.active && stepState.unlocked && !stepState.resolved);
+      if (bazarSabotaged) return { error: "O slot do meio foi sabotado pela Ordem da Trapaca." };
+    }
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);

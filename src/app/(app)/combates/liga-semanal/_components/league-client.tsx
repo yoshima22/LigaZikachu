@@ -29,6 +29,7 @@ import {
   regenerateReplaysAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
+import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
@@ -41,6 +42,22 @@ type PageData = {
   availableMascots: any[];
   leagueInventory: { type: string; quantity: number }[];
   selectedBattleItems: { battleSlot: number; effectType: string }[];
+  orderSabotage: {
+    title: string;
+    description: string | null;
+    affectedSlots: number[];
+    statMultiplier: number;
+    affectedStats: string[];
+  } | null;
+  orderLeagueStepState?: {
+    active: boolean;
+    unlocked: boolean;
+    resolved: boolean;
+    generalClues: number;
+    specificClues: number;
+    requiredGeneralClues: number;
+    requiredSpecificClues: number;
+  };
   weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
   lastChampion: {
     playerName: string; weekKey: string; points: number; wins: number; losses: number;
@@ -109,6 +126,91 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
 }
 
 // ── Liga Atual ─────────────────────────────────────────────────────────────
+
+function OrderSabotageBanner({
+  sabotage,
+  stepState,
+  compact = false,
+}: {
+  sabotage: PageData["orderSabotage"];
+  stepState?: PageData["orderLeagueStepState"];
+  compact?: boolean;
+}) {
+  if (!sabotage && !stepState?.unlocked) return null;
+  const statMultiplier = sabotage?.statMultiplier ?? 0.5;
+  const affectedSlots = sabotage?.affectedSlots ?? [1, 2, 3];
+  const percent = Math.round((1 - statMultiplier) * 100);
+  const slots = affectedSlots.join(", ");
+
+  return (
+    <div className={`rounded-2xl border border-red-500/50 bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,0.25),transparent_35%),rgba(127,29,29,0.18)] ${compact ? "p-3" : "p-4"} shadow-[0_0_24px_rgba(239,68,68,0.14)]`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-200">Alerta da Ordem da Trapaca</p>
+          <p className={`${compact ? "text-xs" : "text-sm"} font-black text-white`}>
+            Slots {slots} estao lutando com -{percent}% nos atributos.
+          </p>
+          {!compact && (
+            <p className="mt-1 text-[11px] leading-relaxed text-red-100/80">
+              Isto e uma sabotagem ativa do evento, nao um erro do sistema. O efeito aparece nos combates e no replay ate a travessura ser resolvida.
+            </p>
+          )}
+        </div>
+        <span className="shrink-0 rounded-full border border-red-300/40 bg-red-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-red-100">
+          Debuff ativo
+        </span>
+      </div>
+      {!compact && stepState && !stepState.resolved && (
+        <div className="mt-4 rounded-xl border border-red-300/20 bg-slate-950/35 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="mb-1 flex justify-between text-[10px] text-red-100/80">
+                <span>Pistas gerais</span>
+                <span>{stepState.generalClues}/{stepState.requiredGeneralClues}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-900">
+                <div
+                  className="h-full rounded-full bg-purple-400"
+                  style={{ width: `${Math.min(100, (stepState.generalClues / Math.max(1, stepState.requiredGeneralClues)) * 100)}%` }}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 flex justify-between text-[10px] text-red-100/80">
+                <span>Pistas da Liga Semanal</span>
+                <span>{stepState.specificClues}/{stepState.requiredSpecificClues}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-900">
+                <div
+                  className="h-full rounded-full bg-[#FFCB05]"
+                  style={{ width: `${Math.min(100, (stepState.specificClues / Math.max(1, stepState.requiredSpecificClues)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          {stepState.unlocked ? (
+            <div className="mt-3">
+              <MysteryStepButton
+                stepKey="MASCOT_LEAGUE_LAST_PLACE_THREE_CLICKS"
+                returnPath="/combates/liga-semanal"
+                className="w-full rounded-xl border border-[#FFCB05]/60 bg-[#FFCB05] px-4 py-2 text-xs font-black text-slate-950 shadow-[0_0_18px_rgba(255,203,5,0.22)] transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                showOnlySuccess
+                pendingLabel="Corrigindo..."
+                title="Resolver a sabotagem da Liga Semanal"
+              >
+                Corrigir tabela adulterada
+              </MysteryStepButton>
+            </div>
+          ) : (
+            <p className="mt-3 text-[11px] text-red-100/75">
+              Encontre mais pistas na Arena, Liga Semanal e expedicoes curtas para liberar a correcao.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LeagueTab({ data }: { data: PageData }) {
   const league = data.currentLeague;
@@ -199,6 +301,8 @@ function LeagueTab({ data }: { data: PageData }) {
       )}
 
       {league && (<>
+      <OrderSabotageBanner sabotage={data.orderSabotage} stepState={data.orderLeagueStepState} />
+
       {/* League status */}
       <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -815,11 +919,13 @@ function ResultsTab({ data }: { data: PageData }) {
           winnerId={replayMatch.winnerId}
           isDraw={replayMatch.isDraw}
           replay={replayMatch.replayJson as TurnLog[]}
+          orderSabotage={data.orderSabotage}
           onFinish={() => setReplayMatch(null)}
         />
       )}
 
       <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
+      <OrderSabotageBanner sabotage={data.orderSabotage} stepState={data.orderLeagueStepState} compact />
 
       {slotGroups.map(({ slot, time, matches }) => (
         <div key={slot} className="space-y-2">

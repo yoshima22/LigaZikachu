@@ -177,6 +177,7 @@ export function LeagueBattleReplayModal({
   winnerId,
   isDraw,
   replay,
+  orderSabotage,
   onFinish,
 }: {
   playerAName: string;
@@ -185,6 +186,7 @@ export function LeagueBattleReplayModal({
   winnerId?: string | null;
   isDraw?: boolean;
   replay: TurnLog[];
+  orderSabotage?: { affectedSlots: number[]; statMultiplier: number } | null;
   onFinish: () => void;
 }) {
   const [turnIdx, setTurnIdx] = useState(-1);
@@ -266,6 +268,15 @@ export function LeagueBattleReplayModal({
               <button onClick={onFinish} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">✕</button>
             </div>
           </div>
+
+          {orderSabotage && (
+            <div className="mx-5 mb-3 rounded-xl border border-red-500/45 bg-red-500/10 px-4 py-2 text-xs text-red-100">
+              <p className="font-black uppercase tracking-wide text-red-200">Sabotagem ativa no replay</p>
+              <p className="mt-0.5">
+                Os slots {orderSabotage.affectedSlots.join(", ")} lutaram com -{Math.round((1 - orderSabotage.statMultiplier) * 100)}% nos atributos por efeito da Ordem da Trapaca.
+              </p>
+            </div>
+          )}
 
           {/* Progress */}
           <div className="mx-5 mb-3 h-1.5 overflow-hidden rounded-full bg-slate-800">

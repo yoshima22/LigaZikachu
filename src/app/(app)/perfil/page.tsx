@@ -16,6 +16,7 @@ import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
+import { getOrderPasswordStampForUser } from "@/lib/raid-event";
 
 
 type ProfileMascot = {
@@ -296,6 +297,7 @@ export default async function PerfilPage() {
     name: getPokemonName(entry.pokemonId),
   }));
   const pokemonOptions = getWishlistPokemonOptions();
+  const orderPasswordStamp = await getOrderPasswordStampForUser(session.user.id);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
   const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
@@ -379,6 +381,28 @@ export default async function PerfilPage() {
           </div>
         </div>
       </div>
+
+      {orderPasswordStamp && (
+        <Card className="border-[#FFCB05]/30 bg-[#FFCB05]/5 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-purple-200">Ordem da Trapaça</p>
+              <p className="font-pixel text-base text-[#FFCB05]">TRAPACEADO</p>
+            </div>
+            <div className="flex items-center justify-center gap-1 rounded-2xl border border-[#FFCB05]/40 bg-slate-950 px-4 py-3 font-pixel text-2xl">
+              {orderPasswordStamp.displayedCode.split("").map((digit, index) => (
+                <span
+                  key={`${digit}-${index}`}
+                  className="text-[#FFCB05]"
+                  style={index === orderPasswordStamp.greenIndex ? { WebkitTextStroke: "1px #FFF4A3", textShadow: "0 0 8px rgba(255,203,5,0.65)" } : undefined}
+                >
+                  {digit}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

@@ -295,6 +295,7 @@ model Player {
   newsRewardClaims        NewsRewardClaim[]
   raidBattleAttempts      RaidBattleAttempt[]
   raidDamageRankings      RaidDamageRanking[]
+  discoveredRaidClues     RaidClue[]             @relation("RaidClueDiscoverer")
 
   @@map("players")
 }
@@ -1289,6 +1290,54 @@ enum ShopItemType {
   VACATION_TICKET
   XP_SHARE
   RAINBOW_FEATHER
+  MEGA_STONE_ABOMASITE
+  MEGA_STONE_ABSOLITE
+  MEGA_STONE_AERODACTYLITE
+  MEGA_STONE_AGGRONITE
+  MEGA_STONE_ALAKAZITE
+  MEGA_STONE_ALTARIANITE
+  MEGA_STONE_AMPHAROSITE
+  MEGA_STONE_AUDINITE
+  MEGA_STONE_BANETTITE
+  MEGA_STONE_BEEDRILLITE
+  MEGA_STONE_BLASTOISINITE
+  MEGA_STONE_BLAZIKENITE
+  MEGA_STONE_CAMERUPTITE
+  MEGA_STONE_CHARIZARDITE_X
+  MEGA_STONE_CHARIZARDITE_Y
+  MEGA_STONE_DIANCITE
+  MEGA_STONE_GALLADITE
+  MEGA_STONE_GARCHOMPITE
+  MEGA_STONE_GARDEVOIRITE
+  MEGA_STONE_GENGARITE
+  MEGA_STONE_GLALITITE
+  MEGA_STONE_GYARADOSITE
+  MEGA_STONE_HERACRONITE
+  MEGA_STONE_HOUNDOOMINITE
+  MEGA_STONE_KANGASKHANITE
+  MEGA_STONE_LATIASITE
+  MEGA_STONE_LATIOSITE
+  MEGA_STONE_LOPUNNITE
+  MEGA_STONE_LUCARIONITE
+  MEGA_STONE_MANECTITE
+  MEGA_STONE_MAWILITE
+  MEGA_STONE_MEDICHAMITE
+  MEGA_STONE_METAGROSSITE
+  MEGA_STONE_MEWTWONITE_X
+  MEGA_STONE_MEWTWONITE_Y
+  MEGA_STONE_PIDGEOTITE
+  MEGA_STONE_PINSIRITE
+  MEGA_STONE_RAYQUAZITE
+  MEGA_STONE_SABLENITE
+  MEGA_STONE_SALAMENCITE
+  MEGA_STONE_SCEPTILITE
+  MEGA_STONE_SCIZORITE
+  MEGA_STONE_SHARPEDONITE
+  MEGA_STONE_SLOWBRONITE
+  MEGA_STONE_STEELIXITE
+  MEGA_STONE_SWAMPERTITE
+  MEGA_STONE_TYRANITARITE
+  MEGA_STONE_VENUSAURITE
   SYNC_TICKET_FIRE_LEFT
   SYNC_TICKET_WATER_RIGHT
   SYNC_TICKET_COMPLETE
@@ -1936,6 +1985,9 @@ model Mascot {
   evolutionLocked      Boolean           @default(false)
   expLocked            Boolean           @default(false)
   isShiny              Boolean           @default(false) // variante shiny — sprite diferente e marcador visual
+  megaEvolvedFromPokemonId Int?
+  megaStoneItemId      String?
+  megaEvolvedAt        DateTime?
   arenaState           MascotArenaState  @default(FREE)
   injuredAt            DateTime?
   restingUntil         DateTime?         // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
@@ -2855,6 +2907,12 @@ enum RaidBattleResult {
 }
 
 enum RaidNotificationType {
+  ORDER_INTRO
+  ORDER_REWARD_ZIKALOOT
+  ORDER_REWARD_BAZAR
+  ORDER_REWARD_LAB
+  ORDER_REWARD_LEAGUE
+  ORDER_REWARD_MASCOTS
   HIDEOUT_FOUND
   MEGA_ACTIVATED
   RAID_DEFEATED
@@ -2932,13 +2990,17 @@ model RaidClue {
   relatedStepKey String?
   visible        Boolean         @default(false)
   releasedAt     DateTime?
+  discoveredAt   DateTime?
+  discoveredByPlayerId String?
   sortOrder      Int             @default(0)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   event          RaidEvent       @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+  discoveredBy   Player?         @relation("RaidClueDiscoverer", fields: [discoveredByPlayerId], references: [id], onDelete: SetNull)
 
   @@unique([raidEventId, sortOrder])
   @@index([raidEventId, visible, releasedAt])
+  @@index([raidEventId, discoveredByPlayerId])
   @@map("raid_clues")
 }
 

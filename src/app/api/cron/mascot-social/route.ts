@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { triggerSocialEvents } from "@/lib/mascot";
+import { applyRandomMascotInjurySabotage } from "@/lib/raid-event";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,7 +19,10 @@ function authorized(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const summary = await triggerSocialEvents();
+  const [summary, orderInjury] = await Promise.all([
+    triggerSocialEvents(),
+    applyRandomMascotInjurySabotage(),
+  ]);
 
   return NextResponse.json({
     ok: true,
@@ -26,5 +30,6 @@ export async function GET(req: NextRequest) {
     battles: summary.battles,
     friendships: summary.friendships,
     events: summary.events.slice(0, 20),
+    orderInjury,
   });
 }

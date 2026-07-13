@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
+import { maybeRevealOrderClueFromExpedition } from "@/lib/raid-event";
 import { getShopItemMeta } from "@/lib/shop-cache";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
@@ -1233,7 +1234,7 @@ async function claimExpeditionLegacy(
 export async function claimExpedition(
   playerId: string,
   expeditionId: string
-): Promise<{ reward: ExpeditionReward; mascotId: string }> {
+): Promise<{ reward: ExpeditionReward; mascotId: string; orderClue?: { clueText: string; relatedStepKey: string | null } | null }> {
   const expedition = await prisma.mascotExpedition.findUnique({
     where: { id: expeditionId },
     include: { mascot: true }
@@ -1291,7 +1292,6 @@ export async function claimExpedition(
   const expMult = mode === "TRAINING"
     ? TRAINING_EXP_MULT[durationKey]
     : mode === "ITEMS" ? 0 : dur.expMultiplier;
-
   // Ovo da Sorte: +EXP% na próxima expedição de TRAINING (apenas modo TRAINING)
   const luckyEggBuff = mode === "TRAINING" ? await prisma.mascotBuff.findFirst({
     where: { mascotId: expedition.mascotId, type: "LUCKY_EGG", expiresAt: { gt: new Date() } }
@@ -1429,6 +1429,13 @@ export async function claimExpedition(
     await addExp(expedition.mascotId, expeditionExp, { ignoreBenchPenalty: true, ignoreExpBoost: true }).catch(() => {});
   }
 
+  const orderClue = await maybeRevealOrderClueFromExpedition({
+    playerId,
+    mascotId: expedition.mascotId,
+    durationKey,
+    mode,
+  }).catch(() => null);
+
   // Ovo da Sorte: consome o buff após uso (1x por dia)
   if (luckyEggBuff) {
     await prisma.mascotBuff.delete({ where: { id: luckyEggBuff.id } }).catch(() => {});
@@ -1456,7 +1463,13 @@ export async function claimExpedition(
     }
   }
 
-  return { reward, mascotId: expedition.mascotId };
+  return {
+    reward,
+    mascotId: expedition.mascotId,
+    orderClue: orderClue
+      ? { clueText: orderClue.clueText, relatedStepKey: orderClue.relatedStepKey }
+      : null,
+  };
 }
 
 // ── Evento de log ─────────────────────────────────────────────────────────────

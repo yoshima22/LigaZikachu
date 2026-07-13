@@ -1,3 +1,5 @@
+import { MEGA_FORM_IDS, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
+
 /**
  * Dados estáticos do sistema de mascotes.
  * Pools de Pokémon por raridade de ovo (gen 1-2, apenas formas iniciais).
@@ -1600,6 +1602,8 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
 };
 
 export function getPokemonName(id: number): string {
+  const megaStone = getMegaStoneForMegaPokemon(id);
+  if (megaStone) return megaStone.megaPokemonName;
   return (
     POKEMON_PT_NAMES[id] ??
     POKEMON_GEN3_NAMES[id] ??
@@ -2542,7 +2546,7 @@ const SPECIAL_COVETED_IDS = [
 // ── Filtros finais nos pools ──────────────────────────────────────────────────
 // Predicado único: exclui lendários, evoluídos (level-up + pedra/troca/amizade)
 const isBaseForm = (id: number) =>
-  !LEGENDARY_POOL.includes(id) && !ALL_EVOLVED_IDS.has(id);
+  !LEGENDARY_POOL.includes(id) && !ALL_EVOLVED_IDS.has(id) && !MEGA_FORM_IDS.has(id);
 
 const addMissingBaseFormsToGenerationPools = () => {
   const generationRanges: Record<string, [number, number]> = {

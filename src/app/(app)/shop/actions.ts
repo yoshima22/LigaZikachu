@@ -10,6 +10,8 @@ import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoin
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType, UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
+import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
+import { isMegaStoneType } from "@/lib/mega-evolution";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -360,6 +362,10 @@ export async function purchaseItem(
     if (!item.active) return { error: "Este item não está disponível." };
 
     // Itens consumíveis (ovos, comida) podem ser comprados várias vezes
+    if (isMegaStoneType(item.type) && !(await isMegaStoneShopUnlocked())) {
+      return { error: "As Pedras de Mega EvoluÃ§Ã£o ainda nÃ£o foram liberadas." };
+    }
+
     const isConsumable = CONSUMABLE_TYPES.includes(item.type);
     if (!isConsumable && quantity > 1) {
       return { error: "Este item é único e só pode ser comprado uma vez." };

@@ -11,16 +11,19 @@ import { BuffPanel } from "./_components/buff-panel";
 import { BulkInteractPanel } from "./_components/bulk-interact-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_ITEM_TYPES, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { cleanupExpiredArenaResting, RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
 import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
+import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
+import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 
 export const dynamic = "force-dynamic";
 
 const BUFF_TYPES_LIST = [
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
+  ...MEGA_STONE_SHOP_ITEM_TYPES,
 ] as const;
 
 function wait(ms: number) {
@@ -273,6 +276,10 @@ export default async function MascotesPage() {
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
   const favoriteMascotCount = featuredMascots.filter(m => m.isFavorite).length;
+  const [orderMascotAttack, orderMascotStepState] = await Promise.all([
+    getRandomMascotInjurySabotage(),
+    getOrderStepUnlockState("MASCOTS_EQUIPPED_WHISPER"),
+  ]);
 
   // mascotData: apenas para a Equipe Favorita (renderizada com card completo)
   const mascotData = featuredMascots.map(m => ({
@@ -356,6 +363,70 @@ export default async function MascotesPage() {
         <RetirePenaltyBadge retiredAt={lastRetiredTeam.retiredAt} />
       )}
 
+      {(orderMascotAttack || (orderMascotStepState.active && orderMascotStepState.unlocked && !orderMascotStepState.resolved)) && (
+        <div className="rounded-2xl border border-red-500/45 bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,0.22),transparent_35%),rgba(127,29,29,0.16)] p-4 shadow-[0_0_24px_rgba(239,68,68,0.12)]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-200">Alerta da Ordem da Trapaca</p>
+              <h2 className="mt-1 text-sm font-black text-white">Mascotes sob ataque</h2>
+              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-red-100/80">
+                A Ordem esta ferindo mascotes aleatoriamente durante a investigacao. O limite diario e baixo e o admin pode bloquear novos ataques em emergencia.
+              </p>
+            </div>
+            {orderMascotAttack && (
+              <span className="shrink-0 rounded-full border border-red-300/40 bg-red-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-red-100">
+                Limite {orderMascotAttack.dailyLimit}/dia
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="mb-1 flex justify-between text-[10px] text-red-100/80">
+                <span>Pistas gerais</span>
+                <span>{orderMascotStepState.generalClues}/{orderMascotStepState.requiredGeneralClues}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-900">
+                <div
+                  className="h-full rounded-full bg-purple-400"
+                  style={{ width: `${Math.min(100, (orderMascotStepState.generalClues / Math.max(1, orderMascotStepState.requiredGeneralClues)) * 100)}%` }}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 flex justify-between text-[10px] text-red-100/80">
+                <span>Pistas dos Mascotes</span>
+                <span>{orderMascotStepState.specificClues}/{orderMascotStepState.requiredSpecificClues}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-900">
+                <div
+                  className="h-full rounded-full bg-[#FFCB05]"
+                  style={{ width: `${Math.min(100, (orderMascotStepState.specificClues / Math.max(1, orderMascotStepState.requiredSpecificClues)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {orderMascotStepState.unlocked ? (
+            <div className="mt-4">
+              <MysteryStepButton
+                stepKey="MASCOTS_EQUIPPED_WHISPER"
+                returnPath="/mascotes"
+                className="w-full rounded-xl border border-[#FFCB05]/60 bg-[#FFCB05] px-4 py-2 text-xs font-black text-slate-950 shadow-[0_0_18px_rgba(255,203,5,0.22)] transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                showOnlySuccess
+                pendingLabel="Protegendo..."
+                title="Interromper os ataques aos mascotes"
+              >
+                Proteger mascotes
+              </MysteryStepButton>
+            </div>
+          ) : (
+            <p className="mt-3 text-[11px] text-red-100/75">
+              Encontre mais pistas na Arena, Liga Semanal e expedicoes curtas para liberar a protecao.
+            </p>
+          )}
+        </div>
+      )}
       {/* Como funciona — explicação para o jogador */}
       <details className="rounded-2xl border border-border bg-slate-950/50 overflow-hidden group">
         <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-300 hover:text-white select-none">
@@ -466,6 +537,8 @@ export default async function MascotesPage() {
   mascots={mascotData.map(m => ({
     id: m.id,
     name: m.nickname ?? getPokemonName(m.pokemonId),
+    pokemonId: m.pokemonId,
+    level: m.level,
     isEquipped: m.isEquipped,
     isFavorite: m.isFavorite,
   }))}
