@@ -370,7 +370,7 @@ export default async function MascotesPage() {
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-200">Alerta da Ordem da Trapaca</p>
               <h2 className="mt-1 text-sm font-black text-white">Mascotes sob ataque</h2>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-red-100/80">
-                A Ordem esta ferindo mascotes aleatoriamente durante a investigacao. O limite diario e baixo e o admin pode bloquear novos ataques em emergencia.
+                A Ordem esta ferindo mascotes aleatoriamente durante a investigacao.
               </p>
             </div>
             {orderMascotAttack && (
