@@ -2573,6 +2573,9 @@ model PassScheduleConfig {
   id        String   @id @default("singleton")
   schedule  Json     // DayReward[] — 30 itens
   allowRetroactiveClaims Boolean  @default(false)
+  displayTitle String?
+  description  String?
+  flavorText   String?
   updatedAt DateTime @updatedAt
   updatedBy String?  // userId do admin que salvou por último
 

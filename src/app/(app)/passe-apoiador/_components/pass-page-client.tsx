@@ -82,6 +82,10 @@ export function PassPageClient({ status, schedule }: Props) {
 
   const pass = status.pass;
   const isExpired = pass.isExpired;
+  const totalDays = pass.totalDays;
+  const visibleSchedule = schedule.filter((reward) => reward.day <= totalDays);
+  const claimedVisibleDays = new Set([...claimedDays].filter((day) => day >= 1 && day <= totalDays));
+  const claimedCount = claimedVisibleDays.size;
 
   return (
     <div className="space-y-6 pb-12">
@@ -117,7 +121,7 @@ export function PassPageClient({ status, schedule }: Props) {
                   <Star size={10} className={isSelected ? "text-yellow-400" : "text-slate-600"} />
                   <span>Passe {idx + 1}</span>
                   <span className="text-slate-500">·</span>
-                  <span>{realClaims}/30 dias</span>
+                  <span>{Math.min(realClaims, p.totalDays)}/{p.totalDays} dias</span>
                   <span className="text-slate-500">·</span>
                   <span>{p.daysRemaining}d restantes</span>
                   {isSelected && <ChevronRight size={10} className="text-yellow-400" />}
@@ -137,7 +141,7 @@ export function PassPageClient({ status, schedule }: Props) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Star size={16} className="text-yellow-400" />
-              <span className="text-xs uppercase tracking-widest text-yellow-400/70 font-semibold">Passe Apoiador da Liga</span>
+              <span className="text-xs uppercase tracking-widest text-yellow-400/70 font-semibold">{pass.description}</span>
               {!isExpired && (
                 <span className="rounded-full bg-yellow-400/10 border border-yellow-400/30 px-2 py-0.5 text-xs text-yellow-300 font-semibold">
                   Ativo
@@ -149,8 +153,8 @@ export function PassPageClient({ status, schedule }: Props) {
                 </span>
               )}
             </div>
-            <h1 className="font-pixel text-base text-white mb-2">Pilar da Comunidade</h1>
-            <p className="text-xs italic text-slate-400">&ldquo;Sem você, as luzes se apagariam.&rdquo;</p>
+            <h1 className="font-pixel text-base text-white mb-2">{pass.displayTitle}</h1>
+            <p className="text-xs italic text-slate-400">&ldquo;{pass.flavorText}&rdquo;</p>
           </div>
 
           <div className="text-right text-xs text-slate-400 space-y-1">
@@ -160,7 +164,7 @@ export function PassPageClient({ status, schedule }: Props) {
             </div>
             <div className="flex items-center gap-1.5 justify-end">
               <CheckCircle2 size={11} />
-              <span>Dias resgatados: <span className="text-slate-200 font-medium">{claimedDays.size}/30</span></span>
+              <span>Dias resgatados: <span className="text-slate-200 font-medium">{claimedCount}/{totalDays}</span></span>
             </div>
           </div>
         </div>
@@ -169,13 +173,13 @@ export function PassPageClient({ status, schedule }: Props) {
         <div className="mt-4">
           <div className="flex justify-between text-xs text-slate-500 mb-1.5">
             <span>Progresso do ciclo</span>
-            <span>{claimedDays.size} de 30 dias</span>
+            <span>{claimedCount} de {totalDays} dias</span>
           </div>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-700"
               style={{
-                width: `${(claimedDays.size / 30) * 100}%`,
+                width: `${(claimedCount / totalDays) * 100}%`,
                 background: "linear-gradient(90deg, #FFCB05, #f97316, #c084fc)",
               }}
             />
@@ -187,7 +191,7 @@ export function PassPageClient({ status, schedule }: Props) {
       <div>
         <div className="flex items-center gap-2 mb-4">
           <Calendar size={14} className="text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-300">Calendário de 30 dias</h2>
+          <h2 className="text-sm font-semibold text-slate-300">Calendário de {totalDays} dias</h2>
         </div>
 
         {status.pass?.allowRetroactiveClaims && today !== null && today > 1 && (
@@ -198,7 +202,7 @@ export function PassPageClient({ status, schedule }: Props) {
         )}
 
         <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-10 gap-2">
-          {schedule.map((reward) => {
+          {visibleSchedule.map((reward) => {
             const isClaimed = claimedDays.has(reward.day);
             const isToday = reward.day === today;
             const isFuture = today !== null && reward.day > today;
@@ -238,7 +242,7 @@ export function PassPageClient({ status, schedule }: Props) {
                   <span className="text-3xl">{r.emoji}</span>
                   <div>
                     <p className="text-sm font-semibold text-white">{r.label}</p>
-                    <p className="text-xs text-slate-400">Dia {r.day} de 30</p>
+                    <p className="text-xs text-slate-400">Dia {r.day} de {totalDays}</p>
                   </div>
                 </div>
                 <Button

@@ -118,6 +118,9 @@ export default async function AdminPage() {
       schedule: r.schedule,
       isCustom: r.isCustom,
       allowRetroactiveClaims: r.allowRetroactiveClaims,
+      displayTitle: r.displayTitle,
+      description: r.description,
+      flavorText: r.flavorText,
     })))
   );
 
@@ -268,6 +271,7 @@ export default async function AdminPage() {
           displayName: p.player.displayName,
           passLabel: p.passLabel ?? "Passe Apoiador",
           expiresAt: p.expiresAt,
+          totalDays: Math.max(1, Math.min(30, Math.ceil((new Date(p.expiresAt).getTime() - new Date(p.startsAt).getTime()) / 86400000))),
           daysRemaining: Math.max(0, Math.ceil((new Date(p.expiresAt).getTime() - Date.now()) / 86400000)),
           claimedDays: p.claimsCount,
           allowRetroactiveClaims: p.allowRetroactiveClaims,

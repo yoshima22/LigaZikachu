@@ -10,6 +10,33 @@ import type { DayReward } from "./schedule";
 export type { DayReward } from "./schedule";
 import { PASS_SCHEDULE, PASS_SCHEDULE_DEFAULTS } from "./schedule";
 
+const DEFAULT_PASS_DISPLAY = {
+  title: "Pilar da Comunidade",
+  description: "Passe Apoiador da Liga",
+  flavorText: "Sem você, as luzes se apagariam.",
+};
+
+async function getPassDisplayConfig(passLabel?: string) {
+  const label = passLabel?.trim() || "Passe Apoiador";
+  try {
+    const cfg = await prisma.passScheduleConfig.findUnique({
+      where: { id: label === "Passe Apoiador" ? "singleton" : label },
+      select: { displayTitle: true, description: true, flavorText: true },
+    });
+    return {
+      title: cfg?.displayTitle?.trim() || (label === "Passe Apoiador" ? DEFAULT_PASS_DISPLAY.title : label),
+      description: cfg?.description?.trim() || (label === "Passe Apoiador" ? DEFAULT_PASS_DISPLAY.description : label),
+      flavorText: cfg?.flavorText?.trim() || (label === "Passe Apoiador" ? DEFAULT_PASS_DISPLAY.flavorText : "Uma recompensa especial da Liga Zikachu."),
+    };
+  } catch {
+    return {
+      title: label === "Passe Apoiador" ? DEFAULT_PASS_DISPLAY.title : label,
+      description: label === "Passe Apoiador" ? DEFAULT_PASS_DISPLAY.description : label,
+      flavorText: label === "Passe Apoiador" ? DEFAULT_PASS_DISPLAY.flavorText : "Uma recompensa especial da Liga Zikachu.",
+    };
+  }
+}
+
 // ── Calendário: leitura com fallback para o hardcoded ─────────────────────────
 // scheduleKey = passLabel do passe (ex: "Passe Apoiador", "Passe Gold").
 // Fallback chain: DB[key] → DB["singleton"] → hardcoded default → PASS_SCHEDULE
@@ -34,9 +61,10 @@ export async function getActiveSchedule(scheduleKey?: string): Promise<DayReward
 
 export async function adminGetSchedule(
   scheduleKey?: string
-): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string; allowRetroactiveClaims: boolean }> {
+): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string; allowRetroactiveClaims: boolean; displayTitle: string; description: string; flavorText: string }> {
   await requireAdmin();
   const label = scheduleKey ?? "Passe Apoiador";
+  const display = await getPassDisplayConfig(label);
   try {
     const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: label === "Passe Apoiador" ? "singleton" : label } });
     if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30)
@@ -45,10 +73,13 @@ export async function adminGetSchedule(
         isCustom: true,
         label,
         allowRetroactiveClaims: cfg.allowRetroactiveClaims,
+        displayTitle: cfg.displayTitle?.trim() || display.title,
+        description: cfg.description?.trim() || display.description,
+        flavorText: cfg.flavorText?.trim() || display.flavorText,
       };
   } catch { /* fallback */ }
   const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
-  return { schedule: fallback, isCustom: false, label, allowRetroactiveClaims: false };
+  return { schedule: fallback, isCustom: false, label, allowRetroactiveClaims: false, displayTitle: display.title, description: display.description, flavorText: display.flavorText };
 }
 
 export async function adminListScheduleLabels(): Promise<string[]> {
@@ -161,6 +192,8 @@ export type ActivePassSummary = {
   id: string;
   startsAt: Date;
   expiresAt: Date;
+  passLabel: string;
+  totalDays: number;
   daysRemaining: number;
   claimsCount: number;
 };
@@ -173,9 +206,13 @@ export type PassStatus = {
     expiresAt: Date;
     daysElapsed: number;
     daysRemaining: number;
+    totalDays: number;
     isExpired: boolean;
     allowRetroactiveClaims: boolean;
     passLabel: string;
+    displayTitle: string;
+    description: string;
+    flavorText: string;
   } | null;
   claims: { dayNumber: number; claimedAt: Date }[];
   todayDay: number | null; // null = não tem passe ativo
@@ -197,7 +234,13 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     // Lista de todos os passes ativos para o seletor
     const allActiveRaw = await prisma.supporterPass.findMany({
       where: { playerId: player.id, active: true },
-      select: { id: true, startsAt: true, expiresAt: true, _count: { select: { claims: true } } },
+      select: {
+        id: true,
+        startsAt: true,
+        expiresAt: true,
+        passLabel: true,
+        claims: { select: { rewardType: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     const now = new Date();
@@ -205,8 +248,10 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
       id: p.id,
       startsAt: p.startsAt,
       expiresAt: p.expiresAt,
+      passLabel: p.passLabel ?? "Passe Apoiador",
+      totalDays: Math.max(1, Math.min(30, Math.ceil((p.expiresAt.getTime() - p.startsAt.getTime()) / 86400000))),
       daysRemaining: Math.max(0, Math.ceil((p.expiresAt.getTime() - now.getTime()) / 86400000)),
-      claimsCount: p._count.claims,
+      claimsCount: p.claims.filter((claim) => claim.rewardType !== "DEBUG_SKIP").length,
     }));
 
     // Seleciona o passe: pelo ID se fornecido, senão o mais recente ativo
@@ -231,12 +276,28 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     // independente do horário em que o passe foi criado.
     const daysElapsed = calendarDaysBRT(pass.startsAt, now);
     const daysRemaining = Math.max(0, Math.ceil((pass.expiresAt.getTime() - now.getTime()) / 86400000));
-    const todayDay = Math.min(30, daysElapsed + 1);
+    const totalDays = Math.max(1, Math.min(30, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
+    const todayDay = Math.min(totalDays, daysElapsed + 1);
     const alreadyClaimed = pass.claims.some(c => c.dayNumber === todayDay);
-    const canClaimToday = !isExpired && !alreadyClaimed && todayDay >= 1 && todayDay <= 30;
+    const canClaimToday = !isExpired && !alreadyClaimed && todayDay >= 1 && todayDay <= totalDays;
+    const display = await getPassDisplayConfig(pass.passLabel);
 
     return {
-      pass: { id: pass.id, active: pass.active, startsAt: pass.startsAt, expiresAt: pass.expiresAt, daysElapsed, daysRemaining, isExpired, allowRetroactiveClaims: pass.allowRetroactiveClaims, passLabel: pass.passLabel },
+      pass: {
+        id: pass.id,
+        active: pass.active,
+        startsAt: pass.startsAt,
+        expiresAt: pass.expiresAt,
+        daysElapsed,
+        daysRemaining,
+        totalDays,
+        isExpired,
+        allowRetroactiveClaims: pass.allowRetroactiveClaims,
+        passLabel: pass.passLabel,
+        displayTitle: display.title,
+        description: display.description,
+        flavorText: display.flavorText,
+      },
       claims: pass.claims,
       todayDay: isExpired ? null : todayDay,
       canClaimToday,
@@ -277,9 +338,10 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (pass.claims.length > 0) return { ok: false, error: "Dia já resgatado." };
 
     // Verificar que o dia já chegou (calendário BRT, não 24h corridas)
-    const currentDay = Math.min(30, calendarDaysBRT(pass.startsAt, new Date()) + 1);
+    const passTotalDays = Math.max(1, Math.min(30, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
+    const currentDay = Math.min(passTotalDays, calendarDaysBRT(pass.startsAt, new Date()) + 1);
     if (!pass.allowRetroactiveClaims && dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
-    if (dayNumber < 1 || dayNumber > 30) return { ok: false, error: "Dia inválido." };
+    if (dayNumber < 1 || dayNumber > passTotalDays) return { ok: false, error: "Dia inválido para este passe." };
 
     const activeSchedule = await getActiveSchedule(pass.passLabel ?? undefined);
     const reward = activeSchedule.find(r => r.day === dayNumber);
@@ -722,6 +784,41 @@ export async function adminSetPassScheduleRetroactive(label: string, allow: bool
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+export async function adminSavePassDisplayConfig(
+  label: string,
+  data: { displayTitle: string; description: string; flavorText: string }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const admin = await getSessionUser();
+    await requireAdmin();
+    const cleanLabel = label.trim() || "Passe Apoiador";
+    const id = cleanLabel === "Passe Apoiador" ? "singleton" : cleanLabel;
+    const fallback = PASS_SCHEDULE_DEFAULTS[cleanLabel] ?? PASS_SCHEDULE;
+    await prisma.passScheduleConfig.upsert({
+      where: { id },
+      create: {
+        id,
+        schedule: fallback as object[],
+        displayTitle: data.displayTitle.trim().slice(0, 80) || null,
+        description: data.description.trim().slice(0, 160) || null,
+        flavorText: data.flavorText.trim().slice(0, 220) || null,
+        updatedBy: admin?.id,
+      },
+      update: {
+        displayTitle: data.displayTitle.trim().slice(0, 80) || null,
+        description: data.description.trim().slice(0, 160) || null,
+        flavorText: data.flavorText.trim().slice(0, 220) || null,
+        updatedBy: admin?.id,
+      },
+    });
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro ao salvar descrição." };
   }
 }
 

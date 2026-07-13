@@ -12,7 +12,7 @@ import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
 import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
   adminGrantVip, adminGrantVipToAll, adminSetRetroactiveClaims, adminRevokeVip,
-  adminSetPassScheduleRetroactive, adminCreatePassSchedule,
+  adminSetPassScheduleRetroactive, adminCreatePassSchedule, adminSavePassDisplayConfig,
 } from "@/app/(app)/passe-apoiador/actions";
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
@@ -131,6 +131,9 @@ interface ScheduleEntry {
   schedule: DayReward[];
   isCustom: boolean;
   allowRetroactiveClaims: boolean;
+  displayTitle: string;
+  description: string;
+  flavorText: string;
 }
 
 interface ActiveVip {
@@ -139,6 +142,7 @@ interface ActiveVip {
   passLabel: string;
   daysRemaining: number;
   claimedDays: number;
+  totalDays: number;
   expiresAt: Date;
   allowRetroactiveClaims: boolean;
 }
@@ -163,6 +167,13 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [retroConfigMap, setRetroConfigMap] = useState<Record<string, boolean>>(
     () => Object.fromEntries(allSchedules.map(s => [s.label, s.allowRetroactiveClaims]))
   );
+  const [displayMap, setDisplayMap] = useState<Record<string, { displayTitle: string; description: string; flavorText: string }>>(
+    () => Object.fromEntries(allSchedules.map(s => [s.label, {
+      displayTitle: s.displayTitle,
+      description: s.description,
+      flavorText: s.flavorText,
+    }]))
+  );
   const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -172,6 +183,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [grantPending, startGrant] = useTransition();
   const [grantAllPending, startGrantAll] = useTransition();
   const [retroConfigPending, startRetroConfig] = useTransition();
+  const [displayPending, startDisplay] = useTransition();
   const [retroPassPending, startRetroPass] = useTransition();
   const [retroPassLoadingId, setRetroPassLoadingId] = useState<string | null>(null);
   const [revokePending, startRevoke] = useTransition();
@@ -218,12 +230,28 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
       }
       return next;
     });
+    setDisplayMap(prev => {
+      const next = { ...prev };
+      for (const s of allSchedules) {
+        next[s.label] = {
+          displayTitle: s.displayTitle,
+          description: s.description,
+          flavorText: s.flavorText,
+        };
+      }
+      return next;
+    });
     setVipRetroMap(prev => ({ ...Object.fromEntries(activeVips.map(v => [v.passId, v.allowRetroactiveClaims])), ...prev }));
   }, [allSchedules, activeVips]);
 
   const schedule = scheduleMap[activeLabel] ?? allSchedules[0]?.schedule ?? [];
   const isCustom = customMap[activeLabel] ?? false;
   const passRetroDefault = retroConfigMap[activeLabel] ?? false;
+  const passDisplay = displayMap[activeLabel] ?? {
+    displayTitle: activeLabel,
+    description: activeLabel,
+    flavorText: "Uma recompensa especial da Liga Zikachu.",
+  };
   const dirty = dirtyMap[activeLabel] ?? false;
 
   const switchLabel = (label: string) => {
@@ -236,8 +264,26 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
         setScheduleMap(prev => ({ ...prev, [label]: result.schedule }));
         setCustomMap(prev => ({ ...prev, [label]: result.isCustom }));
         setRetroConfigMap(prev => ({ ...prev, [label]: result.allowRetroactiveClaims }));
+        setDisplayMap(prev => ({
+          ...prev,
+          [label]: {
+            displayTitle: result.displayTitle,
+            description: result.description,
+            flavorText: result.flavorText,
+          },
+        }));
       });
     }
+  };
+
+  const updateDisplayField = (field: "displayTitle" | "description" | "flavorText", value: string) => {
+    setDisplayMap(prev => ({
+      ...prev,
+      [activeLabel]: {
+        ...(prev[activeLabel] ?? passDisplay),
+        [field]: value,
+      },
+    }));
   };
 
   const updateDay = (day: number, ds: DayState) => {
@@ -284,6 +330,14 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
         setScheduleMap(prev => ({ ...prev, [result.label!]: result.schedule! }));
         setCustomMap(prev => ({ ...prev, [result.label!]: true }));
         setRetroConfigMap(prev => ({ ...prev, [result.label!]: result.allowRetroactiveClaims ?? false }));
+        setDisplayMap(prev => ({
+          ...prev,
+          [result.label!]: {
+            displayTitle: result.label!,
+            description: result.label!,
+            flavorText: "Uma recompensa especial da Liga Zikachu.",
+          },
+        }));
         setActiveLabel(result.label);
         setNewPassLabel("");
         setShowCreateTypeForm(false);
@@ -378,6 +432,17 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
     });
   };
 
+  const handleSaveDisplay = () => {
+    startDisplay(async () => {
+      const result = await adminSavePassDisplayConfig(activeLabel, passDisplay);
+      if (result.ok) {
+        toast.success(`Textos de "${activeLabel}" salvos.`);
+      } else {
+        toast.error(result.error ?? "Erro ao salvar textos do passe.");
+      }
+    });
+  };
+
   const handleReset = () => {
     if (!confirm(`Resetar "${activeLabel}" para os prêmios padrão?`)) return;
     startReset(async () => {
@@ -390,6 +455,14 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
         const fresh = await adminGetSchedule(activeLabel);
         setScheduleMap(prev => ({ ...prev, [activeLabel]: fresh.schedule }));
         setRetroConfigMap(prev => ({ ...prev, [activeLabel]: fresh.allowRetroactiveClaims }));
+        setDisplayMap(prev => ({
+          ...prev,
+          [activeLabel]: {
+            displayTitle: fresh.displayTitle,
+            description: fresh.description,
+            flavorText: fresh.flavorText,
+          },
+        }));
       } else {
         toast.error(result.error ?? "Erro ao resetar.");
       }
@@ -478,6 +551,58 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
           )}
 
           {/* ── Gestão de passes deste tipo ── */}
+          <div className="rounded-xl border border-yellow-500/15 bg-yellow-950/10 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-yellow-300 uppercase tracking-widest">Textos exibidos no passe</p>
+                <p className="text-[11px] text-slate-500">
+                  Ajusta o nome, a descrição curta e a frase que aparecem para o jogador neste tipo de passe.
+                </p>
+              </div>
+              <Button
+                onClick={handleSaveDisplay}
+                disabled={displayPending}
+                variant="outline"
+                className="h-8 gap-2 border-yellow-500/30 bg-yellow-500/10 text-xs text-yellow-200 hover:bg-yellow-500/20"
+              >
+                <Save size={12} />
+                {displayPending ? "Salvando..." : "Salvar textos"}
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Nome exibido</span>
+                <input
+                  value={passDisplay.displayTitle}
+                  onChange={e => updateDisplayField("displayTitle", e.target.value)}
+                  maxLength={80}
+                  placeholder="Ex: Passe da Trapaça"
+                  className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-yellow-400/50 focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Descrição curta</span>
+                <input
+                  value={passDisplay.description}
+                  onChange={e => updateDisplayField("description", e.target.value)}
+                  maxLength={160}
+                  placeholder="Ex: Passe especial do evento"
+                  className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-yellow-400/50 focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Frase do passe</span>
+                <input
+                  value={passDisplay.flavorText}
+                  onChange={e => updateDisplayField("flavorText", e.target.value)}
+                  maxLength={220}
+                  placeholder="Ex: A Ordem deixou algo para trás..."
+                  className="w-full rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm italic text-slate-200 focus:border-yellow-400/50 focus:outline-none"
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-purple-500/10 bg-purple-950/10 p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs font-semibold text-purple-300 uppercase tracking-widest">
@@ -582,7 +707,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                       <Star size={11} className="text-yellow-400 shrink-0" />
                       <span className="font-semibold text-slate-200">{vip.displayName}</span>
                       <span className="flex items-center gap-1 text-slate-500"><Clock size={9} />{vip.daysRemaining}d</span>
-                      <span className="flex items-center gap-1 text-slate-500"><CheckCircle2 size={9} />{vip.claimedDays}/30</span>
+                      <span className="flex items-center gap-1 text-slate-500"><CheckCircle2 size={9} />{Math.min(vip.claimedDays, vip.totalDays)}/{vip.totalDays}</span>
                       {vip.allowRetroactiveClaims && (
                         <span className="rounded-full bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 text-[9px] text-green-400">↩ retroativo</span>
                       )}
