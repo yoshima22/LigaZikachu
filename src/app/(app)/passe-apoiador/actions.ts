@@ -511,6 +511,57 @@ export async function adminGrantVip(opts: {
 
 // ── Admin: revogar VIP ────────────────────────────────────────────────────────
 
+export async function adminGrantVipToAll(opts: {
+  days: number;
+  startDay?: number;
+  passLabel?: string;
+  skipExisting?: boolean;
+}): Promise<{ ok: boolean; granted: number; skipped: number; total: number; error?: string }> {
+  try {
+    await requireAdmin();
+    const days = Math.max(1, Math.min(365, Math.floor(opts.days)));
+    const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
+    const startDay = Math.max(1, Math.min(30, opts.startDay ?? 1));
+    const skipExisting = opts.skipExisting ?? true;
+
+    const players = await prisma.player.findMany({
+      where: { user: { status: "ACTIVE" } },
+      select: { id: true },
+      orderBy: { displayName: "asc" },
+    });
+
+    const existingPlayerIds = skipExisting
+      ? new Set((await prisma.supporterPass.findMany({
+          where: {
+            active: true,
+            passLabel,
+            expiresAt: { gt: new Date() },
+            playerId: { in: players.map((p) => p.id) },
+          },
+          select: { playerId: true },
+        })).map((pass) => pass.playerId))
+      : new Set<string>();
+
+    let granted = 0;
+    let skipped = 0;
+    for (const player of players) {
+      if (existingPlayerIds.has(player.id)) {
+        skipped++;
+        continue;
+      }
+      const result = await adminGrantVip({ playerId: player.id, days, startDay, passLabel });
+      if (result.ok) granted++;
+      else skipped++;
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
+    return { ok: true, granted, skipped, total: players.length };
+  } catch (err) {
+    return { ok: false, granted: 0, skipped: 0, total: 0, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
 export async function adminRevokeVip(passId: string, reason?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const admin = await getSessionUser();

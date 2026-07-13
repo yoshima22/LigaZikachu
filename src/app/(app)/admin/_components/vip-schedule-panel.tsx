@@ -11,7 +11,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
 import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
-  adminGrantVip, adminSetRetroactiveClaims, adminRevokeVip,
+  adminGrantVip, adminGrantVipToAll, adminSetRetroactiveClaims, adminRevokeVip,
   adminSetPassScheduleRetroactive, adminCreatePassSchedule,
 } from "@/app/(app)/passe-apoiador/actions";
 
@@ -170,6 +170,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [savePending, startSave] = useTransition();
   const [resetPending, startReset] = useTransition();
   const [grantPending, startGrant] = useTransition();
+  const [grantAllPending, startGrantAll] = useTransition();
   const [retroConfigPending, startRetroConfig] = useTransition();
   const [retroPassPending, startRetroPass] = useTransition();
   const [retroPassLoadingId, setRetroPassLoadingId] = useState<string | null>(null);
@@ -190,6 +191,7 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [durationDays, setDurationDays] = useState(30);
   const [startDay, setStartDay] = useState(1);
+  const [skipExistingPasses, setSkipExistingPasses] = useState(true);
   const [showGrantForm, setShowGrantForm] = useState(false);
 
   // Sincroniza props → state quando o servidor retorna dados atualizados,
@@ -308,6 +310,27 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
         setShowGrantForm(false);
       } else {
         toast.error(result.error ?? "Erro ao conceder passe.");
+      }
+    });
+  };
+
+  const handleGrantForAll = () => {
+    const mode = skipExistingPasses
+      ? "Quem ja tiver este passe ativo sera ignorado."
+      : "Isso pode criar um novo passe mesmo para quem ja tem um ativo.";
+    if (!confirm(`Conceder "${activeLabel}" de ${durationDays} dia(s) para todos os jogadores ativos?\n\n${mode}`)) return;
+    startGrantAll(async () => {
+      const result = await adminGrantVipToAll({
+        days: durationDays,
+        startDay: startDay > 1 ? startDay : undefined,
+        passLabel: activeLabel,
+        skipExisting: skipExistingPasses,
+      });
+      if (result.ok) {
+        toast.success(`${activeLabel}: ${result.granted} criado(s), ${result.skipped} ignorado(s).`);
+        setShowGrantForm(false);
+      } else {
+        toast.error(result.error ?? "Erro ao conceder passe para todos.");
       }
     });
   };
@@ -519,6 +542,32 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
                     className="gap-2 bg-purple-600 hover:bg-purple-500 text-white text-xs h-9">
                     <UserPlus size={13} />
                     {grantPending ? "Criando..." : "Confirmar"}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-500/20 bg-slate-950/60 px-3 py-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-200">Adicionar este passe para todos os jogadores ativos</p>
+                    <p className="text-[11px] text-slate-500">
+                      Usa o tipo <strong className="text-purple-300">{activeLabel}</strong>, a duração acima e o mesmo calendário de recompensas.
+                    </p>
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <input
+                        type="checkbox"
+                        checked={skipExistingPasses}
+                        onChange={e => setSkipExistingPasses(e.target.checked)}
+                        className="h-4 w-4 rounded border-border bg-slate-900 accent-purple-500"
+                      />
+                      Pular jogadores que ja possuem este passe ativo
+                    </label>
+                  </div>
+                  <Button
+                    onClick={handleGrantForAll}
+                    disabled={grantAllPending}
+                    variant="outline"
+                    className="gap-2 border-yellow-500/40 bg-yellow-500/10 text-xs text-yellow-200 hover:bg-yellow-500/20"
+                  >
+                    <UserPlus size={13} />
+                    {grantAllPending ? "Adicionando..." : "Adicionar para todos"}
                   </Button>
                 </div>
               </div>
