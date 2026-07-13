@@ -21,7 +21,7 @@ type SlotKind = "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM
 
 type Slot =
   | { id: string; kind: "COINS"; amount: number }
-  | { id: string; kind: "EGG"; eggType: "COMMON" | "SPECIAL" | "RARE"; qty: number }
+  | { id: string; kind: "EGG"; eggType: "COMMON" | "SPECIAL" | "RARE" | "LAB"; qty: number }
   | { id: string; kind: "FOOD"; qty: number }
   | { id: string; kind: "SWEET"; qty: number }
   | { id: string; kind: "STICKER_PACK"; packName: string }
@@ -50,7 +50,7 @@ function rewardToSlots(reward: DayReward): Slot[] {
     slots.push({ id: uid(), kind: "COINS", amount: reward.coins });
 
   if (reward.eggType || reward.type === "EGG")
-    slots.push({ id: uid(), kind: "EGG", eggType: (reward.eggType as "COMMON" | "SPECIAL" | "RARE") ?? "COMMON", qty: reward.foodQty ?? 1 });
+    slots.push({ id: uid(), kind: "EGG", eggType: (reward.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: reward.foodQty ?? 1 });
 
   if ((reward.foodType === "FOOD" || reward.type === "FOOD") && !reward.eggType)
     slots.push({ id: uid(), kind: "FOOD", qty: reward.foodQty ?? 1 });
@@ -883,11 +883,12 @@ function SlotEditor({ slot, onUpdate, onRemove }: {
             <div className="space-y-1">
               <label className="text-[10px] text-slate-500 uppercase tracking-widest">Tipo de ovo</label>
               <select value={slot.eggType}
-                onChange={e => onUpdate({ eggType: e.target.value as "COMMON" | "SPECIAL" | "RARE" })}
+                onChange={e => onUpdate({ eggType: e.target.value as "COMMON" | "SPECIAL" | "RARE" | "LAB" })}
                 className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-teal-400/50">
                 <option value="COMMON">Comum</option>
                 <option value="SPECIAL">Especial</option>
                 <option value="RARE">Raro</option>
+                <option value="LAB">Laboratório</option>
               </select>
             </div>
             <div className="space-y-1">
