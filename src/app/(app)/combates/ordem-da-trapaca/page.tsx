@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { ORDER_EVENT_IMAGES } from "@/lib/order-event-assets";
 import { getBossHpPercent, getOrderEventPageData, RAID_PHASE_LABELS } from "@/lib/raid-event";
+import { MEGA_STONES } from "@/lib/mega-evolution";
 import {
   createOrderClueAction,
   prepareOrderEventAction,
@@ -25,6 +26,7 @@ import {
   toggleOrderClueVisibilityAction,
   toggleOrderSabotageAction,
   healOrderRaidMascotSusAction,
+  claimOrderFreeMegaStoneAction,
   debugSetOrderBossHpPercentAction,
   debugRecalculateOrderBossHpAction,
 } from "./actions";
@@ -82,7 +84,7 @@ export default async function OrdemDaTrapacaPage({
   const cluePage = Math.max(1, Number(params?.pistas ?? "1") || 1);
   const data = await getOrderEventPageData({ cluePage, cluePageSize: 12 });
   const event = data.event;
-  if (!admin && (!event?.active || event.phase === "ENDED")) redirect("/dashboard");
+  if (!admin && (!event || event.phase === "ENDED" || (!event.active && event.phase !== "RAID_DEFEATED"))) redirect("/dashboard");
   const hpPercent = event ? getBossHpPercent(event) : 0;
   const raidRevealed = event ? isRaidRevealed(event.phase) : false;
   const megaRevealed = raidRevealed && event ? hpPercent <= event.megaThresholdPercent : false;
@@ -107,7 +109,7 @@ export default async function OrdemDaTrapacaPage({
     statCharisma: number;
   };
   const emptyRaidMascots: RaidAvailableMascot[] = [];
-  const [lastRaidAttempt, injuredMascots, raidAvailableMascots, recentRaidAttempts] = player && event?.id ? await Promise.all([
+  const [lastRaidAttempt, injuredMascots, raidAvailableMascots, recentRaidAttempts, freeMegaStoneClaim] = player && event?.id ? await Promise.all([
     prisma.raidBattleAttempt.findFirst({
       where: { raidEventId: event.id, playerId: player.id },
       select: { createdAt: true, damageToBoss: true, result: true },
@@ -150,7 +152,17 @@ export default async function OrdemDaTrapacaPage({
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-  ]) : [null, [], emptyRaidMascots, []];
+    prisma.userRaidNotification.findUnique({
+      where: {
+        raidEventId_userId_notificationType: {
+          raidEventId: event.id,
+          userId: session.user.id,
+          notificationType: "ORDER_FREE_MEGA_STONE",
+        },
+      },
+      select: { id: true },
+    }),
+  ]) : [null, [], emptyRaidMascots, [], null];
   const raidCooldownUntil = lastRaidAttempt ? new Date(lastRaidAttempt.createdAt.getTime() + 30 * 60 * 1000) : null;
   const raidOnCooldown = raidCooldownUntil ? raidCooldownUntil.getTime() > Date.now() : false;
 
@@ -323,6 +335,43 @@ export default async function OrdemDaTrapacaPage({
                   Ultimo ataque: {lastRaidAttempt.damageToBoss.toLocaleString("pt-BR")} dano · {String(lastRaidAttempt.result)}
                 </p>
               )}
+            </div>
+          )}
+
+          {event.phase === "RAID_DEFEATED" && (
+            <div className="rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-4">
+              <div className="mb-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Vitória da Liga</p>
+                <h2 className="mt-1 text-lg font-black text-white">Escolha sua Pedra de Mega Evolução</h2>
+                <p className="mt-1 text-xs leading-relaxed text-emerald-100/80">
+                  O Capitão Trambique caiu. Cada jogador pode escolher uma Pedra de Mega Evolução gratuitamente uma única vez. As pedras também foram liberadas na ZikaShop.
+                </p>
+              </div>
+              {freeMegaStoneClaim ? (
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-bold text-emerald-100">
+                  Você já escolheu sua pedra gratuita desta raid.
+                </div>
+              ) : (
+                <form action={claimOrderFreeMegaStoneAction} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <select
+                    name="stoneType"
+                    className="rounded-xl border border-emerald-400/30 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-emerald-300"
+                    required
+                  >
+                    {MEGA_STONES.map((stone) => (
+                      <option key={stone.type} value={stone.type}>
+                        {stone.stoneName} - {stone.compatiblePokemonName} Nv.{stone.minLevel}+ ({stone.megaPokemonName})
+                      </option>
+                    ))}
+                  </select>
+                  <button className="rounded-xl bg-emerald-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:brightness-110">
+                    Resgatar pedra
+                  </button>
+                </form>
+              )}
+              <p className="mt-3 text-[11px] text-slate-400">
+                A recompensa final automática da vitória é 1 Ovo Raro e 1000 ZC para todos os jogadores ativos.
+              </p>
             </div>
           )}
 

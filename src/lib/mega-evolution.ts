@@ -9,6 +9,7 @@ export type MegaStoneConfig = {
   megaPokemonName: string;
   minLevel: number;
   price: number;
+  statBonus?: number;
 };
 
 export const MEGA_STAT_BONUS = 10;
@@ -53,7 +54,7 @@ export const MEGA_STONES: readonly MegaStoneConfig[] = [
   { type: "MEGA_STONE_MEWTWONITE_Y", stoneName: "Mewtwonite Y", compatiblePokemonId: 150, compatiblePokemonName: "Mewtwo", megaPokemonId: 10044, megaPokemonName: "Mega Mewtwo Y", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_PIDGEOTITE", stoneName: "Pidgeotite", compatiblePokemonId: 18, compatiblePokemonName: "Pidgeot", megaPokemonId: 10073, megaPokemonName: "Mega Pidgeot", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_PINSIRITE", stoneName: "Pinsirite", compatiblePokemonId: 127, compatiblePokemonName: "Pinsir", megaPokemonId: 10040, megaPokemonName: "Mega Pinsir", minLevel: 50, price: MEGA_STONE_PRICE },
-  { type: "MEGA_STONE_RAYQUAZITE", stoneName: "Meteorito de Rayquaza", compatiblePokemonId: 384, compatiblePokemonName: "Rayquaza", megaPokemonId: 10079, megaPokemonName: "Mega Rayquaza", minLevel: 70, price: 22000 },
+  { type: "MEGA_STONE_RAYQUAZITE", stoneName: "Meteorito de Rayquaza", compatiblePokemonId: 384, compatiblePokemonName: "Rayquaza", megaPokemonId: 10079, megaPokemonName: "Mega Rayquaza", minLevel: 70, price: 22000, statBonus: 13 },
   { type: "MEGA_STONE_SABLENITE", stoneName: "Sablenite", compatiblePokemonId: 302, compatiblePokemonName: "Sableye", megaPokemonId: 10066, megaPokemonName: "Mega Sableye", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_SALAMENCITE", stoneName: "Salamencite", compatiblePokemonId: 373, compatiblePokemonName: "Salamence", megaPokemonId: 10089, megaPokemonName: "Mega Salamence", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_SCEPTILITE", stoneName: "Sceptilite", compatiblePokemonId: 254, compatiblePokemonName: "Sceptile", megaPokemonId: 10065, megaPokemonName: "Mega Sceptile", minLevel: 50, price: MEGA_STONE_PRICE },
@@ -82,7 +83,8 @@ export function getMegaStoneForMegaPokemon(pokemonId: number) {
 }
 
 export function getMegaStoneDescription(stone: MegaStoneConfig) {
-  return `${stone.stoneName}: permite que ${stone.compatiblePokemonName} Nv.${stone.minLevel}+ desperte ${stone.megaPokemonName}. Consome a pedra e concede +${MEGA_STAT_BONUS} em todos os atributos.`;
+  const statBonus = stone.statBonus ?? MEGA_STAT_BONUS;
+  return `${stone.stoneName}: permite que ${stone.compatiblePokemonName} Nv.${stone.minLevel}+ desperte ${stone.megaPokemonName}. Consome a pedra e concede +${statBonus} em todos os atributos.`;
 }
 
 export function buildMegaStoneMetadata(stone: MegaStoneConfig): Prisma.InputJsonObject {
@@ -93,7 +95,7 @@ export function buildMegaStoneMetadata(stone: MegaStoneConfig): Prisma.InputJson
     megaPokemonId: stone.megaPokemonId,
     megaPokemonName: stone.megaPokemonName,
     minLevel: stone.minLevel,
-    statBonus: MEGA_STAT_BONUS,
+    statBonus: stone.statBonus ?? MEGA_STAT_BONUS,
     hiddenUntilOrderEventEnds: true,
   };
 }

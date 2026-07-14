@@ -656,6 +656,8 @@ export async function useMegaStoneAction(mascotId: string, itemId: string): Prom
       return { error: `${stone.compatiblePokemonName} precisa estar no Nv.${stone.minLevel} ou maior.` };
     }
 
+    const statBonus = stone.statBonus ?? MEGA_STAT_BONUS;
+
     await prisma.$transaction(async (tx) => {
       await tx.playerInventory.update({
         where: { playerId_itemId: { playerId: player.id, itemId } },
@@ -668,18 +670,18 @@ export async function useMegaStoneAction(mascotId: string, itemId: string): Prom
           megaEvolvedFromPokemonId: stone.compatiblePokemonId,
           megaStoneItemId: itemId,
           megaEvolvedAt: new Date(),
-          statForce: { increment: MEGA_STAT_BONUS },
-          statAgility: { increment: MEGA_STAT_BONUS },
-          statCharisma: { increment: MEGA_STAT_BONUS },
-          statInstinct: { increment: MEGA_STAT_BONUS },
-          statVitality: { increment: MEGA_STAT_BONUS },
+          statForce: { increment: statBonus },
+          statAgility: { increment: statBonus },
+          statCharisma: { increment: statBonus },
+          statInstinct: { increment: statBonus },
+          statVitality: { increment: statBonus },
         },
       });
       await tx.mascotEvent.create({
         data: {
           mascotId: mascot.id,
           emoji: "🔮",
-          description: `${mascot.nickname ?? stone.compatiblePokemonName} usou ${stone.stoneName} e despertou ${stone.megaPokemonName}: +${MEGA_STAT_BONUS} em todos os atributos.`,
+          description: `${mascot.nickname ?? stone.compatiblePokemonName} usou ${stone.stoneName} e despertou ${stone.megaPokemonName}: +${statBonus} em todos os atributos.`,
         },
       });
     });

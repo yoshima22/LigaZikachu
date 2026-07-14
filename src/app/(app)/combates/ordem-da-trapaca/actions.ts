@@ -6,7 +6,8 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { applyRandomMascotInjurySabotage, deactivateOrderSabotagesForStep, ensureOrderPasswordStamps, estimateOrderRaidBossHp, grantOrderStepRewardToAll, ORDER_EVENT_SLUG, ORDER_MYSTERY_STEP_KEYS, ORDER_MYSTERY_STEPS, ORDER_STARTER_CLUES, ORDER_STEP_CONFIG, ORDER_STEP_REWARD_NOTIFICATION, runOrderRaidBattle, submitOrderRaidPassword, type OrderMysteryStepKey } from "@/lib/raid-event";
 import { healMascotSus } from "@/lib/arena-z";
-import { activateMegaStoneShopItems } from "@/lib/mega-shop";
+import { activateMegaStoneShopItems, ensureMegaStoneShopItems } from "@/lib/mega-shop";
+import { getMegaStoneByType } from "@/lib/mega-evolution";
 
 const PATH = "/combates/ordem-da-trapaca";
 const DAILY_CLUE_LIMIT = 10;
@@ -325,6 +326,70 @@ export async function healOrderRaidMascotSusAction(formData: FormData) {
   if (!player) return;
   await healMascotSus(player.id, mascotId);
   revalidatePath(PATH);
+  revalidatePath("/mascotes");
+}
+
+export async function claimOrderFreeMegaStoneAction(formData: FormData): Promise<void> {
+  const session = await getAppSession();
+  if (!session?.user) return;
+
+  const stoneType = String(formData.get("stoneType") ?? "");
+  const stone = getMegaStoneByType(stoneType);
+  if (!stone) return;
+
+  const [event, player] = await Promise.all([
+    prisma.raidEvent.findUnique({
+      where: { slug: ORDER_EVENT_SLUG },
+      select: { id: true, phase: true },
+    }),
+    prisma.player.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true },
+    }),
+  ]);
+  if (!event || !["RAID_DEFEATED", "ENDED"].includes(event.phase)) {
+    return;
+  }
+  if (!player) return;
+
+  await ensureMegaStoneShopItems(event.phase === "RAID_DEFEATED" || event.phase === "ENDED");
+  const item = await prisma.shopItem.findFirst({
+    where: { type: stone.type },
+    select: { id: true, name: true },
+  });
+  if (!item) return;
+
+  const notificationType = "ORDER_FREE_MEGA_STONE";
+  const existing = await prisma.userRaidNotification.findUnique({
+    where: {
+      raidEventId_userId_notificationType: {
+        raidEventId: event.id,
+        userId: session.user.id,
+        notificationType,
+      },
+    },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.playerInventory.upsert({
+      where: { playerId_itemId: { playerId: player.id, itemId: item.id } },
+      update: { quantity: { increment: 1 } },
+      create: { playerId: player.id, itemId: item.id, quantity: 1, equipped: false, source: "ORDER_RAID_REWARD" },
+    });
+    await tx.userRaidNotification.create({
+      data: {
+        raidEventId: event.id,
+        userId: session.user.id,
+        notificationType,
+        seenAt: null,
+      },
+    });
+  });
+
+  revalidatePath("/combates/ordem-da-trapaca");
+  revalidatePath("/inventario");
   revalidatePath("/mascotes");
 }
 

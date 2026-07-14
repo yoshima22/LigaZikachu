@@ -1134,11 +1134,18 @@ async function grantOrderRaidDefeatedRewardToAll(raidEventId: string) {
       });
       if (existing) continue;
 
-      await tx.mascotEgg.createMany({
-        data: [
-          { playerId: player.id, type: "SPECIAL", origin: "Ordem da Trapaca derrotada" },
-          { playerId: player.id, type: "SPECIAL", origin: "Ordem da Trapaca derrotada" },
-        ],
+      await creditCoins(tx as Prisma.TransactionClient, {
+        playerId: player.id,
+        type: ZikaCoinTxType.ADMIN_ADJUSTMENT,
+        amount: 1000,
+        description: "Recompensa final da Ordem da Trapaca: Capitao Trambique derrotado",
+      });
+      await tx.mascotEgg.create({
+        data: {
+          playerId: player.id,
+          type: "RARE",
+          origin: "Ordem da Trapaca derrotada",
+        },
       });
       await tx.userRaidNotification.create({
         data: {
