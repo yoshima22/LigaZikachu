@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock } from "lucide-react";
+import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search } from "lucide-react";
 import Link from "next/link";
 import { getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
@@ -21,6 +21,9 @@ interface ProposalOfferedItem {
   mascotId?: string; // para ofertas de mascote
   pokemonId?: number;
   level?: number;
+  shopItemId?: string;
+  escrowed_egg_ids?: string[];
+  escrowed?: boolean;
 }
 
 interface ProposalItem {
@@ -322,6 +325,9 @@ export default function BazarListingPage(): React.JSX.Element {
 
   const quantity = payload.quantity as number | undefined;
   const pendingProposals = listing.proposals.filter(p => p.status === "PENDING");
+  const myProposals = currentPlayerId
+    ? listing.proposals.filter(p => p.proposer.id === currentPlayerId)
+    : [];
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -553,6 +559,45 @@ export default function BazarListingPage(): React.JSX.Element {
             </div>
           )}
 
+          {!isOwner && myProposals.length > 0 && (
+            <div className="space-y-2 border-t border-border/40 pt-3">
+              <p className="text-sm font-semibold text-slate-200">Suas propostas neste anuncio</p>
+              {myProposals.map(p => (
+                <div key={p.id} className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-300">
+                      {p.coinsOffer > 0 ? `${p.coinsOffer.toLocaleString("pt-BR")} ZC` : "Sem ZikaCoins"}
+                    </span>
+                    <span className={`text-[10px] font-semibold ${PROPOSAL_STATUS_COLOR[p.status] ?? "text-slate-400"}`}>
+                      {PROPOSAL_STATUS_LABEL[p.status] ?? p.status}
+                    </span>
+                  </div>
+                  {p.itemsOffer && p.itemsOffer.length > 0 && (
+                    <ProposalItemsInline items={p.itemsOffer} />
+                  )}
+                  {p.message && (
+                    <p className="text-xs text-slate-400 italic">&quot;{p.message}&quot;</p>
+                  )}
+                  {p.status === "PENDING" && (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-[10px] text-slate-500">
+                        Itens e ZC desta proposta ficam reservados ate ela ser aceita, recusada ou cancelada.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => handleReject(p.id)}
+                        className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        Cancelar proposta
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Owner: proposals */}
           {isOwner && listing.proposals.length > 0 && (
             <div className="space-y-2 border-t border-border/40 pt-3">
@@ -693,7 +738,22 @@ interface InventoryShopItem {
 interface InventoryData {
   eggs: Array<{type: string; count: number}>;
   foods: Array<{type: string; quantity: number}>;
-  mascots: Array<{id: string; pokemonId: number; nickname: string | null; level: number; bazarListed: boolean; isEquipped: boolean; arenaState: string}>;
+  mascots: Array<{
+    id: string;
+    pokemonId: number;
+    nickname: string | null;
+    level: number;
+    bazarListed: boolean;
+    isEquipped: boolean;
+    arenaState: string;
+    personality?: string | null;
+    statForce: number;
+    statAgility: number;
+    statCharisma: number;
+    statInstinct: number;
+    statVitality: number;
+    battleWins: number;
+  }>;
   inventoryItems: InventoryShopItem[];
 }
 
@@ -701,6 +761,7 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [selected, setSelected] = useState<ProposalOfferedItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [mascotSearch, setMascotSearch] = useState("");
 
   const TRADEABLE = new Set<string>(CONSUMABLE_SHOP_ITEM_TYPES);
 
@@ -747,6 +808,17 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
   };
 
   const selectedKeys = new Set(selected.map(i => i.mascotId ?? i.type));
+  const mascotQuery = mascotSearch.trim().toLowerCase();
+  const visibleMascots = (inventory?.mascots ?? []).filter((m) => {
+    if (!mascotQuery) return true;
+    const pokeName = getPokemonName(m.pokemonId);
+    const name = m.nickname ?? pokeName;
+    return (
+      name.toLowerCase().includes(mascotQuery) ||
+      pokeName.toLowerCase().includes(mascotQuery) ||
+      String(m.pokemonId).includes(mascotQuery)
+    );
+  });
 
   return (
     <div className="space-y-2">
@@ -764,9 +836,22 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
 
           {/* Mascotes disponíveis */}
           {inventory.mascots.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-2">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🐾 Mascotes</p>
-              {inventory.mascots.map(m => {
+              <div className="flex items-center justify-between gap-2 px-1">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Mascotes</p>
+                <span className="text-[9px] text-slate-600">{visibleMascots.length}/{inventory.mascots.length}</span>
+              </div>
+              <div className="relative">
+                <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  value={mascotSearch}
+                  onChange={(e) => setMascotSearch(e.target.value)}
+                  placeholder="Buscar por nome, apelido ou numero..."
+                  className="w-full rounded-lg border border-border bg-slate-950 py-1.5 pl-7 pr-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+                />
+              </div>
+              {visibleMascots.map(m => {
                 const pokeName = getPokemonName(m.pokemonId);
                 const name = m.nickname ?? pokeName;
                 const label = `${name} Nv.${m.level}`;
@@ -779,15 +864,28 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
                       mascotId: m.id,
                       pokemonId: m.pokemonId,
                     })}
-                    className={`w-full text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
+                    className={`w-full text-left text-[11px] rounded-lg px-2 py-2 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                     {/* Static sprite — no GIF */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
-                    {label}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{label}</span>
+                      <span className="mt-0.5 block truncate text-[9px] text-slate-500">
+                        For {m.statForce} · Agi {m.statAgility} · Vit {m.statVitality} · Ins {m.statInstinct} · Car {m.statCharisma}
+                      </span>
+                      <span className="block text-[9px] text-slate-600">
+                        Vitorias: {m.battleWins}{m.personality ? ` · ${PERSONALITY_LABEL[m.personality] ?? m.personality}` : ""}
+                      </span>
+                    </span>
                     {sel && <span className="ml-auto text-[9px]">✓ selecionado</span>}
                   </button>
                 );
               })}
+              {visibleMascots.length === 0 && (
+                <p className="rounded-lg border border-border/40 bg-slate-950/50 px-2 py-2 text-center text-[11px] text-slate-600">
+                  Nenhum mascote encontrado nessa busca.
+                </p>
+              )}
             </div>
           )}
 

@@ -19,6 +19,7 @@ function pluralMascot(count: number) {
 }
 
 type HungerLevel = "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED";
+type FeedType = "FOOD" | "SWEET";
 
 const HUNGER_OPTIONS: { value: HungerLevel; label: string }[] = [
   { value: "STARVING",  label: "Faminto" },
@@ -33,6 +34,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const [pendingPet, startPet] = useTransition();
   const [pendingFeedAll, startFeedAll] = useTransition();
   const [minHunger, setMinHunger] = useState<HungerLevel>("HUNGRY");
+  const [feedType, setFeedType] = useState<FeedType>("FOOD");
   const isFavoriteTeam = scope === "FAVORITES";
 
   // Tick de 1s — atualiza cooldowns em tempo real
@@ -79,9 +81,10 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const handleFeedAll = () => {
     startFeedAll(async () => {
       try {
-        const res = await feedAllAction(minHunger);
+        const res = await feedAllAction(minHunger, feedType);
         if (res.error) { toast.error(res.error); return; }
-        if (res.noFood) { toast.warning("Sem comida no estoque para alimentar os mascotes."); return; }
+        const feedLabel = feedType === "SWEET" ? "doces" : "comida";
+        if (res.noFood) { toast.warning(`Sem ${feedLabel} no estoque para alimentar os mascotes.`); return; }
         if (res.fed === 0) {
           toast.info("Todos os mascotes já estão satisfeitos.");
         } else {
@@ -179,6 +182,26 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
         {/* Alimentar Todos */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-[10px] text-slate-500">Usar:</span>
+            {([
+              { value: "FOOD" as const, label: "Comida" },
+              { value: "SWEET" as const, label: "Doce" },
+            ]).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setFeedType(opt.value)}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
+                  feedType === opt.value
+                    ? "border-[#FFCB05]/60 bg-[#FFCB05]/20 text-[#FFCB05]"
+                    : "border-slate-700 bg-slate-800 text-slate-400 hover:border-[#FFCB05]/30 hover:text-[#FFCB05]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
             <span className="text-[10px] text-slate-500">Alimentar quem está:</span>
             {HUNGER_OPTIONS.map(opt => (
               <button
@@ -202,7 +225,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             className="flex items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
-            Alimentar Todos
+            Alimentar Todos com {feedType === "SWEET" ? "Doce" : "Comida"}
           </button>
         </div>
       </div>

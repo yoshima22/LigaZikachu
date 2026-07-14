@@ -1130,7 +1130,10 @@ function hungerMinHours(status: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED",
   return 2 * m; // SATISFIED
 }
 
-export async function feedAllAction(minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL"): Promise<{
+export async function feedAllAction(
+  minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL",
+  foodType: "FOOD" | "SWEET" = "FOOD",
+): Promise<{
   error?: string; fed: number; skipped: number; noFood: boolean;
 }> {
   try {
@@ -1139,9 +1142,9 @@ export async function feedAllAction(minHunger: "STARVING" | "HUNGRY" | "NEUTRAL"
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado.", fed: 0, skipped: 0, noFood: false };
 
-    // Verifica estoque de comida
+    // Verifica estoque de comida/doce
     const food = await prisma.mascotFoodItem.findUnique({
-      where: { playerId_type: { playerId: player.id, type: "FOOD" } },
+      where: { playerId_type: { playerId: player.id, type: foodType } },
     });
     if (!food || food.quantity <= 0) {
       return { fed: 0, skipped: 0, noFood: true };
@@ -1172,14 +1175,14 @@ export async function feedAllAction(minHunger: "STARVING" | "HUNGRY" | "NEUTRAL"
     const now = new Date();
     await prisma.$transaction([
       prisma.mascotFoodItem.update({
-        where: { playerId_type: { playerId: player.id, type: "FOOD" } },
+        where: { playerId_type: { playerId: player.id, type: foodType } },
         data: { quantity: { decrement: toFeed.length } },
       }),
       ...toFeed.map(m =>
         prisma.mascot.update({
           where: { id: m.id },
           data: {
-            happiness: Math.min(100, m.happiness + 20),
+            happiness: Math.min(100, m.happiness + (foodType === "SWEET" ? 35 : 20)),
             mood: "HAPPY",
             lastFedAt: now,
           },

@@ -26,6 +26,9 @@ type ProposalOfferItem = {
   mascotId?: string;
   pokemonId?: number;
   level?: number;
+  shopItemId?: string;
+  escrowed_egg_ids?: string[];
+  escrowed?: boolean;
 };
 
 const EGG_OFFER_TYPES = [
@@ -705,7 +708,7 @@ export async function createProposal(
     }));
 
     await prisma.$transaction(async (tx) => {
-      await _reserveProposalOffers(tx, player.id, cleanItems);
+      const reservedItems = await _reserveProposalOffers(tx, player.id, cleanItems);
       if (reservedCoins > 0) {
         await tx.zikaCoinWallet.update({
           where: { playerId: player.id },
@@ -720,8 +723,8 @@ export async function createProposal(
           coinsOffer: reservedCoins,
           coinsEscrowed: reservedCoins > 0,
           message,
-          itemsOffer: cleanItems.length > 0
-            ? cleanItems as unknown as import("@prisma/client").Prisma.InputJsonValue
+          itemsOffer: reservedItems.length > 0
+            ? reservedItems as unknown as import("@prisma/client").Prisma.InputJsonValue
             : undefined,
         },
       });
@@ -819,38 +822,43 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
             });
             await registerPokemonDiscovery({ playerId: player.id, pokemonId: mascot.pokemonId, source: "bazar-proposal" }, tx);
           } else if (item.type === "FOOD" || item.type === "SWEET") {
-            const food = await tx.mascotFoodItem.findUnique({
-              where: { playerId_type: { playerId: proposal.proposerId, type: item.type as "FOOD" | "SWEET" } }
-            });
-            if (!food || food.quantity < item.quantity) throw new Error(`Proposer doesn't have enough ${item.type}`);
-            await tx.mascotFoodItem.update({
-              where: { playerId_type: { playerId: proposal.proposerId, type: item.type as "FOOD" | "SWEET" } },
-              data: { quantity: { decrement: item.quantity } }
-            });
             await tx.mascotFoodItem.upsert({
               where: { playerId_type: { playerId: player.id, type: item.type as "FOOD" | "SWEET" } },
               update: { quantity: { increment: item.quantity } },
               create: { playerId: player.id, type: item.type as "FOOD" | "SWEET", quantity: item.quantity }
             });
           } else if (isEggOfferType(item.type)) {
-            const eggs = await tx.mascotEgg.findMany({
-              where: { playerId: proposal.proposerId, type: item.type as never, incubation: null },
-              take: item.quantity,
-            });
-            if (eggs.length < item.quantity) throw new Error(`Proposer doesn't have enough eggs`);
-            await tx.mascotEgg.updateMany({
-              where: { id: { in: eggs.map(e => e.id) } },
-              data: { playerId: player.id, origin: "Proposta de Bazar" }
-            });
+            const eggIds = item.escrowed_egg_ids ?? [];
+            if (eggIds.length > 0) {
+              await tx.mascotEgg.updateMany({
+                where: { id: { in: eggIds }, playerId: proposal.proposerId },
+                data: { playerId: player.id, origin: "Proposta de Bazar" }
+              });
+            } else {
+              const eggs = await tx.mascotEgg.findMany({
+                where: { playerId: proposal.proposerId, type: item.type as never, incubation: null },
+                take: item.quantity,
+              });
+              if (eggs.length < item.quantity) throw new Error(`Proposer doesn't have enough eggs`);
+              await tx.mascotEgg.updateMany({
+                where: { id: { in: eggs.map(e => e.id) } },
+                data: { playerId: player.id, origin: "Proposta de Bazar" }
+              });
+            }
           } else {
-            const inv = await tx.playerInventory.findFirst({
-              where: { playerId: proposal.proposerId, item: { type: item.type as never }, quantity: { gte: item.quantity } }
-            });
+            const inv = item.shopItemId
+              ? { itemId: item.shopItemId }
+              : await tx.playerInventory.findFirst({
+                  where: { playerId: proposal.proposerId, item: { type: item.type as never }, quantity: { gte: item.quantity } },
+                  select: { itemId: true },
+                });
             if (!inv) throw new Error(`Proposer doesn't have enough of ${item.type}`);
-            await tx.playerInventory.update({
-              where: { id: inv.id },
-              data: { quantity: { decrement: item.quantity } }
-            });
+            if (!item.shopItemId) {
+              await tx.playerInventory.updateMany({
+                where: { playerId: proposal.proposerId, itemId: inv.itemId },
+                data: { quantity: { decrement: item.quantity } }
+              });
+            }
             await tx.playerInventory.upsert({
               where: { playerId_itemId: { playerId: player.id, itemId: inv.itemId } },
               update: { quantity: { increment: item.quantity } },
@@ -1215,9 +1223,67 @@ async function isMascotLockedInWeeklyLeague(client: TxClient | typeof prisma, ma
   return teams.some((team) => ((team.mascotIdsJson as string[] | null) ?? []).includes(mascotId));
 }
 
-async function _reserveProposalOffers(tx: TxClient, playerId: string, items: ProposalOfferItem[]) {
+async function _reserveProposalOffers(tx: TxClient, playerId: string, items: ProposalOfferItem[]): Promise<ProposalOfferItem[]> {
+  const reserved: ProposalOfferItem[] = [];
+
   for (const item of items) {
-    if (!item.mascotId) continue;
+    const quantity = item.mascotId ? 1 : Math.max(1, Math.floor(Number(item.quantity) || 1));
+    const normalized: ProposalOfferItem = { ...item, quantity };
+
+    if (!item.mascotId && (item.type === "FOOD" || item.type === "SWEET")) {
+      const foodType = item.type as "FOOD" | "SWEET";
+      const food = await tx.mascotFoodItem.findUnique({
+        where: { playerId_type: { playerId, type: foodType } },
+      });
+      if (!food || food.quantity < quantity) {
+        throw new Error(`Você não tem ${normalized.displayName} suficiente para esta proposta.`);
+      }
+      await tx.mascotFoodItem.update({
+        where: { playerId_type: { playerId, type: foodType } },
+        data: { quantity: { decrement: quantity } },
+      });
+      reserved.push({ ...normalized, escrowed: true });
+      continue;
+    }
+
+    if (!item.mascotId && isEggOfferType(item.type)) {
+      const eggs = await tx.mascotEgg.findMany({
+        where: {
+          playerId,
+          type: item.type as never,
+          incubation: null,
+          NOT: { origin: { startsWith: "bazar:" } },
+        },
+        select: { id: true },
+        take: quantity,
+      });
+      if (eggs.length < quantity) {
+        throw new Error(`Você não tem ${normalized.displayName} suficiente para esta proposta.`);
+      }
+      const eggIds = eggs.map((egg) => egg.id);
+      await tx.mascotEgg.updateMany({
+        where: { id: { in: eggIds }, playerId },
+        data: { origin: `bazar-proposal:${playerId}` },
+      });
+      reserved.push({ ...normalized, escrowed: true, escrowed_egg_ids: eggIds });
+      continue;
+    }
+
+    if (!item.mascotId) {
+      const inv = await tx.playerInventory.findFirst({
+        where: { playerId, item: { type: item.type as never }, quantity: { gte: quantity } },
+        select: { itemId: true },
+      });
+      if (!inv) {
+        throw new Error(`Você não tem ${normalized.displayName} suficiente para esta proposta.`);
+      }
+      await tx.playerInventory.update({
+        where: { playerId_itemId: { playerId, itemId: inv.itemId } },
+        data: { quantity: { decrement: quantity } },
+      });
+      reserved.push({ ...normalized, escrowed: true, shopItemId: inv.itemId });
+      continue;
+    }
 
     const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId } });
     if (!mascot || mascot.playerId !== playerId) {
@@ -1245,7 +1311,10 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
       where: { id: item.mascotId },
       data: { bazarListed: true },
     });
+    reserved.push(normalized);
   }
+
+  return reserved;
 }
 
 async function _releaseProposalOffers(tx: TxClient, items: ProposalOfferItem[] | null, ownerId: string) {
@@ -1255,12 +1324,48 @@ async function _releaseProposalOffers(tx: TxClient, items: ProposalOfferItem[] |
     .map(item => item.mascotId)
     .filter((id): id is string => Boolean(id));
 
-  if (mascotIds.length === 0) return;
+  if (mascotIds.length > 0) {
+    await tx.mascot.updateMany({
+      where: { id: { in: mascotIds }, playerId: ownerId },
+      data: { bazarListed: false },
+    });
+  }
 
-  await tx.mascot.updateMany({
-    where: { id: { in: mascotIds }, playerId: ownerId },
-    data: { bazarListed: false },
-  });
+  for (const item of items) {
+    if (item.mascotId) continue;
+
+    const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+
+    if (item.type === "FOOD" || item.type === "SWEET") {
+      if (!item.escrowed) continue;
+      const foodType = item.type as "FOOD" | "SWEET";
+      await tx.mascotFoodItem.upsert({
+        where: { playerId_type: { playerId: ownerId, type: foodType } },
+        update: { quantity: { increment: quantity } },
+        create: { playerId: ownerId, type: foodType, quantity },
+      });
+      continue;
+    }
+
+    if (isEggOfferType(item.type)) {
+      const eggIds = item.escrowed_egg_ids ?? [];
+      if (eggIds.length > 0) {
+        await tx.mascotEgg.updateMany({
+          where: { id: { in: eggIds }, playerId: ownerId },
+          data: { origin: "Devolvido do Bazar" },
+        });
+      }
+      continue;
+    }
+
+    if (item.shopItemId) {
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId: ownerId, itemId: item.shopItemId } },
+        update: { quantity: { increment: quantity } },
+        create: { playerId: ownerId, itemId: item.shopItemId, quantity },
+      });
+    }
+  }
 }
 
 async function _refundProposalCoins(
