@@ -190,7 +190,7 @@ const getCachedMascotPageData = (playerId: string) =>
   unstable_cache(
     () => fetchMascotPageData(playerId),
     ["player-mascots", playerId],
-    { revalidate: 60, tags: [`player-mascots-${playerId}`] },
+    { revalidate: 15, tags: [`player-mascots-${playerId}`] },
   )();
 
 function MascotLoadError({ message }: { message?: string }) {
@@ -277,8 +277,22 @@ export default async function MascotesPage() {
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
   const favoriteMascotCount = featuredMascots.filter(m => m.isFavorite).length;
   const [orderMascotAttack, orderMascotStepState] = await Promise.all([
-    getRandomMascotInjurySabotage(),
-    getOrderStepUnlockState("MASCOTS_EQUIPPED_WHISPER"),
+    getRandomMascotInjurySabotage().catch((error) => {
+      console.error("[Mascotes] Falha ao carregar sabotagem da Ordem; ocultando alerta.", error);
+      return null;
+    }),
+    getOrderStepUnlockState("MASCOTS_EQUIPPED_WHISPER").catch((error) => {
+      console.error("[Mascotes] Falha ao carregar etapa da Ordem; usando fallback.", error);
+      return {
+        active: false,
+        resolved: false,
+        unlocked: false,
+        generalClues: 0,
+        specificClues: 0,
+        requiredGeneralClues: 25,
+        requiredSpecificClues: 4,
+      };
+    }),
   ]);
 
   // mascotData: apenas para a Equipe Favorita (renderizada com card completo)
