@@ -1317,46 +1317,57 @@ const SPECIAL_EFFECT_CFG: Record<string, {
   bg: string;
   symbol: string;
   particles: string[];
+  motif: "shadow" | "smoke" | "glitch" | "seal" | "raid" | "mega" | "treasure" | "star";
+  ring: "circle" | "diamond" | "scan" | "stamp" | "hex";
+  pulse: string;
 }> = {
   ORDER_SHADOW_MARK: {
     tag: "Marca da Ordem", accent: "#a855f7", symbol: "T",
-    bg: "radial-gradient(circle at 50% 45%,#3b0764 0%,#14011f 48%,#020008 100%)",
-    particles: ["?", "T", "?", "!", "T", "?"],
+    bg: "radial-gradient(circle at 50% 38%,#581c87 0%,#190026 45%,#020008 100%)",
+    particles: ["?", "T", "OLHO", "!", "T", "?"],
+    motif: "shadow", ring: "diamond", pulse: "cinematic-shadow-pulse",
   },
   ORDER_PURPLE_SMOKE: {
     tag: "Fumaca Roxa", accent: "#d946ef", symbol: "~",
-    bg: "radial-gradient(circle at 50% 55%,#581c87 0%,#1e0635 42%,#03000a 100%)",
-    particles: ["~", "*", "~", "?", "~", "+"],
+    bg: "radial-gradient(circle at 45% 55%,#701a75 0%,#2e0644 45%,#03000a 100%)",
+    particles: ["~", "fumaca", "~", "?", "~", "+"],
+    motif: "smoke", ring: "circle", pulse: "cinematic-smoke-pulse",
   },
   ORDER_GLITCH_HEIST: {
     tag: "Roubo Glitchado", accent: "#22d3ee", symbol: "404",
-    bg: "linear-gradient(135deg,#020617 0%,#111827 42%,#2e1065 100%)",
-    particles: ["404", "$", "ERR", "T", "0x", "?"],
+    bg: "linear-gradient(135deg,#020617 0%,#071827 42%,#2e1065 100%)",
+    particles: ["404", "$", "ERR", "0x", "PIX", "?"],
+    motif: "glitch", ring: "scan", pulse: "cinematic-glitch-pulse",
   },
   ORDER_CAPTAIN_SEAL: {
     tag: "Selo do Capitao", accent: "#facc15", symbol: "TRAPACA",
-    bg: "radial-gradient(circle at 50% 45%,#422006 0%,#1c0715 45%,#020008 100%)",
-    particles: ["*", "T", "Z", "*", "T", "+"],
+    bg: "radial-gradient(circle at 50% 45%,#713f12 0%,#2b0918 44%,#020008 100%)",
+    particles: ["SELO", "T", "Z", "*", "OK", "+"],
+    motif: "seal", ring: "stamp", pulse: "cinematic-seal-pulse",
   },
   RAID_BOSS_FLARE: {
     tag: "Alerta de Raid", accent: "#ef4444", symbol: "!",
-    bg: "radial-gradient(circle at 50% 55%,#450a0a 0%,#111827 50%,#020617 100%)",
+    bg: "radial-gradient(circle at 50% 55%,#7f1d1d 0%,#111827 50%,#020617 100%)",
     particles: ["!", "X", "!", "#", "!", "X"],
+    motif: "raid", ring: "hex", pulse: "cinematic-raid-pulse",
   },
   MEGA_AWAKENING: {
     tag: "Mega Despertar", accent: "#f472b6", symbol: "<>",
-    bg: "radial-gradient(circle at 50% 48%,#831843 0%,#3b0764 42%,#020617 100%)",
-    particles: ["<>", "^", "+", "^", "<>", "+"],
+    bg: "radial-gradient(circle at 50% 48%,#9d174d 0%,#4c1d95 42%,#020617 100%)",
+    particles: ["◇", "^", "+", "◆", "◇", "+"],
+    motif: "mega", ring: "hex", pulse: "cinematic-mega-pulse",
   },
   TREASURE_BURST: {
     tag: "Explosao de Espolios", accent: "#fbbf24", symbol: "ZC",
-    bg: "radial-gradient(circle at 50% 55%,#78350f 0%,#111827 48%,#020617 100%)",
-    particles: ["ZC", "$", "*", "ZC", "+", "$"],
+    bg: "radial-gradient(circle at 50% 55%,#92400e 0%,#1f2937 48%,#020617 100%)",
+    particles: ["ZC", "$", "✦", "ZC", "+", "$"],
+    motif: "treasure", ring: "circle", pulse: "cinematic-treasure-pulse",
   },
   STARRY_CROWN: {
     tag: "Coroa Estelar", accent: "#fde68a", symbol: "CROWN",
     bg: "radial-gradient(circle at 50% 45%,#312e81 0%,#111827 48%,#020617 100%)",
-    particles: ["*", "+", "C", "^", "*", "+"],
+    particles: ["✦", "+", "C", "^", "✧", "+"],
+    motif: "star", ring: "circle", pulse: "cinematic-star-pulse",
   },
 };
 
@@ -1380,14 +1391,123 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
     rot: `${rnd(-180, 180)}deg`,
   }));
 
+  const ringBorderRadius = cfg.ring === "diamond"
+    ? "18%"
+    : cfg.ring === "stamp"
+      ? "22px"
+      : cfg.ring === "hex"
+        ? "28%"
+        : "50%";
+  const ringRotation = cfg.ring === "diamond" ? "45deg" : cfg.ring === "stamp" ? "-3deg" : "0deg";
+
   return (
     <>
       <div className="absolute inset-0" style={{ background: cfg.bg, animation: "entrance-in 0.18s ease forwards" }} />
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 1 }}>
+        {cfg.motif === "shadow" && (
+          <>
+            <div style={{
+              position: "absolute", inset: "8% 18%", opacity: 0.4,
+              background: `repeating-conic-gradient(from 18deg, transparent 0deg 18deg, ${cfg.accent}44 19deg 20deg, transparent 21deg 36deg)`,
+              filter: "blur(1px)", animation: "cinematic-slow-spin 8s linear infinite",
+            }} />
+            <div style={{
+              position: "absolute", left: "50%", top: "38%", width: 260, height: 130,
+              transform: "translate(-50%,-50%)", borderRadius: "50%",
+              background: `radial-gradient(ellipse at center, ${cfg.accent}66 0%, ${cfg.accent}22 34%, transparent 68%)`,
+              boxShadow: `0 0 60px ${cfg.accent}77`,
+              animation: "cinematic-eye-open 1.1s ease .25s both",
+            }} />
+          </>
+        )}
+        {cfg.motif === "smoke" && [0, 1, 2, 3, 4].map((i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${10 + i * 18}%`,
+            top: `${18 + (i % 2) * 24}%`,
+            width: 220 + i * 24,
+            height: 150 + i * 18,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, ${cfg.accent}${["44", "33", "55", "22", "44"][i]} 0%, transparent 67%)`,
+            filter: "blur(18px)",
+            animation: `cinematic-smoke-drift ${5 + i * 0.7}s ease-in-out ${i * 0.25}s infinite`,
+          }} />
+        ))}
+        {cfg.motif === "glitch" && (
+          <>
+            <div style={{
+              position: "absolute", inset: 0, opacity: 0.4,
+              background: `repeating-linear-gradient(0deg, transparent 0 10px, ${cfg.accent}33 11px 12px, transparent 13px 22px)`,
+              animation: "cinematic-scanline 0.85s steps(3) infinite",
+            }} />
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} style={{
+                position: "absolute", left: `${8 + i * 15}%`, right: `${5 + i * 3}%`, top: `${18 + i * 13}%`,
+                height: 10 + i * 3, background: i % 2 ? "#ef444455" : `${cfg.accent}55`,
+                transform: `skewX(${i % 2 ? -18 : 18}deg)`, mixBlendMode: "screen",
+                animation: `cinematic-glitch-slice ${0.6 + i * 0.08}s steps(2) ${i * 0.12}s infinite`,
+              }} />
+            ))}
+          </>
+        )}
+        {cfg.motif === "seal" && (
+          <div style={{
+            position: "absolute", left: "50%", top: "50%", width: "min(68vw, 520px)", height: "min(34vw, 250px)",
+            transform: "translate(-50%,-50%) rotate(-8deg)",
+            border: `8px double ${cfg.accent}99`,
+            borderRadius: 28,
+            color: `${cfg.accent}18`,
+            fontSize: "clamp(42px, 10vw, 120px)",
+            fontWeight: 950,
+            display: "grid", placeItems: "center",
+            letterSpacing: "0.08em",
+            boxShadow: `0 0 42px ${cfg.accent}55, inset 0 0 36px ${cfg.accent}22`,
+            animation: "cinematic-stamp-slam 0.75s cubic-bezier(.2,1.4,.3,1) .15s both",
+          }}>TRAPACA</div>
+        )}
+        {cfg.motif === "raid" && (
+          <div style={{
+            position: "absolute", inset: "12%", border: `2px solid ${cfg.accent}66`,
+            background: `linear-gradient(90deg, transparent 0 47%, ${cfg.accent}88 48% 52%, transparent 53% 100%), linear-gradient(0deg, transparent 0 47%, ${cfg.accent}88 48% 52%, transparent 53% 100%)`,
+            clipPath: "polygon(8% 0, 92% 0, 100% 8%, 100% 92%, 92% 100%, 8% 100%, 0 92%, 0 8%)",
+            animation: "cinematic-raid-lock 1.2s ease .1s both",
+          }} />
+        )}
+        {cfg.motif === "mega" && [0, 1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} style={{
+            position: "absolute", left: `${12 + i * 12}%`, top: `${12 + (i % 3) * 24}%`,
+            width: 34 + i * 4, height: 58 + i * 7,
+            background: `linear-gradient(135deg,#fff8,${cfg.accent}dd 35%,#7c3aedaa 70%,transparent)`,
+            clipPath: "polygon(50% 0, 100% 35%, 72% 100%, 20% 86%, 0 35%)",
+            boxShadow: `0 0 28px ${cfg.accent}88`,
+            animation: `cinematic-crystal-pop 1.3s ease ${i * 0.12}s both, cinematic-crystal-float ${3 + i * 0.3}s ease-in-out ${i * 0.15}s infinite`,
+          }} />
+        ))}
+        {cfg.motif === "treasure" && [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+          <div key={i} style={{
+            position: "absolute", left: "50%", top: "52%",
+            width: 24, height: 24, borderRadius: "50%",
+            background: `radial-gradient(circle at 35% 35%, #fff8 0 12%, ${cfg.accent} 18% 62%, #92400e 72%)`,
+            boxShadow: `0 0 18px ${cfg.accent}aa`,
+            // @ts-expect-error CSS vars
+            "--coin-x": `${Math.cos((i / 10) * Math.PI * 2) * rnd(160, 360)}px`,
+            "--coin-y": `${Math.sin((i / 10) * Math.PI * 2) * rnd(90, 220)}px`,
+            animation: `cinematic-coin-burst 1.4s cubic-bezier(.17,.67,.32,1.2) ${i * 0.05}s both`,
+          }} />
+        ))}
+        {cfg.motif === "star" && (
+          <div style={{
+            position: "absolute", inset: "10% 16%", opacity: 0.55,
+            background: `radial-gradient(circle at 20% 30%, ${cfg.accent} 0 2px, transparent 3px), radial-gradient(circle at 45% 20%, #fff 0 1px, transparent 2px), radial-gradient(circle at 70% 40%, ${cfg.accent} 0 2px, transparent 3px), radial-gradient(circle at 60% 75%, #fff 0 1px, transparent 2px), linear-gradient(115deg, transparent 0 48%, ${cfg.accent}33 49% 50%, transparent 51%)`,
+            animation: "cinematic-star-twinkle 2.4s ease infinite",
+          }} />
+        )}
+      </div>
       <div className="absolute inset-0 pointer-events-none" style={{
         background: `radial-gradient(circle at 50% 50%, ${cfg.accent}22 0%, transparent 55%)`,
         boxShadow: `inset 0 0 150px ${cfg.accent}44`,
-        animation: "cinematic-breathe 1.8s ease infinite",
-        zIndex: 1,
+        animation: `${cfg.pulse} 1.8s ease infinite`,
+        zIndex: 2,
       }} />
 
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 2 }}>
@@ -1396,7 +1516,8 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
             position: "absolute",
             width: 180 + i * 120,
             height: 180 + i * 120,
-            borderRadius: "50%",
+            borderRadius: ringBorderRadius,
+            transform: `rotate(${ringRotation})`,
             border: `1px solid ${cfg.accent}${["88", "55", "33"][i]}`,
             boxShadow: `0 0 ${20 + i * 14}px ${cfg.accent}33`,
             animation: `cinematic-ring-pulse ${1.6 + i * 0.35}s ease-out ${i * 0.18}s both`,
@@ -1472,6 +1593,91 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
         @keyframes cinematic-breathe {
           0%, 100% { opacity: .78; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.04); }
+        }
+        @keyframes cinematic-shadow-pulse {
+          0%, 100% { opacity: .72; transform: scale(1); filter: saturate(1); }
+          50% { opacity: 1; transform: scale(1.045); filter: saturate(1.5); }
+        }
+        @keyframes cinematic-smoke-pulse {
+          0%, 100% { opacity: .58; transform: scale(1); filter: blur(0); }
+          50% { opacity: .92; transform: scale(1.06); filter: blur(2px); }
+        }
+        @keyframes cinematic-glitch-pulse {
+          0%, 100% { opacity: .72; transform: translateX(0) scale(1); }
+          20% { transform: translateX(-4px) scale(1.02); }
+          24% { transform: translateX(5px) scale(.99); }
+          50% { opacity: 1; transform: translateX(0) scale(1.04); }
+        }
+        @keyframes cinematic-seal-pulse {
+          0%, 100% { opacity: .72; transform: scale(1) rotate(0deg); }
+          50% { opacity: 1; transform: scale(1.035) rotate(-.35deg); }
+        }
+        @keyframes cinematic-raid-pulse {
+          0%, 100% { opacity: .7; transform: scale(1); box-shadow: inset 0 0 150px #ef444444; }
+          50% { opacity: 1; transform: scale(1.055); box-shadow: inset 0 0 210px #ef444466; }
+        }
+        @keyframes cinematic-mega-pulse {
+          0%, 100% { opacity: .76; transform: scale(1); filter: hue-rotate(0deg); }
+          50% { opacity: 1; transform: scale(1.06); filter: hue-rotate(18deg); }
+        }
+        @keyframes cinematic-treasure-pulse {
+          0%, 100% { opacity: .72; transform: scale(1); filter: brightness(1); }
+          50% { opacity: 1; transform: scale(1.055); filter: brightness(1.35); }
+        }
+        @keyframes cinematic-star-pulse {
+          0%, 100% { opacity: .75; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.045); }
+        }
+        @keyframes cinematic-slow-spin {
+          from { transform: rotate(0deg) scale(1); }
+          to { transform: rotate(360deg) scale(1); }
+        }
+        @keyframes cinematic-eye-open {
+          0% { opacity: 0; transform: translate(-50%,-50%) scaleX(.15) scaleY(.02); filter: blur(12px); }
+          65% { opacity: .9; transform: translate(-50%,-50%) scaleX(1.08) scaleY(1); filter: blur(1px); }
+          100% { opacity: .55; transform: translate(-50%,-50%) scaleX(1) scaleY(.82); filter: blur(0); }
+        }
+        @keyframes cinematic-smoke-drift {
+          0%, 100% { transform: translate3d(-18px, 8px, 0) scale(.92); opacity: .38; }
+          50% { transform: translate3d(22px, -16px, 0) scale(1.12); opacity: .72; }
+        }
+        @keyframes cinematic-scanline {
+          0% { transform: translateY(-18px); opacity: .25; }
+          100% { transform: translateY(18px); opacity: .45; }
+        }
+        @keyframes cinematic-glitch-slice {
+          0%, 100% { transform: translateX(0) skewX(18deg); opacity: .18; }
+          45% { transform: translateX(-28px) skewX(-18deg); opacity: .82; }
+          55% { transform: translateX(24px) skewX(18deg); opacity: .5; }
+        }
+        @keyframes cinematic-stamp-slam {
+          0% { opacity: 0; transform: translate(-50%,-50%) rotate(-24deg) scale(2.4); filter: blur(12px); }
+          55% { opacity: .68; transform: translate(-50%,-50%) rotate(-8deg) scale(.92); filter: blur(0); }
+          74% { transform: translate(-50%,-50%) rotate(-10deg) scale(1.05); }
+          100% { opacity: .42; transform: translate(-50%,-50%) rotate(-8deg) scale(1); }
+        }
+        @keyframes cinematic-raid-lock {
+          0% { opacity: 0; transform: scale(1.5) rotate(8deg); filter: blur(10px); }
+          60% { opacity: .82; transform: scale(.95) rotate(0deg); filter: blur(0); }
+          100% { opacity: .45; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes cinematic-crystal-pop {
+          0% { opacity: 0; transform: translateY(48px) scale(.25) rotate(-18deg); filter: blur(8px); }
+          70% { opacity: .85; transform: translateY(-8px) scale(1.12) rotate(5deg); filter: blur(0); }
+          100% { opacity: .55; transform: translateY(0) scale(1) rotate(0deg); }
+        }
+        @keyframes cinematic-crystal-float {
+          0%, 100% { translate: 0 0; }
+          50% { translate: 0 -18px; }
+        }
+        @keyframes cinematic-coin-burst {
+          0% { opacity: 0; transform: translate(-50%,-50%) scale(.25) rotateY(0deg); }
+          20% { opacity: 1; }
+          100% { opacity: 0; transform: translate(calc(-50% + var(--coin-x)), calc(-50% + var(--coin-y))) scale(.85) rotateY(720deg); }
+        }
+        @keyframes cinematic-star-twinkle {
+          0%, 100% { opacity: .35; filter: drop-shadow(0 0 6px #fde68a); }
+          50% { opacity: .95; filter: drop-shadow(0 0 18px #fde68a); }
         }
         @keyframes cinematic-ring-pulse {
           0% { opacity: 0; transform: scale(.45); }
