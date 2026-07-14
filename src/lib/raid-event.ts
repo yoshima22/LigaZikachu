@@ -1458,6 +1458,22 @@ function readStatArray(value: unknown): WeeklyLeagueSabotageConfig["affectedStat
 }
 
 export async function getActiveWeeklyLeagueSabotage(): Promise<WeeklyLeagueSabotageConfig | null> {
+  const event = await prisma.raidEvent.findUnique({
+    where: { slug: ORDER_EVENT_SLUG },
+    select: { id: true, active: true, phase: true },
+  }).catch(() => null);
+  if (!event?.active || event.phase === "ENDED") return null;
+
+  const step = await prisma.raidMysteryStep.findFirst({
+    where: {
+      raidEventId: event.id,
+      stepKey: "MASCOT_LEAGUE_LAST_PLACE_THREE_CLICKS",
+      active: true,
+    },
+    select: { resolvedAt: true },
+  }).catch(() => null);
+  if (step?.resolvedAt) return null;
+
   const sabotage = (await getActiveRaidSabotages("MASCOT_LEAGUE"))
     .find((entry) => readJsonRecord(entry.effectJson).kind === "WEEKLY_LEAGUE_SLOT_DEBUFF");
   if (!sabotage) return null;

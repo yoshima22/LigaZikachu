@@ -136,7 +136,10 @@ function OrderSabotageBanner({
   stepState?: PageData["orderLeagueStepState"];
   compact?: boolean;
 }) {
+  if (stepState?.resolved) return null;
+  if (compact && !sabotage) return null;
   if (!sabotage && !stepState?.unlocked) return null;
+  const hasActiveSabotage = !!sabotage;
   const statMultiplier = sabotage?.statMultiplier ?? 0.5;
   const affectedSlots = sabotage?.affectedSlots ?? [1, 2, 3];
   const percent = Math.round((1 - statMultiplier) * 100);
@@ -148,16 +151,18 @@ function OrderSabotageBanner({
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-200">Alerta da Ordem da Trapaca</p>
           <p className={`${compact ? "text-xs" : "text-sm"} font-black text-white`}>
-            Slots {slots} estao lutando com -{percent}% nos atributos.
+            {hasActiveSabotage
+              ? `Slots ${slots} estao lutando com -${percent}% nos atributos.`
+              : "A solucao para a sabotagem da Liga Semanal foi liberada."}
           </p>
-          {!compact && (
+          {!compact && hasActiveSabotage && (
             <p className="mt-1 text-[11px] leading-relaxed text-red-100/80">
               Isto e uma sabotagem ativa do evento, nao um erro do sistema. O efeito aparece nos combates e no replay ate a travessura ser resolvida.
             </p>
           )}
         </div>
         <span className="shrink-0 rounded-full border border-red-300/40 bg-red-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-red-100">
-          Debuff ativo
+          {hasActiveSabotage ? "Debuff ativo" : "Solucao liberada"}
         </span>
       </div>
       {!compact && stepState && !stepState.resolved && (
