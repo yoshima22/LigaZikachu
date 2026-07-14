@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, RotateCcw, User } from "lucide-react";
 
@@ -11,9 +11,20 @@ export default function MascotesError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [retryCount, setRetryCount] = useState(0);
+
   useEffect(() => {
     console.error("[MascotesErrorBoundary]", error);
   }, [error]);
+
+  useEffect(() => {
+    if (retryCount >= 2) return;
+    const timeout = window.setTimeout(() => {
+      setRetryCount((count) => count + 1);
+      reset();
+    }, 1800 + retryCount * 1200);
+    return () => window.clearTimeout(timeout);
+  }, [reset, retryCount]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-red-500/30 bg-red-950/15 p-6 text-center">
@@ -26,6 +37,11 @@ export default function MascotesError({
           A pagina de mascotes encontrou uma falha temporaria ao montar seus dados. Seus mascotes,
           ovos e recompensas continuam salvos.
         </p>
+        {retryCount < 2 && (
+          <p className="text-[11px] text-slate-500">
+            Tentando recuperar automaticamente...
+          </p>
+        )}
         {error.digest && (
           <p className="text-[11px] text-slate-500">Digest: {error.digest}</p>
         )}

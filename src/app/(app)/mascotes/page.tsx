@@ -1,4 +1,4 @@
-import { revalidateTag, unstable_cache } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -233,13 +233,17 @@ export default async function MascotesPage() {
   });
   if (!player) return notFound();
 
-  const cleanup = await cleanupExpiredArenaResting(player.id).catch(() => null);
-  if (cleanup && (cleanup.releasedResting > 0 || cleanup.clearedCooldowns > 0)) {
-    revalidateTag(`player-mascots-${player.id}`);
-  }
+  const cleanup = await cleanupExpiredArenaResting(player.id).catch((error) => {
+    console.error("[Mascotes] cleanup de repouso/cooldown falhou; seguindo sem travar a pagina.", error);
+    return null;
+  });
+  const cleanupChanged = !!cleanup && (cleanup.releasedResting > 0 || cleanup.clearedCooldowns > 0);
 
-  // Dados de mascote são cacheados por jogador; a limpeza acima invalida quando muda estado.
-  const pageData = await getCachedMascotPageData(player.id).catch(async (error) => {
+  // Dados de mascote sao cacheados por jogador; se a limpeza mudou estados, pula o cache nesta visita.
+  const loadPageData = cleanupChanged
+    ? () => fetchMascotPageData(player.id)
+    : () => getCachedMascotPageData(player.id);
+  const pageData = await loadPageData().catch(async (error) => {
     console.error("[Mascotes] Cache/load falhou; tentando carga direta.", error);
     return retryMascotLoad(() => fetchMascotPageData(player.id), 2);
   }).catch((error) => {
