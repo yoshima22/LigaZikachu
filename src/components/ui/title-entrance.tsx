@@ -86,6 +86,22 @@ const CONFETTI_COLORS = ["#FFCB05","#f97316","#c084fc","#60a5fa","#4ade80","#fb9
 
 function rnd(min: number, max: number) { return Math.random() * (max - min) + min; }
 
+const CINEMATIC_THEME_ACCENT: Record<string, { accent: string; overlay: string }> = {
+  ELECTRIC: { accent: "#facc15", overlay: "linear-gradient(115deg, transparent 0 44%, #facc1533 45% 47%, transparent 48% 100%)" },
+  FIRE: { accent: "#fb923c", overlay: "radial-gradient(circle at 20% 80%, #ef444455 0%, transparent 42%)" },
+  WATER: { accent: "#38bdf8", overlay: "repeating-linear-gradient(135deg, transparent 0 22px, #38bdf822 23px 26px)" },
+  GRASS: { accent: "#4ade80", overlay: "radial-gradient(circle at 80% 20%, #4ade8033 0%, transparent 38%)" },
+  ZIKABET: { accent: "#fbbf24", overlay: "repeating-conic-gradient(from 0deg, #fbbf2422 0deg 12deg, transparent 13deg 40deg)" },
+  SHADOW: { accent: "#a855f7", overlay: "radial-gradient(circle at 50% 50%, #02061700 0%, #02061766 58%, #000 100%)" },
+  ROYAL: { accent: "#fde68a", overlay: "linear-gradient(90deg, transparent, #fde68a22, transparent)" },
+  TOXIC: { accent: "#bef264", overlay: "radial-gradient(circle at 30% 40%, #84cc1644 0%, transparent 36%)" },
+  COSMIC: { accent: "#c4b5fd", overlay: "radial-gradient(circle at 18% 25%, #fff 0 1px, transparent 2px), radial-gradient(circle at 75% 42%, #c4b5fd 0 2px, transparent 3px)" },
+  STEEL: { accent: "#cbd5e1", overlay: "linear-gradient(135deg, #ffffff18 0 8%, transparent 9% 22%, #94a3b822 23% 30%, transparent 31%)" },
+  FAIRY: { accent: "#f9a8d4", overlay: "radial-gradient(circle at 70% 28%, #f9a8d455 0%, transparent 34%)" },
+  DRAGON: { accent: "#f97316", overlay: "repeating-linear-gradient(60deg, transparent 0 30px, #7c3aed33 31px 35px)" },
+  GHOST: { accent: "#c084fc", overlay: "radial-gradient(ellipse at 50% 60%, #c084fc33 0%, transparent 48%)" },
+};
+
 // Gradientes por raridade para o texto no portal
 const RARITY_GRADIENT: Record<string, string | null> = {
   LEGENDARY: "linear-gradient(90deg,#f97316,#fbbf24,#ffffff,#fbbf24,#f97316)",
@@ -1371,9 +1387,12 @@ const SPECIAL_EFFECT_CFG: Record<string, {
   },
 };
 
-function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effect }: EffectProps & { effect: string }) {
+function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, theme, effect }: EffectProps & { effect: string }) {
   const [ambient, setAmbient] = useState(false);
   const cfg = SPECIAL_EFFECT_CFG[effect] ?? SPECIAL_EFFECT_CFG.STARRY_CROWN;
+  const themeAccent = CINEMATIC_THEME_ACCENT[theme ?? "NEUTRAL"];
+  const accent = themeAccent?.accent ?? cfg.accent;
+  const overlay = themeAccent?.overlay;
   useEffect(() => {
     const t = setTimeout(() => setAmbient(true), AMBIENT_AT[effect] ?? 1200);
     return () => clearTimeout(t);
@@ -1403,19 +1422,27 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
   return (
     <>
       <div className="absolute inset-0" style={{ background: cfg.bg, animation: "entrance-in 0.18s ease forwards" }} />
+      {overlay && (
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: overlay,
+          mixBlendMode: "screen",
+          opacity: 0.7,
+          zIndex: 1,
+        }} />
+      )}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 1 }}>
         {cfg.motif === "shadow" && (
           <>
             <div style={{
               position: "absolute", inset: "8% 18%", opacity: 0.4,
-              background: `repeating-conic-gradient(from 18deg, transparent 0deg 18deg, ${cfg.accent}44 19deg 20deg, transparent 21deg 36deg)`,
+              background: `repeating-conic-gradient(from 18deg, transparent 0deg 18deg, ${accent}44 19deg 20deg, transparent 21deg 36deg)`,
               filter: "blur(1px)", animation: "cinematic-slow-spin 8s linear infinite",
             }} />
             <div style={{
               position: "absolute", left: "50%", top: "38%", width: 260, height: 130,
               transform: "translate(-50%,-50%)", borderRadius: "50%",
-              background: `radial-gradient(ellipse at center, ${cfg.accent}66 0%, ${cfg.accent}22 34%, transparent 68%)`,
-              boxShadow: `0 0 60px ${cfg.accent}77`,
+              background: `radial-gradient(ellipse at center, ${accent}66 0%, ${accent}22 34%, transparent 68%)`,
+              boxShadow: `0 0 60px ${accent}77`,
               animation: "cinematic-eye-open 1.1s ease .25s both",
             }} />
           </>
@@ -1428,7 +1455,7 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
             width: 220 + i * 24,
             height: 150 + i * 18,
             borderRadius: "50%",
-            background: `radial-gradient(circle, ${cfg.accent}${["44", "33", "55", "22", "44"][i]} 0%, transparent 67%)`,
+            background: `radial-gradient(circle, ${accent}${["44", "33", "55", "22", "44"][i]} 0%, transparent 67%)`,
             filter: "blur(18px)",
             animation: `cinematic-smoke-drift ${5 + i * 0.7}s ease-in-out ${i * 0.25}s infinite`,
           }} />
@@ -1437,13 +1464,13 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
           <>
             <div style={{
               position: "absolute", inset: 0, opacity: 0.4,
-              background: `repeating-linear-gradient(0deg, transparent 0 10px, ${cfg.accent}33 11px 12px, transparent 13px 22px)`,
+              background: `repeating-linear-gradient(0deg, transparent 0 10px, ${accent}33 11px 12px, transparent 13px 22px)`,
               animation: "cinematic-scanline 0.85s steps(3) infinite",
             }} />
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} style={{
                 position: "absolute", left: `${8 + i * 15}%`, right: `${5 + i * 3}%`, top: `${18 + i * 13}%`,
-                height: 10 + i * 3, background: i % 2 ? "#ef444455" : `${cfg.accent}55`,
+                height: 10 + i * 3, background: i % 2 ? "#ef444455" : `${accent}55`,
                 transform: `skewX(${i % 2 ? -18 : 18}deg)`, mixBlendMode: "screen",
                 animation: `cinematic-glitch-slice ${0.6 + i * 0.08}s steps(2) ${i * 0.12}s infinite`,
               }} />
@@ -1454,21 +1481,21 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
           <div style={{
             position: "absolute", left: "50%", top: "50%", width: "min(68vw, 520px)", height: "min(34vw, 250px)",
             transform: "translate(-50%,-50%) rotate(-8deg)",
-            border: `8px double ${cfg.accent}99`,
+            border: `8px double ${accent}99`,
             borderRadius: 28,
-            color: `${cfg.accent}18`,
+            color: `${accent}18`,
             fontSize: "clamp(42px, 10vw, 120px)",
             fontWeight: 950,
             display: "grid", placeItems: "center",
             letterSpacing: "0.08em",
-            boxShadow: `0 0 42px ${cfg.accent}55, inset 0 0 36px ${cfg.accent}22`,
+            boxShadow: `0 0 42px ${accent}55, inset 0 0 36px ${accent}22`,
             animation: "cinematic-stamp-slam 0.75s cubic-bezier(.2,1.4,.3,1) .15s both",
           }}>TRAPACA</div>
         )}
         {cfg.motif === "raid" && (
           <div style={{
-            position: "absolute", inset: "12%", border: `2px solid ${cfg.accent}66`,
-            background: `linear-gradient(90deg, transparent 0 47%, ${cfg.accent}88 48% 52%, transparent 53% 100%), linear-gradient(0deg, transparent 0 47%, ${cfg.accent}88 48% 52%, transparent 53% 100%)`,
+            position: "absolute", inset: "12%", border: `2px solid ${accent}66`,
+            background: `linear-gradient(90deg, transparent 0 47%, ${accent}88 48% 52%, transparent 53% 100%), linear-gradient(0deg, transparent 0 47%, ${accent}88 48% 52%, transparent 53% 100%)`,
             clipPath: "polygon(8% 0, 92% 0, 100% 8%, 100% 92%, 92% 100%, 8% 100%, 0 92%, 0 8%)",
             animation: "cinematic-raid-lock 1.2s ease .1s both",
           }} />
@@ -1477,9 +1504,9 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
           <div key={i} style={{
             position: "absolute", left: `${12 + i * 12}%`, top: `${12 + (i % 3) * 24}%`,
             width: 34 + i * 4, height: 58 + i * 7,
-            background: `linear-gradient(135deg,#fff8,${cfg.accent}dd 35%,#7c3aedaa 70%,transparent)`,
+            background: `linear-gradient(135deg,#fff8,${accent}dd 35%,#7c3aedaa 70%,transparent)`,
             clipPath: "polygon(50% 0, 100% 35%, 72% 100%, 20% 86%, 0 35%)",
-            boxShadow: `0 0 28px ${cfg.accent}88`,
+            boxShadow: `0 0 28px ${accent}88`,
             animation: `cinematic-crystal-pop 1.3s ease ${i * 0.12}s both, cinematic-crystal-float ${3 + i * 0.3}s ease-in-out ${i * 0.15}s infinite`,
           }} />
         ))}
@@ -1487,8 +1514,8 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
           <div key={i} style={{
             position: "absolute", left: "50%", top: "52%",
             width: 24, height: 24, borderRadius: "50%",
-            background: `radial-gradient(circle at 35% 35%, #fff8 0 12%, ${cfg.accent} 18% 62%, #92400e 72%)`,
-            boxShadow: `0 0 18px ${cfg.accent}aa`,
+            background: `radial-gradient(circle at 35% 35%, #fff8 0 12%, ${accent} 18% 62%, #92400e 72%)`,
+            boxShadow: `0 0 18px ${accent}aa`,
             // @ts-expect-error CSS vars
             "--coin-x": `${Math.cos((i / 10) * Math.PI * 2) * rnd(160, 360)}px`,
             "--coin-y": `${Math.sin((i / 10) * Math.PI * 2) * rnd(90, 220)}px`,
@@ -1498,14 +1525,14 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
         {cfg.motif === "star" && (
           <div style={{
             position: "absolute", inset: "10% 16%", opacity: 0.55,
-            background: `radial-gradient(circle at 20% 30%, ${cfg.accent} 0 2px, transparent 3px), radial-gradient(circle at 45% 20%, #fff 0 1px, transparent 2px), radial-gradient(circle at 70% 40%, ${cfg.accent} 0 2px, transparent 3px), radial-gradient(circle at 60% 75%, #fff 0 1px, transparent 2px), linear-gradient(115deg, transparent 0 48%, ${cfg.accent}33 49% 50%, transparent 51%)`,
+            background: `radial-gradient(circle at 20% 30%, ${accent} 0 2px, transparent 3px), radial-gradient(circle at 45% 20%, #fff 0 1px, transparent 2px), radial-gradient(circle at 70% 40%, ${accent} 0 2px, transparent 3px), radial-gradient(circle at 60% 75%, #fff 0 1px, transparent 2px), linear-gradient(115deg, transparent 0 48%, ${accent}33 49% 50%, transparent 51%)`,
             animation: "cinematic-star-twinkle 2.4s ease infinite",
           }} />
         )}
       </div>
       <div className="absolute inset-0 pointer-events-none" style={{
-        background: `radial-gradient(circle at 50% 50%, ${cfg.accent}22 0%, transparent 55%)`,
-        boxShadow: `inset 0 0 150px ${cfg.accent}44`,
+        background: `radial-gradient(circle at 50% 50%, ${accent}22 0%, transparent 55%)`,
+        boxShadow: `inset 0 0 150px ${accent}44`,
         animation: `${cfg.pulse} 1.8s ease infinite`,
         zIndex: 2,
       }} />
@@ -1518,8 +1545,8 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
             height: 180 + i * 120,
             borderRadius: ringBorderRadius,
             transform: `rotate(${ringRotation})`,
-            border: `1px solid ${cfg.accent}${["88", "55", "33"][i]}`,
-            boxShadow: `0 0 ${20 + i * 14}px ${cfg.accent}33`,
+            border: `1px solid ${accent}${["88", "55", "33"][i]}`,
+            boxShadow: `0 0 ${20 + i * 14}px ${accent}33`,
             animation: `cinematic-ring-pulse ${1.6 + i * 0.35}s ease-out ${i * 0.18}s both`,
             opacity: 0,
           }} />
@@ -1532,10 +1559,10 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
             position: "absolute",
             left: p.x,
             top: p.y,
-            color: i % 3 === 0 ? "#fff" : cfg.accent,
+            color: i % 3 === 0 ? "#fff" : accent,
             fontWeight: 900,
             fontSize: p.size,
-            textShadow: `0 0 12px ${cfg.accent}, 0 0 24px ${cfg.accent}88`,
+            textShadow: `0 0 12px ${accent}, 0 0 24px ${accent}88`,
             // @ts-expect-error CSS vars
             "--ex": p.tx, "--ey": p.ty, "--er": p.rot,
             animation: `cinematic-float ${p.dur}s ease ${p.delay}s ${ambient ? "infinite" : "both"}`,
@@ -1548,16 +1575,16 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
 
       <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ top: "15%", zIndex: 8 }}>
         <div style={{
-          border: `2px solid ${cfg.accent}99`,
-          color: cfg.accent,
-          background: `${cfg.accent}12`,
+          border: `2px solid ${accent}99`,
+          color: accent,
+          background: `${accent}12`,
           borderRadius: 999,
           padding: "7px clamp(16px, 4vw, 30px)",
           fontSize: "clamp(10px, 2vw, 13px)",
           fontWeight: 900,
           letterSpacing: "0.28em",
           textTransform: "uppercase",
-          boxShadow: `0 0 32px ${cfg.accent}55, inset 0 0 18px ${cfg.accent}18`,
+          boxShadow: `0 0 32px ${accent}55, inset 0 0 18px ${accent}18`,
           animation: "cinematic-seal 0.75s cubic-bezier(.36,.07,.19,.97) 0.25s both",
         }}>
           {cfg.tag}
@@ -1568,8 +1595,8 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
         <div style={{
           fontSize: "clamp(58px, 15vw, 132px)",
           fontWeight: 950,
-          color: `${cfg.accent}22`,
-          textShadow: `0 0 45px ${cfg.accent}66`,
+          color: `${accent}22`,
+          textShadow: `0 0 45px ${accent}66`,
           animation: "cinematic-shockwave 1.4s ease 0.15s both",
         }}>
           {cfg.symbol}
@@ -1580,12 +1607,12 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effe
         <div style={{ animation: "cinematic-title-emerge 0.9s cubic-bezier(.16,1,.3,1) 0.8s both", opacity: 0 }}>
           <TitleBlock
             name={name}
-            color={color || cfg.accent}
-            glowColor={glowColor || cfg.accent}
+            color={color || accent}
+            glowColor={glowColor || accent}
             flavorText={flavorText}
             rarity={rarity}
             ambient={ambient}
-            nameStyle={{ textShadow: `0 0 28px ${cfg.accent}, 0 0 80px ${cfg.accent}88` }}
+            nameStyle={{ textShadow: `0 0 28px ${accent}, 0 0 80px ${accent}88` }}
           />
         </div>
       </div>

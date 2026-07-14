@@ -13,7 +13,7 @@ import { getSuggestedPrice, LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
-const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
+const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET","SHADOW","ROYAL","TOXIC","COSMIC","STEEL","FAIRY","DRAGON","GHOST"] as const;
 const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL","PILAR_DA_COMUNIDADE","ORDER_SHADOW_MARK","ORDER_PURPLE_SMOKE","ORDER_GLITCH_HEIST","ORDER_CAPTAIN_SEAL","RAID_BOSS_FLARE","MEGA_AWAKENING","TREASURE_BURST","STARRY_CROWN"] as const;
 const typeOpts = [
   "TITLE","BANNER","FRAME","ZIKALOOT_TICKET",
@@ -70,6 +70,17 @@ const themeLabel: Record<string, string> = {
   NEUTRAL: "Neutro", ELECTRIC: "⚡ Elétrico", FIRE: "🔥 Fogo",
   WATER: "🌊 Água", GRASS: "🌿 Grama", ZIKABET: "🎰 ZikaBet"
 };
+Object.assign(themeLabel, {
+  SHADOW: "Sombra",
+  ROYAL: "Real",
+  TOXIC: "Toxico",
+  COSMIC: "Cosmico",
+  STEEL: "Metalico",
+  FAIRY: "Fada",
+  DRAGON: "Dragao",
+  GHOST: "Fantasma",
+});
+
 const titlePreviewRarityColor: Record<string, { color: string; glowColor: string }> = {
   COMMON: { color: "#e2e8f0", glowColor: "transparent" },
   UNCOMMON: { color: "#4ade80", glowColor: "#4ade8066" },
@@ -705,7 +716,10 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
       const result = await createShopItem(buildPayload(createForm));
       if (result.error) { toast.error(result.error); return; }
       toast.success("Item criado!"); setCreateForm(EMPTY); setShowCreate(false);
-    } catch { toast.error("Erro ao criar item."); }
+    } catch (error) {
+      console.error("[ShopAdmin] createShopItem failed", error);
+      toast.error(error instanceof Error ? error.message : "Erro ao criar item.");
+    }
   });
 
   const handleUpdate = (id: string) => startTransition(async () => {
@@ -713,7 +727,10 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
       const result = await updateShopItem(id, buildPayload(editForm));
       if (result.error) { toast.error(result.error); return; }
       toast.success("Item atualizado!"); setEditingId(null);
-    } catch { toast.error("Erro ao atualizar item."); }
+    } catch (error) {
+      console.error("[ShopAdmin] updateShopItem failed", error);
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar item.");
+    }
   });
 
   const handleDelete = (id: string, name: string) => {

@@ -24,7 +24,8 @@ export type TitleRarity =
   | "LEGENDARY" | "MYTHIC" | "RELIC";
 
 export type TitleTheme =
-  | "NEUTRAL" | "ELECTRIC" | "FIRE" | "WATER" | "GRASS" | "ZIKABET";
+  | "NEUTRAL" | "ELECTRIC" | "FIRE" | "WATER" | "GRASS" | "ZIKABET"
+  | "SHADOW" | "ROYAL" | "TOXIC" | "COSMIC" | "STEEL" | "FAIRY" | "DRAGON" | "GHOST";
 
 export type TitleContext = "profile" | "ranking" | "feed" | "inventory";
 
@@ -186,6 +187,23 @@ const DEFAULT_REPEAT: Record<string, number> = {
 
 const THEME_BADGE: Record<string, string> = {
   NEUTRAL: "", ELECTRIC: "⚡", FIRE: "🔥", WATER: "🌊", GRASS: "🌿", ZIKABET: "🎰",
+  SHADOW: "◐", ROYAL: "♛", TOXIC: "☣", COSMIC: "✦", STEEL: "◆", FAIRY: "✧", DRAGON: "◇", GHOST: "◌",
+};
+
+const THEME_VISUAL: Record<string, Partial<Pick<RarityDef, "color" | "gradient" | "glowColor" | "sparkles" | "shimmer" | "continuousGlow">>> = {
+  ELECTRIC: { color: "#facc15", gradient: "linear-gradient(90deg,#facc15,#ffffff,#38bdf8,#facc15)", glowColor: "#facc15bb", shimmer: true, continuousGlow: true },
+  FIRE: { color: "#fb923c", gradient: "linear-gradient(90deg,#ef4444,#fb923c,#fef08a,#ef4444)", glowColor: "#fb923cbb", shimmer: true, continuousGlow: true },
+  WATER: { color: "#38bdf8", gradient: "linear-gradient(90deg,#0ea5e9,#67e8f9,#ffffff,#0ea5e9)", glowColor: "#38bdf8aa", shimmer: true, continuousGlow: true },
+  GRASS: { color: "#4ade80", gradient: "linear-gradient(90deg,#16a34a,#86efac,#f0fdf4,#16a34a)", glowColor: "#4ade80aa", continuousGlow: true },
+  ZIKABET: { color: "#fbbf24", gradient: "linear-gradient(90deg,#7c2d12,#fbbf24,#22d3ee,#fbbf24)", glowColor: "#fbbf24bb", sparkles: true, shimmer: true, continuousGlow: true },
+  SHADOW: { color: "#a855f7", gradient: "linear-gradient(90deg,#312e81,#a855f7,#020617,#d8b4fe)", glowColor: "#a855f7cc", sparkles: true, continuousGlow: true },
+  ROYAL: { color: "#fde68a", gradient: "linear-gradient(90deg,#7c2d12,#facc15,#ffffff,#a16207)", glowColor: "#facc15cc", sparkles: true, shimmer: true, continuousGlow: true },
+  TOXIC: { color: "#bef264", gradient: "linear-gradient(90deg,#65a30d,#bef264,#a855f7,#65a30d)", glowColor: "#84cc16bb", continuousGlow: true },
+  COSMIC: { color: "#c4b5fd", gradient: "linear-gradient(90deg,#312e81,#c4b5fd,#f0abfc,#38bdf8)", glowColor: "#c4b5fdcc", sparkles: true, shimmer: true, continuousGlow: true },
+  STEEL: { color: "#cbd5e1", gradient: "linear-gradient(90deg,#64748b,#f8fafc,#94a3b8,#e2e8f0)", glowColor: "#cbd5e188", shimmer: true, continuousGlow: true },
+  FAIRY: { color: "#f9a8d4", gradient: "linear-gradient(90deg,#f9a8d4,#ffffff,#c4b5fd,#f9a8d4)", glowColor: "#f9a8d4bb", sparkles: true, continuousGlow: true },
+  DRAGON: { color: "#f97316", gradient: "linear-gradient(90deg,#7c3aed,#f97316,#facc15,#7c3aed)", glowColor: "#f97316bb", sparkles: true, shimmer: true, continuousGlow: true },
+  GHOST: { color: "#c084fc", gradient: "linear-gradient(90deg,#020617,#c084fc,#64748b,#c084fc)", glowColor: "#c084fccc", continuousGlow: true },
 };
 
 // ── Sparkles — posições fixas para evitar random no render ───────────────────
@@ -221,7 +239,17 @@ export function TitleDisplay({
   const [replayKey,    setReplayKey]    = useState(0);
   const entrancePlayed = useRef(false);
 
-  const cfg  = RARITY_CFG[rarity] ?? RARITY_CFG.COMMON;
+  const baseCfg = RARITY_CFG[rarity] ?? RARITY_CFG.COMMON;
+  const themeVisual = THEME_VISUAL[theme ?? "NEUTRAL"];
+  const cfg: RarityDef = {
+    ...baseCfg,
+    ...(themeVisual ?? {}),
+    sparkles: baseCfg.sparkles || themeVisual?.sparkles || false,
+    shimmer: baseCfg.shimmer || themeVisual?.shimmer || false,
+    continuousGlow: baseCfg.continuousGlow || themeVisual?.continuousGlow || false,
+    rarityBadge: baseCfg.rarityBadge,
+    label: baseCfg.label,
+  };
   const vars = RARITY_VARIANTS[rarity] ?? RARITY_VARIANTS.COMMON;
 
   const variant     = vars[nameHash(name) % vars.length];

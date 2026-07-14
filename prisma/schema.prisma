@@ -1492,6 +1492,14 @@ enum TitleTheme {
   WATER
   GRASS
   ZIKABET
+  SHADOW
+  ROYAL
+  TOXIC
+  COSMIC
+  STEEL
+  FAIRY
+  DRAGON
+  GHOST
 }
 
 enum TitleEntranceEffect {
