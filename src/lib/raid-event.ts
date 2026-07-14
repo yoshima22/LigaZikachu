@@ -383,6 +383,7 @@ export type OrderEventPageData = {
     startsAt: string | null;
     raidStartsAt: string | null;
     raidEndsAt: string | null;
+    megaActivatedAt: string | null;
     hideoutFoundAt: string | null;
   } | null;
   stats: {
@@ -499,7 +500,7 @@ export type RandomMascotInjurySabotageConfig = {
   maxPerPlayerPerDay: number;
 };
 
-export function getBossHpPercent(event: NonNullable<OrderEventPageData["event"]>) {
+export function getBossHpPercent(event: { bossHpMax: number; bossHpCurrent: number }) {
   if (event.bossHpMax <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((event.bossHpCurrent / event.bossHpMax) * 100)));
 }
@@ -655,6 +656,7 @@ export async function getOrderEventPageData(options: { cluePage?: number; cluePa
         bossHpMax: true,
         bossHpCurrent: true,
         megaThresholdPercent: true,
+        megaActivatedAt: true,
         bossConfigJson: true,
         startsAt: true,
         raidStartsAt: true,
@@ -878,6 +880,7 @@ export async function getOrderEventPageData(options: { cluePage?: number; cluePa
       startsAt: event.startsAt?.toISOString() ?? null,
       raidStartsAt: event.raidStartsAt?.toISOString() ?? null,
       raidEndsAt: event.raidEndsAt?.toISOString() ?? null,
+      megaActivatedAt: event.megaActivatedAt?.toISOString() ?? null,
       hideoutFoundAt: event.hideoutFoundAt?.toISOString() ?? null,
     },
     stats: {
@@ -1401,19 +1404,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
   }
 
   const startingBossHp = event.bossHpCurrent;
-  const isMegaPhase = event.megaActivatedAt != null || getBossHpPercent({
-    ...event,
-    phase: String(event.phase),
-    startsAt: null,
-    raidStartsAt: null,
-    raidEndsAt: null,
-    hideoutFoundAt: null,
-    bossConfigJson: event.bossConfigJson,
-    slug: ORDER_EVENT_SLUG,
-    name: "Ordem da Trapaça",
-    villainGroupName: "Ordem da Trapaça",
-    localOnly: true,
-  }) <= event.megaThresholdPercent;
+  const isMegaPhase = event.megaActivatedAt != null || getBossHpPercent(event) <= event.megaThresholdPercent;
 
   const mascotOrder = new Map(uniqueMascotIds.map((id, index) => [id, index]));
   const orderedMascots = [...mascots].sort((a, b) => (mascotOrder.get(a.id) ?? 999) - (mascotOrder.get(b.id) ?? 999));

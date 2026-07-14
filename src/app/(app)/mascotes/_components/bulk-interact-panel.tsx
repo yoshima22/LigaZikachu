@@ -142,13 +142,13 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
           {isFavoriteTeam ? "Equipe Favorita" : "Todos"}
         </span>
       </div>
-      <div className="flex gap-2 flex-wrap">
+      <div className="grid gap-3 lg:grid-cols-[180px_180px_minmax(320px,1fr)]">
         {/* Brincar com todos */}
         <button
           type="button"
           disabled={playDisabled}
           onClick={handlePlayAll}
-          className="flex flex-col items-center gap-0.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2.5 text-xs font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-4 py-2.5 text-xs font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="flex items-center gap-2">
             {pendingPlay ? <Loader2 size={14} className="animate-spin" /> : <Gamepad2 size={14} />}
@@ -166,7 +166,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
           type="button"
           disabled={petDisabled}
           onClick={handlePetAll}
-          className="flex flex-col items-center gap-0.5 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="flex items-center gap-2">
             {pendingPet ? <Loader2 size={14} className="animate-spin" /> : <Hand size={14} />}
@@ -180,9 +180,9 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
         </button>
 
         {/* Alimentar Todos */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1 flex-wrap">
-            <span className="text-[10px] text-slate-500">Usar:</span>
+        <div className="flex min-h-[60px] flex-col justify-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-24 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Item</span>
             {([
               { value: "FOOD" as const, label: "Comida" },
               { value: "SWEET" as const, label: "Doce" },
@@ -201,7 +201,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] text-slate-500">Alimentar quem está:</span>
             {HUNGER_OPTIONS.map(opt => (
               <button
@@ -222,7 +222,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             type="button"
             disabled={feedAllDisabled}
             onClick={handleFeedAll}
-            className="flex items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex min-h-[38px] items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
             Alimentar Todos com {feedType === "SWEET" ? "Doce" : "Comida"}

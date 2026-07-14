@@ -87,7 +87,7 @@ export default async function OrdemDaTrapacaPage({
   if (!admin && (!event || event.phase === "ENDED" || (!event.active && event.phase !== "RAID_DEFEATED"))) redirect("/dashboard");
   const hpPercent = event ? getBossHpPercent(event) : 0;
   const raidRevealed = event ? isRaidRevealed(event.phase) : false;
-  const megaRevealed = raidRevealed && event ? hpPercent <= event.megaThresholdPercent : false;
+  const megaRevealed = raidRevealed && event ? event.megaActivatedAt != null : false;
   const bossConfig = effectRecord(event?.bossConfigJson);
   const seriousModeRevealed = bossConfig.seriousModeActivatedAt != null;
   const visibleClues = data.clues.filter((clue) => clue.visible);
@@ -285,7 +285,7 @@ export default async function OrdemDaTrapacaPage({
             </div>
             <div className="mt-4 overflow-hidden rounded-2xl border border-purple-400/25 bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.16),transparent_58%),#050816]">
               <img
-                src={ORDER_EVENT_IMAGES.captain}
+                src={megaRevealed ? ORDER_EVENT_IMAGES.captainMega : ORDER_EVENT_IMAGES.captain}
                 alt="Capitao Trambique"
                 className="h-auto max-h-[520px] w-full object-contain"
                 loading="lazy"
