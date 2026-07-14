@@ -1178,7 +1178,7 @@ export async function submitOrderRaidPassword(userId: string, rawPassword: strin
   if (!record) return { ok: false as const, message: "A fechadura da Ordem ainda nao foi montada." };
   if (record.solvedAt) return { ok: true as const, message: "A porta ja foi aberta." };
   if (hashRaidPassword(password) !== record.passwordHash) {
-    return { ok: false as const, message: "Senha incorreta. Compare os digitos verdes nos perfis." };
+    return { ok: false as const, message: "Algo me diz que tem como descobrir isso com um pouco de investigação." };
   }
 
   const now = new Date();

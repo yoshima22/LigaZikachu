@@ -235,7 +235,7 @@ export default async function OrdemDaTrapacaPage({
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#FFCB05]">Porta do esconderijo</p>
                 <h2 className="mt-1 text-lg font-black text-white">Digite a senha da Ordem</h2>
                 <p className="mt-1 text-xs leading-relaxed text-slate-300">
-                  Compare os carimbos nos perfis dos jogadores. Em cada carimbo, apenas o digito verde esta na posicao certa.
+                  Com certeza existe alguma forma de encontrar a combinação correta em algum lugar da liga.
                 </p>
               </div>
               <form action={submitOrderRaidPasswordAction} className="grid gap-2 sm:grid-cols-[1fr_auto]">
