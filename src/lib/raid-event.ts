@@ -237,7 +237,10 @@ export const ORDER_STEP_SABOTAGE_TARGETS: Partial<Record<OrderMysteryStepKey, Ar
   effectKind?: string;
 }>>> = {
   ZIKALOOT_FAKE_NUMBER: [{ systemKey: "ZIKALOOT", sabotageType: "ZIKALOOT_FAKE_NUMBER" }],
-  BAZAR_SLOT_SIX_CLICKS: [{ systemKey: "BAZAR", sabotageType: "BLOCK_BAZAR_SLOT" }],
+  BAZAR_SLOT_SIX_CLICKS: [
+    { systemKey: "BAZAR", sabotageType: "BLOCK_BAZAR_SLOT" },
+    { systemKey: "ZIKASHOP", sabotageType: "INCREASE_PRICE" },
+  ],
   LAB_SMOKE_TO_MACHINE: [{ systemKey: "LABORATORY", sabotageType: "DISABLE_LAB_ANALYSIS" }],
   MASCOT_LEAGUE_LAST_PLACE_THREE_CLICKS: [{ systemKey: "MASCOT_LEAGUE", effectKind: "WEEKLY_LEAGUE_SLOT_DEBUFF" }],
   MASCOTS_EQUIPPED_WHISPER: [{ systemKey: "MASCOTS", effectKind: "RANDOM_MASCOT_INJURY" }],
@@ -984,6 +987,42 @@ export async function maybeRevealOrderClueFromExpedition(params: {
   return clue;
 }
 
+export async function maybeRevealOrderClueFromArenaPvp(params: {
+  playerId: string;
+  mascotId?: string | null;
+  won: boolean;
+}) {
+  const event = await prisma.raidEvent.findUnique({
+    where: { slug: ORDER_EVENT_SLUG },
+    select: { id: true, active: true, phase: true },
+  }).catch(() => null);
+  if (!event?.active || event.phase !== "INVESTIGATION") return null;
+
+  const chance = params.won ? 0.12 : 0.06;
+  if (Math.random() > chance) return null;
+
+  const clueId = await selectNextUsefulOrderClueId(event.id);
+  if (!clueId) return null;
+
+  const clue = await prisma.raidClue.update({
+    where: { id: clueId },
+    data: { visible: true, releasedAt: new Date(), discoveredAt: new Date(), discoveredByPlayerId: params.playerId },
+    select: { id: true, clueText: true, relatedStepKey: true },
+  });
+
+  if (params.mascotId) {
+    await prisma.mascotEvent.create({
+      data: {
+        mascotId: params.mascotId,
+        emoji: "PISTA",
+        description: `Encontrou uma pista importante sobre a Ordem da Trapaça na Arena PvP: ${clue.clueText}`,
+      },
+    }).catch(() => null);
+  }
+
+  return clue;
+}
+
 export async function grantOrderStepRewardToAll(raidEventId: string, stepKey: OrderMysteryStepKey, resolverUserId?: string | null) {
   const notificationType = ORDER_STEP_REWARD_NOTIFICATION[stepKey];
   if (!notificationType) return { granted: 0 };
@@ -1163,17 +1202,17 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     },
   });
   if (!event?.active || event.phase !== "RAID_ACTIVE") {
-    return { ok: false as const, message: "O confronto contra a Ordem ainda n?o come?ou." };
+    return { ok: false as const, message: "O confronto contra a Ordem ainda não começou." };
   }
   if (event.bossHpCurrent <= 0) {
-    return { ok: false as const, message: "A Ordem j? foi derrotada." };
+    return { ok: false as const, message: "A Ordem já foi derrotada." };
   }
 
   const player = await prisma.player.findUnique({
     where: { userId },
     select: { id: true, displayName: true },
   });
-  if (!player) return { ok: false as const, message: "Perfil de jogador n?o encontrado." };
+  if (!player) return { ok: false as const, message: "Perfil de jogador não encontrado." };
 
   const lastAttempt = await prisma.raidBattleAttempt.findFirst({
     where: { raidEventId: event.id, playerId: player.id },
@@ -1227,8 +1266,8 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     raidEndsAt: null,
     hideoutFoundAt: null,
     slug: ORDER_EVENT_SLUG,
-    name: "Ordem da Trapa?a",
-    villainGroupName: "Ordem da Trapa?a",
+    name: "Ordem da Trapaça",
+    villainGroupName: "Ordem da Trapaça",
     localOnly: true,
   }) <= event.megaThresholdPercent;
 
@@ -1407,7 +1446,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
           data: {
             mascotId: mascot.id,
             emoji: "RAID",
-            description: `${mascot.name} foi derrotado pela Ordem da Trapa?a e precisa de Atendimento SUS.`,
+            description: `${mascot.name} foi derrotado pela Ordem da Trapaça e precisa de Atendimento SUS.`,
           },
         });
       }

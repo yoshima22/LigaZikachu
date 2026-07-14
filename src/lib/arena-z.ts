@@ -5,6 +5,7 @@ import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { getCombatRoleLabel, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
+import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
 import { unstable_cache } from "next/cache";
@@ -2566,6 +2567,15 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       if (winnerTeam) {
         await maybeDropSyncTicket(tx, winnerTeam.playerId, "arena-pvp");
       }
+    }
+
+    if (!isTrainingBattle && !isCasualBattle && winnerTeam) {
+      const witnessMascotId = winnerTeam.members[0]?.mascotId ?? null;
+      await maybeRevealOrderClueFromArenaPvp({
+        playerId: winnerTeam.playerId,
+        mascotId: witnessMascotId,
+        won: true,
+      }).catch(() => null);
     }
 
     if (!isTrainingBattle && loserTeam && preserved) {
