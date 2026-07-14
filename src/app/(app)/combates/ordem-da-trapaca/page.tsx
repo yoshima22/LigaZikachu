@@ -291,7 +291,7 @@ export default async function OrdemDaTrapacaPage({
               </div>
             ) : (
               <p className="mt-2 text-[11px] text-slate-500">
-                {raidRevealed ? "Cada investida reduz a resistência global do inimigo. O intervalo entre ataques é de 30 minutos por jogador." : "A investigação ainda precisa revelar o que existe dentro do esconderijo."}
+                {raidRevealed ? "Cada investida reduz a resistência global do inimigo. O intervalo entre ataques é de 30 minutos por jogador. Mascotes ficam feridos da mesma forma que na arena." : "A investigação ainda precisa revelar o que existe dentro do esconderijo."}
               </p>
             )}
           </div>
