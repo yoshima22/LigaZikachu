@@ -600,7 +600,7 @@ export default async function OrdemDaTrapacaPage({
                 )}
                 {step.resolvedAt && (
                   <p className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-xs text-emerald-200">
-                    {step.resolvedByName ?? "Um jogador"} resolveu esta travessura. Faltam {Math.max(0, data.stats.totalSteps - data.stats.resolvedSteps)} etapa(s) para abrir a fase da senha.
+                    {step.resolvedByName ?? "Um jogador"} resolveu esta travessura. A investigação avançou e o caminho da Ordem ficou menos escondido.
                   </p>
                 )}
               </div>
