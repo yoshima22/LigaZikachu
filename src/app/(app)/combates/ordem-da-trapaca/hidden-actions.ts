@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { ensureOrderPasswordStamps, grantOrderStepRewardToAll, ORDER_EVENT_SLUG, ORDER_MYSTERY_STEP_KEYS, ORDER_STEP_CONFIG, ORDER_STEP_SABOTAGE_TARGETS, type OrderMysteryStepKey } from "@/lib/raid-event";
+import { deactivateOrderSabotagesForStep, ensureOrderPasswordStamps, grantOrderStepRewardToAll, ORDER_EVENT_SLUG, ORDER_MYSTERY_STEP_KEYS, ORDER_STEP_CONFIG, type OrderMysteryStepKey } from "@/lib/raid-event";
 
 const EVENT_PATH = "/combates/ordem-da-trapaca";
 
@@ -15,38 +15,6 @@ const STEP_FEEDBACK: Record<string, string> = {
   MASCOT_LEAGUE_LAST_PLACE_THREE_CLICKS: "A sabotagem da Liga Semanal foi removida. Os tres primeiros slots voltaram ao normal.",
   MASCOTS_EQUIPPED_WHISPER: "Os ataques aos mascotes foram interrompidos. A Ordem deixou um rastro para a proxima fase.",
 };
-
-function readJsonRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-async function deactivateResolvedSabotages(raidEventId: string, stepKey: OrderMysteryStepKey) {
-  const targets = ORDER_STEP_SABOTAGE_TARGETS[stepKey] ?? [];
-  const now = new Date();
-
-  for (const target of targets) {
-    const activeSabotages = await prisma.raidSabotage.findMany({
-      where: {
-        raidEventId,
-        active: true,
-        systemKey: target.systemKey as never,
-        ...(target.sabotageType ? { sabotageType: target.sabotageType as never } : {}),
-      },
-      select: { id: true, effectJson: true },
-    });
-
-    const ids = activeSabotages
-      .filter((sabotage) => !target.effectKind || readJsonRecord(sabotage.effectJson).kind === target.effectKind)
-      .map((sabotage) => sabotage.id);
-
-    if (ids.length) {
-      await prisma.raidSabotage.updateMany({
-        where: { id: { in: ids } },
-        data: { active: false, endsAt: now },
-      });
-    }
-  }
-}
 
 export type ResolveMysteryStepState = {
   ok: boolean;
@@ -85,7 +53,13 @@ export async function resolveOrderMysteryStepAction(
     },
   });
   if (!step) return { ok: false, message: "Essa pista não pertence à investigação atual." };
-  if (step.resolvedAt) return { ok: true, message: STEP_FEEDBACK[step.stepKey] ?? "Esta etapa já foi descoberta." };
+  if (step.resolvedAt) {
+    await deactivateOrderSabotagesForStep(event.id, step.stepKey as OrderMysteryStepKey);
+    await grantOrderStepRewardToAll(event.id, step.stepKey as OrderMysteryStepKey, session.user.id);
+    revalidatePath(EVENT_PATH);
+    revalidatePath(returnPath);
+    return { ok: true, message: STEP_FEEDBACK[step.stepKey] ?? "Esta etapa já foi descoberta." };
+  }
 
   const config = ORDER_STEP_CONFIG[step.stepKey as OrderMysteryStepKey];
   const [generalClues, specificClues] = await Promise.all([
@@ -115,7 +89,7 @@ export async function resolveOrderMysteryStepAction(
     where: { id: step.id },
     data: { resolvedAt: new Date(), resolvedByUserId: session.user.id },
   });
-  await deactivateResolvedSabotages(event.id, step.stepKey as OrderMysteryStepKey);
+  await deactivateOrderSabotagesForStep(event.id, step.stepKey as OrderMysteryStepKey);
   await grantOrderStepRewardToAll(event.id, step.stepKey as OrderMysteryStepKey, session.user.id);
 
   const unresolvedCount = await prisma.raidMysteryStep.count({

@@ -246,6 +246,38 @@ export const ORDER_STEP_SABOTAGE_TARGETS: Partial<Record<OrderMysteryStepKey, Ar
   MASCOTS_EQUIPPED_WHISPER: [{ systemKey: "MASCOTS", effectKind: "RANDOM_MASCOT_INJURY" }],
 };
 
+export async function deactivateOrderSabotagesForStep(raidEventId: string, stepKey: OrderMysteryStepKey) {
+  const targets = ORDER_STEP_SABOTAGE_TARGETS[stepKey] ?? [];
+  const now = new Date();
+  let deactivated = 0;
+
+  for (const target of targets) {
+    const activeSabotages = await prisma.raidSabotage.findMany({
+      where: {
+        raidEventId,
+        active: true,
+        systemKey: target.systemKey as never,
+        ...(target.sabotageType ? { sabotageType: target.sabotageType as never } : {}),
+      },
+      select: { id: true, effectJson: true },
+    });
+
+    const ids = activeSabotages
+      .filter((sabotage) => !target.effectKind || readJsonRecord(sabotage.effectJson).kind === target.effectKind)
+      .map((sabotage) => sabotage.id);
+
+    if (!ids.length) continue;
+
+    const result = await prisma.raidSabotage.updateMany({
+      where: { id: { in: ids } },
+      data: { active: false, endsAt: now },
+    });
+    deactivated += result.count;
+  }
+
+  return { deactivated };
+}
+
 export const ORDER_STARTER_CLUES = [
   { clueText: "“A Ordem da Trapaça roubou as recompensas da ZikaLoot!”", rarity: "COMMON", quality: "GOOD", relatedStepKey: "ZIKALOOT_FAKE_NUMBER" },
   { clueText: "“A ZikaLoot está trancada. O painel foi adulterado por trapaceiros.”", rarity: "COMMON", quality: "GOOD", relatedStepKey: "ZIKALOOT_FAKE_NUMBER" },

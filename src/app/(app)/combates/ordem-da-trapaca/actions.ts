@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { applyRandomMascotInjurySabotage, ensureOrderPasswordStamps, estimateOrderRaidBossHp, grantOrderStepRewardToAll, ORDER_EVENT_SLUG, ORDER_MYSTERY_STEP_KEYS, ORDER_MYSTERY_STEPS, ORDER_STARTER_CLUES, ORDER_STEP_CONFIG, ORDER_STEP_REWARD_NOTIFICATION, runOrderRaidBattle, submitOrderRaidPassword, type OrderMysteryStepKey } from "@/lib/raid-event";
+import { applyRandomMascotInjurySabotage, deactivateOrderSabotagesForStep, ensureOrderPasswordStamps, estimateOrderRaidBossHp, grantOrderStepRewardToAll, ORDER_EVENT_SLUG, ORDER_MYSTERY_STEP_KEYS, ORDER_MYSTERY_STEPS, ORDER_STARTER_CLUES, ORDER_STEP_CONFIG, ORDER_STEP_REWARD_NOTIFICATION, runOrderRaidBattle, submitOrderRaidPassword, type OrderMysteryStepKey } from "@/lib/raid-event";
 import { healMascotSus } from "@/lib/arena-z";
 import { activateMegaStoneShopItems } from "@/lib/mega-shop";
 
@@ -415,6 +415,7 @@ export async function resolveOrderStepForTestAction(formData: FormData) {
     data: { resolvedAt: new Date(), resolvedByUserId: admin.id },
   });
   if (ORDER_MYSTERY_STEP_KEYS.includes(stepKey as OrderMysteryStepKey)) {
+    await deactivateOrderSabotagesForStep(event.id, stepKey as OrderMysteryStepKey);
     await grantOrderStepRewardToAll(event.id, stepKey as OrderMysteryStepKey, admin.id);
   }
 
