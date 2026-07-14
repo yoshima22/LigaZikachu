@@ -4,7 +4,7 @@ import { AlertTriangle, Bug, Eye, Flag, Radar, ShieldAlert, Skull, Sparkles } fr
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonName, getSpriteUrl, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { ORDER_EVENT_IMAGES } from "@/lib/order-event-assets";
 import { getBossHpPercent, getOrderEventPageData, RAID_PHASE_LABELS } from "@/lib/raid-event";
 import { MEGA_STONES } from "@/lib/mega-evolution";
@@ -88,6 +88,8 @@ export default async function OrdemDaTrapacaPage({
   const hpPercent = event ? getBossHpPercent(event) : 0;
   const raidRevealed = event ? isRaidRevealed(event.phase) : false;
   const megaRevealed = raidRevealed && event ? hpPercent <= event.megaThresholdPercent : false;
+  const bossConfig = effectRecord(event?.bossConfigJson);
+  const seriousModeRevealed = bossConfig.seriousModeActivatedAt != null;
   const visibleClues = data.clues.filter((clue) => clue.visible);
   const generalClues = data.clues.filter((clue) => !clue.relatedStepKey);
   const resolvedSteps = data.steps.filter((step) => step.resolvedAt);
@@ -202,7 +204,7 @@ export default async function OrdemDaTrapacaPage({
             <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">{raidRevealed ? "Inimigo encontrado" : "Investigação"}</p>
             <div className="flex items-center justify-center gap-4">
               <img
-                src={raidRevealed ? getStaticSpriteUrl(megaRevealed ? event?.bossMegaPokemonId ?? 10066 : event?.bossPokemonId ?? 302) : ""}
+                src={raidRevealed ? getSpriteUrl(megaRevealed ? event?.bossMegaPokemonId ?? 10066 : event?.bossPokemonId ?? 302, true) : ""}
                 alt=""
                 className={raidRevealed ? "h-24 w-24 object-contain drop-shadow-[0_0_18px_rgba(168,85,247,0.55)]" : "hidden"}
                 style={{ imageRendering: "pixelated" }}
@@ -291,7 +293,7 @@ export default async function OrdemDaTrapacaPage({
             </div>
             {event.phase === "RAID_ACTIVE" && (
               <div className="mt-3">
-                <OrderRaidEscapeTimer raidEndsAt={event.raidEndsAt} />
+                <OrderRaidEscapeTimer raidEndsAt={event.raidEndsAt} showSeriousModeMessage={seriousModeRevealed} />
               </div>
             )}
             {raidRevealed && megaRevealed ? (

@@ -691,15 +691,7 @@ const EGG_OPTIONS = [
   { value: "EGG_RARE",    label: "🩵 Ovo Raro" },
   { value: "EGG_SPECIAL", label: "💜 Ovo Especial" },
   { value: "EGG_LAB",     label: "🧪 Ovo de Laboratório" },
-  { value: "EGG_GEN1",    label: "1️⃣ Ovo Gen 1" },
-  { value: "EGG_GEN2",    label: "2️⃣ Ovo Gen 2" },
-  { value: "EGG_GEN3",    label: "3️⃣ Ovo Gen 3" },
-  { value: "EGG_GEN4",    label: "4️⃣ Ovo Gen 4" },
-  { value: "EGG_GEN5",    label: "5️⃣ Ovo Gen 5" },
-  { value: "EGG_GEN6",    label: "6️⃣ Ovo Gen 6" },
-  { value: "EGG_GEN7",    label: "7️⃣ Ovo Gen 7" },
-  { value: "EGG_GEN8",    label: "8️⃣ Ovo Gen 8" },
-  { value: "EGG_GEN9",    label: "9️⃣ Ovo Gen 9" },
+  { value: "EGG_EVENT",   label: "Ovo de Evento" },
 ];
 
 function GrantEggSection({ players }: Props) {

@@ -379,6 +379,7 @@ export type OrderEventPageData = {
     bossHpMax: number;
     bossHpCurrent: number;
     megaThresholdPercent: number;
+    bossConfigJson: unknown;
     startsAt: string | null;
     raidStartsAt: string | null;
     raidEndsAt: string | null;
@@ -503,6 +504,83 @@ export function getBossHpPercent(event: NonNullable<OrderEventPageData["event"]>
   return Math.max(0, Math.min(100, Math.round((event.bossHpCurrent / event.bossHpMax) * 100)));
 }
 
+function readBossConfig(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+export async function syncOrderRaidBossThresholds(raidEventId?: string) {
+  const now = new Date();
+  const event = await prisma.raidEvent.findFirst({
+    where: raidEventId ? { id: raidEventId } : { slug: ORDER_EVENT_SLUG },
+    select: {
+      id: true,
+      active: true,
+      phase: true,
+      bossHpMax: true,
+      bossHpCurrent: true,
+      bossConfigJson: true,
+      megaActivatedAt: true,
+      megaThresholdPercent: true,
+    },
+  }).catch(() => null);
+
+  if (!event?.active || event.phase !== "RAID_ACTIVE" || event.bossHpCurrent <= 0 || event.bossHpMax <= 0) {
+    return event;
+  }
+
+  const bossConfig = readBossConfig(event.bossConfigJson);
+  let bossHpMax = event.bossHpMax;
+  let bossHpCurrent = event.bossHpCurrent;
+  let bossConfigJson = bossConfig;
+  let megaActivatedAt = event.megaActivatedAt;
+  let changed = false;
+
+  const seriousModeShouldActivate = bossConfig.seriousModeActivatedAt == null
+    && (bossHpCurrent / bossHpMax) * 100 <= 50;
+
+  if (seriousModeShouldActivate) {
+    bossHpMax *= 4;
+    bossHpCurrent *= 4;
+    bossConfigJson = {
+      ...bossConfigJson,
+      seriousModeActivatedAt: now.toISOString(),
+    };
+    changed = true;
+  }
+
+  const megaShouldActivate = !megaActivatedAt
+    && bossHpCurrent > 0
+    && bossHpMax > 0
+    && (bossHpCurrent / bossHpMax) * 100 <= event.megaThresholdPercent;
+
+  if (megaShouldActivate) {
+    megaActivatedAt = now;
+    changed = true;
+  }
+
+  if (!changed) return event;
+
+  return prisma.raidEvent.update({
+    where: { id: event.id },
+    data: {
+      bossHpMax,
+      bossHpCurrent,
+      bossConfigJson: bossConfigJson as Prisma.InputJsonObject,
+      megaActivatedAt,
+    },
+    select: {
+      id: true,
+      active: true,
+      phase: true,
+      bossHpMax: true,
+      bossHpCurrent: true,
+      bossConfigJson: true,
+      megaActivatedAt: true,
+      megaThresholdPercent: true,
+    },
+  });
+}
+
 function mascotRaidPower(mascot: {
   level: number;
   statForce: number;
@@ -550,7 +628,8 @@ export async function estimateOrderRaidBossHp() {
   const expectedActivePlayers = Math.max(6, Math.min(24, teamPowers.length || 6));
   const targetAttacksPerPlayer = 7;
   const targetDamagePerAttack = Math.max(strongest * 3.4, topAverage * 4.2);
-  return Math.max(180_000, Math.round(targetDamagePerAttack * expectedActivePlayers * targetAttacksPerPlayer));
+  const baselineHp = Math.max(180_000, Math.round(targetDamagePerAttack * expectedActivePlayers * targetAttacksPerPlayer));
+  return Math.round(baselineHp * 1.6);
 }
 
 export async function getOrderEventPageData(options: { cluePage?: number; cluePageSize?: number } = {}): Promise<OrderEventPageData> {
@@ -576,6 +655,7 @@ export async function getOrderEventPageData(options: { cluePage?: number; cluePa
         bossHpMax: true,
         bossHpCurrent: true,
         megaThresholdPercent: true,
+        bossConfigJson: true,
         startsAt: true,
         raidStartsAt: true,
         raidEndsAt: true,
@@ -610,6 +690,19 @@ export async function getOrderEventPageData(options: { cluePage?: number; cluePa
       rankings: [],
       clueRankings: [],
     };
+  }
+
+  if (event.active && event.phase === "RAID_ACTIVE") {
+    const syncedEvent = await syncOrderRaidBossThresholds(event.id).catch(() => null);
+    if (syncedEvent) {
+      event = {
+        ...event,
+        bossHpMax: syncedEvent.bossHpMax,
+        bossHpCurrent: syncedEvent.bossHpCurrent,
+        bossConfigJson: syncedEvent.bossConfigJson,
+        megaActivatedAt: syncedEvent.megaActivatedAt,
+      };
+    }
   }
 
   const [clues, allCluesForProgress, totalClues, steps, sabotages, battleAttempts, rankings, discoveredClues] = await Promise.all([
@@ -1224,7 +1317,7 @@ export async function submitOrderRaidPassword(userId: string, rawPassword: strin
 export async function runOrderRaidBattle(userId: string, selectedMascotIds: string[] = [], selectedRoles: Record<string, string> = {}) {
   const now = new Date();
   const cooldownMs = 30 * 60 * 1000;
-  const event = await prisma.raidEvent.findUnique({
+  let event = await prisma.raidEvent.findUnique({
     where: { slug: ORDER_EVENT_SLUG },
     select: {
       id: true,
@@ -1238,10 +1331,21 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
       bossHpCurrent: true,
       megaThresholdPercent: true,
       megaActivatedAt: true,
+      bossConfigJson: true,
     },
   });
   if (!event?.active || event.phase !== "RAID_ACTIVE") {
     return { ok: false as const, message: "O confronto contra a Ordem ainda não começou." };
+  }
+  const syncedEvent = await syncOrderRaidBossThresholds(event.id).catch(() => null);
+  if (syncedEvent) {
+    event = {
+      ...event,
+      bossHpMax: syncedEvent.bossHpMax,
+      bossHpCurrent: syncedEvent.bossHpCurrent,
+      bossConfigJson: syncedEvent.bossConfigJson,
+      megaActivatedAt: syncedEvent.megaActivatedAt,
+    };
   }
   if (event.bossHpCurrent <= 0) {
     return { ok: false as const, message: "A Ordem já foi derrotada." };
@@ -1304,6 +1408,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     raidStartsAt: null,
     raidEndsAt: null,
     hideoutFoundAt: null,
+    bossConfigJson: event.bossConfigJson,
     slug: ORDER_EVENT_SLUG,
     name: "Ordem da Trapaça",
     villainGroupName: "Ordem da Trapaça",
@@ -1342,18 +1447,38 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     OPPORTUNIST: 1,
     SABOTEUR: 1,
   };
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+  const roleStatBonus = (value: number, min: number, max: number, divisor = 220) => min + clamp(value / divisor, 0, 1) * (max - min);
 
   const mascotStates = orderedMascots.map((mascot) => {
     const power = mascotRaidPower(mascot);
     const combatRole = normalizeCombatRole(selectedRoles[mascot.id]);
     const hp = Math.max(120, Math.round(mascot.statVitality * 9 + mascot.level * 16 + power * 0.8));
-    return { ...mascot, combatRole, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), power, hp, maxHp: hp, damage: 0, defeated: false };
+    return { ...mascot, combatRole, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), power, hp, maxHp: hp, damage: 0, defeated: false, survivorProcUsed: false };
   });
+  const aliveMascots = () => mascotStates.filter((m) => !m.defeated);
+  const teamDamageAura = clamp(
+    mascotStates
+      .filter((m) => m.combatRole === "ENCOURAGER")
+      .reduce((sum, mascot) => sum + roleStatBonus(mascot.statCharisma, 0.04, 0.18), 0)
+    + mascotStates
+      .filter((m) => m.combatRole === "SCOUT")
+      .reduce((sum, mascot) => sum + roleStatBonus((mascot.statAgility + mascot.statInstinct) / 2, 0.01, 0.08), 0),
+    0,
+    0.32,
+  );
+  const bossSabotagePenalty = clamp(
+    mascotStates
+      .filter((m) => m.combatRole === "SABOTEUR")
+      .reduce((sum, mascot) => sum + roleStatBonus((mascot.statInstinct + mascot.statAgility) / 2, 0.03, 0.12), 0),
+    0,
+    0.24,
+  );
   const hpPercentAtStart = event.bossHpMax > 0 ? Math.max(0, Math.min(1, startingBossHp / event.bossHpMax)) : 1;
   const baseBossAdvantage = 0.1 + (1 - hpPercentAtStart) * 0.1;
   const megaBossAdvantage = isMegaPhase ? 0.1 : 0;
   const teamAveragePower = mascotStates.reduce((sum, mascot) => sum + mascot.power, 0) / Math.max(1, mascotStates.length);
-  const bossPower = Math.max(180, Math.round(teamAveragePower * (1 + baseBossAdvantage + megaBossAdvantage)));
+  const bossPower = Math.max(180, Math.round(teamAveragePower * (1 + baseBossAdvantage + megaBossAdvantage - bossSabotagePenalty)));
   const log: Array<Record<string, unknown>> = [];
   let simulatedBossHp = startingBossHp;
   let totalDamage = 0;
@@ -1361,29 +1486,82 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
 
   for (let turn = 1; turn <= 80 && mascotStates.some((m) => !m.defeated); turn++) {
     lastTurn = turn;
-    for (const mascot of mascotStates.filter((m) => !m.defeated)) {
+    for (const mascot of aliveMascots()) {
       const variance = randomInt(85, 121) / 100;
-      const crit = randomInt(100) < Math.min(22, 4 + Math.floor(mascot.statInstinct / 8)) ? 1.55 : 1;
-      const damage = Math.max(1, Math.round(mascot.power * variance * crit * roleDamageMultiplier[mascot.combatRole]));
+      const critChance = Math.min(38, 4 + Math.floor(mascot.statInstinct / 8) + (mascot.combatRole === "OPPORTUNIST" ? 10 : 0));
+      const crit = randomInt(100) < critChance ? (mascot.combatRole === "DUELIST" ? 1.7 : 1.55) : 1;
+      const lowHpMultiplier = mascot.hp / mascot.maxHp <= 0.3 && mascot.combatRole === "SURVIVOR" ? 1.15 : 1;
+      const roleAttributeMultiplier = {
+        ATTACKER: 1 + roleStatBonus(mascot.statForce, 0.08, 0.26),
+        FLANK: 1 + roleStatBonus(mascot.statAgility, 0.04, 0.18),
+        OPPORTUNIST: 1 + roleStatBonus(mascot.statInstinct, 0.05, 0.18),
+        ENCOURAGER: 1,
+        GUARDIAN: 0.9,
+        DUELIST: 1 + roleStatBonus((mascot.statForce + mascot.statInstinct) / 2, 0.06, 0.18),
+        SABOTEUR: 1 + roleStatBonus((mascot.statInstinct + mascot.statAgility) / 2, 0.02, 0.12),
+        HEALER: 0.8,
+        SCOUT: 0.95 + roleStatBonus((mascot.statAgility + mascot.statInstinct) / 2, 0, 0.08),
+        PROVOKER: 0.92,
+        SPECIALIST: 1 + roleStatBonus(Math.max(mascot.statForce, mascot.statAgility, mascot.statInstinct, mascot.statVitality, mascot.statCharisma), 0.06, 0.2),
+        SURVIVOR: lowHpMultiplier,
+        DEFENDER: 0.9,
+      } satisfies Record<CombatRole, number>;
+      const damage = Math.max(1, Math.round(mascot.power * variance * crit * roleDamageMultiplier[mascot.combatRole] * roleAttributeMultiplier[mascot.combatRole] * (1 + teamDamageAura)));
       mascot.damage += damage;
       totalDamage += damage;
       if (simulatedBossHp > 0) {
         simulatedBossHp = Math.max(0, simulatedBossHp - damage);
       }
-      log.push({ turn, actor: mascot.name, actorId: mascot.id, actorPokemonId: mascot.pokemonId, actorRole: mascot.combatRole, action: "ATTACK", damage, crit: crit > 1, bossHp: simulatedBossHp });
+      log.push({ turn, actor: mascot.name, actorId: mascot.id, actorPokemonId: mascot.pokemonId, actorRole: mascot.combatRole, action: "ATTACK", damage, crit: crit > 1, bossHp: simulatedBossHp, teamAura: Math.round(teamDamageAura * 100), sabotage: Math.round(bossSabotagePenalty * 100) });
     }
 
-    const living = mascotStates.filter((m) => !m.defeated);
+    for (const healer of aliveMascots().filter((m) => m.combatRole === "HEALER")) {
+      const wounded = aliveMascots()
+        .filter((m) => m.hp < m.maxHp)
+        .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+      if (wounded && randomInt(100) < clamp(35 + Math.floor((healer.statCharisma + healer.statVitality) / 8), 35, 78)) {
+        const heal = Math.max(20, Math.round(healer.statCharisma * 0.35 + healer.statVitality * 0.25 + healer.level * 4));
+        wounded.hp = Math.min(wounded.maxHp, wounded.hp + heal);
+        log.push({ turn, actor: healer.name, actorId: healer.id, actorPokemonId: healer.pokemonId, actorRole: healer.combatRole, action: "HEAL", target: wounded.name, targetId: wounded.id, amount: heal, targetHp: wounded.hp });
+      }
+    }
+
+    const living = aliveMascots();
     if (living.length === 0) break;
-    const target = living[randomInt(living.length)];
+    const defenderPool = living.filter((m) => m.combatRole === "DEFENDER" || m.combatRole === "PROVOKER");
+    const target = defenderPool.length > 0 && randomInt(100) < 72
+      ? defenderPool[randomInt(defenderPool.length)]
+      : living[randomInt(living.length)];
     const defenseSoak = Math.round(target.statVitality * 1.4 + target.statAgility * 0.4);
     const minimumHit = Math.max(20, Math.round(target.maxHp * (isMegaPhase ? 0.18 : 0.14)));
+    const guardian = target.combatRole !== "GUARDIAN"
+      ? living
+        .filter((m) => m.combatRole === "GUARDIAN" && m.id !== target.id)
+        .sort((a, b) => (b.statVitality + b.statCharisma) - (a.statVitality + a.statCharisma))[0]
+      : null;
     const bossDamage = Math.max(
       minimumHit,
       Math.round((bossPower * (randomInt(90, 121) / 100)) * roleDefenseMultiplier[target.combatRole]) - defenseSoak,
     );
-    target.hp = Math.max(0, target.hp - bossDamage);
-    log.push({ turn, actor: isMegaPhase ? event.bossMascotName : event.bossName, action: "BOSS_ATTACK", target: target.name, targetId: target.id, targetPokemonId: target.pokemonId, targetRole: target.combatRole, damage: bossDamage, targetHp: target.hp });
+    const guardedDamage = guardian && randomInt(100) < clamp(20 + Math.floor((guardian.statVitality + guardian.statCharisma) / 8), 20, 58)
+      ? Math.round(bossDamage * 0.62)
+      : bossDamage;
+    const interceptedDamage = bossDamage - guardedDamage;
+    if (guardian && interceptedDamage > 0) {
+      guardian.hp = Math.max(0, guardian.hp - interceptedDamage);
+      log.push({ turn, actor: guardian.name, actorId: guardian.id, actorPokemonId: guardian.pokemonId, actorRole: guardian.combatRole, action: "GUARD", target: target.name, damage: interceptedDamage, targetHp: guardian.hp });
+      if (guardian.hp <= 0) {
+        guardian.defeated = true;
+        log.push({ turn, actor: guardian.name, actorId: guardian.id, action: "KO" });
+      }
+    }
+    target.hp = Math.max(0, target.hp - guardedDamage);
+    if (target.hp <= 0 && target.combatRole === "SURVIVOR" && !target.survivorProcUsed) {
+      target.survivorProcUsed = true;
+      target.hp = 1;
+      log.push({ turn, actor: target.name, actorId: target.id, actorPokemonId: target.pokemonId, actorRole: target.combatRole, action: "SURVIVE", targetHp: target.hp });
+    }
+    log.push({ turn, actor: isMegaPhase ? event.bossMascotName : event.bossName, action: "BOSS_ATTACK", target: target.name, targetId: target.id, targetPokemonId: target.pokemonId, targetRole: target.combatRole, damage: guardedDamage, targetHp: target.hp });
     if (target.hp <= 0) {
       target.defeated = true;
       log.push({ turn, actor: target.name, actorId: target.id, action: "KO" });
@@ -1403,8 +1581,18 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
 
   totalDamage = Math.min(totalDamage, startingBossHp);
   const defeatedMascotIds = mascotStates.filter((m) => m.defeated).map((m) => m.id);
-  const bossHpAfter = Math.max(0, startingBossHp - totalDamage);
-  const megaJustActivated = !event.megaActivatedAt && bossHpAfter > 0 && event.bossHpMax > 0 && (bossHpAfter / event.bossHpMax) * 100 <= event.megaThresholdPercent;
+  const bossConfig = readBossConfig(event.bossConfigJson);
+  const rawBossHpAfter = Math.max(0, startingBossHp - totalDamage);
+  const seriousModeJustActivated = bossConfig.seriousModeActivatedAt == null
+    && rawBossHpAfter > 0
+    && event.bossHpMax > 0
+    && (rawBossHpAfter / event.bossHpMax) * 100 <= 50;
+  const bossHpMaxAfter = seriousModeJustActivated ? event.bossHpMax * 4 : event.bossHpMax;
+  const bossHpAfter = seriousModeJustActivated ? rawBossHpAfter * 4 : rawBossHpAfter;
+  const bossConfigAfter = seriousModeJustActivated
+    ? { ...bossConfig, seriousModeActivatedAt: now.toISOString() }
+    : bossConfig;
+  const megaJustActivated = !event.megaActivatedAt && bossHpAfter > 0 && bossHpMaxAfter > 0 && (bossHpAfter / bossHpMaxAfter) * 100 <= event.megaThresholdPercent;
   const result = bossHpAfter <= 0 ? "WIN" : defeatedMascotIds.length === mascotStates.length ? "LOSS" : "DRAW";
   const participationPoints = Math.max(1, Math.floor(totalDamage / 5000) + mascots.length);
 
@@ -1429,8 +1617,9 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
           pokemonId: isMegaPhase ? event.bossMegaPokemonId : event.bossPokemonId,
           hpBefore: startingBossHp,
           hpAfter: bossHpAfter,
-          maxHp: event.bossHpMax,
+          maxHp: bossHpMaxAfter,
           megaPhase: isMegaPhase,
+          seriousModeActivated: seriousModeJustActivated,
         },
         damageToBoss: totalDamage,
         participationPoints,
@@ -1469,6 +1658,8 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
       where: { id: event.id },
       data: {
         bossHpCurrent: bossHpAfter,
+        bossHpMax: bossHpMaxAfter,
+        bossConfigJson: bossConfigAfter as Prisma.InputJsonObject,
         megaActivatedAt: megaJustActivated ? now : undefined,
         phase: bossHpAfter <= 0 ? "RAID_DEFEATED" : undefined,
         active: bossHpAfter <= 0 ? false : undefined,
@@ -1503,10 +1694,11 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     bossHpAfter,
     defeatedMascots: mascotStates.filter((m) => m.defeated).map((m) => m.name),
     team: mascotStates.map((m) => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, maxHp: m.maxHp, remainingHp: m.hp, damage: m.damage, defeated: m.defeated, combatRole: m.combatRole })),
-    boss: { name: isMegaPhase ? event.bossMascotName : event.bossName, pokemonId: isMegaPhase ? event.bossMegaPokemonId : event.bossPokemonId, hpBefore: startingBossHp, hpAfter: bossHpAfter, maxHp: event.bossHpMax, megaPhase: isMegaPhase },
+    boss: { name: isMegaPhase ? event.bossMascotName : event.bossName, pokemonId: isMegaPhase ? event.bossMegaPokemonId : event.bossPokemonId, hpBefore: startingBossHp, hpAfter: bossHpAfter, maxHp: bossHpMaxAfter, megaPhase: isMegaPhase, seriousModeActivated: seriousModeJustActivated },
     replay: log,
     cooldownUntil: new Date(now.getTime() + cooldownMs).toISOString(),
     megaJustActivated,
+    seriousModeJustActivated,
     result,
   };
 }

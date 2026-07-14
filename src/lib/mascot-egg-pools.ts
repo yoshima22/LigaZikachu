@@ -121,6 +121,24 @@ const SPECIAL_COVETED_IDS = [
   10238, // Zorua-Hisui
 ];
 
+const EVENT_FEATURED_IDS = [
+  ...STARTER_IDS,
+  25, 37, 58, 63, 66, 92, 95, 123, 127, 128, 131, 132, 133, 147,
+  172, 175, 179, 196, 197, 200, 207, 215, 216, 227, 236, 246,
+  280, 302, 303, 304, 333, 349, 359, 371, 374, 403, 425, 433, 443,
+  446, 447, 448, 479, 570, 587, 607, 610, 633, 636, 674, 679, 704,
+  708, 714, 744, 747, 778, 782, 840, 848, 854, 856, 868, 872, 877,
+  878, 885, 935, 938, 957, 963, 971, 996, 999,
+  10103, 10159, 10164, 10170, 10229, 10235, 10238,
+];
+
+const EVENT_RARE_IDS = [
+  ...PSEUDO_LEGENDARY_BASE_IDS,
+  131, 132, 133, 138, 140, 142, 213, 214, 241, 302, 349, 352, 359,
+  442, 447, 479, 570, 621, 696, 698, 701, 707, 778, 840, 870, 871,
+  874, 875, 967, 977, 978, 999,
+];
+
 const PARADOX_IDS = [
   984, 985, 986, 987, 988, 989,
   990, 991, 992, 993, 994, 995,
@@ -163,28 +181,37 @@ export const EGG_RATE_PROFILES: Record<string, EggRateProfile> = {
   COMMON: {
     legendaryChance: 0.01,
     buckets: [
-      { label: "common_base",    weight: 72, pokemonIds: EGG_POOLS.COMMON },
-      { label: "common_good",    weight: 15, pokemonIds: COMMON_GOOD_IDS },
-      { label: "starter_cameo",  weight: 8,  pokemonIds: STARTER_IDS },
-      { label: "rare_cameo",     weight: 4,  pokemonIds: [133, 147, 172, 175, 236, 280, 349, 447, 570, 704, 744, 778, 885, 996] },
+      { label: "common_base",    weight: 90, pokemonIds: EGG_POOLS.COMMON },
+      { label: "common_good",    weight: 6,  pokemonIds: COMMON_GOOD_IDS },
+      { label: "starter_cameo",  weight: 2,  pokemonIds: STARTER_IDS },
+      { label: "rare_cameo",     weight: 2,  pokemonIds: [133, 147, 172, 175, 236, 280, 349, 447, 570, 704, 744, 778, 885, 996] },
     ],
   },
   RARE: {
     legendaryChance: 0.035,
     buckets: [
-      { label: "starter",               weight: 27, pokemonIds: STARTER_IDS },
-      { label: "rare_favorite",         weight: 33, pokemonIds: RARE_FAN_FAVORITES },
-      { label: "pseudo_legendary_base", weight: 18, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_cameo",         weight: 19, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
+      { label: "starter",               weight: 18, pokemonIds: STARTER_IDS },
+      { label: "rare_favorite",         weight: 44, pokemonIds: RARE_FAN_FAVORITES },
+      { label: "pseudo_legendary_base", weight: 10, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
+      { label: "special_cameo",         weight: 25, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
     ],
   },
   SPECIAL: {
     legendaryChance: 0.065,
     buckets: [
-      { label: "pseudo_legendary_base", weight: 27, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_coveted",       weight: 34, pokemonIds: SPECIAL_COVETED_IDS },
-      { label: "paradox",               weight: 19, pokemonIds: PARADOX_IDS },
+      { label: "pseudo_legendary_base", weight: 16, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
+      { label: "special_coveted",       weight: 44, pokemonIds: SPECIAL_COVETED_IDS },
+      { label: "paradox",               weight: 20, pokemonIds: PARADOX_IDS },
       { label: "fossil_and_ancient",    weight: 14, pokemonIds: FOSSIL_AND_ANCIENT_IDS },
+    ],
+  },
+  EVENT: {
+    legendaryChance: 0.01,
+    buckets: [
+      { label: "event_full_pool", weight: 82, pokemonIds: EGG_POOLS.RANDOM },
+      { label: "event_featured",  weight: 10, pokemonIds: EVENT_FEATURED_IDS },
+      { label: "event_rare",      weight: 6,  pokemonIds: EVENT_RARE_IDS },
+      { label: "event_starter",   weight: 2,  pokemonIds: STARTER_IDS },
     ],
   },
 
@@ -255,6 +282,8 @@ function sanitizeNormalEggPool(ids: number[]): number[] {
   return uniquePokemonIds(ids).filter((id) => {
     if (LEGENDARY_POOL.includes(id)) return false;
     if (ALL_EVOLVED_IDS.has(id)) return false;
+    // Alternate legendary forms are handled by legendary rolls, not normal buckets.
+    if (id === 10006 || id === 10007) return false;
     return true;
   });
 }

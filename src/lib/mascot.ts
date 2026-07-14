@@ -38,7 +38,19 @@ function randomPersonality(): MascotPersonality {
 }
 
 function getEggStatTypeKey(type: string, origin?: string | null) {
+  if (origin?.startsWith("GEN_CHOICE:")) {
+    const originalType = origin.split(":")[1];
+    return originalType || type;
+  }
   return type === "LAB" || origin?.startsWith("LAB_REGION:") ? "LAB" : type;
+}
+
+function getEggRollType(type: string, origin?: string | null) {
+  if (origin?.startsWith("GEN_CHOICE:")) {
+    const genType = origin.split(":")[2];
+    return genType || type;
+  }
+  return type;
 }
 
 /** Sorteio de pokemonId a partir do tipo de ovo */
@@ -109,7 +121,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
   if (incubator.hatched) throw new Error("Ovo já chocado.");
   if (new Date() < incubator.finishAt) throw new Error("O ovo ainda não está pronto.");
 
-  const pokemonId = forcedPokemonId ?? rollPokemonFromEgg(incubator.egg.type);
+  const pokemonId = forcedPokemonId ?? rollPokemonFromEgg(getEggRollType(incubator.egg.type, incubator.egg.origin));
   const personality = randomPersonality();
 
   const mascot = await prisma.$transaction(async (tx) => {

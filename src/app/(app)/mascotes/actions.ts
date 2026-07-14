@@ -109,7 +109,7 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
       } else {
         await prisma.mascotEgg.update({
           where: { id: eggId },
-          data: { type: genOverride as import("@prisma/client").EggType }
+          data: { origin: `GEN_CHOICE:${egg.type}:${genOverride}` }
         });
       }
     }

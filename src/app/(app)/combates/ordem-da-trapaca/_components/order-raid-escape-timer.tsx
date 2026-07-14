@@ -15,7 +15,7 @@ function formatRemaining(ms: number) {
   return parts.join(" ");
 }
 
-export function OrderRaidEscapeTimer({ raidEndsAt }: { raidEndsAt: string | null }) {
+export function OrderRaidEscapeTimer({ raidEndsAt, showSeriousModeMessage = false }: { raidEndsAt: string | null; showSeriousModeMessage?: boolean }) {
   const target = useMemo(() => raidEndsAt ? new Date(raidEndsAt).getTime() : null, [raidEndsAt]);
   const [now, setNow] = useState(() => Date.now());
 
@@ -47,6 +47,11 @@ export function OrderRaidEscapeTimer({ raidEndsAt }: { raidEndsAt: string | null
       <p className="mt-2 text-[11px] leading-relaxed text-red-100/75">
         Se a Liga não derrotar a Ordem antes do prazo, o chefe foge com parte dos espólios do esconderijo.
       </p>
+      {showSeriousModeMessage && (
+        <div className="mt-3 rounded-xl border border-fuchsia-300/30 bg-fuchsia-500/10 px-3 py-2 text-sm font-bold text-fuchsia-50 shadow-[0_0_18px_rgba(168,85,247,0.16)]">
+          &ldquo;Voc&ecirc;s s&atilde;o mais fortes do que imaginei. Vamos batalhar a s&eacute;rio!&rdquo;
+        </div>
+      )}
     </div>
   );
 }

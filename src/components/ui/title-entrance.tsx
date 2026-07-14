@@ -17,7 +17,9 @@ export type TitleEntranceEffect =
   | "NONE" | "LIGHTNING_STRIKE" | "BOSS_ALERT" | "CHAMPION_ARENA"
   | "COIN_RAIN" | "DIMENSIONAL_RIFT" | "ULTRA_RARE_REVEAL"
   | "GLITCH_HACK" | "SLOT_MACHINE" | "ELEMENTAL_AURA" | "MIAUVADAO_SEAL"
-  | "PILAR_DA_COMUNIDADE";
+  | "PILAR_DA_COMUNIDADE"
+  | "ORDER_SHADOW_MARK" | "ORDER_PURPLE_SMOKE" | "ORDER_GLITCH_HEIST" | "ORDER_CAPTAIN_SEAL"
+  | "RAID_BOSS_FLARE" | "MEGA_AWAKENING" | "TREASURE_BURST" | "STARRY_CROWN";
 
 export interface TitleEntranceProps {
   name: string;
@@ -43,6 +45,14 @@ const DURATION: Record<string, number> = {
   ELEMENTAL_AURA:    4000,
   MIAUVADAO_SEAL:     4600,
   PILAR_DA_COMUNIDADE: 7200,
+  ORDER_SHADOW_MARK:  5200,
+  ORDER_PURPLE_SMOKE: 5200,
+  ORDER_GLITCH_HEIST: 4800,
+  ORDER_CAPTAIN_SEAL: 5400,
+  RAID_BOSS_FLARE:    5200,
+  MEGA_AWAKENING:     5600,
+  TREASURE_BURST:     5000,
+  STARRY_CROWN:       5200,
 };
 
 // Tempo até a fase "ambient" começar (ms)
@@ -58,6 +68,14 @@ const AMBIENT_AT: Record<string, number> = {
   ELEMENTAL_AURA:    900,
   MIAUVADAO_SEAL:     1100,
   PILAR_DA_COMUNIDADE: 2200,
+  ORDER_SHADOW_MARK:  1200,
+  ORDER_PURPLE_SMOKE: 1200,
+  ORDER_GLITCH_HEIST: 1100,
+  ORDER_CAPTAIN_SEAL: 1400,
+  RAID_BOSS_FLARE:    1200,
+  MEGA_AWAKENING:     1400,
+  TREASURE_BURST:     1000,
+  STARRY_CROWN:       1300,
 };
 
 const FADE_MS = 700;
@@ -1293,6 +1311,198 @@ function PilarDaComunidadeEffect({ name, color, glowColor, flavorText, rarity }:
   );
 }
 
+const SPECIAL_EFFECT_CFG: Record<string, {
+  tag: string;
+  accent: string;
+  bg: string;
+  symbol: string;
+  particles: string[];
+}> = {
+  ORDER_SHADOW_MARK: {
+    tag: "Marca da Ordem", accent: "#a855f7", symbol: "T",
+    bg: "radial-gradient(circle at 50% 45%,#3b0764 0%,#14011f 48%,#020008 100%)",
+    particles: ["?", "T", "?", "!", "T", "?"],
+  },
+  ORDER_PURPLE_SMOKE: {
+    tag: "Fumaca Roxa", accent: "#d946ef", symbol: "~",
+    bg: "radial-gradient(circle at 50% 55%,#581c87 0%,#1e0635 42%,#03000a 100%)",
+    particles: ["~", "*", "~", "?", "~", "+"],
+  },
+  ORDER_GLITCH_HEIST: {
+    tag: "Roubo Glitchado", accent: "#22d3ee", symbol: "404",
+    bg: "linear-gradient(135deg,#020617 0%,#111827 42%,#2e1065 100%)",
+    particles: ["404", "$", "ERR", "T", "0x", "?"],
+  },
+  ORDER_CAPTAIN_SEAL: {
+    tag: "Selo do Capitao", accent: "#facc15", symbol: "TRAPACA",
+    bg: "radial-gradient(circle at 50% 45%,#422006 0%,#1c0715 45%,#020008 100%)",
+    particles: ["*", "T", "Z", "*", "T", "+"],
+  },
+  RAID_BOSS_FLARE: {
+    tag: "Alerta de Raid", accent: "#ef4444", symbol: "!",
+    bg: "radial-gradient(circle at 50% 55%,#450a0a 0%,#111827 50%,#020617 100%)",
+    particles: ["!", "X", "!", "#", "!", "X"],
+  },
+  MEGA_AWAKENING: {
+    tag: "Mega Despertar", accent: "#f472b6", symbol: "<>",
+    bg: "radial-gradient(circle at 50% 48%,#831843 0%,#3b0764 42%,#020617 100%)",
+    particles: ["<>", "^", "+", "^", "<>", "+"],
+  },
+  TREASURE_BURST: {
+    tag: "Explosao de Espolios", accent: "#fbbf24", symbol: "ZC",
+    bg: "radial-gradient(circle at 50% 55%,#78350f 0%,#111827 48%,#020617 100%)",
+    particles: ["ZC", "$", "*", "ZC", "+", "$"],
+  },
+  STARRY_CROWN: {
+    tag: "Coroa Estelar", accent: "#fde68a", symbol: "CROWN",
+    bg: "radial-gradient(circle at 50% 45%,#312e81 0%,#111827 48%,#020617 100%)",
+    particles: ["*", "+", "C", "^", "*", "+"],
+  },
+};
+
+function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, effect }: EffectProps & { effect: string }) {
+  const [ambient, setAmbient] = useState(false);
+  const cfg = SPECIAL_EFFECT_CFG[effect] ?? SPECIAL_EFFECT_CFG.STARRY_CROWN;
+  useEffect(() => {
+    const t = setTimeout(() => setAmbient(true), AMBIENT_AT[effect] ?? 1200);
+    return () => clearTimeout(t);
+  }, [effect]);
+
+  const particles = Array.from({ length: 28 }, (_, i) => ({
+    x: `${rnd(4, 96)}%`,
+    y: `${rnd(8, 92)}%`,
+    size: rnd(10, 24),
+    char: cfg.particles[i % cfg.particles.length],
+    delay: rnd(0, 1.8),
+    dur: rnd(1.8, 3.8),
+    tx: `${rnd(-60, 60)}px`,
+    ty: `${rnd(-90, 30)}px`,
+    rot: `${rnd(-180, 180)}deg`,
+  }));
+
+  return (
+    <>
+      <div className="absolute inset-0" style={{ background: cfg.bg, animation: "entrance-in 0.18s ease forwards" }} />
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: `radial-gradient(circle at 50% 50%, ${cfg.accent}22 0%, transparent 55%)`,
+        boxShadow: `inset 0 0 150px ${cfg.accent}44`,
+        animation: "cinematic-breathe 1.8s ease infinite",
+        zIndex: 1,
+      }} />
+
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 2 }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{
+            position: "absolute",
+            width: 180 + i * 120,
+            height: 180 + i * 120,
+            borderRadius: "50%",
+            border: `1px solid ${cfg.accent}${["88", "55", "33"][i]}`,
+            boxShadow: `0 0 ${20 + i * 14}px ${cfg.accent}33`,
+            animation: `cinematic-ring-pulse ${1.6 + i * 0.35}s ease-out ${i * 0.18}s both`,
+            opacity: 0,
+          }} />
+        ))}
+      </div>
+
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 3 }}>
+        {particles.map((p, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: p.x,
+            top: p.y,
+            color: i % 3 === 0 ? "#fff" : cfg.accent,
+            fontWeight: 900,
+            fontSize: p.size,
+            textShadow: `0 0 12px ${cfg.accent}, 0 0 24px ${cfg.accent}88`,
+            // @ts-expect-error CSS vars
+            "--ex": p.tx, "--ey": p.ty, "--er": p.rot,
+            animation: `cinematic-float ${p.dur}s ease ${p.delay}s ${ambient ? "infinite" : "both"}`,
+            opacity: 0,
+          }}>
+            {p.char}
+          </div>
+        ))}
+      </div>
+
+      <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ top: "15%", zIndex: 8 }}>
+        <div style={{
+          border: `2px solid ${cfg.accent}99`,
+          color: cfg.accent,
+          background: `${cfg.accent}12`,
+          borderRadius: 999,
+          padding: "7px clamp(16px, 4vw, 30px)",
+          fontSize: "clamp(10px, 2vw, 13px)",
+          fontWeight: 900,
+          letterSpacing: "0.28em",
+          textTransform: "uppercase",
+          boxShadow: `0 0 32px ${cfg.accent}55, inset 0 0 18px ${cfg.accent}18`,
+          animation: "cinematic-seal 0.75s cubic-bezier(.36,.07,.19,.97) 0.25s both",
+        }}>
+          {cfg.tag}
+        </div>
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 7 }}>
+        <div style={{
+          fontSize: "clamp(58px, 15vw, 132px)",
+          fontWeight: 950,
+          color: `${cfg.accent}22`,
+          textShadow: `0 0 45px ${cfg.accent}66`,
+          animation: "cinematic-shockwave 1.4s ease 0.15s both",
+        }}>
+          {cfg.symbol}
+        </div>
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center z-10">
+        <div style={{ animation: "cinematic-title-emerge 0.9s cubic-bezier(.16,1,.3,1) 0.8s both", opacity: 0 }}>
+          <TitleBlock
+            name={name}
+            color={color || cfg.accent}
+            glowColor={glowColor || cfg.accent}
+            flavorText={flavorText}
+            rarity={rarity}
+            ambient={ambient}
+            nameStyle={{ textShadow: `0 0 28px ${cfg.accent}, 0 0 80px ${cfg.accent}88` }}
+          />
+        </div>
+      </div>
+      <style>{`
+        @keyframes cinematic-breathe {
+          0%, 100% { opacity: .78; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.04); }
+        }
+        @keyframes cinematic-ring-pulse {
+          0% { opacity: 0; transform: scale(.45); }
+          25% { opacity: 1; }
+          100% { opacity: 0; transform: scale(1.55); }
+        }
+        @keyframes cinematic-float {
+          0% { opacity: 0; transform: translate3d(0, 20px, 0) rotate(0deg) scale(.75); }
+          25% { opacity: .95; }
+          100% { opacity: 0; transform: translate3d(var(--ex), var(--ey), 0) rotate(var(--er)) scale(1.25); }
+        }
+        @keyframes cinematic-seal {
+          0% { opacity: 0; transform: scale(1.8) rotate(-6deg); filter: blur(8px); }
+          55% { opacity: 1; transform: scale(.92) rotate(2deg); filter: blur(0); }
+          100% { opacity: 1; transform: scale(1) rotate(0); }
+        }
+        @keyframes cinematic-shockwave {
+          0% { opacity: 0; transform: scale(.35); filter: blur(18px); }
+          35% { opacity: 1; transform: scale(1); filter: blur(0); }
+          100% { opacity: .18; transform: scale(1.18); filter: blur(1px); }
+        }
+        @keyframes cinematic-title-emerge {
+          0% { opacity: 0; transform: translateY(24px) scale(.88); filter: blur(10px); }
+          60% { opacity: 1; transform: translateY(-4px) scale(1.03); filter: blur(0); }
+          100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+      `}</style>
+    </>
+  );
+}
+
 // ── Portal principal ──────────────────────────────────────────────────────────
 export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, flavorText, onComplete }: TitleEntranceProps) {
   const [mounted, setMounted] = useState(false);
@@ -1350,6 +1560,7 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
       {effect === "ELEMENTAL_AURA"    && <ElementalAuraEffect    {...props}/>}
       {effect === "MIAUVADAO_SEAL"      && <MiauvadaoSealEffect      {...props}/>}
       {effect === "PILAR_DA_COMUNIDADE" && <PilarDaComunidadeEffect  {...props}/>}
+      {SPECIAL_EFFECT_CFG[effect] && <CinematicTitleEffect {...props} effect={effect} />}
     </div>
   );
 

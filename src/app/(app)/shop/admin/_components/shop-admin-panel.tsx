@@ -6,6 +6,7 @@ import { Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { TitleDisplay } from "@/components/ui/title-display";
+import { TitleEntrance } from "@/components/ui/title-entrance";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { createDefaultMascotShopItems, createShopItem, updateShopItem, deleteShopItem, toggleShopItem, reorderShopItem } from "../../actions";
 import { getSuggestedPrice, LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
@@ -13,10 +14,10 @@ import { ChevronUp, ChevronDown } from "lucide-react";
 
 const rarityOpts  = ["COMMON","UNCOMMON","RARE","EPIC","LEGENDARY","MYTHIC","RELIC"] as const;
 const themeOpts   = ["NEUTRAL","ELECTRIC","FIRE","WATER","GRASS","ZIKABET"] as const;
-const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL"] as const;
+const effectOpts  = ["NONE","LIGHTNING_STRIKE","BOSS_ALERT","CHAMPION_ARENA","COIN_RAIN","DIMENSIONAL_RIFT","ULTRA_RARE_REVEAL","GLITCH_HACK","SLOT_MACHINE","ELEMENTAL_AURA","MIAUVADAO_SEAL","PILAR_DA_COMUNIDADE","ORDER_SHADOW_MARK","ORDER_PURPLE_SMOKE","ORDER_GLITCH_HEIST","ORDER_CAPTAIN_SEAL","RAID_BOSS_FLARE","MEGA_AWAKENING","TREASURE_BURST","STARRY_CROWN"] as const;
 const typeOpts = [
   "TITLE","BANNER","FRAME","ZIKALOOT_TICKET",
-  "EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_LAB","EGG_GEN1","EGG_GEN2",
+  "EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_LAB","EGG_EVENT",
   "MASCOT_FOOD","MASCOT_SWEET",
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
@@ -30,8 +31,7 @@ const typeLabel: Record<string, string> = {
   EGG_RARE: "Ovo Raro",
   EGG_SPECIAL: "Ovo Especial",
   EGG_LAB: "🧪 Ovo de Laboratório",
-  EGG_GEN1: "Ovo Gen 1 (Kanto)",
-  EGG_GEN2: "Ovo Gen 2 (Johto)",
+  EGG_EVENT: "Ovo de Evento",
   MASCOT_FOOD: "Comida de Mascote",
   MASCOT_SWEET: "Doce de Mascote",
   MASCOT_BUFF_EXP:   "⚡ Vitamina Elétrica (Buff EXP)",
@@ -70,6 +70,15 @@ const themeLabel: Record<string, string> = {
   NEUTRAL: "Neutro", ELECTRIC: "⚡ Elétrico", FIRE: "🔥 Fogo",
   WATER: "🌊 Água", GRASS: "🌿 Grama", ZIKABET: "🎰 ZikaBet"
 };
+const titlePreviewRarityColor: Record<string, { color: string; glowColor: string }> = {
+  COMMON: { color: "#e2e8f0", glowColor: "transparent" },
+  UNCOMMON: { color: "#4ade80", glowColor: "#4ade8066" },
+  RARE: { color: "#60a5fa", glowColor: "#60a5fa88" },
+  EPIC: { color: "#c084fc", glowColor: "#c084fc99" },
+  LEGENDARY: { color: "#fb923c", glowColor: "#fb923caa" },
+  MYTHIC: { color: "#fbbf24", glowColor: "#fbbf24cc" },
+  RELIC: { color: "#ef4444", glowColor: "#fbbf24cc" },
+};
 const effectLabel: Record<string, string> = {
   NONE:              "Nenhum",
   LIGHTNING_STRIKE:  "⚡ Relâmpago de Tela",
@@ -82,6 +91,15 @@ const effectLabel: Record<string, string> = {
   SLOT_MACHINE:      "🎰 Máquina Caça-Níquel",
   ELEMENTAL_AURA:    "🔥 Aura Elemental",
   MIAUVADAO_SEAL:    "😸 Miauvadão Aprova",
+  PILAR_DA_COMUNIDADE: "Pilar da Comunidade",
+  ORDER_SHADOW_MARK: "Ordem: Marca Sombria",
+  ORDER_PURPLE_SMOKE: "Ordem: Fumaca Roxa",
+  ORDER_GLITCH_HEIST: "Ordem: Roubo Glitchado",
+  ORDER_CAPTAIN_SEAL: "Ordem: Selo do Capitao",
+  RAID_BOSS_FLARE: "Raid: Alerta de Boss",
+  MEGA_AWAKENING: "Mega: Despertar",
+  TREASURE_BURST: "Espolios: Explosao",
+  STARRY_CROWN: "Coroa Estelar",
 };
 
 interface Item {
@@ -474,12 +492,14 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
   form: FormData; setForm: (f: FormData) => void;
   onSave: () => void; onCancel: () => void; pending: boolean; label: string;
 }) {
+  const [titleEntrancePreviewKey, setTitleEntrancePreviewKey] = useState(0);
   const isFrame    = (form.type as string) === "FRAME";
   const isBanner   = (form.type as string) === "BANNER";
   const isTitle    = (form.type as string) === "TITLE";
   const isBuff     = BUFF_ITEM_TYPES.has(form.type);
   const isVacation = VACATION_ITEM_TYPES.has(form.type);
-  const isMascotItem = ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_GEN1","EGG_GEN2","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"].includes(form.type);
+  const isMascotItem = ["EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_LAB","EGG_EVENT","MASCOT_FOOD","MASCOT_SWEET","MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD"].includes(form.type);
+  const previewColors = titlePreviewRarityColor[form.rarity] ?? titlePreviewRarityColor.COMMON;
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-slate-900/50 p-4 md:grid-cols-2 lg:grid-cols-3">
       <label className="space-y-1 text-xs text-slate-400">
@@ -580,16 +600,40 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
           </div>
           {/* Preview do título */}
           {form.name && (
-            <div className="flex items-center gap-3 rounded-xl border border-border bg-slate-950/60 p-3">
-              <span className="text-xs text-slate-500 shrink-0">Preview:</span>
-              <TitleDisplay
-                name={form.name}
-                rarity={form.rarity as TitleRarity}
-                theme={form.theme as TitleTheme}
-                flavorText={form.flavorText || null}
-                context="inventory"
-              />
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-slate-950/60 p-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <span className="text-xs text-slate-500 shrink-0">Preview:</span>
+                <TitleDisplay
+                  name={form.name}
+                  rarity={form.rarity as TitleRarity}
+                  theme={form.theme as TitleTheme}
+                  flavorText={form.flavorText || null}
+                  context="inventory"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={form.entranceEffect === "NONE" || !form.name.trim()}
+                onClick={() => setTitleEntrancePreviewKey((key) => key + 1)}
+              >
+                Preview efeito
+              </Button>
             </div>
+          )}
+          {titleEntrancePreviewKey > 0 && form.entranceEffect !== "NONE" && (
+            <TitleEntrance
+              key={titleEntrancePreviewKey}
+              name={form.name || "Titulo de Teste"}
+              rarity={form.rarity}
+              theme={form.theme}
+              effect={form.entranceEffect}
+              color={previewColors.color}
+              glowColor={previewColors.glowColor}
+              flavorText={form.flavorText || null}
+              onComplete={() => setTitleEntrancePreviewKey(0)}
+            />
           )}
         </div>
       )}

@@ -62,16 +62,7 @@ export const EGG_SHOP_ITEM_TYPES = [
   "EGG_RARE",
   "EGG_SPECIAL",
   "EGG_LAB",
-  "EGG_GEN1",
-  "EGG_GEN2",
-  "EGG_GEN3",
-  "EGG_GEN4",
-  "EGG_GEN5",
-  "EGG_GEN6",
-  "EGG_GEN7",
-  "EGG_GEN8",
-  "EGG_GEN9",
-  "EGG_GEN6PLUS",
+  "EGG_EVENT",
 ] as const;
 
 export const MASCOT_FOOD_SHOP_ITEM_TYPES = [

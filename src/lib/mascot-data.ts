@@ -1079,7 +1079,7 @@ export function getSpriteUrl(pokemonId: number, animated = false): string {
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
   // GIFs animados só existem para gen 1-5 (IDs 1-649).
   // Para IDs > 649 (gen 6+), usar sempre o PNG estático para evitar imagens quebradas.
-  if (animated && spriteId <= MAX_ANIMATED_ID) {
+  if (animated && (spriteId <= MAX_ANIMATED_ID || MEGA_FORM_IDS.has(spriteId))) {
     return `/sprites/pokemon/versions/generation-v/black-white/animated/${spriteId}.gif`;
   }
   return `/sprites/pokemon/${spriteId}.png`;
@@ -1107,7 +1107,7 @@ export function getShinySprite(pokemonId: number, animated = false): string {
 // Ovos mais raros/altos dão stats base melhores
 export const EGG_STAT_RANGES: Record<string, [number, number]> = {
   COMMON:       [8, 14],
-  EVENT:        [12, 18],
+  EVENT:        [12, 19],
   EGG_GEN1:     [9, 15],
   EGG_GEN2:     [9, 15],
   EGG_GEN3:     [10, 16],

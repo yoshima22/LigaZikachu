@@ -950,12 +950,35 @@ async function creditArenaLoot(
   loot: ArenaLoot,
   description: string
 ) {
-  if (loot.coins > 0) {
+  let payableCoins = loot.coins;
+  if (payableCoins > 0) {
+    const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+    const player = await tx.player.findUnique({
+      where: { id: playerId },
+      select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true },
+    });
+    const earnedToday = player?.arenaPveCoinsDate === todayBRT ? (player.arenaPveCoinsEarned ?? 0) : 0;
+    const available = Math.max(0, PVE_DAILY_COINS_CAP - earnedToday);
+    payableCoins = Math.min(payableCoins, available);
+    if (payableCoins > 0) {
+      await tx.player.update({
+        where: { id: playerId },
+        data: {
+          arenaPveCoinsDate: todayBRT,
+          arenaPveCoinsEarned: earnedToday + payableCoins,
+        },
+      });
+    }
+  }
+
+  if (payableCoins > 0) {
     await creditCoins(tx, {
       playerId,
       type: "BET_WON",
-      amount: loot.coins,
-      description,
+      amount: payableCoins,
+      description: payableCoins < loot.coins
+        ? `${description} (${payableCoins}/${loot.coins} ZC creditados pelo limite diario da Arena)`
+        : description,
     });
   }
   if (loot.food > 0) {
