@@ -95,7 +95,11 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     orderIntro.phase === "INVESTIGATION" &&
     !orderIntro.notifications.some((notification) => notification.seenAt),
   );
-  const orderEventVisible = Boolean(orderIntro?.active && orderIntro.phase !== "ENDED");
+  const orderEventVisible = Boolean(
+    orderIntro &&
+    orderIntro.phase !== "ENDED" &&
+    (orderIntro.active || orderIntro.phase === "RAID_DEFEATED")
+  );
   const pendingOrderReward = await prisma.userRaidNotification.findFirst({
     where: {
       userId: user.id,
