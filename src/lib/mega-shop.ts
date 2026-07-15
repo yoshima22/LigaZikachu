@@ -2,7 +2,16 @@ import { prisma } from "@/lib/prisma";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { buildMegaStoneMetadata, getMegaStoneDescription, MEGA_STONES } from "@/lib/mega-evolution";
 
+const MEGA_STONE_ASSET_BASE = (process.env.NEXT_PUBLIC_MEGA_STONE_ASSET_BASE_URL ?? "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/shop/mega-stones")
+  .replace(/\/$/, "");
+
+const CUSTOM_MEGA_STONE_IMAGES: Record<number, string> = {
+  10301: `${MEGA_STONE_ASSET_BASE}/mega-feraligatr-10301.png`,
+  10302: `${MEGA_STONE_ASSET_BASE}/mega-hawlucha-10302.png`,
+};
+
 function getMegaStoneImageUrl(megaPokemonId: number) {
+  if (CUSTOM_MEGA_STONE_IMAGES[megaPokemonId]) return CUSTOM_MEGA_STONE_IMAGES[megaPokemonId];
   return `/sprites/pokemon/${megaPokemonId}.png`;
 }
 

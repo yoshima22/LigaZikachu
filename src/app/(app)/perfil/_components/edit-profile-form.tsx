@@ -390,35 +390,40 @@ function SpritePreferenceToggle({
   const isAnimated = value !== "STATIC";
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 shadow-inner shadow-black/20">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-200">{label}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isAnimated}
-          onClick={() => onChange(isAnimated ? "STATIC" : "ANIMATED")}
-          className={[
-            "relative h-8 w-36 rounded-full border px-1 text-[10px] font-bold uppercase tracking-wide transition",
-            isAnimated
-              ? "border-[#FFCB05]/50 bg-[#FFCB05]/20 text-[#FFCB05]"
-              : "border-slate-700 bg-slate-900 text-slate-300",
-          ].join(" ")}
-        >
-          <span
+        <div className="grid w-full grid-cols-2 overflow-hidden rounded-lg border border-slate-700 bg-slate-900/80 p-1 text-[10px] font-bold uppercase tracking-wide sm:w-56">
+          <button
+            type="button"
+            aria-pressed={!isAnimated}
+            onClick={() => onChange("STATIC")}
             className={[
-              "absolute top-1 h-6 w-16 rounded-full bg-slate-100 transition-transform",
-              isAnimated ? "translate-x-[66px]" : "translate-x-0",
+              "rounded-md px-3 py-2 transition",
+              !isAnimated
+                ? "bg-[#FFCB05] text-slate-950 shadow shadow-[#FFCB05]/20"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
             ].join(" ")}
-          />
-          <span className="relative z-10 grid grid-cols-2">
-            <span>Fixo</span>
-            <span>Animado</span>
-          </span>
-        </button>
+          >
+            Fixo
+          </button>
+          <button
+            type="button"
+            aria-pressed={isAnimated}
+            onClick={() => onChange("ANIMATED")}
+            className={[
+              "rounded-md px-3 py-2 transition",
+              isAnimated
+                ? "bg-[#FFCB05] text-slate-950 shadow shadow-[#FFCB05]/20"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+            ].join(" ")}
+          >
+            Animado
+          </button>
+        </div>
       </div>
     </div>
   );
