@@ -1331,61 +1331,117 @@ const SPECIAL_EFFECT_CFG: Record<string, {
   tag: string;
   accent: string;
   bg: string;
-  symbol: string;
   particles: string[];
   motif: "shadow" | "smoke" | "glitch" | "seal" | "raid" | "mega" | "treasure" | "star";
   ring: "circle" | "diamond" | "scan" | "stamp" | "hex";
   pulse: string;
 }> = {
   ORDER_SHADOW_MARK: {
-    tag: "Marca da Ordem", accent: "#a855f7", symbol: "T",
+    tag: "Marca da Ordem", accent: "#a855f7",
     bg: "radial-gradient(circle at 50% 38%,#581c87 0%,#190026 45%,#020008 100%)",
-    particles: ["?", "T", "OLHO", "!", "T", "?"],
+    particles: ["◆", "◐", "◇", "•", "◌", "◆"],
     motif: "shadow", ring: "diamond", pulse: "cinematic-shadow-pulse",
   },
   ORDER_PURPLE_SMOKE: {
-    tag: "Fumaca Roxa", accent: "#d946ef", symbol: "~",
+    tag: "Fumaca Roxa", accent: "#d946ef",
     bg: "radial-gradient(circle at 45% 55%,#701a75 0%,#2e0644 45%,#03000a 100%)",
-    particles: ["~", "fumaca", "~", "?", "~", "+"],
+    particles: ["~", "∿", "•", "◌", "∽", "✦"],
     motif: "smoke", ring: "circle", pulse: "cinematic-smoke-pulse",
   },
   ORDER_GLITCH_HEIST: {
-    tag: "Roubo Glitchado", accent: "#22d3ee", symbol: "404",
+    tag: "Roubo Glitchado", accent: "#22d3ee",
     bg: "linear-gradient(135deg,#020617 0%,#071827 42%,#2e1065 100%)",
-    particles: ["404", "$", "ERR", "0x", "PIX", "?"],
+    particles: ["▮", "▯", "◆", "◇", "▰", "▱"],
     motif: "glitch", ring: "scan", pulse: "cinematic-glitch-pulse",
   },
   ORDER_CAPTAIN_SEAL: {
-    tag: "Selo do Capitao", accent: "#facc15", symbol: "TRAPACA",
+    tag: "Selo do Capitao", accent: "#facc15",
     bg: "radial-gradient(circle at 50% 45%,#713f12 0%,#2b0918 44%,#020008 100%)",
-    particles: ["SELO", "T", "Z", "*", "OK", "+"],
+    particles: ["✦", "◆", "◇", "✧", "•", "✦"],
     motif: "seal", ring: "stamp", pulse: "cinematic-seal-pulse",
   },
   RAID_BOSS_FLARE: {
-    tag: "Alerta de Raid", accent: "#ef4444", symbol: "!",
+    tag: "Alerta de Raid", accent: "#ef4444",
     bg: "radial-gradient(circle at 50% 55%,#7f1d1d 0%,#111827 50%,#020617 100%)",
-    particles: ["!", "X", "!", "#", "!", "X"],
+    particles: ["▲", "◆", "△", "◇", "▲", "◆"],
     motif: "raid", ring: "hex", pulse: "cinematic-raid-pulse",
   },
   MEGA_AWAKENING: {
-    tag: "Mega Despertar", accent: "#f472b6", symbol: "<>",
+    tag: "Mega Despertar", accent: "#f472b6",
     bg: "radial-gradient(circle at 50% 48%,#9d174d 0%,#4c1d95 42%,#020617 100%)",
     particles: ["◇", "^", "+", "◆", "◇", "+"],
     motif: "mega", ring: "hex", pulse: "cinematic-mega-pulse",
   },
   TREASURE_BURST: {
-    tag: "Explosao de Espolios", accent: "#fbbf24", symbol: "ZC",
+    tag: "Explosao de Espolios", accent: "#fbbf24",
     bg: "radial-gradient(circle at 50% 55%,#92400e 0%,#1f2937 48%,#020617 100%)",
-    particles: ["ZC", "$", "✦", "ZC", "+", "$"],
+    particles: ["●", "✦", "◆", "●", "+", "✧"],
     motif: "treasure", ring: "circle", pulse: "cinematic-treasure-pulse",
   },
   STARRY_CROWN: {
-    tag: "Coroa Estelar", accent: "#fde68a", symbol: "CROWN",
+    tag: "Coroa Estelar", accent: "#fde68a",
     bg: "radial-gradient(circle at 50% 45%,#312e81 0%,#111827 48%,#020617 100%)",
-    particles: ["✦", "+", "C", "^", "✧", "+"],
+    particles: ["✦", "+", "✧", "◇", "✦", "+"],
     motif: "star", ring: "circle", pulse: "cinematic-star-pulse",
   },
 };
+
+function CinematicCenterIcon({ motif, accent }: { motif: string; accent: string }) {
+  if (motif === "shadow") {
+    return (
+      <div className="cinematic-icon cinematic-icon-shadow" style={{ ["--accent" as string]: accent }}>
+        <span />
+      </div>
+    );
+  }
+  if (motif === "smoke") {
+    return (
+      <div className="cinematic-icon cinematic-icon-smoke" style={{ ["--accent" as string]: accent }}>
+        <span /><span /><span />
+      </div>
+    );
+  }
+  if (motif === "glitch") {
+    return (
+      <div className="cinematic-icon cinematic-icon-glitch" style={{ ["--accent" as string]: accent }}>
+        <span /><span /><span /><span />
+      </div>
+    );
+  }
+  if (motif === "seal") {
+    return (
+      <div className="cinematic-icon cinematic-icon-seal" style={{ ["--accent" as string]: accent }}>
+        <span /><span /><span />
+      </div>
+    );
+  }
+  if (motif === "raid") {
+    return (
+      <div className="cinematic-icon cinematic-icon-raid" style={{ ["--accent" as string]: accent }}>
+        <span /><span />
+      </div>
+    );
+  }
+  if (motif === "mega") {
+    return (
+      <div className="cinematic-icon cinematic-icon-mega" style={{ ["--accent" as string]: accent }}>
+        <span /><span /><span />
+      </div>
+    );
+  }
+  if (motif === "treasure") {
+    return (
+      <div className="cinematic-icon cinematic-icon-treasure" style={{ ["--accent" as string]: accent }}>
+        <span /><span /><span />
+      </div>
+    );
+  }
+  return (
+    <div className="cinematic-icon cinematic-icon-crown" style={{ ["--accent" as string]: accent }}>
+      <span /><span /><span />
+    </div>
+  );
+}
 
 function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, theme, effect }: EffectProps & { effect: string }) {
   const [ambient, setAmbient] = useState(false);
@@ -1483,14 +1539,19 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, them
             transform: "translate(-50%,-50%) rotate(-8deg)",
             border: `8px double ${accent}99`,
             borderRadius: 28,
-            color: `${accent}18`,
-            fontSize: "clamp(42px, 10vw, 120px)",
-            fontWeight: 950,
             display: "grid", placeItems: "center",
-            letterSpacing: "0.08em",
             boxShadow: `0 0 42px ${accent}55, inset 0 0 36px ${accent}22`,
             animation: "cinematic-stamp-slam 0.75s cubic-bezier(.2,1.4,.3,1) .15s both",
-          }}>TRAPACA</div>
+          }}>
+            <div style={{
+              width: "58%",
+              height: "38%",
+              borderRadius: 999,
+              border: `5px solid ${accent}55`,
+              boxShadow: `0 0 30px ${accent}44, inset 0 0 22px ${accent}22`,
+              transform: "rotate(6deg)",
+            }} />
+          </div>
         )}
         {cfg.motif === "raid" && (
           <div style={{
@@ -1592,15 +1653,7 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, them
       </div>
 
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 7 }}>
-        <div style={{
-          fontSize: "clamp(58px, 15vw, 132px)",
-          fontWeight: 950,
-          color: `${accent}22`,
-          textShadow: `0 0 45px ${accent}66`,
-          animation: "cinematic-shockwave 1.4s ease 0.15s both",
-        }}>
-          {cfg.symbol}
-        </div>
+        <CinematicCenterIcon motif={cfg.motif} accent={accent} />
       </div>
 
       <div className="absolute inset-0 flex items-center justify-center z-10">
@@ -1617,6 +1670,157 @@ function CinematicTitleEffect({ name, color, glowColor, flavorText, rarity, them
         </div>
       </div>
       <style>{`
+        .cinematic-icon {
+          --accent: #facc15;
+          position: relative;
+          width: clamp(110px, 18vw, 220px);
+          height: clamp(110px, 18vw, 220px);
+          opacity: .28;
+          filter: drop-shadow(0 0 28px var(--accent)) drop-shadow(0 0 70px var(--accent));
+          animation: cinematic-icon-arrive 1.2s cubic-bezier(.16,1,.3,1) .08s both, cinematic-icon-breathe 2.6s ease-in-out 1.2s infinite;
+        }
+        .cinematic-icon-shadow {
+          border-radius: 46% 54% 48% 52% / 54% 46% 52% 48%;
+          background:
+            radial-gradient(ellipse at 50% 50%, #fff 0 6%, var(--accent) 7% 16%, transparent 17%),
+            radial-gradient(ellipse at 50% 50%, var(--accent) 0 34%, transparent 35%);
+          clip-path: ellipse(48% 24% at 50% 50%);
+          transform: scaleX(1.55);
+        }
+        .cinematic-icon-shadow span {
+          position: absolute;
+          inset: 38% 28%;
+          border-radius: 999px;
+          background: #020008;
+          box-shadow: 0 0 22px #000;
+        }
+        .cinematic-icon-smoke span {
+          position: absolute;
+          border-radius: 999px;
+          background: radial-gradient(circle, var(--accent) 0%, transparent 64%);
+          filter: blur(10px);
+          animation: cinematic-smoke-knot 3.2s ease-in-out infinite;
+        }
+        .cinematic-icon-smoke span:nth-child(1) { inset: 20% 38% 28% 8%; }
+        .cinematic-icon-smoke span:nth-child(2) { inset: 10% 12% 36% 34%; animation-delay: -.8s; }
+        .cinematic-icon-smoke span:nth-child(3) { inset: 42% 20% 10% 22%; animation-delay: -1.5s; }
+        .cinematic-icon-glitch {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          transform: skewX(-10deg);
+          animation: cinematic-icon-arrive 1.2s cubic-bezier(.16,1,.3,1) .08s both, cinematic-glitch-mark 1.1s steps(2) 1.2s infinite;
+        }
+        .cinematic-icon-glitch span {
+          border-radius: 10px;
+          background: linear-gradient(135deg, #fff8, var(--accent), transparent);
+          box-shadow: 0 0 28px var(--accent);
+        }
+        .cinematic-icon-glitch span:nth-child(2), .cinematic-icon-glitch span:nth-child(3) {
+          transform: translateX(18px);
+          opacity: .65;
+        }
+        .cinematic-icon-seal {
+          border: 10px double var(--accent);
+          border-radius: 50%;
+          box-shadow: inset 0 0 36px var(--accent), 0 0 48px var(--accent);
+          transform: rotate(-12deg);
+        }
+        .cinematic-icon-seal span {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 70%;
+          height: 10px;
+          border-radius: 999px;
+          background: var(--accent);
+          box-shadow: 0 0 18px var(--accent);
+          transform: translate(-50%, -50%) rotate(var(--r));
+        }
+        .cinematic-icon-seal span:nth-child(1) { --r: 0deg; }
+        .cinematic-icon-seal span:nth-child(2) { --r: 60deg; }
+        .cinematic-icon-seal span:nth-child(3) { --r: -60deg; }
+        .cinematic-icon-raid {
+          border: 4px solid var(--accent);
+          clip-path: polygon(50% 0, 92% 24%, 92% 76%, 50% 100%, 8% 76%, 8% 24%);
+          box-shadow: inset 0 0 42px var(--accent), 0 0 54px var(--accent);
+        }
+        .cinematic-icon-raid span {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          background: var(--accent);
+          box-shadow: 0 0 18px var(--accent);
+          transform: translate(-50%, -50%);
+        }
+        .cinematic-icon-raid span:nth-child(1) { width: 82%; height: 5px; }
+        .cinematic-icon-raid span:nth-child(2) { width: 5px; height: 82%; }
+        .cinematic-icon-mega span {
+          position: absolute;
+          background: linear-gradient(135deg, #fff, var(--accent) 40%, #7c3aed 72%, transparent);
+          clip-path: polygon(50% 0, 100% 34%, 72% 100%, 20% 84%, 0 34%);
+          box-shadow: 0 0 30px var(--accent);
+          animation: cinematic-crystal-float 2.6s ease-in-out infinite;
+        }
+        .cinematic-icon-mega span:nth-child(1) { inset: 5% 36% 38% 36%; }
+        .cinematic-icon-mega span:nth-child(2) { inset: 42% 56% 4% 18%; animation-delay: -.7s; }
+        .cinematic-icon-mega span:nth-child(3) { inset: 42% 18% 4% 56%; animation-delay: -1.2s; }
+        .cinematic-icon-treasure span {
+          position: absolute;
+          border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, #fff8 0 14%, var(--accent) 18% 62%, #92400e 72%);
+          box-shadow: 0 0 24px var(--accent);
+          animation: cinematic-coin-orbit 2.8s ease-in-out infinite;
+        }
+        .cinematic-icon-treasure span:nth-child(1) { inset: 18% 38% 50% 38%; }
+        .cinematic-icon-treasure span:nth-child(2) { inset: 48% 56% 20% 20%; animation-delay: -.65s; }
+        .cinematic-icon-treasure span:nth-child(3) { inset: 48% 20% 20% 56%; animation-delay: -1.2s; }
+        .cinematic-icon-crown {
+          width: clamp(150px, 24vw, 300px);
+          height: clamp(100px, 16vw, 190px);
+        }
+        .cinematic-icon-crown::before {
+          content: "";
+          position: absolute;
+          inset: 18% 6% 18% 6%;
+          background: linear-gradient(135deg, #fff8, var(--accent), #a16207);
+          clip-path: polygon(0 100%, 8% 35%, 28% 72%, 50% 0, 72% 72%, 92% 35%, 100% 100%);
+          box-shadow: 0 0 38px var(--accent);
+        }
+        .cinematic-icon-crown span {
+          position: absolute;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #fff;
+          box-shadow: 0 0 20px var(--accent), 0 0 42px var(--accent);
+        }
+        .cinematic-icon-crown span:nth-child(1) { left: 6%; top: 30%; }
+        .cinematic-icon-crown span:nth-child(2) { left: 48%; top: -2%; }
+        .cinematic-icon-crown span:nth-child(3) { right: 6%; top: 30%; }
+        @keyframes cinematic-icon-arrive {
+          0% { opacity: 0; transform: scale(.4) rotate(-18deg); filter: blur(8px); }
+          55% { opacity: .36; transform: scale(1.12) rotate(4deg); filter: blur(0); }
+          100% { opacity: .28; transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 28px var(--accent)) drop-shadow(0 0 70px var(--accent)); }
+        }
+        @keyframes cinematic-icon-breathe {
+          0%, 100% { opacity: .22; transform: scale(1); }
+          50% { opacity: .38; transform: scale(1.06); }
+        }
+        @keyframes cinematic-smoke-knot {
+          0%, 100% { transform: translate(0,0) scale(1); opacity: .55; }
+          50% { transform: translate(18px,-12px) scale(1.18); opacity: .9; }
+        }
+        @keyframes cinematic-glitch-mark {
+          0%, 100% { transform: skewX(-10deg) translateX(0); opacity: .24; }
+          35% { transform: skewX(-10deg) translateX(-12px); opacity: .42; }
+          38% { transform: skewX(-10deg) translateX(14px); opacity: .2; }
+          70% { transform: skewX(-10deg) translateX(5px); opacity: .34; }
+        }
+        @keyframes cinematic-coin-orbit {
+          0%, 100% { transform: translateY(0) rotateY(0deg); }
+          50% { transform: translateY(-16px) rotateY(180deg); }
+        }
         @keyframes cinematic-breathe {
           0%, 100% { opacity: .78; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.04); }
