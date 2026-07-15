@@ -31,6 +31,7 @@ interface Item {
   imageUrl: string | null;
   rarity: string;
   price: number;
+  metadata?: unknown;
   theme?: string;
   flavorText?: string | null;
   entranceEffect?: string;
@@ -65,7 +66,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingId, setBuyingId]   = useState<string | null>(null);
-  const [lightbox, setLightbox]   = useState<{ src: string; name: string; type: string } | null>(null);
+  const [lightbox, setLightbox]   = useState<{ src: string; name: string; type: string; fallbackSrc?: string } | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   // Fecha ao pressionar Esc
@@ -78,6 +79,29 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
   }, [lightbox, closeLightbox]);
 
   const getQuantity = (itemId: string) => quantities[itemId] ?? 1;
+
+  const getMegaPreview = (item: Item) => {
+    if (!item.type.startsWith("MEGA_STONE_")) return null;
+    const metadata = item.metadata as Record<string, unknown> | null | undefined;
+    const megaPokemonId = Number(metadata?.megaPokemonId);
+    const megaPokemonName = typeof metadata?.megaPokemonName === "string" ? metadata.megaPokemonName : item.name;
+    if (!Number.isFinite(megaPokemonId) || megaPokemonId <= 0) return null;
+    return {
+      src: `/sprites/pokemon/versions/generation-v/black-white/animated/${megaPokemonId}.gif`,
+      fallbackSrc: item.imageUrl ?? `/sprites/pokemon/${megaPokemonId}.png`,
+      name: megaPokemonName,
+      type: item.type,
+    };
+  };
+
+  const openPreview = (item: Item) => {
+    const megaPreview = getMegaPreview(item);
+    if (megaPreview) {
+      setLightbox(megaPreview);
+      return;
+    }
+    if (item.imageUrl) setLightbox({ src: item.imageUrl, name: item.name, type: item.type });
+  };
 
   const setQuantity = (itemId: string, quantity: number) => {
     const next = Math.min(99, Math.max(1, Math.floor(quantity || 1)));
@@ -132,6 +156,13 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
               lightbox.type === "BANNER" ? "w-full object-cover" : "object-contain"
             }`}
             style={{ background: lightbox.type === "FRAME" ? "transparent" : undefined }}
+            onError={(event) => {
+              const fallback = lightbox.fallbackSrc;
+              if (fallback && event.currentTarget.dataset.fallbackApplied !== "true") {
+                event.currentTarget.dataset.fallbackApplied = "true";
+                event.currentTarget.src = fallback;
+              }
+            }}
           />
           <button
             onClick={closeLightbox}
@@ -171,7 +202,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                 item.type === "BANNER" ? (
                   <div
                     className="group relative aspect-[3/1] w-full overflow-hidden cursor-zoom-in"
-                    onClick={() => setLightbox({ src: item.imageUrl!, name: item.name, type: item.type })}
+                    onClick={() => openPreview(item)}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
@@ -182,7 +213,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                 ) : (
                   <div
                     className="group relative flex h-24 items-center justify-center bg-slate-900 cursor-zoom-in"
-                    onClick={() => setLightbox({ src: item.imageUrl!, name: item.name, type: item.type })}
+                    onClick={() => openPreview(item)}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.imageUrl} alt={item.name} className="max-h-20 object-contain transition-transform group-hover:scale-110" />
