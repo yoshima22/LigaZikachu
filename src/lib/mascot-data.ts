@@ -1080,8 +1080,6 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
   10175: 10179, // Yamask-Galar
   10176: 10180, // Stunfisk-Galar
   10013: 1013,  // Sinistcha Masterpiece → same sprite as Sinistcha
-  10301: 160,   // Mega Feraligatr custom → fallback Feraligatr until dedicated art exists
-  10302: 701,   // Mega Hawlucha custom → fallback Hawlucha until dedicated art exists
 };
 
 // Sprites auto-hospedados em public/sprites (CDN estático do Vercel) — o

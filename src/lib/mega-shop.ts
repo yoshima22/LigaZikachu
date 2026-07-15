@@ -2,13 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { buildMegaStoneMetadata, getMegaStoneDescription, MEGA_STONES } from "@/lib/mega-evolution";
 
-const CUSTOM_MEGA_SPRITE_FALLBACKS: Record<number, number> = {
-  10301: 160, // Mega Feraligatr custom: usa Feraligatr ate existir arte dedicada
-  10302: 701, // Mega Hawlucha custom: usa Hawlucha ate existir arte dedicada
-};
-
 function getMegaStoneImageUrl(megaPokemonId: number) {
-  return `/sprites/pokemon/${CUSTOM_MEGA_SPRITE_FALLBACKS[megaPokemonId] ?? megaPokemonId}.png`;
+  return `/sprites/pokemon/${megaPokemonId}.png`;
 }
 
 async function safeInvalidateShopCache() {
