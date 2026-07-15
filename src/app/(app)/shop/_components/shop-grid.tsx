@@ -23,6 +23,10 @@ const customMegaSpriteFallbacks: Record<number, number> = {
   10301: 160,
   10302: 701,
 };
+const customMegaStoneCardImages: Record<string, string> = {
+  MEGA_STONE_FERALIGATRITE: "/sprites/pokemon/160.png",
+  MEGA_STONE_HAWLUCHITE: "/sprites/pokemon/701.png",
+};
 const rarityLabel: Record<string, string> = {
   COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Raro", EPIC: "Épico",
   LEGENDARY: "Lendário", MYTHIC: "Mítico", RELIC: "Relíquia",
@@ -94,7 +98,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
     if (!Number.isFinite(megaPokemonId) || megaPokemonId <= 0) return null;
     return {
       src: `/sprites/pokemon/versions/generation-v/black-white/animated/${spritePokemonId}.gif`,
-      fallbackSrc: item.imageUrl ?? `/sprites/pokemon/${spritePokemonId}.png`,
+      fallbackSrc: customMegaStoneCardImages[item.type] ?? item.imageUrl ?? `/sprites/pokemon/${spritePokemonId}.png`,
       name: megaPokemonName,
       type: item.type,
     };
@@ -191,6 +195,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
           const canAfford = balance >= totalPrice;
           const isBuying = buyingId === item.id && pending;
           const ownedCount = inventoryCounts[item.id] ?? 0;
+          const displayImageUrl = customMegaStoneCardImages[item.type] ?? item.imageUrl;
 
           return (
             <div
@@ -200,14 +205,14 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
               }`}
             >
               {/* Preview image / banner — clicável para ampliar */}
-              {item.imageUrl ? (
+              {displayImageUrl ? (
                 item.type === "BANNER" ? (
                   <div
                     className="group relative aspect-[3/1] w-full overflow-hidden cursor-zoom-in"
                     onClick={() => openPreview(item)}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                    <img src={displayImageUrl} alt={item.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
                       <ZoomIn size={24} className="text-white drop-shadow" />
                     </div>
@@ -218,7 +223,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     onClick={() => openPreview(item)}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.imageUrl} alt={item.name} className="max-h-20 object-contain transition-transform group-hover:scale-110" />
+                    <img src={displayImageUrl} alt={item.name} className="max-h-20 object-contain transition-transform group-hover:scale-110" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-t-xl">
                       <ZoomIn size={20} className="text-white drop-shadow" />
                     </div>
