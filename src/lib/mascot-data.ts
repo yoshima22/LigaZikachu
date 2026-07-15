@@ -2529,9 +2529,10 @@ export const MYTHICAL_IDS = new Set([
   1025, // Pecharunt — Mítico de distribuição de evento
 ]);
 
-export type MascotRarity = "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST" | "PSEUDO_LEGENDARY" | "PARADOX" | "COMMON";
+export type MascotRarity = "MEGA" | "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST" | "PSEUDO_LEGENDARY" | "PARADOX" | "COMMON";
 
 export function getMascotRarity(pokemonId: number): MascotRarity {
+  if (MEGA_FORM_ID_SET.has(pokemonId)) return "MEGA";
   if (MYTHICAL_IDS.has(pokemonId)) return "MYTHICAL";
   if (ULTRA_BEAST_IDS.has(pokemonId)) return "ULTRA_BEAST";
   if (LEGENDARY_POOL.includes(pokemonId) && !MYTHICAL_IDS.has(pokemonId) && !ULTRA_BEAST_IDS.has(pokemonId)) return "LEGENDARY";
@@ -2541,6 +2542,7 @@ export function getMascotRarity(pokemonId: number): MascotRarity {
 }
 
 export const RARITY_LABEL: Record<MascotRarity, string> = {
+  MEGA: "Mega",
   LEGENDARY: "Lendário",
   MYTHICAL: "Mítico",
   ULTRA_BEAST: "Ultra Besta",
@@ -2550,6 +2552,7 @@ export const RARITY_LABEL: Record<MascotRarity, string> = {
 };
 
 export const RARITY_COLOR: Record<MascotRarity, string> = {
+  MEGA: "border-fuchsia-400/60 bg-fuchsia-500/15 text-fuchsia-200",
   LEGENDARY: "border-yellow-400/50 bg-yellow-400/10 text-yellow-300",
   MYTHICAL: "border-pink-400/50 bg-pink-400/10 text-pink-300",
   ULTRA_BEAST: "border-purple-400/50 bg-purple-400/10 text-purple-300",

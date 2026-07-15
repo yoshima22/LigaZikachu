@@ -710,6 +710,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         return (
           <div className={`border-b px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-wider ${RARITY_COLOR[rarity]}`}>
             {rarity === "LEGENDARY" && "⭐ "}{rarity === "MYTHICAL" && "🌟 "}{rarity === "ULTRA_BEAST" && "🌀 "}{rarity === "PSEUDO_LEGENDARY" && "💎 "}
+            {rarity === "MEGA" && "✦ "}
             {RARITY_LABEL[rarity]}
           </div>
         );

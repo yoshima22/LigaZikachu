@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { getPokemonName, getPokemonTypes, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
 import { MascotCard, markPetted, markPlayed } from "./mascot-card";
@@ -244,6 +244,7 @@ function BankRow({
 
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   const types = getPokemonTypes(mascot.pokemonId);
+  const rarity = getMascotRarity(mascot.pokemonId);
   const chips = getOccupationChips(mascot);
 
   return (
@@ -269,6 +270,11 @@ function BankRow({
                   title={`Análise: ranking ${mascot.ivRating}${typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}`}
                 >
                   {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` ${mascot.ivScore}%` : ""}
+                </span>
+              )}
+              {rarity === "MEGA" && (
+                <span className="shrink-0 inline-flex items-center rounded border border-fuchsia-400/50 bg-fuchsia-500/15 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-fuchsia-200">
+                  Mega
                 </span>
               )}
             </span>
