@@ -1,4 +1,4 @@
-import { MEGA_FORM_IDS, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
+import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 
 /**
  * Dados estáticos do sistema de mascotes.
@@ -1049,6 +1049,15 @@ export const EXP_REWARDS = {
 
 // IDs máximos com GIF animado no PokeAPI (Black/White animated — gen 1-5 apenas)
 const MAX_ANIMATED_ID = 649;
+const OFFICIAL_MEGA_FORM_IDS = [
+  10033, 10034, 10035, 10036, 10037, 10038, 10039, 10040, 10041, 10042,
+  10043, 10044, 10045, 10046, 10047, 10048, 10049, 10050, 10051, 10052,
+  10053, 10054, 10055, 10056, 10057, 10058, 10059, 10060, 10062, 10063,
+  10064, 10065, 10066, 10067, 10068, 10069, 10070, 10071, 10072, 10073,
+  10074, 10075, 10076, 10079, 10087, 10088, 10089, 10090,
+] as const;
+const ANIMATED_MEGA_SPRITE_IDS = new Set<number>(OFFICIAL_MEGA_FORM_IDS);
+const MEGA_FORM_ID_SET = new Set<number>([...OFFICIAL_MEGA_FORM_IDS, 10301, 10302]);
 const SPRITE_ID_OVERRIDES: Record<number, number> = {
   // Galar form IDs in this codebase differ from PokeAPI sprite IDs
   10158: 10161, // Meowth-Galar
@@ -1081,7 +1090,7 @@ export function getSpriteUrl(pokemonId: number, animated = false): string {
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
   // GIFs animados só existem para gen 1-5 (IDs 1-649).
   // Para IDs > 649 (gen 6+), usar sempre o PNG estático para evitar imagens quebradas.
-  if (animated && (spriteId <= MAX_ANIMATED_ID || MEGA_FORM_IDS.has(spriteId))) {
+  if (animated && (spriteId <= MAX_ANIMATED_ID || ANIMATED_MEGA_SPRITE_IDS.has(spriteId))) {
     return `/sprites/pokemon/versions/generation-v/black-white/animated/${spriteId}.gif`;
   }
   return `/sprites/pokemon/${spriteId}.png`;
@@ -1977,6 +1986,55 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   10010:"electric/ice",   // Rotom-Gelo
   10011:"electric/flying",// Rotom-Ventilador
   10012:"electric/grass", // Rotom-Corte
+  // Mega Evolucoes
+  10033:"grass/poison",    // Mega Venusaur
+  10034:"fire/dragon",     // Mega Charizard X
+  10035:"fire/flying",     // Mega Charizard Y
+  10036:"water",           // Mega Blastoise
+  10037:"psychic",         // Mega Alakazam
+  10038:"ghost/poison",    // Mega Gengar
+  10039:"normal",          // Mega Kangaskhan
+  10040:"bug/flying",      // Mega Pinsir
+  10041:"water/dark",      // Mega Gyarados
+  10042:"rock/flying",     // Mega Aerodactyl
+  10043:"psychic/fighting",// Mega Mewtwo X
+  10044:"psychic",         // Mega Mewtwo Y
+  10045:"electric/dragon", // Mega Ampharos
+  10046:"bug/steel",       // Mega Scizor
+  10047:"bug/fighting",    // Mega Heracross
+  10048:"dark/fire",       // Mega Houndoom
+  10049:"rock/dark",       // Mega Tyranitar
+  10050:"fire/fighting",   // Mega Blaziken
+  10051:"psychic/fairy",   // Mega Gardevoir
+  10052:"steel/fairy",     // Mega Mawile
+  10053:"steel",           // Mega Aggron
+  10054:"fighting/psychic",// Mega Medicham
+  10055:"electric",        // Mega Manectric
+  10056:"ghost",           // Mega Banette
+  10057:"dark",            // Mega Absol
+  10058:"dragon/ground",   // Mega Garchomp
+  10059:"fighting/steel",  // Mega Lucario
+  10060:"grass/ice",       // Mega Abomasnow
+  10062:"dragon/psychic",  // Mega Latias
+  10063:"dragon/psychic",  // Mega Latios
+  10064:"water/ground",    // Mega Swampert
+  10065:"grass/dragon",    // Mega Sceptile
+  10066:"dark/ghost",      // Mega Sableye
+  10067:"dragon/fairy",    // Mega Altaria
+  10068:"psychic/fighting",// Mega Gallade
+  10069:"normal/fairy",    // Mega Audino
+  10070:"water/dark",      // Mega Sharpedo
+  10071:"water/psychic",   // Mega Slowbro
+  10072:"steel/ground",    // Mega Steelix
+  10073:"normal/flying",   // Mega Pidgeot
+  10074:"ice",             // Mega Glalie
+  10075:"rock/fairy",      // Mega Diancie
+  10076:"steel/psychic",   // Mega Metagross
+  10079:"dragon/flying",   // Mega Rayquaza
+  10087:"fire/ground",     // Mega Camerupt
+  10088:"normal/fighting", // Mega Lopunny
+  10089:"dragon/flying",   // Mega Salamence
+  10090:"bug/poison",      // Mega Beedrill
   // ── Formas Alolan ──────────────────────────────────────────────────────────
   // Formas de Lycanroc (Gen 7)
   10152:"rock",  // Lycanroc-Midnight
@@ -2552,7 +2610,7 @@ const SPECIAL_COVETED_IDS = [
 // ── Filtros finais nos pools ──────────────────────────────────────────────────
 // Predicado único: exclui lendários, evoluídos (level-up + pedra/troca/amizade)
 const isBaseForm = (id: number) =>
-  !LEGENDARY_POOL.includes(id) && !ALL_EVOLVED_IDS.has(id) && !MEGA_FORM_IDS.has(id);
+  !LEGENDARY_POOL.includes(id) && !ALL_EVOLVED_IDS.has(id) && !MEGA_FORM_ID_SET.has(id);
 
 const addMissingBaseFormsToGenerationPools = () => {
   const generationRanges: Record<string, [number, number]> = {
