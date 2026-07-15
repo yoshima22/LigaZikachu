@@ -11,6 +11,7 @@ import {
   HUNGER_LABEL, HAPPINESS_LABEL, CHALLENGE_LABEL,
   HUNGER_COLOR, HAPPINESS_COLOR, CHALLENGE_COLOR,
 } from "@/lib/mascot-data";
+import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import {
   interactAction, equipMascotAction, unequipMascotAction,
   renameMascotAction, startExpeditionAction, claimExpeditionAction,
@@ -83,7 +84,13 @@ interface MascotData {
   otherMascots?: { id: string; name: string }[];
 }
 
-interface Props { mascot: MascotData; isAdmin?: boolean; compactView?: boolean; onRefresh?: () => void }
+interface Props {
+  mascot: MascotData;
+  isAdmin?: boolean;
+  compactView?: boolean;
+  onRefresh?: () => void;
+  spritePreferences?: PlayerSpritePreferences | null;
+}
 
 const IV_RATING_STYLE: Record<string, string> = {
   SSS: "text-fuchsia-300 border-fuchsia-400/50 bg-fuchsia-500/15",
@@ -384,7 +391,7 @@ function XpShareBadge({ mascotId }: { mascotId: string }) {
   );
 }
 
-export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh }: Props) {
+export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh, spritePreferences = null }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
@@ -552,7 +559,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
   const spriteUrl = imgFailed
     ? (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId))
-    : (mascot.isShiny ? getShinySprite(mascot.pokemonId, true) : getSpriteUrl(mascot.pokemonId, true));
+    : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny });
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },

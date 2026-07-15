@@ -193,6 +193,8 @@ export default async function PerfilPage() {
       avatarUrl: true,
       notes: true,
       casualMode: true,
+      mascotSpritePreference: true,
+      megaSpritePreference: true,
       deckSubmissions: {
         orderBy: { submittedAt: "desc" },
         take: 20,

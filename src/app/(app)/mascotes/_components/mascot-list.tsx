@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MapPin, Search, Star } from "lucide-react";
-import { getPokemonElement, getPokemonTypes, getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonElement, getPokemonTypes, getPokemonName } from "@/lib/mascot-data";
+import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
 import { MascotBankList } from "./mascot-bank-list-demand";
 import type { BankMascot } from "./mascot-bank-list";
@@ -84,11 +85,11 @@ const EXPEDITION_MODE_LABELS: Record<string, string> = {
 };
 
 
-function MiniMascot({ mascot }: { mascot: MascotData }) {
+function MiniMascot({ mascot, spritePreferences }: { mascot: MascotData; spritePreferences?: PlayerSpritePreferences | null }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-950/50 p-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={getSpriteUrl(mascot.pokemonId, true)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+      <img src={getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-slate-200">{mascot.nickname ?? getPokemonName(mascot.pokemonId)}</span>
         <span className="text-[10px] text-slate-500">
@@ -109,10 +110,12 @@ function ExpeditionProgressCard({
   expedition,
   isAdmin,
   onReward,
+  spritePreferences,
 }: {
   expedition: ActiveExpedition;
   isAdmin: boolean;
   onReward: (reward: ExpeditionRewardDisplay) => void;
+  spritePreferences?: PlayerSpritePreferences | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -154,7 +157,7 @@ function ExpeditionProgressCard({
       <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={getSpriteUrl(expedition.mascot.pokemonId, true)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
+          <img src={getPreferredSpriteUrl(expedition.mascot.pokemonId, spritePreferences, { shiny: expedition.mascot.isShiny })} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
             <p className="text-[10px] uppercase tracking-widest text-blue-300">
@@ -202,6 +205,7 @@ export function MascotList({
   hasFood = false,
   hasSweet = false,
   isAdmin = false,
+  spritePreferences = null,
 }: {
   mascots: MascotData[];
   bankMascots?: BankMascot[];
@@ -209,6 +213,7 @@ export function MascotList({
   hasFood?: boolean;
   hasSweet?: boolean;
   isAdmin?: boolean;
+  spritePreferences?: PlayerSpritePreferences | null;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -359,6 +364,7 @@ export function MascotList({
                 expedition={expedition}
                 isAdmin={isAdmin}
                 onReward={setExpeditionReward}
+                spritePreferences={spritePreferences}
               />
             ))}
           </div>
@@ -389,7 +395,7 @@ export function MascotList({
                 </span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} />)}
+                {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} spritePreferences={spritePreferences} />)}
               </div>
             </section>
           )}
@@ -402,6 +408,7 @@ export function MascotList({
               hasFood={hasFood}
               hasSweet={hasSweet}
               isAdmin={isAdmin}
+              spritePreferences={spritePreferences}
             />
           )}
         </>

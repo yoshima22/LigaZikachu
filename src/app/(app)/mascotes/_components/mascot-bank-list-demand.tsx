@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonTypes, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
 import { MascotCard, markPetted, markPlayed } from "./mascot-card";
 import { PerformanceTagPicker } from "./performance-tag-picker";
@@ -202,11 +203,13 @@ function BankRow({
   hasFood,
   hasSweet,
   isAdmin,
+  spritePreferences,
 }: {
   mascot: BankMascot;
   hasFood: boolean;
   hasSweet: boolean;
   isAdmin: boolean;
+  spritePreferences?: PlayerSpritePreferences | null;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"basic" | "full">("basic");
@@ -250,7 +253,7 @@ function BankRow({
         <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={getStaticSpriteUrl(mascot.pokemonId)}
+            src={getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
             alt=""
             className={`h-9 w-9 shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
             style={{ imageRendering: "pixelated" }}
@@ -376,6 +379,7 @@ function BankRow({
                   isAdmin={isAdmin}
                   compactView={view === "basic"}
                   onRefresh={fetchFull}
+                  spritePreferences={spritePreferences}
                 />
               </div>
             </>
@@ -392,12 +396,14 @@ export function MascotBankList({
   hasFood,
   hasSweet,
   isAdmin,
+  spritePreferences,
 }: {
   mascots: BankMascot[];
   totalCount?: number;
   hasFood: boolean;
   hasSweet: boolean;
   isAdmin: boolean;
+  spritePreferences?: PlayerSpritePreferences | null;
 }) {
   const [rows, setRows] = useState<BankMascot[]>(mascots);
   const [knownTotal, setKnownTotal] = useState(totalCount ?? mascots.length);
@@ -549,6 +555,7 @@ export function MascotBankList({
               hasFood={hasFood}
               hasSweet={hasSweet}
               isAdmin={isAdmin}
+              spritePreferences={spritePreferences}
             />
           ))}
         </div>

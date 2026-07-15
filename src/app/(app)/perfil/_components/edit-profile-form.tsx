@@ -15,6 +15,8 @@ interface EditProfileFormProps {
     avatarUrl: string | null;
     standbyUntil: Date | string | null;
     casualMode: boolean;
+    mascotSpritePreference: string | null;
+    megaSpritePreference: string | null;
   };
 }
 
@@ -24,6 +26,8 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [ptcglNick, setPtcglNick] = useState(player.ptcglNick ?? "");
   const [popId, setPopId] = useState(player.popId ?? "");
   const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl ?? "");
+  const [mascotSpritePreference, setMascotSpritePreference] = useState(player.mascotSpritePreference === "STATIC" ? "STATIC" : "ANIMATED");
+  const [megaSpritePreference, setMegaSpritePreference] = useState(player.megaSpritePreference === "STATIC" ? "STATIC" : "ANIMATED");
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [standbyLoading, setStandbyLoading] = useState(false);
@@ -62,6 +66,8 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
         ptcglNick: ptcglNick || undefined,
         popId: popId || undefined,
         avatarUrl: avatarUrl || undefined,
+        mascotSpritePreference: mascotSpritePreference as "ANIMATED" | "STATIC",
+        megaSpritePreference: megaSpritePreference as "ANIMATED" | "STATIC",
       });
       if (result?.error) {
         toast.error(result.error);
@@ -234,6 +240,29 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
         )}
       </div>
 
+      <div className="space-y-3 rounded-2xl border border-border bg-slate-950/50 p-4">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Visual dos mascotes</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Escolha se prefere sprites animados ou imagens estaticas ao navegar pelo jogo.
+          </p>
+        </div>
+
+        <SpritePreferenceToggle
+          label="Mascotes em geral"
+          description="Vale para mascotes comuns, raros, lendarios e formas normais."
+          value={mascotSpritePreference}
+          onChange={setMascotSpritePreference}
+        />
+
+        <SpritePreferenceToggle
+          label="Mega evolucoes"
+          description="Controle separado para as formas mega, que podem ter sprites mais pesados."
+          value={megaSpritePreference}
+          onChange={setMegaSpritePreference}
+        />
+      </div>
+
       <Button type="submit" disabled={loading}>
         {loading ? "Salvando..." : "Salvar alteracoes"}
       </Button>
@@ -343,6 +372,54 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
       </div>
     </div>
     </div>
+    </div>
+  );
+}
+
+function SpritePreferenceToggle({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: string;
+  onChange: (value: "ANIMATED" | "STATIC") => void;
+}) {
+  const isAnimated = value !== "STATIC";
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-200">{label}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isAnimated}
+          onClick={() => onChange(isAnimated ? "STATIC" : "ANIMATED")}
+          className={[
+            "relative h-8 w-36 rounded-full border px-1 text-[10px] font-bold uppercase tracking-wide transition",
+            isAnimated
+              ? "border-[#FFCB05]/50 bg-[#FFCB05]/20 text-[#FFCB05]"
+              : "border-slate-700 bg-slate-900 text-slate-300",
+          ].join(" ")}
+        >
+          <span
+            className={[
+              "absolute top-1 h-6 w-16 rounded-full bg-slate-100 transition-transform",
+              isAnimated ? "translate-x-[66px]" : "translate-x-0",
+            ].join(" ")}
+          />
+          <span className="relative z-10 grid grid-cols-2">
+            <span>Fixo</span>
+            <span>Animado</span>
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

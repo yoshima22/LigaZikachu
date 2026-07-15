@@ -21,7 +21,8 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
-import { getStaticSpriteUrl, getPokemonName, getPokemonElement, MOOD_EMOJI, getWishlistPokemonOptions } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonElement, MOOD_EMOJI, getWishlistPokemonOptions } from "@/lib/mascot-data";
+import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
@@ -76,6 +77,16 @@ export default async function PlayerDetailPage({
   });
 
   if (!player) notFound();
+  const viewerPlayer = await prisma.player.findUnique({
+    where: { userId: session.user.id },
+    select: { mascotSpritePreference: true, megaSpritePreference: true },
+  }).catch(() => null);
+  const spritePreferences = viewerPlayer
+    ? {
+        mascotSpritePreference: viewerPlayer.mascotSpritePreference,
+        megaSpritePreference: viewerPlayer.megaSpritePreference,
+      }
+    : null;
 
   const activeSeason = player.seasonEntries.find((sp) => sp.season.status === SeasonStatus.ACTIVE);
   const isSelf = session.user.id === player.userId;
@@ -792,7 +803,7 @@ export default async function PlayerDetailPage({
                   {/* Static sprite — sem GIF */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={getStaticSpriteUrl(m.pokemonId)}
+                    src={getPreferredSpriteUrl(m.pokemonId, spritePreferences, { shiny: m.isShiny })}
                     alt={name}
                     className="h-12 w-12 object-contain"
                     style={{ imageRendering: "pixelated" }}

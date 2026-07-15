@@ -226,12 +226,16 @@ export default async function MascotesPage() {
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
-    select: { id: true }
+    select: { id: true, mascotSpritePreference: true, megaSpritePreference: true }
   }).catch((error) => {
     console.error("[Mascotes] player lookup failed", { userId: session.user.id, error });
     return null;
   });
   if (!player) return notFound();
+  const spritePreferences = {
+    mascotSpritePreference: player.mascotSpritePreference,
+    megaSpritePreference: player.megaSpritePreference,
+  };
 
   const cleanup = await cleanupExpiredArenaResting(player.id).catch((error) => {
     console.error("[Mascotes] cleanup de repouso/cooldown falhou; seguindo sem travar a pagina.", error);
@@ -612,6 +616,7 @@ export default async function MascotesPage() {
             hasFood={hasFood}
             hasSweet={hasSweet}
             isAdmin={admin}
+            spritePreferences={spritePreferences}
           />
         )}
       </div>

@@ -15,6 +15,8 @@ const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(60),
   ptcglNick: z.string().max(60).optional(),
   popId: z.string().max(30).optional(),
+  mascotSpritePreference: z.enum(["ANIMATED", "STATIC"]).optional(),
+  megaSpritePreference: z.enum(["ANIMATED", "STATIC"]).optional(),
   avatarUrl: z
     .string()
     .max(1_200_000, "A imagem esta muito grande. Use uma imagem menor.")
@@ -190,6 +192,8 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
         ptcglNick: data.ptcglNick || null,
         popId: data.popId || null,
         avatarUrl,
+        mascotSpritePreference: data.mascotSpritePreference ?? "ANIMATED",
+        megaSpritePreference: data.megaSpritePreference ?? "ANIMATED",
       },
     }),
     prisma.user.update({
