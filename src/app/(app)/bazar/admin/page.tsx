@@ -7,6 +7,7 @@ import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import Link from "next/link";
 import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings } from "../actions";
 import type { MiauvadaoOffer } from "../actions";
+import { MEGA_STONES, isMegaStoneType } from "@/lib/mega-evolution";
 
 const ITEM_TYPES = [
   { value: "EGG_COMMON",     label: "🥚 Ovo Comum" },
@@ -21,6 +22,10 @@ const ITEM_TYPES = [
   { value: "MASCOT_BUFF_HAPPY", label: "🍯 Bala de Mel" },
   { value: "MASCOT_BUFF_LUCK", label: "🍀 Amuleto da Sorte" },
   { value: "MASCOT_BUFF_MOOD", label: "💧 Água Sagrada" },
+  ...MEGA_STONES.map((stone) => ({
+    value: stone.type,
+    label: `Mega: ${stone.stoneName} (${stone.compatiblePokemonName})`,
+  })),
 ];
 
 const emptyOffer = (): Partial<MiauvadaoOffer> => ({
@@ -61,9 +66,12 @@ export default function MiauvadaoAdminPage() {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: value };
       // Auto-calc finalPrice when discount or originalPrice changes
-      if (field === "discountPct" || field === "originalPrice") {
+      if (field === "discountPct" || field === "originalPrice" || field === "itemType") {
         const orig = field === "originalPrice" ? Number(value) : (next[idx].originalPrice ?? 0);
-        const disc = field === "discountPct" ? Number(value) : (next[idx].discountPct ?? 0);
+        const rawDisc = field === "discountPct" ? Number(value) : (next[idx].discountPct ?? 0);
+        const maxDiscount = isMegaStoneType(String(next[idx].itemType ?? "")) ? 20 : 90;
+        const disc = Math.min(maxDiscount, Math.max(0, rawDisc));
+        next[idx].discountPct = disc;
         next[idx].finalPrice = Math.round(orig * (1 - disc / 100));
       }
       return next;
@@ -205,7 +213,7 @@ export default function MiauvadaoAdminPage() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500">Desconto (%)</label>
-                  <input type="number" min={1} max={90} value={offer.discountPct ?? ""}
+                  <input type="number" min={1} max={isMegaStoneType(String(offer.itemType ?? "")) ? 20 : 90} value={offer.discountPct ?? ""}
                     onChange={e => updateOffer(idx, "discountPct", parseInt(e.target.value) || 0)}
                     className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none" />
                 </div>

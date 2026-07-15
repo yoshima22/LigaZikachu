@@ -10,6 +10,7 @@ import { getShopItemImages } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
+import { isMegaStoneType } from "@/lib/mega-evolution";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -71,6 +72,7 @@ const MIAUVADAO_ELIGIBLE_TYPES = [
 ];
 
 const MIAUVADAO_MAX_DISCOUNT = 70;
+const MIAUVADAO_MEGA_STONE_MAX_DISCOUNT = 20;
 
 // Faixa de desconto por raridade do item
 const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
@@ -104,11 +106,14 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 
   return chosen.map(item => {
     const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
+    const maxAllowedDiscount = isMegaStoneType(item.type)
+      ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT
+      : MIAUVADAO_MAX_DISCOUNT;
     const rawDiscount = minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus + extraBonus;
     const discountPct = Math.min(
-      MIAUVADAO_MAX_DISCOUNT,
-      rawDiscount >= MIAUVADAO_MAX_DISCOUNT
-        ? (Math.random() < 0.08 ? MIAUVADAO_MAX_DISCOUNT : MIAUVADAO_MAX_DISCOUNT - 1)
+      maxAllowedDiscount,
+      rawDiscount >= maxAllowedDiscount
+        ? (Math.random() < 0.08 ? maxAllowedDiscount : maxAllowedDiscount - 1)
         : rawDiscount,
     );
     const finalPrice  = Math.max(1, Math.round(item.price * (1 - discountPct / 100)));
@@ -1080,7 +1085,14 @@ export async function adminSetMiauvadaoOffers(offers: MiauvadaoOffer[]): Promise
   try {
     await requireAdmin();
     const validUntil = new Date(Date.now() + 24 * 3600000).toISOString();
-    const offersWithExpiry = offers.map(o => ({ ...o, validUntil, sold: 0 }));
+    const offersWithExpiry = offers.map(o => {
+      const discountLimit = isMegaStoneType(o.itemType)
+        ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT
+        : MIAUVADAO_MAX_DISCOUNT;
+      const discountPct = Math.max(0, Math.min(discountLimit, o.discountPct ?? 0));
+      const finalPrice = Math.max(1, Math.round(o.originalPrice * (1 - discountPct / 100)));
+      return { ...o, discountPct, finalPrice, validUntil, sold: 0 };
+    });
     await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
       data: { dailyOffers: offersWithExpiry as unknown as import("@prisma/client").Prisma.InputJsonValue, offersRefreshedAt: new Date() },

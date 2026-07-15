@@ -22,6 +22,8 @@ import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
+import { MEGA_STONES, getMegaStoneByType } from "@/lib/mega-evolution";
+import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -932,9 +934,16 @@ export type ExpeditionReward =
   | { type: "FOOD";      foodType: "FOOD" | "SWEET"; quantity: number }
   | { type: "COINS";     amount: number }
   | { type: "BUFF_ITEM"; shopItemType: string }
+  | { type: "MEGA_STONE"; shopItemType: string }
   | { type: "TRAINING";  exp: number; durationLabel: string }  // retorna só EXP, nunca itens
   | { type: "VACATION";  expBonus: number; gotEgg: boolean }
   | { type: "NOTHING" };
+
+const ITEM_EXPEDITION_6H_MEGA_STONE_CHANCE = 0.005;
+
+function rollRandomMegaStoneType(): string {
+  return randomFrom([...MEGA_STONES]).type;
+}
 
 // Pool de itens especiais que podem ser encontrados em expedições
 function rollBuffItemType(durationKey: ExpeditionDuration): string {
@@ -1033,6 +1042,10 @@ async function rollItemExpeditionReward(
   durationKey: ExpeditionDuration = "1h",
   allyCount = 0
 ): Promise<ExpeditionReward> {
+  if (durationKey === "6h" && Math.random() < ITEM_EXPEDITION_6H_MEGA_STONE_CHANCE) {
+    return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
+  }
+
   const luckBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
   });
@@ -1124,6 +1137,20 @@ function describeExpeditionReward(reward: ExpeditionReward) {
         payload: {
           rewardKind: "MASCOT_BUFF",
           buffType: reward.shopItemType,
+          rewardLabel: label,
+        }
+      };
+    }
+    case "MEGA_STONE": {
+      const stone = getMegaStoneByType(reward.shopItemType);
+      const label = stone?.stoneName ?? "Pedra de Mega Evolucao";
+      return {
+        title: `${label} encontrada!`,
+        description: "Seu mascote voltou da expedição de itens com uma pedra de mega evolução raríssima.",
+        payload: {
+          rewardKind: "MASCOT_BUFF",
+          buffType: reward.shopItemType,
+          quantity: 1,
           rewardLabel: label,
         }
       };
@@ -1330,6 +1357,9 @@ export async function claimExpedition(
   const reward: ExpeditionReward = mode === "TRAINING"
     ? { type: "TRAINING", exp: expeditionExp, durationLabel: dur.label }
     : (baseReward ?? { type: "NOTHING" as const });
+  if (reward.type === "MEGA_STONE") {
+    await ensureMegaStoneShopItems(false);
+  }
   const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
 
   await prisma.$transaction(async (tx) => {
