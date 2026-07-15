@@ -68,6 +68,10 @@ export default async function ManualPage() {
     { id: "interacoes",   label: "Interações" },
     { id: "expedicoes",   label: "Expedições" },
     { id: "itens",        label: "Itens & Buffs" },
+    { id: "atributos-combate", label: "Atributos & Combate" },
+    { id: "posturas",     label: "Posturas" },
+    { id: "personalidades", label: "Personalidades" },
+    { id: "laboratorio-analise", label: "Lab & Análise" },
     { id: "arena",        label: "Arena Z (PvP/PvE)" },
     { id: "economia",     label: "Economia & ZikaCoins" },
     { id: "bazar",        label: "Bazar" },
@@ -345,9 +349,175 @@ export default async function ManualPage() {
             ]}
           />
         </Sub>
+
+        <Sub title="Exemplos numéricos de itens">
+          <Table
+            headers={["Item", "Exemplo prático"]}
+            rows={[
+              ["Vitamina Elétrica", "Se uma expedição renderia 240 EXP, com +25% ela rende 300 EXP."],
+              ["Ovo da Sorte", "Se uma expedição de treino renderia 1.000 EXP, com +20% ela rende 1.200 EXP."],
+              ["Cesta de Piquenique", "Se 6 favoritos receberiam 200 EXP, cada um recebe 230 EXP e +5 felicidade."],
+              ["Proteína Zika", "+2 em Força, Agilidade, Carisma, Instinto e Vitalidade. Uma dose = +10 pontos totais; 3 doses = +30."],
+              ["Amuleto da Sorte", "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2."],
+              ["Mega Stone", "Só cai em expedição de Itens de 6h, com 0,5% antes da rolagem normal de recompensa."],
+            ]}
+          />
+          <Note>Os percentuais de drop são rolagens ponderadas: aumentar Instinto, usar Amuleto da Sorte e levar aliados melhora o peso de ovos/itens, mas não transforma todo resultado em item raro.</Note>
+        </Sub>
       </Section>
 
-      {/* ── 6. Arena Z ────────────────────────────────────────────────────── */}
+      {/* ── 6. Atributos & Combate ────────────────────────────────────────── */}
+      <Section id="atributos-combate" title="Atributos & Cálculo de Combate" emoji="🧮">
+        <Sub title="O que cada atributo faz">
+          <Table
+            headers={["Atributo", "Uso direto no combate", "Posturas que mais aproveitam"]}
+            rows={[
+              ["Força", "Entra no dano base com peso 0,42. Também aumenta Atacante, Duelista e Especialista.", "Atacante, Duelista, Especialista"],
+              ["Agilidade", "Entra no dano base com peso 0,18. Ajuda Flanco/Batedor a furar defesa e escolher alvos frágeis.", "Flanco, Batedor, Sabotador"],
+              ["Instinto", "Entra no dano base com peso 0,12. Ajuda efeitos de debuff, alvo oportunista e sobrevivência.", "Oportunista, Sabotador, Duelista, Sobrevivente"],
+              ["Vitalidade", "Entra na defesa com peso 0,28 e sustenta HP, redução de dano e proteção.", "Defensor, Guardião, Sobrevivente"],
+              ["Carisma", "Entra na defesa com peso 0,08 e fortalece suporte, cura, provocação e bônus de equipe.", "Encorajador, Cuidador, Provocador, Guardião"],
+            ]}
+          />
+        </Sub>
+
+        <Sub title="Fórmula base de dano">
+          <Table
+            headers={["Etapa", "Cálculo"]}
+            rows={[
+              ["Dano base", "máx(5, Força × 0,42 + Agilidade × 0,18 + Instinto × 0,12)"],
+              ["Defesa do alvo", "Vitalidade × 0,28 + Carisma × 0,08"],
+              ["Dano bruto", "máx(1, Dano base - Defesa × 0,35)"],
+              ["Dano final", "Dano bruto × vantagem de tipo × postura × variação aleatória de 0,85 a 1,15"],
+            ]}
+          />
+          <Note>Modos especiais como Liga Semanal, Arena Sincronizada e Raid Boss podem aplicar modificadores por cima dessa base, mas a lógica principal parte desses atributos.</Note>
+        </Sub>
+
+        <Sub title="Exemplo de dano">
+          <Table
+            headers={["Situação", "Resultado aproximado"]}
+            rows={[
+              ["Atacante: 120 Força, 80 Agilidade, 60 Instinto", "Dano base = 50,4 + 14,4 + 7,2 = 72"],
+              ["Alvo: 100 Vitalidade, 50 Carisma", "Defesa = 28 + 4 = 32"],
+              ["Sem postura e sem vantagem de tipo", "Dano bruto = 72 - 11,2 = 60,8, então cerca de 61 antes da variação"],
+              ["Mesmo mascote como Atacante", "Postura adiciona até +26%; 61 vira cerca de 77 antes da variação"],
+            ]}
+          />
+        </Sub>
+      </Section>
+
+      {/* ── 7. Posturas ───────────────────────────────────────────────────── */}
+      <Section id="posturas" title="Posturas de Combate" emoji="🧭">
+        <Sub title="Efeitos por postura">
+          <Table
+            headers={["Postura", "Atributos diretos", "Efeito em números"]}
+            rows={[
+              ["Defensor", "Vitalidade", "Atrai 62% a 78% dos ataques e reduz 8% a 35% do dano recebido."],
+              ["Atacante", "Força", "+8% a +26% de dano; +15% extra contra Defensores."],
+              ["Flanco", "Agilidade", "+4% a +18% de dano, 35% a 82% de chance de furar defesa e +12% contra suportes."],
+              ["Oportunista", "Instinto", "22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; +10% dano se superar Instinto do alvo."],
+              ["Encorajador", "Carisma", "Enquanto ativo, concede +4% a +18% de dano para a equipe."],
+              ["Guardião", "Vitalidade + Carisma", "Intercepta 15% a 40% do dano de aliados; recebe 5% a 20% menos dano; causa 10% menos dano."],
+              ["Duelista", "Força + Instinto", "+6% a +18% de dano base; +12% enquanto mantém duelo no mesmo alvo."],
+              ["Sabotador", "Instinto + Agilidade", "Prioriza suportes e reduz 15% a 40% dos bônus de Encorajadores inimigos."],
+              ["Cuidador", "Carisma + Vitalidade", "Cura aliados com 35% do Carisma + 25% da Vitalidade; 2 a 5 curas por combate; causa 20% menos dano."],
+              ["Batedor", "Agilidade + Instinto", "Até +8% de dano para a equipe; 35% a 82% de chance de focar alvo frágil; causa 5% menos dano."],
+              ["Provocador", "Carisma + Instinto", "20% a 55% de chance de redirecionar ataques para si e reduz 8% do dano desviado; causa 8% menos dano."],
+              ["Especialista", "Maior atributo", "+6% a +20% de dano usando o melhor atributo do mascote."],
+              ["Sobrevivente", "Vitalidade + Instinto", "Reduz até 15% de dano; abaixo de 30% HP ganha +15% dano e redução extra de 25%; sobrevive uma vez com 1 HP."],
+            ]}
+          />
+        </Sub>
+        <Note>A recomendação automática usa os atributos atuais do mascote. Ela é boa como ponto de partida, mas você pode trocar a postura para encaixar melhor na estratégia do time.</Note>
+      </Section>
+
+      {/* ── 8. Personalidades ─────────────────────────────────────────────── */}
+      <Section id="personalidades" title="Personalidades dos Mascotes" emoji="💬">
+        <Sub title="Efeito prático de cada personalidade">
+          <Table
+            headers={["Personalidade", "Efeito no jogo"]}
+            rows={[
+              ["Leal", "Ganha +2 felicidade extra no carinho e cresce melhor em Carisma: peso de Carisma ×1,15 no level-up."],
+              ["Orgulhoso", "Reage mais a vitórias, derrotas e rivalidades. Quando feliz ou confiante, tende a render melhor em eventos sociais."],
+              ["Travesso", "Puxa provocações, rivalidades leves e eventos sociais imprevisíveis sem travar o mascote."],
+              ["Preguiçoso", "Ao brincar, tende a ficar Cansado em vez de Feliz. Boa Vitalidade ajuda a compensar."],
+              ["Competitivo", "Cresce com mais pontos brutos por nível e favorece Força: peso de Força ×1,15 no level-up."],
+              ["Dramático", "Emoções mais fortes, mas crescimento de atributos é levemente menor: perde 1 ponto bruto na base de level-up e Vitalidade tem peso ×0,85."],
+              ["Brincalhão", "Brincar concede +3 felicidade e cerca de +10% EXP nessa interação."],
+              ["Elétrico", "Tem mais energia para brincar e expedições curtas, com menor chance narrativa de cansar."],
+              ["Tímido", "Se felicidade estiver abaixo de 40, pode recusar carinho. Depois que confia, cria laços fortes."],
+              ["Caótico", "Pode gerar eventos raros e imprevisíveis, especialmente quando tem Instinto alto."],
+            ]}
+          />
+        </Sub>
+
+        <Sub title="Pontos de atributo por nível">
+          <Table
+            headers={["Tipo", "Pontos brutos antes dos multiplicadores"]}
+            rows={[
+              ["Mascote comum", "5 pontos brutos por nível, depois ×0,55 e multiplicador de raridade/espécie."],
+              ["Competitivo", "6 pontos brutos por nível e viés para Força."],
+              ["Leal", "6 pontos brutos por nível e viés para Carisma."],
+              ["Dramático", "4 pontos brutos por nível e viés menor para Vitalidade."],
+              ["Pseudo/raros especiais", "Multiplicador de crescimento 1,1."],
+              ["Míticos/lendários especiais", "Multiplicador de crescimento 1,3."],
+            ]}
+          />
+          <Note>Exemplo: um mascote comum normalmente recebe arredondado perto de 3 pontos por nível (5 × 0,55). Um Competitivo recebe perto de 3 a 4, e ainda tende a jogar mais desses pontos em Força.</Note>
+        </Sub>
+      </Section>
+
+      {/* ── 9. Laboratório & Análise ──────────────────────────────────────── */}
+      <Section id="laboratorio-analise" title="Laboratório & Análise de Potencial" emoji="🔬">
+        <Sub title="Como a previsão do Laboratório é calculada">
+          <Table
+            headers={["Parte da análise", "Como funciona"]}
+            rows={[
+              ["Custo", "Cada análise custa ZikaCoins e salva o resultado no mascote para consulta posterior."],
+              ["Nível-alvo", "A simulação projeta o mascote até o nível escolhido, limitado ao Nv.100."],
+              ["Evolução", "Se evolução não estiver travada, o Lab simula a evolução no nível correto e aplica marcos de progresso."],
+              ["Crescimento", "Usa a mesma regra real de level-up: pontos por personalidade × 0,55 × multiplicador da espécie."],
+              ["Distribuição", "Os pontos vão para atributos com pesos baseados nos stats atuais, com variação determinística e anti-freeze para não abandonar atributo fraco."],
+              ["Poder projetado", "Força ×1,1 + Vitalidade ×1,0 + Agilidade ×0,95 + Instinto ×0,95 + Carisma ×0,9."],
+            ]}
+          />
+        </Sub>
+
+        <Sub title="Nota de potencial (IV Score)">
+          <Table
+            headers={["Componente", "Peso no score"]}
+            rows={[
+              ["Qualidade estimada do nascimento", "55% do score. O Lab estima o roll inicial removendo crescimento já conquistado."],
+              ["Teto da espécie/evolução", "45% do score. Considera multiplicador da espécie e quantas evoluções ainda existem."],
+              ["Lendários/Míticos", "Teto de espécie tratado como alto por natureza."],
+              ["Ratings", "SSS ≥92, SS ≥82, S ≥72, A ≥60, B ≥47, C ≥34, D ≥20, E abaixo de 20."],
+            ]}
+          />
+        </Sub>
+
+        <Sub title="Pó de Criação ao reciclar">
+          <Table
+            headers={["Raridade do mascote", "Pó base"]}
+            rows={[
+              ["Comum", "1"],
+              ["Raro", "2"],
+              ["Especial / Lendário / crescimento 1,1+", "3"],
+            ]}
+          />
+          <Table
+            headers={["Duplicatas restantes da mesma espécie", "Multiplicador"]}
+            rows={[
+              ["Nenhuma duplicata", "×1,0"],
+              ["1 duplicata", "×1,5"],
+              ["2 ou mais duplicatas", "×3,0"],
+            ]}
+          />
+          <Note>Exemplo: reciclar um mascote Especial com 2 duplicatas rende 3 × 3,0 = 9 Pó de Criação. Favoritos, mascotes em Liga Semanal, Arena, expedição ou bazar não devem aparecer como recicláveis.</Note>
+        </Sub>
+      </Section>
+
+      {/* ── 10. Arena Z ───────────────────────────────────────────────────── */}
       <Section id="arena" title="Arena Z (PvP e PvE)" emoji="⚔️">
         <Sub title="Salas e limites de nível">
           {ET("arena.intro", "text-xs text-slate-400")}
