@@ -18,6 +18,11 @@ const rarityColors: Record<string, string> = {
   MYTHIC:    "border-yellow-400/50 text-yellow-400",
   RELIC:     "border-red-500/50 text-red-400",
 };
+
+const customMegaSpriteFallbacks: Record<number, number> = {
+  10301: 160,
+  10302: 701,
+};
 const rarityLabel: Record<string, string> = {
   COMMON: "Comum", UNCOMMON: "Incomum", RARE: "Raro", EPIC: "Épico",
   LEGENDARY: "Lendário", MYTHIC: "Mítico", RELIC: "Relíquia",
@@ -84,11 +89,12 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
     if (!item.type.startsWith("MEGA_STONE_")) return null;
     const metadata = item.metadata as Record<string, unknown> | null | undefined;
     const megaPokemonId = Number(metadata?.megaPokemonId);
+    const spritePokemonId = customMegaSpriteFallbacks[megaPokemonId] ?? megaPokemonId;
     const megaPokemonName = typeof metadata?.megaPokemonName === "string" ? metadata.megaPokemonName : item.name;
     if (!Number.isFinite(megaPokemonId) || megaPokemonId <= 0) return null;
     return {
-      src: `/sprites/pokemon/versions/generation-v/black-white/animated/${megaPokemonId}.gif`,
-      fallbackSrc: item.imageUrl ?? `/sprites/pokemon/${megaPokemonId}.png`,
+      src: `/sprites/pokemon/versions/generation-v/black-white/animated/${spritePokemonId}.gif`,
+      fallbackSrc: item.imageUrl ?? `/sprites/pokemon/${spritePokemonId}.png`,
       name: megaPokemonName,
       type: item.type,
     };

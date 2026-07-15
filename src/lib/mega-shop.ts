@@ -2,6 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { buildMegaStoneMetadata, getMegaStoneDescription, MEGA_STONES } from "@/lib/mega-evolution";
 
+const CUSTOM_MEGA_SPRITE_FALLBACKS: Record<number, number> = {
+  10301: 160, // Mega Feraligatr custom: usa Feraligatr ate existir arte dedicada
+  10302: 701, // Mega Hawlucha custom: usa Hawlucha ate existir arte dedicada
+};
+
+function getMegaStoneImageUrl(megaPokemonId: number) {
+  return `/sprites/pokemon/${CUSTOM_MEGA_SPRITE_FALLBACKS[megaPokemonId] ?? megaPokemonId}.png`;
+}
+
 async function safeInvalidateShopCache() {
   try {
     await invalidateShopCache();
@@ -35,7 +44,7 @@ export async function ensureMegaStoneShopItems(active = false) {
       type: stone.type,
       name: stone.stoneName,
       description: getMegaStoneDescription(stone),
-      imageUrl: `/sprites/pokemon/${stone.megaPokemonId}.png`,
+      imageUrl: getMegaStoneImageUrl(stone.megaPokemonId),
       rarity: "LEGENDARY" as const,
       price: stone.price,
       active,
