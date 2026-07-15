@@ -1071,6 +1071,8 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
   10175: 10179, // Yamask-Galar
   10176: 10180, // Stunfisk-Galar
   10013: 1013,  // Sinistcha Masterpiece → same sprite as Sinistcha
+  10301: 160,   // Mega Feraligatr custom → fallback Feraligatr until dedicated art exists
+  10302: 701,   // Mega Hawlucha custom → fallback Hawlucha until dedicated art exists
 };
 
 // Sprites auto-hospedados em public/sprites (CDN estático do Vercel) — o
@@ -1559,6 +1561,8 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
   10006:"Shaymin-Céu",10007:"Giratina-Origem",
   10008:"Rotom-Calor",10009:"Rotom-Lavagem",10010:"Rotom-Gelo",
   10011:"Rotom-Ventilador",10012:"Rotom-Corte",
+  10301:"Mega Feraligatr",
+  10302:"Mega Hawlucha",
   // ── Formas Alolan ─────────────────────────────────────────────────────────────
   // ── Formas de Lycanroc (Gen 7) ───────────────────────────────────────────────
   10152:"Lycanroc-Midnight",
@@ -2016,6 +2020,8 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   10241:"steel/dragon",10242:"steel/dragon",   // Sliggoo/Goodra-Hisui
   10243:"ice/rock",                            // Avalugg-Hisui
   10244:"grass/fighting",                      // Decidueye-Hisui
+  10301:"water",                               // Mega Feraligatr custom
+  10302:"fighting/flying",                     // Mega Hawlucha custom
 };
 
 export function getPokemonElement(pokemonId: number): string {
