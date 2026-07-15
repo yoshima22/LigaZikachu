@@ -151,14 +151,14 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
         onClick={closeLightbox}
       >
         <div
-          className="relative max-h-[90vh] max-w-[90vw] rounded-2xl overflow-hidden shadow-2xl"
+          className="relative flex min-h-[55vh] min-w-[min(92vw,720px)] items-center justify-center rounded-2xl border border-white/10 bg-slate-950/80 p-8 shadow-2xl"
           onClick={e => e.stopPropagation()}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={lightbox.src}
             alt={lightbox.name}
-            className={`block max-h-[85vh] max-w-[88vw] ${
+            className={`block max-h-[88vh] max-w-[90vw] ${
               lightbox.type === "BANNER" ? "w-full object-cover" : "object-contain"
             }`}
             style={{ background: lightbox.type === "FRAME" ? "transparent" : undefined }}
@@ -176,10 +176,6 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
           >
             <X size={16} />
           </button>
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-3 pt-6">
-            <p className="text-sm font-semibold text-white">{lightbox.name}</p>
-            <p className="text-[10px] text-slate-400">Clique fora ou pressione Esc para fechar</p>
-          </div>
         </div>
       </div>
     )}
