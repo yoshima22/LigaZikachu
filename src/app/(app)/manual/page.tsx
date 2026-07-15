@@ -434,20 +434,20 @@ export default async function ManualPage() {
 
       {/* ── 8. Personalidades ─────────────────────────────────────────────── */}
       <Section id="personalidades" title="Personalidades dos Mascotes" emoji="💬">
-        <Sub title="Efeito prático de cada personalidade">
+        <Sub title="Prós e contras de cada personalidade">
           <Table
-            headers={["Personalidade", "Efeito no jogo"]}
+            headers={["Personalidade", "Prós", "Contras / cuidado"]}
             rows={[
-              ["Leal", "Ganha +2 felicidade extra no carinho e cresce melhor em Carisma: peso de Carisma ×1,15 no level-up."],
-              ["Orgulhoso", "Reage mais a vitórias, derrotas e rivalidades. Quando feliz ou confiante, tende a render melhor em eventos sociais."],
-              ["Travesso", "Puxa provocações, rivalidades leves e eventos sociais imprevisíveis sem travar o mascote."],
-              ["Preguiçoso", "Ao brincar, tende a ficar Cansado em vez de Feliz. Boa Vitalidade ajuda a compensar."],
-              ["Competitivo", "Cresce com mais pontos brutos por nível e favorece Força: peso de Força ×1,15 no level-up."],
-              ["Dramático", "Emoções mais fortes, mas crescimento de atributos é levemente menor: perde 1 ponto bruto na base de level-up e Vitalidade tem peso ×0,85."],
-              ["Brincalhão", "Brincar concede +3 felicidade e cerca de +10% EXP nessa interação."],
-              ["Elétrico", "Tem mais energia para brincar e expedições curtas, com menor chance narrativa de cansar."],
-              ["Tímido", "Se felicidade estiver abaixo de 40, pode recusar carinho. Depois que confia, cria laços fortes."],
-              ["Caótico", "Pode gerar eventos raros e imprevisíveis, especialmente quando tem Instinto alto."],
+              ["Leal", "Carinho dá +2 felicidade extra. No level-up, Carisma recebe peso ×1,15, então cresce melhor como suporte, Cuidador, Encorajador ou Provocador.", "Não melhora dano direto. Se o mascote tiver Força baixa, Leal não resolve isso sozinho."],
+              ["Orgulhoso", "Reage melhor quando está feliz, confiante ou vindo de vitórias. Combina com mascotes usados em destaque, arena e eventos sociais positivos.", "Sofre mais narrativamente com derrotas e rivalidades. Pode exigir mais manutenção de humor/felicidade para render bem."],
+              ["Travesso", "Tende a criar provocações e rivalidades leves, aumentando oportunidades de laços e eventos sociais entre mascotes.", "Pode acelerar rivalidades indesejadas. Bom para histórias e caos controlado; ruim se você quer um mascote sempre estável."],
+              ["Preguiçoso", "Pode funcionar bem em mascotes naturalmente resistentes: Vitalidade alta compensa a tendência de cansar.", "Ao brincar, tende a ficar Cansado em vez de Feliz. Precisa de comida, carinho e descanso com mais atenção."],
+              ["Competitivo", "Ganha 6 pontos brutos por nível em vez de 5 e favorece Força com peso ×1,15. Excelente para Atacante, Duelista e Especialista.", "Cresce ofensivamente, mas não dá defesa grátis. Se Vitalidade/Carisma forem baixos, pode bater forte e cair rápido."],
+              ["Dramático", "Quando está feliz ou confiante, tende a render melhor em eventos emocionais e relações marcantes.", "Ganha 4 pontos brutos por nível em vez de 5 e Vitalidade tem peso ×0,85. É uma personalidade charmosa, mas menos eficiente para tanque puro."],
+              ["Brincalhão", "Brincar dá +3 felicidade extra e cerca de +10% EXP nessa interação. Muito bom para evoluir mantendo humor alto.", "Depende de interação frequente. Se ficar abandonado, perde parte do valor prático."],
+              ["Elétrico", "Tem melhor ritmo em interações curtas e expedições rápidas. É bom para jogadores que entram várias vezes ao dia.", "O benefício aparece mais em rotina ativa. Em longos períodos parado, não substitui alimentação e cuidado."],
+              ["Tímido", "Depois que ganha confiança, tende a criar laços fortes e consistentes. Bom para mascotes de longo prazo.", "Se felicidade estiver abaixo de 40, pode recusar carinho. No começo exige mais paciência para estabilizar."],
+              ["Caótico", "Com Instinto alto, aumenta a chance de eventos sociais incomuns, viradas narrativas e interações fora do padrão entre mascotes.", "É menos previsível. Pode gerar situações boas ou inconvenientes; não é a melhor escolha para quem quer controle total."],
             ]}
           />
         </Sub>
@@ -466,11 +466,26 @@ export default async function ManualPage() {
           />
           <Note>Exemplo: um mascote comum normalmente recebe arredondado perto de 3 pontos por nível (5 × 0,55). Um Competitivo recebe perto de 3 a 4, e ainda tende a jogar mais desses pontos em Força.</Note>
         </Sub>
+
+        <Sub title="Como ler personalidade na prática">
+          <Table
+            headers={["Objetivo", "Personalidades que combinam", "Por quê"]}
+            rows={[
+              ["Dano bruto", "Competitivo, Brincalhão", "Competitivo cresce melhor em Força; Brincalhão facilita EXP por interação."],
+              ["Suporte e cura", "Leal, Orgulhoso", "Leal favorece Carisma; Orgulhoso se beneficia de humor alto e vitórias."],
+              ["Mascote social / laços", "Leal, Tímido, Travesso, Caótico", "Geram ou aproveitam melhor relações, confiança, rivalidade e eventos sociais."],
+              ["Tanque / sobrevivência", "Leal, Preguiçoso com Vitalidade alta", "Leal pode crescer suporte/defesa por Carisma; Preguiçoso só vale se a base defensiva já for boa."],
+              ["Build arriscada", "Dramático, Caótico", "Podem render momentos fortes, mas exigem mais leitura de humor, laços e contexto."],
+            ]}
+          />
+          <Note>Personalidade não muda a espécie nem garante vitória. Ela inclina crescimento, humor e eventos sociais. O melhor mascote ainda depende de atributos, postura, nível, itens, laços e modo de jogo.</Note>
+        </Sub>
       </Section>
 
       {/* ── 9. Laboratório & Análise ──────────────────────────────────────── */}
       <Section id="laboratorio-analise" title="Laboratório & Análise de Potencial" emoji="🔬">
         <Sub title="Como a previsão do Laboratório é calculada">
+          <Note>A análise do Laboratório é uma previsão aproximada baseada nas regras atuais do jogo. Ela não é promessa de resultado exato: mudanças futuras de balanceamento, itens usados depois da análise, travas de evolução, Mega Evolução e eventos especiais podem alterar o caminho real do mascote.</Note>
           <Table
             headers={["Parte da análise", "Como funciona"]}
             rows={[
@@ -480,6 +495,19 @@ export default async function ManualPage() {
               ["Crescimento", "Usa a mesma regra real de level-up: pontos por personalidade × 0,55 × multiplicador da espécie."],
               ["Distribuição", "Os pontos vão para atributos com pesos baseados nos stats atuais, com variação determinística e anti-freeze para não abandonar atributo fraco."],
               ["Poder projetado", "Força ×1,1 + Vitalidade ×1,0 + Agilidade ×0,95 + Instinto ×0,95 + Carisma ×0,9."],
+            ]}
+          />
+        </Sub>
+
+        <Sub title="Por que é previsão, não garantia">
+          <Table
+            headers={["Fator", "O que o Lab consegue prever", "O que pode mudar depois"]}
+            rows={[
+              ["Level-up", "Simula o ganho de níveis com a regra atual, incluindo saltos de vários níveis.", "Novos itens, buffs permanentes ou ajustes de balanceamento podem mudar os atributos finais."],
+              ["Evolução", "Projeta a cadeia evolutiva se ela estiver destravada.", "Se o jogador travar evolução, destravar depois, usar Mega Stone ou Pena Arco-Íris, a rota muda."],
+              ["Personalidade", "Aplica os pesos reais: Competitivo favorece Força, Leal favorece Carisma, Dramático reduz Vitalidade.", "Humor, laços e escolhas do jogador ainda afetam eventos e desempenho situacional."],
+              ["Stats iniciais", "Estima a qualidade do nascimento removendo crescimento já conquistado.", "Como o jogo não salva cada ponto histórico separadamente, essa parte é uma estimativa conservadora."],
+              ["Combate", "Sugere posturas e calcula poder projetado por soma ponderada.", "Resultado real ainda depende de tipo, postura adversária, variação de dano, itens, laços e modificadores do modo."],
             ]}
           />
         </Sub>
@@ -494,6 +522,7 @@ export default async function ManualPage() {
               ["Ratings", "SSS ≥92, SS ≥82, S ≥72, A ≥60, B ≥47, C ≥34, D ≥20, E abaixo de 20."],
             ]}
           />
+          <Note>Use o IV Score como bússola de investimento, não como sentença. Um mascote B com boa postura e item certo pode ser mais útil em um modo específico do que um S mal encaixado.</Note>
         </Sub>
 
         <Sub title="Pó de Criação ao reciclar">
