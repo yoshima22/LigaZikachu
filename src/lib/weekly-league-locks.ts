@@ -22,6 +22,16 @@ function teamKey(leagueId: string, battleDate: string, battleSlot: number) {
   return `${leagueId}:${battleDate}:${battleSlot}`;
 }
 
+function uniqueTargets(targets: Array<{ leagueId: string; battleDate: string; battleSlot: number }>) {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = teamKey(target.leagueId, target.battleDate, target.battleSlot);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * Mascotes usados na Liga Semanal ficam fora do Bazar enquanto houver confronto
  * pendente. Isso inclui times gravados para hoje/futuro e times que a tela da
@@ -60,6 +70,12 @@ export async function getWeeklyLeagueLockedMascotIds(
     for (const mascotId of readMascotIds(team.mascotIdsJson)) locked.add(mascotId);
   }
 
+  const visibleTodayInheritedSlots = leagueIds.flatMap((leagueId) =>
+    [1, 2, 3]
+      .filter((battleSlot) => !explicitKeys.has(teamKey(leagueId, today, battleSlot)))
+      .map((battleSlot) => ({ leagueId, battleDate: today, battleSlot })),
+  );
+
   const pendingMatches = await client.weeklyMascotLeagueMatch.findMany({
     where: {
       leagueId: { in: leagueIds },
@@ -70,7 +86,12 @@ export async function getWeeklyLeagueLockedMascotIds(
     select: { leagueId: true, battleDate: true, battleSlot: true },
   });
 
-  const inheritedLookups = pendingMatches
+  const inheritedTargets = uniqueTargets([
+    ...visibleTodayInheritedSlots,
+    ...pendingMatches,
+  ]);
+
+  const inheritedLookups = inheritedTargets
     .filter((match) => !explicitKeys.has(teamKey(match.leagueId, match.battleDate, match.battleSlot)))
     .map((match) =>
       client.weeklyMascotLeagueDailyTeam.findFirst({
