@@ -26,6 +26,7 @@ import {
 } from "../actions";
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
+import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
@@ -328,6 +329,16 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
   if (reward.type === "BUFF_ITEM") {
     const info = (reward.shopItemType ? BUFF_ITEM_DISPLAY[reward.shopItemType] : null) ?? { emoji: "✨", label: "Item especial" };
     return { emoji: info.emoji, title: `${info.label} encontrado!`, description: "O item foi adicionado à sua caixa de presentes." };
+  }
+  if (reward.type === "MEGA_STONE") {
+    const stone = reward.shopItemType ? getMegaStoneByType(reward.shopItemType) : null;
+    const label = stone?.stoneName ?? "Pedra de Mega Evolução";
+    const target = stone?.compatiblePokemonName ? ` para ${stone.compatiblePokemonName}` : "";
+    return {
+      emoji: "💎",
+      title: `${label} encontrada!`,
+      description: `Uma pedra de mega evolução raríssima${target} foi enviada para sua caixa de presentes.`,
+    };
   }
   return { emoji: "😔", title: "Voltou de mãos vazias...", description: "Desta vez não encontrou nada." };
 }

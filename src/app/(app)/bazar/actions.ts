@@ -11,6 +11,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
+import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -319,6 +320,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
+    await prepareBazarMascotAvailability(player.id);
+
     // Validação básica
     if (input.listingType !== "TRADE" && (!input.priceCoins || input.priceCoins < 1)) {
       return { error: "Defina um preço válido em ZikaCoins." };
@@ -360,17 +363,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
 
       if (input.category === "MASCOT" && input.mascotId) {
         const mascot = await tx.mascot.findUnique({ where: { id: input.mascotId } });
-        if (!mascot || mascot.playerId !== player.id) throw new Error("Mascote não encontrado.");
-        if (mascot.bazarListed) throw new Error("Mascote já está anunciado no Bazar.");
-        if (mascot.isEquipped) throw new Error("Desequipe o mascote antes de anunciá-lo.");
-        if (await isMascotLockedInWeeklyLeague(tx, mascot.id, player.id)) {
-          throw new Error("Mascote está escalado na Liga Semanal e não pode ser anunciado no Bazar.");
-        }
-
-        const activeExp = await tx.mascotExpedition.findFirst({
-          where: { mascotId: mascot.id, status: "ACTIVE" },
-        });
-        if (activeExp) throw new Error("Mascote está em expedição — aguarde o retorno.");
+        if (!mascot) throw new Error("Mascote não encontrado.");
+        await assertMascotTradeableInBazar(tx, mascot, player.id);
 
         // Bloqueia mascote
         await tx.mascot.update({ where: { id: input.mascotId }, data: { bazarListed: true } });
@@ -671,6 +665,8 @@ export async function createProposal(
 
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
+
+    await prepareBazarMascotAvailability(player.id);
 
     const listing = await prisma.bazarListing.findUnique({
       where: { id: listingId },
@@ -1223,6 +1219,13 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
+async function prepareBazarMascotAvailability(playerId: string) {
+  await Promise.all([
+    cleanupExpiredArenaResting(playerId),
+    syncDefeatedArenaTeams(playerId),
+  ]).catch(() => null);
+}
+
 async function isMascotLockedInWeeklyLeague(client: TxClient | typeof prisma, mascotId: string, playerId: string) {
   const teams = await client.weeklyMascotLeagueDailyTeam.findMany({
     where: {
@@ -1233,6 +1236,53 @@ async function isMascotLockedInWeeklyLeague(client: TxClient | typeof prisma, ma
   });
 
   return teams.some((team) => ((team.mascotIdsJson as string[] | null) ?? []).includes(mascotId));
+}
+
+async function assertMascotTradeableInBazar(
+  client: TxClient | typeof prisma,
+  mascot: {
+    id: string;
+    playerId: string;
+    pokemonId: number;
+    nickname: string | null;
+    bazarListed: boolean;
+    isEquipped: boolean;
+    arenaState: string;
+    restingUntil: Date | null;
+  },
+  playerId: string,
+  displayName?: string,
+) {
+  const name = displayName ?? mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const now = new Date();
+
+  if (mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.bazarListed) throw new Error(`${name} já está reservado em outra oferta do Bazar.`);
+  if (mascot.isEquipped) throw new Error(`Desequipe ${name} antes de oferecê-lo no Bazar.`);
+  if (mascot.arenaState !== "FREE") {
+    throw new Error(`${name} não está livre para o Bazar no momento (${mascot.arenaState}).`);
+  }
+  if (mascot.restingUntil && mascot.restingUntil > now) {
+    const minutes = Math.ceil((mascot.restingUntil.getTime() - now.getTime()) / 60_000);
+    throw new Error(`${name} ainda está em cooldown por ${minutes} min.`);
+  }
+  if (await isMascotLockedInWeeklyLeague(client, mascot.id, playerId)) {
+    throw new Error(`${name} está escalado na Liga Semanal e não pode ser oferecido no Bazar.`);
+  }
+
+  const [activeExpedition, activeArenaMember] = await Promise.all([
+    client.mascotExpedition.findFirst({
+      where: { mascotId: mascot.id, status: "ACTIVE" },
+      select: { id: true },
+    }),
+    client.arenaTeamMember.findFirst({
+      where: { mascotId: mascot.id, team: { status: "ACTIVE" } },
+      select: { id: true },
+    }),
+  ]);
+
+  if (activeExpedition) throw new Error(`${name} está em expedição e não pode ser oferecido agora.`);
+  if (activeArenaMember) throw new Error(`${name} está em uma equipe ativa da Arena Z.`);
 }
 
 async function _reserveProposalOffers(tx: TxClient, playerId: string, items: ProposalOfferItem[]): Promise<ProposalOfferItem[]> {
@@ -1298,26 +1348,10 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
     }
 
     const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId } });
-    if (!mascot || mascot.playerId !== playerId) {
+    if (!mascot) {
       throw new Error("Mascote da proposta não encontrado.");
     }
-    if (mascot.bazarListed) {
-      throw new Error(`${item.displayName} já está reservado em outra oferta do Bazar.`);
-    }
-    if (mascot.isEquipped) {
-      throw new Error(`Desequipe ${item.displayName} antes de oferecê-lo no Bazar.`);
-    }
-    if (await isMascotLockedInWeeklyLeague(tx, mascot.id, playerId)) {
-      throw new Error(`${item.displayName} está escalado na Liga Semanal e não pode ser oferecido no Bazar.`);
-    }
-
-    const activeExpedition = await tx.mascotExpedition.findFirst({
-      where: { mascotId: item.mascotId, status: "ACTIVE" },
-      select: { id: true },
-    });
-    if (activeExpedition) {
-      throw new Error(`${item.displayName} está em expedição e não pode ser oferecido agora.`);
-    }
+    await assertMascotTradeableInBazar(tx, mascot, playerId, item.displayName);
 
     await tx.mascot.update({
       where: { id: item.mascotId },
@@ -1836,6 +1870,8 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
+    await prepareBazarMascotAvailability(player.id);
+
     if (!input.minBidCoins || input.minBidCoins < 1) return { error: "Lance mínimo inválido." };
 
     const MAX_ACTIVE_LISTINGS = 8;
@@ -1864,11 +1900,8 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
 
       if (input.category === "MASCOT" && input.mascotId) {
         const mascot = await tx.mascot.findUnique({ where: { id: input.mascotId } });
-        if (!mascot || mascot.playerId !== player.id) throw new Error("Mascote não encontrado.");
-        if (mascot.bazarListed) throw new Error("Mascote já está anunciado.");
-        if (mascot.isEquipped) throw new Error("Desequipe o mascote antes de anunciá-lo.");
-        const activeExp = await tx.mascotExpedition.findFirst({ where: { mascotId: mascot.id, status: "ACTIVE" } });
-        if (activeExp) throw new Error("Mascote está em expedição.");
+        if (!mascot) throw new Error("Mascote não encontrado.");
+        await assertMascotTradeableInBazar(tx, mascot, player.id);
         await tx.mascot.update({ where: { id: input.mascotId }, data: { bazarListed: true } });
         payload = {
           mascotId: mascot.id, pokemonId: mascot.pokemonId,

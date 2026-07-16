@@ -3,6 +3,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { getMiauvadaoConfig } from "@/app/(app)/bazar/actions";
+import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 
 const HIDDEN_BAZAR_ITEM_TYPES = [
   "SYNC_TICKET_FIRE_LEFT",
@@ -42,6 +43,11 @@ export async function GET() {
 
     const player = await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } });
     if (!player) return NextResponse.json({ error: "Perfil não encontrado" }, { status: 404 });
+
+    await Promise.all([
+      cleanupExpiredArenaResting(player.id),
+      syncDefeatedArenaTeams(player.id),
+    ]).catch(() => null);
 
     const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(player.id);
 

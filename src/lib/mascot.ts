@@ -17,7 +17,7 @@ import {
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
-import type { EggType, MascotMood, MascotPersonality } from "@prisma/client";
+import type { EggType, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
@@ -1361,11 +1361,19 @@ export async function claimExpedition(
     await ensureMegaStoneShopItems(false);
   }
   const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
+  const storedRewardJson: Record<string, Prisma.InputJsonValue> = {
+    ...reward,
+    mode,
+    durationKey,
+  };
+  if (reward.type === "MEGA_STONE") {
+    storedRewardJson.megaStoneDropChance = ITEM_EXPEDITION_6H_MEGA_STONE_CHANCE;
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
       where: { id: expeditionId },
-      data: { status: "CLAIMED", rewardJson: reward }
+      data: { status: "CLAIMED", rewardJson: storedRewardJson as Prisma.InputJsonObject }
     });
 
     if (mode === "TRAINING") {
