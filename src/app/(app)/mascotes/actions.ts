@@ -1053,7 +1053,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     evolutionLocked: boolean; expLocked: boolean; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string;
     activeBuffs: { type: string; expiresAt: Date }[];
-    relations: { type: string; interactionCount: number; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
+    relations: { type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
     events: { id: string; emoji: string; description: string; createdAt: Date }[];
   };
@@ -1070,7 +1070,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
       include: {
         expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
         relationsAsA: {
-          take: 5,
+          take: 10,
           include: { mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { id: true, displayName: true } } } } },
         },
       },
@@ -1104,6 +1104,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,
+          relationshipScore: r.relationshipScore, specialBondType: r.specialBondType,
           mascotB: { id: r.mascotB.id, pokemonId: r.mascotB.pokemonId, nickname: r.mascotB.nickname, ownerName: r.mascotB.player.displayName, ownerId: r.mascotB.player.id },
         })),
         expeditions: m.expeditions.map(e => ({

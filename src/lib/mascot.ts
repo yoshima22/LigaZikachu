@@ -2456,11 +2456,11 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
 }
 
 /**
- * Remove relações excedentes: mantém no máximo 5 por mascote (as com mais interações).
+ * Remove relações excedentes: mantém no máximo 10 por mascote (as com mais interações).
  * Roda uma vez por ciclo de eventos sociais para manter a tabela enxuta.
  */
 async function pruneExcessRelations(): Promise<void> {
-  const MAX_RELATIONS = 5;
+  const MAX_RELATIONS = 10;
   // Pega IDs de mascotes que têm mais de MAX_RELATIONS relações
   const counts = await prisma.mascotRelation.groupBy({
     by: ["mascotAId"],

@@ -7,8 +7,8 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import {
   BOND_BEHAVIOR_LABEL,
   autoResolveExpiredBondEvents,
-  createBondEventForPlayer,
   effectiveRelationScore,
+  ensureBondEventCadence,
   ensureRunawayWarningsForPlayer,
   normalizeBondOptions,
   relationTier,
@@ -66,28 +66,8 @@ export default async function LacosPage({
   await autoResolveExpiredBondEvents(player.id);
   await ensureRunawayWarningsForPlayer(player.id).catch(() => {});
 
-  // Auto-criar eventos cadenciados: min 4h entre criações, preenche até 5 pendentes
-  const [lastEvent, currentPending] = await Promise.all([
-    prisma.mascotSocialEvent.findFirst({
-      where: { ownerId: player.id },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }).catch(() => null),
-    prisma.mascotSocialEvent.count({
-      where: { ownerId: player.id, status: "PENDING" },
-    }).catch(() => 7),
-  ]);
-
-  const hoursSinceLast = lastEvent
-    ? (Date.now() - lastEvent.createdAt.getTime()) / 3_600_000
-    : 999;
-
-  if (hoursSinceLast >= 2 && currentPending < 7) {
-    const toCreate = Math.min(7 - currentPending, hoursSinceLast >= 8 ? 3 : hoursSinceLast >= 4 ? 2 : 1);
-    for (let i = 0; i < toCreate; i++) {
-      await createBondEventForPlayer(player.id).catch(() => {});
-    }
-  }
+  // Mantém a fila social ativa, com reforço quando o jogador abre a página.
+  await ensureBondEventCadence(player.id).catch(() => 0);
 
   const params = await searchParams;
   const relPage = Math.max(1, Number(params.relPage ?? "1") || 1);
@@ -118,7 +98,7 @@ export default async function LacosPage({
     prisma.mascotSocialEvent.findMany({
       where: { ownerId: player.id, status: "PENDING" },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 10,
       include: {
         mascotA: { select: { id: true, pokemonId: true, nickname: true } },
         mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { displayName: true } } } },

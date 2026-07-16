@@ -138,7 +138,7 @@ async function fetchMascotPageData(playerId: string) {
     prisma.mascotRelation.findMany({
       where: { mascotAId: { in: featuredIds } },
       select: {
-        mascotAId: true, type: true, interactionCount: true,
+        mascotAId: true, type: true, interactionCount: true, relationshipScore: true, specialBondType: true,
         mascotB: {
           select: {
             id: true, pokemonId: true, nickname: true,
@@ -146,7 +146,7 @@ async function fetchMascotPageData(playerId: string) {
           }
         }
       },
-      take: featuredIds.length * 5,
+      take: featuredIds.length * 10,
     })
   ).catch((error) => {
     console.error("[Mascotes] Falha ao carregar relacoes; usando fallback.", error);
@@ -157,7 +157,7 @@ async function fetchMascotPageData(playerId: string) {
   const relationsByMascot = new Map<string, typeof featuredRelationsAll>();
   for (const r of featuredRelationsAll) {
     const list = [...(relationsByMascot.get(r.mascotAId) ?? [])];
-    if (list.length < 5) { list.push(r); relationsByMascot.set(r.mascotAId, list); }
+    if (list.length < 10) { list.push(r); relationsByMascot.set(r.mascotAId, list); }
   }
 
   // Injeta nos mascotes para manter compatibilidade com componentes existentes
@@ -165,7 +165,8 @@ async function fetchMascotPageData(playerId: string) {
     ...m,
     events: [],
     relationsAsA: (relationsByMascot.get(m.id) ?? []).map(r => ({
-      type: r.type, interactionCount: r.interactionCount, mascotB: r.mascotB,
+      type: r.type, interactionCount: r.interactionCount, relationshipScore: r.relationshipScore,
+      specialBondType: r.specialBondType, mascotB: r.mascotB,
     })),
   }));
 
@@ -340,6 +341,8 @@ export default async function MascotesPage() {
     relations: (m.relationsAsA ?? []).map(r => ({
       type: r.type,
       interactionCount: r.interactionCount,
+      relationshipScore: r.relationshipScore,
+      specialBondType: r.specialBondType,
       mascotB: {
         id: r.mascotB.id,
         pokemonId: r.mascotB.pokemonId,

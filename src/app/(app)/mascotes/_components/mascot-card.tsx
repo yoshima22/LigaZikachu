@@ -36,6 +36,8 @@ interface Expedition { id: string; finishAt: Date; status: string; mode?: string
 interface MascotRelation {
   type: string;
   interactionCount: number;
+  relationshipScore: number;
+  specialBondType: string | null;
   mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string };
 }
 
@@ -378,6 +380,25 @@ function getHatchedEggLabel(type?: string | null, origin?: string | null) {
     return `Ovo de Laboratorio (Geracao ${origin.replace("LAB_REGION:EGG_GEN", "")})`;
   }
   return EGG_TYPE_LABEL[type] ?? type.replaceAll("_", " ");
+}
+
+function getRelationTier(relation: MascotRelation) {
+  const legacyScore = relation.type === "FRIEND"
+    ? Math.min(94, 15 + Math.max(1, relation.interactionCount) * 5)
+    : Math.max(-79, -15 - Math.max(1, relation.interactionCount) * 8);
+  const score = typeof relation.relationshipScore === "number" && relation.relationshipScore !== 0
+    ? relation.relationshipScore
+    : legacyScore;
+  if (score <= -80) return { score, label: "Nêmesis", emoji: "☠️" };
+  if (score <= -60) return { score, label: "Rival Direto", emoji: "🔥" };
+  if (score <= -35) return { score, label: "Rival Forte", emoji: "⚔️" };
+  if (score <= -15) return { score, label: "Rival", emoji: "😤" };
+  if (score <= 14) return { score, label: "Conhecido", emoji: "👀" };
+  if (score <= 34) return { score, label: "Colega", emoji: "🤝" };
+  if (score <= 59) return { score, label: "Amigo", emoji: "💚" };
+  if (score <= 79) return { score, label: "Grande Amigo", emoji: "💛" };
+  if (score <= 94) return { score, label: "Melhor Amigo", emoji: "🌟" };
+  return { score, label: "Quase Irmãos", emoji: "✨" };
 }
 
 function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date }) {
@@ -1300,9 +1321,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <div className="rounded-xl border border-border/40 bg-slate-900/30 p-2 space-y-1.5 max-h-48 overflow-y-auto">
                 {mascot.relations.map(rel => {
                   const isFriend = rel.type === "FRIEND";
-                  const tier = isFriend
-                    ? (rel.interactionCount >= 5 ? "💛 Super Amigo" : "💚 Amigo")
-                    : (rel.interactionCount >= 3 ? "🔥 Rival Direto" : "😤 Rival");
+                  const tier = getRelationTier(rel);
                   const name_ = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
                   return (
                     <div key={rel.mascotB.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 border text-[10px] ${
@@ -1314,7 +1333,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                         <p className="font-semibold text-slate-200 truncate">{name_}</p>
                         <p className="text-slate-500 truncate">de {rel.mascotB.ownerName}</p>
                       </div>
-                      <span className={`shrink-0 text-[9px] font-semibold ${isFriend ? "text-green-300" : "text-red-300"}`}>{tier}</span>
+                      <span className={`shrink-0 text-right text-[9px] font-semibold ${isFriend ? "text-green-300" : "text-red-300"}`}>
+                        <span className="block">{tier.emoji} {tier.label}</span>
+                        <span className="block opacity-60">{tier.score > 0 ? "+" : ""}{tier.score} · {rel.interactionCount} interações</span>
+                      </span>
                     </div>
                   );
                 })}

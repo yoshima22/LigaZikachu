@@ -290,6 +290,39 @@ export async function createBondEventForPlayer(playerId: string) {
   });
 }
 
+export async function ensureBondEventCadence(
+  playerId: string,
+  options: { minHours?: number; maxPending?: number; maxCreate?: number } = {},
+) {
+  const minHours = options.minHours ?? 1;
+  const maxPending = options.maxPending ?? 10;
+  const maxCreate = options.maxCreate ?? 3;
+  const [lastEvent, currentPending] = await Promise.all([
+    prisma.mascotSocialEvent.findFirst({
+      where: { ownerId: playerId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+    prisma.mascotSocialEvent.count({
+      where: { ownerId: playerId, status: "PENDING" },
+    }),
+  ]);
+
+  const hoursSinceLast = lastEvent
+    ? (Date.now() - lastEvent.createdAt.getTime()) / 3_600_000
+    : Number.POSITIVE_INFINITY;
+  if (hoursSinceLast < minHours || currentPending >= maxPending) return 0;
+
+  const desired = hoursSinceLast >= 6 ? 3 : hoursSinceLast >= 3 ? 2 : 1;
+  const toCreate = Math.min(maxCreate, maxPending - currentPending, desired);
+  let created = 0;
+  for (let index = 0; index < toCreate; index += 1) {
+    await createBondEventForPlayer(playerId);
+    created += 1;
+  }
+  return created;
+}
+
 export async function ensureRunawayWarningsForPlayer(playerId: string) {
   const player = await prisma.player.findUnique({
     where: { id: playerId },
