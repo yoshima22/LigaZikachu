@@ -692,9 +692,12 @@ export async function autoResolveExpiredBondEvents(playerId: string) {
     select: { id: true },
     take: 10,
   });
+  let resolved = 0;
   for (const event of events) {
-    await applyBondOption(event.id, playerId, "AUTO", "AUTO").catch(() => null);
+    const result = await applyBondOption(event.id, playerId, "AUTO", "AUTO").catch(() => null);
+    if (result) resolved += 1;
   }
+  return resolved;
 }
 
 export async function getBondCombatModifier(mascotIds: string[]) {

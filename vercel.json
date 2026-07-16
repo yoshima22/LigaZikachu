@@ -9,6 +9,10 @@
       "schedule": "0 18 * * *"
     },
     {
+      "path": "/api/cron/mascot-bonds",
+      "schedule": "0 */4 * * *"
+    },
+    {
       "path": "/api/cron/data-retention",
       "schedule": "30 4 * * *"
     },
