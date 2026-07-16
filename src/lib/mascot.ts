@@ -143,6 +143,8 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
         pokemonId,
         personality,
         isShiny,
+        hatchedFromEggType: incubator.egg.type,
+        hatchedFromEggOrigin: incubator.egg.origin,
         statForce:    randomInt(statMin, statMax),
         statAgility:  randomInt(statMin, statMax),
         statCharisma: randomInt(statMin, statMax),

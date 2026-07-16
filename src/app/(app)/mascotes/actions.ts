@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getMegaStoneByType, isMegaStoneType, MEGA_STAT_BONUS } from "@/lib/mega-evolution";
+import { getMegaStoneByType, getMegaStoneForMegaPokemon, isMegaStoneType, MEGA_STAT_BONUS } from "@/lib/mega-evolution";
 import { getSessionPlayer } from "@/lib/session";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
@@ -15,7 +15,7 @@ import {
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
-import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import type { Prisma } from "@prisma/client";
 
@@ -42,7 +42,7 @@ export async function setMascotPerformanceTagAction(mascotId: string, tag: strin
 }
 
 const BANK_MASCOT_PAGE_SIZE = 9;
-const POKEMON_ID_POOL = Array.from({ length: 1025 }, (_, index) => index + 1);
+const POKEMON_ID_POOL = Object.keys(POKEMON_ELEMENT).map(Number);
 const EGG_GENERATION_TYPES = [
   "EGG_GEN1",
   "EGG_GEN2",
@@ -70,12 +70,20 @@ function isLabChoiceEgg(type: string, origin?: string | null) {
 }
 
 function findPokemonIdsBySearch(search: string) {
-  const normalized = search.trim().toLowerCase();
+  const normalized = normalizeMascotSearch(search);
   if (!normalized) return [];
-  const numeric = Number.parseInt(normalized, 10);
-  const byNumber = Number.isFinite(numeric) && String(numeric) === normalized ? [numeric] : [];
-  const byName = POKEMON_ID_POOL.filter((id) => getPokemonName(id).toLowerCase().includes(normalized));
-  return Array.from(new Set([...byNumber, ...byName])).filter((id) => id >= 1 && id <= 1025);
+  const numeric = Number.parseInt(search.trim(), 10);
+  const byNumber = Number.isFinite(numeric) && String(numeric) === search.trim() ? [numeric] : [];
+  const byName = POKEMON_ID_POOL.filter((id) => normalizeMascotSearch(getPokemonName(id)).includes(normalized));
+  return Array.from(new Set([...byNumber, ...byName]));
+}
+
+function normalizeMascotSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 function findPokemonIdsByType(type: string) {
@@ -930,9 +938,21 @@ export async function getBankMascotsPageAction(input?: {
 
     if (search) {
       const pokemonIds = findPokemonIdsBySearch(search);
+      // O banco faz busca case-insensitive, mas nao remove acentos/pontuacao.
+      // Normalizamos os apelidos em memoria para que a mesma busca tolerante
+      // usada nos nomes das especies tambem funcione nos apelidos.
+      const normalizedSearch = normalizeMascotSearch(search);
+      const nicknameCandidates = await prisma.mascot.findMany({
+        where: { playerId: player.id, isFavorite: false, isEquipped: false, nickname: { not: null } },
+        select: { id: true, nickname: true },
+      });
+      const nicknameIds = nicknameCandidates
+        .filter((mascot) => normalizeMascotSearch(mascot.nickname ?? "").includes(normalizedSearch))
+        .map((mascot) => mascot.id);
       and.push({
         OR: [
           { nickname: { contains: search, mode: "insensitive" } },
+          ...(nicknameIds.length > 0 ? [{ id: { in: nicknameIds } }] : []),
           ...(pokemonIds.length > 0 ? [{ pokemonId: { in: pokemonIds } }] : []),
         ],
       });
@@ -1028,6 +1048,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     battleWins: number; battleLosses: number;
     arenaState: string; bazarListed: boolean;
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
+    hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null; megaStoneName: string | null;
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string;
@@ -1071,6 +1092,9 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         battleWins: m.battleWins, battleLosses: m.battleLosses,
         arenaState: m.arenaState, bazarListed: m.bazarListed,
         injuredAt: m.injuredAt, restingUntil: m.restingUntil, hatchedAt: m.hatchedAt,
+        hatchedFromEggType: m.hatchedFromEggType,
+        hatchedFromEggOrigin: m.hatchedFromEggOrigin,
+        megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
         lastInteractedAt: m.lastInteractedAt,
         lastPlayedAt: m.lastPlayedAt,
         lastPettedAt: m.lastPettedAt,

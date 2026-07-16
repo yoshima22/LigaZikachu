@@ -17,6 +17,7 @@ import { cleanupExpiredArenaResting, RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
 import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
+import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +88,8 @@ async function fetchMascotPageData(playerId: string) {
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
         injuredAt: true, restingUntil: true,
-        hatchedAt: true, lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, socialCooldownUntil: true,
+        hatchedAt: true, hatchedFromEggType: true, hatchedFromEggOrigin: true,
+        lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, socialCooldownUntil: true,
         expeditions: {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
@@ -316,6 +318,9 @@ export default async function MascotesPage() {
     injuredAt: m.injuredAt,
     restingUntil: m.restingUntil,
     hatchedAt: m.hatchedAt,
+    hatchedFromEggType: m.hatchedFromEggType,
+    hatchedFromEggOrigin: m.hatchedFromEggOrigin,
+    megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
     lastInteractedAt: m.lastInteractedAt,
     lastPlayedAt: m.lastPlayedAt,
     lastPettedAt: m.lastPettedAt,

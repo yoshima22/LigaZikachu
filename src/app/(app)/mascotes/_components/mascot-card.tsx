@@ -64,6 +64,9 @@ interface MascotData {
   injuredAt: Date | null;
   restingUntil: Date | null;
   hatchedAt: Date;
+  hatchedFromEggType?: string | null;
+  hatchedFromEggOrigin?: string | null;
+  megaStoneName?: string | null;
   lastInteractedAt: Date | null;
   lastPlayedAt?: Date | null;  // presente após migração SQL
   lastPettedAt?: Date | null;  // presente após migração SQL
@@ -353,6 +356,30 @@ const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string
   XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
 };
 
+const EGG_TYPE_LABEL: Record<string, string> = {
+  COMMON: "Ovo Comum",
+  RARE: "Ovo Raro",
+  SPECIAL: "Ovo Especial",
+  EVENT: "Ovo de Evento",
+  LAB: "Ovo de Laboratorio",
+};
+
+function getHatchedEggLabel(type?: string | null, origin?: string | null) {
+  if (!type) return null;
+  if (type.startsWith("EGG_GEN")) {
+    const generation = type.replace("EGG_GEN", "").replace("PLUS", "+");
+    return `Ovo da Geracao ${generation}`;
+  }
+  if (origin?.startsWith("GEN_CHOICE:")) {
+    const generation = origin.split(":")[2]?.replace("EGG_GEN", "");
+    if (generation) return `${EGG_TYPE_LABEL[type] ?? "Ovo"} (Geracao ${generation})`;
+  }
+  if (origin?.startsWith("LAB_REGION:")) {
+    return `Ovo de Laboratorio (Geracao ${origin.replace("LAB_REGION:EGG_GEN", "")})`;
+  }
+  return EGG_TYPE_LABEL[type] ?? type.replaceAll("_", " ");
+}
+
 function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date }) {
   const { remaining, expired } = useTimerExpiry(expiresAt);
   if (expired) return null;
@@ -421,6 +448,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [expeditionMode, setExpeditionMode] = useState<ExpeditionMode>("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
   const [showRelations, setShowRelations] = useState(false);
+  const [showPermanentItems, setShowPermanentItems] = useState(false);
 
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
@@ -441,6 +469,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
   const otherMascots = Array.isArray(mascot.otherMascots) ? mascot.otherMascots : [];
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const permanentItemCounts = mascot.activeBuffs.reduce<Record<string, number>>((counts, buff) => {
+    if (new Date(buff.expiresAt).getFullYear() >= 2090 || BUFF_DISPLAY[buff.type]?.permanent) {
+      counts[buff.type] = (counts[buff.type] ?? 0) + 1;
+    }
+    return counts;
+  }, {});
+  const permanentItems = Object.entries(permanentItemCounts).map(([type, quantity]) => ({
+    key: type,
+    emoji: BUFF_DISPLAY[type]?.emoji ?? "✨",
+    label: BUFF_DISPLAY[type]?.label ?? type.replaceAll("_", " "),
+    quantity,
+  }));
+  if (mascot.megaStoneName) {
+    permanentItems.push({ key: "MEGA_STONE", emoji: "💎", label: mascot.megaStoneName, quantity: 1 });
+  }
+  const hatchedEggLabel = getHatchedEggLabel(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin);
   const expedition = expeditions.find(e => e.status === "ACTIVE");
   // useTimerExpiry: atualiza automaticamente quando a expedição termina
   const expeditionExpiry = useTimerExpiry(expedition?.finishAt ?? null);
@@ -854,6 +898,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 ⚔️ {mascot.battleWins}V {mascot.battleLosses}D em batalhas
               </div>
             )}
+            <div className="text-[9px] text-slate-600" title={hatchedEggLabel ? `Nasceu de ${hatchedEggLabel}` : "Origem do ovo nao registrada para mascotes antigos"}>
+              🥚 {hatchedEggLabel ? `Nasceu de ${hatchedEggLabel}` : "Ovo de origem não registrada"}
+            </div>
 
             {arena && (
               <div className={`mt-1 rounded-lg border px-2 py-1 text-[10px] ${arena.tone}`}>
@@ -1210,6 +1257,30 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             </label>
           </Tip>
         </div>
+
+        {/* ── Itens permanentes aplicados ── */}
+        {!compactView && permanentItems.length > 0 && (
+          <div className="space-y-1.5">
+            <button type="button" onClick={() => setShowPermanentItems(value => !value)}
+              className="w-full flex items-center justify-between text-[10px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-300 transition-colors">
+              <span>✨ Itens permanentes ({permanentItems.reduce((total, item) => total + item.quantity, 0)})</span>
+              <span>{showPermanentItems ? "▲" : "▼"}</span>
+            </button>
+            {showPermanentItems && (
+              <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-2 space-y-1.5">
+                {permanentItems.map(item => (
+                  <div key={item.key} className="flex items-center gap-2 rounded-lg border border-purple-500/15 bg-slate-900/35 px-2 py-1.5 text-[10px]">
+                    <span className="text-base" aria-hidden>{item.emoji}</span>
+                    <span className="min-w-0 flex-1 font-semibold text-slate-200">{item.label}</span>
+                    <span className="shrink-0 rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 font-bold text-purple-300">
+                      x{item.quantity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Amigos e Rivais ── */}
         {!compactView && mascot.relations && mascot.relations.length > 0 && (

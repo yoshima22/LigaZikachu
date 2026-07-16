@@ -1995,6 +1995,9 @@ model Mascot {
   battleLosses     Int               @default(0)
   // Timestamps
   hatchedAt        DateTime          @default(now())
+  // Preserva a procedencia depois que o registro do ovo e consumido ao chocar.
+  hatchedFromEggType   EggType?
+  hatchedFromEggOrigin String?
   lastInteractedAt DateTime?
   lastPlayedAt     DateTime?
   lastPettedAt     DateTime?

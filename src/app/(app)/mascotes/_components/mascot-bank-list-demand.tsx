@@ -423,9 +423,11 @@ export function MascotBankList({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPage, startPageLoad] = useTransition();
   const didInitialLoad = useRef(false);
+  const requestSequence = useRef(0);
 
   const loadPage = useCallback((nextPage: number) => {
     const safeNextPage = Math.max(1, nextPage);
+    const requestId = ++requestSequence.current;
     setLoadError(null);
     startPageLoad(() => {
       void (async () => {
@@ -437,6 +439,8 @@ export function MascotBankList({
           rank: rankFilter,
           perf: perfFilter,
         });
+        // Uma resposta antiga nao pode sobrescrever uma busca digitada depois.
+        if (requestId !== requestSequence.current) return;
         if (res.error || !res.data) {
           setLoadError(res.error ?? "Erro ao carregar banco de mascotes.");
           return;
@@ -454,6 +458,14 @@ export function MascotBankList({
     didInitialLoad.current = true;
     if ((totalCount ?? mascots.length) > 0) loadPage(1);
   }, [loadPage, mascots.length, totalCount]);
+
+  // Pesquisa enquanto o nome e digitado. O pequeno atraso evita uma chamada
+  // por tecla e elimina a necessidade de lembrar de pressionar Enter.
+  useEffect(() => {
+    if (!didInitialLoad.current) return;
+    const timer = window.setTimeout(() => loadPage(1), 350);
+    return () => window.clearTimeout(timer);
+  }, [search, loadPage]);
 
   const totalPages = Math.max(1, Math.ceil(knownTotal / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
