@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { getMiauvadaoConfig } from "@/app/(app)/bazar/actions";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
+import { getWeeklyLeagueLockedMascotIds } from "@/lib/weekly-league-locks";
 
 const HIDDEN_BAZAR_ITEM_TYPES = [
   "SYNC_TICKET_FIRE_LEFT",
@@ -24,29 +25,6 @@ const HIDDEN_BAZAR_ITEM_TYPES = [
   "TRACE_SPECIAL_MAP",
 ] as const;
 
-function getTodayBrt() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
-async function getWeeklyLeagueLockedMascotIds(playerId: string) {
-  const today = getTodayBrt();
-  const teams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
-    where: {
-      playerId,
-      battleDate: { gte: today },
-      league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
-    },
-    select: { mascotIdsJson: true },
-  });
-
-  return new Set(teams.flatMap((team) => (team.mascotIdsJson as string[] | null) ?? []));
-}
-
 export async function GET() {
   try {
     const session = await getAppSession();
@@ -60,7 +38,7 @@ export async function GET() {
       syncDefeatedArenaTeams(player.id),
     ]).catch(() => null);
 
-    const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(player.id);
+    const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(prisma, player.id);
 
     const [mascots, eggs, foods, inventoryItems, wallet, config] = await Promise.all([
       // Mascotes disponíveis (não feridos, não em expedição, não no bazar, não em equipe de arena)

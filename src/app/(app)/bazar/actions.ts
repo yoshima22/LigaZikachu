@@ -12,6 +12,7 @@ import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
+import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -1219,34 +1220,11 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
-function getTodayBrt() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
 async function prepareBazarMascotAvailability(playerId: string) {
   await Promise.all([
     cleanupExpiredArenaResting(playerId),
     syncDefeatedArenaTeams(playerId),
   ]).catch(() => null);
-}
-
-async function isMascotLockedInWeeklyLeague(client: TxClient | typeof prisma, mascotId: string, playerId: string) {
-  const today = getTodayBrt();
-  const teams = await client.weeklyMascotLeagueDailyTeam.findMany({
-    where: {
-      playerId,
-      battleDate: { gte: today },
-      league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
-    },
-    select: { mascotIdsJson: true },
-  });
-
-  return teams.some((team) => ((team.mascotIdsJson as string[] | null) ?? []).includes(mascotId));
 }
 
 async function assertMascotTradeableInBazar(
