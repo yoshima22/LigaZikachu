@@ -24,10 +24,21 @@ const HIDDEN_BAZAR_ITEM_TYPES = [
   "TRACE_SPECIAL_MAP",
 ] as const;
 
+function getTodayBrt() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 async function getWeeklyLeagueLockedMascotIds(playerId: string) {
+  const today = getTodayBrt();
   const teams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
     where: {
       playerId,
+      battleDate: { gte: today },
       league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
     },
     select: { mascotIdsJson: true },
