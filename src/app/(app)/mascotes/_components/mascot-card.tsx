@@ -898,9 +898,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 ⚔️ {mascot.battleWins}V {mascot.battleLosses}D em batalhas
               </div>
             )}
-            <div className="text-[9px] text-slate-600" title={hatchedEggLabel ? `Nasceu de ${hatchedEggLabel}` : "Origem do ovo nao registrada para mascotes antigos"}>
-              🥚 {hatchedEggLabel ? `Nasceu de ${hatchedEggLabel}` : "Ovo de origem não registrada"}
-            </div>
+            {hatchedEggLabel && (
+              <div className="text-[9px] text-slate-600" title={`Nasceu de ${hatchedEggLabel}`}>
+                🥚 Nasceu de {hatchedEggLabel}
+              </div>
+            )}
 
             {arena && (
               <div className={`mt-1 rounded-lg border px-2 py-1 text-[10px] ${arena.tone}`}>
