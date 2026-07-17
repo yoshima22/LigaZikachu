@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, X, ArrowUpDown, ChevronDown } from "lucide-react";
+import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
@@ -656,6 +656,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
   const [search, setSearch] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const slotsLeft = Math.max(0, MAX_MASCOTS - slotsUsed);
 
   useEffect(() => {
@@ -674,6 +675,10 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
     return available.filter(m => !q || displayName(m).toLowerCase().includes(q))
       .sort((a, b) => b.level - a.level);
   }, [available, search]);
+  const pageSize = 6;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -710,7 +715,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
             <input
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="Buscar mascote…"
               className="w-full rounded-lg border border-border bg-slate-900 pl-7 pr-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
             />
@@ -724,7 +729,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
             <p className="text-center text-[11px] text-slate-500 py-2">Nenhum resultado.</p>
           ) : (
             <div className="grid grid-cols-2 gap-1.5 max-h-[280px] overflow-y-auto">
-              {filtered.map(m => {
+              {paginated.map(m => {
                 const sel = mascotId === m.id;
                 return (
                   <button
@@ -749,14 +754,31 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                       style={{ imageRendering: "pixelated" }}
                       onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-[10px] font-semibold text-slate-200">{displayName(m)}</p>
                       <p className="text-[9px] text-slate-500">Nv.{m.level} · Σ{totalStats(m)}</p>
-                      <TypeBadge type={getPokemonElement(m.pokemonId)} small />
+                      <div className="mt-1 grid grid-cols-5 gap-0.5 text-center text-[8px]">
+                        {[["FOR", m.statForce], ["AGI", m.statAgility], ["VIT", m.statVitality], ["INS", m.statInstinct], ["CAR", m.statCharisma]].map(([label, value]) => (
+                          <span key={String(label)} className="rounded bg-slate-800/80 px-0.5 py-0.5 text-slate-400">
+                            <b className="block text-[7px] text-slate-600">{label}</b>{value}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-1 truncate text-[8px] text-sky-300" title={COMBAT_ROLE_OPTIONS.find(role => role.value === recommendedRoleForMascot(m))?.description}>
+                        Recomendada: {getCombatRoleLabel(recommendedRoleForMascot(m))}
+                      </p>
                     </div>
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <button type="button" disabled={safePage <= 1} onClick={() => setPage(current => Math.max(1, current - 1))} className="rounded-lg border border-border bg-slate-900 p-1.5 text-slate-300 disabled:opacity-30"><ChevronLeft size={12} /></button>
+              <span className="text-[10px] text-slate-500">Página {safePage} de {totalPages} · {filtered.length} mascotes</span>
+              <button type="button" disabled={safePage >= totalPages} onClick={() => setPage(current => Math.min(totalPages, current + 1))} className="rounded-lg border border-border bg-slate-900 p-1.5 text-slate-300 disabled:opacity-30"><ChevronRight size={12} /></button>
             </div>
           )}
 

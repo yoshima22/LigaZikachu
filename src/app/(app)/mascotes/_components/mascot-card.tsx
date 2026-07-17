@@ -368,13 +368,14 @@ const EGG_TYPE_LABEL: Record<string, string> = {
 
 function getHatchedEggLabel(type?: string | null, origin?: string | null) {
   if (!type) return null;
+  if (origin?.startsWith("GEN_CHOICE:")) {
+    const [, originalType, generationType] = origin.split(":");
+    const generation = generationType?.replace("EGG_GEN", "").replace("PLUS", "+");
+    if (generation) return `${EGG_TYPE_LABEL[originalType] ?? "Ovo"} de Geração ${generation}`;
+  }
   if (type.startsWith("EGG_GEN")) {
     const generation = type.replace("EGG_GEN", "").replace("PLUS", "+");
-    return `Ovo da Geracao ${generation}`;
-  }
-  if (origin?.startsWith("GEN_CHOICE:")) {
-    const generation = origin.split(":")[2]?.replace("EGG_GEN", "");
-    if (generation) return `${EGG_TYPE_LABEL[type] ?? "Ovo"} (Geracao ${generation})`;
+    return `Ovo de Geração ${generation}`;
   }
   if (origin?.startsWith("LAB_REGION:")) {
     return `Ovo de Laboratorio (Geracao ${origin.replace("LAB_REGION:EGG_GEN", "")})`;
