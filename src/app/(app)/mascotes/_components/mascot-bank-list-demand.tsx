@@ -102,7 +102,6 @@ function getOccupationChips(mascot: BankMascot) {
     const remMin = Math.ceil((new Date(mascot.restingUntil).getTime() - Date.now()) / 60_000);
     chips.push({ label: `Cooldown ${remMin}min`, cls: "bg-amber-500/15 text-amber-300 border-amber-500/20" });
   }
-  if (mascot.buffs.length > 0) chips.push({ label: "Bonus", cls: "bg-purple-500/15 text-purple-300 border-purple-500/20" });
   return chips;
 }
 

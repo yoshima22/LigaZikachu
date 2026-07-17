@@ -746,6 +746,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const expBoost = mascot.activeBuffs.some(buff => buff.type === "EXP_BOOST" && new Date(buff.expiresAt) > new Date()) ? 1.25 : 1;
               const picnic = mascot.activeBuffs.some(buff => buff.type === "PICNIC_BASKET" && new Date(buff.expiresAt) > new Date()) ? 1.15 : 1;
               const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * picnic);
+              const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * picnic);
 
               return (
                 <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
@@ -767,6 +768,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   {/* Padrão */}
                   {expeditionMode === "STANDARD" && <div>
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">🗺 Padrão</p>
+                    <div className="mb-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-2 py-1 text-[10px]">
+                      <span className="text-blue-400">✨ EXP garantida: </span>
+                      <strong className="text-blue-200">{standardExp.toLocaleString("pt-BR")} EXP</strong>
+                      <span className="ml-1 text-slate-500">(valor atual com relações e bônus ativos)</span>
+                    </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
                       <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">{pct(standard.egg)}%</strong></span>
                       <span>🍬 Doce <strong className="text-slate-200">{pct(standard.sweet)}%</strong></span>
@@ -1078,6 +1084,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 if (r.error) { toast.error(r.error); return; }
                 if (r.result?.reward) {
                   const display = rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; shopItemType?: string });
+                  if (r.result.mode === "STANDARD" && r.result.expGained > 0) {
+                    display.description += ` +${r.result.expGained.toLocaleString("pt-BR")} EXP recebido.`;
+                  }
                   if (r.result.orderClue) display.orderClue = r.result.orderClue;
                   setExpeditionReward(display);
                   setExpeditionRewardPendingRefresh(true);

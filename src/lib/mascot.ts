@@ -1245,7 +1245,7 @@ async function claimExpeditionLegacy(
 export async function claimExpedition(
   playerId: string,
   expeditionId: string
-): Promise<{ reward: ExpeditionReward; mascotId: string; orderClue?: { clueText: string; relatedStepKey: string | null } | null }> {
+): Promise<{ reward: ExpeditionReward; mascotId: string; expGained: number; mode: ExpeditionMode; orderClue?: { clueText: string; relatedStepKey: string | null } | null }> {
   const expedition = await prisma.mascotExpedition.findUnique({
     where: { id: expeditionId },
     include: { mascot: true }
@@ -1264,6 +1264,8 @@ export async function claimExpedition(
     const vacationReward = await claimVacation(playerId, expeditionId);
     return {
       mascotId: expedition.mascotId,
+      expGained: vacationReward.expBonus,
+      mode,
       reward: {
         type: "VACATION",
         expBonus: vacationReward.expBonus,
@@ -1449,6 +1451,13 @@ export async function claimExpedition(
     // ignoreBenchPenalty: expedição é esforço do mascote, não interação presencial
     // ignoreExpBoost: buffs já incluídos no cálculo de expeditionExp acima (para log correto)
     await addExp(expedition.mascotId, expeditionExp, { ignoreBenchPenalty: true, ignoreExpBoost: true }).catch(() => {});
+    if (mode === "STANDARD") {
+      await logEvent(
+        expedition.mascotId,
+        "✨",
+        `Expedição padrão de ${dur.label} concluída! +${expeditionExp} EXP.`,
+      );
+    }
   }
 
   const orderClue = await maybeRevealOrderClueFromExpedition({
@@ -1488,6 +1497,8 @@ export async function claimExpedition(
   return {
     reward,
     mascotId: expedition.mascotId,
+    expGained: expeditionExp,
+    mode,
     orderClue: orderClue
       ? { clueText: orderClue.clueText, relatedStepKey: orderClue.relatedStepKey }
       : null,
