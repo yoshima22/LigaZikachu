@@ -674,6 +674,16 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
               </p>
             </div>
 
+            {!result.debugMode && activeCooldownUntil && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 p-3">
+                <div>
+                  <p className="text-xs font-bold text-sky-200">Próximo combate PvE</p>
+                  <p className="mt-0.5 text-[10px] text-sky-100/70">O timer já está contando, sem precisar atualizar a página.</p>
+                </div>
+                <CooldownBadge until={activeCooldownUntil} />
+              </div>
+            )}
+
             {result.injuredMascots.length > 0 && (
               <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
                 <p className="text-xs font-bold text-red-200">

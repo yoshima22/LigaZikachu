@@ -26,7 +26,9 @@ export function useTimerExpiry(
     const update = () => {
       const rem = Math.max(0, targetMs - Date.now());
       setRemaining(rem);
-      if (rem === 0) setExpired(true);
+      // Uma nova data futura pode substituir um timer que já havia expirado.
+      // Recalcular nos dois sentidos evita manter `expired=true` até remontar a página.
+      setExpired(rem === 0);
     };
 
     update(); // executa imediatamente após montar
