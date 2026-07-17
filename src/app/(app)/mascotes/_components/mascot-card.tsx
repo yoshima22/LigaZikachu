@@ -24,7 +24,7 @@ import {
   toggleExpLockAction,
   removeXpShareAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionOdds, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
@@ -641,7 +641,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
-    { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Eficiência em expedições e iniciativa em brigas" },
+    { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Pode reduzir aleatoriamente em até 13% a duração das expedições; também influencia iniciativa em brigas" },
     { key: "statCharisma", label: "Carisma",    emoji: "💛", value: mascot.statCharisma, tip: "Chance de fazer amigos e receber mais presentes" },
     { key: "statInstinct", label: "Instinto",   emoji: "🔍", value: mascot.statInstinct, tip: "Encontra itens mais raros em expedições" },
     { key: "statVitality", label: "Vitalidade", emoji: "🛡",  value: mascot.statVitality, tip: "Resiste melhor a humor ruim e efeitos negativos" },
@@ -694,15 +694,18 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             const allyCount = (mascot.relations ?? []).filter(relation => relation.type === "FRIEND").length;
             const rivalRelations = (mascot.relations ?? []).filter(relation => relation.type === "RIVAL");
             const luckBuff = mascot.activeBuffs.some(buff => buff.type === "LUCK_BOOST" && new Date(buff.expiresAt) > new Date());
+            const agility = getExpeditionAgilityReduction(mascot.statAgility);
+            const pct = (value: number) => value.toFixed(1).replace(".0", "");
             return (
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-blue-300">Influência deste mascote</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🔍 Instinto + nível</p><p className="text-xs font-bold text-white">{mascot.statInstinct} + {Math.floor(mascot.level / 5)} = {mascot.statInstinct + Math.floor(mascot.level / 5)} sorte</p><p className="text-[9px] text-slate-500">Aumenta ovos e define sua raridade.</p></div>
                   <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🤝 Amizades</p><p className="text-xs font-bold text-white">{allyCount} aliado{allyCount !== 1 ? "s" : ""} · +{Math.min(20, allyCount * 4)} peso de ovo</p><p className="text-[9px] text-slate-500">Também concede +{allyCount * 10}% EXP em treino.</p></div>
                   <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🍀 Bônus ativos</p><p className={`text-xs font-bold ${luckBuff ? "text-green-300" : "text-slate-300"}`}>{luckBuff ? "Amuleto: sorte dobrada" : "Sem Amuleto da Sorte"}</p><p className="text-[9px] text-slate-500">{rivalRelations.length} rival{rivalRelations.length !== 1 ? "is" : ""} influencia{rivalRelations.length === 1 ? "" : "m"} apenas EXP.</p></div>
+                  <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">⚡ Agilidade</p><p className="text-xs font-bold text-white">{mascot.statAgility}/250 · {pct(agility.min)}%–{pct(agility.max)}%</p><p className="text-[9px] text-slate-500">A redução de tempo é sorteada ao partir; média de {pct(agility.expected)}%.</p></div>
                 </div>
-                <p className="mt-2 text-[9px] text-slate-600">Agilidade, Força, Vitalidade, Carisma e personalidade não alteram o sorteio principal de loot atualmente.</p>
+                <p className="mt-2 text-[9px] text-slate-600">Agilidade reduz a duração, mas não muda o loot. Força, Vitalidade, Carisma e personalidade não alteram este sorteio.</p>
               </div>
             );
           })()}
@@ -724,6 +727,14 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const items = getExpeditionOdds({ duration: key, mode: "ITEMS", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
               const pct = (value: number) => value.toFixed(1).replace(".0", "");
               const eggQuality = standard.eggType === "SPECIAL" ? "Especial" : standard.eggType === "RARE" ? "Raro" : "Comum";
+              const agility = getExpeditionAgilityReduction(mascot.statAgility);
+              const baseMinutes = dur.ms / 60_000;
+              const fastestMinutes = Math.round(baseMinutes * (1 - agility.max / 100));
+              const slowestMinutes = Math.round(baseMinutes * (1 - agility.min / 100));
+              const formatMinutes = (minutes: number) => minutes >= 60
+                ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}min` : ""}`
+                : `${minutes}min`;
+              const modeLabel = expeditionMode === "TRAINING" ? "Treinamento" : expeditionMode === "ITEMS" ? "Itens" : "Padrão";
 
               const levelMult = 1 + Math.floor(mascot.level / 20) * 0.25;
               const expMult   = TRAINING_EXP_MULT[key as ExpeditionDuration] ?? 0;
@@ -738,17 +749,23 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
               return (
                 <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-blue-400">{dur.label}</p>
+                  <div>
+                    <p className="text-xs font-semibold text-blue-400">{dur.label} · {modeLabel}</p>
+                    <p className="mt-1 text-[10px] text-cyan-300">
+                      ⚡ Duração sorteada: {formatMinutes(fastestMinutes)}–{formatMinutes(slowestMinutes)}
+                      <span className="text-slate-500"> (redução de {pct(agility.min)}% a {pct(agility.max)}%; média {pct(agility.expected)}%)</span>
+                    </p>
+                  </div>
 
                   {/* Treinamento */}
-                  <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1 text-[10px]">
+                  {expeditionMode === "TRAINING" && <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1 text-[10px]">
                     <span className="text-green-400">⚔️ Treinamento: </span>
                     <strong className="text-green-200">{trainingExp.toLocaleString("pt-BR")} EXP</strong>
                     <span className="ml-1 text-slate-500">(valor atual com relações e bônus ativos)</span>
-                  </div>
+                  </div>}
 
                   {/* Padrão */}
-                  <div>
+                  {expeditionMode === "STANDARD" && <div>
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">🗺 Padrão</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
                       <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">{pct(standard.egg)}%</strong></span>
@@ -760,19 +777,19 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       )}
                       {standard.nothing > 0 && <span className="col-span-2 text-slate-500">🌫 Sem recompensa <strong>{pct(standard.nothing)}%</strong></span>}
                     </div>
-                  </div>
+                  </div>}
 
                   {/* Itens */}
-                  <div>
+                  {expeditionMode === "ITEMS" && <div>
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">📦 Itens</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
                       <span>🥚 Ovo <span className="text-slate-600">({items.eggType === "SPECIAL" ? "Especial" : items.eggType === "RARE" ? "Raro" : "Comum"})</span> <strong className="text-slate-200">{pct(items.egg)}%</strong></span>
                       <span>🍬 Doce <strong className="text-slate-200">{pct(items.sweet)}%</strong></span>
                       <span>🍖 Comida <strong className="text-slate-200">{pct(items.food)}%</strong></span>
                       <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">{pct(items.specialItem)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto, Piquenique…)</span></span>
-                      {items.megaStone > 0 && <span className="col-span-2 text-fuchsia-300">💎 Pedra de Mega Evolução <strong>{pct(items.megaStone)}%</strong></span>}
+                      {items.megaStone > 0 && <span className="col-span-2 text-fuchsia-300">💎 Pedra de Mega Evolução <strong>{pct(items.megaStone)}%</strong> <span className="text-slate-500">(somente Itens 6h; Instinto 80+ garante a chance máxima de 0,5%)</span></span>}
                     </div>
-                  </div>
+                  </div>}
                 </div>
               );
             })}
@@ -1163,10 +1180,18 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               </select>
               <div className="flex gap-1.5">
                 <button type="button" disabled={pending}
-                  onClick={() => act(
-                    () => startExpeditionAction(mascot.id, expeditionDuration, expeditionMode),
-                    `Expedicao de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada!`
-                  )}
+                  onClick={() => startTransition(async () => {
+                    const response = await startExpeditionAction(mascot.id, expeditionDuration, expeditionMode);
+                    if (response.error) {
+                      toast.error(response.error);
+                      return;
+                    }
+                    const reduction = response.result?.agilityTimeReductionPct ?? 0;
+                    toast.success(
+                      `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada! Agilidade reduziu o tempo em ${reduction.toFixed(1).replace(".0", "")}%.`
+                    );
+                    router.refresh();
+                  })}
                   className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border py-1.5 text-[11px] font-medium disabled:opacity-40 ${
                     expeditionMode === "TRAINING"
                       ? "border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
@@ -1176,7 +1201,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   }`}>
                   <MapPin size={12}/> {expeditionMode === "TRAINING" ? "Treinar" : expeditionMode === "ITEMS" ? "Buscar" : "Partir"}
                 </button>
-                <button type="button" onClick={() => setShowLootPreview(true)}
+                <button type="button" onClick={() => { setLootPreviewDuration(expeditionDuration); setShowLootPreview(true); }}
                   className="rounded-xl border border-border bg-slate-900/60 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
                   Loot?
                 </button>

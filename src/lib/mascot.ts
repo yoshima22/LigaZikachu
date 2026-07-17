@@ -15,6 +15,7 @@ import {
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
+  getMegaStoneExpeditionChance, rollExpeditionAgilityReduction,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
@@ -941,8 +942,6 @@ export type ExpeditionReward =
   | { type: "VACATION";  expBonus: number; gotEgg: boolean }
   | { type: "NOTHING" };
 
-const ITEM_EXPEDITION_6H_MEGA_STONE_CHANCE = 0.005;
-
 function rollRandomMegaStoneType(): string {
   return randomFrom([...MEGA_STONES]).type;
 }
@@ -1163,9 +1162,15 @@ export async function startExpedition(
   if (durationKey === "7d") throw new Error("Para enviar o mascote de férias, use o Ticket de Férias do Prof. Carvalho no seu inventário.");
 
   const dur = EXPEDITION_DURATIONS[durationKey];
-  const finishAt = new Date(Date.now() + dur.ms);
+  const agilityTimeReductionPct = rollExpeditionAgilityReduction(mascot.statAgility);
+  const effectiveDurationMs = Math.round(dur.ms * (1 - agilityTimeReductionPct / 100));
+  const finishAt = new Date(Date.now() + effectiveDurationMs);
   return prisma.mascotExpedition.create({
-    data: { mascotId, finishAt, rewardJson: { durationKey, mode } }
+    data: {
+      mascotId,
+      finishAt,
+      rewardJson: { durationKey, mode, agilityTimeReductionPct, baseDurationMs: dur.ms, effectiveDurationMs },
+    }
   });
 }
 
@@ -1334,7 +1339,7 @@ export async function claimExpedition(
     durationKey,
   };
   if (reward.type === "MEGA_STONE") {
-    storedRewardJson.megaStoneDropChance = ITEM_EXPEDITION_6H_MEGA_STONE_CHANCE;
+    storedRewardJson.megaStoneDropChance = getMegaStoneExpeditionChance(expedition.mascot.statInstinct) / 100;
   }
 
   await prisma.$transaction(async (tx) => {

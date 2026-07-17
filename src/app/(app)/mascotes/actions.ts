@@ -364,15 +364,19 @@ export async function interactAllAction(
   }
 }
 
-export async function startExpeditionAction(mascotId: string, duration: ExpeditionDuration = "1h", mode: import("@/lib/mascot-data").ExpeditionMode = "STANDARD"): Promise<{ error?: string }> {
+export async function startExpeditionAction(mascotId: string, duration: ExpeditionDuration = "1h", mode: import("@/lib/mascot-data").ExpeditionMode = "STANDARD"): Promise<{ error?: string; result?: { agilityTimeReductionPct: number } }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
-    await startExpedition(player.id, mascotId, duration, mode);
+    const expedition = await startExpedition(player.id, mascotId, duration, mode);
+    const stored = (expedition.rewardJson as Record<string, unknown> | null) ?? {};
+    const agilityTimeReductionPct = typeof stored.agilityTimeReductionPct === "number"
+      ? stored.agilityTimeReductionPct
+      : 0;
     revalidate(player.id);
-    return {};
+    return { result: { agilityTimeReductionPct } };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

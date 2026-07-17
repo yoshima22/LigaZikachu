@@ -1031,6 +1031,28 @@ export type ExpeditionOdds = {
   coinMax: number;
 };
 
+export function getMegaStoneExpeditionChance(instinct: number) {
+  const normalized = Math.max(0, Math.min(80, instinct)) / 80;
+  return 0.1 + normalized * 0.4;
+}
+
+export function getExpeditionAgilityReduction(agility: number) {
+  const normalized = Math.max(0, Math.min(250, agility)) / 250;
+  const expected = normalized * 13;
+  if (expected === 0) return { min: 0, expected: 0, max: 0 };
+  return {
+    min: expected * 0.8,
+    expected,
+    max: Math.min(13, expected * 1.2),
+  };
+}
+
+export function rollExpeditionAgilityReduction(agility: number, random = Math.random) {
+  const range = getExpeditionAgilityReduction(agility);
+  if (range.max === 0) return 0;
+  return range.min + random() * (range.max - range.min);
+}
+
 /** Fonte única das probabilidades usadas pelo sorteio e pelo preview de expedição. */
 export function getExpeditionOdds(params: {
   duration: ExpeditionDuration;
@@ -1083,7 +1105,9 @@ export function getExpeditionOdds(params: {
     food: 38 + rewardBonus * 0.3 + Math.min(10, level),
     specialItem: duration === "6h" ? 14 + (luckBuff ? 4 : 0) : duration === "3h" ? 8 : duration === "1h" ? 4 : 2,
   };
-  const megaStone = duration === "6h" ? 0.5 : 0;
+  const megaStone = mode === "ITEMS" && duration === "6h"
+    ? getMegaStoneExpeditionChance(instinct)
+    : 0;
   const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
   const rewardShare = (100 - megaStone) / total;
   return {

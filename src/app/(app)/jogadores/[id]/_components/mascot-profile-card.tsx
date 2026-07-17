@@ -267,7 +267,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
         <div className="space-y-1">
           {[
             { label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em batalhas e expedições pesadas" },
-            { label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Eficiência em expedições e iniciativa em batalhas" },
+            { label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Pode reduzir aleatoriamente em até 13% a duração das expedições; também influencia iniciativa em batalhas" },
             { label: "Carisma",    emoji: "💛", value: mascot.statCharisma, tip: "Chance de amizades e mais presentes" },
             { label: "Instinto",   emoji: "🔍", value: mascot.statInstinct, tip: "Encontra itens mais raros em expedições" },
             { label: "Vitalidade", emoji: "🛡",  value: mascot.statVitality, tip: "Resistência a humor ruim e efeitos negativos" },
