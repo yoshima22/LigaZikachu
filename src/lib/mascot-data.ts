@@ -1015,6 +1015,88 @@ export const EXPEDITION_DURATIONS = {
 } as const;
 export type ExpeditionDuration = keyof typeof EXPEDITION_DURATIONS;
 
+export type ExpeditionOdds = {
+  luck: number;
+  baseLuck: number;
+  allyBonus: number;
+  nothing: number;
+  egg: number;
+  sweet: number;
+  food: number;
+  coins: number;
+  specialItem: number;
+  megaStone: number;
+  eggType: "COMMON" | "RARE" | "SPECIAL";
+  coinMin: number;
+  coinMax: number;
+};
+
+/** Fonte única das probabilidades usadas pelo sorteio e pelo preview de expedição. */
+export function getExpeditionOdds(params: {
+  duration: ExpeditionDuration;
+  mode: "STANDARD" | "ITEMS";
+  level: number;
+  instinct: number;
+  allyCount?: number;
+  luckBuff?: boolean;
+}): ExpeditionOdds {
+  const { duration, mode, level, instinct } = params;
+  const allyCount = params.allyCount ?? 0;
+  const luckBuff = params.luckBuff ?? false;
+  const rewardBonus = EXPEDITION_DURATIONS[duration].rewardBonus;
+  const baseLuck = instinct + Math.floor(level / 5);
+  const luck = baseLuck * (luckBuff ? 2 : 1);
+  const allyBonus = Math.min(20, allyCount * 4);
+  let eggType: ExpeditionOdds["eggType"] = "COMMON";
+  if (duration === "6h") eggType = luck > 90 ? "SPECIAL" : "RARE";
+  else if (duration === "3h" && luck > 60) eggType = "RARE";
+  else if ((duration === "1h" || duration === "30min") && luck > 85) eggType = "RARE";
+
+  if (mode === "STANDARD") {
+    const levelFloor = Math.min(30, level * 2);
+    const nothing = luckBuff || allyCount >= 3 ? 0 : Math.max(0, 5 - allyCount * 1.5);
+    const weights = {
+      egg: 16 + Math.min(46, luck * 0.20) + rewardBonus * 0.8 + allyBonus,
+      sweet: 14 + rewardBonus * 0.4 + (luckBuff ? 10 : 0),
+      food: 32 + levelFloor * 0.4 + rewardBonus * 0.15,
+      coins: 38 + levelFloor * 0.5,
+      specialItem: duration === "6h" ? 4 + (luckBuff ? 2 : 0) : 0,
+    };
+    const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
+    const rewardShare = (100 - nothing) / total;
+    const coinMin = Math.max(50, 50 + rewardBonus * 6 + level * 2);
+    return {
+      luck, baseLuck, allyBonus, nothing,
+      egg: weights.egg * rewardShare,
+      sweet: weights.sweet * rewardShare,
+      food: weights.food * rewardShare,
+      coins: weights.coins * rewardShare,
+      specialItem: weights.specialItem * rewardShare,
+      megaStone: 0, eggType, coinMin,
+      coinMax: coinMin + 100 + rewardBonus * 12 + level * 3,
+    };
+  }
+
+  const weights = {
+    egg: 16 + Math.min(46, luck * 0.20) + rewardBonus * 1.2 + allyBonus,
+    sweet: 22 + rewardBonus * 0.4 + (luckBuff ? 8 : 0),
+    food: 38 + rewardBonus * 0.3 + Math.min(10, level),
+    specialItem: duration === "6h" ? 14 + (luckBuff ? 4 : 0) : duration === "3h" ? 8 : duration === "1h" ? 4 : 2,
+  };
+  const megaStone = duration === "6h" ? 0.5 : 0;
+  const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
+  const rewardShare = (100 - megaStone) / total;
+  return {
+    luck, baseLuck, allyBonus, nothing: 0,
+    egg: weights.egg * rewardShare,
+    sweet: weights.sweet * rewardShare,
+    food: weights.food * rewardShare,
+    coins: 0,
+    specialItem: weights.specialItem * rewardShare,
+    megaStone, eggType, coinMin: 0, coinMax: 0,
+  };
+}
+
 // Expedição de treinamento (foco em EXP — sem itens/coins)
 // Multiplicadores de EXP muito maiores que o padrão
 export const TRAINING_EXP_MULT: Record<ExpeditionDuration, number> = {

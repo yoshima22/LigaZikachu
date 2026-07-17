@@ -14,7 +14,7 @@ import {
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
-  getMascotStatusGrowthMultiplier, getMascotProgressMilestones,
+  getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
@@ -978,32 +978,12 @@ async function rollExpeditionReward(
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
   });
   const hasLuckBuff = !!luckBuff;
-  const luckMultiplier = hasLuckBuff ? 2 : 1;
   const dur = EXPEDITION_DURATIONS[durationKey];
   const rewardBonus = dur.rewardBonus; // 0, 5, 15, 30
-
-  // Luck escala melhor com nível (a cada 5 níveis)
-  const luck = (mascot.statInstinct + Math.floor(mascot.level / 5)) * luckMultiplier;
-  // Bônus de nível para mascotes baixos — garante que sempre valha a pena
-  const levelFloor = Math.min(30, mascot.level * 2); // Nv1=2, Nv5=10, Nv15=30
-  // Bônus de aliados — cada amigo melhora as chances
   const allyBonus = Math.min(20, allyCount * 4);
-
-  // ── Chance de NOTHING: máx 5%, zero com buff de sorte ou 3+ aliados ─────────
-  const nothingChance = hasLuckBuff || allyCount >= 3 ? 0 : Math.max(0, 5 - allyCount * 1.5);
-  if (Math.random() * 100 < nothingChance) return { type: "NOTHING" };
-
-  // ── Distribuição ponderada dos tipos de recompensa ───────────────────────────
-  // Ovos escalam com instinto de forma contínua até max stat=250.
-  // min(46, luck*0.20): instinct=0→~15%, instinct=50→~21%, instinct=125→~29%, instinct=250→~36%
-  const eggWeight   = 16 + Math.min(46, luck * 0.20) + rewardBonus * 0.8 + allyBonus;
-  const sweetWeight = 14 + rewardBonus * 0.4 + (hasLuckBuff ? 10 : 0);
-  const foodWeight  = 32 + levelFloor * 0.4 + rewardBonus * 0.15;
-  const coinWeight  = 38 + levelFloor * 0.5;
-  // Item especial (buff) — apenas em expedições longas (6h), muito raro
-  const buffWeight  = durationKey === "6h" ? 4 + (hasLuckBuff ? 2 : 0) : 0;
-  const total       = eggWeight + sweetWeight + foodWeight + coinWeight + buffWeight;
-  const roll        = Math.random() * total;
+  const odds = getExpeditionOdds({ duration: durationKey, mode: "STANDARD", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff: hasLuckBuff });
+  const luck = odds.luck;
+  const roll = Math.random() * 100;
 
   // Ovo: qualidade requer instinto significativo com stat max=250
   // 6h SPECIAL: luck>90, 3h RARE: luck>60, 1h/30min RARE: luck>85
@@ -1024,18 +1004,16 @@ async function rollExpeditionReward(
     1;
 
   // Valor de moedas escala com duração e nível
-  const coinMin = Math.max(50, 50 + rewardBonus * 6 + mascot.level * 2);
-  const coinMax = coinMin + 100 + rewardBonus * 12 + mascot.level * 3;
-
-  const cumEgg   = eggWeight;
-  const cumSweet = cumEgg + sweetWeight;
-  const cumFood  = cumSweet + foodWeight;
-  const cumCoin  = cumFood + coinWeight;
-
-  if (roll < cumEgg)   return { type: "EGG",   eggType };
-  if (roll < cumSweet) return { type: "FOOD",  foodType: "SWEET", quantity: sweetQty * 2 };
-  if (roll < cumFood)  return { type: "FOOD",  foodType: "FOOD",  quantity: randomInt(foodQtyMin, foodQtyMax) * 2 };
-  if (roll < cumCoin)  return { type: "COINS", amount: randomInt(coinMin, coinMax) };
+  const cumNothing = odds.nothing;
+  const cumEgg = cumNothing + odds.egg;
+  const cumSweet = cumEgg + odds.sweet;
+  const cumFood = cumSweet + odds.food;
+  const cumCoin = cumFood + odds.coins;
+  if (roll < cumNothing) return { type: "NOTHING" };
+  if (roll < cumEgg)   return { type: "EGG", eggType };
+  if (roll < cumSweet) return { type: "FOOD", foodType: "SWEET", quantity: sweetQty * 2 };
+  if (roll < cumFood)  return { type: "FOOD", foodType: "FOOD", quantity: randomInt(foodQtyMin, foodQtyMax) * 2 };
+  if (roll < cumCoin)  return { type: "COINS", amount: randomInt(odds.coinMin, odds.coinMax) };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
@@ -1044,30 +1022,16 @@ async function rollItemExpeditionReward(
   durationKey: ExpeditionDuration = "1h",
   allyCount = 0
 ): Promise<ExpeditionReward> {
-  if (durationKey === "6h" && Math.random() < ITEM_EXPEDITION_6H_MEGA_STONE_CHANCE) {
-    return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
-  }
-
   const luckBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
   });
   const dur = EXPEDITION_DURATIONS[durationKey];
   const rewardBonus = dur.rewardBonus;
-  const luck = (mascot.statInstinct + Math.floor(mascot.level / 5)) * (luckBuff ? 2 : 1);
+  const odds = getExpeditionOdds({ duration: durationKey, mode: "ITEMS", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff: !!luckBuff });
+  const luck = odds.luck;
   const allyBonus = Math.min(20, allyCount * 4);
 
-  // Em modo ITENS: ovos competem com buffs, escalam com instinto (max stat=250)
-  const eggWeight   = 16 + Math.min(46, luck * 0.20) + rewardBonus * 1.2 + allyBonus;
-  const sweetWeight = 22 + rewardBonus * 0.4 + (luckBuff ? 8 : 0);
-  const foodWeight  = 38 + rewardBonus * 0.3 + Math.min(10, mascot.level);
-  // Item especial (buff): mais comum no modo ITENS, escala com duração
-  const buffWeight  =
-    durationKey === "6h"    ? 14 + (luckBuff ? 4 : 0) :
-    durationKey === "3h"    ? 8 :
-    durationKey === "1h"    ? 4 :
-    2;
-  const total = eggWeight + sweetWeight + foodWeight + buffWeight;
-  const roll = Math.random() * total;
+  const roll = Math.random() * 100;
 
   let eggType = "COMMON";
   if (durationKey === "6h")       eggType = luck > 90 ? "SPECIAL" : "RARE";
@@ -1082,9 +1046,10 @@ async function rollItemExpeditionReward(
   const bonusQuantity = Math.floor((rewardBonus + allyBonus) / 18);
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
-  if (roll < eggWeight)                         return { type: "EGG", eggType };
-  if (roll < eggWeight + sweetWeight)           return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
-  if (roll < eggWeight + sweetWeight + foodWeight) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
+  if (roll < odds.megaStone) return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
+  if (roll < odds.megaStone + odds.egg) return { type: "EGG", eggType };
+  if (roll < odds.megaStone + odds.egg + odds.sweet) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
+  if (roll < odds.megaStone + odds.egg + odds.sweet + odds.food) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 

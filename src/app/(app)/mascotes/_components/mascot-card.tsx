@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star } from "lucide-react";
+import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   getSpriteUrl, getStaticSpriteUrl, getPokemonName, getPokemonTypes, expToNextLevel as expToNext,
   MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL,
@@ -24,7 +24,7 @@ import {
   toggleExpLockAction,
   removeXpShareAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionOdds, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
@@ -469,6 +469,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
   const [expeditionMode, setExpeditionMode] = useState<ExpeditionMode>("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
+  const [lootPreviewDuration, setLootPreviewDuration] = useState<ExpeditionDuration>("1h");
   const [showRelations, setShowRelations] = useState(false);
   const [showPermanentItems, setShowPermanentItems] = useState(false);
 
@@ -684,44 +685,56 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     {/* Loot preview modal */}
     {showLootPreview && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowLootPreview(false)}>
-        <div className="w-full max-w-sm rounded-2xl border border-blue-500/30 bg-slate-950 p-5 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-blue-500/30 bg-slate-950 p-5 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between">
             <p className="font-semibold text-white">🎁 Possível Loot em Expedições</p>
             <button onClick={() => setShowLootPreview(false)} className="text-slate-500 hover:text-slate-300"><X size={14}/></button>
           </div>
-          <p className="text-[11px] text-slate-500">Baseado em Instinto {mascot.statInstinct} · Nível {mascot.level}</p>
+          {(() => {
+            const allyCount = (mascot.relations ?? []).filter(relation => relation.type === "FRIEND").length;
+            const rivalRelations = (mascot.relations ?? []).filter(relation => relation.type === "RIVAL");
+            const luckBuff = mascot.activeBuffs.some(buff => buff.type === "LUCK_BOOST" && new Date(buff.expiresAt) > new Date());
+            return (
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-300">Influência deste mascote</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🔍 Instinto + nível</p><p className="text-xs font-bold text-white">{mascot.statInstinct} + {Math.floor(mascot.level / 5)} = {mascot.statInstinct + Math.floor(mascot.level / 5)} sorte</p><p className="text-[9px] text-slate-500">Aumenta ovos e define sua raridade.</p></div>
+                  <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🤝 Amizades</p><p className="text-xs font-bold text-white">{allyCount} aliado{allyCount !== 1 ? "s" : ""} · +{Math.min(20, allyCount * 4)} peso de ovo</p><p className="text-[9px] text-slate-500">Também concede +{allyCount * 10}% EXP em treino.</p></div>
+                  <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🍀 Bônus ativos</p><p className={`text-xs font-bold ${luckBuff ? "text-green-300" : "text-slate-300"}`}>{luckBuff ? "Amuleto: sorte dobrada" : "Sem Amuleto da Sorte"}</p><p className="text-[9px] text-slate-500">{rivalRelations.length} rival{rivalRelations.length !== 1 ? "is" : ""} influencia{rivalRelations.length === 1 ? "" : "m"} apenas EXP.</p></div>
+                </div>
+                <p className="mt-2 text-[9px] text-slate-600">Agilidade, Força, Vitalidade, Carisma e personalidade não alteram o sorteio principal de loot atualmente.</p>
+              </div>
+            );
+          })()}
+          <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={() => { const keys: ExpeditionDuration[] = ["30min", "1h", "3h", "6h"]; const index = keys.indexOf(lootPreviewDuration); setLootPreviewDuration(keys[(index + keys.length - 1) % keys.length]); }} className="rounded-lg border border-border bg-slate-900 p-2 text-slate-300"><ChevronLeft size={13}/></button>
+            <div className="flex flex-wrap justify-center gap-1">
+              {(["30min", "1h", "3h", "6h"] as ExpeditionDuration[]).map(duration => <button key={duration} type="button" onClick={() => setLootPreviewDuration(duration)} className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold ${lootPreviewDuration === duration ? "border-blue-400/60 bg-blue-500/15 text-blue-200" : "border-border text-slate-500"}`}>{EXPEDITION_DURATIONS[duration].label}</button>)}
+            </div>
+            <button type="button" onClick={() => { const keys: ExpeditionDuration[] = ["30min", "1h", "3h", "6h"]; const index = keys.indexOf(lootPreviewDuration); setLootPreviewDuration(keys[(index + 1) % keys.length]); }} className="rounded-lg border border-border bg-slate-900 p-2 text-slate-300"><ChevronRight size={13}/></button>
+          </div>
           <div className="space-y-3">
             {(Object.entries(EXPEDITION_DURATIONS) as [ExpeditionDuration, typeof EXPEDITION_DURATIONS[ExpeditionDuration]][]).map(([key, dur]) => {
-              if (key === "7d") return null;
-              const luck        = mascot.statInstinct + Math.floor(mascot.level / 5);
-              const levelFloor  = Math.floor(mascot.level / 5);
+              if (key === "7d" || key !== lootPreviewDuration) return null;
+              const allyCount = (mascot.relations ?? []).filter(relation => relation.type === "FRIEND").length;
+              const rivalRelations = (mascot.relations ?? []).filter(relation => relation.type === "RIVAL");
+              const luckBuff = mascot.activeBuffs.some(buff => buff.type === "LUCK_BOOST" && new Date(buff.expiresAt) > new Date());
               const rb          = dur.rewardBonus;
-
-              // ── Modo Padrão (espelha rollExpeditionReward) ──
-              const stdEgg   = 15 + Math.min(28, luck * 0.9) + rb * 1.0;
-              const stdSweet = 14 + rb * 0.4;
-              const stdFood  = 32 + levelFloor * 0.4 + rb * 0.15;
-              const stdCoin  = 38 + levelFloor * 0.5;
-              const stdBuff  = key === "6h" ? 4 : 0;
-              const stdTotal = stdEgg + stdSweet + stdFood + stdCoin + stdBuff;
-              const pStd = (w: number) => ((w / stdTotal) * 100).toFixed(0);
-
-              // ── Modo Itens (espelha rollItemExpeditionReward) ──
-              const itmEgg   = 12 + Math.min(30, luck * 1.0) + rb * 1.5;
-              const itmSweet = 22 + rb * 0.4;
-              const itmFood  = 38 + rb * 0.3 + Math.min(10, mascot.level);
-              const itmBuff  = key === "6h" ? 14 : key === "3h" ? 8 : key === "1h" ? 4 : 2;
-              const itmTotal = itmEgg + itmSweet + itmFood + itmBuff;
-              const pItm = (w: number) => ((w / itmTotal) * 100).toFixed(0);
-
-              const coinMin    = 50 + rb * 5;
-              const coinMax    = coinMin + 150 + rb * 10;
-              const eggQuality = key === "6h" ? "Esp/Raro" : key === "3h" ? "Raro/Com" : "Comum";
+              const standard = getExpeditionOdds({ duration: key, mode: "STANDARD", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
+              const items = getExpeditionOdds({ duration: key, mode: "ITEMS", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
+              const pct = (value: number) => value.toFixed(1).replace(".0", "");
+              const eggQuality = standard.eggType === "SPECIAL" ? "Especial" : standard.eggType === "RARE" ? "Raro" : "Comum";
 
               const levelMult = 1 + Math.floor(mascot.level / 20) * 0.25;
               const expMult   = TRAINING_EXP_MULT[key as ExpeditionDuration] ?? 0;
-              const expMin    = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult);
-              const expMax    = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * 1.3 * 1.2);
+              const allyExpBonus = 1 + allyCount * 0.1;
+              const rivalCount = rivalRelations.length;
+              const directRival = rivalRelations.some(relation => relation.interactionCount >= 3);
+              const rivalBonus = 1 + Math.min((directRival ? 0.10 : rivalCount > 0 ? 0.05 : 0) * rivalCount, 0.15);
+              const luckyEgg = mascot.activeBuffs.some(buff => buff.type === "LUCKY_EGG" && new Date(buff.expiresAt) > new Date()) ? 1.2 : 1;
+              const expBoost = mascot.activeBuffs.some(buff => buff.type === "EXP_BOOST" && new Date(buff.expiresAt) > new Date()) ? 1.25 : 1;
+              const picnic = mascot.activeBuffs.some(buff => buff.type === "PICNIC_BASKET" && new Date(buff.expiresAt) > new Date()) ? 1.15 : 1;
+              const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * picnic);
 
               return (
                 <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
@@ -730,21 +743,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   {/* Treinamento */}
                   <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1 text-[10px]">
                     <span className="text-green-400">⚔️ Treinamento: </span>
-                    <strong className="text-green-200">{expMin.toLocaleString("pt-BR")}–{expMax.toLocaleString("pt-BR")} EXP</strong>
-                    <span className="ml-1 text-slate-500">(max com aliados + Lucky Egg)</span>
+                    <strong className="text-green-200">{trainingExp.toLocaleString("pt-BR")} EXP</strong>
+                    <span className="ml-1 text-slate-500">(valor atual com relações e bônus ativos)</span>
                   </div>
 
                   {/* Padrão */}
                   <div>
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">🗺 Padrão</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
-                      <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">~{pStd(stdEgg)}%</strong></span>
-                      <span>🍬 Doce <strong className="text-slate-200">~{pStd(stdSweet)}%</strong></span>
-                      <span>🍖 Comida <strong className="text-slate-200">~{pStd(stdFood)}%</strong></span>
-                      <span>🪙 Moedas <strong className="text-slate-200">{coinMin}–{coinMax} ZC</strong></span>
-                      {stdBuff > 0 && (
-                        <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">~{pStd(stdBuff)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto…)</span></span>
+                      <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">{pct(standard.egg)}%</strong></span>
+                      <span>🍬 Doce <strong className="text-slate-200">{pct(standard.sweet)}%</strong></span>
+                      <span>🍖 Comida <strong className="text-slate-200">{pct(standard.food)}%</strong></span>
+                      <span>🪙 Moedas <strong className="text-slate-200">{pct(standard.coins)}% · {standard.coinMin}–{standard.coinMax} ZC</strong></span>
+                      {standard.specialItem > 0 && (
+                        <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">{pct(standard.specialItem)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto…)</span></span>
                       )}
+                      {standard.nothing > 0 && <span className="col-span-2 text-slate-500">🌫 Sem recompensa <strong>{pct(standard.nothing)}%</strong></span>}
                     </div>
                   </div>
 
@@ -752,17 +766,18 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   <div>
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">📦 Itens</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
-                      <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">~{pItm(itmEgg)}%</strong></span>
-                      <span>🍬 Doce <strong className="text-slate-200">~{pItm(itmSweet)}%</strong></span>
-                      <span>🍖 Comida <strong className="text-slate-200">~{pItm(itmFood)}%</strong></span>
-                      <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">~{pItm(itmBuff)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto, Piquenique…)</span></span>
+                      <span>🥚 Ovo <span className="text-slate-600">({items.eggType === "SPECIAL" ? "Especial" : items.eggType === "RARE" ? "Raro" : "Comum"})</span> <strong className="text-slate-200">{pct(items.egg)}%</strong></span>
+                      <span>🍬 Doce <strong className="text-slate-200">{pct(items.sweet)}%</strong></span>
+                      <span>🍖 Comida <strong className="text-slate-200">{pct(items.food)}%</strong></span>
+                      <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">{pct(items.specialItem)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto, Piquenique…)</span></span>
+                      {items.megaStone > 0 && <span className="col-span-2 text-fuchsia-300">💎 Pedra de Mega Evolução <strong>{pct(items.megaStone)}%</strong></span>}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-          <p className="text-[10px] text-slate-600">Amuleto da Sorte dobra as chances de loot. Aliados aumentam drops de ovos.</p>
+          <p className="text-[10px] text-slate-600">Percentuais exatos do sorteio atual. Arredondamento visual de até 0,1 ponto percentual.</p>
         </div>
       </div>
     )}
