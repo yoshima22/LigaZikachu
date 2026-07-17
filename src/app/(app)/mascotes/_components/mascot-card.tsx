@@ -1020,9 +1020,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         </div>
 
         {/* ── Buffs ativos ── */}
-        {mascot.activeBuffs.length > 0 && (
+        {mascot.activeBuffs.some(buff => buff.type !== "STAT_BOOST") && (
           <div className="flex flex-wrap gap-1.5">
-            {mascot.activeBuffs.map((buff, i) => (
+            {mascot.activeBuffs.filter(buff => buff.type !== "STAT_BOOST").map((buff, i) => (
               buff.type === "XP_SHARE" ? (
                 <XpShareBadge key={i} mascotId={mascot.id} />
               ) : (
