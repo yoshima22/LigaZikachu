@@ -1162,14 +1162,36 @@ export async function startExpedition(
   if (durationKey === "7d") throw new Error("Para enviar o mascote de férias, use o Ticket de Férias do Prof. Carvalho no seu inventário.");
 
   const dur = EXPEDITION_DURATIONS[durationKey];
-  const agilityTimeReductionPct = rollExpeditionAgilityReduction(mascot.statAgility);
-  const effectiveDurationMs = Math.round(dur.ms * (1 - agilityTimeReductionPct / 100));
+  // O resultado fica estável por mascote/modo/duração durante 24h. Cancelar e
+  // reiniciar a expedição, portanto, não permite rerrolar até obter um valor maior.
+  const rollBucket = Math.floor(Date.now() / 86_400_000);
+  const rollSeed = `${mascot.id}:${mode}:${durationKey}:${rollBucket}`;
+  let hash = 2166136261;
+  for (let index = 0; index < rollSeed.length; index++) {
+    hash ^= rollSeed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  const stableRandom = () => (hash >>> 0) / 4_294_967_296;
+  const agilityTimeReductionPct = rollExpeditionAgilityReduction(mascot.statAgility, stableRandom);
+  // A primeira metade sempre transcorre integralmente. Agilidade acelera apenas
+  // a segunda metade, então 13% nela equivale a até 6,5% da duração total.
+  const firstHalfMs = dur.ms / 2;
+  const secondHalfMs = dur.ms / 2;
+  const effectiveDurationMs = Math.round(firstHalfMs + secondHalfMs * (1 - agilityTimeReductionPct / 100));
   const finishAt = new Date(Date.now() + effectiveDurationMs);
   return prisma.mascotExpedition.create({
     data: {
       mascotId,
       finishAt,
-      rewardJson: { durationKey, mode, agilityTimeReductionPct, baseDurationMs: dur.ms, effectiveDurationMs },
+      rewardJson: {
+        durationKey,
+        mode,
+        agilityTimeReductionPct,
+        totalTimeReductionPct: agilityTimeReductionPct / 2,
+        baseDurationMs: dur.ms,
+        effectiveDurationMs,
+        agilityRollBucket: rollBucket,
+      },
     }
   });
 }

@@ -641,7 +641,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
-    { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Pode reduzir aleatoriamente em até 13% a duração das expedições; também influencia iniciativa em brigas" },
+    { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Pode acelerar em até 13% a segunda metade da expedição (até 6,5% do tempo total); também influencia iniciativa em brigas" },
     { key: "statCharisma", label: "Carisma",    emoji: "💛", value: mascot.statCharisma, tip: "Chance de fazer amigos e receber mais presentes" },
     { key: "statInstinct", label: "Instinto",   emoji: "🔍", value: mascot.statInstinct, tip: "Encontra itens mais raros em expedições" },
     { key: "statVitality", label: "Vitalidade", emoji: "🛡",  value: mascot.statVitality, tip: "Resiste melhor a humor ruim e efeitos negativos" },
@@ -703,7 +703,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🔍 Instinto + nível</p><p className="text-xs font-bold text-white">{mascot.statInstinct} + {Math.floor(mascot.level / 5)} = {mascot.statInstinct + Math.floor(mascot.level / 5)} sorte</p><p className="text-[9px] text-slate-500">Aumenta ovos e define sua raridade.</p></div>
                   <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🤝 Amizades</p><p className="text-xs font-bold text-white">{allyCount} aliado{allyCount !== 1 ? "s" : ""} · +{Math.min(20, allyCount * 4)} peso de ovo</p><p className="text-[9px] text-slate-500">Também concede +{allyCount * 10}% EXP em treino.</p></div>
                   <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">🍀 Bônus ativos</p><p className={`text-xs font-bold ${luckBuff ? "text-green-300" : "text-slate-300"}`}>{luckBuff ? "Amuleto: sorte dobrada" : "Sem Amuleto da Sorte"}</p><p className="text-[9px] text-slate-500">{rivalRelations.length} {rivalRelations.length === 1 ? "rival influencia" : "rivais influenciam"} apenas EXP.</p></div>
-                  <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">⚡ Agilidade</p><p className="text-xs font-bold text-white">{mascot.statAgility}/250 · {pct(agility.min)}%–{pct(agility.max)}%</p><p className="text-[9px] text-slate-500">A redução de tempo é sorteada ao partir; média de {pct(agility.expected)}%.</p></div>
+                  <div className="rounded-lg bg-slate-900/70 p-2"><p className="text-[9px] text-slate-500">⚡ Agilidade</p><p className="text-xs font-bold text-white">{mascot.statAgility}/250 · {pct(agility.min)}%–{pct(agility.max)}%</p><p className="text-[9px] text-slate-500">Acelera somente a segunda metade; até {pct(agility.max / 2)}% do tempo total. Reiniciar não rerrola o bônus.</p></div>
                 </div>
                 <p className="mt-2 text-[9px] text-slate-600">Agilidade reduz a duração, mas não muda o loot. Força, Vitalidade, Carisma e personalidade não alteram este sorteio.</p>
               </div>
@@ -729,8 +729,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const eggQuality = standard.eggType === "SPECIAL" ? "Especial" : standard.eggType === "RARE" ? "Raro" : "Comum";
               const agility = getExpeditionAgilityReduction(mascot.statAgility);
               const baseMinutes = dur.ms / 60_000;
-              const fastestMinutes = Math.round(baseMinutes * (1 - agility.max / 100));
-              const slowestMinutes = Math.round(baseMinutes * (1 - agility.min / 100));
+              const fastestMinutes = Math.round(baseMinutes * (1 - agility.max / 200));
+              const slowestMinutes = Math.round(baseMinutes * (1 - agility.min / 200));
               const formatMinutes = (minutes: number) => minutes >= 60
                 ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}min` : ""}`
                 : `${minutes}min`;
@@ -754,7 +754,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                     <p className="text-xs font-semibold text-blue-400">{dur.label} · {modeLabel}</p>
                     <p className="mt-1 text-[10px] text-cyan-300">
                       ⚡ Duração sorteada: {formatMinutes(fastestMinutes)}–{formatMinutes(slowestMinutes)}
-                      <span className="text-slate-500"> (redução de {pct(agility.min)}% a {pct(agility.max)}%; média {pct(agility.expected)}%)</span>
+                      <span className="text-slate-500"> (Agilidade acelera a segunda metade em {pct(agility.min)}%–{pct(agility.max)}%; redução total de {pct(agility.min / 2)}%–{pct(agility.max / 2)}%)</span>
                     </p>
                   </div>
 
@@ -1197,7 +1197,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                     }
                     const reduction = response.result?.agilityTimeReductionPct ?? 0;
                     toast.success(
-                      `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada! Agilidade reduziu o tempo em ${reduction.toFixed(1).replace(".0", "")}%.`
+                      `Expedição de ${EXPEDITION_DURATIONS[expeditionDuration].label} iniciada! Agilidade acelerará a segunda metade em ${reduction.toFixed(1).replace(".0", "")}% (${(reduction / 2).toFixed(1).replace(".0", "")}% do tempo total).`
                     );
                     router.refresh();
                   })}
