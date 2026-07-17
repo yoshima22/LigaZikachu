@@ -57,7 +57,7 @@ export function PerformanceTagPicker({ mascotId, initial, size = "md", align = "
         {meta.label}
       </button>
       {open && (
-        <div className={`absolute z-50 mt-1 min-w-[150px] rounded-lg border border-border bg-slate-900 p-1 shadow-xl ${align === "right" ? "right-0" : "left-0"}`}>
+        <div className={`absolute z-[80] mt-1 min-w-[170px] rounded-lg border border-border bg-slate-900 p-1 shadow-2xl shadow-black/60 ${align === "right" ? "right-0" : "left-0"}`}>
           <p className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-wide text-slate-500">Desempenho</p>
           {PERFORMANCE_TAGS.map(t => {
             const m = PERFORMANCE_META[t];

@@ -248,7 +248,7 @@ function BankRow({
   const chips = getOccupationChips(mascot);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/50 bg-slate-950/40">
+    <div className="relative overflow-visible rounded-xl border border-border/50 bg-slate-950/40">
       <div className="flex w-full items-center gap-3 px-3 py-2.5 transition-colors hover:bg-slate-800/40">
         {/* Área clicável para expandir */}
         <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">

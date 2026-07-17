@@ -214,7 +214,7 @@ function BankRow({
   const nameColor = statNameColor(mascot);
 
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-950/40 overflow-hidden">
+    <div className="relative overflow-visible rounded-xl border border-border/50 bg-slate-950/40">
       <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-800/40 transition-colors">
         {/* Área clicável para expandir */}
         <button type="button" onClick={handleExpand} className="flex-1 min-w-0 flex items-center gap-3 text-left">

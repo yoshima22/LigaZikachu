@@ -25,6 +25,11 @@ import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-f
 import { CombatRoleSelect } from "./_components/combat-role-select";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { AdminArenaHistorySelector } from "./_components/admin-arena-history-selector";
+import {
+  COMBAT_ROLE_OPTIONS,
+  COMBAT_ROLE_DESCRIPTIONS,
+  normalizeCombatRole,
+} from "@/lib/combat-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -933,10 +938,11 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 {/* Membros */}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {team.members.map(member => (
-                    <div key={member.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-950/60 p-2">
+                    <div key={member.id} className="rounded-xl border border-border/60 bg-slate-950/60 p-2.5">
+                      <div className="flex items-center gap-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={getSpriteUrl(member.mascot.pokemonId, true)} alt="" className="h-8 w-8 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold text-slate-200">
                           {member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)}
                         </p>
@@ -945,9 +951,42 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                           <CombatRoleSelect teamId={team.id} mascotId={member.mascotId} value={member.combatRole} />
                         )}
                       </div>
+                      </div>
+                      <div className="mt-2 grid grid-cols-5 gap-1" aria-label="Atributos do mascote">
+                        {[
+                          ["FOR", member.mascot.statForce, "Força"],
+                          ["AGI", member.mascot.statAgility, "Agilidade"],
+                          ["VIT", member.mascot.statVitality, "Vitalidade"],
+                          ["INS", member.mascot.statInstinct, "Instinto"],
+                          ["CAR", member.mascot.statCharisma, "Carisma"],
+                        ].map(([short, value, label]) => (
+                          <div key={String(short)} title={`${label}: ${value}`} className="rounded-md border border-slate-800 bg-slate-900/70 px-1 py-1 text-center">
+                            <p className="text-[8px] font-bold text-slate-600">{short}</p>
+                            <p className="text-[10px] font-semibold text-slate-300">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[9px] leading-snug text-slate-500">
+                        {COMBAT_ROLE_DESCRIPTIONS[normalizeCombatRole(member.combatRole)]}
+                      </p>
                     </div>
                   ))}
                 </div>
+
+                <details className="group mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-semibold text-sky-200">
+                    <span>Manual das posturas</span>
+                    <ChevronDown size={13} className="transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="grid gap-2 border-t border-sky-500/15 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {COMBAT_ROLE_OPTIONS.map((role) => (
+                      <div key={role.value} className="rounded-lg border border-slate-800 bg-slate-950/70 p-2">
+                        <p className="text-[10px] font-bold text-slate-200">{role.label}</p>
+                        <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">{role.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
 
                 {/* Aviso bloqueado */}
                 {team.status === "ACTIVE" && teamBlockReasons.get(team.id) && (
