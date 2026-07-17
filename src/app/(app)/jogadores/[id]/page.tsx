@@ -191,7 +191,7 @@ export default async function PlayerDetailPage({
   }
   const typedShopItems = shopItems as { id: string; name: string; type: string; rarity: string; active: boolean }[];
   const uniqueShopItems = typedShopItems.filter((item, index, list) =>
-    list.findIndex((entry) => entry.type === item.type) === index
+    list.findIndex((entry) => entry.id === item.id) === index
   );
 
   // Time principal — apenas os 6 favoritos, campos mínimos para o grid simplificado

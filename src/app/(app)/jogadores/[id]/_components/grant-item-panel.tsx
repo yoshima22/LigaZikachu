@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Gift, Plus, Search, Package, Minus } from "lucide-react";
@@ -55,6 +55,10 @@ const RARITY_LABEL: Record<string, string> = {
 
 const SYNC_TYPES = new Set(["SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"]);
 
+function typeLabel(type: string) {
+  return TYPE_LABEL[type] ?? type.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
 export function GrantItemPanel({ playerId, shopItems, ownedItemIds, ownedItems }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -63,7 +67,15 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds, ownedItems }
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [qty, setQty] = useState(1);
 
-  const typeOpts = ["ALL", "TITLE", "BANNER", "FRAME", "ZIKALOOT_TICKET", "SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"];
+  const typeOpts = useMemo(() => {
+    const preferred = ["TITLE", "BANNER", "FRAME", "ZIKALOOT_TICKET", "SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"];
+    const available = new Set([...shopItems, ...ownedItems].map((item) => item.type));
+    return [
+      "ALL",
+      ...preferred.filter((type) => available.has(type)),
+      ...Array.from(available).filter((type) => !preferred.includes(type)).sort((a, b) => typeLabel(a).localeCompare(typeLabel(b), "pt-BR")),
+    ];
+  }, [ownedItems, shopItems]);
 
   const filteredGrant = shopItems.filter((i) => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase());
@@ -167,22 +179,16 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds, ownedItems }
             className="w-16 rounded-lg border border-border bg-slate-900 px-2 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] text-center"
           />
         </div>
-        <div className="flex flex-wrap gap-1">
-          {typeOpts.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTypeFilter(t)}
-              className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
-                typeFilter === t
-                  ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
-                  : "border-border text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {t === "ALL" ? "Todos" : TYPE_LABEL[t]}
-            </button>
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+          className="max-w-[220px] rounded-lg border border-border bg-slate-900 px-3 py-2 text-[10px] font-semibold text-slate-300 outline-none focus:border-[#FFCB05]/50"
+          aria-label="Filtrar por tipo de item"
+        >
+          {typeOpts.map((type) => (
+            <option key={type} value={type}>{type === "ALL" ? "Todos os tipos" : typeLabel(type)}</option>
           ))}
-        </div>
+        </select>
       </div>
 
       {/* Lista — Conceder */}
@@ -204,11 +210,11 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds, ownedItems }
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-sm font-medium text-slate-200 truncate">{item.name}</p>
                       {item.active === false && (
-                        <span className="rounded bg-slate-700/60 px-1 py-0.5 text-[9px] text-slate-500 border border-slate-600/40">inativo</span>
+                        <span className="rounded bg-slate-700/60 px-1 py-0.5 text-[9px] text-slate-400 border border-slate-600/40">oculto/inativo</span>
                       )}
                     </div>
                     <p className="text-[10px] text-slate-500 mt-0.5">
-                      {TYPE_LABEL[item.type] ?? item.type}
+                      {typeLabel(item.type)}
                       <span className={`ml-2 font-semibold ${RARITY_COLOR[item.rarity]}`}>
                         {RARITY_LABEL[item.rarity] ?? item.rarity}
                       </span>
@@ -251,7 +257,7 @@ export function GrantItemPanel({ playerId, shopItems, ownedItemIds, ownedItems }
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-200 truncate">{item.name}</p>
                   <p className="text-[10px] text-slate-500 mt-0.5">
-                    {TYPE_LABEL[item.type] ?? item.type}
+                    {typeLabel(item.type)}
                     <span className={`ml-2 font-semibold ${RARITY_COLOR[item.rarity]}`}>
                       {RARITY_LABEL[item.rarity] ?? item.rarity}
                     </span>
