@@ -257,10 +257,9 @@ export async function getListing(id: string) {
       _count: { select: { favorites: true } },
     },
   });
-  if (listing) {
-    // Incrementa views (fire & forget)
-    prisma.bazarListing.update({ where: { id }, data: { views: { increment: 1 } } }).catch(() => {});
-  }
+  // Não incrementar `views` aqui. Writes fire-and-forget em Server Actions podem
+  // deixar transações abertas no runtime serverless e bloquear a oferta inteira
+  // quando vários jogadores acompanham o mesmo leilão.
   return listing;
 }
 
@@ -1957,37 +1956,43 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
-    const listing = await prisma.bazarListing.findUnique({
-      where: { id: listingId },
-      include: { player: { select: { id: true, displayName: true } } },
-    });
-    if (!listing) return { error: "Anúncio não encontrado." };
-    if (listing.listingType !== "AUCTION") return { error: "Este anúncio não é um leilão." };
-    if (listing.status !== "ACTIVE") return { error: "Este leilão não está mais ativo." };
-    if (listing.playerId === player.id) return { error: "Você não pode dar lance no próprio leilão." };
+    if (!Number.isSafeInteger(amount) || amount <= 0) return { error: "Lance inválido." };
 
-    const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
-    if (new Date() >= endsAt) return { error: "Este leilão já encerrou." };
+    const bid = await prisma.$transaction(async (tx) => {
+      // Um leilão por vez: dois lances simultâneos esperam nesta trava curta e
+      // o segundo relê o valor atualizado antes de validar o lance mínimo.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listingId}))`;
 
-    const minBid = listing.currentBidCoins
-      ? listing.currentBidCoins + 100
-      : (listing.minBidCoins ?? 1);
-    if (amount < minBid) return { error: `Lance mínimo é ${minBid} ZC.` };
-    if (listing.currentBidPlayerId === player.id) return { error: "Você já é o maior lance." };
+      const listing = await tx.bazarListing.findUnique({
+        where: { id: listingId },
+        include: { player: { select: { id: true, displayName: true } } },
+      });
+      if (!listing) throw new Error("Anúncio não encontrado.");
+      if (listing.listingType !== "AUCTION") throw new Error("Este anúncio não é um leilão.");
+      if (listing.status !== "ACTIVE") throw new Error("Este leilão não está mais ativo.");
+      if (listing.playerId === player.id) throw new Error("Você não pode dar lance no próprio leilão.");
 
-    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-    if (!wallet || wallet.balance < amount) return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).` };
+      const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
+      if (new Date() >= endsAt) throw new Error("Este leilão já encerrou.");
+      const minBid = listing.currentBidCoins ? listing.currentBidCoins + 100 : (listing.minBidCoins ?? 1);
+      if (amount < minBid) throw new Error(`Lance mínimo é ${minBid} ZC.`);
+      if (listing.currentBidPlayerId === player.id) throw new Error("Você já é o maior lance.");
 
-    const prevBidderId = listing.currentBidPlayerId;
-    const prevBidAmount = listing.currentBidCoins ?? 0;
+      const prevBidderId = listing.currentBidPlayerId;
+      const prevBidAmount = listing.currentBidCoins ?? 0;
+      const msLeft = endsAt.getTime() - Date.now();
+      const newEndsAt = msLeft < 5 * 60_000 ? new Date(endsAt.getTime() + 30 * 60_000) : endsAt;
 
-    // Extensão: se faltam menos de 5 min, extender em 30 min
-    const msLeft = endsAt.getTime() - Date.now();
-    const newEndsAt = msLeft < 5 * 60_000 ? new Date(endsAt.getTime() + 30 * 60_000) : endsAt;
-
-    await prisma.$transaction(async (tx) => {
-      // Debita coins do novo licitante
-      await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: amount } } });
+      // Débito condicional: impede duas requisições concorrentes de gastarem o
+      // mesmo saldo depois de ambas terem lido a carteira.
+      const debit = await tx.zikaCoinWallet.updateMany({
+        where: { playerId: player.id, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+      if (debit.count !== 1) {
+        const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } });
+        throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
+      }
 
       // Devolve coins ao licitante anterior
       if (prevBidderId && prevBidAmount > 0) {
@@ -2006,14 +2011,15 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
         where: { id: listingId },
         data: { currentBidCoins: amount, currentBidPlayerId: player.id, auctionEndsAt: newEndsAt, expiresAt: newEndsAt },
       });
+      return { listing, prevBidderId, prevBidAmount };
     });
 
     // Notifica o licitante anterior por mensagem privada
-    if (prevBidderId && prevBidderId !== player.id) {
-      const desc = listing.category === "MASCOT"
-        ? `${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName}`
-        : `${(listing.payload as Record<string, unknown>).displayName}`;
-      await _sendBazarSystemDM(prevBidderId, `Seu lance de ${prevBidAmount} ZC no leilão de "${desc}" foi superado por um lance de ${amount} ZC. Os seus ZC foram devolvidos à carteira.`);
+    if (bid.prevBidderId && bid.prevBidderId !== player.id) {
+      const desc = bid.listing.category === "MASCOT"
+        ? `${(bid.listing.payload as Record<string, unknown>).nickname ?? (bid.listing.payload as Record<string, unknown>).pokemonName}`
+        : `${(bid.listing.payload as Record<string, unknown>).displayName}`;
+      await _sendBazarSystemDM(bid.prevBidderId, `Seu lance de ${bid.prevBidAmount} ZC no leilão de "${desc}" foi superado por um lance de ${amount} ZC. Os seus ZC foram devolvidos à carteira.`);
       revalidateTag(`nav-${user.id}`);
     }
 
@@ -2042,10 +2048,17 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
 
     if (!winnerId || winnerBid === 0) {
       // Sem lances: expira e devolve item
-      await prisma.$transaction(async (tx) => {
-        await tx.bazarListing.update({ where: { id: listingId }, data: { status: "EXPIRED" } });
+      const claimed = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listingId}))`;
+        const update = await tx.bazarListing.updateMany({
+          where: { id: listingId, status: "ACTIVE" },
+          data: { status: "EXPIRED" },
+        });
+        if (update.count !== 1) return false;
         await _returnEscrow(tx, listing, listing.playerId);
+        return true;
       });
+      if (!claimed) return { finalized: false };
       revalidateBazar();
       return { finalized: true };
     }
@@ -2060,8 +2073,13 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
       ? `${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName} Nv.${(listing.payload as Record<string, unknown>).level} leiloado por ${winnerBid} ZC`
       : `${(listing.payload as Record<string, unknown>).displayName} leiloado por ${winnerBid} ZC`;
 
-    await prisma.$transaction(async (tx) => {
-      await tx.bazarListing.update({ where: { id: listingId }, data: { status: "SOLD" } });
+    const claimed = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listingId}))`;
+      const update = await tx.bazarListing.updateMany({
+        where: { id: listingId, status: "ACTIVE" },
+        data: { status: "SOLD" },
+      });
+      if (update.count !== 1) return false;
 
       // Transfere coins (já foram debitados do vencedor ao dar lance)
       await tx.zikaCoinWallet.upsert({
@@ -2080,7 +2098,9 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
           coinsAmount: winnerBid, category: listing.category,
         },
       });
+      return true;
     });
+    if (!claimed) return { finalized: false };
 
     revalidateBazar();
     if (listing.player.userId) revalidateTag(`nav-${listing.player.userId}`);
