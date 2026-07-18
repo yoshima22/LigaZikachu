@@ -924,6 +924,8 @@ function ResultsTab({ data }: { data: PageData }) {
           winnerId={replayMatch.winnerId}
           isDraw={replayMatch.isDraw}
           replay={replayMatch.replayJson as TurnLog[]}
+          playerASurvivors={replayMatch.playerASurvivors}
+          playerBSurvivors={replayMatch.playerBSurvivors}
           orderSabotage={data.orderSabotage}
           onFinish={() => setReplayMatch(null)}
         />

@@ -22,51 +22,10 @@ export type TurnLog = {
   effect?: string;
 };
 
-function splitDamage(total: number, parts: number) {
-  const safeTotal = Math.max(0, Math.round(total));
-  const safeParts = Math.max(1, Math.min(parts, Math.max(1, safeTotal)));
-  const base = Math.floor(safeTotal / safeParts);
-  let remainder = safeTotal % safeParts;
-
-  return Array.from({ length: safeParts }, () => {
-    const value = base + (remainder > 0 ? 1 : 0);
-    remainder = Math.max(0, remainder - 1);
-    return value;
-  });
-}
-
 function buildCinematicReplay(replay: TurnLog[]) {
-  if (replay.length === 0) return replay;
-
-  const minSteps = 54;
-  const maxSteps = 110;
-  const expansion = Math.max(1, Math.min(4, Math.ceil(minSteps / replay.length)));
-
-  if (expansion === 1) return replay.map((turn, index) => ({ ...turn, turn: index + 1 }));
-
-  const expanded: TurnLog[] = [];
-  for (const turn of replay) {
-    if (expanded.length >= maxSteps) break;
-
-    if (turn.action !== "ATTACK" || turn.damage <= 1) {
-      expanded.push({ ...turn, turn: expanded.length + 1 });
-      continue;
-    }
-
-    const remainingSlots = Math.max(1, maxSteps - expanded.length);
-    const chunks = splitDamage(turn.damage, Math.min(expansion, remainingSlots));
-
-    chunks.forEach((damage, index) => {
-      expanded.push({
-        ...turn,
-        turn: expanded.length + 1,
-        damage,
-        effect: index === chunks.length - 1 ? turn.effect : undefined,
-      });
-    });
-  }
-
-  return expanded;
+  // Cada entrada persistida corresponde a uma ação oficial. Não fragmentar nem
+  // limitar: o replay deve sempre alcançar a última ação que decidiu o combate.
+  return replay.map((turn, index) => ({ ...turn, turn: index + 1 }));
 }
 
 interface Fighter {
@@ -85,7 +44,7 @@ function resolveName(name: string, pokemonId?: number) {
   return name;
 }
 
-function buildFighters(turns: TurnLog[], playerAId?: string): Fighter[] {
+function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, survivorsB = 0): Fighter[] {
   const seen = new Map<string, Fighter>();
 
   // Use the match's playerAId to determine sides, not turn order
@@ -118,13 +77,28 @@ function buildFighters(turns: TurnLog[], playerAId?: string): Fighter[] {
     if (t.targetPokemonId && !seen.get(t.targetId)!.pokemonId) seen.get(t.targetId)!.pokemonId = t.targetPokemonId;
   }
 
-  for (const t of turns) {
-    const target = seen.get(t.targetId);
-    if (target && t.action === "ATTACK") target.maxHp += t.damage;
+  const damageTaken = new Map<string, number>();
+  const lastActivity = new Map<string, number>();
+  turns.forEach((turn, index) => {
+    lastActivity.set(turn.actorId, index);
+    lastActivity.set(turn.targetId, index);
+    if (turn.action === "ATTACK") {
+      damageTaken.set(turn.targetId, (damageTaken.get(turn.targetId) ?? 0) + turn.damage);
+    }
+  });
+  const survivorIds = new Set<string>();
+  for (const side of ["A", "B"] as const) {
+    const count = side === "A" ? survivorsA : survivorsB;
+    [...seen.values()]
+      .filter(fighter => fighter.side === side)
+      .sort((left, right) => (lastActivity.get(right.id) ?? -1) - (lastActivity.get(left.id) ?? -1))
+      .slice(0, count)
+      .forEach(fighter => survivorIds.add(fighter.id));
   }
-  for (const c of seen.values()) {
-    if (c.maxHp <= 100) c.maxHp = 100;
-    c.hp = c.maxHp;
+  for (const fighter of seen.values()) {
+    const received = damageTaken.get(fighter.id) ?? 0;
+    fighter.maxHp = Math.max(1, received + (survivorIds.has(fighter.id) ? 100 : 0));
+    fighter.hp = fighter.maxHp;
   }
   return [...seen.values()];
 }
@@ -177,6 +151,8 @@ export function LeagueBattleReplayModal({
   winnerId,
   isDraw,
   replay,
+  playerASurvivors = 0,
+  playerBSurvivors = 0,
   orderSabotage,
   onFinish,
 }: {
@@ -186,6 +162,8 @@ export function LeagueBattleReplayModal({
   winnerId?: string | null;
   isDraw?: boolean;
   replay: TurnLog[];
+  playerASurvivors?: number;
+  playerBSurvivors?: number;
   orderSabotage?: { affectedSlots: number[]; statMultiplier: number } | null;
   onFinish: () => void;
 }) {
@@ -198,9 +176,9 @@ export function LeagueBattleReplayModal({
   useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
-    setBaseFighters(buildFighters(cinematicReplay, playerAId));
+    setBaseFighters(buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors));
     setTurnIdx(-1);
-  }, [cinematicReplay, playerAId]);
+  }, [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors]);
 
   // Derive current HP state from baseFighters + all turns up to turnIdx
   const fighters = useMemo(() => {

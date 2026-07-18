@@ -202,6 +202,15 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
     attackerEgg: string | null;
     // Resumo do turno em texto
     turnLines: string[];
+    battleAnimation: Array<{
+      turn: number; action: "ATTACK" | "DEFEND" | "HEAL";
+      attackerId: string; attackerName: string; attackerPokemonId: number;
+      defenderId: string; defenderName: string; defenderPokemonId: number;
+      damage: number; advantageApplied: boolean; isPlayerAttacker: boolean;
+      actorRole?: string; targetRole?: string; effect?: string;
+    }>;
+    playerMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number }>;
+    opponentMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number }>;
     injuredCount: number;
   };
 }> {
@@ -246,12 +255,68 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
     const isCurrentUserDefender = battle.defenderPlayerId === playerId;
 
     const log = Array.isArray(battle.turnLog)
-      ? (battle.turnLog as Array<{ turn: number; actorName: string; targetName: string; damage: number; advantageApplied?: boolean }>)
+      ? (battle.turnLog as Array<{
+          turn: number; action: "ATTACK" | "DEFEND" | "HEAL";
+          actorId: string; actorName: string; actorOwnerId?: string | null; actorRole?: string;
+          targetId: string; targetName: string; targetOwnerId?: string | null; targetRole?: string;
+          damage: number; advantageApplied?: boolean; effect?: string;
+        }>)
       : [];
-    const turnLines = log.slice(0, 15).map(t =>
+    const turnLines = log.map(t =>
       `T${t.turn}: ${t.actorName} → ${t.targetName} (${t.damage} dano${t.advantageApplied ? " ⚡" : ""})`
     );
     const injuredCount = Array.isArray(battle.injuredMascotIds) ? battle.injuredMascotIds.length : 0;
+    const mascotIds = [...new Set(log.flatMap(turn => [turn.actorId, turn.targetId]).filter(Boolean))];
+    const mascots = await prisma.mascot.findMany({
+      where: { id: { in: mascotIds } },
+      select: { id: true, pokemonId: true, nickname: true, level: true },
+    });
+    const mascotById = new Map(mascots.map(mascot => [mascot.id, mascot]));
+    const damageByTarget = new Map<string, number>();
+    for (const turn of log) {
+      if (turn.action === "ATTACK") {
+        damageByTarget.set(turn.targetId, (damageByTarget.get(turn.targetId) ?? 0) + turn.damage);
+      }
+    }
+    const winningPlayerId = attackerWon ? battle.attackerPlayerId : defenderWon ? battle.defenderPlayerId : null;
+    const fighterOwner = new Map<string, string | null>();
+    for (const turn of log) {
+      fighterOwner.set(turn.actorId, turn.actorOwnerId ?? null);
+      fighterOwner.set(turn.targetId, turn.targetOwnerId ?? null);
+    }
+    const toMascotInfo = (id: string) => {
+      const mascot = mascotById.get(id);
+      const fallbackName = log.find(turn => turn.actorId === id)?.actorName
+        ?? log.find(turn => turn.targetId === id)?.targetName
+        ?? "Mascote";
+      const received = damageByTarget.get(id) ?? 0;
+      const survived = winningPlayerId !== null && fighterOwner.get(id) === winningPlayerId;
+      return {
+        id,
+        pokemonId: mascot?.pokemonId ?? 0,
+        name: mascot?.nickname ?? fallbackName,
+        level: mascot?.level ?? 1,
+        maxHp: Math.max(1, received + (survived ? 100 : 0)),
+      };
+    };
+    const playerMascotIds = mascotIds.filter(id => fighterOwner.get(id) === playerId);
+    const opponentMascotIds = mascotIds.filter(id => fighterOwner.get(id) !== playerId);
+    const battleAnimation = log.map(turn => ({
+      turn: turn.turn,
+      action: turn.action,
+      attackerId: turn.actorId,
+      attackerName: turn.actorName,
+      attackerPokemonId: mascotById.get(turn.actorId)?.pokemonId ?? 0,
+      defenderId: turn.targetId,
+      defenderName: turn.targetName,
+      defenderPokemonId: mascotById.get(turn.targetId)?.pokemonId ?? 0,
+      damage: turn.damage,
+      advantageApplied: !!turn.advantageApplied,
+      isPlayerAttacker: turn.actorOwnerId === playerId,
+      actorRole: turn.actorRole,
+      targetRole: turn.targetRole,
+      effect: turn.effect,
+    }));
 
     return {
       battle: {
@@ -268,6 +333,9 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
         defenderEgg,
         attackerEgg,
         turnLines,
+        battleAnimation,
+        playerMascots: playerMascotIds.map(toMascotInfo),
+        opponentMascots: opponentMascotIds.map(toMascotInfo),
         injuredCount,
       },
     };

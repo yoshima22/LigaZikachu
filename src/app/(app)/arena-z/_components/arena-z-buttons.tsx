@@ -396,10 +396,24 @@ const EGG_LABEL: Record<string, string> = {
 };
 
 function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; onClose: () => void }) {
+  const [showReplay, setShowReplay] = useState(false);
   const defenderGained = battle.defenderLoot && battle.defenderLoot.coins > 0;
   const defenderLost = battle.defenderLoot && battle.defenderLoot.coins < 0;
   // Ovo relevante para o usuário atual
   const myEgg = battle.isCurrentUserDefender ? battle.defenderEgg : battle.attackerEgg;
+
+  if (showReplay) {
+    return (
+      <BattleAnimationModal
+        turns={battle.battleAnimation as AnimTurn[]}
+        playerMascots={battle.playerMascots as MascotInfo[]}
+        botMascots={battle.opponentMascots as MascotInfo[]}
+        playerTeamName={battle.isCurrentUserDefender ? battle.defenderName : battle.attackerName}
+        botName={battle.isCurrentUserDefender ? battle.attackerName : battle.defenderName}
+        onFinish={() => setShowReplay(false)}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4">
@@ -474,10 +488,20 @@ function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; on
           </details>
         )}
 
+        {battle.battleAnimation.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowReplay(true)}
+            className="mt-4 w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2.5 text-sm font-bold text-[#FFCB05]"
+          >
+            ▶ Assistir replay completo
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onClose}
-          className="mt-4 w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-950"
+          className="mt-2 w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-bold text-slate-950"
         >
           Entendido
         </button>

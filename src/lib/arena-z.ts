@@ -1685,7 +1685,6 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
       battleAnimation: combat.log
         .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
-        .slice(0, 28)
         .map(t => ({
           turn: t.turn,
           action: t.action,
@@ -1726,7 +1725,6 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       highlights: combat.log.filter(t => t.action === "ATTACK").sort((a,b) => b.damage - a.damage).slice(0,3).map(t => ({ turn: t.turn, actorName: t.actorName, targetName: t.targetName, damage: t.damage, advantageApplied: t.advantageApplied })),
       battleAnimation: combat.log
         .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
-        .slice(0, 28)
         .map(t => ({
           turn: t.turn, action: t.action,
           attackerId: t.actorId, attackerName: t.actorName,
@@ -1985,7 +1983,6 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));
       return combat.log
         .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
-        .slice(0, 28) // cap para animação não ficar longa demais
         .map(t => ({
           turn: t.turn,
           action: t.action,
@@ -2719,7 +2716,6 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     })),
     battleAnimation: combat.log
       .filter(t => t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL")
-      .slice(0, 28)
       .map(t => ({
         turn: t.turn,
         action: t.action,
