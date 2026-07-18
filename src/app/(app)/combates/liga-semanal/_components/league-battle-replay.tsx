@@ -44,6 +44,12 @@ function resolveName(name: string, pokemonId?: number) {
   return name;
 }
 
+function getGuardianAbsorption(turn: TurnLog) {
+  const match = turn.effect?.match(/Guardião (.+?) absorveu (\d+) de dano\./i);
+  if (!match) return null;
+  return { guardianName: match[1], damage: Number(match[2]) };
+}
+
 function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, survivorsB = 0): Fighter[] {
   const seen = new Map<string, Fighter>();
 
@@ -84,6 +90,13 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
     lastActivity.set(turn.targetId, index);
     if (turn.action === "ATTACK") {
       damageTaken.set(turn.targetId, (damageTaken.get(turn.targetId) ?? 0) + turn.damage);
+    }
+    const absorption = getGuardianAbsorption(turn);
+    if (absorption) {
+      const guardian = [...seen.values()].find(fighter => fighter.name === absorption.guardianName);
+      if (guardian) {
+        damageTaken.set(guardian.id, (damageTaken.get(guardian.id) ?? 0) + absorption.damage);
+      }
     }
   });
   const survivorIds = new Set<string>();
@@ -188,6 +201,11 @@ export function LeagueBattleReplayModal({
       if (t.action === "ATTACK") {
         const target = state.find(f => f.id === t.targetId);
         if (target) target.hp = Math.max(0, target.hp - t.damage);
+      }
+      const absorption = getGuardianAbsorption(t);
+      if (absorption) {
+        const guardian = state.find(fighter => fighter.name === absorption.guardianName);
+        if (guardian) guardian.hp = Math.max(0, guardian.hp - absorption.damage);
       }
     }
     return state;
