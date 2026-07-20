@@ -114,6 +114,7 @@ export function BazarFiltersClient() {
               <option value="SALE">Venda</option>
               <option value="TRADE">Troca</option>
               <option value="SALE_OR_TRADE">Venda ou Troca</option>
+              <option value="AUCTION">LeilÃ£o</option>
             </select>
           </div>
 

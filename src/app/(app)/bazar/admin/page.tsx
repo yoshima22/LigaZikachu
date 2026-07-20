@@ -3,10 +3,10 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, ShieldBan } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings } from "../actions";
-import type { MiauvadaoOffer } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings, adminGetBazarTradeBanData, adminSetBazarTradeBan } from "../actions";
+import type { MiauvadaoOffer, BazarTradeBanAdminData } from "../actions";
 import { MEGA_STONES, isMegaStoneType } from "@/lib/mega-evolution";
 
 const ITEM_TYPES = [
@@ -45,6 +45,10 @@ export default function MiauvadaoAdminPage() {
   const [fee, setFee] = useState("10");
   const [vaultBalance, setVaultBalance] = useState(0);
   const [vaultAdjust, setVaultAdjust] = useState("");
+  const [tradeBanData, setTradeBanData] = useState<BazarTradeBanAdminData>({ players: [], bans: [] });
+  const [banPlayerAId, setBanPlayerAId] = useState("");
+  const [banPlayerBId, setBanPlayerBId] = useState("");
+  const [banReason, setBanReason] = useState("");
 
   useEffect(() => {
     getMiauvadaoConfig().then(c => {
@@ -59,7 +63,27 @@ export default function MiauvadaoAdminPage() {
         ]);
       }
     });
+    adminGetBazarTradeBanData().then(setTradeBanData).catch(() => toast.error("NÃ£o foi possÃ­vel carregar os bloqueios do Bazar."));
   }, []);
+
+  const refreshTradeBans = async () => setTradeBanData(await adminGetBazarTradeBanData());
+
+  const handleTradeBan = (playerAId: string, playerBId: string, active: boolean, reason?: string) => {
+    startTransition(async () => {
+      const result = await adminSetBazarTradeBan({ playerAId, playerBId, active, reason });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(active ? "NegociaÃ§Ãµes bloqueadas." : "Bloqueio desativado.");
+      if (active) {
+        setBanPlayerAId("");
+        setBanPlayerBId("");
+        setBanReason("");
+      }
+      await refreshTradeBans();
+    });
+  };
 
   const updateOffer = (idx: number, field: keyof MiauvadaoOffer, value: unknown) => {
     setOffers(prev => {
@@ -114,6 +138,53 @@ export default function MiauvadaoAdminPage() {
         <div>
           <h1 className="font-pixel text-base text-[#FFCB05]">Admin — Miauvadão</h1>
           <p className="text-xs text-slate-500">Configure as ofertas diárias e a taxa do Bazar.</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-red-500/25 bg-slate-950/60 p-5 space-y-4">
+        <div className="flex items-start gap-3">
+          <ShieldBan size={20} className="mt-0.5 text-red-400" />
+          <div>
+            <h2 className="font-semibold text-slate-200">Bloqueios de negociaÃ§Ã£o</h2>
+            <p className="text-xs text-slate-500">Impede compras, propostas, trocas e disputas de leilÃ£o entre o par selecionado.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <select value={banPlayerAId} onChange={(event) => setBanPlayerAId(event.target.value)}
+            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none">
+            <option value="">Primeiro jogador</option>
+            {tradeBanData.players.map((player) => <option key={player.id} value={player.id}>{player.displayName}</option>)}
+          </select>
+          <select value={banPlayerBId} onChange={(event) => setBanPlayerBId(event.target.value)}
+            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none">
+            <option value="">Segundo jogador</option>
+            {tradeBanData.players.map((player) => <option key={player.id} value={player.id}>{player.displayName}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input value={banReason} onChange={(event) => setBanReason(event.target.value)} placeholder="Motivo administrativo (opcional)"
+            className="flex-1 rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none" />
+          <button type="button" disabled={pending || !banPlayerAId || !banPlayerBId}
+            onClick={() => handleTradeBan(banPlayerAId, banPlayerBId, true, banReason)}
+            className="rounded-xl bg-red-500 px-4 py-2 text-xs font-bold text-white hover:bg-red-400 disabled:opacity-50">
+            Bloquear par
+          </button>
+        </div>
+        <div className="space-y-2">
+          {tradeBanData.bans.length === 0 && <p className="text-xs text-slate-600">Nenhum bloqueio cadastrado.</p>}
+          {tradeBanData.bans.map((ban) => (
+            <div key={ban.id} className="flex flex-col gap-2 rounded-xl border border-border/60 bg-slate-900/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-200">{ban.playerAName} <span className="text-slate-600">x</span> {ban.playerBName}</p>
+                <p className="text-[10px] text-slate-500">{ban.reason || "Sem motivo informado"} · {ban.active ? "Ativo" : "Inativo"}</p>
+              </div>
+              <button type="button" disabled={pending}
+                onClick={() => handleTradeBan(ban.playerAId, ban.playerBId, !ban.active, ban.reason ?? undefined)}
+                className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${ban.active ? "border-emerald-500/30 text-emerald-400" : "border-red-500/30 text-red-400"}`}>
+                {ban.active ? "Desbloquear" : "Reativar"}
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 

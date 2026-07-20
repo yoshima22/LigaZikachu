@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Coins, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
-import { getSpriteUrl } from "@/lib/mascot-data";
+import { getMascotRarity, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -49,6 +49,8 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
   const payload = listing.payload as Record<string, unknown>;
   const daysLeft = Math.max(0, Math.ceil((new Date(listing.expiresAt).getTime() - Date.now()) / 86400000));
   const auctionEnd = listing.auctionEndsAt ? new Date(listing.auctionEndsAt) : null;
+  const mascotRarity = listing.category === "MASCOT" ? getMascotRarity(Number(payload.pokemonId)) : null;
+  const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
 
   return (
     <Link href={`/bazar/${listing.id}`}
@@ -69,6 +71,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             <div className="absolute bottom-1 right-1 rounded-full bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">
               Nv.{payload.level as number}
             </div>
+            {mascotRarity && mascotRarityLabel && (
+              <div className={`absolute top-1.5 right-1.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
+                {mascotRarityLabel}
+              </div>
+            )}
           </>
         ) : payload.imageUrl ? (
           // Imagem real cadastrada no shop

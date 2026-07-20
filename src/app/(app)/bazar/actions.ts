@@ -35,13 +35,21 @@ type ProposalOfferItem = {
 };
 
 const EGG_OFFER_TYPES = [
-  "COMMON","RARE","SPECIAL","EVENT",
+  "COMMON","RARE","SPECIAL","EVENT","LAB",
   "EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5",
   "EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS",
 ];
 
 function isEggOfferType(type: string) {
   return EGG_OFFER_TYPES.includes(type);
+}
+
+function getListingQuantity(payload: Record<string, unknown>): number {
+  const quantity = Number(payload.quantity ?? 1);
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    throw new Error("Quantidade invÃ¡lida no anÃºncio.");
+  }
+  return quantity;
 }
 
 const HIDDEN_BAZAR_ITEM_TYPES = new Set([
@@ -477,7 +485,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
             where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } },
             data: { quantity: { decrement: qty } },
           });
-        } else if (["COMMON","RARE","SPECIAL","EVENT","LAB","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(input.itemType)) {
+        } else if (isEggOfferType(input.itemType)) {
           // Ovos — conta quantos tem (exclui ovos já em escrow do bazar)
           const eggs = await tx.mascotEgg.findMany({
             where: {
@@ -909,22 +917,26 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
               create: { playerId: player.id, type: item.type as "FOOD" | "SWEET", quantity: item.quantity }
             });
           } else if (isEggOfferType(item.type)) {
-            const eggIds = item.escrowed_egg_ids ?? [];
+            const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+            const eggIds = [...new Set(item.escrowed_egg_ids ?? [])];
             if (eggIds.length > 0) {
-              await tx.mascotEgg.updateMany({
+              if (eggIds.length !== quantity) throw new Error("A quantidade de ovos da proposta estÃ¡ inconsistente.");
+              const delivered = await tx.mascotEgg.updateMany({
                 where: { id: { in: eggIds }, playerId: proposal.proposerId },
                 data: { playerId: player.id, origin: "Proposta de Bazar" }
               });
+              if (delivered.count !== quantity) throw new Error("NÃ£o foi possÃ­vel entregar todos os ovos da proposta.");
             } else {
               const eggs = await tx.mascotEgg.findMany({
                 where: { playerId: proposal.proposerId, type: item.type as never, incubation: null },
-                take: item.quantity,
+                take: quantity,
               });
-              if (eggs.length < item.quantity) throw new Error(`Proposer doesn't have enough eggs`);
-              await tx.mascotEgg.updateMany({
+              if (eggs.length < quantity) throw new Error(`Proposer doesn't have enough eggs`);
+              const delivered = await tx.mascotEgg.updateMany({
                 where: { id: { in: eggs.map(e => e.id) } },
                 data: { playerId: player.id, origin: "Proposta de Bazar" }
               });
+              if (delivered.count !== quantity) throw new Error("NÃ£o foi possÃ­vel entregar todos os ovos da proposta.");
             }
           } else {
             const inv = item.shopItemId
@@ -1305,6 +1317,67 @@ function canonicalBazarPair(playerAId: string, playerBId: string) {
     : { playerAId: playerBId, playerBId: playerAId };
 }
 
+export type BazarTradeBanAdminData = {
+  players: Array<{ id: string; displayName: string }>;
+  bans: Array<{
+    id: string;
+    playerAId: string;
+    playerBId: string;
+    playerAName: string;
+    playerBName: string;
+    reason: string | null;
+    active: boolean;
+    updatedAt: Date;
+  }>;
+};
+
+export async function adminGetBazarTradeBanData(): Promise<BazarTradeBanAdminData> {
+  await requireAdmin();
+  const [players, bans] = await Promise.all([
+    prisma.player.findMany({
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    }),
+    prisma.bazarPlayerTradeBan.findMany({ orderBy: [{ active: "desc" }, { updatedAt: "desc" }] }),
+  ]);
+  const names = new Map(players.map((player) => [player.id, player.displayName]));
+  return {
+    players,
+    bans: bans.map((ban) => ({
+      ...ban,
+      playerAName: names.get(ban.playerAId) ?? "Jogador removido",
+      playerBName: names.get(ban.playerBId) ?? "Jogador removido",
+    })),
+  };
+}
+
+export async function adminSetBazarTradeBan(input: {
+  playerAId: string;
+  playerBId: string;
+  active: boolean;
+  reason?: string;
+}): Promise<{ error?: string }> {
+  try {
+    const admin = await requireAdmin();
+    if (!input.playerAId || !input.playerBId || input.playerAId === input.playerBId) {
+      return { error: "Selecione dois jogadores diferentes." };
+    }
+    const pair = canonicalBazarPair(input.playerAId, input.playerBId);
+    const validPlayers = await prisma.player.count({ where: { id: { in: [pair.playerAId, pair.playerBId] } } });
+    if (validPlayers !== 2) return { error: "Um dos jogadores nÃ£o foi encontrado." };
+    await prisma.bazarPlayerTradeBan.upsert({
+      where: { playerAId_playerBId: pair },
+      update: { active: input.active, reason: input.reason?.trim() || null, createdByUserId: admin.id },
+      create: { ...pair, active: input.active, reason: input.reason?.trim() || null, createdByUserId: admin.id },
+    });
+    revalidatePath("/bazar/admin");
+    revalidateBazar();
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao atualizar o bloqueio." };
+  }
+}
+
 async function assertBazarPairAllowed(
   client: TxClient | typeof prisma,
   playerAId: string,
@@ -1560,7 +1633,7 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
     }
   } else if (listing.category === "ITEM") {
     const itemType = payload.itemType as string;
-    const qty = (payload.quantity as number) ?? 1;
+    const qty = getListingQuantity(payload);
 
     if (itemType === "FOOD" || itemType === "SWEET") {
       await tx.mascotFoodItem.upsert({
@@ -1568,14 +1641,14 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
         update: { quantity: { increment: qty } },
         create: { playerId: toBuyerId, type: itemType as "FOOD" | "SWEET", quantity: qty },
       });
-    } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(itemType)) {
-      const eggIds = payload.escrowed_egg_ids as string[] | undefined;
-      if (eggIds && eggIds.length > 0) {
-        await tx.mascotEgg.updateMany({
-          where: { id: { in: eggIds } },
-          data: { playerId: toBuyerId, origin: "Comprado no Bazar" },
-        });
-      }
+    } else if (isEggOfferType(itemType)) {
+      const eggIds = [...new Set((payload.escrowed_egg_ids as string[] | undefined) ?? [])];
+      if (eggIds.length !== qty) throw new Error("A quantidade de ovos reservados nÃ£o corresponde ao anÃºncio.");
+      const delivered = await tx.mascotEgg.updateMany({
+        where: { id: { in: eggIds } },
+        data: { playerId: toBuyerId, origin: "Comprado no Bazar" },
+      });
+      if (delivered.count !== qty) throw new Error("NÃ£o foi possÃ­vel entregar todos os ovos do anÃºncio.");
     } else {
       // PlayerInventory item
       const itemId = payload.shopItemId as string | undefined;
@@ -1598,7 +1671,7 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
     await tx.mascot.update({ where: { id: mascotId }, data: { bazarListed: false } });
   } else if (listing.category === "ITEM") {
     const itemType = payload.itemType as string;
-    const qty = (payload.quantity as number) ?? 1;
+    const qty = getListingQuantity(payload);
 
     if (itemType === "FOOD" || itemType === "SWEET") {
       await tx.mascotFoodItem.upsert({
@@ -1606,7 +1679,7 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
         update: { quantity: { increment: qty } },
         create: { playerId: ownerId, type: itemType as "FOOD" | "SWEET", quantity: qty },
       });
-    } else if (["COMMON","RARE","SPECIAL","EVENT","LAB","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(itemType)) {
+    } else if (isEggOfferType(itemType)) {
       const eggIds = payload.escrowed_egg_ids as string[] | undefined;
       if (eggIds && eggIds.length > 0) {
         await tx.mascotEgg.updateMany({
@@ -1806,7 +1879,7 @@ export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
 
 // ── Auto-cleanup silencioso (chamado no page load do bazar) ──────────────────
 
-const EGG_TYPES_SET = new Set(["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS"]);
+const EGG_TYPES_SET = new Set(EGG_OFFER_TYPES);
 const FOOD_TYPES_SET = new Set(["FOOD","SWEET","MASCOT_FOOD","MASCOT_SWEET"]);
 
 /** Verifica se o item de um listing ainda existe em escrow */
@@ -1904,7 +1977,7 @@ export async function adminCleanupStaleBazarListings(): Promise<{ error?: string
         // Food is debited on listing - if the item doesn't exist OR was over-consumed
         itemExists = !!food && food.quantity >= 0; // just check table exists
         if (!food) { itemExists = false; reason = "Comida não encontrada no inventário"; }
-      } else if (["COMMON","RARE","SPECIAL","EVENT","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(itemType ?? "")) {
+      } else if (isEggOfferType(itemType ?? "")) {
         const eggIds = payload.escrowed_egg_ids as string[] | undefined;
         if (eggIds && eggIds.length > 0) {
           const existingEggs = await prisma.mascotEgg.count({
@@ -2019,7 +2092,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           const food = await tx.mascotFoodItem.findUnique({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } } });
           if (!food || food.quantity < qty) throw new Error("Itens insuficientes.");
           await tx.mascotFoodItem.update({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } }, data: { quantity: { decrement: qty } } });
-        } else if (["COMMON","RARE","SPECIAL","EVENT","LAB","EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5","EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9"].includes(input.itemType)) {
+        } else if (isEggOfferType(input.itemType)) {
           const eggs = await tx.mascotEgg.findMany({ where: { playerId: player.id, type: input.itemType as never, incubation: null, NOT: { origin: { startsWith: "bazar:" } } } });
           if (eggs.length < qty) throw new Error("Ovos insuficientes.");
           await tx.mascotEgg.updateMany({ where: { id: { in: eggs.slice(0, qty).map(e => e.id) } }, data: { origin: `bazar:${player.id}` } });
@@ -2085,6 +2158,11 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
       if (listing.status !== "ACTIVE") throw new Error("Este leilão não está mais ativo.");
       if (listing.playerId === player.id) throw new Error("Você não pode dar lance no próprio leilão.");
       await assertBazarPairAllowed(tx, player.id, listing.playerId);
+
+      // Um bloqueio tambÃ©m impede que o par dispute o mesmo leilÃ£o por terceiros.
+      if (listing.currentBidPlayerId) {
+        await assertBazarPairAllowed(tx, player.id, listing.currentBidPlayerId);
+      }
 
       const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
       if (new Date() >= endsAt) throw new Error("Este leilão já encerrou.");
