@@ -28,6 +28,7 @@ import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
+import { getStandbyUntilFromNotes } from "@/lib/account-standby";
 
 export default async function PlayerDetailPage({
   params
@@ -230,6 +231,8 @@ export default async function PlayerDetailPage({
   }
 
   const badge = statusBadge();
+  const playerStandbyUntil = getStandbyUntilFromNotes(player.notes);
+  const playerStandbyActive = !!playerStandbyUntil && playerStandbyUntil > new Date();
   const profileGraffiti = (await getActiveRaidSabotages("PROFILE")).find((s) => s.sabotageType === "PROFILE_GRAFFITI");
   const orderPasswordStamp = await getOrderPasswordStampForUser(player.userId);
 
@@ -826,8 +829,13 @@ export default async function PlayerDetailPage({
 
       {isAdminUser && (
         <div className="space-y-4">
-          {player.user.status === "SUSPENDED" && (
-            <AdminAccountStatusPanel playerId={playerId} displayName={player.displayName} />
+          {(player.user.status === "SUSPENDED" || playerStandbyActive) && (
+            <AdminAccountStatusPanel
+              playerId={playerId}
+              displayName={player.displayName}
+              standbyUntil={playerStandbyActive ? playerStandbyUntil.toISOString() : null}
+              suspended={player.user.status === "SUSPENDED"}
+            />
           )}
           <AdminEggFoodPanel
             playerId={playerId}

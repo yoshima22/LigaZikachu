@@ -9,9 +9,13 @@ import { reactivatePlayerAccount } from "../actions";
 export function AdminAccountStatusPanel({
   playerId,
   displayName,
+  standbyUntil,
+  suspended,
 }: {
   playerId: string;
   displayName: string;
+  standbyUntil: string | null;
+  suspended: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -22,8 +26,12 @@ export function AdminAccountStatusPanel({
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 text-emerald-400" size={20} />
           <div>
-            <p className="text-sm font-semibold text-slate-100">Conta suspensa</p>
-            <p className="text-xs text-slate-400">Restaura o acesso de {displayName} e registra a aÃ§Ã£o no log administrativo.</p>
+            <p className="text-sm font-semibold text-slate-100">{standbyUntil ? "Conta em standby" : "Conta suspensa"}</p>
+            <p className="text-xs text-slate-400">
+              {standbyUntil ? `Pausa voluntÃ¡ria ativa atÃ© ${new Date(standbyUntil).toLocaleString("pt-BR")}. ` : ""}
+              {suspended ? "A conta tambÃ©m estÃ¡ suspensa administrativamente. " : ""}
+              Restaura o acesso de {displayName} e registra a aÃ§Ã£o no log administrativo.
+            </p>
           </div>
         </div>
         <button

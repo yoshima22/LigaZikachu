@@ -18,3 +18,8 @@ export function setStandbyUntilInNotes(notes: string | null | undefined, standby
   const marker = `${STANDBY_PREFIX}${standbyUntil.toISOString()}]`;
   return cleaned ? `${cleaned}\n${marker}` : marker;
 }
+
+export function clearStandbyFromNotes(notes: string | null | undefined) {
+  const cleaned = (notes ?? "").replace(STANDBY_REGEX, "").trim();
+  return cleaned || null;
+}

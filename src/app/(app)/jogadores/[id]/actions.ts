@@ -5,6 +5,7 @@ import { EggType, FoodType, SyncTicketSide, UserStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { grantSyncTicketHalf, grantValidSyncTicketForPlayer, SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
+import { clearStandbyFromNotes, getStandbyUntilFromNotes } from "@/lib/account-standby";
 
 const EGG_TYPE_MAP: Record<string, EggType> = {
   EGG_COMMON: EggType.COMMON,
@@ -36,29 +37,49 @@ export async function reactivatePlayerAccount(
     const admin = await requireAdmin();
     const player = await prisma.player.findUnique({
       where: { id: playerId },
-      select: { userId: true, user: { select: { status: true } } },
+      select: { userId: true, notes: true, user: { select: { status: true } } },
     });
     if (!player) return { error: "Jogador nÃ£o encontrado." };
-    if (player.user.status !== UserStatus.SUSPENDED) {
-      return { error: "Esta conta nÃ£o estÃ¡ suspensa." };
+    const now = new Date();
+    const standbyUntil = getStandbyUntilFromNotes(player.notes);
+    const standbyActive = !!standbyUntil && standbyUntil > now;
+    const administrativelySuspended = player.user.status === UserStatus.SUSPENDED;
+    if (!standbyActive && !administrativelySuspended) {
+      return { error: "Esta conta nÃ£o estÃ¡ pausada nem suspensa." };
     }
 
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: player.userId },
-        data: { status: UserStatus.ACTIVE, approvedById: admin.id },
-      }),
-      prisma.auditLog.create({
+    await prisma.$transaction(async (tx) => {
+      if (administrativelySuspended) {
+        await tx.user.update({
+          where: { id: player.userId },
+          data: { status: UserStatus.ACTIVE, approvedById: admin.id },
+        });
+      }
+      if (standbyActive) {
+        await tx.player.update({
+          where: { id: playerId },
+          data: { notes: clearStandbyFromNotes(player.notes) },
+        });
+        await tx.mascot.updateMany({
+          where: { playerId },
+          data: { lastFedAt: now, lastInteractedAt: now },
+        });
+      }
+      await tx.auditLog.create({
         data: {
           actorUserId: admin.id,
-          entityType: "user",
-          entityId: player.userId,
+          entityType: "player",
+          entityId: playerId,
           action: "user.reactivated",
-          before: { status: UserStatus.SUSPENDED, source: "player-profile" },
-          after: { status: UserStatus.ACTIVE },
+          before: {
+            status: player.user.status,
+            standbyUntil: standbyUntil?.toISOString() ?? null,
+            source: "player-profile",
+          },
+          after: { status: UserStatus.ACTIVE, standbyUntil: null },
         },
-      }),
-    ]);
+      });
+    });
 
     revalidatePath(`/jogadores/${playerId}`);
     revalidatePath("/jogadores");
