@@ -17,7 +17,7 @@ import {
   AdminMascotStateButton, AdminArenaTeamManager, BotBattleButton, DeleteTeamButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge,
-  RetireTeamButton, SusButton, SusShieldButton,
+  RetireTeamButton, SusButton, SusShieldButton, ArenaHistoryReplayButton,
 } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
@@ -1250,6 +1250,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     {formatTurnLog(log).slice(0, 10).map((line, i) => <p key={i}>{line}</p>)}
                     {log.length > 10 && <p className="text-slate-600">...mais {log.length - 10} turno(s)</p>}
                   </div>
+                  <ArenaHistoryReplayButton battleId={battle.id} perspectivePlayerId={historyPlayerId} />
                 </details>
               );
             })}

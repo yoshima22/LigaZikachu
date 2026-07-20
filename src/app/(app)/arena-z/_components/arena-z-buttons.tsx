@@ -510,6 +510,56 @@ function ArenaBattleResultModal({ battle, onClose }: { battle: BattleDetails; on
   );
 }
 
+export function ArenaHistoryReplayButton({
+  battleId,
+  perspectivePlayerId,
+}: {
+  battleId: string;
+  perspectivePlayerId: string;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [battle, setBattle] = useState<BattleDetails | null>(null);
+
+  async function openReplay() {
+    setLoading(true);
+    const response = await getArenaBattleDetailsAction(battleId, perspectivePlayerId);
+    setLoading(false);
+    if (response.error) {
+      toast.error(response.error);
+      return;
+    }
+    if (!response.battle || response.battle.battleAnimation.length === 0) {
+      toast.error("Este combate não possui turnos gravados para replay.");
+      return;
+    }
+    setBattle(response.battle);
+  }
+
+  if (battle) {
+    return (
+      <BattleAnimationModal
+        turns={battle.battleAnimation as AnimTurn[]}
+        playerMascots={battle.playerMascots as MascotInfo[]}
+        botMascots={battle.opponentMascots as MascotInfo[]}
+        playerTeamName={battle.isCurrentUserDefender ? battle.defenderName : battle.attackerName}
+        botName={battle.isCurrentUserDefender ? battle.attackerName : battle.defenderName}
+        onFinish={() => setBattle(null)}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={openReplay}
+      disabled={loading}
+      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#FFCB05]/35 bg-[#FFCB05]/10 px-3 py-1.5 text-[11px] font-semibold text-[#FFCB05] transition hover:bg-[#FFCB05]/15 disabled:cursor-wait disabled:opacity-60"
+    >
+      {loading ? "Carregando replay..." : "▶ Assistir replay"}
+    </button>
+  );
+}
+
 function ArenaStaleModal({ notice, onClose }: { notice: ArenaStaleNotice; onClose: () => void }) {
   const router = useRouter();
   const [loadingBattle, setLoadingBattle] = useState(false);

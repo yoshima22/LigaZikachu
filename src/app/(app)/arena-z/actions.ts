@@ -183,7 +183,7 @@ export async function retireArenaTeamAction(teamId: string): Promise<{ error?: s
 }
 
 /** Retorna detalhes de um combate PvP para exibição no modal "foi atacado" */
-export async function getArenaBattleDetailsAction(battleId: string): Promise<{
+export async function getArenaBattleDetailsAction(battleId: string, perspectivePlayerId?: string): Promise<{
   error?: string;
   battle?: {
     result: string;
@@ -215,11 +215,16 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
   };
 }> {
   try {
-    const playerId = await getCurrentPlayerId();
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const currentPlayer = await getSessionPlayer(user.id);
+    if (!currentPlayer) return { error: "Perfil de jogador não encontrado." };
+    const admin = isAdmin(user.role);
+    const playerId = admin && perspectivePlayerId ? perspectivePlayerId : currentPlayer.id;
     const battle = await prisma.arenaBattle.findUnique({
       where: { id: battleId },
       select: {
-        result: true, rounds: true, createdAt: true,
+        type: true, result: true, rounds: true, createdAt: true, botName: true,
         attackerPlayerId: true, defenderPlayerId: true,
         lootResult: true, turnLog: true, injuredMascotIds: true,
         attackerPlayer: { select: { displayName: true, ptcglNick: true } },
@@ -227,13 +232,17 @@ export async function getArenaBattleDetailsAction(battleId: string): Promise<{
       },
     });
     if (!battle) return { error: "Batalha não encontrada." };
-    // Garante que o jogador participou desta batalha
-    if (battle.attackerPlayerId !== playerId && battle.defenderPlayerId !== playerId) {
+    if (perspectivePlayerId && !admin && perspectivePlayerId !== currentPlayer.id) {
       return { error: "Sem permissão." };
     }
-
+    if (battle.attackerPlayerId !== playerId && battle.defenderPlayerId !== playerId) {
+      return { error: "O jogador selecionado não participou deste combate." };
+    }
+    // Garante que o jogador participou desta batalha
     const attackerName = battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "Atacante";
-    const defenderName = battle.defenderPlayer?.displayName ?? battle.defenderPlayer?.ptcglNick ?? "Defensor";
+    const defenderName = battle.type === "BOT"
+      ? (battle.botName ?? "Bot")
+      : (battle.defenderPlayer?.displayName ?? battle.defenderPlayer?.ptcglNick ?? "Defensor");
     const defenderWon = battle.result === "DEFENDER_WIN";
     const attackerWon = battle.result === "ATTACKER_WIN";
 
