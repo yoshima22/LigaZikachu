@@ -2007,6 +2007,7 @@ model Mascot {
   susRestBonusMinutes  Int               @default(0)
   evolutionLocked      Boolean           @default(false)
   expLocked            Boolean           @default(false)
+  operationsLocked     Boolean           @default(false) // impede envio ao Bazar e uso no Laboratório
   isShiny              Boolean           @default(false) // variante shiny — sprite diferente e marcador visual
   megaEvolvedFromPokemonId Int?
   megaStoneItemId      String?

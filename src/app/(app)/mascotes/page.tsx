@@ -82,7 +82,7 @@ async function fetchMascotPageData(playerId: string) {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
         happiness: true, mood: true, personality: true,
-        isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true,
+        isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true, operationsLocked: true,
         ivRating: true, ivScore: true, performanceTag: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
@@ -329,6 +329,7 @@ export default async function MascotesPage() {
     socialCooldownUntil: m.socialCooldownUntil,
     evolutionLocked: m.evolutionLocked,
     expLocked: m.expLocked,
+    operationsLocked: m.operationsLocked,
     isShiny: m.isShiny,
     ivRating: m.ivRating,
     ivScore: m.ivScore,

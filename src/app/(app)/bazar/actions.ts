@@ -1312,6 +1312,7 @@ async function assertMascotTradeableInBazar(
     nickname: string | null;
     bazarListed: boolean;
     isEquipped: boolean;
+    operationsLocked: boolean;
     arenaState: string;
     restingUntil: Date | null;
   },
@@ -1322,6 +1323,9 @@ async function assertMascotTradeableInBazar(
   const now = new Date();
 
   if (mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.operationsLocked) {
+    throw new Error(`${name} está protegido. Desbloqueie-o na página de Mascotes antes de usar o Bazar.`);
+  }
   if (mascot.bazarListed) throw new Error(`${name} já está reservado em outra oferta do Bazar.`);
   if (mascot.isEquipped) throw new Error(`Desequipe ${name} antes de oferecê-lo no Bazar.`);
   if (mascot.arenaState !== "FREE") {

@@ -20,6 +20,7 @@ type LabMascot = {
   recyclable: boolean;
   isFavorite: boolean;
   bazarListed: boolean;
+  operationsLocked: boolean;
   analyzed: boolean;
   ivRating: string | null;
   ivScore: number | null;
@@ -262,7 +263,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
       {/* ── ANALYZE TAB ── */}
       {tab === "analyze" && (
         <MascotAnalyzer
-          mascots={mascots}
+          mascots={mascots.filter((mascot) => !mascot.operationsLocked)}
           coinBalance={coinBalance}
           analysisCost={analysisCost}
           onBalanceChange={setCoinBalance}

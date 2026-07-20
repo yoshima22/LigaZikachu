@@ -23,6 +23,7 @@ interface MascotData {
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
   expLocked: boolean;
+  operationsLocked: boolean;
   isShiny: boolean;
   ivRating?: string | null;
   ivScore?: number | null;

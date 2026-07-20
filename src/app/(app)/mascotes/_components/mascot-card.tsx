@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star, ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
 import {
   getSpriteUrl, getStaticSpriteUrl, getPokemonName, getPokemonTypes, expToNextLevel as expToNext,
   MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL,
@@ -22,6 +22,7 @@ import {
   toggleFavoriteMascotAction,
   toggleEvolutionLockAction,
   toggleExpLockAction,
+  toggleMascotOperationsLockAction,
   removeXpShareAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
@@ -76,6 +77,7 @@ interface MascotData {
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
   expLocked: boolean;
+  operationsLocked: boolean;
   isShiny: boolean;
   ivRating?: string | null;
   ivScore?: number | null;
@@ -1330,6 +1332,44 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             </label>
           </Tip>
         </div>
+
+        {/* ── Proteção contra transferência ── */}
+        {!compactView && (
+          <div className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
+            mascot.operationsLocked
+              ? "border-emerald-500/30 bg-emerald-500/10"
+              : "border-border/40 bg-slate-900/30"
+          }`}>
+            <div className="min-w-0">
+              <p className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                mascot.operationsLocked ? "text-emerald-300" : "text-slate-300"
+              }`}>
+                {mascot.operationsLocked ? <Lock size={12} /> : <Unlock size={12} />}
+                {mascot.operationsLocked ? "Mascote protegido" : "Proteção desativada"}
+              </p>
+              <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
+                {mascot.operationsLocked
+                  ? "Não pode ser enviado ao Bazar nem utilizado no Laboratório."
+                  : "Pode ser negociado no Bazar e utilizado no Laboratório."}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => act(
+                () => toggleMascotOperationsLockAction(mascot.id, !mascot.operationsLocked),
+                mascot.operationsLocked ? "Proteção removida." : "Mascote protegido."
+              )}
+              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition disabled:opacity-40 ${
+                mascot.operationsLocked
+                  ? "border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500"
+                  : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+              }`}
+            >
+              {mascot.operationsLocked ? "Desbloquear" : "Bloquear"}
+            </button>
+          </div>
+        )}
 
         {/* ── Itens permanentes aplicados ── */}
         {!compactView && permanentItems.length > 0 && (

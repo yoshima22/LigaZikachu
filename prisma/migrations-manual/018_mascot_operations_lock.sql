@@ -1,0 +1,2 @@
+ALTER TABLE "mascots"
+ADD COLUMN IF NOT EXISTS "operationsLocked" BOOLEAN NOT NULL DEFAULT false;

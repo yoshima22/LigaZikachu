@@ -46,6 +46,7 @@ export async function GET() {
         where: {
           playerId: player.id,
           bazarListed: false,
+          operationsLocked: false,
           isEquipped: false,
           arenaState: "FREE",
           id: { notIn: [...weeklyLeagueLockedIds] },

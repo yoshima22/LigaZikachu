@@ -90,6 +90,7 @@ export async function getLabDataAction() {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         isFavorite: true, arenaState: true, bazarListed: true,
+        operationsLocked: true,
         analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
@@ -114,7 +115,7 @@ export async function getLabDataAction() {
     const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
     const dust = Math.ceil(baseDust * multiplier);
     const inWeeklyLeague = weeklyLeagueLockedIds.has(m.id);
-    const recyclable = !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
+    const recyclable = !m.operationsLocked && !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
 
     return {
       id: m.id,
@@ -130,6 +131,7 @@ export async function getLabDataAction() {
       inWeeklyLeague,
       isFavorite: m.isFavorite ?? false,
       bazarListed: m.bazarListed ?? false,
+      operationsLocked: m.operationsLocked ?? false,
       analyzed: !!m.analyzedAt,
       ivRating: m.ivRating,
       ivScore: m.ivScore,
@@ -162,9 +164,10 @@ export async function recycleMascotAction(mascotId: string) {
 
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
-    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true },
+    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true, operationsLocked: true },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
+  if (mascot.operationsLocked) return { ok: false as const, error: "Este mascote está protegido. Desbloqueie-o na página de Mascotes." };
   if (mascot.isFavorite) return { ok: false as const, error: "Nao e possivel reciclar mascotes favoritos." };
   if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes de reciclar." };
   if (mascot.arenaState && mascot.arenaState !== "FREE") {
@@ -209,11 +212,14 @@ export async function recycleMascotsAction(mascotIds: string[]) {
 
   const mascots = await prisma.mascot.findMany({
     where: { id: { in: uniqueIds }, playerId: me.id },
-    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true },
+    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true, operationsLocked: true },
   });
 
   if (mascots.length !== uniqueIds.length) {
     return { ok: false as const, error: "Algum mascote selecionado nao foi encontrado." };
+  }
+  if (mascots.some((mascot) => mascot.operationsLocked)) {
+    return { ok: false as const, error: "Um dos mascotes está protegido. Desbloqueie-o na página de Mascotes." };
   }
 
   const blocked = mascots.find((m) =>
@@ -367,10 +373,14 @@ export async function analyzeMascotAction(
     where: { id: mascotId, playerId: me.id },
     select: {
       id: true, pokemonId: true, level: true, personality: true, evolutionLocked: true,
+      operationsLocked: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
     },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
+  if (mascot.operationsLocked) {
+    return { ok: false as const, error: "Este mascote está protegido. Desbloqueie-o na página de Mascotes." };
+  }
 
   const wallet = await getOrCreateWallet(me.id);
   if (wallet.balance < ANALYSIS_COST) {
