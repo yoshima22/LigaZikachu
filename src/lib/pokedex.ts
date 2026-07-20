@@ -50,6 +50,8 @@ export type PokedexSearchFilters = {
   query?: string;
   type?: string;
   generation?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export const generationOptions = [
@@ -118,11 +120,12 @@ export function formatPokemonName(name: string) {
     .join(" ");
 }
 
-export async function searchPokedexPokemon(filters: PokedexSearchFilters | string, limit = 24) {
+export async function searchPokedexPokemon(filters: PokedexSearchFilters | string) {
   const normalizedFilters =
     typeof filters === "string" ? { query: filters } : filters;
   const normalizedQuery = normalizedFilters.query?.trim().toLowerCase() ?? "";
   const selectedType = normalizedFilters.type?.trim().toLowerCase() ?? "";
+  const pageSize = Math.min(48, Math.max(1, Math.floor(normalizedFilters.pageSize ?? 24)));
   const selectedGeneration = generationOptions.find(
     (generation) => generation.value === normalizedFilters.generation
   );
@@ -151,10 +154,16 @@ export async function searchPokedexPokemon(filters: PokedexSearchFilters | strin
       if (!normalizedQuery) return true;
       return pokemon.name.includes(normalizedQuery) || String(pokemon.id) === normalizedQuery;
     })
-    .sort((a, b) => a.id - b.id)
-    .slice(0, limit);
+    .sort((a, b) => a.id - b.id);
 
-  return Promise.all(filtered.map((pokemon) => getPokedexPokemon(pokemon.name)));
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const requestedPage = Math.max(1, Math.floor(normalizedFilters.page ?? 1));
+  const page = Math.min(requestedPage, totalPages);
+  const pageEntries = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pokemon = await Promise.all(pageEntries.map((entry) => getPokedexPokemon(entry.name)));
+
+  return { pokemon, total, page, pageSize, totalPages };
 }
 
 export async function getPokedexPokemon(nameOrId: string | number): Promise<PokedexPokemon> {

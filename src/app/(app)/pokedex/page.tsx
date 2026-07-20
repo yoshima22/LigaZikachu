@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ExternalLink, Search, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Search, Sparkles } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,27 +13,58 @@ import {
 } from "@/lib/pokedex";
 
 type PokedexPageProps = {
-  searchParams: Promise<{ q?: string; type?: string; generation?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; generation?: string; page?: string }>;
 };
 
 export const metadata = {
   title: "Pokedex | Liga Zikachu"
 };
 
+function pokedexPageHref(
+  page: number,
+  filters: { query: string; type: string; generation: string }
+) {
+  const params = new URLSearchParams();
+  if (filters.query) params.set("q", filters.query);
+  if (filters.type) params.set("type", filters.type);
+  if (filters.generation) params.set("generation", filters.generation);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return `/pokedex${query ? `?${query}` : ""}`;
+}
+
+function paginationPages(current: number, total: number) {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, null, total];
+  if (current >= total - 3) return [1, null, total - 4, total - 3, total - 2, total - 1, total];
+  return [1, null, current - 1, current, current + 1, null, total];
+}
+
 export default async function PokedexPage({ searchParams }: PokedexPageProps) {
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
   const selectedType = params.type?.trim() ?? "";
   const selectedGeneration = params.generation?.trim() ?? "";
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
   let pokemon: PokedexPokemon[] = [];
+  let total = 0;
+  let page = 1;
+  let totalPages = 1;
+  const pageSize = 24;
   let error: string | null = null;
 
   try {
-    pokemon = await searchPokedexPokemon({
+    const result = await searchPokedexPokemon({
       query,
       type: selectedType,
-      generation: selectedGeneration
+      generation: selectedGeneration,
+      page: Number.isFinite(requestedPage) ? requestedPage : 1,
+      pageSize
     });
+    pokemon = result.pokemon;
+    total = result.total;
+    page = result.page;
+    totalPages = result.totalPages;
   } catch {
     error = "Nao foi possivel carregar a Pokedex agora. Tente novamente em instantes.";
   }
@@ -122,6 +153,16 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
           Dados e imagens remotas via PokeAPI. Links de cartas abrem a base oficial do Pokemon TCG em uma nova aba.
         </p>
       </Card>
+
+      {!error && pokemon.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <p>
+            Mostrando <span className="font-semibold text-slate-300">{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)}</span>
+            {" "}de <span className="font-semibold text-slate-300">{total}</span> Pokémon
+          </p>
+          <p>Página {page} de {totalPages}</p>
+        </div>
+      )}
 
       {error ? (
         <Card>
@@ -237,6 +278,59 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
             </Card>
           ))}
         </div>
+      )}
+
+      {!error && pokemon.length > 0 && totalPages > 1 && (
+        <nav className="flex flex-wrap items-center justify-center gap-1.5" aria-label="Paginação da Pokédex">
+          <Link
+            href={pokedexPageHref(Math.max(1, page - 1), {
+              query, type: selectedType, generation: selectedGeneration
+            })}
+            aria-disabled={page === 1}
+            className={`flex h-9 items-center gap-1 rounded-lg border px-3 text-xs transition ${
+              page === 1
+                ? "pointer-events-none border-border text-slate-700"
+                : "border-border text-slate-300 hover:border-[#FFCB05]/50 hover:text-[#FFCB05]"
+            }`}
+          >
+            <ChevronLeft size={14} /> Anterior
+          </Link>
+
+          {paginationPages(page, totalPages).map((pageNumber, index) =>
+            pageNumber === null ? (
+              <span key={`ellipsis-${index}`} className="flex h-9 w-8 items-center justify-center text-xs text-slate-600">…</span>
+            ) : (
+              <Link
+                key={pageNumber}
+                href={pokedexPageHref(pageNumber, {
+                  query, type: selectedType, generation: selectedGeneration
+                })}
+                aria-current={pageNumber === page ? "page" : undefined}
+                className={`flex h-9 min-w-9 items-center justify-center rounded-lg border px-2 text-xs font-semibold transition ${
+                  pageNumber === page
+                    ? "border-[#FFCB05]/50 bg-[#FFCB05]/15 text-[#FFCB05]"
+                    : "border-border text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                }`}
+              >
+                {pageNumber}
+              </Link>
+            )
+          )}
+
+          <Link
+            href={pokedexPageHref(Math.min(totalPages, page + 1), {
+              query, type: selectedType, generation: selectedGeneration
+            })}
+            aria-disabled={page === totalPages}
+            className={`flex h-9 items-center gap-1 rounded-lg border px-3 text-xs transition ${
+              page === totalPages
+                ? "pointer-events-none border-border text-slate-700"
+                : "border-border text-slate-300 hover:border-[#FFCB05]/50 hover:text-[#FFCB05]"
+            }`}
+          >
+            Próxima <ChevronRight size={14} />
+          </Link>
+        </nav>
       )}
     </div>
   );
