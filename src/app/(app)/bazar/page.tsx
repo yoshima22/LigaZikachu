@@ -302,7 +302,12 @@ export default async function BazarPage({
 
         {/* Feed sidebar */}
         <div className="space-y-3">
-          <h3 className="font-semibold text-slate-200 text-sm">📡 Atividade recente</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-slate-200 text-sm">📡 Atividade recente</h3>
+            <Link href="/bazar/historico" className="text-[10px] font-semibold text-[#FFCB05] hover:underline">
+              Ver histórico completo
+            </Link>
+          </div>
           <BazarFeed transactions={transactions.map(t => ({ ...t, category: t.category as string }))} />
         </div>
       </div>

@@ -274,6 +274,83 @@ export async function getRecentTransactions(take = 10) {
   });
 }
 
+export async function getTransactionHistory({
+  search,
+  page = 1,
+  pageSize = 20,
+}: {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+} = {}) {
+  const normalizedSearch = search?.trim();
+  const safePageSize = Math.min(50, Math.max(1, Math.floor(pageSize)));
+  const where = normalizedSearch
+    ? {
+        OR: [
+          { sellerName: { contains: normalizedSearch, mode: "insensitive" as const } },
+          { buyerName: { contains: normalizedSearch, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
+
+  const total = await prisma.bazarTransaction.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const safePage = Math.min(totalPages, Math.max(1, Math.floor(page)));
+  const transactions = await prisma.bazarTransaction.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    skip: (safePage - 1) * safePageSize,
+    take: safePageSize,
+    select: {
+      id: true,
+      listingId: true,
+      category: true,
+      coinsAmount: true,
+      buyerName: true,
+      sellerName: true,
+      description: true,
+      createdAt: true,
+    },
+  });
+
+  const listings = transactions.length
+    ? await prisma.bazarListing.findMany({
+        where: { id: { in: transactions.map((transaction) => transaction.listingId) } },
+        select: {
+          id: true,
+          listingType: true,
+          payload: true,
+          proposals: {
+            where: { status: "ACCEPTED" },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: { coinsOffer: true, itemsOffer: true },
+          },
+        },
+      })
+    : [];
+  const listingById = new Map(listings.map((listing) => [listing.id, listing]));
+
+  return {
+    transactions: transactions.map((transaction) => {
+      const listing = listingById.get(transaction.listingId);
+      const acceptedProposal = listing?.proposals[0] ?? null;
+      return {
+        ...transaction,
+        listingType: listing?.listingType ?? null,
+        payload: listing?.payload ?? null,
+        offerCoins: acceptedProposal?.coinsOffer ?? transaction.coinsAmount,
+        offerItems: acceptedProposal?.itemsOffer ?? null,
+      };
+    }),
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages,
+  };
+}
+
 
 const _getMiauvadaoConfigCached = unstable_cache(
   async () => {
