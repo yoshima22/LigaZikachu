@@ -9,10 +9,12 @@ export type TurnLog = {
   actorName: string;
   actorOwnerId?: string | null;
   actorPokemonId?: number;
+  actorLevel?: number;
   targetId: string;
   targetName: string;
   targetOwnerId?: string | null;
   targetPokemonId?: number;
+  targetLevel?: number;
   action: "ATTACK" | "DEFEND";
   damage: number;
   multiplier: number;
@@ -32,6 +34,7 @@ interface Fighter {
   id: string;
   name: string;
   pokemonId?: number;
+  level?: number;
   side: "A" | "B";
   maxHp: number;
   hp: number;
@@ -68,19 +71,21 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
     if (!seen.has(t.actorId)) {
       seen.set(t.actorId, {
         id: t.actorId, name: resolveName(t.actorName, t.actorPokemonId),
-        pokemonId: t.actorPokemonId, side: getSide(t.actorOwnerId),
+        pokemonId: t.actorPokemonId, level: t.actorLevel, side: getSide(t.actorOwnerId),
         maxHp: 100, hp: 100, role: t.actorRole,
       });
     }
     if (!seen.has(t.targetId)) {
       seen.set(t.targetId, {
         id: t.targetId, name: resolveName(t.targetName, t.targetPokemonId),
-        pokemonId: t.targetPokemonId, side: getSide(t.targetOwnerId),
+        pokemonId: t.targetPokemonId, level: t.targetLevel, side: getSide(t.targetOwnerId),
         maxHp: 100, hp: 100, role: t.targetRole,
       });
     }
     if (t.actorPokemonId && !seen.get(t.actorId)!.pokemonId) seen.get(t.actorId)!.pokemonId = t.actorPokemonId;
     if (t.targetPokemonId && !seen.get(t.targetId)!.pokemonId) seen.get(t.targetId)!.pokemonId = t.targetPokemonId;
+    if (t.actorLevel && !seen.get(t.actorId)!.level) seen.get(t.actorId)!.level = t.actorLevel;
+    if (t.targetLevel && !seen.get(t.targetId)!.level) seen.get(t.targetId)!.level = t.targetLevel;
   }
 
   const damageTaken = new Map<string, number>();
@@ -148,7 +153,9 @@ function FighterRow({ f, isActor, isTarget, isAttack }: { f: Fighter; isActor: b
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between">
-          <p className={`text-[11px] font-semibold truncate ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>{f.name}</p>
+          <p className={`text-[11px] font-semibold truncate ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>
+            {f.name}{f.level ? ` Â· Nv.${f.level}` : ""}
+          </p>
           {f.role && <span className="text-[9px] text-yellow-400 shrink-0 ml-1">{f.role}</span>}
         </div>
         <HpBar hp={f.hp} maxHp={f.maxHp} />
@@ -313,9 +320,9 @@ export function LeagueBattleReplayModal({
             {current ? (
               <>
                 <p className="text-sm text-slate-300">
-                  <span className="font-bold text-[#FFCB05]">{resolvedActorName}</span>
+                  <span className="font-bold text-[#FFCB05]">{resolvedActorName}{current.actorLevel ? ` Â· Nv.${current.actorLevel}` : ""}</span>
                   {current.action === "ATTACK" ? " atacou " : " defendeu "}
-                  <span className="font-bold text-[#FFCB05]">{resolvedTargetName}</span>
+                  <span className="font-bold text-[#FFCB05]">{resolvedTargetName}{current.targetLevel ? ` Â· Nv.${current.targetLevel}` : ""}</span>
                 </p>
                 {current.action === "ATTACK" && (
                   <p className="text-xs mt-0.5">

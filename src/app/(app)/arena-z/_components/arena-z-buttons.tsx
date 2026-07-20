@@ -140,7 +140,7 @@ function MascotPanel({
         }}
       />
       <span className={`block truncate text-center text-[8px] font-semibold sm:text-[9px] ${isPlayer ? "text-blue-300" : "text-red-300"}`}>
-        {mascot.name}
+        {mascot.name} Â· Nv.{mascot.level}
       </span>
       <div className="mt-1 w-full">
         <HpBar current={currentHp} max={mascot.maxHp} isPlayer={isPlayer} />
@@ -217,6 +217,9 @@ function BattleAnimationModal({
   }, [currentIdx, turns.length]); // intentionally omit onFinish — use ref
 
   const turn = turns[currentIdx] ?? null;
+  const allReplayMascots = [...playerMascots, ...botMascots];
+  const attackerLevel = turn ? allReplayMascots.find(m => m.id === turn.attackerId)?.level : undefined;
+  const defenderLevel = turn ? allReplayMascots.find(m => m.id === turn.defenderId)?.level : undefined;
   const progress = turns.length > 0 ? Math.round((currentIdx / turns.length) * 100) : 100;
   const showDamage = phase === "hit";
 
@@ -316,13 +319,13 @@ function BattleAnimationModal({
           <div className="mx-3 mt-3 rounded-xl border border-border bg-slate-900/60 px-3 py-2 text-center sm:mx-5">
             {turn ? (
               <p className="text-[11px] text-slate-300">
-                <span className={turn.isPlayerAttacker ? "text-blue-300 font-semibold" : "text-red-300 font-semibold"}>{turn.attackerName}</span>
+                <span className={turn.isPlayerAttacker ? "text-blue-300 font-semibold" : "text-red-300 font-semibold"}>{turn.attackerName}{attackerLevel ? ` Â· Nv.${attackerLevel}` : ""}</span>
                 {turn.actorRole && <span className="ml-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">{turn.actorRole}</span>}
                 {(turn.action ?? "ATTACK") === "DEFEND" ? (
                   <span className="text-blue-200"> preparou defesa.</span>
                 ) : (
                   <>
-                    {" "}atacou <span className={turn.isPlayerAttacker ? "text-red-300 font-semibold" : "text-blue-300 font-semibold"}>{turn.defenderName}</span>
+                    {" "}atacou <span className={turn.isPlayerAttacker ? "text-red-300 font-semibold" : "text-blue-300 font-semibold"}>{turn.defenderName}{defenderLevel ? ` Â· Nv.${defenderLevel}` : ""}</span>
                     {turn.targetRole && <span className="ml-1 rounded-full border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">{turn.targetRole}</span>}
                     {showDamage && (
                       <span className={turn.advantageApplied ? " text-yellow-300" : " text-slate-400"}>

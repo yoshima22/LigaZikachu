@@ -282,10 +282,12 @@ export function runLeagueCombat(
         actorName: mascot.name,
         actorOwnerId: mascot.ownerId,
         actorPokemonId: mascot.pokemonId,
+        actorLevel: mascot.level,
         targetId: mascot.id,
         targetName: mascot.name,
         targetOwnerId: mascot.ownerId,
         targetPokemonId: mascot.pokemonId,
+        targetLevel: mascot.level,
         action: "DEFEND",
         damage: 0,
         attackerType: getPokemonElement(mascot.pokemonId),
@@ -341,8 +343,8 @@ export function runLeagueCombat(
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({
-              turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
-              targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId,
+              turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
+              targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
               action: "HEAL", damage: heal,
               attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(target.pokemonId),
               multiplier: 1, advantageApplied: false,
@@ -444,8 +446,8 @@ export function runLeagueCombat(
       ].filter(Boolean).join(" ") || undefined;
 
       log.push({
-        turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId,
-        targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId,
+        turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
+        targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
         action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: multiplier > 1,
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
         effect: effects,

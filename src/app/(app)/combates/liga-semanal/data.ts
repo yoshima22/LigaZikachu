@@ -228,8 +228,26 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       for (const m of rawMatches as any[]) { matchPlayerIds.add(m.playerAId); if (m.playerBId) matchPlayerIds.add(m.playerBId); }
       const matchPlayers = await prisma.player.findMany({ where: { id: { in: [...matchPlayerIds] } }, select: { id: true, displayName: true, ptcglNick: true, user: { select: { email: true } } } });
       const mpNames = new Map(matchPlayers.map(p => [p.id, formatPlayerLabel(p)]));
+      // Replays antigos nao persistiam nivel. Enriquece somente a resposta da UI;
+      // nenhum turno, dano ou resultado salvo e alterado.
+      const replayMascotIds = [...new Set((rawMatches as any[]).flatMap((match) =>
+        Array.isArray(match.replayJson)
+          ? match.replayJson.flatMap((turn: any) => [turn.actorId, turn.targetId]).filter(Boolean)
+          : []
+      ))] as string[];
+      const replayMascots = replayMascotIds.length > 0
+        ? await prisma.mascot.findMany({ where: { id: { in: replayMascotIds } }, select: { id: true, level: true } })
+        : [];
+      const replayLevelById = new Map(replayMascots.map((mascot) => [mascot.id, mascot.level]));
       todayMatches = (rawMatches as any[]).map(m => ({
         ...m,
+        replayJson: Array.isArray(m.replayJson)
+          ? m.replayJson.map((turn: any) => ({
+              ...turn,
+              actorLevel: turn.actorLevel ?? replayLevelById.get(turn.actorId),
+              targetLevel: turn.targetLevel ?? replayLevelById.get(turn.targetId),
+            }))
+          : m.replayJson,
         playerAName: mpNames.get(m.playerAId) ?? "Jogador",
         playerBName: m.playerBId ? (mpNames.get(m.playerBId) ?? "Jogador") : null,
       }));
