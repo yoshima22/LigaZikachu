@@ -2515,6 +2515,22 @@ model BazarTransaction {
 }
 
 // Configuração do Miauvadão (NPC intermediário — singleton)
+model BazarPlayerTradeBan {
+  id              String   @id @default(cuid())
+  playerAId       String
+  playerBId       String
+  reason           String?
+  createdByUserId String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([playerAId, playerBId])
+  @@index([playerAId, active])
+  @@index([playerBId, active])
+  @@map("bazar_player_trade_bans")
+}
+
 model MiauvadaoConfig {
   id                String   @id @default("singleton")
   vaultBalance      Int      @default(0)

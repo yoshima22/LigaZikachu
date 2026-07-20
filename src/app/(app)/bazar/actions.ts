@@ -657,6 +657,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
     if (!listing) return { error: "Anúncio não encontrado." };
     if (listing.status !== "ACTIVE") return { error: "Este anúncio não está mais disponível." };
     if (listing.playerId === player.id) return { error: "Você não pode comprar seu próprio anúncio." };
+    await assertBazarPairAllowed(prisma, player.id, listing.playerId);
     if (!listing.priceCoins) return { error: "Este anúncio não tem preço definido." };
     if (listing.listingType === "TRADE") return { error: "Este anúncio é somente troca. Envie uma proposta." };
 
@@ -751,6 +752,7 @@ export async function createProposal(
     });
     if (!listing || listing.status !== "ACTIVE") return { error: "Anúncio indisponível." };
     if (listing.playerId === player.id) return { error: "Você não pode propor no seu próprio anúncio." };
+    await assertBazarPairAllowed(prisma, player.id, listing.playerId);
 
     const reservedCoins = Math.max(0, Math.floor(Number(coinsOffer) || 0));
 
@@ -837,6 +839,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     if (proposal.listing.playerId !== player.id) return { error: "Sem permissão." };
     if (proposal.status !== "PENDING") return { error: "Proposta não está mais pendente." };
     if (proposal.listing.status !== "ACTIVE") return { error: "Anúncio não está mais ativo." };
+    await assertBazarPairAllowed(prisma, proposal.proposerId, proposal.listing.playerId);
 
     // Propostas novas jÃ¡ reservam ZC ao serem criadas. Este bloco preserva propostas antigas.
     if (proposal.coinsOffer > 0 && !proposal.coinsEscrowed) {
@@ -1295,6 +1298,35 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
 // ── Utilitários internos ──────────────────────────────────────────────────────
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+function canonicalBazarPair(playerAId: string, playerBId: string) {
+  return playerAId < playerBId
+    ? { playerAId, playerBId }
+    : { playerAId: playerBId, playerBId: playerAId };
+}
+
+async function assertBazarPairAllowed(
+  client: TxClient | typeof prisma,
+  playerAId: string,
+  playerBId: string,
+) {
+  if (await isBazarPairBanned(client, playerAId, playerBId)) {
+    throw new Error("Negociações entre estes dois jogadores estão bloqueadas permanentemente pela administração.");
+  }
+}
+
+async function isBazarPairBanned(
+  client: TxClient | typeof prisma,
+  playerAId: string,
+  playerBId: string,
+) {
+  const pair = canonicalBazarPair(playerAId, playerBId);
+  const ban = await client.bazarPlayerTradeBan.findUnique({
+    where: { playerAId_playerBId: pair },
+    select: { active: true },
+  });
+  return ban?.active === true;
+}
 
 async function prepareBazarMascotAvailability(playerId: string) {
   await Promise.all([
@@ -2052,6 +2084,7 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
       if (listing.listingType !== "AUCTION") throw new Error("Este anúncio não é um leilão.");
       if (listing.status !== "ACTIVE") throw new Error("Este leilão não está mais ativo.");
       if (listing.playerId === player.id) throw new Error("Você não pode dar lance no próprio leilão.");
+      await assertBazarPairAllowed(tx, player.id, listing.playerId);
 
       const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
       if (new Date() >= endsAt) throw new Error("Este leilão já encerrou.");
