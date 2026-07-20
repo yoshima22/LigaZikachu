@@ -608,7 +608,7 @@ export default async function MascotesPage() {
           <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{featuredMascots.length + bankMascotCount}</span>
         </div>
 
-        {featuredMascots.length === 0 && bankMascots.length === 0 ? (
+        {featuredMascots.length === 0 && bankMascotCount === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
             <Egg size={36} className="mx-auto text-slate-600" />
             <p className="text-sm text-slate-500">Você ainda não tem mascotes.</p>
