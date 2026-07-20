@@ -154,7 +154,7 @@ function FighterRow({ f, isActor, isTarget, isAttack }: { f: Fighter; isActor: b
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between">
           <p className={`text-[11px] font-semibold truncate ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>
-            {f.name}{f.level ? ` Â· Nv.${f.level}` : ""}
+            {f.name}{f.level ? ` - Nv.${f.level}` : ""}
           </p>
           {f.role && <span className="text-[9px] text-yellow-400 shrink-0 ml-1">{f.role}</span>}
         </div>
@@ -320,9 +320,9 @@ export function LeagueBattleReplayModal({
             {current ? (
               <>
                 <p className="text-sm text-slate-300">
-                  <span className="font-bold text-[#FFCB05]">{resolvedActorName}{current.actorLevel ? ` Â· Nv.${current.actorLevel}` : ""}</span>
+                  <span className="font-bold text-[#FFCB05]">{resolvedActorName}{current.actorLevel ? ` - Nv.${current.actorLevel}` : ""}</span>
                   {current.action === "ATTACK" ? " atacou " : " defendeu "}
-                  <span className="font-bold text-[#FFCB05]">{resolvedTargetName}{current.targetLevel ? ` Â· Nv.${current.targetLevel}` : ""}</span>
+                  <span className="font-bold text-[#FFCB05]">{resolvedTargetName}{current.targetLevel ? ` - Nv.${current.targetLevel}` : ""}</span>
                 </p>
                 {current.action === "ATTACK" && (
                   <p className="text-xs mt-0.5">

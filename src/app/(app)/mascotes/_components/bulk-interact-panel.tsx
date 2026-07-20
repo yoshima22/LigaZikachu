@@ -157,7 +157,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
           <span className="text-[9px] font-normal text-[#FFCB05]/60">
             {availableForPlay === 0
               ? "Todos em cooldown"
-              : `${availableForPlay} disponível${availableForPlay !== 1 ? "is" : ""}`}
+              : `${availableForPlay} ${availableForPlay === 1 ? "disponível" : "disponíveis"}`}
           </span>
         </button>
 
@@ -175,7 +175,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
           <span className="text-[9px] font-normal text-rose-400/60">
             {availableForPet === 0
               ? "Todos em cooldown"
-              : `${availableForPet} disponível${availableForPet !== 1 ? "is" : ""}`}
+              : `${availableForPet} ${availableForPet === 1 ? "disponível" : "disponíveis"}`}
           </span>
         </button>
 
