@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Coins, History, Search, UserRound } from "lucide-react";
+import { getPokemonName } from "@/lib/mascot-data";
 import { getTransactionHistory } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +13,29 @@ type Payload = {
   quantity?: number;
 };
 
-type OfferedItem = { displayName?: string; quantity?: number };
+type OfferedItem = {
+  displayName?: string;
+  quantity?: number;
+  pokemonId?: number;
+  level?: number;
+};
+
+function isSameName(first?: string | null, second?: string | null) {
+  return Boolean(
+    first &&
+    second &&
+    first.trim().localeCompare(second.trim(), "pt-BR", { sensitivity: "base" }) === 0
+  );
+}
 
 function listedAsset(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
   const value = payload as Payload;
-  const name = value.nickname || value.pokemonName || value.displayName;
+  const originalName = value.pokemonName || value.displayName;
+  const nickname = value.nickname?.trim();
+  const name = originalName
+    ? `${originalName}${nickname && !isSameName(originalName, nickname) ? ` (${nickname})` : ""}`
+    : nickname;
   if (!name) return fallback;
   const level = typeof value.level === "number" ? ` Nv.${value.level}` : "";
   const quantity = typeof value.quantity === "number" && value.quantity > 1
@@ -33,6 +51,15 @@ function offeredAssets(items: unknown) {
     const quantity = typeof item.quantity === "number" && item.quantity > 1
       ? `${item.quantity}× `
       : "";
+    if (typeof item.pokemonId === "number") {
+      const originalName = getPokemonName(item.pokemonId);
+      const offeredName = item.displayName?.replace(/\s+Nv\.\d+\s*$/i, "").trim();
+      const nickname = offeredName && !isSameName(originalName, offeredName)
+        ? ` (${offeredName})`
+        : "";
+      const level = typeof item.level === "number" ? ` Nv.${item.level}` : "";
+      return `${quantity}${originalName}${nickname}${level}`;
+    }
     return `${quantity}${item.displayName || "Item não identificado"}`;
   });
 }
