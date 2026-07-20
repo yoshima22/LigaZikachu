@@ -17,6 +17,7 @@ import { AdminResetPanel } from "./_components/admin-reset-panel";
 import { GrantItemPanel } from "./_components/grant-item-panel";
 import { AdminEggFoodPanel } from "./_components/admin-egg-food-panel";
 import { AdminCasualModePanel } from "./_components/admin-casual-mode-panel";
+import { AdminAccountStatusPanel } from "./_components/admin-account-status-panel";
 import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
@@ -825,6 +826,9 @@ export default async function PlayerDetailPage({
 
       {isAdminUser && (
         <div className="space-y-4">
+          {player.user.status === "SUSPENDED" && (
+            <AdminAccountStatusPanel playerId={playerId} displayName={player.displayName} />
+          )}
           <AdminEggFoodPanel
             playerId={playerId}
             eggs={await prisma.mascotEgg.findMany({
