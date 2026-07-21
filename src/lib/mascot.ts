@@ -450,6 +450,7 @@ export async function addExp(
   let levelsGained = 0;
   let evolved = false;
   let newPokemonId: number | undefined;
+  const evolvedPokemonIds: number[] = [];
 
   // Verifica level ups em cadeia (cap: nível 100)
   while (level < 100 && exp >= expToNextLevel(level)) {
@@ -465,6 +466,7 @@ export async function addExp(
       pokemonId = opts ? opts[Math.floor(Math.random() * opts.length)] : evo.to;
       evolved = true;
       newPokemonId = pokemonId;
+      evolvedPokemonIds.push(pokemonId);
     }
   }
 
@@ -546,6 +548,14 @@ export async function addExp(
     where: { id: mascotId },
     data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate }
   });
+
+  for (const evolvedPokemonId of new Set(evolvedPokemonIds)) {
+    await registerPokemonDiscovery({
+      playerId: mascot.playerId,
+      pokemonId: evolvedPokemonId,
+      source: `evolution:${mascot.pokemonId}`,
+    });
+  }
 
   if (newMilestones.length > 0) {
     await prisma.mascotProgressMilestone.createMany({

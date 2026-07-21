@@ -30,3 +30,26 @@ export async function registerPokemonDiscovery(
     update: {},
   });
 }
+
+/** Repara registros legados a partir das espécies que o jogador possui hoje. */
+export async function syncPokemonDexFromOwnedMascots(
+  playerId: string,
+  client: PrismaTx = prisma,
+) {
+  const ownedSpecies = await client.mascot.findMany({
+    where: { playerId },
+    distinct: ["pokemonId"],
+    select: { pokemonId: true },
+  });
+  if (ownedSpecies.length === 0) return 0;
+
+  const result = await client.playerPokemonDex.createMany({
+    data: ownedSpecies.map(({ pokemonId }) => ({
+      playerId,
+      pokemonId,
+      source: "owned-mascot-reconciliation",
+    })),
+    skipDuplicates: true,
+  });
+  return result.count;
+}

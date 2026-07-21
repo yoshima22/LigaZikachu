@@ -1,5 +1,6 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { syncPokemonDexFromOwnedMascots } from "@/lib/pokemon-dex";
 import { getActiveStickerPacks } from "@/lib/shop-cache";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -88,6 +89,10 @@ export default async function AlbumPage({
     where: { userId: session.user.id },
     select: { id: true },
   });
+
+  if (player) {
+    await syncPokemonDexFromOwnedMascots(player.id);
+  }
 
   const [
     wallet,
