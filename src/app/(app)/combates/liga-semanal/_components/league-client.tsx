@@ -1035,6 +1035,10 @@ function OpponentAnalysisModal({ analysis, myMascots, onClose }: { analysis: Opp
               <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">Seu elenco contra este adversário</p><h3 className="mt-1 text-sm font-black text-white">6 mascotes recomendados</h3></div>
               <p className="text-[9px] text-slate-500">Sugestão por confronto de tipos, nível e atributos; não altera suas equipes.</p>
             </div>
+            <div className="mt-3 rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2 text-[9px] leading-relaxed text-slate-400">
+              <p><span className="font-bold text-cyan-300">Como ler:</span> o <span className="font-semibold text-yellow-300">Índice</span> é uma pontuação comparativa para ordenar apenas os seus mascotes — não representa chance de vitória. Ele combina vantagem de tipos contra o histórico do rival, risco defensivo, nível e atributos.</p>
+              <p className="mt-1"><span className="font-semibold text-cyan-300">Ataque</span> acima de 1,00× indica confronto ofensivo favorável. <span className="font-semibold text-emerald-300">Risco</span> abaixo de 1,00× indica que o mascote tende a resistir melhor aos tipos mais usados pelo adversário.</p>
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {recommendations.map(({ mascot, score, offensive, incoming, reasons, role }, index) => {
                 const types = getPokemonTypes(mascot.pokemonId);
