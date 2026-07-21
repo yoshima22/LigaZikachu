@@ -141,10 +141,10 @@ export function BazarFiltersClient() {
               <option value="">Todas</option>
               <option value="COMMON">Comum</option>
               <option value="MEGA">Mega</option>
-              <option value="LEGENDARY">LendÃ¡rio</option>
-              <option value="MYTHICAL">MÃ­tico</option>
+              <option value="LEGENDARY">Lendário</option>
+              <option value="MYTHICAL">Mítico</option>
               <option value="ULTRA_BEAST">Ultra Besta</option>
-              <option value="PSEUDO_LEGENDARY">Pseudo-LendÃ¡rio</option>
+              <option value="PSEUDO_LEGENDARY">Pseudo-Lendário</option>
               <option value="PARADOX">Paradoxal</option>
             </select>
           </div>
