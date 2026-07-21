@@ -1,0 +1,2 @@
+ALTER TABLE "shop_items"
+ADD COLUMN IF NOT EXISTS "inventoryEnabled" BOOLEAN NOT NULL DEFAULT true;

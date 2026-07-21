@@ -115,7 +115,7 @@ const effectLabel: Record<string, string> = {
 
 interface Item {
   id: string; type: string; name: string; description: string | null;
-  imageUrl: string | null; rarity: string; price: number; active: boolean; owners: number;
+  imageUrl: string | null; rarity: string; price: number; active: boolean; inventoryEnabled: boolean; owners: number;
   metadata?: unknown; theme?: string; flavorText?: string | null; entranceEffect?: string;
 }
 
@@ -130,6 +130,7 @@ const VACATION_ITEM_TYPES = new Set(["VACATION_TICKET"]);
 type FormData = {
   type: typeof typeOpts[number]; name: string; description: string;
   imageUrl: string; rarity: typeof rarityOpts[number]; price: number;
+  inventoryEnabled: boolean;
   frameMeta: FrameMeta;
   bannerMeta: BannerMeta;
   buffMeta: BuffMeta;
@@ -144,7 +145,7 @@ const DEFAULT_BUFF_META:     BuffMeta     = { buffHours: 2, expMultiplierPct: 25
 const DEFAULT_VACATION_META: VacationMeta = { vacationDays: 7, expBonus: 6000, eggChancePct: 30 };
 
 const EMPTY: FormData = {
-  type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100,
+  type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100, inventoryEnabled: true,
   frameMeta: DEFAULT_FRAME_META,
   bannerMeta: DEFAULT_BANNER_META,
   buffMeta: DEFAULT_BUFF_META,
@@ -161,6 +162,7 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
   return {
     type: i.type as typeof typeOpts[number], name: i.name, description: i.description ?? "",
     imageUrl: i.imageUrl ?? "", rarity: i.rarity as typeof rarityOpts[number], price: i.price,
+    inventoryEnabled: i.inventoryEnabled,
     frameMeta: {
       frameScale:   meta.frameScale   ?? 2.0,
       frameOffsetX: meta.frameOffsetX ?? 0,
@@ -554,6 +556,18 @@ function ItemForm({ form, setForm, onSave, onCancel, pending, label }: {
           placeholder="Descrição opcional"
           className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
       </label>
+      <label className="flex items-center gap-3 rounded-lg border border-border bg-slate-950 px-3 py-2 text-xs text-slate-300">
+        <input
+          type="checkbox"
+          checked={form.inventoryEnabled}
+          onChange={(e) => setForm({ ...form, inventoryEnabled: e.target.checked })}
+          className="h-4 w-4 accent-[#FFCB05]"
+        />
+        <span>
+          Disponível no inventário
+          <span className="mt-0.5 block text-[10px] text-slate-500">Permite equipar mesmo quando estiver oculto na loja.</span>
+        </span>
+      </label>
       <ImageUpload
         value={form.imageUrl}
         onChange={(url) => setForm({ ...form, imageUrl: url })}
@@ -813,6 +827,7 @@ export function ShopAdminPanel({ items }: { items: Item[] }) {
                         <p className="text-xs text-slate-500">
                           {rarityLabel[item.rarity]} · {item.price.toLocaleString("pt-BR")} ZC · {item.owners} dono{item.owners !== 1 ? "s" : ""}
                           {!item.active && <span className="ml-2 text-slate-600">[inativo]</span>}
+                          {!item.inventoryEnabled && <span className="ml-2 text-red-400/80">[bloqueado no inventário]</span>}
                         </p>
                       </div>
                     </div>

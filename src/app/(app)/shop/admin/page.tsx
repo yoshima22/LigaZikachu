@@ -60,6 +60,7 @@ export default async function ShopAdminPage() {
           rarity: i.rarity,
           price: i.price,
           active: i.active,
+          inventoryEnabled: i.inventoryEnabled,
           owners: i._count.ownerships,
           metadata: i.metadata ?? undefined,
           theme: i.theme ?? undefined,

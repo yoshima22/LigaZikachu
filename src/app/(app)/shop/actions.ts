@@ -22,6 +22,7 @@ const createItemSchema = z.object({
   imageUrl: z.string().url().optional().or(z.literal("")),
   rarity: z.nativeEnum(ShopItemRarity),
   price: z.number().int().min(1).max(999999),
+  inventoryEnabled: z.boolean().default(true),
   // metadata para molduras, banners e buffs
   metadata: z.object({
     // Moldura (FRAME)
@@ -175,6 +176,7 @@ export async function createShopItem(
     await prisma.shopItem.create({
       data: {
         type: data.type, name: data.name, rarity: data.rarity, price: data.price,
+        inventoryEnabled: data.inventoryEnabled,
         imageUrl: data.imageUrl || null,
         description: data.description || null,
         metadata: data.metadata ?? undefined,
@@ -201,20 +203,31 @@ export async function updateShopItem(
   try {
     await requireAdmin();
     const data = createItemSchema.parse(raw);
-    await prisma.shopItem.update({
-      where: { id: itemId },
-      data: {
-        type: data.type, name: data.name, rarity: data.rarity, price: data.price,
-        imageUrl: data.imageUrl || null,
-        description: data.description || null,
-        metadata: data.metadata ?? undefined,
-        theme: data.theme ?? undefined,
-        flavorText: data.flavorText ?? null,
-        entranceEffect: data.entranceEffect ?? undefined,
+    await prisma.$transaction(async (tx) => {
+      await tx.shopItem.update({
+        where: { id: itemId },
+        data: {
+          type: data.type, name: data.name, rarity: data.rarity, price: data.price,
+          inventoryEnabled: data.inventoryEnabled,
+          imageUrl: data.imageUrl || null,
+          description: data.description || null,
+          metadata: data.metadata ?? undefined,
+          theme: data.theme ?? undefined,
+          flavorText: data.flavorText ?? null,
+          entranceEffect: data.entranceEffect ?? undefined,
+        }
+      });
+      if (!data.inventoryEnabled) {
+        await tx.playerInventory.updateMany({
+          where: { itemId, equipped: true },
+          data: { equipped: false },
+        });
       }
     });
     revalidatePath("/shop");
     revalidatePath("/shop/admin");
+    revalidatePath("/inventario");
+    revalidatePath("/perfil");
     void invalidateShopCache();
     return {};
   } catch (err) {
@@ -493,9 +506,12 @@ export async function equipItem(itemId: string, equip: boolean): Promise<{ error
 
     const owned = await prisma.playerInventory.findUnique({
       where: { playerId_itemId: { playerId: player.id, itemId } },
-      include: { item: { select: { type: true } } }
+      include: { item: { select: { type: true, inventoryEnabled: true } } }
     });
     if (!owned) return { error: "Você não possui este item." };
+    if (equip && !owned.item.inventoryEnabled) {
+      return { error: "Este item foi desativado para uso no inventário." };
+    }
 
     if (equip) {
       // Desequipar outros itens do mesmo tipo

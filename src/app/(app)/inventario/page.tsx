@@ -21,7 +21,7 @@ export default async function InventarioPage() {
 
   const [inventory, syncLeftCount, syncRightCount, syncCompleteCount] = await Promise.all([
     prisma.playerInventory.findMany({
-      where: { playerId: player.id },
+      where: { playerId: player.id, item: { inventoryEnabled: true } },
       select: {
         id: true,
         equipped: true,
