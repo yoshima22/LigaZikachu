@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
-import { POKEMON_TYPE_LABELS } from "@/lib/pokemon-types-data";
 import {
   startWeeklyLeagueNowAction,
   joinLeagueAction,
@@ -41,6 +40,13 @@ type OpponentAnalysis = {
   typePreferences: Array<{ name: string; count: number }>;
   rolePreferences: Array<{ name: string; count: number }>;
   recentMatches: Array<{ id: string; weekKey: string; opponentName: string; result: "W" | "L" | "D"; damage: number; resolvedAt: string | Date | null }>;
+};
+
+const SCOUTING_TYPE_LABELS: Record<string, string> = {
+  normal: "Normal", fire: "Fogo", water: "Água", grass: "Planta", electric: "Elétrico",
+  ice: "Gelo", fighting: "Lutador", poison: "Venenoso", ground: "Terrestre", flying: "Voador",
+  psychic: "Psíquico", bug: "Inseto", rock: "Pedra", ghost: "Fantasma", dragon: "Dragão",
+  dark: "Sombrio", steel: "Aço", fairy: "Fada",
 };
 
 type PageData = {
@@ -963,7 +969,7 @@ function OpponentAnalysisModal({ analysis, onClose }: { analysis: OpponentAnalys
             {[["Preferência de tipos", analysis.typePreferences, maxType, "bg-cyan-400"], ["Posturas mais usadas", analysis.rolePreferences, maxRole, "bg-violet-400"]].map(([title, entries, max, bar]) => (
               <div key={String(title)} className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
                 <h3 className="text-xs font-bold text-slate-200">{String(title)}</h3>
-                <div className="mt-3 space-y-2">{(entries as Array<{ name: string; count: number }>).map((entry) => <div key={entry.name}><div className="mb-1 flex justify-between text-[10px]"><span className="capitalize text-slate-300">{title === "Preferência de tipos" ? (POKEMON_TYPE_LABELS[entry.name] ?? entry.name) : entry.name}</span><span className="text-slate-500">{entry.count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(8, (entry.count / Number(max)) * 100)}%` }} /></div></div>)}</div>
+                <div className="mt-3 space-y-2">{(entries as Array<{ name: string; count: number }>).map((entry) => <div key={entry.name}><div className="mb-1 flex justify-between text-[10px]"><span className="capitalize text-slate-300">{title === "Preferência de tipos" ? (SCOUTING_TYPE_LABELS[entry.name.toLowerCase()] ?? entry.name) : entry.name}</span><span className="text-slate-500">{entry.count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(8, (entry.count / Number(max)) * 100)}%` }} /></div></div>)}</div>
               </div>
             ))}
           </div>
