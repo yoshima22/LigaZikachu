@@ -4,7 +4,7 @@ import React, { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
-import { getPokemonName, getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import {
   startWeeklyLeagueNowAction,
   joinLeagueAction,
@@ -921,9 +921,60 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
 // ── Resultados ─────────────────────────────────────────────────────────────
 
-function OpponentAnalysisModal({ analysis, onClose }: { analysis: OpponentAnalysis; onClose: () => void }) {
+function buildMascotRecommendations(analysis: OpponentAnalysis, mascots: PageData["availableMascots"]) {
+  const opponentPool = analysis.topMascots.filter((mascot) => mascot.pokemonId > 0);
+  const totalOpponentUses = Math.max(1, opponentPool.reduce((sum, mascot) => sum + mascot.uses, 0));
+  const scored = mascots.map((mascot) => {
+    const types = getPokemonTypes(mascot.pokemonId);
+    let offensive = 1;
+    let incoming = 1;
+    let bestTargetName = "";
+    let bestTargetMultiplier = 0;
+    if (opponentPool.length > 0) {
+      offensive = opponentPool.reduce((sum, target) => {
+        const multiplier = getTypeAdvantageMultiplier(types, getPokemonTypes(target.pokemonId));
+        if (multiplier > bestTargetMultiplier) {
+          bestTargetName = getPokemonName(target.pokemonId) || target.name;
+          bestTargetMultiplier = multiplier;
+        }
+        return sum + multiplier * target.uses;
+      }, 0) / totalOpponentUses;
+      incoming = opponentPool.reduce((sum, target) => sum + getTypeAdvantageMultiplier(getPokemonTypes(target.pokemonId), types) * target.uses, 0) / totalOpponentUses;
+    }
+    const stats = Number(mascot.statForce ?? 0) + Number(mascot.statAgility ?? 0) + Number(mascot.statInstinct ?? 0) + Number(mascot.statVitality ?? 0) + Number(mascot.statCharisma ?? 0);
+    const score = offensive * 55 - incoming * 28 + Math.min(100, Number(mascot.level ?? 1)) * 0.3 + stats * 0.025;
+    const reasons: string[] = [];
+    if (bestTargetName && bestTargetMultiplier > 1) reasons.push(`vantagem contra ${bestTargetName}`);
+    if (incoming < 0.98) reasons.push("boa resistência ao padrão rival");
+    if (offensive > 1.05) reasons.push("pressão ofensiva favorável");
+    if (Number(mascot.level ?? 1) >= 75) reasons.push(`nível ${mascot.level}`);
+    if (reasons.length === 0) reasons.push("bom equilíbrio de atributos e confronto");
+    return { mascot, score, offensive, incoming, reasons: reasons.slice(0, 2), role: recommendCombatRole(mascot) };
+  }).sort((a, b) => b.score - a.score);
+
+  // Evita uma sugestão excessivamente repetitiva: no máximo 2 mascotes com o mesmo tipo primário.
+  const selected: typeof scored = [];
+  const primaryTypeCounts = new Map<string, number>();
+  for (const entry of scored) {
+    const primaryType = getPokemonTypes(entry.mascot.pokemonId)[0] ?? "normal";
+    if ((primaryTypeCounts.get(primaryType) ?? 0) >= 2) continue;
+    selected.push(entry);
+    primaryTypeCounts.set(primaryType, (primaryTypeCounts.get(primaryType) ?? 0) + 1);
+    if (selected.length === 6) break;
+  }
+  if (selected.length < 6) {
+    for (const entry of scored) {
+      if (!selected.includes(entry)) selected.push(entry);
+      if (selected.length === 6) break;
+    }
+  }
+  return selected;
+}
+
+function OpponentAnalysisModal({ analysis, myMascots, onClose }: { analysis: OpponentAnalysis; myMascots: PageData["availableMascots"]; onClose: () => void }) {
   const maxType = Math.max(1, ...analysis.typePreferences.map((entry) => entry.count));
   const maxRole = Math.max(1, ...analysis.rolePreferences.map((entry) => entry.count));
+  const recommendations = buildMascotRecommendations(analysis, myMascots);
   const resultColor = { W: "bg-emerald-500 text-emerald-950", L: "bg-red-500 text-white", D: "bg-slate-500 text-white" } as const;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-sm" onClick={onClose}>
@@ -978,6 +1029,28 @@ function OpponentAnalysisModal({ analysis, onClose }: { analysis: OpponentAnalys
             <h3 className="text-xs font-bold text-slate-200">Últimos 5 jogos</h3>
             <div className="mt-3 grid gap-2 sm:grid-cols-5">{analysis.recentMatches.map((match) => <div key={match.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><span className={`inline-grid h-6 w-6 place-items-center rounded-lg text-[10px] font-black ${resultColor[match.result]}`}>{match.result === "W" ? "V" : match.result === "L" ? "D" : "E"}</span><p className="mt-2 truncate text-[10px] font-semibold text-slate-200">vs {match.opponentName}</p><p className="text-[9px] text-slate-500">{match.weekKey} · {match.damage.toLocaleString()} dano</p></div>)}</div>
           </div>
+
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">Seu elenco contra este adversário</p><h3 className="mt-1 text-sm font-black text-white">6 mascotes recomendados</h3></div>
+              <p className="text-[9px] text-slate-500">Sugestão por confronto de tipos, nível e atributos; não altera suas equipes.</p>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {recommendations.map(({ mascot, score, offensive, incoming, reasons, role }, index) => {
+                const types = getPokemonTypes(mascot.pokemonId);
+                return <div key={mascot.id} className="relative overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-950/70 p-3">
+                  <span className="absolute right-2 top-2 text-2xl font-black text-slate-800">#{index + 1}</span>
+                  <div className="flex items-center gap-3">
+                    <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <div className="min-w-0"><p className="truncate text-xs font-bold text-white">{getPokemonName(mascot.pokemonId)}</p><p className="truncate text-[9px] text-slate-500">{mascot.nickname ? `“${mascot.nickname}” · ` : ""}Nv.{mascot.level} · {getCombatRoleLabel(role)}</p></div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">{types.map((type) => <span key={type} className="rounded-full bg-slate-800 px-2 py-0.5 text-[8px] font-semibold text-slate-300">{SCOUTING_TYPE_LABELS[type] ?? type}</span>)}</div>
+                  <p className="mt-2 text-[9px] leading-relaxed text-emerald-200/80">{reasons.join(" · ")}</p>
+                  <div className="mt-2 grid grid-cols-3 gap-1 text-center"><div className="rounded-lg bg-slate-900 p-1"><p className="text-[7px] text-slate-600">ÍNDICE</p><p className="text-[10px] font-bold text-yellow-300">{Math.round(score)}</p></div><div className="rounded-lg bg-slate-900 p-1"><p className="text-[7px] text-slate-600">ATAQUE</p><p className="text-[10px] font-bold text-cyan-300">{offensive.toFixed(2)}×</p></div><div className="rounded-lg bg-slate-900 p-1"><p className="text-[7px] text-slate-600">RISCO</p><p className={`text-[10px] font-bold ${incoming <= 1 ? "text-emerald-300" : "text-red-300"}`}>{incoming.toFixed(2)}×</p></div></div>
+                </div>;
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1014,7 +1087,7 @@ function ResultsTab({ data }: { data: PageData }) {
           onFinish={() => setReplayMatch(null)}
         />
       )}
-      {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} onClose={() => setOpponentAnalysis(null)} />}
+      {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} myMascots={data.availableMascots} onClose={() => setOpponentAnalysis(null)} />}
 
       <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
       <OrderSabotageBanner sabotage={data.orderSabotage} stepState={data.orderLeagueStepState} compact />
