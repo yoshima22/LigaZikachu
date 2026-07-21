@@ -33,6 +33,15 @@ import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_compon
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
+type OpponentAnalysis = {
+  playerId: string; playerName: string; matches: number; wins: number; losses: number; draws: number;
+  score: number; winRate: number; averageDamage: number;
+  topMascots: Array<{ pokemonId: number; name: string; uses: number }>;
+  typePreferences: Array<{ name: string; count: number }>;
+  rolePreferences: Array<{ name: string; count: number }>;
+  recentMatches: Array<{ id: string; weekKey: string; opponentName: string; result: "W" | "L" | "D"; damage: number; resolvedAt: string | Date | null }>;
+};
+
 type PageData = {
   player: { id: string; displayName: string; walletBalance: number; isAdmin: boolean };
   currentLeague: any;
@@ -58,7 +67,8 @@ type PageData = {
     requiredGeneralClues: number;
     requiredSpecificClues: number;
   };
-  weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
+  weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; ownerName: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
+  opponentAnalyses: Record<string, OpponentAnalysis>;
   lastChampion: {
     playerName: string; weekKey: string; points: number; wins: number; losses: number;
     avatarUrl: string | null; playerId: string;
@@ -435,6 +445,9 @@ const HIGHLIGHT_CATEGORIES: Array<{
   { title: "Mais Resistente", emoji: "🛡️", color: "text-green-400", sortFn: (a, b) => b.damageTaken - a.damageTaken, valueFn: h => `${h.damageTaken.toLocaleString()} dano absorvido` },
   { title: "Melhor Cuidador", emoji: "💚", color: "text-cyan-400", sortFn: (a, b) => b.heals - a.heals, valueFn: h => `${h.heals} curas`, filterFn: h => h.heals > 0 },
   { title: "Maior Taxa de Vitória", emoji: "🏆", color: "text-yellow-400", sortFn: (a, b) => (b.wins / Math.max(1, b.matches)) - (a.wins / Math.max(1, a.matches)), valueFn: h => `${Math.round((h.wins / Math.max(1, h.matches)) * 100)}% (${h.wins}V/${h.matches}P)`, filterFn: h => h.matches >= 2 },
+  { title: "Mais Presente", emoji: "📅", color: "text-violet-400", sortFn: (a, b) => b.matches - a.matches, valueFn: h => `${h.matches} combates`, filterFn: h => h.matches > 0 },
+  { title: "Maior Dano Médio", emoji: "📈", color: "text-pink-400", sortFn: (a, b) => (b.damageDealt / Math.max(1, b.matches)) - (a.damageDealt / Math.max(1, a.matches)), valueFn: h => `${Math.round(h.damageDealt / Math.max(1, h.matches)).toLocaleString()} por combate`, filterFn: h => h.matches >= 2 && h.damageDealt > 0 },
+  { title: "Melhor Finalizador", emoji: "🎯", color: "text-amber-400", sortFn: (a, b) => (b.kosDealt / Math.max(1, b.matches)) - (a.kosDealt / Math.max(1, a.matches)), valueFn: h => `${(h.kosDealt / Math.max(1, h.matches)).toFixed(1)} KOs/combate`, filterFn: h => h.matches >= 2 && h.kosDealt > 0 },
 ];
 
 function WeekHighlights({ highlights }: { highlights: HighlightEntry[] }) {
@@ -462,7 +475,7 @@ function WeekHighlights({ highlights }: { highlights: HighlightEntry[] }) {
               )}
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] text-slate-500">{cat.emoji} {cat.title}</p>
-                <p className={`text-sm font-bold ${cat.color}`}>{getPokemonName(top.pokemonId) || top.name}</p>
+                <p className={`text-sm font-bold ${cat.color}`}>{getPokemonName(top.pokemonId) || top.name} <span className="font-medium text-slate-400">({top.ownerName})</span></p>
                 <p className="text-[10px] text-slate-400">{top.name !== getPokemonName(top.pokemonId) ? `"${top.name}" · ` : ""}{cat.valueFn(top)}</p>
                 <p className="text-[9px] text-slate-500">{top.role}</p>
               </div>
@@ -489,7 +502,7 @@ function WeekHighlights({ highlights }: { highlights: HighlightEntry[] }) {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={getStaticSpriteUrl(h.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                     ) : null}
-                    <span className="text-[10px] text-slate-300 truncate">{getPokemonName(h.pokemonId) || h.name}{h.name !== getPokemonName(h.pokemonId) ? ` "${h.name}"` : ""}</span>
+                    <span className="text-[10px] text-slate-300 truncate">{getPokemonName(h.pokemonId) || h.name}{h.name !== getPokemonName(h.pokemonId) ? ` "${h.name}"` : ""} <span className="text-slate-500">({h.ownerName})</span></span>
                     <span className={`ml-auto text-[10px] font-semibold ${cat.color}`}>{cat.valueFn(h)}</span>
                   </div>
                 ))}
@@ -901,8 +914,72 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
 // ── Resultados ─────────────────────────────────────────────────────────────
 
+function OpponentAnalysisModal({ analysis, onClose }: { analysis: OpponentAnalysis; onClose: () => void }) {
+  const maxType = Math.max(1, ...analysis.typePreferences.map((entry) => entry.count));
+  const maxRole = Math.max(1, ...analysis.rolePreferences.map((entry) => entry.count));
+  const resultColor = { W: "bg-emerald-500 text-emerald-950", L: "bg-red-500 text-white", D: "bg-slate-500 text-white" } as const;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-sm" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-cyan-400/25 bg-[#080d1c] shadow-2xl shadow-cyan-950/40" onClick={(event) => event.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-800 bg-[#080d1c]/95 p-5 backdrop-blur">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">Scouting do adversário do dia</p>
+            <h2 className="mt-1 text-xl font-black text-white">{analysis.playerName}</h2>
+            <p className="text-xs text-slate-500">Histórico consolidado de todas as Ligas Semanais registradas.</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:text-white">Fechar ✕</button>
+        </div>
+
+        <div className="space-y-5 p-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              ["Score geral", analysis.score, "text-yellow-300"], ["Combates", analysis.matches, "text-white"],
+              ["Vitórias", analysis.wins, "text-emerald-400"], ["Derrotas", analysis.losses, "text-red-400"],
+              ["Dano médio", analysis.averageDamage.toLocaleString(), "text-orange-300"],
+            ].map(([label, value, color]) => <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3"><p className="text-[9px] uppercase tracking-wider text-slate-500">{label}</p><p className={`mt-1 text-xl font-black ${color}`}>{value}</p></div>)}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+            <div className="flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/55 p-4 lg:flex-col lg:justify-center">
+              <div className="grid h-32 w-32 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(#22d3ee ${analysis.winRate}%, #172033 0)` }}>
+                <div className="grid h-24 w-24 place-items-center rounded-full bg-[#0b1120] text-center"><div><p className="text-2xl font-black text-cyan-300">{analysis.winRate}%</p><p className="text-[9px] uppercase text-slate-500">vitórias</p></div></div>
+              </div>
+              <p className="text-xs text-slate-400"><span className="font-bold text-slate-200">{analysis.wins}V</span> · {analysis.draws}E · {analysis.losses}D</p>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
+              <h3 className="text-xs font-bold text-slate-200">Top 5 mascotes mais utilizados</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {analysis.topMascots.map((mascot, index) => <div key={`${mascot.name}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-950/60 px-3 py-2">
+                  <span className="w-4 text-xs font-black text-cyan-500">#{index + 1}</span>
+                  {mascot.pokemonId > 0 && <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />}
+                  <div className="min-w-0"><p className="truncate text-xs font-bold text-white">{getPokemonName(mascot.pokemonId) || mascot.name}</p><p className="text-[9px] text-slate-500">{mascot.name !== getPokemonName(mascot.pokemonId) ? `“${mascot.name}” · ` : ""}{mascot.uses} escalações</p></div>
+                </div>)}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {[["Preferência de tipos", analysis.typePreferences, maxType, "bg-cyan-400"], ["Posturas mais usadas", analysis.rolePreferences, maxRole, "bg-violet-400"]].map(([title, entries, max, bar]) => (
+              <div key={String(title)} className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
+                <h3 className="text-xs font-bold text-slate-200">{String(title)}</h3>
+                <div className="mt-3 space-y-2">{(entries as Array<{ name: string; count: number }>).map((entry) => <div key={entry.name}><div className="mb-1 flex justify-between text-[10px]"><span className="capitalize text-slate-300">{entry.name}</span><span className="text-slate-500">{entry.count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(8, (entry.count / Number(max)) * 100)}%` }} /></div></div>)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
+            <h3 className="text-xs font-bold text-slate-200">Últimos 5 jogos</h3>
+            <div className="mt-3 grid gap-2 sm:grid-cols-5">{analysis.recentMatches.map((match) => <div key={match.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><span className={`inline-grid h-6 w-6 place-items-center rounded-lg text-[10px] font-black ${resultColor[match.result]}`}>{match.result === "W" ? "V" : match.result === "L" ? "D" : "E"}</span><p className="mt-2 truncate text-[10px] font-semibold text-slate-200">vs {match.opponentName}</p><p className="text-[9px] text-slate-500">{match.weekKey} · {match.damage.toLocaleString()} dano</p></div>)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ResultsTab({ data }: { data: PageData }) {
   const [replayMatch, setReplayMatch] = useState<any>(null);
+  const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
 
   if (data.todayMatches.length === 0) {
     return <div className="py-10 text-center text-sm text-slate-500">Matchups ainda não gerados. Admin pode gerar na aba Admin.</div>;
@@ -930,6 +1007,7 @@ function ResultsTab({ data }: { data: PageData }) {
           onFinish={() => setReplayMatch(null)}
         />
       )}
+      {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} onClose={() => setOpponentAnalysis(null)} />}
 
       <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
       <OrderSabotageBanner sabotage={data.orderSabotage} stepState={data.orderLeagueStepState} compact />
@@ -950,6 +1028,9 @@ function ResultsTab({ data }: { data: PageData }) {
             const isBye = match.status === "BYE";
             const winnerIsA = match.winnerId === match.playerAId;
             const winnerIsB = match.winnerId === match.playerBId;
+            const involvesMe = match.playerAId === data.player.id || match.playerBId === data.player.id;
+            const opponentId = match.playerAId === data.player.id ? match.playerBId : match.playerBId === data.player.id ? match.playerAId : null;
+            const availableAnalysis = opponentId ? data.opponentAnalyses[opponentId] : null;
 
             if (isBye) {
               return (
@@ -961,6 +1042,8 @@ function ResultsTab({ data }: { data: PageData }) {
 
             return (
               <div key={match.id} className={`rounded-xl border p-3 space-y-1 ${
+                involvesMe ? "ring-1 ring-[#FFCB05]/45 " : ""
+              }${
                 isScheduled ? "border-yellow-500/20 bg-yellow-500/5" :
                 isResolved ? "border-green-500/20 bg-green-500/5" :
                 "border-border bg-slate-900/60"
@@ -972,7 +1055,7 @@ function ResultsTab({ data }: { data: PageData }) {
 
                 {/* Matchup card */}
                 <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
-                  <div className={`text-right ${isResolved && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
+                  <div className={`text-right ${match.playerAId === data.player.id ? "text-[#FFCB05]" : isResolved && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
                     <p className="text-xs font-bold">{match.playerAName}</p>
                     {odds?.oddsA && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsA).toFixed(2)}×</p>}
                     {isResolved && <p className="text-[9px] text-slate-500">Dano: {match.playerADamageDealt} | Sobr: {match.playerASurvivors}</p>}
@@ -980,7 +1063,7 @@ function ResultsTab({ data }: { data: PageData }) {
 
                   <span className="text-xs font-bold text-slate-500 px-2">vs</span>
 
-                  <div className={`text-left ${isResolved && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
+                  <div className={`text-left ${match.playerBId === data.player.id ? "text-[#FFCB05]" : isResolved && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
                     <p className="text-xs font-bold">{match.playerBName ?? "—"}</p>
                     {odds?.oddsB && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsB).toFixed(2)}×</p>}
                     {isResolved && <p className="text-[9px] text-slate-500">Dano: {match.playerBDamageDealt} | Sobr: {match.playerBSurvivors}</p>}
@@ -988,6 +1071,11 @@ function ResultsTab({ data }: { data: PageData }) {
                 </div>
 
                 {isResolved && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
+                {availableAnalysis && (
+                  <button onClick={() => setOpponentAnalysis(availableAnalysis)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 transition-colors">
+                    Analisar adversário
+                  </button>
+                )}
                 {isResolved && match.replayJson && (
                   <button
                     onClick={() => setReplayMatch(match)}
