@@ -74,7 +74,7 @@ type PageData = {
     requiredGeneralClues: number;
     requiredSpecificClues: number;
   };
-  weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; ownerName: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>;
+  weekHighlights: Array<{ id: string; name: string; pokemonId: number; ownerId: string; ownerName: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; attackActions: number; matches: number; wins: number }>;
   opponentAnalyses: Record<string, OpponentAnalysis>;
   lastChampion: {
     playerName: string; weekKey: string; points: number; wins: number; losses: number;
@@ -236,6 +236,8 @@ function OrderSabotageBanner({
 
 function LeagueTab({ data }: { data: PageData }) {
   const league = data.currentLeague;
+  const [showOwnAnalysis, setShowOwnAnalysis] = useState(false);
+  const ownAnalysis = data.opponentAnalyses[data.player.id];
 
   if (!league && !data.lastChampion) {
     return (
@@ -249,6 +251,14 @@ function LeagueTab({ data }: { data: PageData }) {
 
   return (
     <div className="space-y-4">
+      {showOwnAnalysis && ownAnalysis && <OpponentAnalysisModal analysis={ownAnalysis} myMascots={data.availableMascots} showRecommendations={false} onClose={() => setShowOwnAnalysis(false)} />}
+      {ownAnalysis && (
+        <div className="flex justify-end">
+          <button onClick={() => setShowOwnAnalysis(true)} className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition-colors hover:bg-cyan-400/15">
+            Ver análise própria
+          </button>
+        </div>
+      )}
       {/* Champion banner */}
       {data.lastChampion && (
         <div className="relative overflow-hidden rounded-2xl border border-[#FFCB05]/40 bg-gradient-to-r from-[#1a1400] via-[#2a1d00] to-[#1a1400] p-5">
@@ -455,6 +465,7 @@ const HIGHLIGHT_CATEGORIES: Array<{
   { title: "Mais Presente", emoji: "📅", color: "text-violet-400", sortFn: (a, b) => b.matches - a.matches, valueFn: h => `${h.matches} combates`, filterFn: h => h.matches > 0 },
   { title: "Maior Dano Médio", emoji: "📈", color: "text-pink-400", sortFn: (a, b) => (b.damageDealt / Math.max(1, b.matches)) - (a.damageDealt / Math.max(1, a.matches)), valueFn: h => `${Math.round(h.damageDealt / Math.max(1, h.matches)).toLocaleString()} por combate`, filterFn: h => h.matches >= 2 && h.damageDealt > 0 },
   { title: "Melhor Finalizador", emoji: "🎯", color: "text-amber-400", sortFn: (a, b) => (b.kosDealt / Math.max(1, b.matches)) - (a.kosDealt / Math.max(1, a.matches)), valueFn: h => `${(h.kosDealt / Math.max(1, h.matches)).toFixed(1)} KOs/combate`, filterFn: h => h.matches >= 2 && h.kosDealt > 0 },
+  { title: "Atacante Ágil", emoji: "💨", color: "text-sky-400", sortFn: (a, b) => b.attackActions - a.attackActions, valueFn: h => `${h.attackActions} ataques`, filterFn: h => h.attackActions > 0 },
 ];
 
 function WeekHighlights({ highlights }: { highlights: HighlightEntry[] }) {
@@ -971,7 +982,7 @@ function buildMascotRecommendations(analysis: OpponentAnalysis, mascots: PageDat
   return selected;
 }
 
-function OpponentAnalysisModal({ analysis, myMascots, onClose }: { analysis: OpponentAnalysis; myMascots: PageData["availableMascots"]; onClose: () => void }) {
+function OpponentAnalysisModal({ analysis, myMascots, showRecommendations = true, onClose }: { analysis: OpponentAnalysis; myMascots: PageData["availableMascots"]; showRecommendations?: boolean; onClose: () => void }) {
   const maxType = Math.max(1, ...analysis.typePreferences.map((entry) => entry.count));
   const maxRole = Math.max(1, ...analysis.rolePreferences.map((entry) => entry.count));
   const recommendations = buildMascotRecommendations(analysis, myMascots);
@@ -981,7 +992,7 @@ function OpponentAnalysisModal({ analysis, myMascots, onClose }: { analysis: Opp
       <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-cyan-400/25 bg-[#080d1c] shadow-2xl shadow-cyan-950/40" onClick={(event) => event.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-800 bg-[#080d1c]/95 p-5 backdrop-blur">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">Scouting do adversário do dia</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">{showRecommendations ? "Scouting do adversário do dia" : "Sua análise na Liga Semanal"}</p>
             <h2 className="mt-1 text-xl font-black text-white">{analysis.playerName}</h2>
             <p className="text-xs text-slate-500">Histórico consolidado de todas as Ligas Semanais registradas.</p>
           </div>
@@ -1030,7 +1041,7 @@ function OpponentAnalysisModal({ analysis, myMascots, onClose }: { analysis: Opp
             <div className="mt-3 grid gap-2 sm:grid-cols-5">{analysis.recentMatches.map((match) => <div key={match.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><span className={`inline-grid h-6 w-6 place-items-center rounded-lg text-[10px] font-black ${resultColor[match.result]}`}>{match.result === "W" ? "V" : match.result === "L" ? "D" : "E"}</span><p className="mt-2 truncate text-[10px] font-semibold text-slate-200">vs {match.opponentName}</p><p className="text-[9px] text-slate-500">{match.weekKey} · {match.damage.toLocaleString()} dano</p></div>)}</div>
           </div>
 
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4">
+          {showRecommendations && <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">Seu elenco contra este adversário</p><h3 className="mt-1 text-sm font-black text-white">6 mascotes recomendados</h3></div>
               <p className="text-[9px] text-slate-500">Sugestão por confronto de tipos, nível e atributos; não altera suas equipes.</p>
@@ -1054,7 +1065,7 @@ function OpponentAnalysisModal({ analysis, myMascots, onClose }: { analysis: Opp
                 </div>;
               })}
             </div>
-          </div>
+          </div>}
         </div>
       </div>
     </div>

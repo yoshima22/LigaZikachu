@@ -262,7 +262,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         select: { replayJson: true, playerAId: true, playerBId: true, winnerId: true },
       });
       // Compute per-mascot stats from replay logs
-      const mascotStats = new Map<string, { id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; matches: number; wins: number }>();
+      const mascotStats = new Map<string, { id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; attackActions: number; matches: number; wins: number }>();
 
       for (const match of allMatches as any[]) {
         if (!match.replayJson || !Array.isArray(match.replayJson)) continue;
@@ -273,24 +273,30 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
           if (!seen.has(t.actorId)) seen.set(t.actorId, { name: t.actorName, pokemonId: t.actorPokemonId, ownerId: t.actorOwnerId, role: t.actorRole });
           if (!seen.has(t.targetId)) seen.set(t.targetId, { name: t.targetName, pokemonId: t.targetPokemonId, ownerId: t.targetOwnerId, role: t.targetRole });
 
+          if (t.action === "ATTACK") {
+            const attackerStat = mascotStats.get(t.actorId) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, attackActions: 0, matches: 0, wins: 0 };
+            attackerStat.attackActions++;
+            mascotStats.set(t.actorId, attackerStat);
+          }
+
           if (t.action === "ATTACK" && t.damage > 0) {
             const prev = hpTracker.get(t.targetId) ?? 9999;
             const newHp = prev - t.damage;
             hpTracker.set(t.targetId, newHp);
 
             const key = t.actorId;
-            const stat = mascotStats.get(key) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, matches: 0, wins: 0 };
+            const stat = mascotStats.get(key) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, attackActions: 0, matches: 0, wins: 0 };
             stat.damageDealt += t.damage;
             if (newHp <= 0) stat.kosDealt++;
             mascotStats.set(key, stat);
 
-            const tgtStat = mascotStats.get(t.targetId) ?? { id: t.targetId, name: t.targetName, pokemonId: t.targetPokemonId ?? 0, ownerId: t.targetOwnerId ?? "", role: t.targetRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, matches: 0, wins: 0 };
+            const tgtStat = mascotStats.get(t.targetId) ?? { id: t.targetId, name: t.targetName, pokemonId: t.targetPokemonId ?? 0, ownerId: t.targetOwnerId ?? "", role: t.targetRole ?? "Atacante", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, attackActions: 0, matches: 0, wins: 0 };
             tgtStat.damageTaken += t.damage;
             mascotStats.set(t.targetId, tgtStat);
           }
 
           if (t.action === "DEFEND" && t.effect?.includes("curou")) {
-            const stat = mascotStats.get(t.actorId) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Cuidador", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, matches: 0, wins: 0 };
+            const stat = mascotStats.get(t.actorId) ?? { id: t.actorId, name: t.actorName, pokemonId: t.actorPokemonId ?? 0, ownerId: t.actorOwnerId ?? "", role: t.actorRole ?? "Cuidador", damageDealt: 0, damageTaken: 0, kosDealt: 0, heals: 0, attackActions: 0, matches: 0, wins: 0 };
             stat.heals++;
             mascotStats.set(t.actorId, stat);
           }
@@ -319,7 +325,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       }));
     } catch { /* ok */ }
 
-    // Scouting histórico: a resposta inclui somente adversários do jogador no dia exibido.
+    // Scouting histórico: inclui o próprio jogador e somente os adversários dele no dia exibido.
     try {
       const opponentIds = [...new Set((todayMatches as any[]).flatMap((match) => {
         if (match.playerAId === playerId && match.playerBId) return [match.playerBId];
@@ -327,13 +333,14 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         return [];
       }))];
 
-      if (opponentIds.length > 0) {
-        const [opponents, history] = await Promise.all([
-          prisma.player.findMany({ where: { id: { in: opponentIds } }, select: { id: true, displayName: true } }),
+      const analysisPlayerIds = [...new Set([playerId, ...opponentIds])];
+      if (analysisPlayerIds.length > 0) {
+        const [analyzedPlayers, history] = await Promise.all([
+          prisma.player.findMany({ where: { id: { in: analysisPlayerIds } }, select: { id: true, displayName: true } }),
           prisma.weeklyMascotLeagueMatch.findMany({
             where: {
               status: "RESOLVED",
-              OR: [{ playerAId: { in: opponentIds } }, { playerBId: { in: opponentIds } }],
+              OR: [{ playerAId: { in: analysisPlayerIds } }, { playerBId: { in: analysisPlayerIds } }],
             },
             select: {
               id: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true,
@@ -347,7 +354,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         const historyPlayers = await prisma.player.findMany({ where: { id: { in: allPlayerIds } }, select: { id: true, displayName: true } });
         const playerNames = new Map(historyPlayers.map((entry) => [entry.id, entry.displayName]));
 
-        for (const opponent of opponents) {
+        for (const opponent of analyzedPlayers) {
           const matches = history.filter((match) => match.playerAId === opponent.id || match.playerBId === opponent.id);
           let wins = 0, losses = 0, draws = 0, damageDealt = 0;
           const mascotUsage = new Map<string, { pokemonId: number; name: string; uses: number }>();
