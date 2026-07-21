@@ -393,7 +393,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
             score: wins * 3 + draws,
             winRate: matches.length ? Math.round((wins / matches.length) * 100) : 0,
             averageDamage: matches.length ? Math.round(damageDealt / matches.length) : 0,
-            topMascots: [...mascotUsage.values()].sort((a, b) => b.uses - a.uses).slice(0, 5),
+            topMascots: [...mascotUsage.values()].sort((a, b) => b.uses - a.uses).slice(0, 6),
             typePreferences: sortedCounts(typeUsage).slice(0, 6),
             rolePreferences: sortedCounts(roleUsage).slice(0, 6),
             recentMatches: matches.slice(0, 5).map((match) => {

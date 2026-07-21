@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
+import { POKEMON_TYPE_LABELS } from "@/lib/pokemon-types-data";
 import {
   startWeeklyLeagueNowAction,
   joinLeagueAction,
@@ -947,7 +948,7 @@ function OpponentAnalysisModal({ analysis, onClose }: { analysis: OpponentAnalys
               <p className="text-xs text-slate-400"><span className="font-bold text-slate-200">{analysis.wins}V</span> · {analysis.draws}E · {analysis.losses}D</p>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
-              <h3 className="text-xs font-bold text-slate-200">Top 5 mascotes mais utilizados</h3>
+              <h3 className="text-xs font-bold text-slate-200">Top 6 mascotes mais utilizados</h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {analysis.topMascots.map((mascot, index) => <div key={`${mascot.name}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-950/60 px-3 py-2">
                   <span className="w-4 text-xs font-black text-cyan-500">#{index + 1}</span>
@@ -962,7 +963,7 @@ function OpponentAnalysisModal({ analysis, onClose }: { analysis: OpponentAnalys
             {[["Preferência de tipos", analysis.typePreferences, maxType, "bg-cyan-400"], ["Posturas mais usadas", analysis.rolePreferences, maxRole, "bg-violet-400"]].map(([title, entries, max, bar]) => (
               <div key={String(title)} className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
                 <h3 className="text-xs font-bold text-slate-200">{String(title)}</h3>
-                <div className="mt-3 space-y-2">{(entries as Array<{ name: string; count: number }>).map((entry) => <div key={entry.name}><div className="mb-1 flex justify-between text-[10px]"><span className="capitalize text-slate-300">{entry.name}</span><span className="text-slate-500">{entry.count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(8, (entry.count / Number(max)) * 100)}%` }} /></div></div>)}</div>
+                <div className="mt-3 space-y-2">{(entries as Array<{ name: string; count: number }>).map((entry) => <div key={entry.name}><div className="mb-1 flex justify-between text-[10px]"><span className="capitalize text-slate-300">{title === "Preferência de tipos" ? (POKEMON_TYPE_LABELS[entry.name] ?? entry.name) : entry.name}</span><span className="text-slate-500">{entry.count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(8, (entry.count / Number(max)) * 100)}%` }} /></div></div>)}</div>
               </div>
             ))}
           </div>
