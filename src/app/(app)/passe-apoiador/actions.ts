@@ -399,7 +399,16 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
 
       // 6. Shop item (por nome — lookup)
       if (reward.shopItemName) {
-        const shopItem = await tx.shopItem.findFirst({ where: { name: { contains: reward.shopItemName }, active: true } });
+        const shopItem = await tx.shopItem.findFirst({
+          where: {
+            name: { contains: reward.shopItemName, mode: "insensitive" },
+            inventoryEnabled: true,
+          },
+          orderBy: [
+            { active: "desc" },
+            { updatedAt: "desc" },
+          ],
+        });
         if (shopItem) {
           const existing = await tx.playerInventory.findUnique({
             where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } },
