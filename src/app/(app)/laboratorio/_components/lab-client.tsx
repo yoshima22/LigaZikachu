@@ -263,7 +263,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
       {/* ── ANALYZE TAB ── */}
       {tab === "analyze" && (
         <MascotAnalyzer
-          mascots={mascots.filter((mascot) => !mascot.operationsLocked)}
+          mascots={mascots}
           coinBalance={coinBalance}
           analysisCost={analysisCost}
           onBalanceChange={setCoinBalance}

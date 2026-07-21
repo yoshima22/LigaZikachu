@@ -373,15 +373,10 @@ export async function analyzeMascotAction(
     where: { id: mascotId, playerId: me.id },
     select: {
       id: true, pokemonId: true, level: true, personality: true, evolutionLocked: true,
-      operationsLocked: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
     },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
-  if (mascot.operationsLocked) {
-    return { ok: false as const, error: "Este mascote está protegido. Desbloqueie-o na página de Mascotes." };
-  }
-
   const wallet = await getOrCreateWallet(me.id);
   if (wallet.balance < ANALYSIS_COST) {
     return { ok: false as const, error: `Saldo insuficiente. A análise custa ${ANALYSIS_COST} ZC.` };
