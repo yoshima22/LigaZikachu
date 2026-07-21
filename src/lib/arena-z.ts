@@ -51,10 +51,14 @@ const PASSIVE_MIN_INTERVAL_HOURS      = 0.5; // processa a cada 30 min
 export async function applyPassiveIncome(teamId: string): Promise<{ coins: number; exp: number } | null> {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { select: { id: true } } },
+    include: {
+      members: { select: { id: true } },
+      player: { select: { casualMode: true } },
+    },
   });
   if (!team || team.status !== "ACTIVE" || team.members.length === 0) return null;
   if (team.isTraining) return null; // Treino: sem renda passiva
+  if (team.player.casualMode) return null; // Casual: sem ZC ou EXP passivos
 
   const lastAt = team.lastPassiveIncomeAt ?? team.enteredAt;
   const hoursElapsed = (Date.now() - new Date(lastAt).getTime()) / 3_600_000;
@@ -1415,7 +1419,10 @@ export async function deleteAllArenaTeams(): Promise<{ teams: number }> {
 export async function retireArenaTeam(playerId: string, teamId: string) {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: true },
+    include: {
+      members: true,
+      player: { select: { casualMode: true } },
+    },
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (!["ACTIVE", "DEFEATED"].includes(team.status)) throw new Error("Equipe ja retirada.");
@@ -1482,8 +1489,8 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
 
   const vaultFinal = {
-    coins: pveCoinsCapped + pvpPart.coins,
-    exp:   pveExp   + pvpPart.exp,
+    coins: team.player.casualMode ? 0 : pveCoinsCapped + pvpPart.coins,
+    exp:   team.player.casualMode ? 0 : pveExp + pvpPart.exp,
     food:  team.vaultFood,
     sweet: team.vaultSweet,
     effectiveMult: pvpPart.effectiveMult,
@@ -1660,6 +1667,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   // Admin: força debug mode automaticamente (sem cooldown, sem efeito no ranking/loot)
   const ownerUser = await prisma.player.findUnique({ where: { id: playerId }, include: { user: { select: { role: true } } } });
   const isAdminPlayer = ["ADMIN","SUPER_ADMIN"].includes(ownerUser?.user.role ?? "");
+  const isCasualPlayer = ownerUser?.casualMode ?? false;
   if (isAdminPlayer) {
     // Debug mode automático para admin: roda combate sem persistir resultado real
     const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
@@ -1805,8 +1813,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   // Recompensa escalada pela dificuldade
   const baseReward = won ? botReward(band.min, band.max, useDifficulty) : { coins: 0, exp: 0, food: 0, sweet: 0, egg: undefined, buffItem: undefined };
   const reward: ArenaLootFull = won ? {
-    coins: Math.round(baseReward.coins * diff.rewardMult * PVE_REWARD_MULT),
-    exp:   Math.round(baseReward.exp   * diff.rewardMult * PVE_REWARD_MULT),
+    coins: isCasualPlayer ? 0 : Math.round(baseReward.coins * diff.rewardMult * PVE_REWARD_MULT),
+    exp:   isCasualPlayer ? 0 : Math.round(baseReward.exp * diff.rewardMult * PVE_REWARD_MULT),
     food:  baseReward.food,
     sweet: baseReward.sweet,
     egg:   baseReward.egg,
@@ -1820,8 +1828,8 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     : (!won && Math.random() < injuryChance ? [pick(attackers).id] : []);
   const teamDefeated = !won && injuredMascotIds.length >= team.members.length;
   const currentVault: ArenaLoot = {
-    coins: team.vaultCoins,
-    exp: team.vaultExp,
+    coins: isCasualPlayer ? 0 : team.vaultCoins,
+    exp: isCasualPlayer ? 0 : team.vaultExp,
     food: team.vaultFood,
     sweet: team.vaultSweet,
   };
@@ -1937,7 +1945,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     }
   });
 
-  if (teamDefeated && defeatPreserved) await distributeArenaExp(defeatExpMascotIds, defeatPreserved.exp);
+  if (!isCasualPlayer && teamDefeated && defeatPreserved) await distributeArenaExp(defeatExpMascotIds, defeatPreserved.exp);
 
   return {
     won,
@@ -2600,7 +2608,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
       }).catch(() => null);
     }
 
-    if (!isTrainingBattle && loserTeam && preserved) {
+    if (!isTrainingBattle && !isCasualBattle && loserTeam && preserved) {
       if (loserTeamDefeated) {
         await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP");
         await tx.arenaTeam.delete({ where: { id: loserTeam.id } });
@@ -2674,10 +2682,10 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     }
   });
 
-  if (!isTrainingBattle && loserTeamDefeated && preserved) await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
+  if (!isTrainingBattle && !isCasualBattle && loserTeamDefeated && preserved) await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
 
   // EXP de defesa para mascotes defensores sobreviventes (30 EXP base + 20 extra se perfeita) — não no treino
-  if (!isTrainingBattle && survivingDefenderMascotIds.length > 0) {
+  if (!isTrainingBattle && !isCasualBattle && survivingDefenderMascotIds.length > 0) {
     const defenseExp = perfectDefense ? 50 : 30;
     await Promise.all(
       survivingDefenderMascotIds.map(id =>
@@ -2694,8 +2702,8 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     isTrainingBattle,
     winnerName: winnerTeam?.player.displayName ?? null,
     loserName: loserTeam?.player.displayName ?? null,
-    stolen: attackerWon && !isTrainingBattle ? (lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 }) : { coins: 0, exp: 0, food: 0, sweet: 0 },
-    defenseRewardCoins: isTrainingBattle ? 0 : defenseRewardCoins,
+    stolen: attackerWon && !isTrainingBattle && !isCasualBattle ? (lootSplit?.stolen ?? { coins: 0, exp: 0, food: 0, sweet: 0 }) : { coins: 0, exp: 0, food: 0, sweet: 0 },
+    defenseRewardCoins: isTrainingBattle || isCasualBattle ? 0 : defenseRewardCoins,
     defenderEgg: isTrainingBattle ? null : defenderEgg,
     attackerEgg: isTrainingBattle ? null : attackerEgg,
     foundGroundSpoils: attackerWon && !isTrainingBattle ? foundGroundSpoils : null,
