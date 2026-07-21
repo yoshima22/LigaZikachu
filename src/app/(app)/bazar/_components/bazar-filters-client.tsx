@@ -40,7 +40,7 @@ export function BazarFiltersClient() {
 
   const clearSearch = () => handleSearch("");
 
-  const hasFilters = params.get("cat") || params.get("type") || params.get("maxPrice") || params.get("sort");
+  const hasFilters = params.get("cat") || params.get("type") || params.get("rarity") || params.get("maxPrice") || params.get("sort");
 
   return (
     <div className="space-y-3">
@@ -81,14 +81,14 @@ export function BazarFiltersClient() {
           Filtros
           {hasFilters && (
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#FFCB05] text-[9px] font-bold text-[#1A1A2E]">
-              {[params.get("cat"), params.get("type"), params.get("maxPrice"), params.get("sort")].filter(Boolean).length}
+              {[params.get("cat"), params.get("type"), params.get("rarity"), params.get("maxPrice"), params.get("sort")].filter(Boolean).length}
             </span>
           )}
         </button>
       </div>
 
       {open && (
-        <div className="grid gap-3 sm:grid-cols-4 rounded-xl border border-border bg-slate-900/60 p-3">
+        <div className="grid gap-3 sm:grid-cols-5 rounded-xl border border-border bg-slate-900/60 p-3">
           <div className="space-y-1">
             <label className="text-[10px] text-slate-500 uppercase tracking-wide">Categoria</label>
             <select
@@ -132,6 +132,24 @@ export function BazarFiltersClient() {
           </div>
 
           <div className="space-y-1">
+            <label className="text-[10px] text-slate-500 uppercase tracking-wide">Raridade</label>
+            <select
+              value={params.get("rarity") ?? ""}
+              onChange={e => update("rarity", e.target.value)}
+              className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none"
+            >
+              <option value="">Todas</option>
+              <option value="COMMON">Comum</option>
+              <option value="MEGA">Mega</option>
+              <option value="LEGENDARY">LendÃ¡rio</option>
+              <option value="MYTHICAL">MÃ­tico</option>
+              <option value="ULTRA_BEAST">Ultra Besta</option>
+              <option value="PSEUDO_LEGENDARY">Pseudo-LendÃ¡rio</option>
+              <option value="PARADOX">Paradoxal</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
             <label className="text-[10px] text-slate-500 uppercase tracking-wide">Preço máx.</label>
             <input
               type="number"
@@ -145,7 +163,7 @@ export function BazarFiltersClient() {
 
           {/* Limpar todos os filtros */}
           {hasFilters && (
-            <div className="sm:col-span-4 flex justify-end">
+            <div className="sm:col-span-5 flex justify-end">
               <button
                 onClick={() => {
                   const p = new URLSearchParams();

@@ -16,6 +16,7 @@ import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
+import type { MascotRarity } from "@/lib/mascot-data";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function BazarPage({
       maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
       sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
       search: searchParams.q || undefined,
+      rarity: searchParams.rarity as MascotRarity | undefined,
       page: searchParams.page ? parseInt(searchParams.page) : 1,
     }),
     getCachedRecentTransactions(6),

@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { getPokemonName } from "@/lib/mascot-data";
+import { getMascotRarity, getPokemonName, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
 import { MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
@@ -183,11 +183,37 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awa
 
 const LISTINGS_PAGE_SIZE = 12;
 
+const BAZAR_RARITY_CANDIDATE_IDS = [
+  ...Array.from({ length: 1100 }, (_, index) => index + 1),
+  ...Array.from({ length: 401 }, (_, index) => 10000 + index),
+];
+const BAZAR_IDS_BY_RARITY = BAZAR_RARITY_CANDIDATE_IDS.reduce((map, pokemonId) => {
+  map[getMascotRarity(pokemonId)].push(pokemonId);
+  return map;
+}, {
+  MEGA: [], LEGENDARY: [], MYTHICAL: [], ULTRA_BEAST: [],
+  PSEUDO_LEGENDARY: [], PARADOX: [], COMMON: [],
+} as Record<MascotRarity, number[]>);
+const BAZAR_NON_COMMON_IDS = (Object.keys(BAZAR_IDS_BY_RARITY) as MascotRarity[])
+  .filter((rarity) => rarity !== "COMMON")
+  .flatMap((rarity) => BAZAR_IDS_BY_RARITY[rarity]);
+
+function mascotRarityListingFilter(rarity?: MascotRarity) {
+  if (!rarity || !BAZAR_IDS_BY_RARITY[rarity]) return {};
+  const ids = rarity === "COMMON" ? BAZAR_NON_COMMON_IDS : BAZAR_IDS_BY_RARITY[rarity];
+  const conditions = ids.map((pokemonId) => ({ payload: { path: ["pokemonId"], equals: pokemonId } }));
+  return {
+    category: "MASCOT" as BazarItemCategory,
+    ...(rarity === "COMMON" ? { NOT: { OR: conditions } } : { OR: conditions }),
+  };
+}
+
 export async function getListings(filters?: {
   category?: BazarItemCategory;
   type?: BazarListingType;
   maxPrice?: number;
   search?: string;
+  rarity?: MascotRarity;
   sortBy?: "newest" | "cheapest" | "expensive";
   page?: number;
 }) {
@@ -215,6 +241,7 @@ export async function getListings(filters?: {
     ...(filters?.category ? { category: filters.category } : {}),
     ...(filters?.type     ? { listingType: filters.type }  : {}),
     ...(filters?.maxPrice !== undefined ? { priceCoins: { lte: filters.maxPrice } } : {}),
+    ...mascotRarityListingFilter(filters?.rarity),
     ...searchFilter,
   };
 

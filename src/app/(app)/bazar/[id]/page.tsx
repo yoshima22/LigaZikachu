@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search } from "lucide-react";
 import Link from "next/link";
-import { getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { getMascotRarity, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import {
   getListing, buyListing, createProposal, acceptProposal,
@@ -316,6 +316,8 @@ export default function BazarListingPage(): React.JSX.Element {
     : 0;
   const pokemonId = payload.pokemonId as number | undefined;
   const pokemonName = pokemonId ? getPokemonName(pokemonId) : "";
+  const mascotRarity = pokemonId ? getMascotRarity(pokemonId) : null;
+  const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
   const nickname = payload.nickname as string | undefined;
   const personality = payload.personality as string | undefined;
   const level = payload.level as number | undefined;
@@ -354,6 +356,11 @@ export default function BazarListingPage(): React.JSX.Element {
                 onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(pokemonId); }}
               />
               <p className="text-[#FFCB05] font-semibold">Nível {level}</p>
+              {mascotRarity && mascotRarityLabel && (
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
+                  {mascotRarityLabel}
+                </span>
+              )}
             </div>
           ) : (
             <span className="text-7xl">{getShopItemEmoji(itemType ?? "")}</span>
