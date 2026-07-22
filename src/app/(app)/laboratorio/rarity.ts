@@ -1,4 +1,5 @@
 import { LEGENDARY_POOL, getMascotStatusGrowthMultiplier } from "@/lib/mascot-data";
+import { getLabDustBase, type LabDustRarity } from "./dust";
 
 const SPECIAL_IDS = new Set([
   129, 131, 132, 133, 137, 138, 140, 143, 147, 215, 227, 233, 236, 241,
@@ -24,7 +25,7 @@ const RARE_IDS = new Set([
   650, 653, 656, 722, 725, 728, 810, 813, 816, 906, 909, 912,
 ]);
 
-export type MascotRarity = "COMMON" | "RARE" | "SPECIAL";
+export type MascotRarity = LabDustRarity;
 
 export function getMascotRarity(pokemonId: number): MascotRarity {
   if (LEGENDARY_POOL.includes(pokemonId)) return "SPECIAL";
@@ -35,6 +36,5 @@ export function getMascotRarity(pokemonId: number): MascotRarity {
 }
 
 export function getMascotBaseDust(pokemonId: number): number {
-  const r = getMascotRarity(pokemonId);
-  return r === "SPECIAL" ? 3 : r === "RARE" ? 2 : 1;
+  return getLabDustBase(getMascotRarity(pokemonId));
 }

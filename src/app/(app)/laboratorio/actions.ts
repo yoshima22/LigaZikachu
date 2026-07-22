@@ -9,7 +9,8 @@ import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { computeMascotAnalysis } from "@/lib/mascot-analysis";
 import type { MascotAnalysis } from "@/lib/mascot-analysis";
-import { getMascotRarity, getMascotBaseDust } from "./rarity";
+import { getMascotRarity } from "./rarity";
+import { calculateLabDust } from "./dust";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 
 // Custo de cada análise de mascote no Laboratório (cada abertura recompra a análise)
@@ -103,17 +104,11 @@ export async function getLabDataAction() {
     getWeeklyLeagueLockedMascotIds(me.id),
   ]);
 
-  // Build pokémonId → count map for duplicate multiplier
-  const countMap = new Map<number, number>();
-  for (const m of mascots) countMap.set(m.pokemonId, (countMap.get(m.pokemonId) ?? 0) + 1);
-
   const mascotList = mascots.map((m) => {
     const rarity = getMascotRarity(m.pokemonId);
-    const baseDust = getMascotBaseDust(m.pokemonId);
-    const copies = countMap.get(m.pokemonId) ?? 1;
-    const extras = copies - 1;
-    const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
-    const dust = Math.ceil(baseDust * multiplier);
+    // A lista começa pelo valor individual. O cliente projeta o bônus conforme
+    // cópias da mesma espécie entram nos slots de reciclagem.
+    const dust = calculateLabDust(rarity, 1);
     const inWeeklyLeague = weeklyLeagueLockedIds.has(m.id);
     const recyclable = !m.operationsLocked && !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
 
@@ -178,15 +173,7 @@ export async function recycleMascotAction(mascotId: string) {
     return { ok: false as const, error: "Mascote esta escalado na Liga Semanal. Remova ou altere o time antes de reciclar." };
   }
 
-  const allMascots = await prisma.mascot.findMany({
-    where: { playerId: me.id },
-    select: { pokemonId: true },
-  });
-  const copies = allMascots.filter((x) => x.pokemonId === mascot.pokemonId).length;
-  const extras = copies - 1;
-  const baseDust = getMascotBaseDust(mascot.pokemonId);
-  const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
-  const dust = Math.ceil(baseDust * multiplier);
+  const dust = calculateLabDust(getMascotRarity(mascot.pokemonId), 1);
 
   await prisma.$transaction([
     prisma.mascot.delete({ where: { id: mascotId } }),
@@ -242,14 +229,11 @@ export async function recycleMascotsAction(mascotIds: string[]) {
   }
 
   const breakdown = mascots.map((mascot) => {
-    const baseDust = getMascotBaseDust(mascot.pokemonId);
     const copies = selectedCountMap.get(mascot.pokemonId) ?? 1;
-    const extras = copies - 1;
-    const multiplier = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
     return {
       mascotId: mascot.id,
       pokemonId: mascot.pokemonId,
-      dust: Math.ceil(baseDust * multiplier),
+      dust: calculateLabDust(getMascotRarity(mascot.pokemonId), copies),
     };
   });
 

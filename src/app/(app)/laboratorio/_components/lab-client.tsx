@@ -4,6 +4,7 @@ import { useState, useTransition, useMemo } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
 import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
 import type { MascotRarity } from "../rarity";
+import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
 import { PERFORMANCE_META, normalizePerformanceTag } from "@/lib/mascot-performance";
 
@@ -37,8 +38,6 @@ const RARITY_COLOR: Record<MascotRarity, string> = {
   RARE: "text-blue-400 border-blue-600/40",
   SPECIAL: "text-[#FFCB05] border-[#FFCB05]/40",
 };
-const RARITY_BASE: Record<MascotRarity, number> = { COMMON: 1, RARE: 2, SPECIAL: 3 };
-
 const MAX_SLOTS = 6;
 const PAGE_SIZE = 12;
 
@@ -80,12 +79,11 @@ function GuideSection({ icon, title, children }: { icon: string; title: string; 
 // ── Dust preview calculation ──────────────────────────────────────────────────
 function calcSlotDust(slots: LabMascot[]): { total: number; breakdown: { mascot: LabMascot; base: number; mult: number; dust: number }[] } {
   const breakdown = slots.map((m) => {
-    const base = RARITY_BASE[m.rarity];
+    const base = getLabDustBase(m.rarity);
     // Count copies of this pokémon among selected slots
     const copies = slots.filter((s) => s.pokemonId === m.pokemonId).length;
-    const extras = copies - 1;
-    const mult = extras >= 2 ? 3.0 : extras === 1 ? 1.5 : 1.0;
-    return { mascot: m, base, mult, dust: Math.ceil(base * mult) };
+    const mult = getLabDustMultiplier(copies);
+    return { mascot: m, base, mult, dust: calculateLabDust(m.rarity, copies) };
   });
   return { total: breakdown.reduce((s, b) => s + b.dust, 0), breakdown };
 }
@@ -417,6 +415,8 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
                 {paged.map((m) => {
                   const slotsLeft = slots.some((s) => s === null);
+                  const projectedCopies = filledSlots.filter((slot) => slot.pokemonId === m.pokemonId).length + 1;
+                  const projectedDust = calculateLabDust(m.rarity, projectedCopies);
                   return (
                     <button
                       key={m.id}
@@ -441,7 +441,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
                       <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[m.rarity]}`}>
                         {RARITY_LABEL[m.rarity]}
                       </span>
-                      <span className="text-[9px] text-slate-500">🧫 {m.dust} Pó de Criação</span>
+                      <span className="text-[9px] text-slate-500">🧫 {projectedDust} Pó de Criação</span>
                     </button>
                   );
                 })}
