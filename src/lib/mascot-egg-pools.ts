@@ -163,20 +163,6 @@ const HISUI_COMMON_IDS  = [10231, 10234];        // Voltorb-H, Qwilfish-H
 const HISUI_RARE_IDS    = [10229, 10235];        // Growlithe-H, Sneasel-H
 const HISUI_SPECIAL_IDS = [10238];               // Zorua-H
 
-// Nativos Gen 7 (sem as formas Alolan)
-const GEN7_NATIVE_IDS = [
-  722, 725, 728,
-  731, 734, 736, 739, 742, 744, 746, 747, 749, 751, 753, 755, 757,
-  759, 761, 767, 769, 777, 781, 782,
-];
-
-// Nativos Gen 8 (sem as formas Galarianas)
-const GEN8_NATIVE_IDS = [
-  810, 813, 816,
-  819, 821, 824, 827, 829, 831, 833, 835, 837, 840, 843, 845, 846,
-  848, 850, 852, 854, 856, 868, 870, 871, 872, 874, 875, 877, 878, 885,
-];
-
 export const EGG_RATE_PROFILES: Record<string, EggRateProfile> = {
   COMMON: {
     legendaryChance: 0.01,
@@ -190,19 +176,22 @@ export const EGG_RATE_PROFILES: Record<string, EggRateProfile> = {
   RARE: {
     legendaryChance: 0.035,
     buckets: [
-      { label: "starter",               weight: 18, pokemonIds: STARTER_IDS },
-      { label: "rare_favorite",         weight: 44, pokemonIds: RARE_FAN_FAVORITES },
-      { label: "pseudo_legendary_base", weight: 10, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_cameo",         weight: 25, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
+      // A pool completa garante que toda espécie configurada tenha caminho real de drop.
+      { label: "rare_full_pool",         weight: 40, pokemonIds: EGG_POOLS.RARE },
+      { label: "starter",                weight: 15, pokemonIds: STARTER_IDS },
+      { label: "rare_favorite",          weight: 25, pokemonIds: RARE_FAN_FAVORITES },
+      { label: "pseudo_legendary_base",  weight: 8,  pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
+      { label: "special_cameo",          weight: 12, pokemonIds: [...FOSSIL_AND_ANCIENT_IDS, ...SPECIAL_COVETED_IDS] },
     ],
   },
   SPECIAL: {
     legendaryChance: 0.065,
     buckets: [
-      { label: "pseudo_legendary_base", weight: 16, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
-      { label: "special_coveted",       weight: 44, pokemonIds: SPECIAL_COVETED_IDS },
-      { label: "paradox",               weight: 20, pokemonIds: PARADOX_IDS },
-      { label: "fossil_and_ancient",    weight: 14, pokemonIds: FOSSIL_AND_ANCIENT_IDS },
+      { label: "special_full_pool",      weight: 30, pokemonIds: EGG_POOLS.SPECIAL },
+      { label: "pseudo_legendary_base", weight: 15, pokemonIds: PSEUDO_LEGENDARY_BASE_IDS },
+      { label: "special_coveted",        weight: 30, pokemonIds: SPECIAL_COVETED_IDS },
+      { label: "paradox",                weight: 15, pokemonIds: PARADOX_IDS },
+      { label: "fossil_and_ancient",     weight: 10, pokemonIds: FOSSIL_AND_ANCIENT_IDS },
     ],
   },
   EVENT: {
@@ -220,7 +209,7 @@ export const EGG_RATE_PROFILES: Record<string, EggRateProfile> = {
   EGG_GEN7: {
     legendaryChance: 0.01,
     buckets: [
-      { label: "gen7_native",       weight: 80, pokemonIds: GEN7_NATIVE_IDS },
+      { label: "gen7_native",       weight: 80, pokemonIds: EGG_POOLS.EGG_GEN7.filter((id) => id < 10_000) },
       { label: "gen7_alolan_common",weight: 12, pokemonIds: ALOLAN_COMMON_IDS },
       { label: "gen7_alolan_rare",  weight: 5,  pokemonIds: ALOLAN_RARE_IDS },
       { label: "gen7_alolan_ultra", weight: 3,  pokemonIds: ALOLAN_SPECIAL_IDS },
@@ -229,7 +218,7 @@ export const EGG_RATE_PROFILES: Record<string, EggRateProfile> = {
   EGG_GEN8: {
     legendaryChance: 0.01,
     buckets: [
-      { label: "gen8_native",       weight: 80, pokemonIds: GEN8_NATIVE_IDS },
+      { label: "gen8_native",       weight: 80, pokemonIds: EGG_POOLS.EGG_GEN8.filter((id) => id < 10_000) },
       { label: "gen8_galar_common", weight: 12, pokemonIds: GALAR_COMMON_IDS },
       { label: "gen8_galar_rare",   weight: 5,  pokemonIds: GALAR_RARE_IDS },
       { label: "gen8_galar_ultra",  weight: 3,  pokemonIds: GALAR_SPECIAL_IDS },
@@ -272,10 +261,38 @@ function uniquePokemonIds(ids: number[]): number[] {
   return [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
 }
 
-function hatchableLegendaryPool(): number[] {
-  return uniquePokemonIds(
+function generationForPokemonId(pokemonId: number): number | null {
+  if (pokemonId >= 1 && pokemonId <= 151) return 1;
+  if (pokemonId <= 251) return 2;
+  if (pokemonId <= 386) return 3;
+  if (pokemonId <= 493) return 4;
+  if (pokemonId <= 649) return 5;
+  if (pokemonId <= 721) return 6;
+  if (pokemonId <= 809) return 7;
+  if (pokemonId <= 905) return 8;
+  if (pokemonId <= 1025) return 9;
+  // Formas alternativas lendárias usam IDs especiais da PokéAPI.
+  if (pokemonId === 10006 || pokemonId === 10007) return 4;
+  if ([10166, 10167, 10168].includes(pokemonId)) return 8;
+  return null;
+}
+
+function requestedGenerations(eggType: string): Set<number> | null {
+  if (eggType === "EGG_GEN6PLUS") return new Set([6, 7, 8, 9]);
+  const match = /^EGG_GEN([1-9])$/.exec(eggType);
+  return match ? new Set([Number(match[1])]) : null;
+}
+
+function hatchableLegendaryPool(eggType: string): number[] {
+  const allowedGenerations = requestedGenerations(eggType);
+  const pool = uniquePokemonIds(
     LEGENDARY_POOL.map((id) => LEGENDARY_HATCH_BASE_OVERRIDES[id] ?? id)
   ).filter((id) => !ALL_EVOLVED_IDS.has(id));
+  if (!allowedGenerations) return pool;
+  return pool.filter((id) => {
+    const generation = generationForPokemonId(id);
+    return generation !== null && allowedGenerations.has(generation);
+  });
 }
 
 function sanitizeNormalEggPool(ids: number[]): number[] {
@@ -341,7 +358,8 @@ function fallbackPoolForEgg(eggType: string): number[] {
  */
 export function rollPokemonIdFromEgg(eggType: string): number {
   if (Math.random() < legendaryChanceForEgg(eggType)) {
-    return randomFrom(hatchableLegendaryPool());
+    const legendaryPool = hatchableLegendaryPool(eggType);
+    if (legendaryPool.length > 0) return randomFrom(legendaryPool);
   }
 
   const profile = EGG_RATE_PROFILES[eggType];
