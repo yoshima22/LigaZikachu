@@ -18,7 +18,7 @@ import {
   getMegaStoneExpeditionChance, rollExpeditionAgilityReduction,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
-import type { EggType, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
+import type { EggType, Mascot, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
@@ -416,9 +416,9 @@ export function computeProceduralStats(
 export async function addExp(
   mascotId: string,
   amount: number,
-  options: { ignoreBenchPenalty?: boolean; ignoreExpBoost?: boolean } = {}
+  options: { ignoreBenchPenalty?: boolean; ignoreExpBoost?: boolean; mascotSnapshot?: Mascot } = {}
 ): Promise<LevelUpResult> {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  const mascot = options.mascotSnapshot ?? await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
   if (mascot.expLocked) return { leveled: false, newLevel: mascot.level, evolved: false };
   // EXP agora é dado a qualquer mascote (equipado ou no banco)
@@ -688,6 +688,8 @@ export interface InteractionResult {
   expGained: number;
   newMood?: MascotMood;
   refused?: boolean;
+  inventoryRemaining?: number;
+  evolved?: boolean;
 }
 
 export async function interactWithMascot(
@@ -782,6 +784,7 @@ export async function interactWithMascot(
   let refused = false;
   let newMood: MascotMood | undefined;
   let message = "";
+  let inventoryRemaining: number | undefined;
 
   switch (type) {
     case "PLAY": {
@@ -820,11 +823,15 @@ export async function interactWithMascot(
     }
 
     case "FEED_FOOD": {
-      const food = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "FOOD" } } });
-      if (!food || food.quantity <= 0) {
+      const consumed = await prisma.mascotFoodItem.updateMany({
+        where: { playerId, type: "FOOD", quantity: { gt: 0 } },
+        data: { quantity: { decrement: 1 } },
+      });
+      if (consumed.count === 0) {
         return { success: false, message: "Você não tem comida no inventário.", happinessChange: 0, expGained: 0 };
       }
-      await prisma.mascotFoodItem.update({ where: { playerId_type: { playerId, type: "FOOD" } }, data: { quantity: { decrement: 1 } } });
+      const food = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "FOOD" } }, select: { quantity: true } });
+      inventoryRemaining = food?.quantity ?? 0;
       happinessChange = 25;
       expGained = calcFinalExp(EXP_REWARDS.FEED_FOOD);
       newMood = "HAPPY";
@@ -833,11 +840,15 @@ export async function interactWithMascot(
     }
 
     case "FEED_SWEET": {
-      const sweet = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "SWEET" } } });
-      if (!sweet || sweet.quantity <= 0) {
+      const consumed = await prisma.mascotFoodItem.updateMany({
+        where: { playerId, type: "SWEET", quantity: { gt: 0 } },
+        data: { quantity: { decrement: 1 } },
+      });
+      if (consumed.count === 0) {
         return { success: false, message: "Você não tem doces no inventário.", happinessChange: 0, expGained: 0 };
       }
-      await prisma.mascotFoodItem.update({ where: { playerId_type: { playerId, type: "SWEET" } }, data: { quantity: { decrement: 1 } } });
+      const sweet = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "SWEET" } }, select: { quantity: true } });
+      inventoryRemaining = sweet?.quantity ?? 0;
       happinessChange = 35;
       expGained = calcFinalExp(EXP_REWARDS.FEED_SWEET);
       newMood = "EXCITED";
@@ -866,11 +877,11 @@ export async function interactWithMascot(
   });
 
   // Aplica EXP — passa ignoreBenchPenalty:true porque já calculamos o bench mult acima
-  if (expGained > 0) {
-    await addExp(mascotId, expGained, { ignoreBenchPenalty: true, ignoreExpBoost: true });
-  }
+  const levelResult = expGained > 0
+    ? await addExp(mascotId, expGained, { ignoreBenchPenalty: true, ignoreExpBoost: true, mascotSnapshot: mascot })
+    : null;
 
-  return { success: true, message, happinessChange, expGained, newMood: finalMood };
+  return { success: true, message, happinessChange, expGained, newMood: finalMood, inventoryRemaining, evolved: levelResult?.evolved };
 }
 
 // ── Mood decay (recalcula humor baseado em última interação) ──────────────────

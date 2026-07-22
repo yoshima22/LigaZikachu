@@ -278,10 +278,12 @@ export async function interactAction(
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);
     if (result.success && (type === "FEED_FOOD" || type === "FEED_SWEET")) {
-      await clearRunawayWarningIfRecovered(player.id, mascotId).catch(() => false);
+      await clearRunawayWarningIfRecovered(player.id, mascotId, prisma, true).catch(() => false);
     }
 
-    revalidate(player.id);
+    // Expira apenas os dados de mascotes para a próxima leitura, sem reconstruir
+    // toda a página nesta resposta. O card atual já foi atualizado no cliente.
+    revalidateTag(`player-mascots-${player.id}`);
     return { result };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };

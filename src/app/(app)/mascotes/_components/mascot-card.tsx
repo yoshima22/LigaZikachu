@@ -459,6 +459,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
   const [imgFailed, setImgFailed] = useState(false);
+  const [hasFood, setHasFood] = useState(mascot.hasFood);
+  const [hasSweet, setHasSweet] = useState(mascot.hasSweet);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
   const [expeditionRewardPendingRefresh, setExpeditionRewardPendingRefresh] = useState(false);
   const closeExpeditionReward = () => {
@@ -488,6 +490,17 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   useEffect(() => { setLocalExp(mascot.exp); },             [mascot.exp]);
   useEffect(() => { setLocalLevel(mascot.level); },         [mascot.level]);
   useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
+  useEffect(() => { setHasFood(mascot.hasFood); },           [mascot.hasFood]);
+  useEffect(() => { setHasSweet(mascot.hasSweet); },         [mascot.hasSweet]);
+  useEffect(() => {
+    const syncInventory = (event: Event) => {
+      const detail = (event as CustomEvent<{ type: "FEED_FOOD" | "FEED_SWEET"; remaining: number }>).detail;
+      if (detail.type === "FEED_FOOD") setHasFood(detail.remaining > 0);
+      if (detail.type === "FEED_SWEET") setHasSweet(detail.remaining > 0);
+    };
+    window.addEventListener("mascot-food-inventory", syncInventory);
+    return () => window.removeEventListener("mascot-food-inventory", syncInventory);
+  }, []);
   // (seed do Map movido para depois do useState de nowMs — veja abaixo)
 
   const events = Array.isArray(mascot.events) ? mascot.events : [];
@@ -562,8 +575,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const inExpedition = !!expedition && !claimable;
   const canPlay      = !arenaLocked && !inExpedition && !playOnCooldown && localMood !== "TIRED" && localMood !== "ANGRY";
   const canPet       = !arenaLocked && !inExpedition && !petOnCooldown && localMood !== "ANGRY" && !(mascot.personality === "TIMID" && localHappiness < 40);
-  const canFeedFood  = !arenaLocked && mascot.hasFood  && hungerStatus !== "STUFFED"; // comida permitida em expedição
-  const canFeedSweet = !arenaLocked && !inExpedition && mascot.hasSweet && hungerStatus !== "STUFFED";
+  const canFeedFood  = !arenaLocked && hasFood  && hungerStatus !== "STUFFED"; // comida permitida em expedição
+  const canFeedSweet = !arenaLocked && !inExpedition && hasSweet && hungerStatus !== "STUFFED";
 
   const act = (fn: () => Promise<{ error?: string; result?: unknown }>, successMsg?: string) => {
     startTransition(async () => {
@@ -627,12 +640,20 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           });
         }
         if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
+        if ((type === "FEED_FOOD" || type === "FEED_SWEET") && typeof r.result.inventoryRemaining === "number") {
+          window.dispatchEvent(new CustomEvent("mascot-food-inventory", {
+            detail: { type, remaining: r.result.inventoryRemaining },
+          }));
+        }
         // Grava no Map de módulo — persiste mesmo que o componente remonte
         if (type === "PLAY") { markPlayed(mascot.id); setNowMs(Date.now()); }
         if (type === "PET")  { markPetted(mascot.id); setNowMs(Date.now()); }
-        // Re-render server para atualizar inventário e EXP
-        router.refresh();
-        onRefresh?.();
+        // Evolução troca espécie/sprite e exige os dados completos do servidor.
+        // Nas demais interações o estado otimista já contém tudo que mudou.
+        if (r.result.evolved) {
+          router.refresh();
+          onRefresh?.();
+        }
       }
     });
   };
@@ -1138,7 +1159,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <Utensils size={12}/> Comida
             </button>
           </Tip>
-          <Tip text={!canFeedSweet ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : !mascot.hasSweet ? "Sem doces no estoque" : "Em expedição") : "Doce: bônus de EXP e anima o mascote"}>
+          <Tip text={!canFeedSweet ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : !hasSweet ? "Sem doces no estoque" : "Em expedição") : "Doce: bônus de EXP e anima o mascote"}>
             <button type="button" disabled={pending || !canFeedSweet} onClick={() => handleInteract("FEED_SWEET")}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               <Candy size={12}/> Doce
