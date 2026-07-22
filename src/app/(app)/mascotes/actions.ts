@@ -330,28 +330,35 @@ export async function interactAllAction(
       message: string;
     }[] = [];
 
-    for (const mascot of mascots) {
-      try {
-        if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
-          await recalculateMood(mascot.id);
+    // Pequenos lotes reduzem muito o tempo da ação sem abrir conexões demais no banco.
+    // Mantemos a ordem da lista e fazemos uma única invalidação de cache ao final.
+    // Alimentação continua serial para não haver disputa pelo mesmo saldo de itens.
+    const concurrency = type === "FEED_FOOD" || type === "FEED_SWEET" ? 1 : 4;
+    for (let index = 0; index < mascots.length; index += concurrency) {
+      const batch = mascots.slice(index, index + concurrency);
+      const batchResults = await Promise.all(batch.map(async (mascot) => {
+        try {
+          if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
+            await recalculateMood(mascot.id);
+          }
+
+          const result = await interactWithMascot(player.id, mascot.id, type);
+          return {
+            mascotId: mascot.id,
+            name: mascot.nickname ?? `#${mascot.pokemonId}`,
+            success: result.success,
+            message: result.message,
+          };
+        } catch (err) {
+          return {
+            mascotId: mascot.id,
+            name: mascot.nickname ?? `#${mascot.pokemonId}`,
+            success: false,
+            message: err instanceof Error ? err.message : "Erro.",
+          };
         }
-
-        const result = await interactWithMascot(player.id, mascot.id, type);
-
-        results.push({
-          mascotId: mascot.id,
-          name: mascot.nickname ?? `#${mascot.pokemonId}`,
-          success: result.success,
-          message: result.message,
-        });
-      } catch (err) {
-        results.push({
-          mascotId: mascot.id,
-          name: mascot.nickname ?? `#${mascot.pokemonId}`,
-          success: false,
-          message: err instanceof Error ? err.message : "Erro.",
-        });
-      }
+      }));
+      results.push(...batchResults);
     }
 
     revalidate(player.id);

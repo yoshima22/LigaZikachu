@@ -243,6 +243,7 @@ model Player {
   betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
   weeklyLeagueBetsPlaced  WeeklyMascotLeagueBet[] @relation("WeeklyLeagueBetByPlayer")
   weeklyLeagueBetsOn      WeeklyMascotLeagueBet[] @relation("WeeklyLeagueBetOnPlayer")
+  weeklyScoutingAggregate WeeklyMascotScoutingAggregate?
   stickers                PlayerSticker[]
   achievementEvents       AchievementEvent[]
   zikalootWins            ZikaLoot[]            @relation("ZikaLootWinner")
@@ -2740,6 +2741,26 @@ model WeeklyMascotLeagueBattleItem {
   @@index([leagueId, battleDate])
   @@index([playerId])
   @@map("weekly_mascot_league_battle_items")
+}
+
+model WeeklyMascotScoutingAggregate {
+  playerId            String   @id
+  matches             Int      @default(0)
+  wins                Int      @default(0)
+  losses              Int      @default(0)
+  draws               Int      @default(0)
+  damageDealt         BigInt   @default(0)
+  mascotUsage         Json     @default("{}")
+  typeUsage           Json     @default("{}")
+  roleUsage           Json     @default("{}")
+  recentMatches       Json     @default("[]")
+  lastProcessedAt     DateTime?
+  lastProcessedMatchId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  player              Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@map("weekly_mascot_scouting_aggregates")
 }
 
 model WeeklyMascotLeagueMascotStats {

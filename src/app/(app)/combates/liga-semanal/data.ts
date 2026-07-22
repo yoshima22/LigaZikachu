@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { WEEKLY_MODIFIERS } from "./constants";
 import { getActiveWeeklyLeagueSabotage, getOrderStepUnlockState } from "@/lib/raid-event";
-import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 
 function formatPlayerLabel(p: { displayName: string; ptcglNick?: string | null; user?: { email?: string | null } | null }): string {
   const base = p.displayName;
@@ -325,99 +324,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       }));
     } catch { /* ok */ }
 
-    // Scouting histórico: inclui o próprio jogador e somente os adversários dele no dia exibido.
-    try {
-      const opponentIds = [...new Set((todayMatches as any[]).flatMap((match) => {
-        if (match.playerAId === playerId && match.playerBId) return [match.playerBId];
-        if (match.playerBId === playerId) return [match.playerAId];
-        return [];
-      }))];
-
-      const analysisPlayerIds = [...new Set([playerId, ...opponentIds])];
-      if (analysisPlayerIds.length > 0) {
-        const [analyzedPlayers, history] = await Promise.all([
-          prisma.player.findMany({ where: { id: { in: analysisPlayerIds } }, select: { id: true, displayName: true } }),
-          prisma.weeklyMascotLeagueMatch.findMany({
-            where: {
-              status: "RESOLVED",
-              OR: [{ playerAId: { in: analysisPlayerIds } }, { playerBId: { in: analysisPlayerIds } }],
-            },
-            select: {
-              id: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true,
-              playerADamageDealt: true, playerBDamageDealt: true, resolvedAt: true,
-              replayJson: true, league: { select: { weekKey: true } },
-            },
-            orderBy: { resolvedAt: "desc" },
-          }),
-        ]);
-        const allPlayerIds = [...new Set(history.flatMap((match) => [match.playerAId, match.playerBId].filter(Boolean) as string[]))];
-        const historyPlayers = await prisma.player.findMany({ where: { id: { in: allPlayerIds } }, select: { id: true, displayName: true } });
-        const playerNames = new Map(historyPlayers.map((entry) => [entry.id, entry.displayName]));
-
-        for (const opponent of analyzedPlayers) {
-          const matches = history.filter((match) => match.playerAId === opponent.id || match.playerBId === opponent.id);
-          let wins = 0, losses = 0, draws = 0, damageDealt = 0;
-          const mascotUsage = new Map<string, { pokemonId: number; name: string; uses: number }>();
-          const roleUsage = new Map<string, number>();
-          const typeUsage = new Map<string, number>();
-
-          for (const match of matches) {
-            if (match.isDraw) draws++;
-            else if (match.winnerId === opponent.id) wins++;
-            else losses++;
-            damageDealt += match.playerAId === opponent.id ? match.playerADamageDealt : match.playerBDamageDealt;
-
-            const seenMascots = new Set<string>();
-            const seenRoles = new Set<string>();
-            for (const turn of Array.isArray(match.replayJson) ? match.replayJson as any[] : []) {
-              for (const side of ["actor", "target"] as const) {
-                if (turn[`${side}OwnerId`] !== opponent.id || !turn[`${side}Id`]) continue;
-                const mascotId = String(turn[`${side}Id`]);
-                if (!seenMascots.has(mascotId)) {
-                  seenMascots.add(mascotId);
-                  const pokemonId = Number(turn[`${side}PokemonId`] ?? 0);
-                  const current = mascotUsage.get(mascotId) ?? { pokemonId, name: String(turn[`${side}Name`] ?? getPokemonName(pokemonId)), uses: 0 };
-                  current.uses++;
-                  mascotUsage.set(mascotId, current);
-                  for (const type of getPokemonTypes(pokemonId)) typeUsage.set(type, (typeUsage.get(type) ?? 0) + 1);
-                }
-                const role = String(turn[`${side}Role`] ?? "Atacante");
-                const roleKey = `${mascotId}:${role}`;
-                if (!seenRoles.has(roleKey)) {
-                  seenRoles.add(roleKey);
-                  roleUsage.set(role, (roleUsage.get(role) ?? 0) + 1);
-                }
-              }
-            }
-          }
-
-          const sortedCounts = (map: Map<string, number>) => [...map].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
-          opponentAnalyses[opponent.id] = {
-            playerId: opponent.id,
-            playerName: opponent.displayName,
-            matches: matches.length,
-            wins, losses, draws,
-            score: wins * 3 + draws,
-            winRate: matches.length ? Math.round((wins / matches.length) * 100) : 0,
-            averageDamage: matches.length ? Math.round(damageDealt / matches.length) : 0,
-            topMascots: [...mascotUsage.values()].sort((a, b) => b.uses - a.uses).slice(0, 6),
-            typePreferences: sortedCounts(typeUsage).slice(0, 6),
-            rolePreferences: sortedCounts(roleUsage).slice(0, 6),
-            recentMatches: matches.slice(0, 5).map((match) => {
-              const otherId = match.playerAId === opponent.id ? match.playerBId : match.playerAId;
-              return {
-                id: match.id,
-                weekKey: match.league.weekKey,
-                opponentName: otherId ? (playerNames.get(otherId) ?? "Jogador") : "BYE",
-                result: match.isDraw ? "D" : match.winnerId === opponent.id ? "W" : "L",
-                damage: match.playerAId === opponent.id ? match.playerADamageDealt : match.playerBDamageDealt,
-                resolvedAt: match.resolvedAt,
-              };
-            }),
-          };
-        }
-      }
-    } catch { /* scouting é complementar e não pode impedir a página */ }
+    // Scouting carregado sob demanda; nenhum replay histórico entra no carregamento inicial.
   }
 
   let walletBalance = 0;

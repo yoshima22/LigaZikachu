@@ -27,6 +27,7 @@ import {
   resetAndResimulateAction,
   fullLeagueResetAction,
   regenerateReplaysAction,
+  getWeeklyScoutingAnalysisAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
@@ -236,8 +237,19 @@ function OrderSabotageBanner({
 
 function LeagueTab({ data }: { data: PageData }) {
   const league = data.currentLeague;
-  const [showOwnAnalysis, setShowOwnAnalysis] = useState(false);
-  const ownAnalysis = data.opponentAnalyses[data.player.id];
+  const [ownAnalysis, setOwnAnalysis] = useState<OpponentAnalysis | null>(null);
+  const [analysisPending, startAnalysis] = useTransition();
+
+  const loadOwnAnalysis = () => {
+    startAnalysis(async () => {
+      const response = await getWeeklyScoutingAnalysisAction(data.player.id);
+      if ("error" in response) {
+        toast.error(response.error);
+        return;
+      }
+      setOwnAnalysis(response.analysis as OpponentAnalysis);
+    });
+  };
 
   if (!league && !data.lastChampion) {
     return (
@@ -251,14 +263,12 @@ function LeagueTab({ data }: { data: PageData }) {
 
   return (
     <div className="space-y-4">
-      {showOwnAnalysis && ownAnalysis && <OpponentAnalysisModal analysis={ownAnalysis} myMascots={data.availableMascots} showRecommendations={false} onClose={() => setShowOwnAnalysis(false)} />}
-      {ownAnalysis && (
-        <div className="flex justify-end">
-          <button onClick={() => setShowOwnAnalysis(true)} className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition-colors hover:bg-cyan-400/15">
-            Ver análise própria
-          </button>
-        </div>
-      )}
+      {ownAnalysis && <OpponentAnalysisModal analysis={ownAnalysis} myMascots={data.availableMascots} showRecommendations={false} onClose={() => setOwnAnalysis(null)} />}
+      <div className="flex justify-end">
+        <button onClick={loadOwnAnalysis} disabled={analysisPending} className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition-colors hover:bg-cyan-400/15 disabled:cursor-wait disabled:opacity-50">
+          {analysisPending ? "Calculando..." : "Ver análise própria"}
+        </button>
+      </div>
       {/* Champion banner */}
       {data.lastChampion && (
         <div className="relative overflow-hidden rounded-2xl border border-[#FFCB05]/40 bg-gradient-to-r from-[#1a1400] via-[#2a1d00] to-[#1a1400] p-5">
@@ -1075,6 +1085,18 @@ function OpponentAnalysisModal({ analysis, myMascots, showRecommendations = true
 function ResultsTab({ data }: { data: PageData }) {
   const [replayMatch, setReplayMatch] = useState<any>(null);
   const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
+  const [analysisTargetId, setAnalysisTargetId] = useState<string | null>(null);
+  const [analysisPending, startAnalysis] = useTransition();
+
+  const loadOpponentAnalysis = (playerId: string) => {
+    setAnalysisTargetId(playerId);
+    startAnalysis(async () => {
+      const response = await getWeeklyScoutingAnalysisAction(playerId);
+      if ("error" in response) toast.error(response.error);
+      else setOpponentAnalysis(response.analysis as OpponentAnalysis);
+      setAnalysisTargetId(null);
+    });
+  };
 
   if (data.todayMatches.length === 0) {
     return <div className="py-10 text-center text-sm text-slate-500">Matchups ainda não gerados. Admin pode gerar na aba Admin.</div>;
@@ -1125,7 +1147,6 @@ function ResultsTab({ data }: { data: PageData }) {
             const winnerIsB = match.winnerId === match.playerBId;
             const involvesMe = match.playerAId === data.player.id || match.playerBId === data.player.id;
             const opponentId = match.playerAId === data.player.id ? match.playerBId : match.playerBId === data.player.id ? match.playerAId : null;
-            const availableAnalysis = opponentId ? data.opponentAnalyses[opponentId] : null;
 
             if (isBye) {
               return (
@@ -1166,9 +1187,9 @@ function ResultsTab({ data }: { data: PageData }) {
                 </div>
 
                 {isResolved && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
-                {availableAnalysis && (
-                  <button onClick={() => setOpponentAnalysis(availableAnalysis)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 transition-colors">
-                    Analisar adversário
+                {opponentId && involvesMe && (
+                  <button disabled={analysisPending && analysisTargetId === opponentId} onClick={() => loadOpponentAnalysis(opponentId)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-50 transition-colors">
+                    {analysisPending && analysisTargetId === opponentId ? "Calculando..." : "Analisar adversário"}
                   </button>
                 )}
                 {isResolved && match.replayJson && (
