@@ -388,27 +388,32 @@ function pickByePlayer(players: PairingPlayer[], byeCount: Map<string, number>, 
   })[0] ?? null;
 }
 
-export async function getWeeklyScoutingAnalysisAction(targetPlayerId: string) {
-  const session = await getAppSession();
-  if (!session?.user) return { error: "Não autenticado" };
-  const player = await getSessionPlayer(session.user.id);
-  if (!player) return { error: "Jogador não encontrado" };
-  if (targetPlayerId !== player.id) {
-    const allowed = await prisma.weeklyMascotLeagueMatch.findFirst({
-      where: {
-        battleDate: getTodayBrt(),
-        OR: [
-          { playerAId: player.id, playerBId: targetPlayerId },
-          { playerAId: targetPlayerId, playerBId: player.id },
-        ],
-      },
-      select: { id: true },
-    });
-    if (!allowed) return { error: "A análise está disponível apenas para seus adversários do dia." };
+export async function getWeeklyScoutingAnalysisAction(targetPlayerId: string, matchId?: string) {
+  try {
+    const session = await getAppSession();
+    if (!session?.user) return { error: "Não autenticado" };
+    const player = await getSessionPlayer(session.user.id);
+    if (!player) return { error: "Jogador não encontrado" };
+    if (targetPlayerId !== player.id) {
+      const allowed = await prisma.weeklyMascotLeagueMatch.findFirst({
+        where: {
+          ...(matchId ? { id: matchId } : { battleDate: getTodayBrt() }),
+          OR: [
+            { playerAId: player.id, playerBId: targetPlayerId },
+            { playerAId: targetPlayerId, playerBId: player.id },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!allowed) return { error: "Este confronto não permite analisar esse adversário." };
+    }
+    const { getWeeklyScoutingAnalysis } = await import("@/lib/weekly-scouting");
+    const analysis = await getWeeklyScoutingAnalysis(targetPlayerId);
+    return { analysis: JSON.parse(JSON.stringify(analysis)) };
+  } catch (error) {
+    console.error("[weekly-scouting] Falha ao carregar análise", error);
+    return { error: "Não foi possível carregar a análise. Tente novamente." };
   }
-  const { getWeeklyScoutingAnalysis } = await import("@/lib/weekly-scouting");
-  const analysis = await getWeeklyScoutingAnalysis(targetPlayerId);
-  return { analysis: JSON.parse(JSON.stringify(analysis)) };
 }
 
 function swissPairSlot(

@@ -1086,15 +1086,29 @@ function ResultsTab({ data }: { data: PageData }) {
   const [replayMatch, setReplayMatch] = useState<any>(null);
   const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
   const [analysisTargetId, setAnalysisTargetId] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<{ matchId: string; message: string } | null>(null);
   const [analysisPending, startAnalysis] = useTransition();
 
-  const loadOpponentAnalysis = (playerId: string) => {
+  const loadOpponentAnalysis = (playerId: string, matchId: string) => {
     setAnalysisTargetId(playerId);
+    setAnalysisError(null);
     startAnalysis(async () => {
-      const response = await getWeeklyScoutingAnalysisAction(playerId);
-      if ("error" in response) toast.error(response.error);
-      else setOpponentAnalysis(response.analysis as OpponentAnalysis);
-      setAnalysisTargetId(null);
+      try {
+        const response = await getWeeklyScoutingAnalysisAction(playerId, matchId);
+        if ("error" in response) {
+          const message = response.error ?? "Não foi possível carregar a análise.";
+          toast.error(message);
+          setAnalysisError({ matchId, message });
+        } else {
+          setOpponentAnalysis(response.analysis as OpponentAnalysis);
+        }
+      } catch {
+        const message = "Não foi possível carregar a análise. Tente novamente.";
+        toast.error(message);
+        setAnalysisError({ matchId, message });
+      } finally {
+        setAnalysisTargetId(null);
+      }
     });
   };
 
@@ -1188,9 +1202,12 @@ function ResultsTab({ data }: { data: PageData }) {
 
                 {isResolved && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
                 {opponentId && involvesMe && (
-                  <button disabled={analysisPending && analysisTargetId === opponentId} onClick={() => loadOpponentAnalysis(opponentId)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-50 transition-colors">
-                    {analysisPending && analysisTargetId === opponentId ? "Calculando..." : "Analisar adversário"}
-                  </button>
+                  <>
+                    <button disabled={analysisPending && analysisTargetId === opponentId} onClick={() => loadOpponentAnalysis(opponentId, match.id)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-50 transition-colors">
+                      {analysisPending && analysisTargetId === opponentId ? "Calculando análise..." : "Analisar adversário"}
+                    </button>
+                    {analysisError?.matchId === match.id && <p className="text-center text-[9px] text-red-300">{analysisError?.message}</p>}
+                  </>
                 )}
                 {isResolved && match.replayJson && (
                   <button
