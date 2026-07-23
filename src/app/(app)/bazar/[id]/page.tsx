@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search } from "lucide-react";
+import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { getMascotRarity, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
@@ -54,7 +54,12 @@ interface ListingDetail {
   description: string | null;
   wantedDesc: string | null;
   expiresAt: Date;
-  player: { id: string; displayName: string; avatarUrl: string | null };
+  player: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+    pokemonWishlist: Array<{ pokemonId: number }>;
+  };
   proposals: ProposalItem[];
   auctionBids?: AuctionBidItem[];
   _count: { favorites: number };
@@ -120,6 +125,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const [editWanted, setEditWanted] = useState("");
   const [bidAmount, setBidAmount] = useState("");
   const [auctionTimeLeft, setAuctionTimeLeft] = useState("");
+  const [sellerWishlistOpen, setSellerWishlistOpen] = useState(false);
   // Evita chamar finalizeAuction repetidamente a cada tick do countdown
   const finalizeRequestedRef = useRef(false);
 
@@ -420,9 +426,69 @@ export default function BazarListingPage(): React.JSX.Element {
 
           {/* Seller + meta */}
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>Vendedor: <strong className="text-slate-300">{listing.player.displayName}</strong></span>
+            <span className="flex items-center gap-1">
+              Vendedor:
+              {isTrade ? (
+                <button
+                  type="button"
+                  onClick={() => setSellerWishlistOpen((open) => !open)}
+                  aria-expanded={sellerWishlistOpen}
+                  className="inline-flex items-center gap-1 font-semibold text-slate-300 underline decoration-dotted underline-offset-4 transition-colors hover:text-[#FFCB05]"
+                >
+                  {listing.player.displayName}
+                  <ChevronDown
+                    size={12}
+                    className={`transition-transform ${sellerWishlistOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+              ) : (
+                <strong className="text-slate-300">{listing.player.displayName}</strong>
+              )}
+            </span>
             <span>{listing._count.favorites} ♥ · {listing.proposals.length} propostas</span>
           </div>
+
+          {isTrade && sellerWishlistOpen && (
+            <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
+              <div className="mb-3 flex items-center gap-2">
+                <Heart size={13} className="fill-[#FFCB05] text-[#FFCB05]" />
+                <div>
+                  <p className="text-xs font-semibold text-slate-100">
+                    Wishlist de {listing.player.displayName}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Mascotes que o vendedor procura receber.</p>
+                </div>
+              </div>
+              {listing.player.pokemonWishlist.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {listing.player.pokemonWishlist.map(({ pokemonId }) => (
+                    <div
+                      key={pokemonId}
+                      className="flex items-center gap-2 rounded-lg border border-border bg-slate-950/60 px-2 py-1.5"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getStaticSpriteUrl(pokemonId)}
+                        alt=""
+                        className="h-8 w-8 shrink-0 object-contain"
+                        style={{ imageRendering: "pixelated" }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[11px] font-semibold text-slate-200">
+                          {getPokemonName(pokemonId)}
+                        </span>
+                        <span className="text-[9px] text-slate-500">#{pokemonId}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-slate-500">
+                  Este jogador ainda não publicou uma wishlist.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Price (anúncios normais) */}
           {!isAuction && listing.priceCoins !== null && listing.priceCoins !== undefined && (

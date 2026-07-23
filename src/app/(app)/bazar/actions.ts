@@ -314,7 +314,17 @@ export async function getListing(id: string) {
   const listing = await prisma.bazarListing.findUnique({
     where: { id },
     include: {
-      player: { select: { id: true, displayName: true, avatarUrl: true } },
+      player: {
+        select: {
+          id: true,
+          displayName: true,
+          avatarUrl: true,
+          pokemonWishlist: {
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            select: { pokemonId: true },
+          },
+        },
+      },
       proposals: {
         include: {
           proposer: { select: { id: true, displayName: true, avatarUrl: true } },
