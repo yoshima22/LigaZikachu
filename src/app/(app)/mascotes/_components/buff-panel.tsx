@@ -214,7 +214,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-white truncate">{buff.name}</p>
                 {buff.description && (
-                  <p className="text-[10px] text-slate-500 line-clamp-2">{buff.description}</p>
+                  <p className="text-[10px] leading-relaxed text-slate-500">{buff.description}</p>
                 )}
                 <p className="text-[10px] text-[#FFCB05] mt-0.5">×{buff.quantity} disponível</p>
 

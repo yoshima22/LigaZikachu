@@ -357,7 +357,7 @@ export default async function ManualPage() {
             rows={[
               ["Vitamina Elétrica", "Se uma expedição renderia 240 EXP, com +25% ela rende 300 EXP."],
               ["Ovo da Sorte", "Se uma expedição de treino renderia 1.000 EXP, com +20% ela rende 1.200 EXP."],
-              ["Cesta de Piquenique", "Treino recebe +25% EXP; Padrão +12% EXP e +1,5 p.p. em ovo/item especial; Itens +3 p.p. em ovo/item especial."],
+              ["Cesta de Piquenique", "Treino recebe +25% EXP; Padrão +12% EXP e +1,5 ponto percentual em ovo/item especial; Itens +3 pontos percentuais em ovo/item especial."],
               ["Proteína Zika", "+2 em Força, Agilidade, Carisma, Instinto e Vitalidade. Uma dose = +10 pontos totais; 3 doses = +30."],
               ["Amuleto da Sorte", "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2."],
               ["Mega Stone", "Só cai em expedição de Itens de 6h, com 0,5% antes da rolagem normal de recompensa."],

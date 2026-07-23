@@ -134,7 +134,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.PICNIC_BASKET,
     name: "Cesta de Piquenique Chocante",
-    description: "Reduz em 30% a próxima expedição iniciada. Por 3 horas: Treinamento recebe +25% EXP; Itens ganha +3 p.p. de chance de ovo e item especial; Padrão recebe +12% EXP e +1,5 p.p. de chance de ovo e item especial.",
+    description: "Reduz em 30% a próxima expedição iniciada. Por 3 horas: Treinamento recebe +25% EXP; Itens ganha +3 pontos percentuais de chance de ovo e item especial; Padrão recebe +12% EXP e +1,5 ponto percentual de chance de ovo e item especial.",
     imageUrl: null,
     rarity: ShopItemRarity.RARE,
     price: 2500,

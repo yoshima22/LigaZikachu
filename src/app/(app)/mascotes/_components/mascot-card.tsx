@@ -357,7 +357,7 @@ const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200", areas: "Expedição ✓ · Arena ✗ · Interações ✗" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política Fraqueza", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
-  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique 3h", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Treino +25% EXP · Padrão +12% EXP/+1,5 p.p. loot · Itens +3 p.p. loot" },
+  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique 3h", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Treino +25% EXP · Padrão +12% EXP/+1,5 ponto percentual de loot · Itens +3 pontos percentuais de loot" },
   PICNIC_SPEED:    { emoji: "⚡",   label: "Próxima exp. -30%", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", permanent: true },
   XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
   XP_SHARE_TEAM:   { emoji: "📡",   label: "Comp. Geral",     color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
