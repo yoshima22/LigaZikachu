@@ -312,7 +312,7 @@ export default async function ManualPage() {
             headers={["Item", "Efeito", "Duração", "Onde se aplica"]}
             rows={[
               ["⚡ Vitamina Elétrica", "+25% EXP em 1 mascote", "2h (admin config)", "Expedição, Arena, Interações"],
-              ["🧺 Cesta de Piquenique", "+15% EXP + +5 felicidade", "2h", "Expedição, Arena, Interações (6 favoritos)"],
+              ["🧺 Cesta de Piquenique", "-30% na próxima duração; bônus de EXP/loot por modo", "3h para bônus; redução no próximo uso", "Expedições"],
               ["🥚 Ovo da Sorte", "+20% EXP em 1 expedição", "1 uso (diário)", "Expedição de Treinamento"],
             ]}
           />
@@ -330,12 +330,13 @@ export default async function ManualPage() {
             rows={[
               ["🍀 Amuleto da Sorte", "Dobra chance de loot raro em expedições por 6h"],
               ["💊 Proteína Zika", "+2 permanentes em todos os 5 atributos (máx 3 doses por mascote)"],
-              ["🍯 Bala de Mel", "Felicidade vai para 100 instantaneamente + humor HAPPY"],
+              ["🍯 Bala de Mel", "Felicidade vai para 100 e há 40% de chance de nova amizade ou evento bônus com amigo"],
               ["💧 Água Sagrada", "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente"],
               ["🛡️ Política de Fraqueza", "Protege contra ataques oportunistas na Arena Z (permanente)"],
               ["📡 Compartilhador de XP", "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Pode ser desequipado pelo card do mascote — o item volta ao inventário."],
-              ["🏖️ Ticket de Férias", "Envia mascote para 7 dias com o Prof. Carvalho (+EXP e felicidade)"],
-              ["🌈 Pena Arco-Íris", "IRREVERSÍVEL — reseta o mascote para nível 1"],
+              ["📡 Compartilhador Geral", "Distribui 10% da EXP de Treinamento a todos os outros favoritos. Apenas um Compartilhador pode ficar equipado."],
+              ["🏖️ Ticket de Férias", "Ao retornar, concede 4.000 EXP + 10 EXP por nível, além das recompensas de férias"],
+              ["🌈 Pena Arco-Íris", "IRREVERSÍVEL — volta ao Nv.1 e ressorteia personalidade/status no intervalo do ovo original; sem registro usa Ovo Raro"],
             ]}
           />
         </Sub>
@@ -356,7 +357,7 @@ export default async function ManualPage() {
             rows={[
               ["Vitamina Elétrica", "Se uma expedição renderia 240 EXP, com +25% ela rende 300 EXP."],
               ["Ovo da Sorte", "Se uma expedição de treino renderia 1.000 EXP, com +20% ela rende 1.200 EXP."],
-              ["Cesta de Piquenique", "Se 6 favoritos receberiam 200 EXP, cada um recebe 230 EXP e +5 felicidade."],
+              ["Cesta de Piquenique", "Treino recebe +25% EXP; Padrão +12% EXP e +1,5 p.p. em ovo/item especial; Itens +3 p.p. em ovo/item especial."],
               ["Proteína Zika", "+2 em Força, Agilidade, Carisma, Instinto e Vitalidade. Uma dose = +10 pontos totais; 3 doses = +30."],
               ["Amuleto da Sorte", "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2."],
               ["Mega Stone", "Só cai em expedição de Itens de 6h, com 0,5% antes da rolagem normal de recompensa."],

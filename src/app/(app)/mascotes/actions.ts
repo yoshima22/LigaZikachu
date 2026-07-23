@@ -71,6 +71,51 @@ function isLabChoiceEgg(type: string, origin?: string | null) {
   return type === "LAB" || !!getLabEggGeneration(origin);
 }
 
+async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string) {
+  if (Math.random() >= 0.4) return;
+
+  const relations = await prisma.mascotRelation.findMany({
+    where: { mascotAId: mascotId },
+    select: { mascotBId: true, type: true },
+    orderBy: { interactionCount: "desc" },
+    take: 10,
+  });
+
+  if (relations.length < 10) {
+    const candidates = await prisma.mascot.findMany({
+      where: {
+        id: { notIn: [mascotId, ...relations.map((relation) => relation.mascotBId)] },
+        playerId: { not: playerId },
+        player: { user: { role: "PLAYER" } },
+      },
+      select: { id: true },
+      take: 20,
+    });
+    const candidate = candidates[Math.floor(Math.random() * candidates.length)];
+    if (candidate) {
+      await formFriendship(mascotId, candidate.id);
+      return;
+    }
+  }
+
+  const friends = relations.filter((relation) => relation.type === "FRIEND");
+  const friend = friends[Math.floor(Math.random() * friends.length)];
+  if (!friend) return;
+  await prisma.$transaction([
+    prisma.mascotRelation.update({
+      where: { mascotAId_mascotBId: { mascotAId: mascotId, mascotBId: friend.mascotBId } },
+      data: { interactionCount: { increment: 1 } },
+    }),
+    prisma.mascotRelation.updateMany({
+      where: { mascotAId: friend.mascotBId, mascotBId: mascotId, type: "FRIEND" },
+      data: { interactionCount: { increment: 1 } },
+    }),
+    prisma.mascotEvent.create({
+      data: { mascotId, emoji: "💚", description: "A Bala de Mel inspirou um evento bônus com um amigo!" },
+    }),
+  ]);
+}
+
 const LAB_CHOICES_MARKER = "LAB_CHOICES:";
 
 function getStoredLabChoices(origin?: string | null): number[] | null {
@@ -690,6 +735,10 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       await tx.mascotEvent.create({ data: { mascotId, emoji: "✨", description: `Usou ${config.label}!` } });
     });
 
+    if (inventoryItem.item.type === "MASCOT_BUFF_HAPPY") {
+      await maybeTriggerHoneyFriendship(mascotId, player.id).catch(() => {});
+    }
+
     revalidate(player.id);
     return { replacedExistingBuff };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
@@ -844,17 +893,43 @@ export async function claimVacationAction(expeditionId: string): Promise<{ error
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useXpShareAction(mascotId: string): Promise<{ error?: string }> {
+export async function useXpShareAction(mascotId: string, itemId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
-    const shopItem = await prisma.shopItem.findFirst({ where: { type: "XP_SHARE", active: true }, select: { id: true } });
+    const shopItem = await prisma.shopItem.findFirst({
+      where: { id: itemId, type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] }, active: true },
+      select: { id: true, type: true },
+    });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Compartilhador de XP no inventário." };
-    await applyXpShare(player.id, mascotId);
-    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    const previous = await prisma.mascotBuff.findFirst({
+      where: {
+        type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] },
+        mascot: { playerId: player.id },
+        expiresAt: { gt: new Date("2090-01-01") },
+      },
+      select: { type: true },
+    });
+    await applyXpShare(player.id, mascotId, shopItem.type as "XP_SHARE" | "XP_SHARE_TEAM");
+    await prisma.$transaction(async (tx) => {
+      await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+      if (previous) {
+        const previousItem = await tx.shopItem.findFirst({
+          where: { type: previous.type as "XP_SHARE" | "XP_SHARE_TEAM", active: true },
+          select: { id: true },
+        });
+        if (previousItem) {
+          await tx.playerInventory.upsert({
+            where: { playerId_itemId: { playerId: player.id, itemId: previousItem.id } },
+            update: { quantity: { increment: 1 } },
+            create: { playerId: player.id, itemId: previousItem.id, quantity: 1 },
+          });
+        }
+      }
+    });
     revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -864,9 +939,12 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
-    await removeXpShare(player.id, mascotId);
+    const removedType = await removeXpShare(player.id, mascotId);
     // Devolve o item ao inventário do jogador
-    const shopItem = await prisma.shopItem.findFirst({ where: { type: "XP_SHARE", active: true }, select: { id: true } });
+    const shopItem = await prisma.shopItem.findFirst({
+      where: { type: removedType as "XP_SHARE" | "XP_SHARE_TEAM", active: true },
+      select: { id: true },
+    });
     if (shopItem) {
       await prisma.playerInventory.upsert({
         where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } },
@@ -878,16 +956,20 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useRainbowFeatherAction(mascotId: string): Promise<{ error?: string }> {
+export async function useRainbowFeatherAction(mascotId: string, itemId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
-    const shopItem = await prisma.shopItem.findFirst({ where: { type: "RAINBOW_FEATHER", active: true }, select: { id: true } });
+    const shopItem = await prisma.shopItem.findFirst({
+      where: { id: itemId, type: "RAINBOW_FEATHER", active: true },
+      select: { id: true, metadata: true },
+    });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Pena Arco-Íris no inventário." };
-    await applyRainbowFeather(player.id, mascotId);
+    const eggTier = (shopItem.metadata as { eggTier?: "COMMON" | "RARE" | "SPECIAL" | "LAB" } | null)?.eggTier;
+    await applyRainbowFeather(player.id, mascotId, eggTier);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
     revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }

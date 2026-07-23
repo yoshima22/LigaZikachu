@@ -427,18 +427,12 @@ export async function addExp(
 
   // Check for active EXP_BOOST buff (ignorado se já foi aplicado pelo caller)
   if (!options.ignoreExpBoost) {
-    const [expBoostBuff, picnicBuff, expBoostItem, picnicItem] = await Promise.all([
+    const [expBoostBuff, expBoostItem] = await Promise.all([
       prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } }),
-      prisma.mascotBuff.findFirst({ where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } } }),
       getShopItemMeta("MASCOT_BUFF_EXP"),
-      getShopItemMeta("PICNIC_BASKET"),
     ]);
     if (expBoostBuff) {
       const pct = (expBoostItem as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25;
-      amount = Math.floor(amount * (1 + pct / 100));
-    }
-    if (picnicBuff) {
-      const pct = (picnicItem as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15;
       amount = Math.floor(amount * (1 + pct / 100));
     }
   }
@@ -743,17 +737,13 @@ export async function interactWithMascot(
   const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
 
   // Pré-busca multipliers de EXP para calcular o valor real antes de montar a mensagem
-  const [picnicBuff, relations, expBoostBuff] = await Promise.all([
-    prisma.mascotBuff.findFirst({ where: { mascotId, type: "PICNIC_BASKET", expiresAt: { gt: now } } }).catch(() => null),
+  const [relations, expBoostBuff] = await Promise.all([
     prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true, interactionCount: true } }).catch(() => [] as { type: string; interactionCount: number }[]),
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
   ]);
-  const [picnicItemMeta, expBoostItemMeta] = await Promise.all([
-    picnicBuff   ? getShopItemMeta("PICNIC_BASKET")    : Promise.resolve(null),
-    expBoostBuff ? getShopItemMeta("MASCOT_BUFF_EXP") : Promise.resolve(null),
-  ]);
-  const picnicExpBonus   = picnicBuff ? ((picnicItemMeta as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 0;
-  const picnicHappyBonus = picnicBuff ? ((picnicItemMeta as { happinessBonus?: number } | null)?.happinessBonus ?? 5) : 0;
+  const expBoostItemMeta = expBoostBuff ? await getShopItemMeta("MASCOT_BUFF_EXP") : null;
+  const picnicExpBonus = 0;
+  const picnicHappyBonus = 0;
 
   // Bônus social escalado por tier (§12 do doc social)
   const friendRels     = relations.filter(r => r.type === "FRIEND");
@@ -992,7 +982,8 @@ function rollBuffItemType(durationKey: ExpeditionDuration): string {
 async function rollExpeditionReward(
   mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
   durationKey: ExpeditionDuration = "1h",
-  allyCount = 0
+  allyCount = 0,
+  picnicBonusPct = 0,
 ): Promise<ExpeditionReward> {
   const luckBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
@@ -1024,13 +1015,14 @@ async function rollExpeditionReward(
     1;
 
   // Valor de moedas escala com duração e nível
-  const cumNothing = odds.nothing;
+  const cumNothing = Math.max(0, odds.nothing - picnicBonusPct * 2);
   const cumEgg = cumNothing + odds.egg;
-  const cumSweet = cumEgg + odds.sweet;
+  const picnicEggLimit = cumEgg + picnicBonusPct;
+  const cumSweet = picnicEggLimit + odds.sweet;
   const cumFood = cumSweet + odds.food;
   const cumCoin = cumFood + odds.coins;
   if (roll < cumNothing) return { type: "NOTHING" };
-  if (roll < cumEgg)   return { type: "EGG", eggType };
+  if (roll < picnicEggLimit) return { type: "EGG", eggType };
   if (roll < cumSweet) return { type: "FOOD", foodType: "SWEET", quantity: sweetQty * 2 };
   if (roll < cumFood)  return { type: "FOOD", foodType: "FOOD", quantity: randomInt(foodQtyMin, foodQtyMax) * 2 };
   if (roll < cumCoin)  return { type: "COINS", amount: randomInt(odds.coinMin, odds.coinMax) };
@@ -1040,7 +1032,8 @@ async function rollExpeditionReward(
 async function rollItemExpeditionReward(
   mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
   durationKey: ExpeditionDuration = "1h",
-  allyCount = 0
+  allyCount = 0,
+  picnicBonusPct = 0,
 ): Promise<ExpeditionReward> {
   const luckBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: mascot.id, type: "LUCK_BOOST", expiresAt: { gt: new Date() } }
@@ -1067,9 +1060,12 @@ async function rollItemExpeditionReward(
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
   if (roll < odds.megaStone) return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
-  if (roll < odds.megaStone + odds.egg) return { type: "EGG", eggType };
-  if (roll < odds.megaStone + odds.egg + odds.sweet) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
-  if (roll < odds.megaStone + odds.egg + odds.sweet + odds.food) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
+  const eggLimit = odds.megaStone + odds.egg + picnicBonusPct;
+  const sweetLimit = eggLimit + odds.sweet;
+  const foodLimit = sweetLimit + Math.max(0, odds.food - picnicBonusPct * 2);
+  if (roll < eggLimit) return { type: "EGG", eggType };
+  if (roll < sweetLimit) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
+  if (roll < foodLimit) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
@@ -1183,6 +1179,16 @@ export async function startExpedition(
   if (durationKey === "7d") throw new Error("Para enviar o mascote de férias, use o Ticket de Férias do Prof. Carvalho no seu inventário.");
 
   const dur = EXPEDITION_DURATIONS[durationKey];
+  const [picnicSpeedBuff, picnicRewardBuff] = await Promise.all([
+    prisma.mascotBuff.findFirst({
+      where: { type: "PICNIC_SPEED", mascot: { playerId }, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    }),
+    prisma.mascotBuff.findFirst({
+      where: { type: "PICNIC_BASKET", mascot: { playerId }, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    }),
+  ]);
   // O resultado fica estável por mascote/modo/duração durante 24h. Cancelar e
   // reiniciar a expedição, portanto, não permite rerrolar até obter um valor maior.
   const rollBucket = Math.floor(Date.now() / 86_400_000);
@@ -1198,22 +1204,32 @@ export async function startExpedition(
   // a segunda metade, então 13% nela equivale a até 6,5% da duração total.
   const firstHalfMs = dur.ms / 2;
   const secondHalfMs = dur.ms / 2;
-  const effectiveDurationMs = Math.round(firstHalfMs + secondHalfMs * (1 - agilityTimeReductionPct / 100));
+  const agilityAdjustedDurationMs = firstHalfMs + secondHalfMs * (1 - agilityTimeReductionPct / 100);
+  const picnicTimeReductionPct = picnicSpeedBuff ? 30 : 0;
+  const effectiveDurationMs = Math.round(agilityAdjustedDurationMs * (1 - picnicTimeReductionPct / 100));
   const finishAt = new Date(Date.now() + effectiveDurationMs);
-  return prisma.mascotExpedition.create({
-    data: {
-      mascotId,
-      finishAt,
-      rewardJson: {
-        durationKey,
-        mode,
-        agilityTimeReductionPct,
-        totalTimeReductionPct: agilityTimeReductionPct / 2,
-        baseDurationMs: dur.ms,
-        effectiveDurationMs,
-        agilityRollBucket: rollBucket,
+  return prisma.$transaction(async (tx) => {
+    const expedition = await tx.mascotExpedition.create({
+      data: {
+        mascotId,
+        finishAt,
+        rewardJson: {
+          durationKey,
+          mode,
+          agilityTimeReductionPct,
+          picnicTimeReductionPct,
+          totalTimeReductionPct: 100 * (1 - effectiveDurationMs / dur.ms),
+          baseDurationMs: dur.ms,
+          effectiveDurationMs,
+          agilityRollBucket: rollBucket,
+          picnicActive: !!picnicRewardBuff,
+        },
       },
+    });
+    if (picnicSpeedBuff) {
+      await tx.mascotBuff.deleteMany({ where: { type: "PICNIC_SPEED", mascot: { playerId } } });
     }
+    return expedition;
   });
 }
 
@@ -1301,6 +1317,8 @@ export async function claimExpedition(
   const stored = (expedition.rewardJson as Record<string, unknown> | null) ?? {};
   const durationKey: ExpeditionDuration = (stored.durationKey as ExpeditionDuration) ?? "1h";
   const mode: ExpeditionMode = (stored.mode as ExpeditionMode) ?? "STANDARD";
+  const picnicActive = stored.picnicActive === true;
+  const picnicLootBonusPct = picnicActive ? (mode === "ITEMS" ? 3 : mode === "STANDARD" ? 1.5 : 0) : 0;
   const dur = EXPEDITION_DURATIONS[durationKey];
 
   if (mode === "VACATION") {
@@ -1329,8 +1347,8 @@ export async function claimExpedition(
   const baseReward = mode === "TRAINING"
     ? null  // preenchido após calcular EXP
     : mode === "ITEMS"
-      ? await rollItemExpeditionReward(expedition.mascot, durationKey, allyCount)
-      : await rollExpeditionReward(expedition.mascot, durationKey, allyCount);
+      ? await rollItemExpeditionReward(expedition.mascot, durationKey, allyCount, picnicLootBonusPct)
+      : await rollExpeditionReward(expedition.mascot, durationKey, allyCount, picnicLootBonusPct);
 
   // EXP: base × duração × nível × bônus social
   const expBase = EXP_REWARDS.EXPEDITION;
@@ -1354,19 +1372,19 @@ export async function claimExpedition(
   }) : null;
 
   // Vitamina Elétrica e Cesta de Piquenique: incluídas no cálculo para que o log/modal reflita o valor real
-  const [expBoostBuff, picnicBuff] = await Promise.all([
-    prisma.mascotBuff.findFirst({ where: { mascotId: expedition.mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } }),
-    prisma.mascotBuff.findFirst({ where: { mascotId: expedition.mascotId, type: "PICNIC_BASKET", expiresAt: { gt: new Date() } } }),
-  ]);
-  const [luckyEggMeta, expBoostMeta, picnicShopMeta] = await Promise.all([
+  const expBoostBuff = await prisma.mascotBuff.findFirst({
+    where: { mascotId: expedition.mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } },
+  });
+  const [luckyEggMeta, expBoostMeta] = await Promise.all([
     luckyEggBuff  ? getShopItemMeta("LUCKY_EGG")       : null,
     expBoostBuff  ? getShopItemMeta("MASCOT_BUFF_EXP") : null,
-    picnicBuff    ? getShopItemMeta("PICNIC_BASKET")   : null,
   ]);
 
   const luckyEggMult  = luckyEggBuff  ? 1 + ((luckyEggMeta  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 20) / 100 : 1.0;
   const expBoostMult  = expBoostBuff  ? 1 + ((expBoostMeta  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
-  const picnicExpMult = picnicBuff    ? 1 + ((picnicShopMeta as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 15) / 100 : 1.0;
+  const picnicExpMult = picnicActive
+    ? mode === "TRAINING" ? 1.25 : mode === "STANDARD" ? 1.12 : 1
+    : 1;
 
   const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult);
 
@@ -1515,24 +1533,30 @@ export async function claimExpedition(
     await prisma.mascotBuff.delete({ where: { id: luckyEggBuff.id } }).catch(() => {});
   }
 
-  // Compartilhador de XP: distribui metade do EXP de TRAINING para Pokémon com XP_SHARE
+  // Compartilhadores: individual (50%) ou geral (10% aos outros favoritos).
   if (mode === "TRAINING" && expeditionExp > 0) {
-    const sharedExp = Math.floor(expeditionExp / 2);
-    if (sharedExp > 0) {
-      const xpShareBuffs = await prisma.mascotBuff.findMany({
-        where: {
-          type: "XP_SHARE",
-          mascot: { playerId },
-          mascotId: { not: expedition.mascotId }, // não conta o próprio mascote
-          expiresAt: { gt: new Date("2090-01-01") },
-        },
-        select: { mascotId: true },
-      }).catch(() => []);
-      for (const xb of xpShareBuffs) {
-        await addExp(xb.mascotId, sharedExp, { ignoreBenchPenalty: true }).catch(() => {});
-        await prisma.mascotEvent.create({
-          data: { mascotId: xb.mascotId, emoji: "📡", description: `Compartilhou ${sharedExp} EXP via Compartilhador de XP!` }
-        }).catch(() => {});
+    const equippedShare = await prisma.mascotBuff.findFirst({
+      where: {
+        type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] },
+        mascot: { playerId },
+        expiresAt: { gt: new Date("2090-01-01") },
+      },
+      select: { type: true, mascotId: true },
+    }).catch(() => null);
+    if (equippedShare?.type === "XP_SHARE" && equippedShare.mascotId !== expedition.mascotId) {
+      const sharedExp = Math.floor(expeditionExp / 2);
+      await addExp(equippedShare.mascotId, sharedExp, { ignoreBenchPenalty: true }).catch(() => {});
+      await logEvent(equippedShare.mascotId, "📡", `Recebeu ${sharedExp} EXP via Compartilhador de XP!`).catch(() => {});
+    } else if (equippedShare?.type === "XP_SHARE_TEAM") {
+      const sharedExp = Math.floor(expeditionExp * 0.1);
+      const favorites = await prisma.mascot.findMany({
+        where: { playerId, isFavorite: true, id: { not: expedition.mascotId } },
+        select: { id: true },
+        take: 10,
+      });
+      for (const favorite of favorites) {
+        await addExp(favorite.id, sharedExp, { ignoreBenchPenalty: true }).catch(() => {});
+        await logEvent(favorite.id, "📡", `Recebeu ${sharedExp} EXP via Compartilhador Geral!`).catch(() => {});
       }
     }
   }
@@ -2537,28 +2561,25 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
   await logEvent(mascotId, "🛡️", "Política de Fraqueza equipada! Estará protegido contra ataques oportunistas.");
 }
 
-/** Cesta de Piquenique Chocante: EXP% e felicidade aos 6 favoritos por N horas (config via ShopItem.metadata) */
+/** Cesta de Piquenique: acelera a próxima expedição e melhora as iniciadas nas próximas 3h. */
 export async function applyPicnicBasket(playerId: string) {
-  const [favoriteMascots, picnicShopItem] = await Promise.all([
-    prisma.mascot.findMany({ where: { playerId, isFavorite: true, arenaState: "FREE" }, take: 6 }),
-    getShopItemMeta("PICNIC_BASKET"),
-  ]);
-  if (favoriteMascots.length === 0) throw new Error("Nenhum mascote favorito livre encontrado. Marque até 6 mascotes como favorito.");
-  const picnicMeta = picnicShopItem as { buffHours?: number; expMultiplierPct?: number; happinessBonus?: number } | null;
-  const hours  = picnicMeta?.buffHours        ?? 2;
-  const expPct = picnicMeta?.expMultiplierPct ?? 15;
-  const happy  = picnicMeta?.happinessBonus   ?? 5;
-  const mascotIds = favoriteMascots.map(m => m.id);
-  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
-  // Remove buffs PICNIC_BASKET anteriores (sem acúmulo) e cria novos
-  await prisma.mascotBuff.deleteMany({ where: { mascotId: { in: mascotIds }, type: "PICNIC_BASKET" } });
-  await prisma.mascotBuff.createMany({
-    data: mascotIds.map(id => ({ mascotId: id, type: "PICNIC_BASKET" as const, expiresAt }))
+  const mascots = await prisma.mascot.findMany({ where: { playerId }, select: { id: true } });
+  if (mascots.length === 0) throw new Error("Nenhum mascote encontrado.");
+  const mascotIds = mascots.map((mascot) => mascot.id);
+  const rewardExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const speedExpiresAt = new Date("2099-12-31T23:59:59Z");
+  await prisma.$transaction(async (tx) => {
+    await tx.mascotBuff.deleteMany({
+      where: { mascotId: { in: mascotIds }, type: { in: ["PICNIC_BASKET", "PICNIC_SPEED"] } },
+    });
+    await tx.mascotBuff.createMany({
+      data: mascotIds.flatMap((id) => [
+        { mascotId: id, type: "PICNIC_BASKET" as const, expiresAt: rewardExpiresAt },
+        { mascotId: id, type: "PICNIC_SPEED" as const, expiresAt: speedExpiresAt },
+      ]),
+    });
   });
-  for (const m of favoriteMascots) {
-    await logEvent(m.id, "🧺⚡", `Piquenique Chocante! +${expPct}% EXP e +${happy} felicidade em batalhas, interações e expedições por ${hours}h.`);
-  }
-  return favoriteMascots.length;
+  return mascots.length;
 }
 
 /** Ticket de Férias: envia Pokémon com o Professor Carvalho pelos dias configurados no shop */
@@ -2592,7 +2613,7 @@ export async function claimVacation(playerId: string, expeditionId: string) {
 
   const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
   const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
-  const expBonus = meta.expBonus ?? 6000;
+  const expBonus = 4000 + Math.max(0, expedition.mascot.level - 1) * 10;
   const eggChancePct = meta.eggChancePct ?? 30;
   const gotEgg = Math.random() * 100 < eggChancePct;
 
@@ -2628,47 +2649,74 @@ export async function claimVacation(playerId: string, expeditionId: string) {
 }
 
 /** Compartilhador de XP: equipa em Pokémon fora de expedição (1 por jogador) */
-export async function applyXpShare(playerId: string, mascotId: string) {
+export async function applyXpShare(playerId: string, mascotId: string, type: "XP_SHARE" | "XP_SHARE_TEAM") {
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId },
     include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
   });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.expeditions.length > 0) throw new Error("Não pode equipar em mascote em expedição.");
-  const existing = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "XP_SHARE", expiresAt: { gt: new Date("2090-01-01") } }
+  await prisma.$transaction(async (tx) => {
+    await tx.mascotBuff.deleteMany({
+      where: {
+        type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] },
+        mascot: { playerId },
+        expiresAt: { gt: new Date("2090-01-01") },
+      },
+    });
+    await tx.mascotBuff.create({
+      data: { mascotId, type, expiresAt: new Date("2099-12-31T23:59:59Z") },
+    });
   });
-  if (existing) throw new Error("Este mascote já tem Compartilhador de XP.");
-  const count = await prisma.mascotBuff.count({
-    where: { type: "XP_SHARE", mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }
-  });
-  if (count >= 1) throw new Error("Você já tem um Compartilhador de XP ativo em outro mascote.");
-  await prisma.mascotBuff.create({
-    data: { mascotId, type: "XP_SHARE", expiresAt: new Date("2099-12-31T23:59:59Z") }
-  });
-  await logEvent(mascotId, "📡", "Compartilhador de XP equipado! Receberá metade do EXP de expedições de treinamento.");
+  await logEvent(mascotId, "📡", type === "XP_SHARE"
+    ? "Compartilhador de XP equipado: receberá 50% da EXP de Treinamento."
+    : "Compartilhador Geral equipado: outros favoritos receberão 10% da EXP de Treinamento.");
 }
 
 /** Remove Compartilhador de XP do Pokémon */
 export async function removeXpShare(playerId: string, mascotId: string) {
   const buff = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "XP_SHARE", mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }
+    where: { mascotId, type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] }, mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }
   });
   if (!buff) throw new Error("Compartilhador de XP não encontrado neste mascote.");
   await prisma.mascotBuff.delete({ where: { id: buff.id } });
   await logEvent(mascotId, "📡", "Compartilhador de XP removido.");
+  return buff.type;
 }
 
-/** Pena Arco-Íris: reseta Pokémon para nível 1 com atributos base */
-export async function applyRainbowFeather(playerId: string, mascotId: string) {
+/** Pena Arco-Íris: faz o mascote renascer usando o mesmo intervalo do ovo original. */
+export async function applyRainbowFeather(
+  playerId: string,
+  mascotId: string,
+  expectedEggTier?: "COMMON" | "RARE" | "SPECIAL" | "LAB",
+) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para usar a Pena Arco-Íris.");
+  const eggTypeKey = mascot.hatchedFromEggType
+    ? getEggStatTypeKey(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin)
+    : "RARE";
+  const actualEggTier =
+    eggTypeKey === "LAB" ? "LAB" :
+    eggTypeKey === "SPECIAL" ? "SPECIAL" :
+    eggTypeKey === "RARE" || !mascot.hatchedFromEggType ? "RARE" :
+    "COMMON";
+  if (expectedEggTier && expectedEggTier !== actualEggTier) {
+    const labels = { COMMON: "Comum", RARE: "Rara", SPECIAL: "Especial", LAB: "de Laboratório" };
+    throw new Error(`Este mascote exige uma Pena Arco-Íris ${labels[actualEggTier]}.`);
+  }
+  const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? EGG_STAT_RANGES.RARE;
+  const personality = randomPersonality();
   await prisma.mascot.update({
     where: { id: mascotId },
     data: {
       level: 1, exp: 0,
-      statForce: 10, statAgility: 10, statCharisma: 10, statInstinct: 10, statVitality: 10,
+      personality,
+      statForce: randomInt(statMin, statMax),
+      statAgility: randomInt(statMin, statMax),
+      statCharisma: randomInt(statMin, statMax),
+      statInstinct: randomInt(statMin, statMax),
+      statVitality: randomInt(statMin, statMax),
       happiness: 50, mood: "NEUTRAL",
     }
   });
@@ -2676,7 +2724,7 @@ export async function applyRainbowFeather(playerId: string, mascotId: string) {
   await prisma.mascotBuff.deleteMany({
     where: { mascotId, type: "STAT_BOOST", expiresAt: { gt: new Date("2090-01-01") } }
   }).catch(() => {});
-  await logEvent(mascotId, "🌈", "Pena Arco-Íris usada! Atributos e nível resetados. Uma nova jornada começa!");
+  await logEvent(mascotId, "🌈", `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${statMin}–${statMax}.`);
 }
 
 // ── Utilidades para UI ────────────────────────────────────────────────────────

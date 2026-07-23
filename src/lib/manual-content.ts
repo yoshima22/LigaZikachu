@@ -41,11 +41,11 @@ export const MANUAL_DEFAULTS: ManualContentMap = {
 
   // ── Itens & Buffs ────────────────────────────────────────────────────────────
   "itens.buffs.note":
-    "Vitamina Elétrica e Cesta de Piquenique não se acumulam entre si para o mesmo mascote. Férias estão excluídas do bônus de EXP em todos os buffs.",
+    "A Cesta de Piquenique afeta somente expedições. A redução de 30% combina com a redução de Agilidade e é consumida ao iniciar a próxima expedição.",
   "itens.calc":
-    "EXP base = 25 · fator de posição (1.5 se companheiro, 1.25 se favorito, 1.0 se banco) · bônus social (0–+25%) · Vitamina (+25% se ativa) · Piquenique (+15% se ativo)",
+    "EXP base = 25 · fator de posição (1.5 se companheiro, 1.25 se favorito, 1.0 se banco) · bônus social (0–+25%) · Vitamina (+25% se ativa)",
   "itens.calc.exemplo":
-    "Exemplo: Companheiro com Vitamina + Piquenique + 2 aliados = 25 × 1.5 × 1.15 × 1.25 × 1.10 ≈ 59 EXP",
+    "Exemplo: Companheiro com Vitamina + 2 aliados = 25 × 1.5 × 1.25 × 1.10 ≈ 52 EXP",
 
   // ── Arena Z ──────────────────────────────────────────────────────────────────
   "arena.intro":

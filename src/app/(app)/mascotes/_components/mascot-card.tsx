@@ -289,6 +289,7 @@ const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política de Fraqueza" },
   PICNIC_BASKET:   { emoji: "🧺",   label: "Cesta de Piquenique" },
   XP_SHARE:        { emoji: "📡",   label: "Compartilhador de XP" },
+  XP_SHARE_TEAM:   { emoji: "📡",   label: "Compartilhador Geral" },
 };
 
 const ORDER_CLUE_STEP_LABELS: Record<string, string> = {
@@ -356,8 +357,10 @@ const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200", areas: "Expedição ✓ · Arena ✗ · Interações ✗" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política Fraqueza", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
-  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique +15%", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
+  PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique 3h", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Treino +25% EXP · Padrão +12% EXP/+1,5 p.p. loot · Itens +3 p.p. loot" },
+  PICNIC_SPEED:    { emoji: "⚡",   label: "Próxima exp. -30%", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", permanent: true },
   XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
+  XP_SHARE_TEAM:   { emoji: "📡",   label: "Comp. Geral",     color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
 };
 
 const EGG_TYPE_LABEL: Record<string, string> = {
@@ -770,9 +773,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const rivalBonus = 1 + Math.min((directRival ? 0.10 : rivalCount > 0 ? 0.05 : 0) * rivalCount, 0.15);
               const luckyEgg = mascot.activeBuffs.some(buff => buff.type === "LUCKY_EGG" && new Date(buff.expiresAt) > new Date()) ? 1.2 : 1;
               const expBoost = mascot.activeBuffs.some(buff => buff.type === "EXP_BOOST" && new Date(buff.expiresAt) > new Date()) ? 1.25 : 1;
-              const picnic = mascot.activeBuffs.some(buff => buff.type === "PICNIC_BASKET" && new Date(buff.expiresAt) > new Date()) ? 1.15 : 1;
-              const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * picnic);
-              const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * picnic);
+              const picnicActive = mascot.activeBuffs.some(buff => buff.type === "PICNIC_BASKET" && new Date(buff.expiresAt) > new Date());
+              const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * (picnicActive ? 1.25 : 1));
+              const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * (picnicActive ? 1.12 : 1));
 
               return (
                 <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
@@ -1049,7 +1052,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         {mascot.activeBuffs.some(buff => buff.type !== "STAT_BOOST") && (
           <div className="flex flex-wrap gap-1.5">
             {mascot.activeBuffs.filter(buff => buff.type !== "STAT_BOOST").map((buff, i) => (
-              buff.type === "XP_SHARE" ? (
+              buff.type === "XP_SHARE" || buff.type === "XP_SHARE_TEAM" ? (
                 <XpShareBadge key={i} mascotId={mascot.id} />
               ) : (
                 <ActiveBuffBadge key={i} type={buff.type} expiresAt={buff.expiresAt} />

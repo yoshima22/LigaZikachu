@@ -60,6 +60,7 @@ const mascotItemEmoji: Record<string, string> = {
   PICNIC_BASKET: "🧺⚡",
   VACATION_TICKET: "🏖️",
   XP_SHARE: "📡",
+  XP_SHARE_TEAM: "📡",
   RAINBOW_FEATHER: "🌈",
 };
 

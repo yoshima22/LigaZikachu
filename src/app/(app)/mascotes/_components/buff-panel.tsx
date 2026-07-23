@@ -23,6 +23,7 @@ const BUFF_EMOJI: Record<string, string> = {
   PICNIC_BASKET:     "🧺⚡",
   VACATION_TICKET:   "🏖️",
   XP_SHARE:          "📡",
+  XP_SHARE_TEAM:     "📡",
   RAINBOW_FEATHER:   "🌈",
 };
 
@@ -36,8 +37,8 @@ const EXP_BUFF_AREAS: Record<string, { label: string; applies: boolean }[]> = {
   ],
   PICNIC_BASKET: [
     { label: "Expedição",   applies: true },
-    { label: "Arena",       applies: true },
-    { label: "Interações",  applies: true },
+    { label: "Arena",       applies: false },
+    { label: "Interações",  applies: false },
     { label: "Férias",      applies: false },
   ],
   LUCKY_EGG: [
@@ -109,7 +110,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     } else if (isExpBuff && mascotHasExpBoost) {
       confirmMsg = `${mascotName} já tem uma Vitamina Elétrica ativa. Usar outra irá REMOVER o buff atual e aplicar um novo. Deseja continuar?`;
     } else if (isPlayerLevel) {
-      confirmMsg = `Usar ${selectedBuffItem.name} na Equipe Favorita?`;
+      confirmMsg = `Usar ${selectedBuffItem.name}? A próxima expedição terá -30% de duração e as iniciadas nas próximas 3h receberão bônus por modo.`;
     } else {
       confirmMsg = `Usar ${selectedBuffItem.name} em ${mascotName}?`;
     }
@@ -125,8 +126,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot);
       else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction();
       else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
-      else if (t === "XP_SHARE") r = await useXpShareAction(selectedMascot);
-      else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot);
+      else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
+      else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
       else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
       else r = await useMascotBuffAction(selectedMascot, selectedBuff);
 
@@ -135,10 +136,10 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         if (r.replacedExistingBuff) {
           toast.success(`Vitamina Elétrica anterior removida. Novo buff aplicado em ${mascotName}! ⚡`);
         } else if (t === "PICNIC_BASKET") {
-          toast.success("Piquenique iniciado! Equipe Favorita tem bônus por 2h. 🧺");
+          toast.success("Piquenique ativado: próxima expedição -30% e bônus por modo durante 3h. 🧺");
         } else if (t === "VACATION_TICKET") {
           toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 7 dias. 🏖️`);
-        } else if (t === "XP_SHARE") {
+        } else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") {
           toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         } else if (t === "RAINBOW_FEATHER") {
           toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);

@@ -20,7 +20,7 @@ const typeOpts = [
   "EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_LAB","EGG_EVENT",
   "MASCOT_FOOD","MASCOT_SWEET",
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
-  "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","RAINBOW_FEATHER",
+  "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","XP_SHARE_TEAM","RAINBOW_FEATHER",
   ...LEAGUE_SHOP_ITEM_TYPES,
 ] as const;
 const typeLabel: Record<string, string> = {
@@ -44,6 +44,7 @@ const typeLabel: Record<string, string> = {
   PICNIC_BASKET:     "🧺⚡ Cesta de Piquenique Chocante",
   VACATION_TICKET:   "🏖️ Ticket de Férias do Prof. Carvalho",
   XP_SHARE:          "📡 Compartilhador de XP",
+  XP_SHARE_TEAM:     "📡 Compartilhador Geral de XP",
   RAINBOW_FEATHER:   "🌈 Pena Arco-Íris",
   LEAGUE_CAPTAIN_BAND: "Faixa de Capitão",
   LEAGUE_FORMATION_WHISTLE: "Apito de Formação",
