@@ -330,7 +330,12 @@ export default async function PerfilPage() {
         {equippedBanner?.item.imageUrl ? (
           <div className="relative h-32 w-full overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={equippedBanner.item.imageUrl} alt="Banner" className="h-full w-full object-cover object-center" />
+            <img
+              src={equippedBanner.item.imageUrl}
+              alt="Banner"
+              className="h-full w-full object-cover object-center"
+              style={{ filter: "brightness(1.15)" }}
+            />
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0f0f1a]/80" />
           </div>
         ) : (
