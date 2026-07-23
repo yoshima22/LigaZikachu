@@ -2820,6 +2820,133 @@ export async function repairRecentRainbowFeatherDevolutions(playerId: string): P
   return repairs.size;
 }
 
+/**
+ * Recupera uma Pena Primordial consumida por uma versão antiga da Server Action.
+ * A combinação item administrativo zerado + marcador ausente + evento logo após
+ * a concessão identifica o caso sem alterar resets normais.
+ */
+export async function repairRecentPrimordialFeatherReset(playerId: string): Promise<number> {
+  const inventory = await prisma.playerInventory.findUnique({
+    where: {
+      playerId_itemId: {
+        playerId,
+        itemId: "admin-lab-rainbow-feather",
+      },
+    },
+    select: { quantity: true, purchasedAt: true, source: true },
+  });
+  if (!inventory || inventory.quantity > 0 || inventory.source !== "ADMIN_GRANT") return 0;
+
+  const player = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { adminLabFeatherUsedAt: true },
+  });
+  if (!player || player.adminLabFeatherUsedAt) return 0;
+
+  const deadline = new Date(inventory.purchasedAt.getTime() + 30 * 60_000);
+  const use = await prisma.mascotEvent.findFirst({
+    where: {
+      emoji: "🌈",
+      createdAt: { gte: inventory.purchasedAt, lte: deadline },
+      mascot: {
+        playerId,
+        level: 1,
+        hatchedFromEggType: null,
+        hatchedFromEggOrigin: null,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      createdAt: true,
+      mascot: {
+        select: {
+          id: true,
+          pokemonId: true,
+          statForce: true,
+          statAgility: true,
+          statCharisma: true,
+          statInstinct: true,
+          statVitality: true,
+        },
+      },
+    },
+  });
+  if (!use) return 0;
+
+  const [statMin, statMax] = EGG_STAT_RANGES.LAB;
+  const newStats = {
+    statForce: randomInt(statMin, statMax),
+    statAgility: randomInt(statMin, statMax),
+    statCharisma: randomInt(statMin, statMax),
+    statInstinct: randomInt(statMin, statMax),
+    statVitality: randomInt(statMin, statMax),
+  };
+  const repaired = await prisma.$transaction(async (tx) => {
+    const marked = await tx.player.updateMany({
+      where: { id: playerId, adminLabFeatherUsedAt: null },
+      data: { adminLabFeatherUsedAt: use.createdAt },
+    });
+    if (marked.count !== 1) return false;
+
+    const updated = await tx.mascot.updateMany({
+      where: {
+        id: use.mascot.id,
+        playerId,
+        level: 1,
+        hatchedFromEggType: null,
+        hatchedFromEggOrigin: null,
+      },
+      data: {
+        ...newStats,
+        hatchedFromEggType: "LAB",
+        hatchedFromEggOrigin: "Origem de ovo de Laboratorio",
+      },
+    });
+    if (updated.count !== 1) throw new Error("O mascote mudou durante a recuperação da Pena Primordial.");
+
+    await tx.mascotEvent.create({
+      data: {
+        mascotId: use.mascot.id,
+        emoji: "🌈",
+        description: `Correção da Pena Arco-Íris Primordial: origem de Laboratório registrada e atributos ressorteados em ${statMin}–${statMax}.`,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        entityType: "mascot",
+        entityId: use.mascot.id,
+        action: "rainbow_feather.primordial_auto_repair",
+        before: {
+          pokemonId: use.mascot.pokemonId,
+          stats: {
+            statForce: use.mascot.statForce,
+            statAgility: use.mascot.statAgility,
+            statCharisma: use.mascot.statCharisma,
+            statInstinct: use.mascot.statInstinct,
+            statVitality: use.mascot.statVitality,
+          },
+          hatchedFromEggType: null,
+          hatchedFromEggOrigin: null,
+        },
+        after: {
+          pokemonId: use.mascot.pokemonId,
+          stats: newStats,
+          hatchedFromEggType: "LAB",
+          hatchedFromEggOrigin: "Origem de ovo de Laboratorio",
+          adminLabFeatherUsedAt: use.createdAt.toISOString(),
+        },
+        metadata: {
+          reason: "Pena Primordial processada por Server Action anterior",
+          sourceEventId: use.id,
+        },
+      },
+    });
+    return true;
+  });
+  return repaired ? 1 : 0;
+}
+
 /** Pena Arco-Íris: faz o mascote renascer na forma base usando o intervalo do ovo original. */
 export async function applyRainbowFeather(
   playerId: string,

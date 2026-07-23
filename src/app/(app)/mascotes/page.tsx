@@ -2,7 +2,11 @@ import { unstable_cache } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { recalculateMood, repairRecentRainbowFeatherDevolutions } from "@/lib/mascot";
+import {
+  recalculateMood,
+  repairRecentPrimordialFeatherReset,
+  repairRecentRainbowFeatherDevolutions,
+} from "@/lib/mascot";
 import { getPokemonName } from "@/lib/mascot-data";
 import { isAdmin } from "@/lib/auth/permissions";
 import { MascotList } from "./_components/mascot-list";
@@ -248,8 +252,13 @@ export default async function MascotesPage() {
     console.error("[Mascotes] correção de desevolução por Pena Arco-Íris falhou; seguindo sem travar a pagina.", error);
     return 0;
   });
+  const repairedPrimordialReset = await repairRecentPrimordialFeatherReset(player.id).catch((error) => {
+    console.error("[Mascotes] correção da Pena Primordial falhou; seguindo sem travar a pagina.", error);
+    return 0;
+  });
   const cleanupChanged = (!!cleanup && (cleanup.releasedResting > 0 || cleanup.clearedCooldowns > 0))
-    || repairedRainbowResets > 0;
+    || repairedRainbowResets > 0
+    || repairedPrimordialReset > 0;
 
   // Dados de mascote sao cacheados por jogador; se a limpeza mudou estados, pula o cache nesta visita.
   const loadPageData = cleanupChanged

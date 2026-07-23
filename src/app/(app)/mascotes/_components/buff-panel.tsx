@@ -184,6 +184,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         } else if (t === "RAINBOW_FEATHER") {
           toast.success(`${mascotName} renasceu no nível 1 com atributos ${r.statRange ?? "ressorteados"}! 🌈`);
+          // Garante que o card irmão descarte qualquer snapshot anterior do RSC/cache.
+          window.setTimeout(() => window.location.reload(), 600);
         } else if (isMegaStoneType(t)) {
           toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
         } else if (t === "LUCKY_EGG") {
