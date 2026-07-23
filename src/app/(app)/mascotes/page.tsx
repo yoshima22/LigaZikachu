@@ -587,6 +587,7 @@ export default async function MascotesPage() {
     level: m.level,
     isEquipped: m.isEquipped,
     isFavorite: m.isFavorite,
+    arenaState: m.arenaState,
     hatchedFromEggType: m.hatchedFromEggType,
     hatchedFromEggOrigin: m.hatchedFromEggOrigin,
   }))}

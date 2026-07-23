@@ -14,6 +14,7 @@ interface BuffItem {
 }
 interface MascotOption {
   id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean;
+  arenaState?: string;
   hatchedFromEggType?: string | null; hatchedFromEggOrigin?: string | null;
 }
 
@@ -83,27 +84,35 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const isExpBuff = selectedBuffItem?.type === "MASCOT_BUFF_EXP";
   const isMegaStone = selectedBuffItem ? isMegaStoneType(selectedBuffItem.type) : false;
   const selectedMegaStone = selectedBuffItem ? getMegaStoneByType(selectedBuffItem.type) : null;
+  const isRainbowFeather = selectedBuffItem?.type === "RAINBOW_FEATHER";
   const isAdminLabFeather = selectedBuffItem?.metadata?.adminLabOriginOverride === true;
-  const eligibleMascots = isAdminLabFeather
-    ? mascots.filter((m) => !m.hatchedFromEggType && !m.hatchedFromEggOrigin)
-    : mascots;
+  const featherTier = selectedBuffItem?.metadata?.eggTier;
+  const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
+  const getOriginTier = (mascot: MascotOption) => {
+    const originKey = mascot.hatchedFromEggOrigin?.startsWith("GEN_CHOICE:")
+      ? mascot.hatchedFromEggOrigin.split(":")[1]
+      : mascot.hatchedFromEggType;
+    return !mascot.hatchedFromEggType ? "RARE"
+      : originKey === "LAB" ? "LAB"
+      : originKey === "SPECIAL" ? "SPECIAL"
+      : originKey === "EVENT" ? "EVENT"
+      : originKey === "RARE" ? "RARE"
+      : "COMMON";
+  };
+  const eligibleMascots = mascots.filter((mascot) => {
+    if (!isRainbowFeather) return true;
+    if (mascot.arenaState && mascot.arenaState !== "FREE") return false;
+    if (isAdminLabFeather) return !mascot.hatchedFromEggType && !mascot.hatchedFromEggOrigin;
+    if (!featherTier) return true;
+    return tierRank[featherTier] >= tierRank[getOriginTier(mascot)];
+  });
   const mascotOptions = isMegaStone && selectedMegaStone
     ? eligibleMascots.filter((m) => m.pokemonId === selectedMegaStone.compatiblePokemonId && m.level >= selectedMegaStone.minLevel)
     : eligibleMascots;
   const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
   const selectedMascotItem = mascots.find((mascot) => mascot.id === selectedMascot);
-  const featherTier = selectedBuffItem?.metadata?.eggTier;
-  const originKey = selectedMascotItem?.hatchedFromEggOrigin?.startsWith("GEN_CHOICE:")
-    ? selectedMascotItem.hatchedFromEggOrigin.split(":")[1]
-    : selectedMascotItem?.hatchedFromEggType;
-  const originTier = !selectedMascotItem?.hatchedFromEggType ? "RARE"
-    : originKey === "LAB" ? "LAB"
-    : originKey === "SPECIAL" ? "SPECIAL"
-    : originKey === "EVENT" ? "EVENT"
-    : originKey === "RARE" ? "RARE"
-    : "COMMON";
-  const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
+  const originTier = selectedMascotItem ? getOriginTier(selectedMascotItem) : "RARE";
   const featherAboveOrigin = selectedBuffItem?.type === "RAINBOW_FEATHER"
     && Boolean(featherTier)
     && tierRank[featherTier ?? "COMMON"] > tierRank[originTier];
@@ -328,7 +337,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
             disabled={
               pending ||
               (!selectedMascot && !PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "")) ||
-              (isAdminLabFeather && !mascotOptions.some((mascot) => mascot.id === selectedMascot)) ||
+              (!PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "") && !mascotOptions.some((mascot) => mascot.id === selectedMascot)) ||
               (isProtein && proteinFull)
             }
             onClick={handleUse}
