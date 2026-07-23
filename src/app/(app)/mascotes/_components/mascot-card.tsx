@@ -380,7 +380,10 @@ function getHatchedEggLabel(type?: string | null, origin?: string | null) {
     return `Ovo de Geração ${generation}`;
   }
   if (origin?.startsWith("LAB_REGION:")) {
-    return `Ovo de Laboratorio (Geracao ${origin.replace("LAB_REGION:EGG_GEN", "")})`;
+    const generation = origin
+      .replace("LAB_REGION:EGG_GEN", "")
+      .split("|", 1)[0];
+    return `Ovo de Laboratorio (Geracao ${generation})`;
   }
   return EGG_TYPE_LABEL[type] ?? type.replaceAll("_", " ");
 }

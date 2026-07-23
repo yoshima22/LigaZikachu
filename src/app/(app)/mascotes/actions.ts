@@ -61,12 +61,36 @@ function isEggGenerationType(value?: string | null): value is (typeof EGG_GENERA
 }
 
 function getLabEggGeneration(origin?: string | null) {
-  const value = origin?.startsWith("LAB_REGION:") ? origin.slice("LAB_REGION:".length) : null;
+  const value = origin?.startsWith("LAB_REGION:")
+    ? origin.slice("LAB_REGION:".length).split("|", 1)[0]
+    : null;
   return isEggGenerationType(value) ? value : null;
 }
 
 function isLabChoiceEgg(type: string, origin?: string | null) {
   return type === "LAB" || !!getLabEggGeneration(origin);
+}
+
+const LAB_CHOICES_MARKER = "LAB_CHOICES:";
+
+function getStoredLabChoices(origin?: string | null): number[] | null {
+  const marker = origin?.split("|").find((part) => part.startsWith(LAB_CHOICES_MARKER));
+  if (!marker) return null;
+
+  const choices = marker
+    .slice(LAB_CHOICES_MARKER.length)
+    .split(",")
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  return choices.length === 3 && new Set(choices).size === 3 ? choices : null;
+}
+
+function storeLabChoices(origin: string | null, choices: number[]) {
+  const preservedParts = (origin ?? "")
+    .split("|")
+    .filter((part) => part && !part.startsWith(LAB_CHOICES_MARKER));
+  return [...preservedParts, `${LAB_CHOICES_MARKER}${choices.join(",")}`].join("|");
 }
 
 function findPokemonIdsBySearch(search: string) {
@@ -146,6 +170,11 @@ export async function hatchEggAction(): Promise<{
     });
     if (!incubator) return { error: "Sem ovo na incubadora." };
     if (isLabChoiceEgg(incubator.egg.type, incubator.egg.origin)) {
+      if (new Date() < incubator.finishAt) return { error: "O ovo ainda não está pronto." };
+
+      const storedChoices = getStoredLabChoices(incubator.egg.origin);
+      if (storedChoices) return { labChoices: storedChoices };
+
       const { rollLabEggChoice, rollPokemonFromEgg } = await import("@/lib/mascot");
       const labGeneration = getLabEggGeneration(incubator.egg.origin);
       const seen = new Set<number>();
@@ -154,7 +183,23 @@ export async function hatchEggAction(): Promise<{
         const id = labGeneration ? rollPokemonFromEgg(labGeneration) : rollLabEggChoice();
         if (!seen.has(id)) { seen.add(id); choices.push(id); }
       }
-      return { labChoices: choices };
+
+      // A atualização condicional impede que duas abas gravem trios diferentes.
+      const saved = await prisma.mascotEgg.updateMany({
+        where: { id: incubator.eggId, playerId: player.id, origin: incubator.egg.origin },
+        data: { origin: storeLabChoices(incubator.egg.origin, choices) },
+      });
+      if (saved.count === 1) return { labChoices: choices };
+
+      const currentEgg = await prisma.mascotEgg.findUnique({
+        where: { id: incubator.eggId },
+        select: { playerId: true, origin: true },
+      });
+      const concurrentChoices = currentEgg?.playerId === player.id
+        ? getStoredLabChoices(currentEgg.origin)
+        : null;
+      if (concurrentChoices) return { labChoices: concurrentChoices };
+      return { error: "Não foi possível fixar as opções deste ovo. Tente novamente." };
     }
 
     const result = await hatchEgg(player.id);
@@ -172,6 +217,18 @@ export async function confirmLabChoiceAction(chosenPokemonId: number): Promise<{
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
+    const incubator = await prisma.mascotIncubator.findUnique({
+      where: { playerId: player.id },
+      include: { egg: { select: { type: true, origin: true } } },
+    });
+    if (!incubator || !isLabChoiceEgg(incubator.egg.type, incubator.egg.origin)) {
+      return { error: "Ovo de laboratório não encontrado." };
+    }
+    const storedChoices = getStoredLabChoices(incubator.egg.origin);
+    if (!storedChoices?.includes(chosenPokemonId)) {
+      return { error: "Esta opção não pertence ao resultado deste ovo." };
+    }
+
     const result = await hatchEgg(player.id, chosenPokemonId);
     revalidate(player.id);
     return { result };
