@@ -1958,6 +1958,7 @@ model MascotEgg {
   obtainedAt DateTime        @default(now())
   // Se vier de uma conquista/evento, guarda a origem
   origin     String?
+  hatchRarityBonusPct Float @default(0)
   player     Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
   incubation MascotIncubator?
   @@index([playerId])

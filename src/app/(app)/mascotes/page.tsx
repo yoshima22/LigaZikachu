@@ -104,14 +104,14 @@ async function fetchMascotPageData(playerId: string) {
     }),
     prisma.mascotEgg.findMany({
       where: { playerId, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },
-      select: { id: true, type: true, obtainedAt: true, origin: true },
+      select: { id: true, type: true, obtainedAt: true, origin: true, hatchRarityBonusPct: true },
       orderBy: { obtainedAt: "asc" }
     }),
     prisma.mascotIncubator.findUnique({
       where: { playerId },
       select: {
         id: true, startedAt: true, finishAt: true, hatched: true,
-        egg: { select: { type: true, origin: true } }
+        egg: { select: { type: true, origin: true, hatchRarityBonusPct: true } }
       },
     }),
     prisma.mascotFoodItem.findMany({
@@ -596,11 +596,12 @@ export default async function MascotesPage() {
           id: incubator.id,
           eggType: incubator.egg.type,
           eggOrigin: incubator.egg.origin ?? undefined,
+          hatchRarityBonusPct: incubator.egg.hatchRarityBonusPct,
           startedAt: incubator.startedAt,
           finishAt: incubator.finishAt,
           hatched: incubator.hatched,
         } : null}
-        eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin }))}
+        eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin, hatchRarityBonusPct: e.hatchRarityBonusPct }))}
         canSkipIncubation={admin}
         eggImages={eggImageByType}
       />

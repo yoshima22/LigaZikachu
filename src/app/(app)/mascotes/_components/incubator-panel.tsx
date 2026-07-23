@@ -13,12 +13,13 @@ interface IncubatorData {
   id: string;
   eggType: string;
   eggOrigin?: string;
+  hatchRarityBonusPct?: number;
   startedAt: Date;
   finishAt: Date;
   hatched: boolean;
 }
 
-interface EggItem { id: string; type: string; obtainedAt: Date; origin: string | null }
+interface EggItem { id: string; type: string; obtainedAt: Date; origin: string | null; hatchRarityBonusPct?: number }
 
 interface Props {
   incubator: IncubatorData | null;
@@ -301,6 +302,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             </div>
             <div className="text-center">
               <p className="font-semibold text-white">{getEggLabel(incubator.eggType, incubator.eggOrigin)}</p>
+              {!!incubator.hatchRarityBonusPct && (
+                <p className="text-[10px] font-semibold text-purple-300">
+                  +{incubator.hatchRarityBonusPct} pontos percentuais de chance de mascote de raridade elevada
+                </p>
+              )}
               <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
                 <Clock size={12} />
                 <Countdown finishAt={new Date(incubator.finishAt)} />
@@ -359,6 +365,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white">{getEggLabel(egg.type, egg.origin ?? undefined)}</p>
+                  {!!egg.hatchRarityBonusPct && (
+                    <p className="text-[10px] font-semibold text-purple-300">
+                      +{egg.hatchRarityBonusPct} pontos percentuais de chance de mascote de raridade elevada
+                    </p>
+                  )}
                   {egg.origin && <p className="text-[10px] text-slate-500">{egg.origin}</p>}
                 </div>
                 <button type="button" disabled={pending || !!incubator} onClick={() => { setSelectedGen(""); setGenPickEggId(egg.id); }}

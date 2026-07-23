@@ -5,7 +5,7 @@ import { getOrCreateWallet } from "@/lib/zikacoins";
 import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-react";
 import { isAdmin } from "@/lib/auth/permissions";
 import { MiauvadaoPanel } from "./_components/miauvadao-panel";
-import { ShellGame } from "./_components/shell-game";
+import { MiauvadaoGames } from "./_components/miauvadao-games";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
@@ -18,6 +18,8 @@ import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-butt
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import type { MascotRarity } from "@/lib/mascot-data";
+import type { MiauvadaoFusionEggType } from "@/lib/miauvadao-egg-fusion";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,23 @@ export default async function BazarPage({
   const currentPlayer = session?.user ? await getSessionPlayer(session.user.id) : null;
   const playerId = currentPlayer?.id ?? null;
 
-  const wallet = playerId ? await getOrCreateWallet(playerId) : null;
+  const [wallet, fusionEggGroups] = playerId ? await Promise.all([
+    getOrCreateWallet(playerId),
+    prisma.mascotEgg.groupBy({
+      by: ["type"],
+      where: {
+        playerId,
+        type: { in: ["COMMON", "EVENT", "RARE", "SPECIAL"] },
+        incubation: null,
+        NOT: { origin: { startsWith: "bazar:" } },
+      },
+      _count: { _all: true },
+    }),
+  ]) : [null, []];
+  const fusionEggCounts = { COMMON: 0, EVENT: 0, RARE: 0, SPECIAL: 0 } as Record<MiauvadaoFusionEggType, number>;
+  for (const group of fusionEggGroups) {
+    if (group.type in fusionEggCounts) fusionEggCounts[group.type as MiauvadaoFusionEggType] = group._count._all;
+  }
 
   // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
   // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
@@ -185,6 +203,7 @@ export default async function BazarPage({
         lastNpcMessage={freshMiauvadao.lastNpcMessage ?? freshMiauvadao.lastWinnerMessage ?? null}
         slotRefreshAvailable={slotRefreshAvailable}
         purchaseStatus={purchaseStatus}
+        rotationEndsAt={rotation.next.toISOString()}
         sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
       />
 
@@ -226,12 +245,13 @@ export default async function BazarPage({
       )}
 
       {/* Shell Game */}
-      <ShellGame
+      <MiauvadaoGames
         balance={wallet?.balance ?? 0}
         playerId={playerId}
         vaultBalance={freshMiauvadao.vaultBalance}
         lastWinnerMessage={freshMiauvadao.lastWinnerMessage ?? null}
         isAdmin={admin}
+        eggCounts={fusionEggCounts}
       />
 
       {/* Filters */}

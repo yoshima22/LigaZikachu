@@ -230,10 +230,11 @@ interface Props {
   lastNpcMessage?: string | null;
   slotRefreshAvailable?: boolean;
   purchaseStatus: MiauvadaoPurchaseStatus;
+  rotationEndsAt: string;
   sabotagedOfferIndex?: number | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, sabotagedOfferIndex = null }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -251,7 +252,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
   // defasagem de relógio entre cliente e servidor e evita refresh em loop.
   const lastRefreshRef = useRef(0);
   useEffect(() => {
-    const validUntil = offers[0]?.validUntil;
+    const validUntil = rotationEndsAt;
     if (!validUntil) return;
     const target = new Date(validUntil).getTime();
     const check = () => {
@@ -265,7 +266,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
     };
     const iv = setInterval(check, 1000);
     return () => clearInterval(iv);
-  }, [offers, router]);
+  }, [rotationEndsAt, router]);
 
   const handleBuy = (idx: number) => {
     const offer = offers[idx];
@@ -413,9 +414,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
                   {vaultBalance.toLocaleString("pt-BR")} ZC
                 </strong>
               </span>
-              {offers[0]?.validUntil && (
-                <span><RefreshCountdown validUntil={offers[0].validUntil} /></span>
-              )}
+              <span><RefreshCountdown validUntil={rotationEndsAt} /></span>
               {playerId && <span>Compras disponíveis: <strong style={{ color: "#FFCB05" }}>{purchaseCount}/2</strong></span>}
             </div>
           </div>

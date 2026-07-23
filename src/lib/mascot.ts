@@ -124,7 +124,10 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
   if (incubator.hatched) throw new Error("Ovo já chocado.");
   if (new Date() < incubator.finishAt) throw new Error("O ovo ainda não está pronto.");
 
-  const pokemonId = forcedPokemonId ?? rollPokemonFromEgg(getEggRollType(incubator.egg.type, incubator.egg.origin));
+  const pokemonId = forcedPokemonId ?? rollPokemonIdFromEgg(
+    getEggRollType(incubator.egg.type, incubator.egg.origin),
+    incubator.egg.hatchRarityBonusPct,
+  );
   const personality = randomPersonality();
 
   const mascot = await prisma.$transaction(async (tx) => {

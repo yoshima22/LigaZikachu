@@ -356,8 +356,9 @@ function fallbackPoolForEgg(eggType: string): number[] {
  * EGG_GALAR, EGG_HISUI) usam buckets ponderados.
  * Demais ovos de geração mantêm pool flat com filtro de evoluídos/lendários.
  */
-export function rollPokemonIdFromEgg(eggType: string): number {
-  if (Math.random() < legendaryChanceForEgg(eggType)) {
+export function rollPokemonIdFromEgg(eggType: string, rarityBonusPct = 0): number {
+  const bonusChance = Math.max(0, Math.min(4, rarityBonusPct)) / 100;
+  if (Math.random() < Math.min(1, legendaryChanceForEgg(eggType) + bonusChance)) {
     const legendaryPool = hatchableLegendaryPool(eggType);
     if (legendaryPool.length > 0) return randomFrom(legendaryPool);
   }

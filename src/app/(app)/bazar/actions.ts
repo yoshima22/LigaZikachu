@@ -14,6 +14,13 @@ import { isMegaStoneType } from "@/lib/mega-evolution";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
+import {
+  MIAUVADAO_FUSION_EGG_TYPES,
+  rollFusionLootBonus,
+  rollMiauvadaoFusion,
+  type MiauvadaoFusionEggType,
+} from "@/lib/miauvadao-egg-fusion";
+import { EggType } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -1113,6 +1120,88 @@ export async function getMiauvadaoPurchaseStatus(playerId: string | null): Promi
   return purchaseStatusFromQuota(
     await prisma.miauvadaoPurchaseQuota.findUnique({ where: { playerId } }),
   );
+}
+
+const MIAUVADAO_EGG_FUSION_VAULT_COST = 500;
+
+export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]): Promise<{
+  error?: string;
+  result?: "BROKEN" | MiauvadaoFusionEggType | "LAB";
+  lootBonusPct?: number;
+  newVaultBalance?: number;
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    if (eggTypes.length !== 3 || eggTypes.some((type) => !MIAUVADAO_FUSION_EGG_TYPES.includes(type))) {
+      return { error: "Selecione exatamente 3 ovos válidos." };
+    }
+
+    const outcome = await prisma.$transaction(async (tx) => {
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+      if (config.vaultBalance < MIAUVADAO_EGG_FUSION_VAULT_COST) {
+        throw new Error(`A máquina está desligada: o cofre precisa de pelo menos ${MIAUVADAO_EGG_FUSION_VAULT_COST} ZC para funcionar.`);
+      }
+
+      const required = eggTypes.reduce((map, type) => {
+        map.set(type, (map.get(type) ?? 0) + 1);
+        return map;
+      }, new Map<MiauvadaoFusionEggType, number>());
+      const consumedIds: string[] = [];
+      for (const [type, quantity] of required) {
+        const eggs = await tx.mascotEgg.findMany({
+          where: {
+            playerId: player.id,
+            type: type as EggType,
+            incubation: null,
+            NOT: { origin: { startsWith: "bazar:" } },
+          },
+          orderBy: { obtainedAt: "asc" },
+          take: quantity,
+          select: { id: true },
+        });
+        if (eggs.length !== quantity) throw new Error(`Você não possui ${quantity} Ovo(s) ${type} disponível(is).`);
+        consumedIds.push(...eggs.map((egg) => egg.id));
+      }
+
+      const result = rollMiauvadaoFusion(eggTypes);
+      const lootBonusPct = result === "BROKEN" ? 0 : rollFusionLootBonus();
+      const consumed = await tx.mascotEgg.deleteMany({ where: { id: { in: consumedIds }, playerId: player.id } });
+      if (consumed.count !== 3) {
+        throw new Error("Os ovos mudaram enquanto a fusão era processada. Nada foi consumido; tente novamente.");
+      }
+      if (result !== "BROKEN") {
+        await tx.mascotEgg.create({
+          data: {
+            playerId: player.id,
+            type: result as EggType,
+            origin: "Miauvadão: Fusão de Ovos",
+            hatchRarityBonusPct: lootBonusPct,
+          },
+        });
+      }
+      const updatedConfig = await tx.miauvadaoConfig.update({
+        where: { id: "singleton" },
+        data: {
+          vaultBalance: { decrement: MIAUVADAO_EGG_FUSION_VAULT_COST },
+          lastNpcMessage: result === "BROKEN"
+            ? `${player.displayName} arriscou três ovos, mas a máquina transformou tudo em casca quebrada! 💥`
+            : `${player.displayName} fundiu três ovos e recebeu um Ovo ${result}${lootBonusPct ? ` com +${lootBonusPct} pontos percentuais de chance de alta raridade` : ""}! 🥚`,
+          lastNpcMessageAt: new Date(),
+        },
+      });
+      return { result, lootBonusPct, newVaultBalance: updatedConfig.vaultBalance };
+    }, { isolationLevel: "Serializable" });
+
+    revalidateTag("miauvadao-config");
+    revalidatePath("/bazar");
+    revalidatePath("/mascotes");
+    return outcome;
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "A fusão falhou." };
+  }
 }
 
 export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: string; purchaseStatus?: MiauvadaoPurchaseStatus }> {
