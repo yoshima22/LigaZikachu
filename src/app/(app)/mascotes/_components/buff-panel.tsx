@@ -313,7 +313,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           {selectedBuffItem?.type === "RAINBOW_FEATHER" && selectedMascot && (
             <div className="w-full space-y-2">
               <p className="text-[10px] text-red-400 font-semibold">
-                ⚠️ IRREVERSÍVEL — volta ao nível 1 e ressorteia personalidade e atributos
+                ⚠️ IRREVERSÍVEL — volta à forma básica e ao nível 1, ressorteando personalidade e atributos
               </p>
               {featherWarning && (
                 <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-semibold text-amber-300">

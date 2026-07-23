@@ -1005,7 +1005,7 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
         data: {
           mascotId,
           emoji: "🌈",
-          description: `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${reset.statMin}–${reset.statMax}.`,
+          description: `Pena Arco-Íris usada! O mascote voltou para ${getPokemonName(reset.basePokemonId)} no nível 1, com personalidade e atributos sorteados novamente no intervalo ${reset.statMin}–${reset.statMax}.`,
         },
       });
       return reset;

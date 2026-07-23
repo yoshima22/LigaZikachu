@@ -10,7 +10,7 @@ import { getShopItemMeta } from "@/lib/shop-cache";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
   ALL_EVOLVED_IDS, EGG_POOLS, LEGENDARY_HATCH_BASE_OVERRIDES, LEGENDARY_POOL,
-  EVOLUTION_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
+  EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
@@ -23,7 +23,7 @@ import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
-import { MEGA_STONES, getMegaStoneByType } from "@/lib/mega-evolution";
+import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 
@@ -2703,7 +2703,45 @@ export async function removeXpShare(playerId: string, mascotId: string) {
   return buff.type;
 }
 
-/** Pena Arco-Íris: faz o mascote renascer usando o mesmo intervalo do ovo original. */
+const RAINBOW_FEATHER_BASE_FORM_OVERRIDES: Readonly<Record<number, number>> = {
+  // Ramificações que não fazem parte do mapa simplificado de evolução.
+  135: 133, 136: 133, 196: 133, 197: 133, 470: 133, 471: 133, 700: 133,
+  186: 60,
+  199: 79,
+  902: 550,
+  980: 194,
+  // Evoluções regionais cuja base pertence a outra forma.
+  10100: 172,
+  10114: 102,
+  10115: 104,
+  10169: 10161,
+  10233: 155,
+  10236: 501,
+  10237: 548,
+  10240: 627,
+  10241: 704,
+  10242: 704,
+  10243: 712,
+  10244: 722,
+};
+
+function getRainbowFeatherBaseForm(pokemonId: number): number {
+  const megaStone = getMegaStoneForMegaPokemon(pokemonId);
+  let current = megaStone?.compatiblePokemonId ?? pokemonId;
+  const overriddenBase = RAINBOW_FEATHER_BASE_FORM_OVERRIDES[current];
+  if (overriddenBase) current = overriddenBase;
+
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const previous = EVOLUTION_REVERSE_MAP.get(current)?.[0];
+    if (!previous) break;
+    current = previous.from;
+  }
+  return current;
+}
+
+/** Pena Arco-Íris: faz o mascote renascer na forma base usando o intervalo do ovo original. */
 export async function applyRainbowFeather(
   playerId: string,
   mascotId: string,
@@ -2736,10 +2774,15 @@ export async function applyRainbowFeather(
   }
   const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? EGG_STAT_RANGES.RARE;
   const personality = randomPersonality();
+  const basePokemonId = getRainbowFeatherBaseForm(mascot.pokemonId);
+  const resetDefaultNickname = mascot.nickname === getPokemonName(mascot.pokemonId);
   await db.mascot.update({
     where: { id: mascotId },
     data: {
       level: 1, exp: 0,
+      pokemonId: basePokemonId,
+      evolutionLocked: false,
+      ...(resetDefaultNickname ? { nickname: null } : {}),
       personality,
       statForce: randomInt(statMin, statMax),
       statAgility: randomInt(statMin, statMax),
@@ -2759,14 +2802,17 @@ export async function applyRainbowFeather(
   await db.mascotBuff.deleteMany({
     where: { mascotId, type: "STAT_BOOST", expiresAt: { gt: new Date("2090-01-01") } }
   }).catch(() => {});
+  // O novo ciclo pode conquistar novamente os marcos de maturidade e evolução.
+  await db.mascotProgressMilestone.deleteMany({ where: { mascotId } });
   if (!tx) {
-    await logEvent(mascotId, "🌈", `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${statMin}–${statMax}.`);
+    await logEvent(mascotId, "🌈", `Pena Arco-Íris usada! O mascote voltou para ${getPokemonName(basePokemonId)} no nível 1 e teve personalidade e atributos sorteados novamente.`);
   }
   return {
     statMin,
     statMax,
     actualEggTier: adminLabOriginOverride ? "LAB" : actualEggTier,
     usedFallback: !adminLabOriginOverride && !mascot.hatchedFromEggType,
+    basePokemonId,
   };
 }
 
