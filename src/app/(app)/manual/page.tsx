@@ -608,7 +608,7 @@ export default async function ManualPage() {
           <Table
             headers={["Gasto", "Custo"]}
             rows={[
-              ["Atualização manual das ofertas do Miauvadão", "100 ZC (3× compartilhadas/dia)"],
+              ["Troca global de um slot do Miauvadão", "250 ZC (1× por rotação de 6h)"],
               ["Taxa de listagem no Bazar", "definida pelo admin"],
               ["Compras na ZikaShop", "variável por item"],
               ["Pacotes de figurinhas", "definido por pacote"],

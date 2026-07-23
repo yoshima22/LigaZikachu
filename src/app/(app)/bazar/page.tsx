@@ -10,7 +10,8 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, markBazarProposalsViewed } from "./actions";
+import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, getMiauvadaoPurchaseStatus, markBazarProposalsViewed } from "./actions";
+import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
 import { getCachedListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
@@ -65,11 +66,10 @@ export default async function BazarPage({
 
   const dailyOffers = (freshMiauvadao.dailyOffers as unknown[]) ?? [];
 
-  const REFRESH_DAILY_LIMIT = 3;
-  const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const refreshData = (freshMiauvadao.playerRefreshData ?? {}) as Record<string, { date?: string; count?: number }>;
-  const globalRefreshCount = refreshData["__global__"]?.date === todayBRT ? (refreshData["__global__"]?.count ?? 0) : 0;
-  const refreshesRemaining = Math.max(0, REFRESH_DAILY_LIMIT - globalRefreshCount);
+  const purchaseStatus = await getMiauvadaoPurchaseStatus(playerId);
+  const rotation = getMiauvadaoRotation();
+  const slotRefreshAvailable = !freshMiauvadao.slotRefreshUsedCycle
+    || freshMiauvadao.slotRefreshUsedCycle < rotation.start;
 
   return (
     <div className="space-y-6">
@@ -151,22 +151,22 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>💰 Cofre do Miauvadão</p>
-            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>10% de cada compra</strong> nas ofertas, <strong style={{ color: "#FFCB05" }}>apostas perdidas</strong> no jogo e <strong style={{ color: "#FFCB05" }}>investimentos de jogadores (60 ZC)</strong>. Quanto mais cheio, melhores os descontos e prêmios.</p>
+            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>10% de cada compra</strong>, apostas perdidas e a troca global de slot. Quanto mais cheio, melhores os descontos e prêmios.</p>
           </div>
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>📊 Como os descontos são calculados</p>
-            <p>Desconto base = faixa da raridade. O cofre adiciona um bonus suave, com teto raro de <strong style={{ color: "#FFCB05" }}>70%</strong>. Refresh pago adiciona <strong style={{ color: "#FFCB05" }}>+10 pontos percentuais extras</strong> aos itens novos, ainda respeitando o teto.</p>
+            <p>Desconto base = faixa da raridade. O cofre adiciona um bônus suave, com teto raro de <strong style={{ color: "#FFCB05" }}>70%</strong>. As ofertas mudam às 00:00, 06:00, 12:00 e 18:00 (horário de Brasília).</p>
           </div>
 
           <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Atualizar Ofertas (60 ZC)</p>
-            <p>Qualquer jogador pode pagar 60 ZC para atualizar os 3 itens do dia imediatamente. Os 60 ZC vão ao cofre e os novos itens ganham <strong style={{ color: "#FFCB05" }}>+10 pontos de desconto extras</strong> além do normal. O <strong style={{ color: "#FFCB05" }}>contador de tempo não reinicia</strong> — só os itens mudam.</p>
+            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Troca global de slot (250 ZC)</p>
+            <p>A cada rotação, qualquer jogador pode trocar <strong style={{ color: "#FFCB05" }}>um único slot</strong>, incluindo item e desconto. A troca vale para todos, custa 250 ZC e só pode ser usada uma vez até o próximo ciclo.</p>
           </div>
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
-            <p>Aposte entre 50–2000 ZC. A bolinha aparece num copo e os copos embaralham. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 40% da aposta</strong> (ex: 100 ZC apostados → recebe 140 ZC). O bônus de 40% sai do cofre. Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
+            <p>Aposte entre 50–2000 ZC. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 65%</strong> (ex: 100 ZC → 165 ZC). Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
           </div>
 
           <div className="space-y-1">
@@ -183,8 +183,8 @@ export default async function BazarPage({
         balance={wallet?.balance ?? 0}
         playerId={playerId}
         lastNpcMessage={freshMiauvadao.lastNpcMessage ?? freshMiauvadao.lastWinnerMessage ?? null}
-        refreshesRemaining={refreshesRemaining}
-        refreshDailyLimit={REFRESH_DAILY_LIMIT}
+        slotRefreshAvailable={slotRefreshAvailable}
+        purchaseStatus={purchaseStatus}
         sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
       />
 

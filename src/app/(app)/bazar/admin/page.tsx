@@ -111,7 +111,7 @@ export default function MiauvadaoAdminPage() {
       finalPrice: o.finalPrice ?? 0,
       stock: o.stock ?? 1,
       sold: 0,
-      validUntil: new Date(Date.now() + 24 * 3600000).toISOString(),
+      validUntil: new Date(Date.now() + 6 * 3600000).toISOString(),
     } as MiauvadaoOffer));
 
     startTransition(async () => {

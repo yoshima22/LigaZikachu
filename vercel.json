@@ -21,6 +21,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/miauvadao-rotation",
+      "schedule": "0 3,9,15,21 * * *"
+    },
+    {
       "path": "/api/cron/sync-close",
       "schedule": "1 20 * * *"
     },

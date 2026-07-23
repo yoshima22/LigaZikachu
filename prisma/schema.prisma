@@ -2543,6 +2543,7 @@ model MiauvadaoConfig {
   dailyOffers       Json     @default("[]")
   offersRefreshedAt    DateTime?
   playerRefreshData    Json      @default("{}")   // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
+  slotRefreshUsedCycle DateTime?
   // Shell Game — última mensagem do NPC
   lastWinnerMessage String?
   lastWinnerAt      DateTime?
@@ -2551,6 +2552,15 @@ model MiauvadaoConfig {
   updatedAt         DateTime @updatedAt
 
   @@map("miauvadao_config")
+}
+
+model MiauvadaoPurchaseQuota {
+  playerId        String   @id
+  chargeOneUsedAt DateTime?
+  chargeTwoUsedAt DateTime?
+  updatedAt       DateTime @updatedAt
+
+  @@map("miauvadao_purchase_quotas")
 }
 
 // ── Passe Apoiador ────────────────────────────────────────────────────────────

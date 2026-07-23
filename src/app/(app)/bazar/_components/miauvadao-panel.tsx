@@ -4,8 +4,8 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
-import { buyMiauvadaoOffer, refreshMiauvadaoShopNow } from "../actions";
-import type { MiauvadaoOffer } from "../actions";
+import { buyMiauvadaoOffer, refreshMiauvadaoOfferSlot } from "../actions";
+import type { MiauvadaoOffer, MiauvadaoPurchaseStatus } from "../actions";
 import { getShopItemEmoji } from "@/lib/shop-config";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -72,40 +72,6 @@ function EggImg({ src }: { src: string }) {
   );
 }
 
-// ── RefreshShopButton ─────────────────────────────────────────────────────────
-
-function RefreshShopButton({ playerId, refreshesRemaining, refreshDailyLimit }: { playerId: string | null; refreshesRemaining: number; refreshDailyLimit: number }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  if (!playerId) return null;
-  const limitReached = refreshesRemaining <= 0;
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-1.5 text-[10px]" style={{ color: limitReached ? "#7a4a00" : "#8b6c00" }}>
-        <RefreshCw size={9} />
-        {limitReached
-          ? "Limite atingido para hoje"
-          : <><strong style={{ color: "#FFCB05" }}>{refreshesRemaining}</strong>/{refreshDailyLimit} atualizações restantes hoje</>
-        }
-      </div>
-      <button type="button" disabled={pending || limitReached}
-        onClick={() => {
-          if (!confirm(`Pagar 100 ZC para atualizar as ofertas agora com descontos melhores? (${refreshesRemaining} de ${refreshDailyLimit} restantes, cooldown 15 min)`)) return;
-          startTransition(async () => {
-            const r = await refreshMiauvadaoShopNow();
-            if (r.error) { toast.error(r.error); return; }
-            toast.success("Ofertas atualizadas! Descontos melhorados. 🛍️");
-            router.refresh();
-          });
-        }}
-        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ background: "#2a1a03", border: "1px solid #c9a800", color: limitReached ? "#5a4700" : "#c9a800" }}>
-        🔄 Atualizar ofertas (100 ZC · {refreshDailyLimit}x compartilhadas/dia)
-      </button>
-    </div>
-  );
-}
-
 // ── Cores base ────────────────────────────────────────────────────────────────
 const GOLD   = "#c9a800";
 const GOLD_D = "#5a4700";
@@ -113,19 +79,22 @@ const GOLD_D = "#5a4700";
 // ── Card TCG ──────────────────────────────────────────────────────────────────
 
 function MiauvadaoCard({
-  offer, idx, onBuy, pending, buying, balance, sabotaged,
+  offer, idx, onBuy, onRefresh, pending, buying, balance, sabotaged, canPurchase, slotRefreshAvailable,
 }: {
   offer: MiauvadaoOffer;
   idx: number;
   onBuy: (i: number) => void;
+  onRefresh: (i: number) => void;
   pending: boolean;
   buying: boolean;
   balance: number;
   sabotaged?: boolean;
+  canPurchase: boolean;
+  slotRefreshAvailable: boolean;
 }) {
   const soldOut = offer.sold >= offer.stock;
   const expired = new Date() > new Date(offer.validUntil);
-  const canBuy  = !sabotaged && !soldOut && !expired && balance >= offer.finalPrice;
+  const canBuy  = canPurchase && !sabotaged && !soldOut && !expired && balance >= offer.finalPrice;
   const dimmed  = sabotaged || soldOut || expired;
 
   return (
@@ -239,6 +208,12 @@ function MiauvadaoCard({
              buying && pending ? "Comprando…" :
              <><ShoppingCart size={11}/> Comprar</>}
           </button>
+          {slotRefreshAvailable && (
+            <button type="button" disabled={pending} onClick={() => onRefresh(idx)}
+              className="w-full rounded-lg border border-[#c9a800]/50 py-1.5 text-[10px] font-bold text-[#c9a800] disabled:opacity-50">
+              <RefreshCw size={10} className="mr-1 inline" /> Trocar este slot · 250 ZC
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -253,15 +228,23 @@ interface Props {
   balance: number;
   playerId: string | null;
   lastNpcMessage?: string | null;
-  refreshesRemaining?: number;
-  refreshDailyLimit?: number;
+  slotRefreshAvailable?: boolean;
+  purchaseStatus: MiauvadaoPurchaseStatus;
   sabotagedOfferIndex?: number | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, refreshesRemaining = 3, refreshDailyLimit = 3, sabotagedOfferIndex = null }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, sabotagedOfferIndex = null }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
+  const [purchaseStatus, setPurchaseStatus] = useState(initialPurchaseStatus);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  const availablePurchases = purchaseStatus.rechargeAt.filter((date) => new Date(date).getTime() > now).length;
+  const purchaseCount = Math.max(purchaseStatus.available, 2 - availablePurchases);
 
   // Ao expirar o timer, recarrega a página para o servidor re-gerar as ofertas
   // (autoRefreshMiauvadaoIfNeeded roda no load). Throttle de 4s cobre a
@@ -294,8 +277,21 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
     startTransition(async () => {
       const r = await buyMiauvadaoOffer(idx);
       if (r.error) toast.error(r.error);
-      else { toast.success(`"${offer.name}" adicionado ao inventário! 🎉`); router.refresh(); }
+      else {
+        if (r.purchaseStatus) setPurchaseStatus(r.purchaseStatus);
+        toast.success(`"${offer.name}" adicionado ao inventário! 🎉`);
+        router.refresh();
+      }
       setBuyingIdx(null);
+    });
+  };
+
+  const handleRefresh = (idx: number) => {
+    if (!confirm("Trocar este slot e seu desconto para todos por 250 ZC? Esta troca só pode ser usada uma vez nesta rotação.")) return;
+    startTransition(async () => {
+      const result = await refreshMiauvadaoOfferSlot(idx);
+      if (result.error) toast.error(result.error);
+      else { toast.success("Slot trocado para todos os jogadores!"); router.refresh(); }
     });
   };
 
@@ -420,6 +416,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
               {offers[0]?.validUntil && (
                 <span><RefreshCountdown validUntil={offers[0].validUntil} /></span>
               )}
+              {playerId && <span>Compras disponíveis: <strong style={{ color: "#FFCB05" }}>{purchaseCount}/2</strong></span>}
             </div>
           </div>
 
@@ -439,10 +436,13 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
                   offer={offer}
                   idx={idx}
                   onBuy={handleBuy}
+                  onRefresh={handleRefresh}
                   pending={pending}
                   buying={buyingIdx === idx}
                   balance={balance}
                   sabotaged={sabotagedOfferIndex === idx}
+                  canPurchase={purchaseCount > 0}
+                  slotRefreshAvailable={slotRefreshAvailable}
                 />
               ))}
             </div>
@@ -452,7 +452,9 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
             <p className="text-[10px]" style={{ color: "#3a2c00" }}>
               As taxas do Bazar alimentam o cofre do Miauvadão e financiam os descontos.
             </p>
-            <RefreshShopButton playerId={playerId} refreshesRemaining={refreshesRemaining} refreshDailyLimit={refreshDailyLimit} />
+            <span className="text-[10px]" style={{ color: slotRefreshAvailable ? "#c9a800" : "#5a4700" }}>
+              {slotRefreshAvailable ? "1 troca de slot disponível nesta rotação" : "Troca de slot já utilizada nesta rotação"}
+            </span>
           </div>
       </div>
     </div>

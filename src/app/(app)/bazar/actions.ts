@@ -13,6 +13,7 @@ import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-even
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
+import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 
 function revalidateBazar() {
@@ -83,6 +84,8 @@ const MIAUVADAO_ELIGIBLE_TYPES = [
 
 const MIAUVADAO_MAX_DISCOUNT = 70;
 const MIAUVADAO_MEGA_STONE_MAX_DISCOUNT = 20;
+const MIAUVADAO_SLOT_REFRESH_COST = 250;
+const MIAUVADAO_PURCHASE_RECHARGE_MS = 10 * 60_000;
 
 // Faixa de desconto por raridade do item
 const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
@@ -108,7 +111,7 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 
   // Quanto mais ZC no cofre, maior o bônus de desconto (máx +20%)
   const vaultBonus = Math.min(14, Math.floor(Math.sqrt(Math.max(0, vaultBalance) / 500) * 3));
-  const validUntil = new Date(Date.now() + 24 * 3600_000).toISOString();
+  const validUntil = getMiauvadaoRotation().next.toISOString();
 
   // Sorteia até 3 itens distintos
   const shuffled = [...shopItems].sort(() => Math.random() - 0.5);
@@ -151,9 +154,11 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awa
     const config = await getMiauvadaoConfig();
 
     const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
+    const rotation = getMiauvadaoRotation();
     const firstOffer = offers[0];
     const expired = !firstOffer
-      || new Date() > new Date(firstOffer.validUntil)
+      || !config.offersRefreshedAt
+      || config.offersRefreshedAt < rotation.start
       || !firstOffer.shopItemId;
 
     if (!expired) return null;
@@ -161,15 +166,13 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awa
     const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
     if (newOffers.length === 0) return null;
 
-    const currentRefreshData = (config.playerRefreshData ?? {}) as Record<string, unknown>;
-    const resetRefreshData = { ...currentRefreshData, "__global__": { date: "", count: 0 } };
     // Retorna o resultado do update diretamente — sem precisar re-buscar pelo cache
     const freshConfig = await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
       data: {
         dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-        offersRefreshedAt: new Date(),
-        playerRefreshData: resetRefreshData as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        offersRefreshedAt: rotation.start,
+        slotRefreshUsedCycle: null,
       },
     });
     revalidateTag("miauvadao-config");
@@ -1091,7 +1094,28 @@ export async function toggleFavorite(listingId: string): Promise<{ error?: strin
 
 // ── Miauvadão ─────────────────────────────────────────────────────────────────
 
-export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: string }> {
+export type MiauvadaoPurchaseStatus = { available: number; rechargeAt: string[] };
+
+function purchaseStatusFromQuota(
+  quota: { chargeOneUsedAt: Date | null; chargeTwoUsedAt: Date | null } | null,
+  now = new Date(),
+): MiauvadaoPurchaseStatus {
+  const rechargeAt = [quota?.chargeOneUsedAt, quota?.chargeTwoUsedAt]
+    .filter((value): value is Date => Boolean(value))
+    .map((value) => new Date(value.getTime() + MIAUVADAO_PURCHASE_RECHARGE_MS))
+    .filter((value) => value > now)
+    .sort((a, b) => a.getTime() - b.getTime());
+  return { available: 2 - rechargeAt.length, rechargeAt: rechargeAt.map((value) => value.toISOString()) };
+}
+
+export async function getMiauvadaoPurchaseStatus(playerId: string | null): Promise<MiauvadaoPurchaseStatus> {
+  if (!playerId) return { available: 0, rechargeAt: [] };
+  return purchaseStatusFromQuota(
+    await prisma.miauvadaoPurchaseQuota.findUnique({ where: { playerId } }),
+  );
+}
+
+export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: string; purchaseStatus?: MiauvadaoPurchaseStatus }> {
   try {
     if (offerIndex === 1) {
       const [sabotages, stepState] = await Promise.all([
@@ -1106,22 +1130,37 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
-    const config = await getMiauvadaoConfig();
-    const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
-    const offer = offers[offerIndex];
-
-    if (!offer) return { error: "Oferta não encontrada." };
-    if (offer.sold >= offer.stock) return { error: "Estoque esgotado." };
-    if (new Date() > new Date(offer.validUntil)) return { error: "Oferta expirada." };
-
-    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-    if (!wallet || wallet.balance < offer.finalPrice) {
-      return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis, oferta custa ${offer.finalPrice} ZC).` };
-    }
-
-    const coinsToVault = Math.floor(offer.finalPrice * 0.10);
-
-    await prisma.$transaction(async (tx) => {
+    await autoRefreshMiauvadaoIfNeeded();
+    const result = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+      const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
+      const offer = offers[offerIndex];
+      if (!offer) throw new Error("Oferta não encontrada.");
+      if (offer.sold >= offer.stock) throw new Error("Estoque esgotado.");
+      if (now > new Date(offer.validUntil)) throw new Error("Oferta expirada.");
+      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < offer.finalPrice) {
+        throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis, oferta custa ${offer.finalPrice} ZC).`);
+      }
+      const quota = await tx.miauvadaoPurchaseQuota.upsert({
+        where: { playerId: player.id },
+        update: {},
+        create: { playerId: player.id },
+      });
+      const chargeOneAvailable = !quota.chargeOneUsedAt
+        || now.getTime() - quota.chargeOneUsedAt.getTime() >= MIAUVADAO_PURCHASE_RECHARGE_MS;
+      const chargeTwoAvailable = !quota.chargeTwoUsedAt
+        || now.getTime() - quota.chargeTwoUsedAt.getTime() >= MIAUVADAO_PURCHASE_RECHARGE_MS;
+      if (!chargeOneAvailable && !chargeTwoAvailable) {
+        const status = purchaseStatusFromQuota(quota, now);
+        throw new Error(`Suas duas compras estão recarregando. Próxima disponível às ${new Date(status.rechargeAt[0]).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}.`);
+      }
+      await tx.miauvadaoPurchaseQuota.update({
+        where: { playerId: player.id },
+        data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now },
+      });
+      const coinsToVault = Math.floor(offer.finalPrice * 0.10);
       // Cobrar player
       await tx.zikaCoinWallet.update({
         where: { playerId: player.id },
@@ -1167,11 +1206,13 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
           create: { playerId: player.id, itemId: offer.shopItemId, quantity: 1 },
         });
       }
-    });
+      const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
+      return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now) };
+    }, { isolationLevel: "Serializable" });
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
-    return {};
+    return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao comprar." };
   }
@@ -1195,7 +1236,7 @@ export interface MiauvadaoOffer {
 export async function adminSetMiauvadaoOffers(offers: MiauvadaoOffer[]): Promise<{ error?: string }> {
   try {
     await requireAdmin();
-    const validUntil = new Date(Date.now() + 24 * 3600000).toISOString();
+    const validUntil = getMiauvadaoRotation().next.toISOString();
     const offersWithExpiry = offers.map(o => {
       const discountLimit = isMegaStoneType(o.itemType)
         ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT
@@ -1226,67 +1267,52 @@ export async function adminUpdateListingFee(fee: number): Promise<{ error?: stri
   }
 }
 
-const REFRESH_COST        = 100;
-const REFRESH_COOLDOWN_MS = 15 * 60 * 1000; // 15 min
-const REFRESH_DAILY_LIMIT = 3;
-
-export async function refreshMiauvadaoShopNow(): Promise<{ error?: string; newBalance?: number }> {
+export async function refreshMiauvadaoOfferSlot(offerIndex: number): Promise<{ error?: string; newBalance?: number }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
-
-    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-    if (!wallet || wallet.balance < REFRESH_COST) return { error: `Saldo insuficiente (precisa de ${REFRESH_COST} ZC).` };
-
-    const configBefore = await getMiauvadaoConfig();
-    const vaultBeforeRefresh = configBefore?.vaultBalance ?? 0;
-
-    // Verificar cooldown (por jogador) e limite diário compartilhado (global)
-    const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-    const refreshData = (configBefore?.playerRefreshData ?? {}) as Record<string, { date?: string; count?: number; lastAt?: string }>;
-
-    // Limite global compartilhado entre todos os jogadores
-    const globalData = refreshData["__global__"];
-    const globalCount = globalData?.date === todayBRT ? (globalData.count ?? 0) : 0;
-    if (globalCount >= REFRESH_DAILY_LIMIT)
-      return { error: `Limite diário atingido (${REFRESH_DAILY_LIMIT} atualizações compartilhadas por dia).` };
-
-    // Cooldown individual (evita spam de um único jogador)
-    const myData = refreshData[player.id];
-    if (myData?.lastAt && Date.now() - new Date(myData.lastAt).getTime() < REFRESH_COOLDOWN_MS) {
-      const remaining = Math.ceil((REFRESH_COOLDOWN_MS - (Date.now() - new Date(myData.lastAt).getTime())) / 60000);
-      return { error: `Aguarde ${remaining} min antes de atualizar novamente.` };
-    }
-
-    const updatedRefreshData = {
-      ...refreshData,
-      "__global__": { date: todayBRT, count: globalCount + 1 },
-      [player.id]: { lastAt: new Date().toISOString() },
-    };
-
-    const [updatedWallet] = await prisma.$transaction([
-      prisma.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: REFRESH_COST } } }),
-      prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: REFRESH_COST } } }),
-    ]);
-
-    const newOffers = await rollMiauvadaoOffers(vaultBeforeRefresh, 10);
-
-    const msg = `O ${player.displayName} investiu ${REFRESH_COST} ZC e atualizou as ofertas com descontos melhores! 🛍️`;
-    await prisma.miauvadaoConfig.update({
-      where: { id: "singleton" },
-      data: {
-        dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-        playerRefreshData: updatedRefreshData as unknown as import("@prisma/client").Prisma.InputJsonValue,
-        lastNpcMessage: msg,
-        lastNpcMessageAt: new Date(),
+    if (!Number.isInteger(offerIndex) || offerIndex < 0 || offerIndex > 2) return { error: "Slot inválido." };
+    await autoRefreshMiauvadaoIfNeeded();
+    const rotation = getMiauvadaoRotation();
+    const result = await prisma.$transaction(async (tx) => {
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+      if (config.slotRefreshUsedCycle && config.slotRefreshUsedCycle >= rotation.start) {
+        throw new Error("A troca de um slot já foi usada nesta rotação.");
       }
-    });
+      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < MIAUVADAO_SLOT_REFRESH_COST) {
+        throw new Error(`Saldo insuficiente (precisa de ${MIAUVADAO_SLOT_REFRESH_COST} ZC).`);
+      }
+      const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
+      if (!offers[offerIndex]) throw new Error("Slot não encontrado.");
+      const candidates = await rollMiauvadaoOffers(config.vaultBalance);
+      const existingIds = new Set(offers.map((offer) => offer.shopItemId));
+      const replacement = candidates.find((offer) => !existingIds.has(offer.shopItemId)) ?? candidates[0];
+      if (!replacement) throw new Error("Nenhum item elegível para a troca.");
+      const updatedOffers = [...offers];
+      updatedOffers[offerIndex] = replacement;
+      const updatedWallet = await tx.zikaCoinWallet.update({
+        where: { playerId: player.id },
+        data: { balance: { decrement: MIAUVADAO_SLOT_REFRESH_COST } },
+      });
+      await tx.miauvadaoConfig.update({
+        where: { id: "singleton" },
+        data: {
+          dailyOffers: updatedOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+          slotRefreshUsedCycle: rotation.start,
+          vaultBalance: { increment: MIAUVADAO_SLOT_REFRESH_COST },
+          lastNpcMessage: `${player.displayName} pagou ${MIAUVADAO_SLOT_REFRESH_COST} ZC e trocou uma oferta para todo mundo! 🔄`,
+          lastNpcMessageAt: new Date(),
+        },
+      });
+      return { newBalance: updatedWallet.balance };
+    }, { isolationLevel: "Serializable" });
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
-    return { newBalance: updatedWallet.balance };
+    return result;
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -1316,7 +1342,8 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
       where: { id: "singleton" },
       data: {
         dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-        offersRefreshedAt: new Date(),
+        offersRefreshedAt: getMiauvadaoRotation().start,
+        slotRefreshUsedCycle: null,
         lastNpcMessage: "Admin atualizou as ofertas do Miauvadão manualmente. 🛍️",
         lastNpcMessageAt: new Date(),
       },
@@ -1727,8 +1754,8 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
 
 const SHELL_MIN_BET = 50;
 const SHELL_MAX_BET = 2000;
-// Premio = aposta + 40% da aposta; o premio total e debitado do cofre.
-const SHELL_WIN_BONUS_PCT = 0.40; // jogador ganha aposta + 40% da aposta
+// Premio = aposta + 65% da aposta; o premio total e debitado do cofre.
+const SHELL_WIN_BONUS_PCT = 0.65;
 const SHELL_COOLDOWN_MS = 5 * 60_000;
 
 const MIAUVADAO_RAGE: string[] = [
@@ -1814,9 +1841,9 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
     let newBalance = 0;
 
     if (won) {
-      // Premio correto: aposta + 40% da aposta; o premio total sai do cofre.
+      // Premio correto: aposta + 65% da aposta; o premio total sai do cofre.
       const vaultBonus = Math.floor(session.betAmount * SHELL_WIN_BONUS_PCT);
-      prize = session.betAmount + vaultBonus; // ex: aposta 100 -> recebe 140
+      prize = session.betAmount + vaultBonus; // ex: aposta 100 -> recebe 165
       const vaultDebit = prize;
       const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
       const message = template
