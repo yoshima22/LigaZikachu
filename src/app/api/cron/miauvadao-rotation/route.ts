@@ -6,6 +6,14 @@ export async function GET(req: NextRequest) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const result = await autoRefreshMiauvadaoIfNeeded();
-  return NextResponse.json({ ok: true, rotated: Boolean(result), checkedAt: new Date().toISOString() });
+  try {
+    const result = await autoRefreshMiauvadaoIfNeeded({ throwOnError: true });
+    return NextResponse.json({ ok: true, rotated: Boolean(result), checkedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error("[Cron Miauvadao] A rotacao falhou.", error);
+    return NextResponse.json(
+      { ok: false, error: "Falha ao executar a rotação do Miauvadão.", checkedAt: new Date().toISOString() },
+      { status: 500 },
+    );
+  }
 }

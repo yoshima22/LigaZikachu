@@ -170,10 +170,14 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 
 /** Checa se as ofertas expiraram e gera novas automaticamente a partir do shop */
 // Retorna freshConfig quando rolou novas ofertas (evita re-fetch pelo cache no mesmo request)
-export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awaited<ReturnType<typeof prisma.miauvadaoConfig.findUniqueOrThrow>> } | null> {
+export async function autoRefreshMiauvadaoIfNeeded(options?: {
+  throwOnError?: boolean;
+}): Promise<{ freshConfig: Awaited<ReturnType<typeof prisma.miauvadaoConfig.findUniqueOrThrow>> } | null> {
   try {
-    // Usa o cache para checar — sem egress extra na maioria dos page loads
-    const config = await getMiauvadaoConfig();
+    // A rotação é uma escrita crítica: sempre confira o estado real do banco.
+    // Usar o cache aqui pode fazer o cron enxergar o ciclo anterior como atual.
+    const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } })
+      ?? await prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
 
     const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const rotation = getMiauvadaoRotation();
@@ -197,9 +201,17 @@ export async function autoRefreshMiauvadaoIfNeeded(): Promise<{ freshConfig: Awa
         slotRefreshUsedCycle: null,
       },
     });
-    revalidateTag("miauvadao-config");
+    try {
+      revalidateTag("miauvadao-config");
+    } catch (cacheError) {
+      // A rotação no banco já foi concluída. Falha de invalidação não pode
+      // transformar uma escrita bem-sucedida em falso negativo para o cron.
+      console.warn("[Miauvadao] Rotacao concluida, mas o cache nao foi invalidado.", cacheError);
+    }
     return { freshConfig };
-  } catch {
+  } catch (error) {
+    console.error("[Miauvadao] Falha ao executar rotacao automatica.", error);
+    if (options?.throwOnError) throw error;
     return null;
   }
 }
