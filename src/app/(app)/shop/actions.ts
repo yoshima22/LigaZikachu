@@ -188,12 +188,22 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   },
   {
     type: ShopItemType.RAINBOW_FEATHER,
+    name: "Pena Arco-Íris de Evento",
+    description: "Ressorteia personalidade e atributos respeitando sempre o intervalo do ovo de origem. Também pode ser usada em origens inferiores, sem elevar seus atributos.",
+    imageUrl: null,
+    rarity: ShopItemRarity.EPIC,
+    price: 2600,
+    sortOrder: 68,
+    metadata: { eggTier: "EVENT" },
+  },
+  {
+    type: ShopItemType.RAINBOW_FEATHER,
     name: "Pena Arco-Íris Especial",
     description: "Ressorteia personalidade e atributos de um mascote originado de Ovo Especial, preservando o intervalo original.",
     imageUrl: null,
     rarity: ShopItemRarity.EPIC,
     price: 3100,
-    sortOrder: 68,
+    sortOrder: 69,
     metadata: { eggTier: "SPECIAL" },
   },
   {
@@ -203,7 +213,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
     imageUrl: null,
     rarity: ShopItemRarity.LEGENDARY,
     price: 4200,
-    sortOrder: 69,
+    sortOrder: 70,
     metadata: { eggTier: "LAB" },
   },
 ];

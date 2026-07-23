@@ -956,22 +956,43 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useRainbowFeatherAction(mascotId: string, itemId: string): Promise<{ error?: string }> {
+export async function useRainbowFeatherAction(mascotId: string, itemId: string): Promise<{ error?: string; statRange?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
     const shopItem = await prisma.shopItem.findFirst({
-      where: { id: itemId, type: "RAINBOW_FEATHER", active: true },
-      select: { id: true, metadata: true },
+      where: { id: itemId, type: "RAINBOW_FEATHER" },
+      select: { id: true, metadata: true, rarity: true },
     });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Pena Arco-Íris no inventário." };
-    const eggTier = (shopItem.metadata as { eggTier?: "COMMON" | "RARE" | "SPECIAL" | "LAB" } | null)?.eggTier;
-    await applyRainbowFeather(player.id, mascotId, eggTier);
-    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
-    revalidate(player.id); return {};
+    const metadataTier = (shopItem.metadata as { eggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB" } | null)?.eggTier;
+    const eggTier = metadataTier ?? (
+      shopItem.rarity === "LEGENDARY" || shopItem.rarity === "MYTHIC" || shopItem.rarity === "RELIC" ? "LAB"
+      : shopItem.rarity === "EPIC" ? "SPECIAL"
+      : shopItem.rarity === "RARE" ? "RARE"
+      : "COMMON"
+    );
+    const result = await prisma.$transaction(async (tx) => {
+      const currentInventory = await tx.playerInventory.findUnique({ where: { id: inv.id } });
+      if (!currentInventory || currentInventory.quantity < 1) throw new Error("Você não tem Pena Arco-Íris no inventário.");
+      const reset = await applyRainbowFeather(player.id, mascotId, eggTier, tx);
+      await tx.playerInventory.update({
+        where: { id: inv.id },
+        data: { quantity: { decrement: 1 } },
+      });
+      await tx.mascotEvent.create({
+        data: {
+          mascotId,
+          emoji: "🌈",
+          description: `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${reset.statMin}–${reset.statMax}.`,
+        },
+      });
+      return reset;
+    });
+    revalidate(player.id); return { statRange: `${result.statMin}–${result.statMax}` };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

@@ -127,7 +127,7 @@ async function fetchMascotPageData(playerId: string) {
       where: { playerId, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES_LIST as unknown as import("@prisma/client").ShopItemType[] } } },
       select: {
         quantity: true,
-        item: { select: { id: true, name: true, type: true, description: true, imageUrl: true } }
+        item: { select: { id: true, name: true, type: true, description: true, imageUrl: true, metadata: true, rarity: true } }
       },
     }),
   ]));
@@ -564,6 +564,16 @@ export default async function MascotesPage() {
     quantity: b.quantity,
     description: b.item.description ?? undefined,
     imageUrl: b.item.imageUrl ?? undefined,
+    metadata: (b.item.metadata as { eggTier?: string } | null) ?? (
+      b.item.type === "RAINBOW_FEATHER"
+        ? { eggTier:
+            b.item.rarity === "LEGENDARY" || b.item.rarity === "MYTHIC" || b.item.rarity === "RELIC" ? "LAB"
+            : b.item.rarity === "EPIC" ? "SPECIAL"
+            : b.item.rarity === "RARE" ? "RARE"
+            : "COMMON"
+          }
+        : null
+    ),
   }))}
   mascots={mascotData.map(m => ({
     id: m.id,
@@ -572,6 +582,8 @@ export default async function MascotesPage() {
     level: m.level,
     isEquipped: m.isEquipped,
     isFavorite: m.isFavorite,
+    hatchedFromEggType: m.hatchedFromEggType,
+    hatchedFromEggOrigin: m.hatchedFromEggOrigin,
   }))}
   proteinDoses={Object.fromEntries(proteinBoostedMascots.map(b => [b.mascotId, b._count.id]))}
   activeBuffsByMascot={Object.fromEntries([...buffsByMascotId.entries()].map(([id, buffs]) => [id, buffs.map(b => b.type)]))}

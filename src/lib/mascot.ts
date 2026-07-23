@@ -2688,9 +2688,11 @@ export async function removeXpShare(playerId: string, mascotId: string) {
 export async function applyRainbowFeather(
   playerId: string,
   mascotId: string,
-  expectedEggTier?: "COMMON" | "RARE" | "SPECIAL" | "LAB",
+  expectedEggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB",
+  tx?: Prisma.TransactionClient,
 ) {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  const db = tx ?? prisma;
+  const mascot = await db.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para usar a Pena Arco-Íris.");
   const eggTypeKey = mascot.hatchedFromEggType
@@ -2699,15 +2701,17 @@ export async function applyRainbowFeather(
   const actualEggTier =
     eggTypeKey === "LAB" ? "LAB" :
     eggTypeKey === "SPECIAL" ? "SPECIAL" :
+    eggTypeKey === "EVENT" ? "EVENT" :
     eggTypeKey === "RARE" || !mascot.hatchedFromEggType ? "RARE" :
     "COMMON";
-  if (expectedEggTier && expectedEggTier !== actualEggTier) {
-    const labels = { COMMON: "Comum", RARE: "Rara", SPECIAL: "Especial", LAB: "de Laboratório" };
-    throw new Error(`Este mascote exige uma Pena Arco-Íris ${labels[actualEggTier]}.`);
+  const tierRank = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 } as const;
+  if (expectedEggTier && tierRank[expectedEggTier] < tierRank[actualEggTier]) {
+    const labels = { COMMON: "Comum", RARE: "Rara", EVENT: "de Evento", SPECIAL: "Especial", LAB: "de Laboratório" };
+    throw new Error(`Esta pena não alcança a origem deste mascote. Use uma Pena Arco-Íris ${labels[actualEggTier]} ou superior.`);
   }
   const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? EGG_STAT_RANGES.RARE;
   const personality = randomPersonality();
-  await prisma.mascot.update({
+  await db.mascot.update({
     where: { id: mascotId },
     data: {
       level: 1, exp: 0,
@@ -2721,10 +2725,13 @@ export async function applyRainbowFeather(
     }
   });
   // Remove marca de proteína (stats foram resetados)
-  await prisma.mascotBuff.deleteMany({
+  await db.mascotBuff.deleteMany({
     where: { mascotId, type: "STAT_BOOST", expiresAt: { gt: new Date("2090-01-01") } }
   }).catch(() => {});
-  await logEvent(mascotId, "🌈", `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${statMin}–${statMax}.`);
+  if (!tx) {
+    await logEvent(mascotId, "🌈", `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${statMin}–${statMax}.`);
+  }
+  return { statMin, statMax, actualEggTier, usedFallback: !mascot.hatchedFromEggType };
 }
 
 // ── Utilidades para UI ────────────────────────────────────────────────────────

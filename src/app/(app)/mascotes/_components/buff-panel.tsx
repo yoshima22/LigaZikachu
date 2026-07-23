@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Zap } from "lucide-react";
 import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction } from "../actions";
@@ -9,8 +10,12 @@ import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
   description?: string; imageUrl?: string;
+  metadata?: { eggTier?: string } | null;
 }
-interface MascotOption { id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean }
+interface MascotOption {
+  id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean;
+  hatchedFromEggType?: string | null; hatchedFromEggOrigin?: string | null;
+}
 
 const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_EXP:   "⚡",
@@ -66,6 +71,7 @@ interface Props {
 }
 
 export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMascot = {} }: Props) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
   const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? mascots.find(m => m.isFavorite)?.id ?? "");
@@ -82,6 +88,26 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     : mascots;
   const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
+  const selectedMascotItem = mascots.find((mascot) => mascot.id === selectedMascot);
+  const featherTier = selectedBuffItem?.metadata?.eggTier;
+  const originKey = selectedMascotItem?.hatchedFromEggOrigin?.startsWith("GEN_CHOICE:")
+    ? selectedMascotItem.hatchedFromEggOrigin.split(":")[1]
+    : selectedMascotItem?.hatchedFromEggType;
+  const originTier = !selectedMascotItem?.hatchedFromEggType ? "RARE"
+    : originKey === "LAB" ? "LAB"
+    : originKey === "SPECIAL" ? "SPECIAL"
+    : originKey === "EVENT" ? "EVENT"
+    : originKey === "RARE" ? "RARE"
+    : "COMMON";
+  const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
+  const featherAboveOrigin = selectedBuffItem?.type === "RAINBOW_FEATHER"
+    && Boolean(featherTier)
+    && tierRank[featherTier ?? "COMMON"] > tierRank[originTier];
+  const featherWarning = featherAboveOrigin
+    ? !selectedMascotItem?.hatchedFromEggType
+      ? "Este mascote não possui ovo de origem registrado. Mesmo usando uma pena de Evento, Especial ou Laboratório, os atributos serão sorteados apenas no intervalo de Ovo Raro."
+      : `Esta pena é superior ao ovo de origem registrado (${originTier === "COMMON" ? "Comum" : originTier === "RARE" ? "Raro" : originTier === "EVENT" ? "Evento" : originTier === "SPECIAL" ? "Especial" : "Laboratório"}). Ela pode ser usada, mas os atributos continuarão respeitando o intervalo da origem.`
+    : null;
 
   // Verifica se o mascote selecionado já tem EXP_BOOST ativo
   const selectedMascotActiveBuffs = selectedMascot ? (activeBuffsByMascot[selectedMascot] ?? []) : [];
@@ -106,7 +132,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
 
     let confirmMsg: string;
     if (isDestructive) {
-      confirmMsg = `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai resetar nível, EXP e todos os atributos para 0. Esta ação é IRREVERSÍVEL. Tem certeza?`;
+      confirmMsg = `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai voltar o mascote ao nível 1 e sortear novamente personalidade e atributos. Esta ação é IRREVERSÍVEL.${featherWarning ? `\n\n${featherWarning}` : ""}\n\nTem certeza?`;
     } else if (isExpBuff && mascotHasExpBoost) {
       confirmMsg = `${mascotName} já tem uma Vitamina Elétrica ativa. Usar outra irá REMOVER o buff atual e aplicar um novo. Deseja continuar?`;
     } else if (isPlayerLevel) {
@@ -119,7 +145,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (isDestructive && !confirm("Confirme novamente: isso não pode ser desfeito.")) return;
 
     startTransition(async () => {
-      let r: { error?: string; replacedExistingBuff?: boolean; megaName?: string };
+      let r: { error?: string; replacedExistingBuff?: boolean; megaName?: string; statRange?: string };
       const t = selectedBuffItem.type;
 
       if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
@@ -142,7 +168,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") {
           toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         } else if (t === "RAINBOW_FEATHER") {
-          toast.success(`${mascotName} foi resetado para o nível 1. Uma nova jornada! 🌈`);
+          toast.success(`${mascotName} renasceu no nível 1 com atributos ${r.statRange ?? "ressorteados"}! 🌈`);
         } else if (isMegaStoneType(t)) {
           toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
         } else if (t === "LUCKY_EGG") {
@@ -152,6 +178,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else {
           toast.success("Item usado com sucesso! ✨");
         }
+        router.refresh();
       }
     });
   };
@@ -278,9 +305,16 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           )}
 
           {selectedBuffItem?.type === "RAINBOW_FEATHER" && selectedMascot && (
-            <span className="text-[10px] text-red-400 font-semibold">
-              ⚠️ IRREVERSÍVEL — nível e atributos serão zerados
-            </span>
+            <div className="w-full space-y-2">
+              <p className="text-[10px] text-red-400 font-semibold">
+                ⚠️ IRREVERSÍVEL — volta ao nível 1 e ressorteia personalidade e atributos
+              </p>
+              {featherWarning && (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] font-semibold text-amber-300">
+                  ⚠️ {featherWarning}
+                </p>
+              )}
+            </div>
           )}
 
           <button
