@@ -13,6 +13,7 @@ import {
   grantValidSyncTicketForPlayer,
   SYNC_TICKET_TYPES,
 } from "@/lib/sync-challenge";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
@@ -176,6 +177,24 @@ export async function updateGlobalNotice(message: string): Promise<{ error?: str
     return { message: clean };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao atualizar aviso." };
+  }
+}
+
+export async function publishProfessorAnnouncement(message: string): Promise<{ error?: string; message?: string }> {
+  try {
+    await requireAdmin();
+    const clean = message.trim().replace(/\s+/g, " ").slice(0, 320);
+    if (clean.length < 3) return { error: "Escreva uma mensagem com pelo menos 3 caracteres." };
+    const published = await publishLeagueTicker({
+      type: "ADMIN_PROFESSOR_ANNOUNCEMENT",
+      message: clean,
+      priority: 20,
+      ttlHours: 48,
+    });
+    if (!published) return { error: "Não foi possível publicar a mensagem." };
+    return { message: clean };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao publicar mensagem do Professor Enguiça." };
   }
 }
 

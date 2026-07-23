@@ -23,7 +23,7 @@ import { ORDER_EVENT_SLUG, ORDER_STEP_PUBLIC_REWARD_LABELS } from "@/lib/raid-ev
 import { OrderEventIntroModal } from "./_components/order-event-intro-modal";
 import { OrderEventRewardModal } from "./_components/order-event-reward-modal";
 import { markOrderIntroSeenAction, markOrderRewardSeenAction } from "./_components/order-event-intro-actions";
-import { getActiveLeagueTickerEvents } from "@/lib/league-ticker";
+import { getPendingLeagueTickerEvents } from "@/lib/league-ticker";
 import { LeagueTicker } from "./_components/league-ticker";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
@@ -81,7 +81,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   });
   const [globalNotice, tickerEvents] = await Promise.all([
     getGlobalNotice(),
-    getActiveLeagueTickerEvents().catch(() => []),
+    navData.player ? getPendingLeagueTickerEvents(navData.player.id).catch(() => []) : Promise.resolve([]),
   ]);
   const orderIntro = await prisma.raidEvent.findUnique({
     where: { slug: ORDER_EVENT_SLUG },

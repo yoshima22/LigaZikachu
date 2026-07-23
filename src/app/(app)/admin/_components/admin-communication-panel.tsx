@@ -2,19 +2,21 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Coins, Megaphone, Send } from "lucide-react";
+import { Coins, Megaphone, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { sendZikaCoinsToAllPlayers, updateGlobalNotice } from "../actions";
+import { publishProfessorAnnouncement, sendZikaCoinsToAllPlayers, updateGlobalNotice } from "../actions";
 
 export function AdminCommunicationPanel({ initialNotice }: { initialNotice: string }) {
   const [notice, setNotice] = useState(initialNotice);
   const [coins, setCoins] = useState("");
   const [description, setDescription] = useState("Presente global da Liga");
+  const [professorMessage, setProfessorMessage] = useState("");
   const [pendingNotice, startNotice] = useTransition();
   const [pendingCoins, startCoins] = useTransition();
+  const [pendingProfessor, startProfessor] = useTransition();
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-3">
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
         <div className="flex items-center gap-2">
           <Megaphone size={16} className="text-[#FFCB05]" />
@@ -50,6 +52,45 @@ export function AdminCommunicationPanel({ initialNotice }: { initialNotice: stri
           >
             <Send size={13} />
             {pendingNotice ? "Salvando..." : "Salvar aviso"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-cyan-500/25 bg-gradient-to-br from-slate-950/70 to-cyan-950/20 p-5">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-cyan-300" />
+          <h3 className="font-semibold text-slate-200">Professor Enguiça informa</h3>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Entra na fila de novidades de todos os jogadores. Cada jogador verá a mensagem uma única vez.
+        </p>
+        <textarea
+          value={professorMessage}
+          onChange={(event) => setProfessorMessage(event.target.value)}
+          maxLength={320}
+          rows={4}
+          className="mt-3 w-full rounded-xl border border-cyan-500/20 bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/60"
+          placeholder="Ex.: O Professor Enguiça informa que as inscrições da Liga TCG estão abertas!"
+        />
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-[10px] text-slate-600">{professorMessage.length}/320</span>
+          <Button
+            type="button"
+            disabled={pendingProfessor || professorMessage.trim().length < 3}
+            onClick={() => {
+              startProfessor(async () => {
+                const result = await publishProfessorAnnouncement(professorMessage);
+                if (result.error) toast.error(result.error);
+                else {
+                  setProfessorMessage("");
+                  toast.success("Mensagem do Professor Enguiça enviada.");
+                }
+              });
+            }}
+            className="gap-2 bg-cyan-300 text-slate-950 hover:bg-cyan-200 disabled:opacity-40"
+          >
+            <Send size={13} />
+            {pendingProfessor ? "Publicando..." : "Publicar mensagem"}
           </Button>
         </div>
       </div>

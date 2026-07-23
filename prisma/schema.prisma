@@ -379,6 +379,17 @@ model LeagueTickerEvent {
   @@map("league_ticker_events")
 }
 
+model LeagueTickerView {
+  id       String   @id @default(cuid())
+  eventId  String
+  playerId String
+  seenAt   DateTime @default(now())
+
+  @@unique([eventId, playerId])
+  @@index([playerId, seenAt])
+  @@map("league_ticker_views")
+}
+
 // Torneio independente — pode existir em paralelo a seasons legadas
 model Tournament {
   id                    String             @id @default(cuid())

@@ -14,13 +14,20 @@ type TickerEvent = {
 
 export function LeagueTicker({ initialEvents }: { initialEvents: TickerEvent[] }) {
   const [events, setEvents] = useState(initialEvents);
-  const [index, setIndex] = useState(0);
+  const current = events[0] ?? null;
 
   useEffect(() => {
-    if (events.length < 2) return;
-    const timer = window.setInterval(() => setIndex((current) => (current + 1) % events.length), 14_000);
-    return () => window.clearInterval(timer);
-  }, [events.length]);
+    if (!current) return;
+    void fetch("/api/league-ticker", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId: current.id }),
+    }).catch(() => null);
+    const timer = window.setTimeout(() => {
+      setEvents((queued) => queued.filter((event) => event.id !== current.id));
+    }, 14_000);
+    return () => window.clearTimeout(timer);
+  }, [current]);
 
   useEffect(() => {
     const refresh = async () => {
@@ -29,15 +36,16 @@ export function LeagueTicker({ initialEvents }: { initialEvents: TickerEvent[] }
       if (!response?.ok) return;
       const payload = await response.json().catch(() => null) as { events?: TickerEvent[] } | null;
       if (!payload?.events) return;
-      setEvents(payload.events);
-      setIndex((current) => payload.events!.length ? current % payload.events!.length : 0);
+      setEvents((queued) => {
+        const known = new Set(queued.map((event) => event.id));
+        return [...queued, ...payload.events!.filter((event) => !known.has(event.id))];
+      });
     };
     const timer = window.setInterval(refresh, 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  if (events.length === 0) return null;
-  const current = events[index % events.length];
+  if (!current) return null;
   const text = (
     <span key={current.id} className="professor-ticker-text inline-block whitespace-nowrap font-semibold text-amber-50">
       <span className="mr-2 text-[#FFCB05]">Professor Enguiça informa:</span>
