@@ -174,7 +174,7 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>📊 Como os descontos são calculados</p>
-            <p>Desconto base = faixa da raridade. O cofre adiciona um bônus suave, com teto raro de <strong style={{ color: "#FFCB05" }}>70%</strong>. As ofertas mudam às 00:00, 06:00, 12:00 e 18:00 (horário de Brasília).</p>
+            <p>Desconto base = faixa da raridade. O cofre adiciona um bônus suave, com teto raro de <strong style={{ color: "#FFCB05" }}>70%</strong>. As ofertas mudam às 04:00, 10:00, 16:00 e 22:00 (horário de Brasília).</p>
           </div>
 
           <div className="space-y-1">

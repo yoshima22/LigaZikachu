@@ -65,7 +65,7 @@ export const MANUAL_DEFAULTS: ManualContentMap = {
   "bazar.intro":
     "O Bazar é o mercado de jogadores: venda, compra e troca de mascotes, ovos e itens com outros participantes.",
   "bazar.miauvadao":
-    "O Miauvadão atualiza 3 ofertas às 00:00, 06:00, 12:00 e 18:00 (horário de Brasília). Cada jogador possui duas cargas de compra, que recarregam individualmente 10 minutos após o uso. Uma vez por rotação, qualquer jogador pode pagar 250 ZC para trocar um único slot para todos.",
+    "O Miauvadão atualiza 3 ofertas às 04:00, 10:00, 16:00 e 22:00 (horário de Brasília). Cada jogador possui duas cargas de compra, que recarregam individualmente 10 minutos após o uso. Uma vez por rotação, qualquer jogador pode pagar 250 ZC para trocar um único slot para todos.",
 
   // ── TCG ──────────────────────────────────────────────────────────────────────
   "tcg.premios":
