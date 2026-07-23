@@ -457,7 +457,8 @@ export async function analyzeMascotAction(
   const previousAnalysis = mascot.analysisJson as unknown as Partial<MascotAnalysis> | null;
   // O ranking representa o potencial intrínseco desbloqueado na primeira análise.
   // Simulações posteriores atualizam projeções, mas nunca reclassificam o mascote.
-  const analysis: MascotAnalysis = !firstAnalysis && mascot.ivScore != null && mascot.ivRating
+  const hasStableAnalysis = previousAnalysis?.analysisVersion === 2;
+  const analysis: MascotAnalysis = !firstAnalysis && hasStableAnalysis && mascot.ivScore != null && mascot.ivRating
     ? {
         ...computedAnalysis,
         ivScore: mascot.ivScore,

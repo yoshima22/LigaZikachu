@@ -30,6 +30,7 @@ export interface AnalysisInput {
 }
 
 export interface MascotAnalysis {
+  analysisVersion?: number;
   currentLevel: number;
   targetLevel: number;
   currentStats: MascotStats;
@@ -526,6 +527,7 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
   else if (input.personality === "DRAMATIC") personalityNote = "Personalidade Dramática: crescimento levemente menor e Vitalidade reduzida.";
 
   return {
+    analysisVersion: 2,
     currentLevel,
     targetLevel,
     currentStats,
