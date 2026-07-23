@@ -17,10 +17,10 @@ const TIER_SCORE: Record<MiauvadaoFusionEggType, number> = {
 };
 
 const ANCHORS: Array<Record<MiauvadaoFusionResult, number>> = [
-  { BROKEN: 55, COMMON: 32, EVENT: 8, RARE: 4, SPECIAL: 0.95, LAB: 0.05 },
-  { BROKEN: 45, COMMON: 20, EVENT: 20, RARE: 11, SPECIAL: 3.5, LAB: 0.5 },
-  { BROKEN: 34, COMMON: 8, EVENT: 17, RARE: 28, SPECIAL: 11.5, LAB: 1.5 },
-  { BROKEN: 20, COMMON: 2, EVENT: 5, RARE: 16, SPECIAL: 53, LAB: 4 },
+  { BROKEN: 50, COMMON: 30, EVENT: 10, RARE: 7, SPECIAL: 2.8, LAB: 0.2 },
+  { BROKEN: 42, COMMON: 18, EVENT: 20, RARE: 14, SPECIAL: 5, LAB: 1 },
+  { BROKEN: 35, COMMON: 8, EVENT: 12, RARE: 25, SPECIAL: 15, LAB: 5 },
+  { BROKEN: 25, COMMON: 3, EVENT: 5, RARE: 10, SPECIAL: 42, LAB: 15 },
 ];
 
 export function getMiauvadaoFusionChances(eggTypes: MiauvadaoFusionEggType[]) {
@@ -50,7 +50,29 @@ export function rollMiauvadaoFusion(
   return "BROKEN";
 }
 
-export function rollFusionLootBonus(random = Math.random) {
+export function getFusionHatchBonusRange(
+  eggTypes: MiauvadaoFusionEggType[],
+  result: MiauvadaoFusionResult,
+): readonly [number, number] {
+  if (result === "BROKEN") return [0, 0];
+  const ingredientAverage = eggTypes.reduce((sum, type) => sum + TIER_SCORE[type], 0) / eggTypes.length;
+  const resultScore = result === "LAB" ? 4 : TIER_SCORE[result];
+  const downgrade = ingredientAverage - resultScore;
+  if (downgrade <= 0) return [0, 4];
+  if (downgrade <= 1) return [5, 10];
+  if (downgrade <= 2) return [8, 15];
+  return [12, 20];
+}
+
+export function rollFusionLootBonus(
+  eggTypes: MiauvadaoFusionEggType[],
+  result: MiauvadaoFusionResult,
+  random = Math.random,
+) {
+  const [minimum, maximum] = getFusionHatchBonusRange(eggTypes, result);
+  if (maximum > 4) {
+    return minimum + Math.floor(random() * (maximum - minimum + 1));
+  }
   let roll = random() * 100;
   for (const outcome of MIAUVADAO_FUSION_HATCH_BONUS_CHANCES) {
     roll -= outcome.chancePct;

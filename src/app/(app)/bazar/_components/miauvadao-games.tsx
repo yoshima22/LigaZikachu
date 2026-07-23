@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ShellGame } from "./shell-game";
 import { fuseMiauvadaoEggsAction } from "../actions";
 import {
+  getFusionHatchBonusRange,
   getMiauvadaoFusionChances,
   MIAUVADAO_FUSION_HATCH_BONUS_CHANCES,
   MIAUVADAO_FUSION_EGG_TYPES,
@@ -152,19 +153,30 @@ function EggFusionGame({
       <div className="mt-4 rounded-xl border border-purple-500/20 bg-purple-950/10 p-3">
         <p className="text-xs font-bold text-purple-200">Chances desta mistura</p>
         {selected.length === 3 ? (
-          <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1 text-[11px] sm:grid-cols-3">
+          <div className="mt-2 grid grid-cols-1 gap-x-5 gap-y-1 text-[11px] sm:grid-cols-2">
             {(["BROKEN", "COMMON", "EVENT", "RARE", "SPECIAL", "LAB"] as const).map((outcome) => (
               <div key={outcome} className="flex justify-between gap-2">
                 <span className="text-slate-400">{LABELS[outcome]}</span>
-                <strong className={outcome === "LAB" ? "text-purple-300" : outcome === "BROKEN" ? "text-red-300" : "text-slate-200"}>
-                  {chances[outcome].toLocaleString("pt-BR", { minimumFractionDigits: chances[outcome] < 1 ? 2 : 1, maximumFractionDigits: 2 })}%
-                </strong>
+                <span className="text-right">
+                  <strong className={outcome === "LAB" ? "text-purple-300" : outcome === "BROKEN" ? "text-red-300" : "text-slate-200"}>
+                    {chances[outcome].toLocaleString("pt-BR", { minimumFractionDigits: chances[outcome] < 1 ? 2 : 1, maximumFractionDigits: 2 })}%
+                  </strong>
+                  {outcome !== "BROKEN" && (() => {
+                    const [minimum, maximum] = getFusionHatchBonusRange(selected, outcome);
+                    return (
+                      <small className="ml-1.5 text-[9px] text-purple-300">
+                        bônus +{minimum}–{maximum}
+                      </small>
+                    );
+                  })()}
+                </span>
               </div>
             ))}
           </div>
         ) : <p className="mt-1 text-[11px] text-slate-500">Selecione os três ingredientes para revelar as probabilidades exatas.</p>}
         <p className="mt-2 text-[10px] text-slate-500">
-          O ovo gerado também sorteia um bônus para aumentar a chance de nascer um mascote de raridade elevada.
+          O ovo gerado sorteia um bônus para aumentar a chance de nascer um mascote de raridade elevada.
+          Se o resultado for inferior à qualidade média dos ingredientes, a compensação sobe para até +20 pontos percentuais.
           Esse bônus não altera os atributos do mascote.
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-400">

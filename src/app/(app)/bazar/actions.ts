@@ -1167,7 +1167,7 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
       }
 
       const result = rollMiauvadaoFusion(eggTypes);
-      const lootBonusPct = result === "BROKEN" ? 0 : rollFusionLootBonus();
+      const lootBonusPct = rollFusionLootBonus(eggTypes, result);
       const consumed = await tx.mascotEgg.deleteMany({ where: { id: { in: consumedIds }, playerId: player.id } });
       if (consumed.count !== 3) {
         throw new Error("Os ovos mudaram enquanto a fusão era processada. Nada foi consumido; tente novamente.");
