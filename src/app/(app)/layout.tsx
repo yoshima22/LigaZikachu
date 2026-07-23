@@ -23,6 +23,8 @@ import { ORDER_EVENT_SLUG, ORDER_STEP_PUBLIC_REWARD_LABELS } from "@/lib/raid-ev
 import { OrderEventIntroModal } from "./_components/order-event-intro-modal";
 import { OrderEventRewardModal } from "./_components/order-event-reward-modal";
 import { markOrderIntroSeenAction, markOrderRewardSeenAction } from "./_components/order-event-intro-actions";
+import { getActiveLeagueTickerEvents } from "@/lib/league-ticker";
+import { LeagueTicker } from "./_components/league-ticker";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -77,7 +79,10 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     console.error("[Layout] nav data failed", { userId: user.id, error });
     return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0, unreadNews: 0 };
   });
-  const globalNotice = await getGlobalNotice();
+  const [globalNotice, tickerEvents] = await Promise.all([
+    getGlobalNotice(),
+    getActiveLeagueTickerEvents().catch(() => []),
+  ]);
   const orderIntro = await prisma.raidEvent.findUnique({
     where: { slug: ORDER_EVENT_SLUG },
     select: {
@@ -225,6 +230,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </details>
           )}
+          <LeagueTicker
+            initialEvents={tickerEvents.map((event) => ({
+              ...event,
+              createdAt: event.createdAt.toISOString(),
+            }))}
+          />
         </header>
 
         {/* Main content */}

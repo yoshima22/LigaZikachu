@@ -13,6 +13,7 @@ import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
 import { creditCoins } from "@/lib/zikacoins";
 import { isStandbyActive } from "@/lib/account-standby";
 import { getActiveWeeklyLeagueSabotage } from "@/lib/raid-event";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -1648,6 +1649,18 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
       await tx.weeklyMascotLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: participants[0].playerId } });
     }, { timeout: 20000, maxWait: 10000 });
 
+    const champion = await prisma.player.findUnique({
+      where: { id: participants[0].playerId },
+      select: { displayName: true },
+    }).catch(() => null);
+    await publishLeagueTicker({
+      type: "WEEKLY_LEAGUE_CHAMPION",
+      message: `${champion?.displayName ?? "Um jogador"} foi campeão da Liga Semanal. Parabéns!`,
+      href: "/combates/liga-semanal",
+      eventKey: `weekly-league-champion:${leagueId}`,
+      priority: 10,
+      ttlHours: 48,
+    });
     revalidatePath(PATH);
     revalidatePath("/caixa-de-presentes");
     return { success: true, granted };

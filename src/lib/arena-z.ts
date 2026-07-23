@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -1481,7 +1482,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   // Cap diário PvE: calcula quanto do PvE pode ser creditado hoje
   const player = await prisma.player.findUnique({
     where: { id: playerId },
-    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true },
+    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, displayName: true },
   });
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const earnedToday = player?.arenaPveCoinsDate === todayBRT ? (player.arenaPveCoinsEarned ?? 0) : 0;
@@ -1556,6 +1557,16 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   });
 
   await distributeArenaExp(expMascotIds, vaultFinal.exp);
+  if ((vaultFinal.coins > 0 || vaultFinal.exp > 0) && player?.displayName) {
+    await publishLeagueTicker({
+      type: "ARENA_VAULT_COLLECTED",
+      message: `${player.displayName} coletou ${vaultFinal.coins.toLocaleString("pt-BR")} ZC e ${vaultFinal.exp.toLocaleString("pt-BR")} EXP na Sala ${team.roomLevel ?? "Livre"} da Arena Z!`,
+      href: "/arena-z",
+      priority: 2,
+      ttlHours: 5,
+      sampleRate: 0.3,
+    });
+  }
 
   return { ...vaultFinal, hadPenalty: hadRecentBattle };
 }
@@ -2692,6 +2703,17 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
         addExp(id, defenseExp, { ignoreBenchPenalty: true }).catch(() => null)
       )
     );
+  }
+
+  if (!isTrainingBattle && !isCasualBattle && winnerTeam && loserTeam) {
+    await publishLeagueTicker({
+      type: "ARENA_PVP_WIN",
+      message: `${winnerTeam.player.displayName} derrotou ${loserTeam.player.displayName} na Arena Z!`,
+      href: "/arena-z",
+      priority: 2,
+      ttlHours: 6,
+      sampleRate: 0.35,
+    });
   }
 
   const allMascots = new Map([...attackers, ...defenders].map(m => [m.id, m]));

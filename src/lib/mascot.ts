@@ -25,6 +25,7 @@ import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -655,6 +656,21 @@ export async function addExp(
         ]);
       }
     }
+  }
+
+  if (mascot.level < 100 && level === 100) {
+    const owner = await prisma.player.findUnique({
+      where: { id: mascot.playerId },
+      select: { displayName: true },
+    }).catch(() => null);
+    await publishLeagueTicker({
+      type: "MASCOT_LEVEL_100",
+      message: `${mascot.nickname ?? getPokemonName(pokemonId)} de ${owner?.displayName ?? "um jogador"} chegou ao nível 100!`,
+      href: `/jogadores/${mascot.playerId}`,
+      eventKey: `mascot-level-100:${mascotId}`,
+      priority: 8,
+      ttlHours: 24,
+    });
   }
 
   return { leveled, newLevel: level, evolved, newPokemonId };

@@ -22,6 +22,7 @@ import {
 } from "@/lib/miauvadao-egg-fusion";
 import { EggType } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 function revalidateBazar() {
   revalidatePath("/bazar");
@@ -50,6 +51,19 @@ const EGG_OFFER_TYPES = [
 
 function isEggOfferType(type: string) {
   return EGG_OFFER_TYPES.includes(type);
+}
+
+const TICKER_EGG_LABELS: Record<string, string> = {
+  COMMON: "Ovo Comum",
+  EVENT: "Ovo de Evento",
+  RARE: "Ovo Raro",
+  SPECIAL: "Ovo Especial",
+  LAB: "Ovo de Laboratório",
+};
+
+function tickerEggOrigin(payload: Record<string, unknown>) {
+  const type = typeof payload.hatchedFromEggType === "string" ? payload.hatchedFromEggType : null;
+  return type ? TICKER_EGG_LABELS[type] ?? type.replaceAll("_", " ") : null;
 }
 
 function getListingQuantity(payload: Record<string, unknown>): number {
@@ -504,6 +518,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
             vitality: mascot.statVitality,
           },
           battleWins: mascot.battleWins,
+          hatchedFromEggType: mascot.hatchedFromEggType,
+          hatchedFromEggOrigin: mascot.hatchedFromEggOrigin,
         };
 
       } else if (input.category === "ITEM") {
@@ -590,6 +606,18 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
       });
     });
 
+    if (input.category === "MASCOT" && typeof payload.pokemonId === "number") {
+      const rarity = getMascotRarity(payload.pokemonId);
+      if (rarity === "LEGENDARY" || rarity === "MYTHICAL") {
+        await publishLeagueTicker({
+          type: "BAZAR_RARE_LISTING",
+          message: `${player.displayName} anunciou ${payload.nickname ?? payload.pokemonName} no Bazar. É um mascote ${rarity === "MYTHICAL" ? "mítico" : "lendário"} — vá conferir!`,
+          href: "/bazar",
+          priority: 6,
+          ttlHours: 10,
+        });
+      }
+    }
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
     return {};
@@ -2222,6 +2250,8 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           level: mascot.level, personality: mascot.personality,
           stats: { force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality },
           battleWins: mascot.battleWins,
+          hatchedFromEggType: mascot.hatchedFromEggType,
+          hatchedFromEggOrigin: mascot.hatchedFromEggOrigin,
         };
       } else if (input.category === "ITEM") {
         const qty = input.quantity ?? 1;
@@ -2258,6 +2288,18 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
       });
     });
 
+    if (input.category === "MASCOT") {
+      const mascotName = String(payload.nickname ?? payload.pokemonName ?? "mascote");
+      const eggOrigin = tickerEggOrigin(payload);
+      await publishLeagueTicker({
+        type: "BAZAR_MASCOT_AUCTION",
+        message: `${player.displayName} criou um leilão com ${mascotName}${eggOrigin ? `, nascido de ${eggOrigin}` : ""}. Dê seu lance!`,
+        href: "/bazar?listingType=AUCTION",
+        priority: 4,
+        ttlHours: input.auctionDuration === "12h" ? 12 : 24,
+        sampleRate: 0.75,
+      });
+    }
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
     return {};

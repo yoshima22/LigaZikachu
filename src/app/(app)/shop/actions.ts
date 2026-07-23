@@ -12,6 +12,7 @@ import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType, UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
 import { isMegaStoneType } from "@/lib/mega-evolution";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -585,7 +586,17 @@ export async function equipItem(itemId: string, equip: boolean): Promise<{ error
     if (equip) {
       const { onTitleEquipped, onBannerEquipped, onFrameEquipped } = await import("@/lib/achievement-events");
       if (owned.item.type === "TITLE") void onTitleEquipped(player.id).catch(() => {});
-      if (owned.item.type === "BANNER") void onBannerEquipped(player.id).catch(() => {});
+      if (owned.item.type === "BANNER") {
+        void onBannerEquipped(player.id).catch(() => {});
+        await publishLeagueTicker({
+          type: "PROFILE_BANNER_CHANGED",
+          message: `${player.displayName} alterou o banner de perfil. Aproveite para conferir a wishlist!`,
+          href: `/jogadores/${player.id}`,
+          priority: 1,
+          ttlHours: 4,
+          sampleRate: 0.4,
+        });
+      }
       if (owned.item.type === "FRAME") void onFrameEquipped(player.id).catch(() => {});
     }
 

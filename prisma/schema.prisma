@@ -363,6 +363,22 @@ model AppSetting {
   @@map("app_settings")
 }
 
+model LeagueTickerEvent {
+  id        String   @id @default(cuid())
+  type      String
+  message   String   @db.Text
+  href      String?
+  eventKey  String?  @unique
+  priority  Int      @default(0)
+  startsAt  DateTime @default(now())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt, startsAt])
+  @@index([priority, createdAt])
+  @@map("league_ticker_events")
+}
+
 // Torneio independente — pode existir em paralelo a seasons legadas
 model Tournament {
   id                    String             @id @default(cuid())

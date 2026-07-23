@@ -17,6 +17,7 @@ import { clearRunawayWarningIfRecovered } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 import type { Prisma } from "@prisma/client";
 
 function revalidate(playerId?: string) {
@@ -813,6 +814,14 @@ export async function useMegaStoneAction(mascotId: string, itemId: string): Prom
       });
     });
 
+    await publishLeagueTicker({
+      type: "MEGA_EVOLUTION",
+      message: `${player.displayName} mega evoluiu ${mascot.nickname ?? stone.compatiblePokemonName} para ${stone.megaPokemonName}!`,
+      href: `/jogadores/${player.id}`,
+      eventKey: `mega-evolution:${mascot.id}`,
+      priority: 7,
+      ttlHours: 18,
+    });
     revalidate(player.id);
     return { megaName: stone.megaPokemonName };
   } catch (err) {
