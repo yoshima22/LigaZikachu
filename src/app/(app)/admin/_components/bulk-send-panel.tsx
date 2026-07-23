@@ -51,8 +51,8 @@ export function BulkSendPanel({ items }: { items: ShopItem[] }) {
         <h3 className="font-semibold text-slate-200">Enviar Item para Todos os Jogadores</h3>
       </div>
       <p className="text-xs text-slate-500">
-        Envia um item da ZikaShop para todos os jogadores ativos simultaneamente.
-        Itens únicos (títulos, banners) são pulados se o jogador já possuir.
+        Envia qualquer item cadastrado para todos os jogadores ativos simultaneamente,
+        inclusive itens inativos, ocultos da loja ou exclusivos do admin.
       </p>
 
       {/* Busca */}

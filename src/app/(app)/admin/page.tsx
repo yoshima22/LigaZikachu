@@ -133,9 +133,6 @@ export default async function AdminPage() {
     orderBy: [{ type: "asc" }, { active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, type: true, rarity: true, active: true }
   });
-  const uniqueShopItems = allShopItems.filter((item, index, list) =>
-    list.findIndex((entry) => entry.type === item.type) === index
-  );
 
   return (
     <div className="space-y-8">
@@ -261,7 +258,7 @@ export default async function AdminPage() {
       <MascotSocialPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <AdminExpeditionPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
       <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
-      <BulkSendPanel items={uniqueShopItems} />
+      <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
       <VipSchedulePanel
         allSchedules={allSchedules}
