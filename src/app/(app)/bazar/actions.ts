@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getMascotRarity, getPokemonName, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
-import { MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
@@ -1143,14 +1143,10 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
 
       // Entregar item (mesmo esquema da shop)
       if (offer.itemType.startsWith("EGG_") || ["EGG_COMMON","EGG_RARE","EGG_SPECIAL"].includes(offer.itemType)) {
-        const eggTypeMap: Record<string, string> = {
-          EGG_COMMON: "COMMON", EGG_RARE: "RARE", EGG_SPECIAL: "SPECIAL",
-          EGG_GEN1: "EGG_GEN1", EGG_GEN2: "EGG_GEN2", EGG_GEN3: "EGG_GEN3",
-          EGG_GEN4: "EGG_GEN4", EGG_GEN5: "EGG_GEN5", EGG_GEN6: "EGG_GEN6",
-          EGG_GEN7: "EGG_GEN7", EGG_GEN8: "EGG_GEN8", EGG_GEN9: "EGG_GEN9",
-        };
+        const eggType = EGG_SHOP_TO_EGG_TYPE[offer.itemType];
+        if (!eggType) throw new Error(`Tipo de ovo não suportado pelo Miauvadão: ${offer.itemType}`);
         await tx.mascotEgg.create({
-          data: { playerId: player.id, type: (eggTypeMap[offer.itemType] ?? "COMMON") as never, origin: "Miauvadão" },
+          data: { playerId: player.id, type: eggType as never, origin: "Miauvadão" },
         });
       } else if (offer.itemType === "MASCOT_FOOD") {
         await tx.mascotFoodItem.upsert({
