@@ -2,7 +2,7 @@
 // Tudo determinístico — reaproveita as mesmas regras de crescimento de mascot.ts.
 import {
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, LEGENDARY_POOL,
-  getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getPokemonName,
+  getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getPokemonName, getMascotRarity,
 } from "@/lib/mascot-data";
 import { COMBAT_ROLE_LABELS, COMBAT_ROLE_DESCRIPTIONS } from "@/lib/combat-roles";
 
@@ -54,6 +54,15 @@ export interface MascotAnalysis {
   personalityNote: string | null;
   projectedPower: number;
   roleSuggestions: { role: string; label: string; statLabel: string; value: number; description: string }[];
+  progressMilestones?: {
+    kind: "EVOLUTION" | "MATURITY";
+    level: number;
+    points: number;
+    label: string;
+    pokemonName?: string;
+  }[];
+  maturityPoints?: number;
+  evolutionPoints?: number;
   statAnalysis?: {
     key: StatKey;
     label: string;
@@ -100,6 +109,40 @@ export function evolutionsRemaining(pokemonId: number): number {
     current = next.toOptions?.[0] ?? next.to;
   }
   return count;
+}
+
+function futureProgressMilestones(
+  pokemonId: number,
+  currentLevel: number,
+  targetLevel: number,
+  evolutionLocked: boolean,
+): NonNullable<MascotAnalysis["progressMilestones"]> {
+  if (LEGENDARY_POOL.includes(pokemonId)) return [];
+  const chain = fullEvolutionChain(pokemonId);
+  const currentIndex = Math.max(0, chain.findIndex((form) => form.pokemonId === pokemonId));
+
+  if (chain.length === 1) {
+    return [16, 32, 50]
+      .filter((level) => level > currentLevel && level <= targetLevel)
+      .map((level) => ({
+        kind: "MATURITY" as const,
+        level,
+        points: 3,
+        label: level === 50 ? "Maturidade plena" : `Maturidade Nv.${level}`,
+      }));
+  }
+
+  if (evolutionLocked) return [];
+  return chain
+    .slice(currentIndex + 1)
+    .filter((form) => form.level > currentLevel && form.level <= targetLevel)
+    .map((form) => ({
+      kind: "EVOLUTION" as const,
+      level: form.level,
+      points: chain.length === 2 ? 4 : 3,
+      label: `Evolução para ${getPokemonName(form.pokemonId)}`,
+      pokemonName: getPokemonName(form.pokemonId),
+    }));
 }
 
 /** Forma final a que o mascote chega ao atingir targetLevel (respeitando evolutionLocked). */
@@ -361,7 +404,9 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
   };
   const currentTotal = currentStats.force + currentStats.agility + currentStats.charisma + currentStats.instinct + currentStats.vitality;
 
-  const growthMult = getMascotStatusGrowthMultiplier(finalFormAtLevel(input.pokemonId, targetLevel, evolutionLocked));
+  const lineage = fullEvolutionChain(input.pokemonId);
+  const lineageGrowthMult = Math.max(...lineage.map((form) => getMascotStatusGrowthMultiplier(form.pokemonId)));
+  const growthMult = lineageGrowthMult;
 
   // Projeção de stats até targetLevel — simulação fiel nível a nível
   const sim = simulateGrowth(input, currentLevel, targetLevel, currentStats);
@@ -378,11 +423,19 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
   const rollQuality = (estimatedBaseTotal - BASE_MIN_TOTAL) / (BASE_MAX_TOTAL - BASE_MIN_TOTAL);
 
   // 2) Potencial de espécie (multiplicador de crescimento) e evoluções restantes.
-  const speciesPotential = Math.max(0, Math.min(1, (growthMult - 1) / 0.3)); // 0, 0.33, 1
+  const rarity = getMascotRarity(input.pokemonId);
+  const rarityPotential =
+    rarity === "LEGENDARY" || rarity === "MYTHICAL" || rarity === "ULTRA_BEAST" || rarity === "MEGA"
+      ? 1
+      : rarity === "PSEUDO_LEGENDARY" || rarity === "PARADOX"
+        ? 1 / 3
+        : Math.max(0, Math.min(1, (growthMult - 1) / 0.3));
+  const speciesPotential = rarityPotential;
   const evoRemaining = evolutionsRemaining(input.pokemonId);
-  const evoPotential = Math.max(0, Math.min(1, evoRemaining / 2));
-  const isLegendary = LEGENDARY_POOL.includes(input.pokemonId);
-  const ceiling = isLegendary ? 1 : (0.65 * speciesPotential + 0.35 * evoPotential);
+  const lineageEvolutions = Math.max(0, lineage.length - 1);
+  const evoPotential = Math.max(0, Math.min(1, lineageEvolutions / 2));
+  const isEliteRarity = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "MEGA"].includes(rarity);
+  const ceiling = isEliteRarity ? 1 : (0.65 * speciesPotential + 0.35 * evoPotential);
 
   const ivScore = Math.round(100 * (0.55 * rollQuality + 0.45 * ceiling));
   const ivRating = ratingFromScore(ivScore);
@@ -458,6 +511,13 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     projectedStats.force * 1.1 + projectedStats.vitality * 1.0 + projectedStats.agility * 0.95 +
     projectedStats.instinct * 0.95 + projectedStats.charisma * 0.9,
   );
+  const progressMilestones = futureProgressMilestones(input.pokemonId, currentLevel, targetLevel, evolutionLocked);
+  const maturityPoints = progressMilestones
+    .filter((milestone) => milestone.kind === "MATURITY")
+    .reduce((sum, milestone) => sum + milestone.points, 0);
+  const evolutionPoints = progressMilestones
+    .filter((milestone) => milestone.kind === "EVOLUTION")
+    .reduce((sum, milestone) => sum + milestone.points, 0);
 
   // Nota de personalidade (afeta o crescimento)
   let personalityNote: string | null = null;
@@ -489,6 +549,9 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     personalityNote,
     projectedPower,
     roleSuggestions,
+    progressMilestones,
+    maturityPoints,
+    evolutionPoints,
     statAnalysis,
     projectionMethod: "Projeção baseada no mesmo cálculo de level-up em bloco usado pelo jogo quando EXP faz o mascote pular níveis, incluindo evolução e marcos de progressão.",
     estimatedBaseTotal,

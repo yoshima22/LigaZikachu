@@ -442,7 +442,7 @@ export async function analyzeMascotAction(
     select: {
       id: true, pokemonId: true, level: true, personality: true, evolutionLocked: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-      analyzedAt: true,
+      analyzedAt: true, ivScore: true, ivRating: true, analysisJson: true,
     },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
@@ -453,7 +453,21 @@ export async function analyzeMascotAction(
   }
 
   const clampedTarget = targetLevel ? Math.max(mascot.level, Math.min(100, Math.round(targetLevel))) : undefined;
-  const analysis = computeMascotAnalysis(mascot, clampedTarget);
+  const computedAnalysis = computeMascotAnalysis(mascot, clampedTarget);
+  const previousAnalysis = mascot.analysisJson as unknown as Partial<MascotAnalysis> | null;
+  // O ranking representa o potencial intrínseco desbloqueado na primeira análise.
+  // Simulações posteriores atualizam projeções, mas nunca reclassificam o mascote.
+  const analysis: MascotAnalysis = !firstAnalysis && mascot.ivScore != null && mascot.ivRating
+    ? {
+        ...computedAnalysis,
+        ivScore: mascot.ivScore,
+        ivRating: mascot.ivRating as MascotAnalysis["ivRating"],
+        verdict: previousAnalysis?.verdict ?? computedAnalysis.verdict,
+        rollQualityPct: previousAnalysis?.rollQualityPct ?? computedAnalysis.rollQualityPct,
+        speciesPotentialPct: previousAnalysis?.speciesPotentialPct ?? computedAnalysis.speciesPotentialPct,
+        evoPotentialPct: previousAnalysis?.evoPotentialPct ?? computedAnalysis.evoPotentialPct,
+      }
+    : computedAnalysis;
 
   await prisma.$transaction(async (tx) => {
     if (firstAnalysis) {

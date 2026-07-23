@@ -269,7 +269,7 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
           <div className="group/tip relative cursor-help text-center">
             <p className="text-[10px] uppercase tracking-widest text-slate-400">Ranking</p>
             <p className={`font-pixel text-3xl leading-tight ${style.text}`}>{a.ivRating}</p>
-            <TipBubble align="left" text="Nota geral de SSS (elite) a E (fraco). Resume o potencial do mascote combinando roll inicial, bônus da espécie e evoluções." />
+            <TipBubble align="left" text="Nota permanente de SSS (elite) a E (fraco). É definida na primeira análise pelo roll inicial, espécie e linha evolutiva; simulações de nível não alteram esse ranking." />
           </div>
           <div className="hidden h-10 w-px bg-slate-700 sm:block" />
           <div className="group/tip relative cursor-help text-center">
@@ -306,7 +306,7 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
         <div className="group/tip relative cursor-help rounded-xl border border-border bg-slate-950/40 p-2">
           <p className="text-slate-500">Evoluções</p>
           <p className="font-bold text-slate-200">{a.evoPotentialPct}%</p>
-          <TipBubble align="right" text="Evoluções ainda restantes na linha. Cada evolução concede marcos de atributos, elevando o teto de poder. Linha completa de 3 estágios = 100%." />
+          <TipBubble align="right" text="Potencial da linha evolutiva completa, independentemente da forma atual. Cada evolução concede marcos de atributos; uma linha de 3 estágios representa 100%." />
         </div>
       </div>
 
@@ -359,6 +359,52 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
           })()}
         </div>
       </div>
+
+      {a.progressMilestones && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                <Sparkles size={13} />
+                Marcos de atributos até o Nv.{a.targetLevel}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Pontos extras distribuídos entre os atributos quando o mascote amadurece ou evolui.
+              </p>
+            </div>
+            <div className="flex gap-2 text-[10px]">
+              <span className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-cyan-300">
+                Maturidade: +{a.maturityPoints ?? 0}
+              </span>
+              <span className="rounded-lg border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-purple-300">
+                Evolução: +{a.evolutionPoints ?? 0}
+              </span>
+            </div>
+          </div>
+          {a.progressMilestones.length > 0 ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {a.progressMilestones.map((milestone) => (
+                <div
+                  key={`${milestone.kind}-${milestone.level}-${milestone.label}`}
+                  className="flex items-center justify-between rounded-xl border border-border bg-slate-950/50 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-slate-200">{milestone.label}</p>
+                    <p className="text-[10px] text-slate-500">
+                      Nv.{milestone.level} · {milestone.kind === "MATURITY" ? "Maturidade" : "Evolução"}
+                    </p>
+                  </div>
+                  <span className="text-sm font-bold text-amber-300">+{milestone.points} pts</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-2 text-xs text-slate-500">
+              Não há novos marcos de maturidade ou evolução dentro desta projeção.
+            </p>
+          )}
+        </div>
+      )}
 
       {a.statAnalysis?.length ? (
         <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
