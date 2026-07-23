@@ -12,9 +12,10 @@ import type { MascotAnalysis } from "@/lib/mascot-analysis";
 import { getMascotRarity } from "./rarity";
 import { calculateLabDust } from "./dust";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
+import { MEGA_STONES } from "@/lib/mega-evolution";
 
-// Custo de cada análise de mascote no Laboratório (cada abertura recompra a análise)
-const ANALYSIS_COST = 200;
+// A primeira análise desbloqueia simulações gratuitas permanentes para o mascote.
+const ANALYSIS_COST = 100;
 
 // weekKey = "YYYY-Www" using ISO week number
 function getWeekKey(): string {
@@ -26,9 +27,24 @@ function getWeekKey(): string {
   return `${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
+function getMonthKey(): string {
+  return new Date().toLocaleDateString("sv-SE", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).slice(0, 7);
+}
+
+function getWeeklyEvolutionStone() {
+  const key = getWeekKey();
+  const hash = [...key].reduce((total, char) => total + char.charCodeAt(0), 0);
+  return MEGA_STONES[hash % MEGA_STONES.length];
+}
+
 // ── Limits & costs ────────────────────────────────────────────────────────────
 const WEEKLY_LIMITS = { coinsTraded: 5, commonEggs: 10, rareEggs: 4, specialEggs: 1 } as const;
 const SHOP_COSTS = { coins: 10, commonEgg: 15, rareEgg: 25, specialEgg: 40 } as const;
+const MONTHLY_SHOP_COSTS = { labEgg: 250, evolutionStone: 300 } as const;
 const SHOP_REWARDS = { coins: 400 } as const;
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -66,6 +82,15 @@ async function getOrCreateWeeklyUsage(playerId: string) {
   });
 }
 
+async function getOrCreateMonthlyUsage(playerId: string) {
+  const monthKey = getMonthKey();
+  return prisma.labMonthlyUsage.upsert({
+    where: { playerId_monthKey: { playerId, monthKey } },
+    create: { playerId, monthKey },
+    update: {},
+  });
+}
+
 async function getWeeklyLeagueLockedMascotIds(playerId: string) {
   const teams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
     where: {
@@ -81,7 +106,7 @@ async function getWeeklyLeagueLockedMascotIds(playerId: string) {
 export async function getLabDataAction() {
   const me = await requirePlayer();
 
-  const [player, mascots, weeklyUsage] = await Promise.all([
+  const [player, mascots, weeklyUsage, monthlyUsage] = await Promise.all([
     prisma.player.findUnique({
       where: { id: me.id },
       select: { creationDust: true },
@@ -97,6 +122,7 @@ export async function getLabDataAction() {
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
     getOrCreateWeeklyUsage(me.id),
+    getOrCreateMonthlyUsage(me.id),
   ]);
 
   const [wallet, weeklyLeagueLockedIds] = await Promise.all([
@@ -146,8 +172,17 @@ export async function getLabDataAction() {
       rareEggs: weeklyUsage.rareEggs,
       specialEggs: weeklyUsage.specialEggs,
     },
+    monthlyUsage: {
+      labEggs: monthlyUsage.labEggs,
+      evolutionStones: monthlyUsage.evolutionStones,
+    },
+    weeklyEvolutionStone: {
+      type: getWeeklyEvolutionStone().type,
+      name: getWeeklyEvolutionStone().stoneName,
+    },
     limits: WEEKLY_LIMITS,
     costs: SHOP_COSTS,
+    monthlyCosts: MONTHLY_SHOP_COSTS,
   };
 }
 
@@ -344,6 +379,55 @@ export async function tradeDustForEggAction(eggTier: "COMMON" | "RARE" | "SPECIA
   return { ok: true as const };
 }
 
+export async function tradeDustForMonthlyItemAction(kind: "LAB_EGG" | "EVOLUTION_STONE") {
+  const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
+  const monthKey = getMonthKey();
+  const field = kind === "LAB_EGG" ? "labEggs" as const : "evolutionStones" as const;
+  const cost = kind === "LAB_EGG" ? MONTHLY_SHOP_COSTS.labEgg : MONTHLY_SHOP_COSTS.evolutionStone;
+  const stone = getWeeklyEvolutionStone();
+
+  try {
+    const rewardLabel = await prisma.$transaction(async (tx) => {
+      const usage = await tx.labMonthlyUsage.upsert({
+        where: { playerId_monthKey: { playerId: me.id, monthKey } },
+        create: { playerId: me.id, monthKey },
+        update: {},
+      });
+      if (usage[field] >= 1) throw new Error("Limite mensal atingido. Uma nova compra será liberada no dia 01.");
+      const player = await tx.player.findUniqueOrThrow({
+        where: { id: me.id },
+        select: { creationDust: true },
+      });
+      if (player.creationDust < cost) throw new Error(`Pó insuficiente. Necessário: ${cost} pó.`);
+      await tx.player.update({
+        where: { id: me.id },
+        data: { creationDust: { decrement: cost } },
+      });
+      if (kind === "LAB_EGG") {
+        await tx.mascotEgg.create({ data: { playerId: me.id, type: EggType.LAB, origin: "LAB" } });
+      } else {
+        const shopItem = await tx.shopItem.findFirst({ where: { type: stone.type }, select: { id: true } });
+        if (!shopItem) throw new Error("A pedra desta semana não está cadastrada na ZikaShop.");
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: me.id, itemId: shopItem.id } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId: me.id, itemId: shopItem.id, quantity: 1, source: "LAB_MONTHLY" },
+        });
+      }
+      await tx.labMonthlyUsage.update({
+        where: { id: usage.id },
+        data: { [field]: { increment: 1 } },
+      });
+      return kind === "LAB_EGG" ? "Ovo de Laboratório" : stone.stoneName;
+    }, { isolationLevel: "Serializable" });
+    return { ok: true as const, rewardLabel };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível concluir a troca." };
+  }
+}
+
 // ── Análise de mascote (IV / potencial) ─────────────────────────────────────────
 export async function analyzeMascotAction(
   mascotId: string,
@@ -358,11 +442,13 @@ export async function analyzeMascotAction(
     select: {
       id: true, pokemonId: true, level: true, personality: true, evolutionLocked: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+      analyzedAt: true,
     },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
   const wallet = await getOrCreateWallet(me.id);
-  if (wallet.balance < ANALYSIS_COST) {
+  const firstAnalysis = !mascot.analyzedAt;
+  if (firstAnalysis && wallet.balance < ANALYSIS_COST) {
     return { ok: false as const, error: `Saldo insuficiente. A análise custa ${ANALYSIS_COST} ZC.` };
   }
 
@@ -370,12 +456,14 @@ export async function analyzeMascotAction(
   const analysis = computeMascotAnalysis(mascot, clampedTarget);
 
   await prisma.$transaction(async (tx) => {
-    await creditCoins(tx, {
-      playerId: me.id,
-      type: ZikaCoinTxType.LAB_TRADE,
-      amount: -ANALYSIS_COST,
-      description: `Laboratório: análise de ${getPokemonName(mascot.pokemonId)}`,
-    });
+    if (firstAnalysis) {
+      await creditCoins(tx, {
+        playerId: me.id,
+        type: ZikaCoinTxType.LAB_TRADE,
+        amount: -ANALYSIS_COST,
+        description: `Laboratório: desbloqueio da análise de ${getPokemonName(mascot.pokemonId)}`,
+      });
+    }
     await tx.mascot.update({
       where: { id: mascot.id },
       data: {

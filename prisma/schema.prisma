@@ -289,6 +289,7 @@ model Player {
   syncEventScores           SyncEventScore[] @relation("SyncEventScorePlayer")
   creationDust            Int                  @default(0)
   labWeeklyUsage          LabWeeklyUsage[]
+  labMonthlyUsage         LabMonthlyUsage[]
   traceRoomsAsHider       TraceRoom[]          @relation("TraceRoomHider")
   traceRoomsAsHunter      TraceRoom[]          @relation("TraceRoomHunter")
   goldenPawTransactions   GoldenPawTransaction[]
@@ -2018,7 +2019,7 @@ model Mascot {
   arenaState           MascotArenaState  @default(FREE)
   injuredAt            DateTime?
   restingUntil         DateTime?         // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
-  // Análise de IV/potencial feita no Laboratório (200 ZC por análise)
+  // A primeira análise de IV/potencial custa 100 ZC; simulações seguintes são gratuitas.
   analyzedAt           DateTime?         // última vez que foi analisado no Lab
   ivScore              Int?              // 0-100 (potencial futuro)
   ivRating             String?           // SSS, SS, S, A, B, C, D ou E
@@ -2552,6 +2553,20 @@ model MiauvadaoConfig {
   updatedAt         DateTime @updatedAt
 
   @@map("miauvadao_config")
+}
+
+model LabMonthlyUsage {
+  id              String   @id @default(cuid())
+  playerId        String
+  monthKey        String   // "YYYY-MM" no horario de Brasilia
+  labEggs         Int      @default(0)
+  evolutionStones Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, monthKey])
+  @@map("lab_monthly_usage")
 }
 
 model MiauvadaoPurchaseQuota {

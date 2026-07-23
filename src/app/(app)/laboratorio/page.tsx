@@ -110,8 +110,11 @@ export default async function LaboratorioPage() {
       initialDust={data.creationDust}
       initialMascots={data.mascots}
       initialWeeklyUsage={data.weeklyUsage}
+      initialMonthlyUsage={data.monthlyUsage}
+      weeklyEvolutionStone={data.weeklyEvolutionStone}
       limits={data.limits}
       costs={data.costs}
+      monthlyCosts={data.monthlyCosts}
       initialCoinBalance={data.coinBalance}
       analysisCost={data.analysisCost}
     />

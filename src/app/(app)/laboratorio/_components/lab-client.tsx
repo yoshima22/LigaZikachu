@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
-import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction } from "../actions";
+import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction } from "../actions";
 import type { MascotRarity } from "../rarity";
 import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
@@ -31,6 +31,8 @@ type LabMascot = {
 type WeeklyUsage = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
 type Limits = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
 type Costs = { coins: number; commonEgg: number; rareEgg: number; specialEgg: number };
+type MonthlyUsage = { labEggs: number; evolutionStones: number };
+type MonthlyCosts = { labEgg: number; evolutionStone: number };
 
 const RARITY_LABEL: Record<MascotRarity, string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial" };
 const RARITY_COLOR: Record<MascotRarity, string> = {
@@ -45,8 +47,11 @@ interface Props {
   initialDust: number;
   initialMascots: LabMascot[];
   initialWeeklyUsage: WeeklyUsage;
+  initialMonthlyUsage: MonthlyUsage;
+  weeklyEvolutionStone: { type: string; name: string };
   limits: Limits;
   costs: Costs;
+  monthlyCosts: MonthlyCosts;
   initialCoinBalance: number;
   analysisCost: number;
 }
@@ -89,12 +94,13 @@ function calcSlotDust(slots: LabMascot[]): { total: number; breakdown: { mascot:
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, limits, costs, initialCoinBalance, analysisCost }: Props) {
+export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, initialMonthlyUsage, weeklyEvolutionStone, limits, costs, monthlyCosts, initialCoinBalance, analysisCost }: Props) {
   const [tab, setTab] = useState<"recycle" | "shop" | "analyze">("recycle");
   const [dust, setDust] = useState(initialDust);
   const [coinBalance, setCoinBalance] = useState(initialCoinBalance);
   const [mascots, setMascots] = useState(initialMascots);
   const [weeklyUsage, setWeeklyUsage] = useState(initialWeeklyUsage);
+  const [monthlyUsage, setMonthlyUsage] = useState(initialMonthlyUsage);
   const [search, setSearch] = useState("");
   const [perfFilter, setPerfFilter] = useState("");
   const [page, setPage] = useState(0);
@@ -179,6 +185,19 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
     });
   };
 
+  const handleMonthlyTrade = (kind: "LAB_EGG" | "EVOLUTION_STONE") => {
+    start(async () => {
+      const res = await tradeDustForMonthlyItemAction(kind);
+      if (!res.ok) { showFeedback(false, res.error); return; }
+      const cost = kind === "LAB_EGG" ? monthlyCosts.labEgg : monthlyCosts.evolutionStone;
+      setDust((value) => value - cost);
+      setMonthlyUsage((usage) => kind === "LAB_EGG"
+        ? { ...usage, labEggs: usage.labEggs + 1 }
+        : { ...usage, evolutionStones: usage.evolutionStones + 1 });
+      showFeedback(true, `${res.rewardLabel} adicionado ao seu inventário!`);
+    });
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       {/* Header */}
@@ -229,6 +248,8 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
             <p>🥚 <strong className="text-slate-200">Ovo Comum</strong> — 15 Pó de Criação · limite 10×/semana</p>
             <p>💙 <strong className="text-blue-300">Ovo Raro</strong> — 25 Pó de Criação · limite 4×/semana</p>
             <p>⭐ <strong className="text-[#FFCB05]">Ovo Especial</strong> — 40 Pó de Criação · limite 1×/semana</p>
+            <p>🧪 <strong className="text-purple-300">Ovo de Laboratório</strong> — 250 Pó de Criação · limite 1×/mês</p>
+            <p>💎 <strong className="text-cyan-300">Pedra de Evolução semanal</strong> — 300 Pó de Criação · limite 1×/mês</p>
           </div>
           <p>Os limites reiniciam toda segunda-feira.</p>
         </GuideSection>
@@ -465,7 +486,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
       {tab === "shop" && (
         <div className="space-y-3">
           <p className="mb-4 text-xs text-slate-500">
-            Troque Pó de Criação por ZikaCoins ou ovos. Limites reiniciam toda segunda-feira.
+            Troque Pó de Criação por recompensas. Os limites semanais reiniciam na segunda-feira; os mensais, no dia 01.
           </p>
           <ShopItem title="400 ZikaCoins" description="Adicionados diretamente à sua carteira."
             cost={costs.coins} dust={dust} used={weeklyUsage.coinsTraded} limit={limits.coinsTraded}
@@ -479,6 +500,16 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
           <ShopItem title="Ovo Especial" description="Pool exclusivo dos pokémons mais raros e cobiçados."
             cost={costs.specialEgg} dust={dust} used={weeklyUsage.specialEggs} limit={limits.specialEggs}
             isPending={isPending} onBuy={() => handleTradeEgg("SPECIAL")} />
+          <div className="pt-2">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-purple-300">Trocas mensais</p>
+          </div>
+          <ShopItem title="Ovo de Laboratório" description="Ovo com atributos superiores. Uma compra é liberada novamente todo dia 01."
+            cost={monthlyCosts.labEgg} dust={dust} used={monthlyUsage.labEggs} limit={1}
+            periodLabel="neste mês" isPending={isPending} onBuy={() => handleMonthlyTrade("LAB_EGG")} />
+          <ShopItem title={`Pedra de Evolução — ${weeklyEvolutionStone.name}`}
+            description="A pedra disponível muda semanalmente. O limite de compra reinicia no dia 01."
+            cost={monthlyCosts.evolutionStone} dust={dust} used={monthlyUsage.evolutionStones} limit={1}
+            periodLabel="neste mês" isPending={isPending} onBuy={() => handleMonthlyTrade("EVOLUTION_STONE")} />
         </div>
       )}
 
@@ -527,9 +558,9 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, lim
   );
 }
 
-function ShopItem({ title, description, cost, dust, used, limit, isPending, onBuy }: {
+function ShopItem({ title, description, cost, dust, used, limit, periodLabel = "esta semana", isPending, onBuy }: {
   title: string; description: string; cost: number;
-  dust: number; used: number; limit: number; isPending: boolean; onBuy: () => void;
+  dust: number; used: number; limit: number; periodLabel?: string; isPending: boolean; onBuy: () => void;
 }) {
   const atLimit = used >= limit;
   const canAfford = dust >= cost;
@@ -540,7 +571,7 @@ function ShopItem({ title, description, cost, dust, used, limit, isPending, onBu
         <p className="text-xs text-slate-400">{description}</p>
         <div className="mt-1 flex items-center gap-3">
           <span className="text-xs font-bold text-[#FFCB05]">🧫 {cost} Pó de Criação</span>
-          <span className={`text-[10px] ${atLimit ? "text-red-400" : "text-slate-500"}`}>{used}/{limit} esta semana</span>
+          <span className={`text-[10px] ${atLimit ? "text-red-400" : "text-slate-500"}`}>{used}/{limit} {periodLabel}</span>
         </div>
       </div>
       <button onClick={onBuy} disabled={atLimit || !canAfford || isPending}

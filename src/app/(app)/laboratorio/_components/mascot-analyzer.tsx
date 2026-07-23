@@ -128,6 +128,7 @@ export function MascotAnalyzer({
       if (!res.ok) { setError(res.error); return; }
       setAnalysis(res.analysis);
       setFromCache(false);
+      setSelected((current) => current ? { ...current, analyzed: true, ivRating: res.analysis.ivRating, ivScore: res.analysis.ivScore } : current);
       onBalanceChange(res.coinBalance);
       onAnalyzed(selected.id, res.analysis.ivRating, res.analysis.ivScore);
     });
@@ -154,7 +155,8 @@ export function MascotAnalyzer({
             <p className="text-sm font-semibold text-slate-100">Análise de Mascote</p>
             <p className="text-xs text-slate-400">
               Descubra o <strong className="text-purple-300">potencial (IV)</strong>, a prévia de evolução e a projeção de atributos.
-              Cada análise custa <strong className="text-[#FFCB05]">{analysisCost} ZC</strong> e atribui um ranking de <strong>SSS</strong> a <strong>E</strong>.
+              A primeira análise custa <strong className="text-[#FFCB05]">{analysisCost} ZC</strong> e atribui um ranking de <strong>SSS</strong> a <strong>E</strong>.
+              Depois disso, você pode simular gratuitamente qualquer nível-alvo neste mascote.
             </p>
           </div>
           <div className="shrink-0 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-1.5 text-center">
@@ -226,16 +228,16 @@ export function MascotAnalyzer({
                   Ver análise salva
                 </button>
               )}
-              <button onClick={runAnalysis} disabled={pending || coinBalance < analysisCost}
+              <button onClick={runAnalysis} disabled={pending || (!selected.analyzed && coinBalance < analysisCost)}
                 className="flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50">
                 {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                {pending ? "Analisando..." : selected.analyzed ? `Reanalisar (${analysisCost} ZC)` : `Analisar (${analysisCost} ZC)`}
+                {pending ? "Analisando..." : selected.analyzed ? "Simular grátis" : `Analisar (${analysisCost} ZC)`}
               </button>
             </div>
           </div>
 
-          {coinBalance < analysisCost && !analysis && (
-            <p className="text-xs text-red-400">Saldo insuficiente para uma nova análise ({analysisCost} ZC){selected.analyzed ? " — mas você pode ver a análise salva de graça." : "."}</p>
+          {coinBalance < analysisCost && !analysis && !selected.analyzed && (
+            <p className="text-xs text-red-400">Saldo insuficiente para desbloquear a análise ({analysisCost} ZC).</p>
           )}
           {error && <p className="text-xs text-red-400">{error}</p>}
 
@@ -243,7 +245,7 @@ export function MascotAnalyzer({
             <>
               {fromCache && (
                 <p className="text-[11px] text-slate-500">
-                  📄 Mostrando a análise salva{analysis.analyzedAtIso ? ` de ${new Date(analysis.analyzedAtIso).toLocaleDateString("pt-BR")}` : ""} (Nv.{analysis.currentLevel} → Nv.{analysis.targetLevel}). Reanalise para atualizar com o nível atual.
+                  📄 Mostrando a análise salva{analysis.analyzedAtIso ? ` de ${new Date(analysis.analyzedAtIso).toLocaleDateString("pt-BR")}` : ""} (Nv.{analysis.currentLevel} → Nv.{analysis.targetLevel}). Faça uma nova simulação gratuitamente para atualizar.
                 </p>
               )}
               <AnalysisResult analysis={analysis} />
