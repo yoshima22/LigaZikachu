@@ -18,6 +18,7 @@ import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import type { Prisma } from "@prisma/client";
 
 function revalidate(playerId?: string) {
@@ -975,6 +976,7 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
       select: { id: true, metadata: true, rarity: true },
     });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const isAdminLabFeather = shopItem.id === ADMIN_LAB_RAINBOW_FEATHER_ID;
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Pena Arco-Íris no inventário." };
     const metadataTier = (shopItem.metadata as { eggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB" } | null)?.eggTier;
@@ -987,7 +989,14 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
     const result = await prisma.$transaction(async (tx) => {
       const currentInventory = await tx.playerInventory.findUnique({ where: { id: inv.id } });
       if (!currentInventory || currentInventory.quantity < 1) throw new Error("Você não tem Pena Arco-Íris no inventário.");
-      const reset = await applyRainbowFeather(player.id, mascotId, eggTier, tx);
+      if (isAdminLabFeather) {
+        const marked = await tx.player.updateMany({
+          where: { id: player.id, adminLabFeatherUsedAt: null },
+          data: { adminLabFeatherUsedAt: new Date() },
+        });
+        if (marked.count !== 1) throw new Error("Esta Pena especial só pode ser usada uma vez por conta.");
+      }
+      const reset = await applyRainbowFeather(player.id, mascotId, eggTier, tx, isAdminLabFeather);
       await tx.playerInventory.update({
         where: { id: inv.id },
         data: { quantity: { decrement: 1 } },

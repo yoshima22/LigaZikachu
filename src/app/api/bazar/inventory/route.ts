@@ -5,6 +5,7 @@ import { getOrCreateWallet } from "@/lib/zikacoins";
 import { getMiauvadaoConfig } from "@/app/(app)/bazar/actions";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { getWeeklyLeagueLockedMascotIds } from "@/lib/weekly-league-locks";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 const HIDDEN_BAZAR_ITEM_TYPES = [
   "SYNC_TICKET_FIRE_LEFT",
@@ -78,6 +79,7 @@ export async function GET() {
       prisma.playerInventory.findMany({
         where: {
           playerId: player.id,
+          itemId: { not: ADMIN_LAB_RAINBOW_FEATHER_ID },
           quantity: { gt: 0 },
           item: { type: { notIn: [...HIDDEN_BAZAR_ITEM_TYPES] as never[] } },
         },

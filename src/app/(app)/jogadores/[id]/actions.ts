@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { grantSyncTicketHalf, grantValidSyncTicketForPlayer, SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
 import { clearStandbyFromNotes, getStandbyUntilFromNotes } from "@/lib/account-standby";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 const EGG_TYPE_MAP: Record<string, EggType> = {
   EGG_COMMON: EggType.COMMON,
@@ -98,13 +99,22 @@ export async function grantItemToPlayer(
     await requireAdmin();
 
     const [player, item] = await Promise.all([
-      prisma.player.findUnique({ where: { id: playerId }, select: { id: true } }),
+      prisma.player.findUnique({ where: { id: playerId }, select: { id: true, adminLabFeatherUsedAt: true } }),
       prisma.shopItem.findUnique({ where: { id: itemId }, select: { id: true, name: true, type: true } }),
     ]);
     if (!player) return { error: "Jogador nao encontrado." };
     if (!item) return { error: "Item nao encontrado." };
 
-    const safeQty = Math.max(1, Math.min(Math.floor(quantity), 99));
+    let safeQty = Math.max(1, Math.min(Math.floor(quantity), 99));
+    if (item.id === ADMIN_LAB_RAINBOW_FEATHER_ID) {
+      if (player.adminLabFeatherUsedAt) return { error: "Este jogador já utilizou a Pena Arco-Íris Primordial." };
+      const alreadyOwned = await prisma.playerInventory.findUnique({
+        where: { playerId_itemId: { playerId, itemId } },
+        select: { quantity: true },
+      });
+      if ((alreadyOwned?.quantity ?? 0) > 0) return { error: "Este jogador já possui a Pena Arco-Íris Primordial." };
+      safeQty = 1;
+    }
     const eggType = EGG_TYPE_MAP[item.type];
     const foodType = FOOD_TYPE_MAP[item.type];
 

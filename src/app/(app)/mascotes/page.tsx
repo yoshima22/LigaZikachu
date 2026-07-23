@@ -564,7 +564,7 @@ export default async function MascotesPage() {
     quantity: b.quantity,
     description: b.item.description ?? undefined,
     imageUrl: b.item.imageUrl ?? undefined,
-    metadata: (b.item.metadata as { eggTier?: string } | null) ?? (
+    metadata: (b.item.metadata as { eggTier?: string; adminLabOriginOverride?: boolean } | null) ?? (
       b.item.type === "RAINBOW_FEATHER"
         ? { eggTier:
             b.item.rarity === "LEGENDARY" || b.item.rarity === "MYTHIC" || b.item.rarity === "RELIC" ? "LAB"

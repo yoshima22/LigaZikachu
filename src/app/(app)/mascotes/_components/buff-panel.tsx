@@ -10,7 +10,7 @@ import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
   description?: string; imageUrl?: string;
-  metadata?: { eggTier?: string } | null;
+  metadata?: { eggTier?: string; adminLabOriginOverride?: boolean } | null;
 }
 interface MascotOption {
   id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean;
@@ -83,9 +83,13 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const isExpBuff = selectedBuffItem?.type === "MASCOT_BUFF_EXP";
   const isMegaStone = selectedBuffItem ? isMegaStoneType(selectedBuffItem.type) : false;
   const selectedMegaStone = selectedBuffItem ? getMegaStoneByType(selectedBuffItem.type) : null;
-  const mascotOptions = isMegaStone && selectedMegaStone
-    ? mascots.filter((m) => m.pokemonId === selectedMegaStone.compatiblePokemonId && m.level >= selectedMegaStone.minLevel)
+  const isAdminLabFeather = selectedBuffItem?.metadata?.adminLabOriginOverride === true;
+  const eligibleMascots = isAdminLabFeather
+    ? mascots.filter((m) => !m.hatchedFromEggType && !m.hatchedFromEggOrigin)
     : mascots;
+  const mascotOptions = isMegaStone && selectedMegaStone
+    ? eligibleMascots.filter((m) => m.pokemonId === selectedMegaStone.compatiblePokemonId && m.level >= selectedMegaStone.minLevel)
+    : eligibleMascots;
   const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
   const selectedMascotItem = mascots.find((mascot) => mascot.id === selectedMascot);
@@ -103,7 +107,9 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const featherAboveOrigin = selectedBuffItem?.type === "RAINBOW_FEATHER"
     && Boolean(featherTier)
     && tierRank[featherTier ?? "COMMON"] > tierRank[originTier];
-  const featherWarning = featherAboveOrigin
+  const featherWarning = isAdminLabFeather
+    ? "Uso único por conta. O mascote receberá atributos de Ovo de Laboratório e terá essa origem registrada permanentemente."
+    : featherAboveOrigin
     ? !selectedMascotItem?.hatchedFromEggType
       ? "Este mascote não possui ovo de origem registrado. Mesmo usando uma pena de Evento, Especial ou Laboratório, os atributos serão sorteados apenas no intervalo de Ovo Raro."
       : `Esta pena é superior ao ovo de origem registrado (${originTier === "COMMON" ? "Comum" : originTier === "RARE" ? "Raro" : originTier === "EVENT" ? "Evento" : originTier === "SPECIAL" ? "Especial" : "Laboratório"}). Ela pode ser usada, mas os atributos continuarão respeitando o intervalo da origem.`
@@ -322,6 +328,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
             disabled={
               pending ||
               (!selectedMascot && !PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "")) ||
+              (isAdminLabFeather && !mascotOptions.some((mascot) => mascot.id === selectedMascot)) ||
               (isProtein && proteinFull)
             }
             onClick={handleUse}

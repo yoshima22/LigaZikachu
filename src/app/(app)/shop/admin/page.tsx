@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ShopAdminPanel } from "./_components/shop-admin-panel";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default async function ShopAdminPage() {
   await requireAdmin();
 
   const items = await prisma.shopItem.findMany({
+    where: { id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID } },
     orderBy: [{ type: "asc" }, { rarity: "asc" }, { name: "asc" }],
     include: { _count: { select: { ownerships: true } } }
   });

@@ -26,6 +26,7 @@ import { getPokemonName, getPokemonElement, MOOD_EMOJI, getWishlistPokemonOption
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
+import { ensureAdminLabRainbowFeather } from "@/lib/admin-lab-feather";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
@@ -94,7 +95,10 @@ export default async function PlayerDetailPage({
   const isSelf = session.user.id === player.userId;
   const isAdminUser = isAdmin(session.user.role);
   if (isAdminUser) {
-    await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
+    await Promise.all([
+      prisma.$transaction((tx) => ensureSyncChallengeItems(tx)),
+      ensureAdminLabRainbowFeather(),
+    ]);
   }
 
   const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, wishlistRows] = await Promise.all([

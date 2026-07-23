@@ -2709,12 +2709,18 @@ export async function applyRainbowFeather(
   mascotId: string,
   expectedEggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB",
   tx?: Prisma.TransactionClient,
+  adminLabOriginOverride = false,
 ) {
   const db = tx ?? prisma;
   const mascot = await db.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para usar a Pena Arco-Íris.");
-  const eggTypeKey = mascot.hatchedFromEggType
+  if (adminLabOriginOverride && (mascot.hatchedFromEggType || mascot.hatchedFromEggOrigin)) {
+    throw new Error("Esta Pena especial só pode ser usada em mascotes sem ovo de origem registrado.");
+  }
+  const eggTypeKey = adminLabOriginOverride
+    ? "LAB"
+    : mascot.hatchedFromEggType
     ? getEggStatTypeKey(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin)
     : "RARE";
   const actualEggTier =
@@ -2741,6 +2747,12 @@ export async function applyRainbowFeather(
       statInstinct: randomInt(statMin, statMax),
       statVitality: randomInt(statMin, statMax),
       happiness: 50, mood: "NEUTRAL",
+      ...(adminLabOriginOverride
+        ? {
+            hatchedFromEggType: "LAB" as const,
+            hatchedFromEggOrigin: "Origem de ovo de Laboratorio",
+          }
+        : {}),
     }
   });
   // Remove marca de proteína (stats foram resetados)
@@ -2750,7 +2762,12 @@ export async function applyRainbowFeather(
   if (!tx) {
     await logEvent(mascotId, "🌈", `Pena Arco-Íris usada! Personalidade e atributos foram sorteados novamente no intervalo ${statMin}–${statMax}.`);
   }
-  return { statMin, statMax, actualEggTier, usedFallback: !mascot.hatchedFromEggType };
+  return {
+    statMin,
+    statMax,
+    actualEggTier: adminLabOriginOverride ? "LAB" : actualEggTier,
+    usedFallback: !adminLabOriginOverride && !mascot.hatchedFromEggType,
+  };
 }
 
 // ── Utilidades para UI ────────────────────────────────────────────────────────

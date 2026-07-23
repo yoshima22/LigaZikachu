@@ -23,6 +23,7 @@ import {
 import { EggType } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 function revalidateBazar() {
   revalidatePath("/bazar");
@@ -570,6 +571,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
                 include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } },
               });
           if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          if (inv.itemId === ADMIN_LAB_RAINBOW_FEATHER_ID) throw new Error("Este item administrativo não pode ser negociado.");
           // Desconta do inventário imediatamente (escrow — não pode usar durante o anúncio)
           await tx.playerInventory.update({
             where: { id: inv.id },
@@ -2271,6 +2273,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
             ? await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: input.shopItemId } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } })
             : await tx.playerInventory.findFirst({ where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } });
           if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          if (inv.itemId === ADMIN_LAB_RAINBOW_FEATHER_ID) throw new Error("Este item administrativo não pode ser leiloado.");
           await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: qty } } });
           payload = { ...payload, shopItemId: inv.itemId, imageUrl: sanitizePayloadImageUrl(inv.item.imageUrl ?? input.imageUrl) };
         }
