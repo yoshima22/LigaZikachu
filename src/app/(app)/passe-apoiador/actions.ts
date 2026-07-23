@@ -6,6 +6,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { creditCoins } from "@/lib/zikacoins";
 import { ZikaCoinTxType } from "@prisma/client";
+import { deactivateExpiredSupporterPasses } from "@/lib/supporter-pass";
 import type { DayReward } from "./schedule";
 export type { DayReward } from "./schedule";
 import { PASS_SCHEDULE, PASS_SCHEDULE_DEFAULTS } from "./schedule";
@@ -231,9 +232,12 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     const player = await getSessionPlayer(user.id);
     if (!player) return empty;
 
+    const now = new Date();
+    await deactivateExpiredSupporterPasses(now);
+
     // Lista de todos os passes ativos para o seletor
     const allActiveRaw = await prisma.supporterPass.findMany({
-      where: { playerId: player.id, active: true },
+      where: { playerId: player.id, active: true, expiresAt: { gt: now } },
       select: {
         id: true,
         startsAt: true,
@@ -243,7 +247,6 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
       },
       orderBy: { createdAt: "desc" },
     });
-    const now = new Date();
     const allActivePasses: ActivePassSummary[] = allActiveRaw.map(p => ({
       id: p.id,
       startsAt: p.startsAt,
@@ -257,11 +260,11 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     // Seleciona o passe: pelo ID se fornecido, senão o mais recente ativo
     const pass = passId
       ? await prisma.supporterPass.findFirst({
-          where: { id: passId, playerId: player.id, active: true },
+          where: { id: passId, playerId: player.id, active: true, expiresAt: { gt: now } },
           include: { claims: { select: { dayNumber: true, claimedAt: true }, orderBy: { dayNumber: "asc" } } },
         })
       : await prisma.supporterPass.findFirst({
-          where: { playerId: player.id, active: true },
+          where: { playerId: player.id, active: true, expiresAt: { gt: now } },
           include: { claims: { select: { dayNumber: true, claimedAt: true }, orderBy: { dayNumber: "asc" } } },
           orderBy: { createdAt: "desc" },
         });
@@ -699,8 +702,10 @@ export async function adminListActiveVips(): Promise<{
 }> {
   try {
     await requireAdmin();
+    const now = new Date();
+    await deactivateExpiredSupporterPasses(now);
     const passes = await prisma.supporterPass.findMany({
-      where: { active: true },
+      where: { active: true, expiresAt: { gt: now } },
       include: {
         player: { select: { id: true, displayName: true } },
         _count: { select: { claims: true } },
@@ -744,7 +749,7 @@ export async function adminSetRetroactiveClaimsByLabel(label: string, allow: boo
     const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
     const [result] = await prisma.$transaction([
       prisma.supporterPass.updateMany({
-        where: { active: true, passLabel: label },
+        where: { active: true, expiresAt: { gt: new Date() }, passLabel: label },
         data: { allowRetroactiveClaims: allow },
       }),
       prisma.passScheduleConfig.upsert({
@@ -835,7 +840,7 @@ export async function adminSetRetroactiveClaimsAll(allow: boolean): Promise<{ ok
   try {
     await requireAdmin();
     const result = await prisma.supporterPass.updateMany({
-      where: { active: true },
+      where: { active: true, expiresAt: { gt: new Date() } },
       data: { allowRetroactiveClaims: allow },
     });
     return { ok: true, updated: result.count };

@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { deactivateExpiredSupporterPasses } from "@/lib/supporter-pass";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -33,6 +34,9 @@ export async function GET(req: NextRequest) {
   }
 
   const results: Record<string, number> = {};
+
+  // O registro e os resgates permanecem para auditoria; apenas sai do estado ativo.
+  results.expiredSupporterPasses = await deactivateExpiredSupporterPasses().catch(() => 0);
 
   // 1. MascotEvent — mantém apenas os 4 mais recentes por mascote
   // Usa SQL direto pois Prisma não suporta DELETE com window functions nativamente
