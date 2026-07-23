@@ -1218,12 +1218,73 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
     select: { id: true },
   });
   await Promise.all(settledMatches.map((match) => settleWeeklyLeagueBets(match.id)));
+  await publishWeeklyRoundTicker(leagueId, today, battleSlot);
 
   revalidatePath(PATH);
   return { success: true, matches: pairings.length };
   } catch (err) {
     return { error: `Erro na simulação: ${String(err).slice(0, 200)}` };
   }
+}
+
+async function publishWeeklyRoundTicker(leagueId: string, battleDate: string, battleSlot: number) {
+  const matches = await prisma.weeklyMascotLeagueMatch.findMany({
+    where: { leagueId, battleDate, battleSlot, status: "RESOLVED" },
+    select: {
+      id: true,
+      playerAId: true,
+      playerBId: true,
+      winnerId: true,
+      isDraw: true,
+      playerASurvivors: true,
+      playerBSurvivors: true,
+      playerADamageDealt: true,
+      playerBDamageDealt: true,
+    },
+  });
+  if (!matches.length) return;
+
+  const playerIds = [...new Set(matches.flatMap((match) =>
+    [match.playerAId, match.playerBId].filter((id): id is string => Boolean(id)),
+  ))];
+  const players = await prisma.player.findMany({
+    where: { id: { in: playerIds } },
+    select: { id: true, displayName: true },
+  });
+  const names = new Map(players.map((player) => [player.id, player.displayName]));
+  const totalDamage = (match: typeof matches[number]) =>
+    match.playerADamageDealt + match.playerBDamageDealt;
+  const survivorGap = (match: typeof matches[number]) =>
+    Math.abs(match.playerASurvivors - match.playerBSurvivors);
+
+  const highlighted = [
+    [...matches].sort((a, b) => totalDamage(b) - totalDamage(a))[0],
+    [...matches].sort((a, b) => survivorGap(a) - survivorGap(b))[0],
+  ].filter((match, index, list) => list.findIndex((item) => item.id === match.id) === index);
+
+  await Promise.all(highlighted.map(async (match, index) => {
+    const playerA = names.get(match.playerAId) ?? "Um treinador";
+    const playerB = match.playerBId ? names.get(match.playerBId) ?? "outro treinador" : "outro treinador";
+    const winner = match.winnerId ? names.get(match.winnerId) ?? "Um treinador" : null;
+    const loser = match.winnerId === match.playerAId ? playerB : playerA;
+    const winnerSurvivors = match.winnerId === match.playerAId
+      ? match.playerASurvivors
+      : match.playerBSurvivors;
+    const damage = totalDamage(match);
+    const message = match.isDraw
+      ? `${playerA} e ${playerB} empataram na Liga Semanal após um confronto de ${damage.toLocaleString("pt-BR")} de dano combinado!`
+      : index === 0
+        ? `${winner} derrotou ${loser} na Liga Semanal com ${winnerSurvivors} sobrevivente${winnerSurvivors === 1 ? "" : "s"}! O confronto somou ${damage.toLocaleString("pt-BR")} de dano.`
+        : `${winner} venceu ${loser} em um dos combates mais apertados da rodada ${battleSlot} da Liga Semanal!`;
+    await publishLeagueTicker({
+      type: "WEEKLY_LEAGUE_BATTLE",
+      message,
+      href: "/combates/liga-semanal",
+      eventKey: `weekly-league:${match.id}:${index === 0 ? "damage-highlight" : "close-highlight"}`,
+      priority: 2,
+      ttlHours: 18,
+    });
+  }));
 }
 
 // ── Regenerate replays only (no ranking changes) ────────────────────────
@@ -1870,6 +1931,18 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
           });
         }
       }
+    });
+  }
+
+  if (dueSlots.length > 0) {
+    const battleDateLabel = battleDate.split("-").reverse().join("/");
+    await publishLeagueTicker({
+      type: "WEEKLY_LEAGUE_FIGHT_DAY",
+      message: `Dia de luta na Liga Semanal! O Professor Enguiça está acompanhando os confrontos de ${battleDateLabel} e trará os destaques das rodadas.`,
+      href: "/combates/liga-semanal",
+      eventKey: `weekly-league:fight-day:${league.id}:${battleDate}`,
+      priority: 1,
+      ttlHours: 18,
     });
   }
 
