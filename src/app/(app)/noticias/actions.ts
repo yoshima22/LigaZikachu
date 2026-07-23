@@ -9,7 +9,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { creditCoins } from "@/lib/zikacoins";
 
-const rewardKindSchema = z.enum(["NONE", "ZIKA_COINS", "MASCOT_EGG", "MASCOT_FOOD", "MASCOT_BUFF"]);
+const rewardKindSchema = z.enum(["NONE", "ZIKA_COINS", "MASCOT_EGG", "MASCOT_FOOD", "MASCOT_BUFF", "SHOP_ITEM"]);
 
 const newsSchema = z.object({
   title: z.string().trim().min(3, "Titulo muito curto.").max(120),
@@ -23,7 +23,7 @@ const newsSchema = z.object({
   rewardTitle: z.string().trim().max(120).optional().or(z.literal("")),
 });
 
-function buildRewardPayload(data: z.infer<typeof newsSchema>) {
+async function buildRewardPayload(data: z.infer<typeof newsSchema>) {
   if (data.rewardKind === "NONE") return { rewardEnabled: false, rewardTitle: null, rewardPayload: Prisma.JsonNull };
   if (data.rewardKind === "ZIKA_COINS") {
     const amount = Math.max(1, data.rewardAmount);
@@ -52,6 +52,30 @@ function buildRewardPayload(data: z.infer<typeof newsSchema>) {
       rewardPayload: { rewardKind: "MASCOT_FOOD", foodType, quantity },
     };
   }
+  if (data.rewardKind === "SHOP_ITEM") {
+    if (!data.rewardType) throw new Error("Selecione um item cosmético da ZikaShop.");
+    const item = await prisma.shopItem.findFirst({
+      where: {
+        id: data.rewardType,
+        type: { in: [ShopItemType.TITLE, ShopItemType.BANNER, ShopItemType.FRAME] },
+        inventoryEnabled: true,
+      },
+      select: { id: true, name: true, type: true },
+    });
+    if (!item) throw new Error("Item cosmético não encontrado ou indisponível no inventário.");
+    const quantity = Math.max(1, data.rewardAmount || 1);
+    return {
+      rewardEnabled: true,
+      rewardTitle: data.rewardTitle || item.name,
+      rewardPayload: {
+        rewardKind: "SHOP_ITEM",
+        shopItemId: item.id,
+        itemName: item.name,
+        itemType: item.type,
+        quantity,
+      },
+    };
+  }
   const buffType = data.rewardType && Object.values(ShopItemType).includes(data.rewardType as ShopItemType)
     ? data.rewardType
     : "MASCOT_BUFF_EXP";
@@ -76,7 +100,7 @@ export async function createNewsPost(raw: z.infer<typeof newsSchema>) {
     const uploadedImage = data.imageUrl?.startsWith("data:image/")
       ? await uploadDataUrlAsset(data.imageUrl, "news", data.title)
       : data.imageUrl || null;
-    const reward = buildRewardPayload(data);
+    const reward = await buildRewardPayload(data);
 
     await prisma.newsPost.create({
       data: {
@@ -108,7 +132,7 @@ export async function updateNewsPost(postId: string, raw: z.infer<typeof newsSch
     const uploadedImage = data.imageUrl?.startsWith("data:image/")
       ? await uploadDataUrlAsset(data.imageUrl, "news", data.title)
       : data.imageUrl || null;
-    const reward = buildRewardPayload(data);
+    const reward = await buildRewardPayload(data);
 
     await prisma.newsPost.update({
       where: { id: postId },
@@ -217,6 +241,22 @@ export async function claimNewsReward(postId: string) {
             update: { quantity: { increment: quantity } },
           });
         }
+      } else if (rewardKind === "SHOP_ITEM" && typeof payload.shopItemId === "string") {
+        const quantity = typeof payload.quantity === "number" ? Math.max(1, Math.floor(payload.quantity)) : 1;
+        const item = await tx.shopItem.findFirst({
+          where: {
+            id: payload.shopItemId,
+            type: { in: [ShopItemType.TITLE, ShopItemType.BANNER, ShopItemType.FRAME] },
+            inventoryEnabled: true,
+          },
+          select: { id: true },
+        });
+        if (!item) throw new Error("O item cosmético desta recompensa não está mais disponível.");
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: player.id, itemId: item.id } },
+          create: { playerId: player.id, itemId: item.id, quantity, source: "NEWS_REWARD" },
+          update: { quantity: { increment: quantity } },
+        });
       }
       await tx.newsRead.upsert({
         where: { postId_playerId: { postId, playerId: player.id } },

@@ -20,6 +20,9 @@ function describeReward(payload: unknown) {
   if (data.rewardKind === "MASCOT_BUFF") {
     return `${amount ?? 1}x ${String(data.buffType ?? "Item de mascote")}`;
   }
+  if (data.rewardKind === "SHOP_ITEM") {
+    return `${amount ?? 1}x ${String(data.itemName ?? "Item cosmético")}`;
+  }
   return null;
 }
 
@@ -38,6 +41,8 @@ function getRewardFormValues(payload: unknown) {
       ? data.foodType
       : typeof data.buffType === "string"
         ? data.buffType
+        : typeof data.shopItemId === "string"
+          ? data.shopItemId
         : "";
   return { rewardKind, rewardAmount, rewardType };
 }
@@ -47,6 +52,16 @@ export default async function NoticiasPage() {
   const user = session?.user;
   const admin = user ? isAdmin(user.role) : false;
   const player = user ? await getSessionPlayer(user.id) : null;
+  const cosmeticOptions = admin
+    ? await prisma.shopItem.findMany({
+        where: {
+          type: { in: ["TITLE", "BANNER", "FRAME"] },
+          inventoryEnabled: true,
+        },
+        select: { id: true, name: true, type: true, rarity: true },
+        orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+      })
+    : [];
 
   const posts = await prisma.newsPost.findMany({
     where: { published: true },
@@ -102,8 +117,8 @@ export default async function NoticiasPage() {
         </div>
       </div>
 
-      {admin && <NewsComposer />}
-      <NewsList posts={viewPosts} admin={admin} />
+      {admin && <NewsComposer cosmeticOptions={cosmeticOptions} />}
+      <NewsList posts={viewPosts} admin={admin} cosmeticOptions={cosmeticOptions} />
     </div>
   );
 }

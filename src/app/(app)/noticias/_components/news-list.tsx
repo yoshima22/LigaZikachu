@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { claimNewsReward, markNewsPostsRead, updateNewsPost } from "../actions";
+import type { CosmeticRewardOption } from "./news-composer";
 
 export type NewsPostView = {
   id: string;
@@ -28,6 +29,7 @@ const rewardKinds = [
   { value: "MASCOT_EGG", label: "Ovo de mascote" },
   { value: "MASCOT_FOOD", label: "Comida/Doce" },
   { value: "MASCOT_BUFF", label: "Item da loja" },
+  { value: "SHOP_ITEM", label: "Cosmético da ZikaShop" },
 ] as const;
 
 const eggTypes = ["COMMON", "RARE", "SPECIAL", "EVENT", "GEN1", "GEN2", "GEN3", "GEN4", "GEN5", "GEN6", "GEN7", "GEN8", "GEN9"];
@@ -101,7 +103,15 @@ function NewsBody({ body }: { body: string }) {
   );
 }
 
-export function NewsList({ posts, admin = false }: { posts: NewsPostView[]; admin?: boolean }) {
+export function NewsList({
+  posts,
+  admin = false,
+  cosmeticOptions = [],
+}: {
+  posts: NewsPostView[];
+  admin?: boolean;
+  cosmeticOptions?: CosmeticRewardOption[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -138,7 +148,7 @@ export function NewsList({ posts, admin = false }: { posts: NewsPostView[]; admi
       {posts.map((post) => (
         <article key={post.id} className="overflow-hidden rounded-2xl border border-[#FFCB05]/15 bg-slate-950/75 shadow-lg shadow-black/20">
           {editingId === post.id ? (
-            <NewsEditForm post={post} onCancel={() => setEditingId(null)} onSaved={() => { setEditingId(null); router.refresh(); }} />
+            <NewsEditForm post={post} cosmeticOptions={cosmeticOptions} onCancel={() => setEditingId(null)} onSaved={() => { setEditingId(null); router.refresh(); }} />
           ) : (
           <>
           {post.imageUrl && (
@@ -211,7 +221,17 @@ export function NewsList({ posts, admin = false }: { posts: NewsPostView[]; admi
   );
 }
 
-function NewsEditForm({ post, onCancel, onSaved }: { post: NewsPostView; onCancel: () => void; onSaved: () => void }) {
+function NewsEditForm({
+  post,
+  cosmeticOptions,
+  onCancel,
+  onSaved,
+}: {
+  post: NewsPostView;
+  cosmeticOptions: CosmeticRewardOption[];
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
   const [title, setTitle] = useState(post.title);
   const [subtitle, setSubtitle] = useState(post.subtitle ?? "");
   const [body, setBody] = useState(post.body);
@@ -228,6 +248,11 @@ function NewsEditForm({ post, onCancel, onSaved }: { post: NewsPostView; onCance
       ? foodTypes
       : rewardKind === "MASCOT_BUFF"
         ? buffTypes
+        : rewardKind === "SHOP_ITEM"
+          ? cosmeticOptions.map((item) => ({
+              value: item.id,
+              label: `${item.type === "TITLE" ? "Título" : item.type === "BANNER" ? "Banner" : "Moldura"} · ${item.name} (${item.rarity})`,
+            }))
         : [];
 
   function save() {
@@ -238,7 +263,7 @@ function NewsEditForm({ post, onCancel, onSaved }: { post: NewsPostView; onCance
         body,
         imageUrl,
         published: true,
-        rewardKind: rewardKind as "NONE" | "ZIKA_COINS" | "MASCOT_EGG" | "MASCOT_FOOD" | "MASCOT_BUFF",
+        rewardKind: rewardKind as "NONE" | "ZIKA_COINS" | "MASCOT_EGG" | "MASCOT_FOOD" | "MASCOT_BUFF" | "SHOP_ITEM",
         rewardAmount,
         rewardType,
         rewardTitle,
@@ -278,7 +303,7 @@ function NewsEditForm({ post, onCancel, onSaved }: { post: NewsPostView; onCance
               <input type="number" min={1} value={rewardAmount} onChange={(event) => setRewardAmount(Number(event.target.value))} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" />
               {typeOptions.length > 0 && (
                 <select value={rewardType} onChange={(event) => setRewardType(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white">
-                  <option value="">Padrao</option>
+                  <option value="">{rewardKind === "SHOP_ITEM" ? "Selecione o cosmético" : "Padrao"}</option>
                   {typeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               )}

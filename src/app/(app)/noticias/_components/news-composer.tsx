@@ -13,7 +13,15 @@ const rewardKinds = [
   { value: "MASCOT_EGG", label: "Ovo de mascote" },
   { value: "MASCOT_FOOD", label: "Comida/Doce" },
   { value: "MASCOT_BUFF", label: "Item da loja" },
+  { value: "SHOP_ITEM", label: "Cosmético da ZikaShop" },
 ] as const;
+
+export type CosmeticRewardOption = {
+  id: string;
+  name: string;
+  type: string;
+  rarity: string;
+};
 
 const eggTypes = ["COMMON", "RARE", "SPECIAL", "EVENT", "GEN1", "GEN2", "GEN3", "GEN4", "GEN5", "GEN6", "GEN7", "GEN8", "GEN9"];
 const foodTypes = [
@@ -36,7 +44,7 @@ function insertMarkup(body: string, setBody: (value: string) => void, markup: st
   setBody(`${body}${suffix}${markup}`);
 }
 
-export function NewsComposer() {
+export function NewsComposer({ cosmeticOptions }: { cosmeticOptions: CosmeticRewardOption[] }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
@@ -54,6 +62,11 @@ export function NewsComposer() {
       ? foodTypes
       : rewardKind === "MASCOT_BUFF"
         ? buffTypes
+        : rewardKind === "SHOP_ITEM"
+          ? cosmeticOptions.map((item) => ({
+              value: item.id,
+              label: `${item.type === "TITLE" ? "Título" : item.type === "BANNER" ? "Banner" : "Moldura"} · ${item.name} (${item.rarity})`,
+            }))
         : [];
 
   function submit() {
@@ -159,7 +172,7 @@ export function NewsComposer() {
               <input type="number" min={1} value={rewardAmount} onChange={(e) => setRewardAmount(Number(e.target.value))} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Quantidade" />
               {typeOptions.length > 0 && (
                 <select value={rewardType} onChange={(e) => setRewardType(e.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white">
-                  <option value="">Padrao</option>
+                  <option value="">{rewardKind === "SHOP_ITEM" ? "Selecione o cosmético" : "Padrao"}</option>
                   {typeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               )}
