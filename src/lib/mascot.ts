@@ -2741,6 +2741,85 @@ function getRainbowFeatherBaseForm(pokemonId: number): number {
   return current;
 }
 
+/**
+ * Corrige usos feitos por uma Server Action antiga ainda aberta no navegador
+ * durante uma troca de deploy. A ação nova já desevolui no mesmo transaction.
+ */
+export async function repairRecentRainbowFeatherDevolutions(playerId: string): Promise<number> {
+  const since = new Date(Date.now() - 6 * 60 * 60_000);
+  const recentUses = await prisma.mascotEvent.findMany({
+    where: {
+      emoji: "🌈",
+      createdAt: { gte: since },
+      mascot: { playerId, level: 1 },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      mascot: {
+        select: {
+          id: true,
+          pokemonId: true,
+          level: true,
+          evolutionLocked: true,
+        },
+      },
+    },
+  });
+
+  const repairs = new Map<string, {
+    eventId: string;
+    pokemonId: number;
+    basePokemonId: number;
+    evolutionLocked: boolean;
+  }>();
+  for (const use of recentUses) {
+    if (repairs.has(use.mascot.id)) continue;
+    const basePokemonId = getRainbowFeatherBaseForm(use.mascot.pokemonId);
+    if (basePokemonId === use.mascot.pokemonId) continue;
+    repairs.set(use.mascot.id, {
+      eventId: use.id,
+      pokemonId: use.mascot.pokemonId,
+      basePokemonId,
+      evolutionLocked: use.mascot.evolutionLocked,
+    });
+  }
+  if (repairs.size === 0) return 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const [mascotId, repair] of repairs) {
+      await tx.mascot.update({
+        where: { id: mascotId },
+        data: { pokemonId: repair.basePokemonId, evolutionLocked: false },
+      });
+      await tx.mascotProgressMilestone.deleteMany({ where: { mascotId } });
+      await tx.auditLog.create({
+        data: {
+          entityType: "mascot",
+          entityId: mascotId,
+          action: "rainbow_feather.devolution_auto_repair",
+          before: {
+            pokemonId: repair.pokemonId,
+            level: 1,
+            evolutionLocked: repair.evolutionLocked,
+          },
+          after: {
+            pokemonId: repair.basePokemonId,
+            level: 1,
+            evolutionLocked: false,
+            progressMilestones: [],
+          },
+          metadata: {
+            reason: "Uso recente processado por Server Action anterior ao deploy da desevolução",
+            sourceEventId: repair.eventId,
+          },
+        },
+      });
+    }
+  });
+  return repairs.size;
+}
+
 /** Pena Arco-Íris: faz o mascote renascer na forma base usando o intervalo do ovo original. */
 export async function applyRainbowFeather(
   playerId: string,
