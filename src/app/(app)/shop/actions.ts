@@ -32,6 +32,7 @@ const createItemSchema = z.object({
     // Banner
     focusX: z.number().min(0).max(100).optional(),
     focusY: z.number().min(0).max(100).optional(),
+    brightnessPct: z.number().int().min(50).max(300).optional(),
     // Buff (MASCOT_BUFF_EXP, PICNIC_BASKET, LUCKY_EGG)
     buffHours:        z.number().min(1).max(72).optional(),
     expMultiplierPct: z.number().min(1).max(200).optional(),

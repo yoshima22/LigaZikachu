@@ -275,7 +275,7 @@ export default async function PerfilPage() {
     }),
     prisma.playerInventory.findMany({
       where: { playerId: player.id, equipped: true },
-      include: { item: { select: { type: true, name: true, imageUrl: true } } }
+      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true } } }
     }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -334,7 +334,11 @@ export default async function PerfilPage() {
               src={equippedBanner.item.imageUrl}
               alt="Banner"
               className="h-full w-full object-cover object-center"
-              style={{ filter: "brightness(1.15)" }}
+              style={{
+                filter: `brightness(${Math.min(300, Math.max(50,
+                  (equippedBanner.item.metadata as { brightnessPct?: number } | null)?.brightnessPct ?? 115
+                )) / 100})`,
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0f0f1a]/80" />
           </div>

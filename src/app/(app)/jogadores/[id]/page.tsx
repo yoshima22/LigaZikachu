@@ -308,7 +308,9 @@ export default async function PlayerDetailPage({
                   <img src={equippedBanner.item.imageUrl} alt="Banner"
                     className="absolute inset-0 h-full w-full object-cover"
                     style={{
-                      filter: "brightness(1.15)",
+                      filter: `brightness(${Math.min(300, Math.max(50,
+                        (equippedBanner.item.metadata as { brightnessPct?: number } | null)?.brightnessPct ?? 115
+                      )) / 100})`,
                       objectPosition: (() => {
                         const m = equippedBanner.item.metadata as { focusX?: number; focusY?: number } | null | undefined;
                         return `${m?.focusX ?? 50}% ${m?.focusY ?? 50}%`;

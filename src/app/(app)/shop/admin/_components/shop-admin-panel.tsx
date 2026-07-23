@@ -121,7 +121,7 @@ interface Item {
 }
 
 type FrameMeta    = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
-type BannerMeta   = { focusX: number; focusY: number };
+type BannerMeta   = { focusX: number; focusY: number; brightnessPct: number };
 type BuffMeta     = { buffHours: number; expMultiplierPct: number; happinessBonus: number };
 type VacationMeta = { vacationDays: number; expBonus: number; eggChancePct: number };
 
@@ -141,7 +141,7 @@ type FormData = {
   entranceEffect: typeof effectOpts[number];
 };
 const DEFAULT_FRAME_META:    FrameMeta    = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
-const DEFAULT_BANNER_META:   BannerMeta   = { focusX: 50, focusY: 50 };
+const DEFAULT_BANNER_META:   BannerMeta   = { focusX: 50, focusY: 50, brightnessPct: 115 };
 const DEFAULT_BUFF_META:     BuffMeta     = { buffHours: 2, expMultiplierPct: 25, happinessBonus: 5 };
 const DEFAULT_VACATION_META: VacationMeta = { vacationDays: 7, expBonus: 6000, eggChancePct: 30 };
 
@@ -172,6 +172,7 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
     bannerMeta: {
       focusX: (meta as Partial<BannerMeta>).focusX ?? 50,
       focusY: (meta as Partial<BannerMeta>).focusY ?? 50,
+      brightnessPct: (meta as Partial<BannerMeta>).brightnessPct ?? 115,
     },
     buffMeta: {
       buffHours:        meta.buffHours        ?? DEFAULT_BUFF_META.buffHours,
@@ -215,11 +216,11 @@ function BannerMetaEditor({ bannerMeta, setBannerMeta, imageUrl }: {
               src={imageUrl}
               alt="Banner preview"
               className="absolute inset-0 h-full w-full object-cover"
-              style={{ objectPosition }}
+              style={{ objectPosition, filter: `brightness(${bannerMeta.brightnessPct / 100})` }}
             />
             {/* Gradiente igual ao perfil */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/70 via-[#0f0f1a]/20 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/60 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#0f0f1a]/85 via-[#0f0f1a]/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a]/80 via-transparent to-transparent" />
           </>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-600">
@@ -248,7 +249,7 @@ function BannerMetaEditor({ bannerMeta, setBannerMeta, imageUrl }: {
       </div>
 
       {/* Sliders */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <label className="block space-y-1 text-xs text-slate-400">
           <div className="flex justify-between">
             <span>Foco horizontal (X)</span>
@@ -271,10 +272,21 @@ function BannerMetaEditor({ bannerMeta, setBannerMeta, imageUrl }: {
             className="w-full accent-[#FFCB05]" />
           <p className="text-[10px] text-slate-600">0% = topo · 50% = centro · 100% = base</p>
         </label>
+        <label className="block space-y-1 text-xs text-slate-400">
+          <div className="flex justify-between">
+            <span>Brilho da imagem</span>
+            <span className="font-semibold text-slate-300">{bannerMeta.brightnessPct}%</span>
+          </div>
+          <input type="range" min="50" max="300" step="5"
+            value={bannerMeta.brightnessPct}
+            onChange={e => setBannerMeta({ ...bannerMeta, brightnessPct: parseInt(e.target.value) })}
+            className="w-full accent-[#FFCB05]" />
+          <p className="text-[10px] text-slate-600">100% = imagem original · aumente para recuperar detalhes escuros</p>
+        </label>
       </div>
       <button type="button" onClick={() => setBannerMeta(DEFAULT_BANNER_META)}
         className="text-xs text-slate-500 hover:text-slate-300 underline">
-        Resetar para centro (50%, 50%)
+        Resetar foco e brilho
       </button>
     </div>
   );
