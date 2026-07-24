@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
-import { getCombatRoleLabel, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, getCombatActionsPerRound, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
@@ -488,11 +488,14 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
 
     for (const entry of all) {
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
-      const opponents = entry.side === "A" ? alive(defenders, hp) : alive(attackers, hp);
+      const actor = entry.mascot;
+      const enemyTeam = entry.side === "A" ? defenders : attackers;
+      const actionProfile = getCombatActionsPerRound(actor.agility, alive(enemyTeam, hp).map((m) => getEffectiveStat(m, debuffs, "agility")));
+
+      for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
+      const opponents = alive(enemyTeam, hp);
       const allies = entry.side === "A" ? attackers : defenders;
       if (opponents.length === 0) break;
-
-      const actor = entry.mascot;
 
       // HEALER: may heal instead of attacking
       const healResult = tryHealerAction(actor, allies, hp, healCount);
@@ -503,7 +506,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
           action: "HEAL", damage: healResult.healAmount, attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(actor.pokemonId),
           multiplier: 1, advantageApplied: false,
           actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(actor.combatRole),
-          effect: healResult.effect,
+          effect: `${healResult.effect}${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}`,
         });
         turn++;
         continue;
@@ -537,7 +540,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
           targetId: actor.id, targetName: actor.name, targetOwnerId: actor.ownerId,
           action: "DEFEND", damage: 0, attackerType, defenderType: attackerType, multiplier: 1, advantageApplied: false,
           actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(actor.combatRole),
-          effect: `${getCombatRoleLabel(actor.combatRole)} preparou defesa (${Math.round(reduction * 100)}%).`,
+          effect: `${getCombatRoleLabel(actor.combatRole)} preparou defesa (${Math.round(reduction * 100)}%).${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}`,
         });
         turn++;
         continue;
@@ -582,6 +585,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const debuffEffect = tryApplyOpportunistDebuff(actor, target, debuffs);
       const saboteurEffect = trySaboteurDisrupt(actor, opponents, hp);
       const effects = [
+        actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador ativo: +${Math.round(encourage * 100)}% impulso.` : null,
         scoutBonus > 0 ? `Batedor ativo: +${Math.round(scoutBonus * 100)}% precisão.` : null,
         debuffEffect,
@@ -599,6 +603,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole), effect: effects,
       });
       turn++;
+      }
     }
   }
 

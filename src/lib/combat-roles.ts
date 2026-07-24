@@ -62,6 +62,23 @@ export function getCombatRoleLabel(value: unknown): string {
   return COMBAT_ROLE_LABELS[normalizeCombatRole(value)];
 }
 
+export const AGILITY_EXTRA_ACTION_GAP = 60;
+export const AGILITY_THIRD_ACTION_GAP = 140;
+
+/**
+ * Regra geral de ações por rodada:
+ * 1 ação normalmente; +1 com 60 de Agilidade acima da média adversária;
+ * +1 adicional com 140 de diferença. Máximo de 3 ações.
+ */
+export function getCombatActionsPerRound(agility: number, opponentAgilities: number[]) {
+  const opponentAverage = opponentAgilities.length > 0
+    ? opponentAgilities.reduce((sum, value) => sum + value, 0) / opponentAgilities.length
+    : agility;
+  const gap = agility - opponentAverage;
+  const actions = gap >= AGILITY_THIRD_ACTION_GAP ? 3 : gap >= AGILITY_EXTRA_ACTION_GAP ? 2 : 1;
+  return { actions, opponentAverage, gap };
+}
+
 export function recommendCombatRole(stats: {
   statForce?: number | null;
   statAgility?: number | null;

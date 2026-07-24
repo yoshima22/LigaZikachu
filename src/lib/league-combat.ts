@@ -1,6 +1,6 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName } from "./mascot-data";
-import { normalizeCombatRole, getCombatRoleLabel, type CombatRole } from "./combat-roles";
+import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 
@@ -324,11 +324,14 @@ export function runLeagueCombat(
 
     for (const entry of all) {
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
-      const opponents = entry.side === "A" ? alive(b, hp) : alive(a, hp);
+      const actor = entry.mascot;
+      const enemyTeam = entry.side === "A" ? b : a;
+      const actionProfile = getCombatActionsPerRound(actor.agility, alive(enemyTeam, hp).map((m) => m.agility));
+
+      for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
+      const opponents = alive(enemyTeam, hp);
       const allies = entry.side === "A" ? a : b;
       if (opponents.length === 0) break;
-
-      const actor = entry.mascot;
 
       // HEALER action
       if (actor.combatRole === "HEALER") {
@@ -349,7 +352,7 @@ export function runLeagueCombat(
               attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(target.pokemonId),
               multiplier: 1, advantageApplied: false,
               actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
-              effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).`,
+              effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}`,
             });
             actionNum++;
             continue;
@@ -439,6 +442,7 @@ export function runLeagueCombat(
       }
 
       const effects = [
+        actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador: +${Math.round(encourage * 100)}%.` : null,
         scoutBonus > 0 ? `Batedor: +${Math.round(scoutBonus * 100)}%.` : null,
         debuffEffect, guardianEffect, survivorEffect,
@@ -453,6 +457,7 @@ export function runLeagueCombat(
         effect: effects,
       });
       actionNum++;
+      }
     }
     round++;
   }

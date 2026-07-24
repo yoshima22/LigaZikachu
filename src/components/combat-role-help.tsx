@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { HelpCircle, X } from "lucide-react";
 import {
+  AGILITY_EXTRA_ACTION_GAP,
+  AGILITY_THIRD_ACTION_GAP,
   COMBAT_ROLE_DESCRIPTIONS,
   getCombatRoleLabel,
   normalizeCombatRole,
@@ -63,9 +65,25 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
 }
 
 function modeText(mode: CombatMode) {
-  if (mode === "RAID") return "Na Raid, a equipe age na ordem da escalação. Todos atacam por rodada; o Cuidador ainda pode realizar uma cura adicional depois.";
+  if (mode === "RAID") return `Na Raid, a equipe age na ordem da escalação. Cada mascote ataca 1 vez; recebe 2 ataques ao superar a média de Agilidade dos companheiros em ${AGILITY_EXTRA_ACTION_GAP} e 3 ao superar em ${AGILITY_THIRD_ACTION_GAP}. O Cuidador ainda pode curar depois.`;
   if (mode === "SYNC") return "Na Arena Sincronizada, a postura altera pesos e confrontos do cálculo do modo. A ordem visual da escalação não promete ataques extras.";
-  return "Na Arena e Liga Semanal, cada mascote vivo recebe 1 ação por rodada. A ordem é definida pela Agilidade, com pequena variação aleatória de até 3 pontos; postura não concede ações extras.";
+  return `Na Arena e Liga Semanal, a Agilidade define a ordem, com pequena variação de até 3 pontos. Cada mascote começa com 1 ação: recebe 2 ações ao superar a média de Agilidade inimiga em ${AGILITY_EXTRA_ACTION_GAP} e 3 ações ao superar em ${AGILITY_THIRD_ACTION_GAP}. A postura, sozinha, não concede ações extras.`;
+}
+
+function actionBehavior(role: CombatRole, mode: CombatMode) {
+  if (role === "HEALER") {
+    return mode === "RAID"
+      ? "ATACA + CURA: na Raid, ataca normalmente e depois pode realizar uma cura adicional."
+      : "CURA OU ATACA: se houver aliado ferido e ainda restarem curas, usa a ação para curar no lugar de atacar. Caso contrário, ataca.";
+  }
+  if (role === "DEFENDER") return "ATACA OU DEFENDE: na Arena pode gastar a ação preparando defesa; nos demais casos, ataca. A atração de golpes é passiva.";
+  if (role === "GUARDIAN") return "ATACA OU DEFENDE: sua interceptação é passiva e não consome o turno. Na Arena também pode gastar a ação preparando defesa.";
+  if (role === "ENCOURAGER") return "ATACA + BUFF PASSIVO: fortalece o dano da equipe enquanto estiver vivo e continua atacando normalmente.";
+  if (role === "SABOTEUR") return "ATACA + DEBUFF PASSIVO: reduz ou bloqueia suporte inimigo e também realiza seu ataque.";
+  if (role === "SCOUT") return "ATACA + BUFF PASSIVO: melhora o dano/foco da equipe enquanto estiver vivo e também ataca.";
+  if (role === "PROVOKER") return "ATACA + PROVOCAÇÃO PASSIVA: redireciona golpes fora do próprio turno e ataca quando chega sua ação.";
+  if (role === "SURVIVOR") return "ATACA + SOBREVIVÊNCIA PASSIVA: seus efeitos defensivos não consomem a ação.";
+  return "ATACA: usa suas ações para causar dano; os efeitos descritos são aplicados junto ao ataque ou passivamente.";
 }
 
 export function CombatRoleHelpButton({
@@ -106,11 +124,20 @@ export function CombatRoleHelpButton({
         <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs leading-relaxed text-cyan-100">
           <strong>Turnos e prioridade:</strong> {modeText(mode)}
           {stats && (
-            <p className="mt-2 text-cyan-300">
+            <div className="mt-2 space-y-1 text-cyan-300">
+            <p>
               Iniciativa deste mascote: <strong>{stats.statAgility}</strong>
               {rank > 0 ? ` — posição estimada #${rank} entre ${teamStats.length} membros da equipe.` : "."}
             </p>
+            <p>
+              Ações por rodada: <strong>1 normalmente</strong>; 2 se a média {mode === "RAID" ? "dos companheiros" : "inimiga"} for até {Math.max(0, stats.statAgility - AGILITY_EXTRA_ACTION_GAP)}; 3 se for até {Math.max(0, stats.statAgility - AGILITY_THIRD_ACTION_GAP)}.
+            </p>
+            </div>
           )}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 px-3 py-2 text-xs font-bold leading-relaxed text-yellow-100">
+          {actionBehavior(normalized, mode)}
         </div>
 
         <p className="mt-4 text-xs leading-relaxed text-slate-300">{COMBAT_ROLE_DESCRIPTIONS[normalized]}</p>

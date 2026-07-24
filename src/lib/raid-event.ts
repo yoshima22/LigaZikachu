@@ -2,7 +2,7 @@ import { createHash, randomInt } from "crypto";
 import { ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName } from "@/lib/mascot-data";
-import { normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatActionsPerRound, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { creditCoins } from "@/lib/zikacoins";
 
 export const ORDER_EVENT_SLUG = "ordem-da-trapaca";
@@ -1478,6 +1478,9 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
   for (let turn = 1; turn <= 80 && mascotStates.some((m) => !m.defeated); turn++) {
     lastTurn = turn;
     for (const mascot of aliveMascots()) {
+      const teammateAgilities = aliveMascots().filter((member) => member.id !== mascot.id).map((member) => member.statAgility);
+      const actionProfile = getCombatActionsPerRound(mascot.statAgility, teammateAgilities);
+      for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
       const variance = randomInt(85, 121) / 100;
       const critChance = Math.min(38, 4 + Math.floor(mascot.statInstinct / 8) + (mascot.combatRole === "OPPORTUNIST" ? 10 : 0));
       const crit = randomInt(100) < critChance ? (mascot.combatRole === "DUELIST" ? 1.7 : 1.55) : 1;
@@ -1503,7 +1506,8 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
       if (simulatedBossHp > 0) {
         simulatedBossHp = Math.max(0, simulatedBossHp - damage);
       }
-      log.push({ turn, actor: mascot.name, actorId: mascot.id, actorPokemonId: mascot.pokemonId, actorRole: mascot.combatRole, action: "ATTACK", damage, crit: crit > 1, bossHp: simulatedBossHp, teamAura: Math.round(teamDamageAura * 100), sabotage: Math.round(bossSabotagePenalty * 100) });
+      log.push({ turn, actor: mascot.name, actorId: mascot.id, actorPokemonId: mascot.pokemonId, actorRole: mascot.combatRole, action: "ATTACK", damage, crit: crit > 1, bossHp: simulatedBossHp, teamAura: Math.round(teamDamageAura * 100), sabotage: Math.round(bossSabotagePenalty * 100), extraActionByAgility: actionIndex > 0, actionInRound: actionIndex + 1, actionsInRound: actionProfile.actions });
+      }
     }
 
     for (const healer of aliveMascots().filter((m) => m.combatRole === "HEALER")) {

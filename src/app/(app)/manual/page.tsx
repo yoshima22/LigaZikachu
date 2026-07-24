@@ -443,6 +443,7 @@ export default async function ManualPage() {
             ]}
           />
         </Sub>
+        <Note>Regra geral de Agilidade: cada mascote começa com 1 ação por rodada. Na Arena e Liga, recebe 2 ações quando sua Agilidade supera a média adversária em 60 pontos e 3 ações quando supera em 140. Na Raid, a comparação usa a média dos companheiros. Cuidador pode trocar essas ações por curas; buffs de Encorajador, Batedor, Guardião, Sabotador e Provocador são passivos e não impedem o ataque.</Note>
         <Note>A recomendação automática usa os atributos atuais do mascote. Ela é boa como ponto de partida, mas você pode trocar a postura para encaixar melhor na estratégia do time.</Note>
       </Section>
 
