@@ -332,7 +332,7 @@ export default async function ManualPage() {
             rows={[
               ["🍀 Amuleto da Sorte", "Dobra chance de loot raro em expedições por 6h"],
               ["💊 Proteína Zika", "+2 permanentes em todos os 5 atributos (máx 3 doses por mascote)"],
-              ["🍯 Bala de Mel", "Felicidade vai para 100 e sempre cria uma nova amizade (até 10 amigos) ou um evento bônus com presente enviado por um amigo"],
+              ["🍯 Bala de Mel", "Felicidade vai para 100 e tem 40% de chance de criar uma nova amizade (até 10 amigos) ou abrir um evento bônus com presente enviado por um amigo"],
               ["💧 Água Sagrada", "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente"],
               ["🛡️ Política de Fraqueza", "Recupera completamente um mascote ferido/em repouso, remove todo o repouso e protege contra o próximo ataque oportunista"],
               ["📡 Compartilhador de XP", "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Pode ser desequipado pelo card do mascote — o item volta ao inventário."],

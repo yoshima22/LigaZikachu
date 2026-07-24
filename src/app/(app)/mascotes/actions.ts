@@ -78,7 +78,12 @@ type HoneySocialOutcome =
   | { type: "BONUS_EVENT"; partnerName: string; message: string }
   | null;
 
+const HONEY_SOCIAL_EVENT_CHANCE = 0.40;
+
 async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): Promise<HoneySocialOutcome> {
+  // A felicidade máxima é garantida; amizade/evento social mantém a chance de 40%.
+  if (Math.random() >= HONEY_SOCIAL_EVENT_CHANCE) return null;
+
   const relations = await prisma.mascotRelation.findMany({
     where: { mascotAId: mascotId },
     select: {
