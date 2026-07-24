@@ -99,6 +99,12 @@ export function TeamCombatAnalysisButton({
     const attackers = positioned.filter((m) => m.role === "ATTACKER");
     const flanks = positioned.filter((m) => m.role === "FLANK");
     const provokers = positioned.filter((m) => m.role === "PROVOKER");
+    const defenders = positioned.filter((m) => m.role === "DEFENDER");
+    const saboteurs = positioned.filter((m) => m.role === "SABOTEUR");
+    const levels = positioned.map((m) => m.level);
+    const minLevel = levels.length ? Math.min(...levels) : 0;
+    const maxLevel = levels.length ? Math.max(...levels) : 0;
+    const levelGap = maxLevel - minLevel;
     const typeSet = new Set(positioned.flatMap((m) => getPokemonTypes(m.pokemonId)));
     const coverage = new Set<string>();
     for (const type of typeSet) for (const target of TYPE_ADVANTAGE[type] ?? []) coverage.add(target);
@@ -115,14 +121,15 @@ export function TeamCombatAnalysisButton({
     if (!encouragers.length && positioned.length >= 3) recommendations.push("Um Encorajador pode elevar em até 18% o dano de toda a equipe.");
     if (typeSet.size <= 2 && positioned.length >= 4) recommendations.push("Cobertura de tipos concentrada: diversificar reduz confrontos desfavoráveis.");
     if (healers.length > 1) recommendations.push("Dois Cuidadores aumentam sustentação, mas podem reduzir a pressão ofensiva na Arena/Liga.");
+    if (levelGap >= 20) recommendations.push(`Níveis muito distintos (Nv.${minLevel}–${maxLevel}): em PvE, os membros mais fracos podem cair cedo e deixar a equipe em desvantagem.`);
     const offRecommended = positioned.filter((m) => m.role !== recommendCombatRole(m));
     if (offRecommended.length >= 3) recommendations.push(`${offRecommended.length} mascotes usam postura diferente da recomendada pelos atributos; confira os casos individualmente.`);
     if (!recommendations.length) recommendations.push("Composição equilibrada: ajuste fino deve considerar os tipos e posturas do adversário.");
 
     return {
       positioned, attackOrder, encouragerBonus, scoutBonus, healing, guardians,
-      guardianDefense, attackers, flanks, provokers, coverage, weaknesses,
-      recommendations,
+      guardianDefense, attackers, flanks, provokers, defenders, saboteurs,
+      coverage, weaknesses, recommendations, minLevel, maxLevel, levelGap,
     };
   }, [mascots, roles, mode]);
 
@@ -142,12 +149,19 @@ export function TeamCombatAnalysisButton({
           <div className="mt-5 rounded-xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">Posicione ao menos um mascote para gerar a análise.</div>
         ) : (
           <>
-            <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <StatCard label="Impulso ofensivo" value={pct(analysis.encouragerBonus + analysis.scoutBonus)} detail={`Encorajador ${pct(analysis.encouragerBonus)} + Batedor ${pct(analysis.scoutBonus)} enquanto estiverem ativos.`} />
               <StatCard label="Cura média por rodada" value={`${Math.round(analysis.healing)} HP`} detail={mode === "RAID" ? "Valor esperado considerando a chance de cura da Raid." : "Potencial se os Cuidadores tiverem aliados feridos e curas disponíveis."} />
               <StatCard label="Proteção de Guardião" value={pct(analysis.guardianDefense)} detail={analysis.guardians.length ? `Primeiro Guardião intercepta essa parcela do golpe em um aliado.` : "Nenhum Guardião selecionado."} />
               <StatCard label="Cobertura ofensiva" value={`${analysis.coverage.size} tipos`} detail={`${analysis.positioned.length} mascote(s), ${new Set(analysis.positioned.flatMap((m) => getPokemonTypes(m.pokemonId))).size} tipo(s) próprio(s).`} />
+              <StatCard label="Faixa de níveis" value={`Nv.${analysis.minLevel}–${analysis.maxLevel}`} detail={analysis.levelGap >= 20 ? `Diferença alta de ${analysis.levelGap} níveis: risco maior no PvE.` : `Diferença de ${analysis.levelGap} níveis entre os membros.`} />
             </div>
+
+            {analysis.levelGap >= 20 && (
+              <div className="mt-4 rounded-xl border border-orange-500/35 bg-orange-500/10 px-4 py-3 text-xs leading-relaxed text-orange-100">
+                <strong>Equipe com níveis muito distintos:</strong> mascotes de Nv.{analysis.minLevel} a Nv.{analysis.maxLevel}. Em batalhas PvE, os membros de nível baixo podem ser eliminados cedo, reduzindo dano, cura e efeitos passivos disponíveis nas rodadas seguintes.
+              </div>
+            )}
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <section className="rounded-xl border border-slate-800 bg-slate-900/45 p-4">
@@ -176,6 +190,37 @@ export function TeamCombatAnalysisButton({
                 </div>
               </section>
             </div>
+
+            <section className="mt-4 rounded-xl border border-violet-500/25 bg-violet-500/5 p-4">
+              <div>
+                <h4 className="text-sm font-black text-violet-100">Rede de suporte da equipe</h4>
+                <p className="mt-1 text-[10px] text-slate-500">Influências passivas e defensivas consideradas no preview, enquanto o mascote responsável permanecer ativo.</p>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {analysis.positioned.filter((m) => ["ENCOURAGER", "HEALER", "GUARDIAN", "PROVOKER", "SCOUT", "SABOTEUR", "DEFENDER"].includes(m.role)).map((m) => {
+                  let effect = "";
+                  if (m.role === "ENCOURAGER") effect = `Suporte ofensivo: participa do impulso coletivo de ${pct(analysis.encouragerBonus)}. Não concede defesa diretamente.`;
+                  if (m.role === "HEALER") effect = `Suporte de recuperação: cura individual de ${getHealerHealAmount({ charisma: m.statCharisma, vitality: m.statVitality, level: m.level })} HP quando acionado.`;
+                  if (m.role === "GUARDIAN") effect = `Suporte defensivo: intercepta ${pct(cap(0.15 + (m.statVitality + m.statCharisma) / 600, 0.40))} do dano dirigido a um aliado.`;
+                  if (m.role === "PROVOKER") effect = `Proteção por controle: ${pct(cap(0.20 + m.statCharisma / 300 + m.statInstinct / 400, 0.55))} de chance de puxar um ataque para si, reduzindo-o em 8%.`;
+                  if (m.role === "SCOUT") effect = `Suporte ofensivo: contribui com até ${pct(cap(m.statAgility / 400 + m.statInstinct / 500, 0.08))} de bônus de dano e melhora o foco da equipe.`;
+                  if (m.role === "SABOTEUR") effect = `Suporte de controle: interfere em Encorajadores e Cuidadores inimigos; não aumenta diretamente a defesa aliada.`;
+                  if (m.role === "DEFENDER") effect = `Linha de frente: reduz pessoalmente ${pct(cap(0.08 + m.statVitality / 240, 0.35))} do dano e atrai a maioria dos ataques.`;
+                  return (
+                    <div key={m.id} className="rounded-lg border border-violet-500/15 bg-slate-950/60 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <strong className="truncate text-xs text-white">{nameOf(m)}</strong>
+                        <span className="shrink-0 text-[9px] font-bold text-violet-300">{getCombatRoleLabel(m.role)}</span>
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{effect}</p>
+                    </div>
+                  );
+                })}
+                {!analysis.positioned.some((m) => ["ENCOURAGER", "HEALER", "GUARDIAN", "PROVOKER", "SCOUT", "SABOTEUR", "DEFENDER"].includes(m.role)) && (
+                  <p className="text-xs text-slate-500">Nenhuma postura de suporte, controle ou linha de frente foi selecionada.</p>
+                )}
+              </div>
+            </section>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <section className="rounded-xl border border-green-500/20 bg-green-500/5 p-4">
