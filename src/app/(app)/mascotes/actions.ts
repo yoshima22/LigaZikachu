@@ -79,8 +79,6 @@ type HoneySocialOutcome =
   | null;
 
 async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): Promise<HoneySocialOutcome> {
-  if (Math.random() >= 0.4) return null;
-
   const relations = await prisma.mascotRelation.findMany({
     where: { mascotAId: mascotId },
     select: {
@@ -136,6 +134,8 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
   });
   if (!mascot) return null;
   const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const giftType = Math.random() < 0.25 ? "SWEET" : "FOOD";
+  const giftLabel = giftType === "SWEET" ? "1 Doce de Mascote" : "1 Comida de Mascote";
   const description = `${mascotName} (${mascot.player.displayName}) decidiu dividir a Bala de Mel com ${partnerName} (${friend.mascotB.player.displayName}).`;
   await prisma.$transaction([
     prisma.mascotRelation.update({
@@ -147,7 +147,7 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
       data: { interactionCount: { increment: 1 }, lastInteractionAt: new Date() },
     }),
     prisma.mascotEvent.create({
-      data: { mascotId, emoji: "💚", description: "A Bala de Mel inspirou um evento bônus com um amigo!" },
+      data: { mascotId, emoji: "🎁", description: `${partnerName} enviou ${giftLabel} de presente após dividir a Bala de Mel!` },
     }),
     prisma.mascotEvent.create({
       data: { mascotId: friend.mascotBId, emoji: "💚", description },
@@ -167,11 +167,16 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
         expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
       },
     }),
+    prisma.mascotFoodItem.upsert({
+      where: { playerId_type: { playerId, type: giftType } },
+      update: { quantity: { increment: 1 } },
+      create: { playerId, type: giftType, quantity: 1 },
+    }),
   ]);
   return {
     type: "BONUS_EVENT",
     partnerName,
-    message: `A Bala de Mel gerou um evento bônus com ${partnerName}! Confira na página de Laços.`,
+    message: `${partnerName} enviou ${giftLabel} para você! Um evento bônus também foi aberto na página de Laços. 🎁`,
   };
 }
 
