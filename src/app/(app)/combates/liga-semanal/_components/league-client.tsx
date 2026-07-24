@@ -1140,6 +1140,8 @@ function ResultsTab({ data }: { data: PageData }) {
           winnerId={replayMatch.winnerId}
           isDraw={replayMatch.isDraw}
           replay={replayMatch.replayJson as TurnLog[]}
+          lineupA={replayMatch.replayLineupA ?? []}
+          lineupB={replayMatch.replayLineupB ?? []}
           playerASurvivors={replayMatch.playerASurvivors}
           playerBSurvivors={replayMatch.playerBSurvivors}
           orderSabotage={data.orderSabotage}

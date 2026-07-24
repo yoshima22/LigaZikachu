@@ -41,6 +41,17 @@ interface Fighter {
   role?: string;
 }
 
+export type ReplayLineupFighter = {
+  id: string;
+  name: string;
+  pokemonId?: number;
+  level?: number;
+  ownerId?: string;
+  role?: string;
+  maxHp?: number;
+};
+const EMPTY_LINEUP: ReplayLineupFighter[] = [];
+
 function resolveName(name: string, pokemonId?: number) {
   if (name && !name.startsWith("#")) return name;
   if (pokemonId) return getPokemonName(pokemonId);
@@ -53,7 +64,7 @@ function getGuardianAbsorption(turn: TurnLog) {
   return { guardianName: match[1], damage: Number(match[2]) };
 }
 
-function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, survivorsB = 0): Fighter[] {
+function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, survivorsB = 0, lineupA: ReplayLineupFighter[] = [], lineupB: ReplayLineupFighter[] = []): Fighter[] {
   const seen = new Map<string, Fighter>();
 
   // Use the match's playerAId to determine sides, not turn order
@@ -65,6 +76,21 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
   function getSide(ownerId?: string | null): "A" | "B" {
     if (!ownerId || !ownerA) return "A";
     return ownerId === ownerA ? "A" : "B";
+  }
+
+  for (const [side, lineup] of [["A", lineupA], ["B", lineupB]] as const) {
+    for (const mascot of lineup) {
+      seen.set(mascot.id, {
+        id: mascot.id,
+        name: resolveName(mascot.name, mascot.pokemonId),
+        pokemonId: mascot.pokemonId,
+        level: mascot.level,
+        side,
+        maxHp: mascot.maxHp ?? 100,
+        hp: mascot.maxHp ?? 100,
+        role: mascot.role,
+      });
+    }
   }
 
   for (const t of turns) {
@@ -115,7 +141,7 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
   }
   for (const fighter of seen.values()) {
     const received = damageTaken.get(fighter.id) ?? 0;
-    fighter.maxHp = Math.max(1, received + (survivorIds.has(fighter.id) ? 100 : 0));
+    fighter.maxHp = Math.max(fighter.maxHp, received + (survivorIds.has(fighter.id) ? 100 : 0), 1);
     fighter.hp = fighter.maxHp;
   }
   return [...seen.values()];
@@ -174,6 +200,8 @@ export function LeagueBattleReplayModal({
   playerASurvivors = 0,
   playerBSurvivors = 0,
   orderSabotage,
+  lineupA = EMPTY_LINEUP,
+  lineupB = EMPTY_LINEUP,
   onFinish,
 }: {
   playerAName: string;
@@ -185,6 +213,8 @@ export function LeagueBattleReplayModal({
   playerASurvivors?: number;
   playerBSurvivors?: number;
   orderSabotage?: { affectedSlots: number[]; statMultiplier: number } | null;
+  lineupA?: ReplayLineupFighter[];
+  lineupB?: ReplayLineupFighter[];
   onFinish: () => void;
 }) {
   const [turnIdx, setTurnIdx] = useState(-1);
@@ -196,9 +226,9 @@ export function LeagueBattleReplayModal({
   useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
-    setBaseFighters(buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors));
+    setBaseFighters(buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB));
     setTurnIdx(-1);
-  }, [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors]);
+  }, [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB]);
 
   // Derive current HP state from baseFighters + all turns up to turnIdx
   const fighters = useMemo(() => {

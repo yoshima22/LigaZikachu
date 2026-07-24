@@ -6,7 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
-import { recommendCombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, recommendCombatRole } from "@/lib/combat-roles";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
@@ -1173,7 +1173,18 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors,
       playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt,
       playerADamageTaken: result.teamADamageTaken, playerBDamageTaken: result.teamBDamageTaken,
-      resultJson: { winner: result.winner, rounds: result.rounds },
+      resultJson: {
+        winner: result.winner,
+        rounds: result.rounds,
+        lineupA: teamAMascots.map((mascot) => ({
+          id: mascot.id, name: mascot.name, pokemonId: mascot.pokemonId, level: mascot.level,
+          ownerId: mascot.ownerId, role: getCombatRoleLabel(mascot.combatRole), maxHp: mascot.hp,
+        })),
+        lineupB: teamBMascots.map((mascot) => ({
+          id: mascot.id, name: mascot.name, pokemonId: mascot.pokemonId, level: mascot.level,
+          ownerId: mascot.ownerId, role: getCombatRoleLabel(mascot.combatRole), maxHp: mascot.hp,
+        })),
+      },
       replayJson: result.log as unknown as any,
       status: "RESOLVED" as const, resolvedAt: new Date(),
     };

@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { WEEKLY_MODIFIERS } from "./constants";
 import { getActiveWeeklyLeagueSabotage, getOrderStepUnlockState } from "@/lib/raid-event";
+import { getPokemonName } from "@/lib/mascot-data";
+import { getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
 
 function formatPlayerLabel(p: { displayName: string; ptcglNick?: string | null; user?: { email?: string | null } | null }): string {
   const base = p.displayName;
@@ -229,6 +231,48 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       for (const m of rawMatches as any[]) { matchPlayerIds.add(m.playerAId); if (m.playerBId) matchPlayerIds.add(m.playerBId); }
       const matchPlayers = await prisma.player.findMany({ where: { id: { in: [...matchPlayerIds] } }, select: { id: true, displayName: true, ptcglNick: true, user: { select: { email: true } } } });
       const mpNames = new Map(matchPlayers.map(p => [p.id, formatPlayerLabel(p)]));
+      // O log contém somente quem agiu ou foi alvo. Recupera a escalação salva
+      // para que suportes/passivos também apareçam no replay.
+      const savedTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
+        where: {
+          leagueId: (currentLeague as any).id,
+          playerId: { in: [...matchPlayerIds] },
+          battleDate: { lte: matchDate },
+        },
+        select: { playerId: true, battleDate: true, battleSlot: true, mascotIdsJson: true, rolesJson: true },
+        orderBy: { battleDate: "desc" },
+      });
+      const savedTeamByPlayerSlot = new Map<string, (typeof savedTeams)[number]>();
+      for (const team of savedTeams) {
+        const key = `${team.playerId}:${team.battleSlot}`;
+        if (!savedTeamByPlayerSlot.has(key)) savedTeamByPlayerSlot.set(key, team);
+      }
+      const savedMascotIds = [...new Set(savedTeams.flatMap((team) => Array.isArray(team.mascotIdsJson) ? team.mascotIdsJson as string[] : []))];
+      const savedMascots = savedMascotIds.length
+        ? await prisma.mascot.findMany({
+            where: { id: { in: savedMascotIds } },
+            select: { id: true, pokemonId: true, nickname: true, level: true, statVitality: true },
+          })
+        : [];
+      const savedMascotById = new Map(savedMascots.map((mascot) => [mascot.id, mascot]));
+      const lineupFromSavedTeam = (playerId: string, battleSlot: number) => {
+        const team = savedTeamByPlayerSlot.get(`${playerId}:${battleSlot}`);
+        if (!team || !Array.isArray(team.mascotIdsJson)) return [];
+        const roles = (team.rolesJson ?? {}) as Record<string, string>;
+        return (team.mascotIdsJson as string[]).flatMap((id) => {
+          const mascot = savedMascotById.get(id);
+          if (!mascot) return [];
+          return [{
+            id: mascot.id,
+            name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
+            pokemonId: mascot.pokemonId,
+            level: mascot.level,
+            ownerId: playerId,
+            role: getCombatRoleLabel(normalizeCombatRole(roles[id])),
+            maxHp: Math.max(10, Math.round(55 + mascot.level * 6 + mascot.statVitality * 4)),
+          }];
+        });
+      };
       // Replays antigos nao persistiam nivel. Enriquece somente a resposta da UI;
       // nenhum turno, dano ou resultado salvo e alterado.
       const replayMascotIds = [...new Set((rawMatches as any[]).flatMap((match) =>
@@ -242,6 +286,12 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       const replayLevelById = new Map(replayMascots.map((mascot) => [mascot.id, mascot.level]));
       todayMatches = (rawMatches as any[]).map(m => ({
         ...m,
+        replayLineupA: Array.isArray((m.resultJson as any)?.lineupA)
+          ? (m.resultJson as any).lineupA
+          : lineupFromSavedTeam(m.playerAId, m.battleSlot),
+        replayLineupB: Array.isArray((m.resultJson as any)?.lineupB)
+          ? (m.resultJson as any).lineupB
+          : m.playerBId ? lineupFromSavedTeam(m.playerBId, m.battleSlot) : [],
         replayJson: Array.isArray(m.replayJson)
           ? m.replayJson.map((turn: any) => ({
               ...turn,
