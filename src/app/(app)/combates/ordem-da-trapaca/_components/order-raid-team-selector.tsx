@@ -8,6 +8,7 @@ import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type Comb
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { attackOrderRaidBossAction } from "../actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
+import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
 type RaidMascot = {
   id: string;
@@ -232,7 +233,10 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
         <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FFCB05]">Equipe da Raid</p>
-            <span className="text-xs font-black text-[#FFCB05]">{selected.length}/6</span>
+            <div className="flex items-center gap-2">
+              <TeamCombatAnalysisButton mascots={selectedMascots} roles={roles} mode="RAID" />
+              <span className="text-xs font-black text-[#FFCB05]">{selected.length}/6</span>
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {selectedMascots.map((mascot) => (

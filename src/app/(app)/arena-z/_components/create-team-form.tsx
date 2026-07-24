@@ -8,6 +8,7 @@ import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type Comb
 import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
+import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
 export interface ValidMascot {
   id: string;
@@ -263,9 +264,12 @@ function SelectedBar({
     <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-[9px] font-bold uppercase tracking-widest text-[#FFCB05]/70">Time e posturas</span>
-        <span className={`text-[10px] font-bold ${selected.size >= MAX_MASCOTS ? "text-[#FFCB05]" : "text-slate-500"}`}>
-          {selected.size}/{MAX_MASCOTS}
-        </span>
+        <div className="flex items-center gap-2">
+          <TeamCombatAnalysisButton mascots={selList} roles={roles} mode="ARENA" />
+          <span className={`text-[10px] font-bold ${selected.size >= MAX_MASCOTS ? "text-[#FFCB05]" : "text-slate-500"}`}>
+            {selected.size}/{MAX_MASCOTS}
+          </span>
+        </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {selList.map((m) => {

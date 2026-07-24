@@ -6,6 +6,7 @@ import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../con
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
+import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import {
   startWeeklyLeagueNowAction,
   joinLeagueAction,
@@ -683,9 +684,12 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-bold text-slate-100">Montando Time {editingSlot} — {BATTLE_TIMES_BRT[editingSlot - 1]}</h3>
-          <button onClick={() => setEditingSlot(null)} className="text-xs text-slate-400 hover:text-slate-200">← Voltar</button>
+          <div className="flex items-center gap-2">
+            <TeamCombatAnalysisButton mascots={selectedMascots as any[]} roles={roles} mode="LEAGUE" />
+            <button onClick={() => setEditingSlot(null)} className="text-xs text-slate-400 hover:text-slate-200">← Voltar</button>
+          </div>
         </div>
 
         {/* Slot grid (selected mascots) */}
