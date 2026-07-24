@@ -20,6 +20,12 @@ import {
   rollMiauvadaoFusion,
   type MiauvadaoFusionEggType,
 } from "@/lib/miauvadao-egg-fusion";
+import {
+  getMaxShellBetForVault,
+  getShellGamePrize,
+  SHELL_MAX_BET,
+  SHELL_MIN_BET,
+} from "@/lib/miauvadao-shell-game";
 import { EggType } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 import { publishLeagueTicker } from "@/lib/league-ticker";
@@ -1301,14 +1307,14 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         where: { playerId: player.id },
         data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now },
       });
-      const coinsToVault = Math.floor(offer.finalPrice * 0.10);
+      const coinsToVault = Math.floor(offer.finalPrice * 0.25);
       // Cobrar player
       await tx.zikaCoinWallet.update({
         where: { playerId: player.id },
         data: { balance: { decrement: offer.finalPrice } },
       });
 
-      // Atualizar sold na oferta + adicionar 10% ao cofre + mensagem NPC
+      // Atualizar sold na oferta + adicionar 25% ao cofre + mensagem NPC
       const updatedOffers = [...offers];
       updatedOffers[offerIndex] = { ...offer, sold: offer.sold + 1 };
       await tx.miauvadaoConfig.update({
@@ -1893,10 +1899,6 @@ async function _returnEscrow(tx: TxClient, listing: { id: string; category: stri
 
 // ── Shell Game ────────────────────────────────────────────────────────────────
 
-const SHELL_MIN_BET = 50;
-const SHELL_MAX_BET = 2000;
-// Premio = aposta + 65% da aposta; o premio total e debitado do cofre.
-const SHELL_WIN_BONUS_PCT = 0.65;
 const SHELL_COOLDOWN_MS = 5 * 60_000;
 
 const MIAUVADAO_RAGE: string[] = [
@@ -1933,8 +1935,20 @@ export async function startShellGameSession(betAmount: number): Promise<{
       if (elapsed < SHELL_COOLDOWN_MS) return { lastCooldownMs: SHELL_COOLDOWN_MS - elapsed };
     }
 
-    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    const [wallet, config] = await Promise.all([
+      prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } }),
+      prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" }, select: { vaultBalance: true } }),
+    ]);
     if (!wallet || wallet.balance < betAmount) return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC).` };
+    const vaultBalance = config?.vaultBalance ?? 0;
+    const maxVaultBet = getMaxShellBetForVault(vaultBalance);
+    if (betAmount > maxVaultBet) {
+      return {
+        error: maxVaultBet < SHELL_MIN_BET
+          ? `O cofre possui apenas ${vaultBalance.toLocaleString("pt-BR")} ZC e não consegue pagar nem a aposta mínima em caso de vitória.`
+          : `Com ${vaultBalance.toLocaleString("pt-BR")} ZC no cofre, a aposta máxima segura é ${maxVaultBet.toLocaleString("pt-BR")} ZC.`,
+      };
+    }
 
     const ballPos = Math.floor(Math.random() * 3);
     const expiresAt = new Date(Date.now() + 5 * 60_000);
@@ -1983,8 +1997,8 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
 
     if (won) {
       // Premio correto: aposta + 65% da aposta; o premio total sai do cofre.
-      const vaultBonus = Math.floor(session.betAmount * SHELL_WIN_BONUS_PCT);
-      prize = session.betAmount + vaultBonus; // ex: aposta 100 -> recebe 165
+      prize = getShellGamePrize(session.betAmount); // ex: aposta 100 -> recebe 165
+      const vaultBonus = prize - session.betAmount;
       const vaultDebit = prize;
       const template = MIAUVADAO_RAGE[Math.floor(Math.random() * MIAUVADAO_RAGE.length)];
       const message = template
@@ -1993,16 +2007,24 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
         .replace("{bonus}", vaultBonus.toLocaleString("pt-BR"))
         .replace("{debit}", vaultDebit.toLocaleString("pt-BR"));
       const updatedWallet = await prisma.$transaction(async (tx) => {
+        const paidByVault = await tx.miauvadaoConfig.updateMany({
+          where: { id: "singleton", vaultBalance: { gte: vaultDebit } },
+          data: {
+            vaultBalance: { decrement: vaultDebit },
+            lastWinnerMessage: message,
+            lastWinnerAt: new Date(),
+            lastNpcMessage: message,
+            lastNpcMessageAt: new Date(),
+          },
+        });
+        if (paidByVault.count === 0) {
+          throw new Error("O cofre mudou durante a partida e não consegue pagar este prêmio agora. Tente revelar o resultado novamente após o cofre receber fundos.");
+        }
         await creditCoins(tx, {
           playerId: player.id,
           type: "BET_WON",
           amount: prize,
           description: `Vitória no Jogo do Miauvadão: recebeu ${prize.toLocaleString("pt-BR")} ZC`,
-        });
-        await tx.miauvadaoConfig.upsert({
-          where: { id: "singleton" },
-          update: { vaultBalance: { decrement: vaultDebit }, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
-          create: { id: "singleton", vaultBalance: -vaultDebit, lastWinnerMessage: message, lastWinnerAt: new Date(), lastNpcMessage: message, lastNpcMessageAt: new Date() },
         });
         await tx.shellGameSession.update({ where: { id: sessionId }, data: { resolved: true, won: true } });
         return tx.zikaCoinWallet.findUniqueOrThrow({

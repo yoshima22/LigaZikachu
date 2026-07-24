@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Coins, Trophy, Skull, Timer } from "lucide-react";
 import { startShellGameSession, resolveShellGame, getShellGameCooldown } from "../actions";
+import {
+  getMaxShellBetForVault,
+  getShellGamePrize,
+  SHELL_MAX_BET,
+  SHELL_MIN_BET,
+} from "@/lib/miauvadao-shell-game";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -327,9 +333,18 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
   };
 
   // Cálculo: aposta + 65% da aposta = prêmio total; tudo sai do cofre.
-  const winBonus   = Math.floor(bet * 0.65);
-  const totalPrize = bet + winBonus;
+  const totalPrize = getShellGamePrize(bet);
+  const maxVaultBet = getMaxShellBetForVault(vaultBalance);
+  const maxAllowedBet = Math.min(SHELL_MAX_BET, localBalance, maxVaultBet);
+  const vaultCanPayMinimum = maxVaultBet >= SHELL_MIN_BET;
   const isPlaying  = phase !== "idle" && phase !== "won" && phase !== "lost";
+
+  useEffect(() => {
+    if (phase !== "idle") return;
+    setBet((current) => maxAllowedBet >= SHELL_MIN_BET
+      ? Math.min(Math.max(current, SHELL_MIN_BET), maxAllowedBet)
+      : SHELL_MIN_BET);
+  }, [maxAllowedBet, phase]);
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{
@@ -454,15 +469,15 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
               {phase === "idle" && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs" style={{ color: GOLD_D }}>
-                    <span>Aposta (50–2000 ZC)</span>
+                    <span>Aposta ({SHELL_MIN_BET}–{Math.max(0, maxAllowedBet).toLocaleString("pt-BR")} ZC)</span>
                     <span>Saldo: <strong style={{ color: "#FFCB05" }}>{localBalance.toLocaleString("pt-BR")} ZC</strong></span>
                   </div>
                   <div className="flex gap-2">
                     <input
                       type="number"
-                      min={50} max={Math.min(2000, localBalance)}
+                      min={SHELL_MIN_BET} max={Math.max(SHELL_MIN_BET, maxAllowedBet)}
                       value={bet}
-                      onChange={e => setBet(Math.min(2000, Math.max(50, parseInt(e.target.value) || 50)))}
+                      onChange={e => setBet(Math.min(maxAllowedBet, Math.max(SHELL_MIN_BET, parseInt(e.target.value) || SHELL_MIN_BET)))}
                       className="flex-1 rounded-xl border px-3 py-2 text-center text-sm font-bold outline-none"
                       style={{ background: "#0d0b08", borderColor: GOLD_D, color: "#FFCB05" }}
                     />
@@ -471,17 +486,24 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
                   <div className="grid grid-cols-4 gap-1.5">
                     {[50, 100, 250, 500].map(v => (
                       <button key={v} type="button"
-                        onClick={() => setBet(Math.min(v, localBalance))}
+                        disabled={v > maxAllowedBet}
+                        onClick={() => setBet(Math.min(v, maxAllowedBet))}
                         className="rounded-lg py-1 text-[11px] font-semibold transition-all"
                         style={{
                           background: bet === v ? GOLD : "#2a1a03",
                           color: bet === v ? "#1a1209" : GOLD_D,
                           border: `1px solid ${GOLD_D}`,
+                          opacity: v > maxAllowedBet ? 0.35 : 1,
                         }}>
                         {v}
                       </button>
                     ))}
                   </div>
+                  {!vaultCanPayMinimum && (
+                    <p className="text-center text-[10px] text-red-400">
+                      Jogo indisponível: o cofre não consegue pagar o prêmio da aposta mínima.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -496,7 +518,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
                 ) : (
                   <button
                     type="button"
-                    disabled={!playerId || bet > localBalance || bet < 50}
+                    disabled={!playerId || !vaultCanPayMinimum || bet > maxAllowedBet || bet < SHELL_MIN_BET}
                     onClick={handleStart}
                     className="w-full rounded-xl py-3 text-sm font-black transition-all disabled:opacity-40"
                     style={{

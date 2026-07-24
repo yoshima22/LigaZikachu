@@ -169,7 +169,7 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>💰 Cofre do Miauvadão</p>
-            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>10% de cada compra</strong>, apostas perdidas e a troca global de slot. Quanto mais cheio, melhores os descontos e prêmios.</p>
+            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>25% de cada compra</strong>, apostas perdidas e a troca global de slot. Quanto mais cheio, melhores os descontos e prêmios.</p>
           </div>
 
           <div className="space-y-1">
