@@ -33,6 +33,9 @@ interface Listing {
   payload: Record<string, unknown>;
   priceCoins: number | null;
   description: string | null;
+  loanEnabled?: boolean;
+  loanAmountCoins?: number | null;
+  loanInterestPct?: number | null;
   expiresAt: Date;
   createdAt: Date;
   player: { id: string; displayName: string };
@@ -112,6 +115,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
 
       {/* Info */}
       <div className="p-3 space-y-2 flex-1">
+        {listing.loanEnabled && listing.loanAmountCoins && (
+          <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2 py-1.5 text-[10px] text-cyan-100">
+            Empréstimo: {listing.loanAmountCoins.toLocaleString("pt-BR")} ZC · {listing.loanInterestPct ?? 0}% juros
+          </div>
+        )}
         <div>
           <p className="font-semibold text-white text-sm truncate">
             {listing.category === "MASCOT"

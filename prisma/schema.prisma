@@ -135,50 +135,50 @@ enum RegistrationStatus {
 }
 
 model User {
-  id                       String               @id @default(cuid())
-  name                     String?
-  email                    String               @unique
-  emailVerified            DateTime?
-  image                    String?
-  passwordHash             String?
-  role                     Role                 @default(PLAYER)
-  status                   UserStatus           @default(PENDING_APPROVAL)
-  approvedById             String?
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
-  approvedBy               User?                @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
-  approvedUsers            User[]               @relation("UserApprovals")
-  player                   Player?
-  accounts                 Account[]
-  sessions                 Session[]
-  createdSeasons           Season[]             @relation("SeasonCreatedBy")
-  createdMatches           Match[]              @relation("MatchCreatedBy")
-  reportedMatches          Match[]              @relation("MatchReportedBy")
-  confirmedMatches         Match[]              @relation("MatchConfirmedBy")
-  approvedDecks            DeckSubmission[]     @relation("DeckApprovedBy")
-  openedChallenges         Challenge[]          @relation("ChallengeOpenedBy")
-  resolvedChallenges       Challenge[]          @relation("ChallengeResolvedBy")
-  createdBoosterCodes      BoosterCode[]        @relation("BoosterCodeCreatedBy")
-  invalidatedCodes         BoosterCode[]        @relation("BoosterCodeInvalidatedBy")
-  assignedDistributions    CodeDistribution[]   @relation("CodeAssignedBy")
-  revokedDistributions     CodeDistribution[]   @relation("CodeRevokedBy")
-  createdAchievements      Achievement[]        @relation("AchievementCreatedBy")
-  generatedSnapshots       RankingSnapshot[]    @relation("RankingSnapshotGeneratedBy")
-  awardedPlayerAchievements PlayerAchievement[] @relation("PlayerAchievementAwardedBy")
-  auditLogs                AuditLog[]           @relation("AuditActor")
-  createdTournaments       Tournament[]         @relation("TournamentCreatedBy")
-  decidedRegistrations     TournamentRegistration[] @relation("RegistrationDecidedBy")
-  createdLeagueBadges      LeagueBadge[]        @relation("LeagueBadgeCreatedBy")
-  awardedPlayerBadges      PlayerBadge[]        @relation("PlayerBadgeAwardedBy")
-  coinAdjustments          ZikaCoinTransaction[] @relation("ZkTxAdmin")
-  fcmTokens                UserFcmToken[]
-  createdShopItems         ShopItem[]           @relation("ShopItemCreatedBy")
-  createdZikaLoots         ZikaLoot[]           @relation("ZikaLootCreatedBy")
-  tutorialProgress         UserTutorialProgress[]
-  passwordResetTokens      PasswordResetToken[]
-  createdNewsPosts         NewsPost[]           @relation("NewsPostAuthor")
-  raidNotifications        UserRaidNotification[]
-  raidPasswordStamps       RaidPasswordStamp[]
+  id                        String                   @id @default(cuid())
+  name                      String?
+  email                     String                   @unique
+  emailVerified             DateTime?
+  image                     String?
+  passwordHash              String?
+  role                      Role                     @default(PLAYER)
+  status                    UserStatus               @default(PENDING_APPROVAL)
+  approvedById              String?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+  approvedBy                User?                    @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedUsers             User[]                   @relation("UserApprovals")
+  player                    Player?
+  accounts                  Account[]
+  sessions                  Session[]
+  createdSeasons            Season[]                 @relation("SeasonCreatedBy")
+  createdMatches            Match[]                  @relation("MatchCreatedBy")
+  reportedMatches           Match[]                  @relation("MatchReportedBy")
+  confirmedMatches          Match[]                  @relation("MatchConfirmedBy")
+  approvedDecks             DeckSubmission[]         @relation("DeckApprovedBy")
+  openedChallenges          Challenge[]              @relation("ChallengeOpenedBy")
+  resolvedChallenges        Challenge[]              @relation("ChallengeResolvedBy")
+  createdBoosterCodes       BoosterCode[]            @relation("BoosterCodeCreatedBy")
+  invalidatedCodes          BoosterCode[]            @relation("BoosterCodeInvalidatedBy")
+  assignedDistributions     CodeDistribution[]       @relation("CodeAssignedBy")
+  revokedDistributions      CodeDistribution[]       @relation("CodeRevokedBy")
+  createdAchievements       Achievement[]            @relation("AchievementCreatedBy")
+  generatedSnapshots        RankingSnapshot[]        @relation("RankingSnapshotGeneratedBy")
+  awardedPlayerAchievements PlayerAchievement[]      @relation("PlayerAchievementAwardedBy")
+  auditLogs                 AuditLog[]               @relation("AuditActor")
+  createdTournaments        Tournament[]             @relation("TournamentCreatedBy")
+  decidedRegistrations      TournamentRegistration[] @relation("RegistrationDecidedBy")
+  createdLeagueBadges       LeagueBadge[]            @relation("LeagueBadgeCreatedBy")
+  awardedPlayerBadges       PlayerBadge[]            @relation("PlayerBadgeAwardedBy")
+  coinAdjustments           ZikaCoinTransaction[]    @relation("ZkTxAdmin")
+  fcmTokens                 UserFcmToken[]
+  createdShopItems          ShopItem[]               @relation("ShopItemCreatedBy")
+  createdZikaLoots          ZikaLoot[]               @relation("ZikaLootCreatedBy")
+  tutorialProgress          UserTutorialProgress[]
+  passwordResetTokens       PasswordResetToken[]
+  createdNewsPosts          NewsPost[]               @relation("NewsPostAuthor")
+  raidNotifications         UserRaidNotification[]
+  raidPasswordStamps        RaidPasswordStamp[]
 
   @@map("users")
 }
@@ -209,113 +209,115 @@ model UserTutorialProgress {
 }
 
 model Player {
-  id                      String               @id @default(cuid())
-  userId                  String               @unique
-  displayName             String
-  whatsapp                String?
-  ptcglNick               String?              @unique
-  popId                   String?              // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
-  avatarUrl               String?
-  active                  Boolean              @default(true)
-  notes                   String?
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seasonEntries           SeasonPlayer[]
-  matchesAsPlayerA        Match[]              @relation("MatchPlayerA")
-  matchesAsPlayerB        Match[]              @relation("MatchPlayerB")
-  matchesWon              Match[]              @relation("MatchWinner")
-  matchesLost             Match[]              @relation("MatchLoser")
-  confirmations           MatchConfirmation[]
-  deckSubmissions         DeckSubmission[]
-  challengesAsChallenger  Challenge[]          @relation("ChallengeChallenger")
-  challengesAsChallenged  Challenge[]          @relation("ChallengeChallenged")
-  codeDistributions       CodeDistribution[]
-  playerBadges            PlayerBadge[]
-  playerAchievements      PlayerAchievement[]
-  rankingSnapshots        RankingSnapshot[]
-  tournamentRegistrations TournamentRegistration[]
-  gifts                   PlayerGift[]
-  badgeProgress           BadgeProgress[]
-  wallet                  ZikaCoinWallet?
-  inventory               PlayerInventory[]
-  betsPlaced              ZikaBet[]             @relation("ZkBetByPlayer")
-  betsOn                  ZikaBet[]             @relation("ZkBetOnPlayer")
-  weeklyLeagueBetsPlaced  WeeklyMascotLeagueBet[] @relation("WeeklyLeagueBetByPlayer")
-  weeklyLeagueBetsOn      WeeklyMascotLeagueBet[] @relation("WeeklyLeagueBetOnPlayer")
-  weeklyScoutingAggregate WeeklyMascotScoutingAggregate?
-  stickers                PlayerSticker[]
-  achievementEvents       AchievementEvent[]
-  zikalootWins            ZikaLoot[]            @relation("ZikaLootWinner")
-  zikalootPicks           ZikaLootPick[]
-  savedDecks              SavedDeck[]
-  mascots                 Mascot[]
-  pokemonDex              PlayerPokemonDex[]
-  pokemonWishlist         PlayerPokemonWishlist[]
-  ownedMascotSocialEvents MascotSocialEvent[]  @relation("MascotSocialEventOwner")
-  resolvedMascotSocialEvents MascotSocialEvent[] @relation("MascotSocialEventResolver")
-  mascotSocialDecisionLogs MascotSocialDecisionLog[]
-  mascotEggs              MascotEgg[]
-  mascotIncubator         MascotIncubator?
-  mascotFoods             MascotFoodItem[]
-  arenaTeams              ArenaTeam[]
-  arenaBattlesAsAttacker  ArenaBattle[]        @relation("ArenaBattleAttacker")
-  arenaBattlesAsDefender  ArenaBattle[]        @relation("ArenaBattleDefender")
-  bazarListings           BazarListing[]
-  bazarProposals          BazarProposal[]
-  bazarFavorites          BazarFavorite[]
-  shellGameSessions       ShellGameSession[]
-  arenaTutorialClaimed    Boolean              @default(false)
-  arenaPveCoinsDate       String               @default("")  // "YYYY-MM-DD" BRT — data do contador diário PvE
-  arenaPveCoinsEarned     Int                  @default(0)   // ZC PvE resgatados hoje
-  susShieldDate           String               @default("")  // "YYYY-MM-DD" BRT — escudo SUS usado hoje
-  mascotBondBehavior      String               @default("FREE")
-  mascotSpritePreference  String               @default("ANIMATED")
-  megaSpritePreference    String               @default("ANIMATED")
-  supporterPasses         SupporterPass[]
-  sentMessages            DirectMessage[]  @relation("SentMessages")
-  receivedMessages        DirectMessage[]  @relation("ReceivedMessages")
-  generalMessages         GeneralChatMessage[]
-  syncChallengeEntries    SyncChallengeEntry[]
-  generatedSyncTicketHalves SyncTicketHalf[] @relation("SyncTicketHalfGeneratedBy")
-  ownedSyncTicketHalves     SyncTicketHalf[] @relation("SyncTicketHalfOwner")
-  ownedSyncTickets          SyncTicket[]     @relation("SyncTicketOwner")
-  syncTicketsBannedByLeft   SyncTicket[]     @relation("SyncTicketBannedA")
-  syncTicketsBannedByRight  SyncTicket[]     @relation("SyncTicketBannedB")
-  syncTeamsAsA              SyncEventTeam[]  @relation("SyncEventTeamPlayerA")
-  syncTeamsAsB              SyncEventTeam[]  @relation("SyncEventTeamPlayerB")
-  syncLineups               SyncEventLineup[] @relation("SyncEventLineupPlayer")
-  syncRoundSelections       SyncRoundSelection[] @relation("SyncRoundSelectionPlayer")
-  syncEventScores           SyncEventScore[] @relation("SyncEventScorePlayer")
-  creationDust            Int                  @default(0)
-  labWeeklyUsage          LabWeeklyUsage[]
-  labMonthlyUsage         LabMonthlyUsage[]
-  traceRoomsAsHider       TraceRoom[]          @relation("TraceRoomHider")
-  traceRoomsAsHunter      TraceRoom[]          @relation("TraceRoomHunter")
-  goldenPawTransactions   GoldenPawTransaction[]
-  casualMode              Boolean              @default(false)
-  adminLabFeatherUsedAt   DateTime?
-  auctionBids             BazarAuctionBid[]
-  newsReads               NewsRead[]
-  newsRewardClaims        NewsRewardClaim[]
-  raidBattleAttempts      RaidBattleAttempt[]
-  raidDamageRankings      RaidDamageRanking[]
-  discoveredRaidClues     RaidClue[]             @relation("RaidClueDiscoverer")
+  id                         String                         @id @default(cuid())
+  userId                     String                         @unique
+  displayName                String
+  whatsapp                   String?
+  ptcglNick                  String?                        @unique
+  popId                      String? // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
+  avatarUrl                  String?
+  active                     Boolean                        @default(true)
+  notes                      String?
+  createdAt                  DateTime                       @default(now())
+  updatedAt                  DateTime                       @updatedAt
+  user                       User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonEntries              SeasonPlayer[]
+  matchesAsPlayerA           Match[]                        @relation("MatchPlayerA")
+  matchesAsPlayerB           Match[]                        @relation("MatchPlayerB")
+  matchesWon                 Match[]                        @relation("MatchWinner")
+  matchesLost                Match[]                        @relation("MatchLoser")
+  confirmations              MatchConfirmation[]
+  deckSubmissions            DeckSubmission[]
+  challengesAsChallenger     Challenge[]                    @relation("ChallengeChallenger")
+  challengesAsChallenged     Challenge[]                    @relation("ChallengeChallenged")
+  codeDistributions          CodeDistribution[]
+  playerBadges               PlayerBadge[]
+  playerAchievements         PlayerAchievement[]
+  rankingSnapshots           RankingSnapshot[]
+  tournamentRegistrations    TournamentRegistration[]
+  gifts                      PlayerGift[]
+  badgeProgress              BadgeProgress[]
+  wallet                     ZikaCoinWallet?
+  inventory                  PlayerInventory[]
+  betsPlaced                 ZikaBet[]                      @relation("ZkBetByPlayer")
+  betsOn                     ZikaBet[]                      @relation("ZkBetOnPlayer")
+  weeklyLeagueBetsPlaced     WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetByPlayer")
+  weeklyLeagueBetsOn         WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetOnPlayer")
+  weeklyScoutingAggregate    WeeklyMascotScoutingAggregate?
+  stickers                   PlayerSticker[]
+  achievementEvents          AchievementEvent[]
+  zikalootWins               ZikaLoot[]                     @relation("ZikaLootWinner")
+  zikalootPicks              ZikaLootPick[]
+  savedDecks                 SavedDeck[]
+  mascots                    Mascot[]
+  pokemonDex                 PlayerPokemonDex[]
+  pokemonWishlist            PlayerPokemonWishlist[]
+  ownedMascotSocialEvents    MascotSocialEvent[]            @relation("MascotSocialEventOwner")
+  resolvedMascotSocialEvents MascotSocialEvent[]            @relation("MascotSocialEventResolver")
+  mascotSocialDecisionLogs   MascotSocialDecisionLog[]
+  mascotEggs                 MascotEgg[]
+  mascotIncubator            MascotIncubator?
+  mascotFoods                MascotFoodItem[]
+  arenaTeams                 ArenaTeam[]
+  arenaBattlesAsAttacker     ArenaBattle[]                  @relation("ArenaBattleAttacker")
+  arenaBattlesAsDefender     ArenaBattle[]                  @relation("ArenaBattleDefender")
+  bazarListings              BazarListing[]
+  bazarProposals             BazarProposal[]
+  bazarFavorites             BazarFavorite[]
+  bazarLoansAsLender         BazarLoan[]                    @relation("BazarLoanLender")
+  bazarLoansAsBorrower       BazarLoan[]                    @relation("BazarLoanBorrower")
+  shellGameSessions          ShellGameSession[]
+  arenaTutorialClaimed       Boolean                        @default(false)
+  arenaPveCoinsDate          String                         @default("") // "YYYY-MM-DD" BRT — data do contador diário PvE
+  arenaPveCoinsEarned        Int                            @default(0) // ZC PvE resgatados hoje
+  susShieldDate              String                         @default("") // "YYYY-MM-DD" BRT — escudo SUS usado hoje
+  mascotBondBehavior         String                         @default("FREE")
+  mascotSpritePreference     String                         @default("ANIMATED")
+  megaSpritePreference       String                         @default("ANIMATED")
+  supporterPasses            SupporterPass[]
+  sentMessages               DirectMessage[]                @relation("SentMessages")
+  receivedMessages           DirectMessage[]                @relation("ReceivedMessages")
+  generalMessages            GeneralChatMessage[]
+  syncChallengeEntries       SyncChallengeEntry[]
+  generatedSyncTicketHalves  SyncTicketHalf[]               @relation("SyncTicketHalfGeneratedBy")
+  ownedSyncTicketHalves      SyncTicketHalf[]               @relation("SyncTicketHalfOwner")
+  ownedSyncTickets           SyncTicket[]                   @relation("SyncTicketOwner")
+  syncTicketsBannedByLeft    SyncTicket[]                   @relation("SyncTicketBannedA")
+  syncTicketsBannedByRight   SyncTicket[]                   @relation("SyncTicketBannedB")
+  syncTeamsAsA               SyncEventTeam[]                @relation("SyncEventTeamPlayerA")
+  syncTeamsAsB               SyncEventTeam[]                @relation("SyncEventTeamPlayerB")
+  syncLineups                SyncEventLineup[]              @relation("SyncEventLineupPlayer")
+  syncRoundSelections        SyncRoundSelection[]           @relation("SyncRoundSelectionPlayer")
+  syncEventScores            SyncEventScore[]               @relation("SyncEventScorePlayer")
+  creationDust               Int                            @default(0)
+  labWeeklyUsage             LabWeeklyUsage[]
+  labMonthlyUsage            LabMonthlyUsage[]
+  traceRoomsAsHider          TraceRoom[]                    @relation("TraceRoomHider")
+  traceRoomsAsHunter         TraceRoom[]                    @relation("TraceRoomHunter")
+  goldenPawTransactions      GoldenPawTransaction[]
+  casualMode                 Boolean                        @default(false)
+  adminLabFeatherUsedAt      DateTime?
+  auctionBids                BazarAuctionBid[]
+  newsReads                  NewsRead[]
+  newsRewardClaims           NewsRewardClaim[]
+  raidBattleAttempts         RaidBattleAttempt[]
+  raidDamageRankings         RaidDamageRanking[]
+  discoveredRaidClues        RaidClue[]                     @relation("RaidClueDiscoverer")
 
   @@map("players")
 }
 
 model LabWeeklyUsage {
-  id            String   @id @default(cuid())
-  playerId      String
-  weekKey       String   // e.g. "2026-W24"
-  coinsTraded   Int      @default(0)
-  commonEggs    Int      @default(0)
-  rareEggs      Int      @default(0)
-  specialEggs   Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  playerId    String
+  weekKey     String // e.g. "2026-W24"
+  coinsTraded Int      @default(0)
+  commonEggs  Int      @default(0)
+  rareEggs    Int      @default(0)
+  specialEggs Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, weekKey])
   @@map("lab_weekly_usage")
@@ -330,9 +332,9 @@ model DirectMessage {
   readAt     DateTime?
 
   attachmentType String? // "MASCOT" | "ITEM"
-  attachmentData Json?   // snapshot dos dados do item/mascote no momento do envio
+  attachmentData Json? // snapshot dos dados do item/mascote no momento do envio
 
-  sender   Player @relation("SentMessages",   fields: [senderId],   references: [id], onDelete: Cascade)
+  sender   Player @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiver Player @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([senderId, receiverId])
@@ -341,10 +343,10 @@ model DirectMessage {
 }
 
 model GeneralChatMessage {
-  id         String    @id @default(cuid())
-  senderId   String
-  content    String
-  createdAt  DateTime  @default(now())
+  id        String   @id @default(cuid())
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
 
   attachmentType String?
   attachmentData Json?
@@ -393,70 +395,70 @@ model LeagueTickerView {
 
 // Torneio independente — pode existir em paralelo a seasons legadas
 model Tournament {
-  id                    String             @id @default(cuid())
-  code                  String?
-  name                  String
-  slug                  String             @unique
-  edition               String?
-  description           String?
-  format                TournamentFormat   @default(ONLINE)
-  status                TournamentStatus   @default(DRAFT)
-  startDate             DateTime
-  endDate               DateTime?
-  maxPlayers            Int?
-  matchesPerPlayer      Int?
-  requiresDeckSubmission Boolean            @default(true)
-  registrationOpensAt   DateTime?
-  registrationClosesAt  DateTime?
-  bannerImageUrl        String?
-  themeMetadata         Json?
-  rankingConfig         Json
-  seasonId              String?
-  announcement          String?
-  challengeConfig       Json?
-  betConfig             Json?
-  narrativeText         String?            @db.Text   // análise geral do campeonato pelo Prof. Enguiça
-  narrativeGeneratedAt  DateTime?
-  createdById           String
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  createdBy             User               @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  weeks                 TournamentWeek[]
-  registrations         TournamentRegistration[]
-  season                Season?            @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  deckSubmissions       DeckSubmission[]
-  badges                LeagueBadge[]
-  challenges            Challenge[]        @relation("TournamentChallenges")
-  coinTransactions      ZikaCoinTransaction[] @relation("ZkTxTournament")
-  achievements          Achievement[]      @relation("TournamentAchievements")
+  id                     String                   @id @default(cuid())
+  code                   String?
+  name                   String
+  slug                   String                   @unique
+  edition                String?
+  description            String?
+  format                 TournamentFormat         @default(ONLINE)
+  status                 TournamentStatus         @default(DRAFT)
+  startDate              DateTime
+  endDate                DateTime?
+  maxPlayers             Int?
+  matchesPerPlayer       Int?
+  requiresDeckSubmission Boolean                  @default(true)
+  registrationOpensAt    DateTime?
+  registrationClosesAt   DateTime?
+  bannerImageUrl         String?
+  themeMetadata          Json?
+  rankingConfig          Json
+  seasonId               String?
+  announcement           String?
+  challengeConfig        Json?
+  betConfig              Json?
+  narrativeText          String?                  @db.Text // análise geral do campeonato pelo Prof. Enguiça
+  narrativeGeneratedAt   DateTime?
+  createdById            String
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  createdBy              User                     @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  weeks                  TournamentWeek[]
+  registrations          TournamentRegistration[]
+  season                 Season?                  @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  deckSubmissions        DeckSubmission[]
+  badges                 LeagueBadge[]
+  challenges             Challenge[]              @relation("TournamentChallenges")
+  coinTransactions       ZikaCoinTransaction[]    @relation("ZkTxTournament")
+  achievements           Achievement[]            @relation("TournamentAchievements")
 
   @@map("tournaments")
 }
 
 // Semanas específicas de um torneio com modo
 model TournamentWeek {
-  id           String       @id @default(cuid())
-  tournamentId String
-  weekNumber   Int
-  label        String?
-  mode         WeekMode     @default(PADRAO)
-  multiplier   Decimal      @default(1) @db.Decimal(6, 2)
-  bonusRule    Json?
-  status       WeekStatus   @default(PLANNED)
-  startDate    DateTime
-  endDate      DateTime
-  lockAt       DateTime?
-  deckLockAt   DateTime?
+  id                   String                @id @default(cuid())
+  tournamentId         String
+  weekNumber           Int
+  label                String?
+  mode                 WeekMode              @default(PADRAO)
+  multiplier           Decimal               @default(1) @db.Decimal(6, 2)
+  bonusRule            Json?
+  status               WeekStatus            @default(PLANNED)
+  startDate            DateTime
+  endDate              DateTime
+  lockAt               DateTime?
+  deckLockAt           DateTime?
   notes                String?
-  narrativeText        String?   @db.Text   // gerado via IA ao encerrar a semana
+  narrativeText        String?               @db.Text // gerado via IA ao encerrar a semana
   narrativeGeneratedAt DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  matches      Match[]      @relation("TournamentWeekMatches")
-  deckSubmissions  DeckSubmission[]
-  challenges       Challenge[]         @relation("TournamentWeekChallenges")
-  coinTransactions ZikaCoinTransaction[] @relation("ZkTxWeek")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  tournament           Tournament            @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches              Match[]               @relation("TournamentWeekMatches")
+  deckSubmissions      DeckSubmission[]
+  challenges           Challenge[]           @relation("TournamentWeekChallenges")
+  coinTransactions     ZikaCoinTransaction[] @relation("ZkTxWeek")
 
   @@unique([tournamentId, weekNumber])
   @@map("tournament_weeks")
@@ -480,19 +482,19 @@ model TournamentRegistration {
 }
 
 model Season {
-  id                 String               @id @default(cuid())
+  id                 String              @id @default(cuid())
   name               String
-  slug               String               @unique
+  slug               String              @unique
   description        String?
   startDate          DateTime
   endDate            DateTime?
-  status             SeasonStatus         @default(DRAFT)
+  status             SeasonStatus        @default(DRAFT)
   rankingConfig      Json
   topOfDayConfig     Json?
   createdById        String
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  createdBy          User                 @relation("SeasonCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  createdBy          User                @relation("SeasonCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   seasonPlayers      SeasonPlayer[]
   weeks              Week[]
   tournaments        Tournament[]
@@ -551,58 +553,58 @@ model Week {
 }
 
 model Match {
-  id                String          @id @default(cuid())
-  seasonId          String?
-  weekId            String?
-  tournamentWeekId  String?
-  playerAId         String
-  playerBId         String?
-  isBye             Boolean         @default(false)
-  scheduledAt       DateTime?
-  playedAt          DateTime?
-  roundLabel        String?
-  tableLabel        String?
-  bestOf            Int             @default(3)
-  playerAWins       Int             @default(0)
-  playerBWins       Int             @default(0)
-  draws             Int             @default(0)
-  winnerDefendedPrizes Int           @default(0)
-  winnerPlayerId    String?
-  loserPlayerId     String?
+  id                      String                @id @default(cuid())
+  seasonId                String?
+  weekId                  String?
+  tournamentWeekId        String?
+  playerAId               String
+  playerBId               String?
+  isBye                   Boolean               @default(false)
+  scheduledAt             DateTime?
+  playedAt                DateTime?
+  roundLabel              String?
+  tableLabel              String?
+  bestOf                  Int                   @default(3)
+  playerAWins             Int                   @default(0)
+  playerBWins             Int                   @default(0)
+  draws                   Int                   @default(0)
+  winnerDefendedPrizes    Int                   @default(0)
+  winnerPlayerId          String?
+  loserPlayerId           String?
   playerADeckSubmissionId String?
   playerBDeckSubmissionId String?
-  status            MatchStatus     @default(PENDING_CONFIRMATION)
-  resultSource      ResultSource    @default(MANUAL)
-  rankingPointsA    Decimal         @default(0) @db.Decimal(10, 2)
-  rankingPointsB    Decimal         @default(0) @db.Decimal(10, 2)
-  topOfDayEligible  Boolean         @default(false)
-  notes             String?
-  reportedById      String?
-  confirmedById     String?
-  reportedAt        DateTime?
-  confirmedAt       DateTime?
-  createdById       String
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  season            Season?         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  week              Week?           @relation(fields: [weekId], references: [id], onDelete: SetNull)
-  tournamentWeek    TournamentWeek? @relation("TournamentWeekMatches", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
-  playerA           Player          @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
-  playerB           Player?         @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  winnerPlayer      Player?         @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
-  loserPlayer       Player?         @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
-  reportedBy        User?           @relation("MatchReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
-  confirmedBy       User?           @relation("MatchConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
-  createdBy         User            @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  confirmations     MatchConfirmation[]
-  challenges        Challenge[]
+  status                  MatchStatus           @default(PENDING_CONFIRMATION)
+  resultSource            ResultSource          @default(MANUAL)
+  rankingPointsA          Decimal               @default(0) @db.Decimal(10, 2)
+  rankingPointsB          Decimal               @default(0) @db.Decimal(10, 2)
+  topOfDayEligible        Boolean               @default(false)
+  notes                   String?
+  reportedById            String?
+  confirmedById           String?
+  reportedAt              DateTime?
+  confirmedAt             DateTime?
+  createdById             String
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  season                  Season?               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week                    Week?                 @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  tournamentWeek          TournamentWeek?       @relation("TournamentWeekMatches", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  playerA                 Player                @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
+  playerB                 Player?               @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  winnerPlayer            Player?               @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
+  loserPlayer             Player?               @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
+  reportedBy              User?                 @relation("MatchReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  confirmedBy             User?                 @relation("MatchConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  createdBy               User                  @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmations           MatchConfirmation[]
+  challenges              Challenge[]
+  playerAOdds             Decimal?              @db.Decimal(6, 2)
+  playerBOdds             Decimal?              @db.Decimal(6, 2)
+  betsEnabled             Boolean               @default(false)
+  coinTransactions        ZikaCoinTransaction[] @relation("ZkTxMatch")
+  bets                    ZikaBet[]
 
   @@index([seasonId, weekId, status])
-  playerAOdds      Decimal?              @db.Decimal(6,2)
-  playerBOdds      Decimal?              @db.Decimal(6,2)
-  betsEnabled      Boolean               @default(false)
-  coinTransactions ZikaCoinTransaction[] @relation("ZkTxMatch")
-  bets             ZikaBet[]
   @@index([playerAId, playerBId, playedAt])
   @@index([playerADeckSubmissionId])
   @@index([playerBDeckSubmissionId])
@@ -626,30 +628,30 @@ model MatchConfirmation {
 }
 
 model DeckSubmission {
-  id              String               @id @default(cuid())
-  seasonId        String
-  weekId          String?
-  tournamentId    String?
+  id               String               @id @default(cuid())
+  seasonId         String
+  weekId           String?
+  tournamentId     String?
   tournamentWeekId String?
-  playerId        String
-  deckNumber      Int                  @default(1)
-  deckName        String
-  deckList        String
-  archetype       String?
-  submittedAt     DateTime             @default(now())
-  editedAt        DateTime?
-  deadlineAt      DateTime
-  status          DeckSubmissionStatus @default(SUBMITTED)
-  approvedById    String?
-  approvedAt      DateTime?
-  rejectionReason String?
-  isLate          Boolean              @default(false)
-  season          Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  week            Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
-  tournament      Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
-  tournamentWeek  TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
-  player          Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  approvedBy      User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  playerId         String
+  deckNumber       Int                  @default(1)
+  deckName         String
+  deckList         String
+  archetype        String?
+  submittedAt      DateTime             @default(now())
+  editedAt         DateTime?
+  deadlineAt       DateTime
+  status           DeckSubmissionStatus @default(SUBMITTED)
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+  isLate           Boolean              @default(false)
+  season           Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week             Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  tournament       Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  tournamentWeek   TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  player           Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  approvedBy       User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@unique([seasonId, weekId, playerId])
   @@index([tournamentWeekId, playerId, deckNumber])
@@ -698,7 +700,7 @@ model BadgeProgress {
   playerId  String
   points    Int         @default(0)
   notes     String?
-  updatedAt DateTime    @updatedAt @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
   badge     LeagueBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   player    Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
@@ -707,13 +709,13 @@ model BadgeProgress {
 }
 
 model LeagueBadge {
-  id           String        @id @default(cuid())
+  id           String          @id @default(cuid())
   tournamentId String
   name         String
-  imageUrl     String        @db.Text
+  imageUrl     String          @db.Text
   createdById  String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
   tournament   Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   createdBy    User            @relation("LeagueBadgeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   owners       PlayerBadge[]
@@ -740,21 +742,21 @@ model PlayerBadge {
 }
 
 model BoosterCode {
-  id              String            @id @default(cuid())
+  id              String             @id @default(cuid())
   seasonId        String?
-  code            String            @unique
+  code            String             @unique
   sourceBatch     String?
   rewardLabel     String?
-  status          BoosterCodeStatus @default(AVAILABLE)
-  importedAt      DateTime          @default(now())
+  status          BoosterCodeStatus  @default(AVAILABLE)
+  importedAt      DateTime           @default(now())
   expiresAt       DateTime?
   notes           String?
   createdById     String
   invalidatedById String?
   invalidatedAt   DateTime?
-  season          Season?           @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  createdBy       User              @relation("BoosterCodeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  invalidatedBy   User?             @relation("BoosterCodeInvalidatedBy", fields: [invalidatedById], references: [id], onDelete: SetNull)
+  season          Season?            @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  createdBy       User               @relation("BoosterCodeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  invalidatedBy   User?              @relation("BoosterCodeInvalidatedBy", fields: [invalidatedById], references: [id], onDelete: SetNull)
   distributions   CodeDistribution[]
 
   @@map("booster_codes")
@@ -877,25 +879,27 @@ model Achievement {
 }
 
 model AchievementRule {
-  id            String               @id @default(cuid())
-  achievementId String
-  eventType     AchievementEventType
-  targetValue   Int                  @default(1)
+  id             String               @id @default(cuid())
+  achievementId  String
+  eventType      AchievementEventType
+  targetValue    Int                  @default(1)
   metadataFilter Json?
-  achievement   Achievement          @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  achievement    Achievement          @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
   @@index([achievementId])
   @@map("achievement_rules")
 }
 
 model AchievementReward {
-  id            String                @id @default(cuid())
-  achievementId String
-  rewardType    AchievementRewardType
-  rewardAmount  Int?
-  rewardItemId  String?               // ShopItem.id para cosméticos
-  titleText     String?               // para TITLE_TEXT
-  deliverViaGift Boolean             @default(true)
-  achievement   Achievement          @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  id             String                @id @default(cuid())
+  achievementId  String
+  rewardType     AchievementRewardType
+  rewardAmount   Int?
+  rewardItemId   String? // ShopItem.id para cosméticos
+  titleText      String? // para TITLE_TEXT
+  deliverViaGift Boolean               @default(true)
+  achievement    Achievement           @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
   @@map("achievement_rewards")
 }
 
@@ -908,28 +912,29 @@ model AchievementEvent {
   seasonId  String?
   createdAt DateTime             @default(now())
   player    Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
   @@index([playerId, eventType])
   @@map("achievement_events")
 }
 
 model PlayerAchievement {
-  id             String       @id @default(cuid())
-  achievementId  String
-  playerId       String
-  seasonId       String?
-  awardedById    String?
-  awardedAt      DateTime     @default(now())
-  notes          String?
+  id            String      @id @default(cuid())
+  achievementId String
+  playerId      String
+  seasonId      String?
+  awardedById   String?
+  awardedAt     DateTime    @default(now())
+  notes         String?
   // Novos campos
-  pointsAwarded  Int?
-  progress       Int          @default(1)
-  timesUnlocked  Int          @default(1)
-  isHighlighted  Boolean      @default(false)
-  weekId         String?
-  achievement    Achievement  @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  season         Season?      @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  awardedBy      User?        @relation("PlayerAchievementAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
+  pointsAwarded Int?
+  progress      Int         @default(1)
+  timesUnlocked Int         @default(1)
+  isHighlighted Boolean     @default(false)
+  weekId        String?
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  player        Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  season        Season?     @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  awardedBy     User?       @relation("PlayerAchievementAwardedBy", fields: [awardedById], references: [id], onDelete: SetNull)
 
   @@unique([achievementId, playerId, seasonId])
   @@map("player_achievements")
@@ -964,24 +969,24 @@ model RankingSnapshot {
   player             Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
   generatedBy        User         @relation("RankingSnapshotGeneratedBy", fields: [generatedById], references: [id], onDelete: Restrict)
 
-  @@index([seasonId, weekId, generatedAt])
   @@unique([seasonId, weekId, playerId, snapshotType, algorithmVersion, inputHash])
+  @@index([seasonId, weekId, generatedAt])
   @@map("ranking_snapshots")
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
+  id          String   @id @default(cuid())
   actorUserId String?
-  entityType String
-  entityId   String
-  action     String
-  before     Json?
-  after      Json?
-  metadata   Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
-  actor      User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  entityType  String
+  entityId    String
+  action      String
+  before      Json?
+  after       Json?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
@@ -994,7 +999,7 @@ model PlayerGift {
   type        GiftType   @default(BOOSTER_CODE)
   title       String
   description String?
-  payload     Json?      // { code: "...", boosterCodeId: "...", etc }
+  payload     Json? // { code: "...", boosterCodeId: "...", etc }
   status      GiftStatus @default(UNCLAIMED)
   claimedAt   DateTime?
   expiresAt   DateTime?
@@ -1078,17 +1083,18 @@ enum PokemonRarity {
 }
 
 model PokemonCard {
-  id          String        @id @default(cuid())
-  nationalId  Int           @unique
+  id          String          @id @default(cuid())
+  nationalId  Int             @unique
   name        String
   displayName String
   generation  Int
   types       String[]
-  imageUrl    String?       @db.Text
-  rarity      PokemonRarity @default(COMMON)
-  active      Boolean       @default(true)
-  createdAt   DateTime      @default(now())
+  imageUrl    String?         @db.Text
+  rarity      PokemonRarity   @default(COMMON)
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
   stickers    PlayerSticker[]
+
   @@index([generation])
   @@index([rarity])
   @@map("pokemon_cards")
@@ -1103,6 +1109,7 @@ model PlayerSticker {
   firstObtained DateTime    @default(now())
   player        Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
   card          PokemonCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
   @@unique([playerId, cardId])
   @@index([playerId])
   @@map("player_stickers")
@@ -1119,27 +1126,29 @@ model StickerPack {
   rarityBoost Boolean  @default(false)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+
   @@map("sticker_packs")
 }
 
 // ── ZikaLoot ──────────────────────────────────────────────────────────────────
 
 model ZikaLoot {
-  id          String         @id @default(cuid())
-  name        String
-  description String?
-  prize       String
-  drawAt      DateTime
+  id           String         @id @default(cuid())
+  name         String
+  description  String?
+  prize        String
+  drawAt       DateTime
   drawnNumber  Int?
   drawnNumbers Int[]
   prizeConfig  Json?
   status       ZikaLootStatus @default(SCHEDULED)
-  winnerId    String?
-  createdById String
-  createdAt   DateTime       @default(now())
-  winner      Player?        @relation("ZikaLootWinner", fields: [winnerId], references: [id], onDelete: SetNull)
-  createdBy   User           @relation("ZikaLootCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  picks       ZikaLootPick[]
+  winnerId     String?
+  createdById  String
+  createdAt    DateTime       @default(now())
+  winner       Player?        @relation("ZikaLootWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  createdBy    User           @relation("ZikaLootCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  picks        ZikaLootPick[]
+
   @@map("zika_loot")
 }
 
@@ -1151,6 +1160,7 @@ model ZikaLootPick {
   pickedAt DateTime @default(now())
   loot     ZikaLoot @relation(fields: [lootId], references: [id], onDelete: Cascade)
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
   @@unique([lootId, number])
   @@index([lootId, playerId])
   @@map("zika_loot_picks")
@@ -1168,6 +1178,7 @@ model SavedDeck {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
   @@index([playerId])
   @@map("saved_decks")
 }
@@ -1180,7 +1191,7 @@ model ZikaBet {
   matchId         String
   betOnPlayerId   String
   amount          Int
-  odds            Decimal       @db.Decimal(6,2)
+  odds            Decimal       @db.Decimal(6, 2)
   potentialReturn Int
   status          ZikaBetStatus @default(OPEN)
   placedAt        DateTime      @default(now())
@@ -1188,6 +1199,7 @@ model ZikaBet {
   player          Player        @relation("ZkBetByPlayer", fields: [playerId], references: [id], onDelete: Cascade)
   match           Match         @relation(fields: [matchId], references: [id], onDelete: Cascade)
   betOnPlayer     Player        @relation("ZkBetOnPlayer", fields: [betOnPlayerId], references: [id], onDelete: Cascade)
+
   @@unique([playerId, matchId])
   @@index([playerId])
   @@index([matchId])
@@ -1197,19 +1209,19 @@ model ZikaBet {
 // ── ZikaCoins ──────────────────────────────────────────────────────────────────
 
 model WeeklyMascotLeagueBet {
-  id              String        @id @default(cuid())
+  id              String                  @id @default(cuid())
   playerId        String
   weeklyMatchId   String
   betOnPlayerId   String
   amount          Int
-  odds            Decimal       @db.Decimal(6,2)
+  odds            Decimal                 @db.Decimal(6, 2)
   potentialReturn Int
-  status          ZikaBetStatus @default(OPEN)
-  placedAt        DateTime      @default(now())
+  status          ZikaBetStatus           @default(OPEN)
+  placedAt        DateTime                @default(now())
   settledAt       DateTime?
-  player          Player        @relation("WeeklyLeagueBetByPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  player          Player                  @relation("WeeklyLeagueBetByPlayer", fields: [playerId], references: [id], onDelete: Cascade)
   weeklyMatch     WeeklyMascotLeagueMatch @relation(fields: [weeklyMatchId], references: [id], onDelete: Cascade)
-  betOnPlayer     Player        @relation("WeeklyLeagueBetOnPlayer", fields: [betOnPlayerId], references: [id], onDelete: Cascade)
+  betOnPlayer     Player                  @relation("WeeklyLeagueBetOnPlayer", fields: [betOnPlayerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, weeklyMatchId])
   @@index([playerId])
@@ -1257,14 +1269,15 @@ model ZikaCoinWallet {
   balance      Int                   @default(0)
   totalEarned  Int                   @default(0)
   totalSpent   Int                   @default(0)
-  updatedAt    DateTime              @updatedAt @default(now())
+  updatedAt    DateTime              @default(now()) @updatedAt
   player       Player                @relation(fields: [playerId], references: [id], onDelete: Cascade)
   transactions ZikaCoinTransaction[]
+
   @@map("zikacoin_wallets")
 }
 
 model ZikaCoinTransaction {
-  id               String              @id @default(cuid())
+  id               String           @id @default(cuid())
   walletId         String
   type             ZikaCoinTxType
   amount           Int
@@ -1275,13 +1288,14 @@ model ZikaCoinTransaction {
   tournamentWeekId String?
   matchId          String?
   adminId          String?
-  status           ZikaCoinTxStatus    @default(COMPLETED)
-  createdAt        DateTime            @default(now())
-  wallet           ZikaCoinWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  tournament       Tournament?         @relation("ZkTxTournament", fields: [tournamentId], references: [id], onDelete: SetNull)
-  tournamentWeek   TournamentWeek?     @relation("ZkTxWeek", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
-  match            Match?              @relation("ZkTxMatch", fields: [matchId], references: [id], onDelete: SetNull)
-  admin            User?               @relation("ZkTxAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  status           ZikaCoinTxStatus @default(COMPLETED)
+  createdAt        DateTime         @default(now())
+  wallet           ZikaCoinWallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  tournament       Tournament?      @relation("ZkTxTournament", fields: [tournamentId], references: [id], onDelete: SetNull)
+  tournamentWeek   TournamentWeek?  @relation("ZkTxWeek", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  match            Match?           @relation("ZkTxMatch", fields: [matchId], references: [id], onDelete: SetNull)
+  admin            User?            @relation("ZkTxAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+
   @@index([walletId, createdAt])
   @@map("zikacoin_transactions")
 }
@@ -1561,43 +1575,45 @@ enum TitleEntranceEffect {
 }
 
 model ShopItem {
-  id          String          @id @default(cuid())
-  type        ShopItemType
-  name        String
-  description String?
-  imageUrl    String?         @db.Text
-  rarity      ShopItemRarity  @default(COMMON)
-  price       Int
-  active      Boolean         @default(true)
-  inventoryEnabled Boolean    @default(true)
-  sortOrder   Int             @default(0)  // ordem de exibição na loja
+  id                        String               @id @default(cuid())
+  type                      ShopItemType
+  name                      String
+  description               String?
+  imageUrl                  String?              @db.Text
+  rarity                    ShopItemRarity       @default(COMMON)
+  price                     Int
+  active                    Boolean              @default(true)
+  inventoryEnabled          Boolean              @default(true)
+  sortOrder                 Int                  @default(0) // ordem de exibição na loja
   // Para molduras (FRAME): { frameScale: number, frameOffsetX: number, frameOffsetY: number }
   // Para banners (BANNER): { focusX: number, focusY: number }
-  metadata    Json?
+  metadata                  Json?
   // Para títulos (TITLE): tema visual, frase de sabor e efeito de entrada
-  theme           TitleTheme           @default(NEUTRAL)
-  flavorText      String?              @db.Text
-  entranceEffect  TitleEntranceEffect  @default(NONE)
-  createdById String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  createdBy   User?           @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  ownerships  PlayerInventory[]
+  theme                     TitleTheme           @default(NEUTRAL)
+  flavorText                String?              @db.Text
+  entranceEffect            TitleEntranceEffect  @default(NONE)
+  createdById               String?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  createdBy                 User?                @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  ownerships                PlayerInventory[]
   syncChallengeConsumptions SyncChallengeEntry[]
+
   @@map("shop_items")
 }
 
 model PlayerInventory {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   playerId    String
   itemId      String
-  equipped    Boolean   @default(false)
-  quantity    Int       @default(1)
-  purchasedAt DateTime  @default(now())
+  equipped    Boolean  @default(false)
+  quantity    Int      @default(1)
+  purchasedAt DateTime @default(now())
   // "SHOP" | "VIP_PASS" | "ADMIN_GRANT" | null
   source      String?
-  player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  item        ShopItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  item        ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
   @@unique([playerId, itemId])
   @@index([playerId])
   @@map("player_inventory")
@@ -1620,28 +1636,28 @@ model SyncChallengeEntry {
 }
 
 model SyncChallengeConfig {
-  id                                   String   @id @default("singleton")
-  ticketsEnabled                       Boolean  @default(true)
-  registrationOpensAt                  DateTime?
-  registrationClosesAt                 DateTime?
-  round1At                             DateTime?
-  round2At                             DateTime?
-  round3At                             DateTime?
-  tiebreakAt                           DateTime?
-  rewardsAt                            DateTime?
-  adminSimulationEnabled               Boolean  @default(false)
-  dropFromPve                          Boolean  @default(true)
-  dropFromPvp                          Boolean  @default(true)
-  dropFromExpedition                   Boolean  @default(true)
-  dropFromCraftingDustRecycle          Boolean  @default(true)
-  dropFromTcgMatch                     Boolean  @default(true)
-  pveDropChance                        Float    @default(0.05)
-  pvpDropChance                        Float    @default(0.30)
-  expedition3hDropChance               Float    @default(0.04)
-  expedition6hDropChance               Float    @default(0.08)
-  recycleDropChance                    Float    @default(0.70)
-  tcgWinDropChance                     Float    @default(1.00)
-  updatedAt                            DateTime @updatedAt
+  id                          String    @id @default("singleton")
+  ticketsEnabled              Boolean   @default(true)
+  registrationOpensAt         DateTime?
+  registrationClosesAt        DateTime?
+  round1At                    DateTime?
+  round2At                    DateTime?
+  round3At                    DateTime?
+  tiebreakAt                  DateTime?
+  rewardsAt                   DateTime?
+  adminSimulationEnabled      Boolean   @default(false)
+  dropFromPve                 Boolean   @default(true)
+  dropFromPvp                 Boolean   @default(true)
+  dropFromExpedition          Boolean   @default(true)
+  dropFromCraftingDustRecycle Boolean   @default(true)
+  dropFromTcgMatch            Boolean   @default(true)
+  pveDropChance               Float     @default(0.05)
+  pvpDropChance               Float     @default(0.30)
+  expedition3hDropChance      Float     @default(0.04)
+  expedition6hDropChance      Float     @default(0.08)
+  recycleDropChance           Float     @default(0.70)
+  tcgWinDropChance            Float     @default(1.00)
+  updatedAt                   DateTime  @updatedAt
 
   @@map("sync_challenge_config")
 }
@@ -1668,55 +1684,55 @@ model SyncTicketHalf {
 }
 
 model SyncTicket {
-  id              String           @id @default(cuid())
-  ownerId         String
-  leftHalfId      String           @unique
-  rightHalfId     String           @unique
-  bannedUserAId   String
-  bannedUserBId   String
-  status          SyncTicketStatus @default(AVAILABLE)
-  createdAt       DateTime         @default(now())
-  consumedAt      DateTime?
-  refundedAt      DateTime?
-  owner           Player           @relation("SyncTicketOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  leftHalf        SyncTicketHalf    @relation("SyncTicketLeftHalf", fields: [leftHalfId], references: [id], onDelete: Restrict)
-  rightHalf       SyncTicketHalf    @relation("SyncTicketRightHalf", fields: [rightHalfId], references: [id], onDelete: Restrict)
-  bannedUserA     Player           @relation("SyncTicketBannedA", fields: [bannedUserAId], references: [id], onDelete: Restrict)
-  bannedUserB     Player           @relation("SyncTicketBannedB", fields: [bannedUserBId], references: [id], onDelete: Restrict)
-  syncTeamAsA     SyncEventTeam?   @relation("SyncEventTeamTicketA")
-  syncTeamAsB     SyncEventTeam?   @relation("SyncEventTeamTicketB")
+  id            String           @id @default(cuid())
+  ownerId       String
+  leftHalfId    String           @unique
+  rightHalfId   String           @unique
+  bannedUserAId String
+  bannedUserBId String
+  status        SyncTicketStatus @default(AVAILABLE)
+  createdAt     DateTime         @default(now())
+  consumedAt    DateTime?
+  refundedAt    DateTime?
+  owner         Player           @relation("SyncTicketOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  leftHalf      SyncTicketHalf   @relation("SyncTicketLeftHalf", fields: [leftHalfId], references: [id], onDelete: Restrict)
+  rightHalf     SyncTicketHalf   @relation("SyncTicketRightHalf", fields: [rightHalfId], references: [id], onDelete: Restrict)
+  bannedUserA   Player           @relation("SyncTicketBannedA", fields: [bannedUserAId], references: [id], onDelete: Restrict)
+  bannedUserB   Player           @relation("SyncTicketBannedB", fields: [bannedUserBId], references: [id], onDelete: Restrict)
+  syncTeamAsA   SyncEventTeam?   @relation("SyncEventTeamTicketA")
+  syncTeamAsB   SyncEventTeam?   @relation("SyncEventTeamTicketB")
 
   @@index([ownerId, status, createdAt])
   @@map("sync_tickets")
 }
 
 model SyncEventTeam {
-  id              String              @id @default(cuid())
+  id              String               @id @default(cuid())
   playerAId       String
   playerBId       String?
-  ticketAId       String              @unique
-  ticketBId       String?             @unique
-  status          SyncEventTeamStatus @default(OPEN)
-  confirmedA      Boolean             @default(false)
-  confirmedB      Boolean             @default(false)
-  lineupStatusA   SyncLineupStatus    @default(OPEN)
-  lineupStatusB   SyncLineupStatus    @default(OPEN)
+  ticketAId       String               @unique
+  ticketBId       String?              @unique
+  status          SyncEventTeamStatus  @default(OPEN)
+  confirmedA      Boolean              @default(false)
+  confirmedB      Boolean              @default(false)
+  lineupStatusA   SyncLineupStatus     @default(OPEN)
+  lineupStatusB   SyncLineupStatus     @default(OPEN)
   roomId          String?
-  roomSlot        Int?                // 1–4 dentro da sala
-  createdAt       DateTime            @default(now())
+  roomSlot        Int? // 1–4 dentro da sala
+  createdAt       DateTime             @default(now())
   completedAt     DateTime?
   confirmedAt     DateTime?
   cancelledAt     DateTime?
   lineupReadyAt   DateTime?
-  playerA         Player              @relation("SyncEventTeamPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
-  playerB         Player?             @relation("SyncEventTeamPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  ticketA         SyncTicket          @relation("SyncEventTeamTicketA", fields: [ticketAId], references: [id], onDelete: Restrict)
-  ticketB         SyncTicket?         @relation("SyncEventTeamTicketB", fields: [ticketBId], references: [id], onDelete: Restrict)
-  room            SyncEventRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  playerA         Player               @relation("SyncEventTeamPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB         Player?              @relation("SyncEventTeamPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  ticketA         SyncTicket           @relation("SyncEventTeamTicketA", fields: [ticketAId], references: [id], onDelete: Restrict)
+  ticketB         SyncTicket?          @relation("SyncEventTeamTicketB", fields: [ticketBId], references: [id], onDelete: Restrict)
+  room            SyncEventRoom?       @relation(fields: [roomId], references: [id], onDelete: SetNull)
   lineups         SyncEventLineup[]
   roundSelections SyncRoundSelection[]
-  matchesAsA      SyncRoundMatch[]    @relation("SyncRoundMatchTeamA")
-  matchesAsB      SyncRoundMatch[]    @relation("SyncRoundMatchTeamB")
+  matchesAsA      SyncRoundMatch[]     @relation("SyncRoundMatchTeamA")
+  matchesAsB      SyncRoundMatch[]     @relation("SyncRoundMatchTeamB")
   scores          SyncEventScore[]
 
   @@index([status, createdAt])
@@ -1727,17 +1743,17 @@ model SyncEventTeam {
 }
 
 model SyncEventLineup {
-  id        String           @id @default(cuid())
-  teamId    String
-  playerId  String
-  mascotId  String
-  slot      Int              // 1–9
+  id         String           @id @default(cuid())
+  teamId     String
+  playerId   String
+  mascotId   String
+  slot       Int // 1–9
   combatRole MascotCombatRole @default(ATTACKER)
-  createdAt DateTime         @default(now())
+  createdAt  DateTime         @default(now())
 
-  team      SyncEventTeam    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  player    Player           @relation("SyncEventLineupPlayer", fields: [playerId], references: [id], onDelete: Cascade)
-  mascot    Mascot           @relation("SyncEventLineupMascot", fields: [mascotId], references: [id], onDelete: Cascade)
+  team   SyncEventTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player        @relation("SyncEventLineupPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  mascot Mascot        @relation("SyncEventLineupMascot", fields: [mascotId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, playerId, slot])
   @@unique([teamId, mascotId])
@@ -1747,17 +1763,17 @@ model SyncEventLineup {
 
 model SyncEventRoom {
   id          String         @id @default(cuid())
-  roomIndex   Int            // 1, 2, 3 (até 3 arenas simultâneas)
-  date        String         // "YYYY-MM-DD" BRT
+  roomIndex   Int // 1, 2, 3 (até 3 arenas simultâneas)
+  date        String // "YYYY-MM-DD" BRT
   status      SyncRoomStatus @default(FORMING)
   formedAt    DateTime       @default(now())
   validatedAt DateTime?
   finishedAt  DateTime?
   cancelledAt DateTime?
 
-  teams   SyncEventTeam[]
-  rounds  SyncEventRound[]
-  scores  SyncEventScore[]
+  teams  SyncEventTeam[]
+  rounds SyncEventRound[]
+  scores SyncEventScore[]
 
   @@unique([date, roomIndex])
   @@index([date, status])
@@ -1765,17 +1781,17 @@ model SyncEventRoom {
 }
 
 model SyncEventRound {
-  id                  String          @id @default(cuid())
-  roomId              String
-  roundNumber         Int             // 1, 2, 3; 0 = desempate
-  status              SyncRoundStatus @default(PENDING)
-  modifierId          String?
-  scheduledAt         DateTime
-  selectionsClosedAt  DateTime?
-  executedAt          DateTime?
+  id                 String          @id @default(cuid())
+  roomId             String
+  roundNumber        Int // 1, 2, 3; 0 = desempate
+  status             SyncRoundStatus @default(PENDING)
+  modifierId         String?
+  scheduledAt        DateTime
+  selectionsClosedAt DateTime?
+  executedAt         DateTime?
 
-  room       SyncEventRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  modifier   SyncEventModifier? @relation(fields: [modifierId], references: [id], onDelete: SetNull)
+  room       SyncEventRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  modifier   SyncEventModifier?   @relation(fields: [modifierId], references: [id], onDelete: SetNull)
   selections SyncRoundSelection[]
   matches    SyncRoundMatch[]
 
@@ -1837,19 +1853,19 @@ model SyncRoundMatch {
 }
 
 model SyncEventScore {
-  id             String  @id @default(cuid())
+  id             String   @id @default(cuid())
   roomId         String
   teamId         String
   playerId       String
-  wins           Int     @default(0)
-  losses         Int     @default(0)
-  draws          Int     @default(0)
-  damageDone     Int     @default(0)
-  damageTaken    Int     @default(0)
-  survivingTotal Int     @default(0)
+  wins           Int      @default(0)
+  losses         Int      @default(0)
+  draws          Int      @default(0)
+  damageDone     Int      @default(0)
+  damageTaken    Int      @default(0)
+  survivingTotal Int      @default(0)
   finalPosition  Int?
-  rewardGranted  Boolean @default(false)
-  updatedAt      DateTime @updatedAt @default(now())
+  rewardGranted  Boolean  @default(false)
+  updatedAt      DateTime @default(now()) @updatedAt
 
   room   SyncEventRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   team   SyncEventTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -1867,6 +1883,7 @@ model UserFcmToken {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@map("user_fcm_tokens")
 }
@@ -1980,96 +1997,99 @@ enum ArenaBattleStatus {
 }
 
 model MascotEgg {
-  id         String          @id @default(cuid())
-  playerId   String
-  type       EggType         @default(COMMON)
-  obtainedAt DateTime        @default(now())
+  id                  String           @id @default(cuid())
+  playerId            String
+  type                EggType          @default(COMMON)
+  obtainedAt          DateTime         @default(now())
   // Se vier de uma conquista/evento, guarda a origem
-  origin     String?
-  hatchRarityBonusPct Float @default(0)
-  player     Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  incubation MascotIncubator?
+  origin              String?
+  hatchRarityBonusPct Float            @default(0)
+  player              Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  incubation          MascotIncubator?
+
   @@index([playerId])
   @@map("mascot_eggs")
 }
 
 model MascotIncubator {
   id        String    @id @default(cuid())
-  playerId  String    @unique  // 1 incubadora por jogador
+  playerId  String    @unique // 1 incubadora por jogador
   eggId     String    @unique
   startedAt DateTime  @default(now())
   finishAt  DateTime
   hatched   Boolean   @default(false)
   player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   egg       MascotEgg @relation(fields: [eggId], references: [id], onDelete: Cascade)
+
   @@map("mascot_incubators")
 }
 
 model Mascot {
-  id               String            @id @default(cuid())
-  playerId         String
-  pokemonId        Int               // ID da PokéAPI
-  nickname         String?
-  level            Int               @default(1)
-  exp              Int               @default(0)
-  happiness        Int               @default(50)  // 0-100
-  mood             MascotMood        @default(NEUTRAL)
-  personality      MascotPersonality
-  isEquipped       Boolean           @default(false)
-  isFavorite       Boolean           @default(false)
+  id                       String                    @id @default(cuid())
+  playerId                 String
+  pokemonId                Int // ID da PokéAPI
+  nickname                 String?
+  level                    Int                       @default(1)
+  exp                      Int                       @default(0)
+  happiness                Int                       @default(50) // 0-100
+  mood                     MascotMood                @default(NEUTRAL)
+  personality              MascotPersonality
+  isEquipped               Boolean                   @default(false)
+  isFavorite               Boolean                   @default(false)
   // Stats
-  statForce        Int               @default(10)
-  statAgility      Int               @default(10)
-  statCharisma     Int               @default(10)
-  statInstinct     Int               @default(10)
-  statVitality     Int               @default(10)
+  statForce                Int                       @default(10)
+  statAgility              Int                       @default(10)
+  statCharisma             Int                       @default(10)
+  statInstinct             Int                       @default(10)
+  statVitality             Int                       @default(10)
   // Batalhas
-  battleWins       Int               @default(0)
-  battleLosses     Int               @default(0)
+  battleWins               Int                       @default(0)
+  battleLosses             Int                       @default(0)
   // Timestamps
-  hatchedAt        DateTime          @default(now())
+  hatchedAt                DateTime                  @default(now())
   // Preserva a procedencia depois que o registro do ovo e consumido ao chocar.
-  hatchedFromEggType   EggType?
-  hatchedFromEggOrigin String?
-  lastInteractedAt DateTime?
-  lastPlayedAt     DateTime?
-  lastPettedAt     DateTime?
-  lastFedAt        DateTime?
-  bazarListed          Boolean           @default(false)
-  socialCooldownUntil  DateTime?         // rival travou interações temporariamente
-  susRestBonusMinutes  Int               @default(0)
-  evolutionLocked      Boolean           @default(false)
-  expLocked            Boolean           @default(false)
-  operationsLocked     Boolean           @default(false) // impede envio ao Bazar e uso no Laboratório
-  isShiny              Boolean           @default(false) // variante shiny — sprite diferente e marcador visual
+  hatchedFromEggType       EggType?
+  hatchedFromEggOrigin     String?
+  lastInteractedAt         DateTime?
+  lastPlayedAt             DateTime?
+  lastPettedAt             DateTime?
+  lastFedAt                DateTime?
+  bazarListed              Boolean                   @default(false)
+  socialCooldownUntil      DateTime? // rival travou interações temporariamente
+  susRestBonusMinutes      Int                       @default(0)
+  evolutionLocked          Boolean                   @default(false)
+  expLocked                Boolean                   @default(false)
+  operationsLocked         Boolean                   @default(false) // impede envio ao Bazar e uso no Laboratório
+  isShiny                  Boolean                   @default(false) // variante shiny — sprite diferente e marcador visual
   megaEvolvedFromPokemonId Int?
-  megaStoneItemId      String?
-  megaEvolvedAt        DateTime?
-  arenaState           MascotArenaState  @default(FREE)
-  injuredAt            DateTime?
-  restingUntil         DateTime?         // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
+  megaStoneItemId          String?
+  megaEvolvedAt            DateTime?
+  arenaState               MascotArenaState          @default(FREE)
+  injuredAt                DateTime?
+  restingUntil             DateTime? // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
   // A primeira análise de IV/potencial custa 100 ZC; simulações seguintes são gratuitas.
-  analyzedAt           DateTime?         // última vez que foi analisado no Lab
-  ivScore              Int?              // 0-100 (potencial futuro)
-  ivRating             String?           // SSS, SS, S, A, B, C, D ou E
-  analysisJson         Json?             // snapshot completo da última análise
+  analyzedAt               DateTime? // última vez que foi analisado no Lab
+  ivScore                  Int? // 0-100 (potencial futuro)
+  ivRating                 String? // SSS, SS, S, A, B, C, D ou E
+  analysisJson             Json? // snapshot completo da última análise
   // Marcador pessoal de desempenho definido pelo jogador: FORTE, NEUTRO, RUIM, PESSIMO
-  performanceTag       String            @default("NEUTRO")
-  player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  expeditions      MascotExpedition[]
-  arenaTeamMembers ArenaTeamMember[]
-  relationsAsA     MascotRelation[]  @relation("MascotRelationA")
-  relationsAsB     MascotRelation[]  @relation("MascotRelationB")
-  socialEventsAsA  MascotSocialEvent[] @relation("MascotSocialEventMascotA")
-  socialEventsAsB  MascotSocialEvent[] @relation("MascotSocialEventMascotB")
-  socialDecisionLogsAsA MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
-  socialDecisionLogsAsB MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
-  events           MascotEvent[]
-  progressMilestones MascotProgressMilestone[]
-  buffs            MascotBuff[]
-  syncLineups      SyncEventLineup[] @relation("SyncEventLineupMascot")
-  traceRoomsAsHider  TraceRoom[] @relation("TraceRoomHiderMascot")
-  traceRoomsAsHunter TraceRoom[] @relation("TraceRoomHunterMascot")
+  performanceTag           String                    @default("NEUTRO")
+  player                   Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  expeditions              MascotExpedition[]
+  arenaTeamMembers         ArenaTeamMember[]
+  relationsAsA             MascotRelation[]          @relation("MascotRelationA")
+  relationsAsB             MascotRelation[]          @relation("MascotRelationB")
+  socialEventsAsA          MascotSocialEvent[]       @relation("MascotSocialEventMascotA")
+  socialEventsAsB          MascotSocialEvent[]       @relation("MascotSocialEventMascotB")
+  socialDecisionLogsAsA    MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
+  socialDecisionLogsAsB    MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
+  events                   MascotEvent[]
+  progressMilestones       MascotProgressMilestone[]
+  buffs                    MascotBuff[]
+  syncLineups              SyncEventLineup[]         @relation("SyncEventLineupMascot")
+  traceRoomsAsHider        TraceRoom[]               @relation("TraceRoomHiderMascot")
+  traceRoomsAsHunter       TraceRoom[]               @relation("TraceRoomHunterMascot")
+
   @@index([playerId])
   @@map("mascots")
 }
@@ -2110,20 +2130,21 @@ enum MascotRelationType {
 }
 
 model MascotRelation {
-  id               String             @id @default(cuid())
-  mascotAId        String
-  mascotBId        String
-  type             MascotRelationType @default(RIVAL)
-  relationshipScore Int               @default(0)
+  id                String             @id @default(cuid())
+  mascotAId         String
+  mascotBId         String
+  type              MascotRelationType @default(RIVAL)
+  relationshipScore Int                @default(0)
   specialBondType   String?
-  wins             Int                @default(0)
-  losses           Int                @default(0)
-  interactionCount Int                @default(1)  // sobe com eventos; determina tier
+  wins              Int                @default(0)
+  losses            Int                @default(0)
+  interactionCount  Int                @default(1) // sobe com eventos; determina tier
   lastInteractionAt DateTime?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  mascotA   Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
-  mascotB   Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  mascotA           Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB           Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
+
   @@unique([mascotAId, mascotBId])
   @@index([mascotAId, relationshipScore])
   @@index([mascotBId, relationshipScore])
@@ -2171,10 +2192,10 @@ model MascotSocialEvent {
   autoResolvedAt      DateTime?
   createdAt           DateTime                @default(now())
 
-  owner            Player  @relation("MascotSocialEventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  resolvedByPlayer Player? @relation("MascotSocialEventResolver", fields: [resolvedByPlayerId], references: [id], onDelete: SetNull)
-  mascotA          Mascot  @relation("MascotSocialEventMascotA", fields: [mascotAId], references: [id], onDelete: Cascade)
-  mascotB          Mascot? @relation("MascotSocialEventMascotB", fields: [mascotBId], references: [id], onDelete: Cascade)
+  owner            Player                    @relation("MascotSocialEventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  resolvedByPlayer Player?                   @relation("MascotSocialEventResolver", fields: [resolvedByPlayerId], references: [id], onDelete: SetNull)
+  mascotA          Mascot                    @relation("MascotSocialEventMascotA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB          Mascot?                   @relation("MascotSocialEventMascotB", fields: [mascotBId], references: [id], onDelete: Cascade)
   decisions        MascotSocialDecisionLog[]
 
   @@index([ownerId, status, createdAt])
@@ -2220,13 +2241,14 @@ model MascotEvent {
   description String
   createdAt   DateTime @default(now())
   mascot      Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
   @@index([mascotId, createdAt])
   @@map("mascot_events")
 }
 
 model MascotProgressMilestone {
   id        String   @id @default(cuid())
-  mascotId String
+  mascotId  String
   key       String
   label     String
   level     Int
@@ -2240,13 +2262,14 @@ model MascotProgressMilestone {
 }
 
 model MascotExpedition {
-  id         String          @id @default(cuid())
+  id         String           @id @default(cuid())
   mascotId   String
-  startedAt  DateTime        @default(now())
+  startedAt  DateTime         @default(now())
   finishAt   DateTime
   status     ExpeditionStatus @default(ACTIVE)
   rewardJson Json?
-  mascot     Mascot          @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  mascot     Mascot           @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
   @@index([mascotId])
   @@map("mascot_expeditions")
 }
@@ -2267,12 +2290,13 @@ enum MascotBuffType {
 }
 
 model MascotBuff {
-  id        String        @id @default(cuid())
+  id        String         @id @default(cuid())
   mascotId  String
   type      MascotBuffType
   expiresAt DateTime
-  createdAt DateTime      @default(now())
-  mascot    Mascot        @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  mascot    Mascot         @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
   @@index([mascotId, expiresAt])
   @@map("mascot_buffs")
 }
@@ -2283,51 +2307,52 @@ model MascotFoodItem {
   type     FoodType
   quantity Int      @default(1)
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
   @@unique([playerId, type])
   @@map("mascot_food_items")
 }
 
 model ArenaTeam {
-  id             String          @id @default(cuid())
-  playerId       String
-  name           String
-  status         ArenaTeamStatus @default(ACTIVE)
-  vaultCoins     Int             @default(0)
-  vaultExp       Int             @default(0)
-  vaultFood      Int             @default(0)
-  vaultSweet     Int             @default(0)
-  multiplier     Decimal         @default(1) @db.Decimal(5, 2)
-  roomLevel      Int             @default(0)       // sala: 10, 20, ..., 100 (max nível permitido)
-  isTraining     Boolean         @default(false)   // sala de treinamento: sem lesões, sem loot, sem ranking
-  pendingBotJson Json?
+  id                   String          @id @default(cuid())
+  playerId             String
+  name                 String
+  status               ArenaTeamStatus @default(ACTIVE)
+  vaultCoins           Int             @default(0)
+  vaultExp             Int             @default(0)
+  vaultFood            Int             @default(0)
+  vaultSweet           Int             @default(0)
+  multiplier           Decimal         @default(1) @db.Decimal(5, 2)
+  roomLevel            Int             @default(0) // sala: 10, 20, ..., 100 (max nível permitido)
+  isTraining           Boolean         @default(false) // sala de treinamento: sem lesões, sem loot, sem ranking
+  pendingBotJson       Json?
   pendingBotDifficulty String?
-  lastPassiveIncomeAt DateTime    @default(now())
-  enteredAt      DateTime        @default(now())
-  lastBattleAt   DateTime?       // última batalha PvP
-  lastPveBattleAt DateTime?      // última batalha PvE (cooldown separado)
-  retiredAt      DateTime?       // set quando retirou COM recompensas ≥ 1 ZC (gera cooldown de 10 min)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  lastPassiveIncomeAt  DateTime        @default(now())
+  enteredAt            DateTime        @default(now())
+  lastBattleAt         DateTime? // última batalha PvP
+  lastPveBattleAt      DateTime? // última batalha PvE (cooldown separado)
+  retiredAt            DateTime? // set quando retirou COM recompensas ≥ 1 ZC (gera cooldown de 10 min)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  player         Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  members        ArenaTeamMember[]
-  attacks        ArenaBattle[]   @relation("ArenaBattleAttackTeam")
-  defenses       ArenaBattle[]   @relation("ArenaBattleDefenseTeam")
+  player   Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  members  ArenaTeamMember[]
+  attacks  ArenaBattle[]     @relation("ArenaBattleAttackTeam")
+  defenses ArenaBattle[]     @relation("ArenaBattleDefenseTeam")
 
   @@index([playerId, status])
   @@map("arena_teams")
 }
 
 model ArenaTeamMember {
-  id        String    @id @default(cuid())
-  teamId    String
-  mascotId  String
-  slot      Int
+  id         String           @id @default(cuid())
+  teamId     String
+  mascotId   String
+  slot       Int
   combatRole MascotCombatRole @default(ATTACKER)
-  joinedAt  DateTime  @default(now())
+  joinedAt   DateTime         @default(now())
 
-  team      ArenaTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  mascot    Mascot    @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  team   ArenaTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mascot Mascot    @relation(fields: [mascotId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, slot])
   @@unique([teamId, mascotId])
@@ -2356,10 +2381,10 @@ model ArenaBattle {
   seenByDefender   Boolean           @default(false) // true após defensor visualizar o ataque
   createdAt        DateTime          @default(now())
 
-  attackerPlayer   Player?           @relation("ArenaBattleAttacker", fields: [attackerPlayerId], references: [id], onDelete: SetNull)
-  defenderPlayer   Player?           @relation("ArenaBattleDefender", fields: [defenderPlayerId], references: [id], onDelete: SetNull)
-  attackTeam       ArenaTeam?        @relation("ArenaBattleAttackTeam", fields: [attackTeamId], references: [id], onDelete: SetNull)
-  defenseTeam      ArenaTeam?        @relation("ArenaBattleDefenseTeam", fields: [defenseTeamId], references: [id], onDelete: SetNull)
+  attackerPlayer Player?    @relation("ArenaBattleAttacker", fields: [attackerPlayerId], references: [id], onDelete: SetNull)
+  defenderPlayer Player?    @relation("ArenaBattleDefender", fields: [defenderPlayerId], references: [id], onDelete: SetNull)
+  attackTeam     ArenaTeam? @relation("ArenaBattleAttackTeam", fields: [attackTeamId], references: [id], onDelete: SetNull)
+  defenseTeam    ArenaTeam? @relation("ArenaBattleDefenseTeam", fields: [defenseTeamId], references: [id], onDelete: SetNull)
 
   @@index([type, createdAt])
   @@index([attackerPlayerId])
@@ -2436,27 +2461,36 @@ enum BazarProposalStatus {
   CANCELLED
 }
 
+enum BazarLoanStatus {
+  ACTIVE
+  PAID
+  FORGIVEN
+}
+
 // Anúncio do Bazar
 model BazarListing {
-  id           String             @id @default(cuid())
-  playerId     String
-  category     BazarItemCategory
-  listingType  BazarListingType
-  status       BazarListingStatus @default(ACTIVE)
+  id          String             @id @default(cuid())
+  playerId    String
+  category    BazarItemCategory
+  listingType BazarListingType
+  status      BazarListingStatus @default(ACTIVE)
 
   // O que está sendo vendido/trocado (JSON flexível)
   // Mascot:   { mascotId, pokemonId, pokemonName, level, nickname, personality, stats }
   // Item:     { itemType, quantity, displayName }
   // Cosmetic: { inventoryItemId, itemType, displayName }
-  payload      Json
+  payload Json
 
-  priceCoins   Int?     // null = troca somente
-  wantedDesc   String?  // texto livre descrevendo o que quer em troca
-  description  String?
+  priceCoins      Int? // null = troca somente
+  wantedDesc      String? // texto livre descrevendo o que quer em troca
+  description     String?
+  loanEnabled     Boolean @default(false)
+  loanAmountCoins Int?
+  loanInterestPct Int?
 
-  feeCharged   Int      @default(0)
-  views        Int      @default(0)
-  expiresAt    DateTime
+  feeCharged Int      @default(0)
+  views      Int      @default(0)
+  expiresAt  DateTime
 
   // Campos de leilão (null para anúncios normais)
   minBidCoins        Int?
@@ -2464,13 +2498,14 @@ model BazarListing {
   currentBidPlayerId String?
   auctionEndsAt      DateTime?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  player       Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  proposals    BazarProposal[]
-  favorites    BazarFavorite[]
-  auctionBids  BazarAuctionBid[]
+  player      Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  proposals   BazarProposal[]
+  favorites   BazarFavorite[]
+  auctionBids BazarAuctionBid[]
+  loan        BazarLoan?
 
   @@index([category, status, createdAt])
   @@index([playerId])
@@ -2484,8 +2519,8 @@ model BazarAuctionBid {
   amount    Int
   createdAt DateTime @default(now())
 
-  listing   BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  player    Player       @relation(fields: [playerId], references: [id])
+  listing BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  player  Player       @relation(fields: [playerId], references: [id])
 
   @@index([listingId, createdAt])
   @@map("bazar_auction_bids")
@@ -2493,39 +2528,85 @@ model BazarAuctionBid {
 
 // Proposta de troca/compra
 model BazarProposal {
-  id          String              @id @default(cuid())
-  listingId   String
-  proposerId  String
+  id         String @id @default(cuid())
+  listingId  String
+  proposerId String
 
-  coinsOffer  Int                 @default(0)
-  coinsEscrowed Boolean           @default(false)
+  coinsOffer    Int     @default(0)
+  coinsEscrowed Boolean @default(false)
   // JSON: [{type:"ITEM", itemType, quantity, displayName}]
-  itemsOffer  Json?
-  message     String?
+  itemsOffer    Json?
+  message       String?
+  loanRequested Boolean @default(false)
 
-  status      BazarProposalStatus @default(PENDING)
+  status             BazarProposalStatus @default(PENDING)
   viewedByProposerAt DateTime?
 
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  listing     BazarListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  proposer    Player        @relation(fields: [proposerId], references: [id], onDelete: Cascade)
+  listing  BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  proposer Player       @relation(fields: [proposerId], references: [id], onDelete: Cascade)
+  loan     BazarLoan?
 
   @@index([listingId])
   @@index([proposerId])
   @@map("bazar_proposals")
 }
 
+// Contrato de boa-fé: o sistema registra e recebe parcelas, mas nunca cobra automaticamente.
+model BazarLoan {
+  id              String          @id @default(cuid())
+  listingId       String          @unique
+  proposalId      String          @unique
+  lenderId        String
+  borrowerId      String
+  principalCoins  Int
+  interestPct     Int
+  totalDueCoins   Int
+  amountPaidCoins Int             @default(0)
+  status          BazarLoanStatus @default(ACTIVE)
+  itemSnapshot    Json
+  createdAt       DateTime        @default(now())
+  paidAt          DateTime?
+
+  listing  BazarListing       @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  proposal BazarProposal      @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  lender   Player             @relation("BazarLoanLender", fields: [lenderId], references: [id], onDelete: Restrict)
+  borrower Player             @relation("BazarLoanBorrower", fields: [borrowerId], references: [id], onDelete: Restrict)
+  payments BazarLoanPayment[]
+
+  @@index([lenderId, status, createdAt])
+  @@index([borrowerId, status, createdAt])
+  @@index([status, totalDueCoins])
+  @@map("bazar_loans")
+}
+
+model BazarLoanPayment {
+  id             String   @id @default(cuid())
+  loanId         String
+  payerId        String
+  receiverId     String
+  amountCoins    Int
+  remainingCoins Int
+  createdAt      DateTime @default(now())
+
+  loan BazarLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId, createdAt])
+  @@index([payerId, createdAt])
+  @@map("bazar_loan_payments")
+}
+
 // Favoritos
 model BazarFavorite {
-  id        String       @id @default(cuid())
+  id        String   @id @default(cuid())
   playerId  String
   listingId String
-  createdAt DateTime     @default(now())
+  createdAt DateTime @default(now())
 
-  player    Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  listing   BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  player  Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  listing BazarListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, listingId])
   @@map("bazar_favorites")
@@ -2533,17 +2614,17 @@ model BazarFavorite {
 
 // Histórico de transações (feed público)
 model BazarTransaction {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   listingId   String
   sellerId    String
   buyerId     String
   sellerName  String
   buyerName   String
-  description String   // ex: "Pikachu Nv.5 vendido por 1500 ZC"
-  coinsAmount Int      @default(0)
+  description String // ex: "Pikachu Nv.5 vendido por 1500 ZC"
+  coinsAmount Int               @default(0)
   category    BazarItemCategory
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([createdAt])
   @@map("bazar_transactions")
@@ -2554,11 +2635,11 @@ model BazarPlayerTradeBan {
   id              String   @id @default(cuid())
   playerAId       String
   playerBId       String
-  reason           String?
+  reason          String?
   createdByUserId String?
-  active           Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([playerAId, playerBId])
   @@index([playerAId, active])
@@ -2567,19 +2648,19 @@ model BazarPlayerTradeBan {
 }
 
 model MiauvadaoConfig {
-  id                String   @id @default("singleton")
-  vaultBalance      Int      @default(0)
-  listingFee        Int      @default(10)
-  dailyOffers       Json     @default("[]")
+  id                   String    @id @default("singleton")
+  vaultBalance         Int       @default(0)
+  listingFee           Int       @default(10)
+  dailyOffers          Json      @default("[]")
   offersRefreshedAt    DateTime?
-  playerRefreshData    Json      @default("{}")   // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
+  playerRefreshData    Json      @default("{}") // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
   slotRefreshUsedCycle DateTime?
   // Shell Game — última mensagem do NPC
-  lastWinnerMessage String?
-  lastWinnerAt      DateTime?
-  lastNpcMessage    String?
-  lastNpcMessageAt  DateTime?
-  updatedAt         DateTime @updatedAt
+  lastWinnerMessage    String?
+  lastWinnerAt         DateTime?
+  lastNpcMessage       String?
+  lastNpcMessageAt     DateTime?
+  updatedAt            DateTime  @updatedAt
 
   @@map("miauvadao_config")
 }
@@ -2587,7 +2668,7 @@ model MiauvadaoConfig {
 model LabMonthlyUsage {
   id              String   @id @default(cuid())
   playerId        String
-  monthKey        String   // "YYYY-MM" no horario de Brasilia
+  monthKey        String // "YYYY-MM" no horario de Brasilia
   labEggs         Int      @default(0)
   evolutionStones Int      @default(0)
   createdAt       DateTime @default(now())
@@ -2599,10 +2680,10 @@ model LabMonthlyUsage {
 }
 
 model MiauvadaoPurchaseQuota {
-  playerId        String   @id
+  playerId        String    @id
   chargeOneUsedAt DateTime?
   chargeTwoUsedAt DateTime?
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
 
   @@map("miauvadao_purchase_quotas")
 }
@@ -2610,24 +2691,24 @@ model MiauvadaoPurchaseQuota {
 // ── Passe Apoiador ────────────────────────────────────────────────────────────
 
 model SupporterPass {
-  id               String               @id @default(cuid())
-  playerId         String
-  active           Boolean              @default(true)
-  passLabel        String               @default("Passe Apoiador")
-  startsAt         DateTime             @default(now())
-  expiresAt        DateTime
+  id                     String    @id @default(cuid())
+  playerId               String
+  active                 Boolean   @default(true)
+  passLabel              String    @default("Passe Apoiador")
+  startsAt               DateTime  @default(now())
+  expiresAt              DateTime
   // VIP title ShopItem id granted to the player
-  titleItemId      String?
-  createdByAdminId String?
-  revokedByAdminId String?
+  titleItemId            String?
+  createdByAdminId       String?
+  revokedByAdminId       String?
   revokedAt              DateTime?
   revokeReason           String?
-  allowRetroactiveClaims Boolean              @default(false)
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
+  allowRetroactiveClaims Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  player           Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  claims           SupporterPassClaim[]
+  player Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  claims SupporterPassClaim[]
 
   @@index([playerId])
   @@index([active, expiresAt])
@@ -2635,15 +2716,15 @@ model SupporterPass {
 }
 
 model SupporterPassClaim {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   passId        String
   playerId      String
-  dayNumber     Int       // 1–30
-  rewardType    String    // "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT"
+  dayNumber     Int // 1–30
+  rewardType    String // "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT"
   rewardPayload Json
-  claimedAt     DateTime  @default(now())
+  claimedAt     DateTime @default(now())
 
-  pass          SupporterPass @relation(fields: [passId], references: [id], onDelete: Cascade)
+  pass SupporterPass @relation(fields: [passId], references: [id], onDelete: Cascade)
 
   @@unique([passId, dayNumber])
   @@index([playerId])
@@ -2652,16 +2733,16 @@ model SupporterPassClaim {
 
 // Sessão de Shell Game — guarda posição da bolinha no servidor (anti-cheat)
 model ShellGameSession {
-  id         String   @id @default(cuid())
-  playerId   String
-  betAmount  Int
-  ballPos    Int      // 0 | 1 | 2  — segredo até o palpite
-  resolved   Boolean  @default(false)
-  won        Boolean?
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  playerId  String
+  betAmount Int
+  ballPos   Int // 0 | 1 | 2  — segredo até o palpite
+  resolved  Boolean  @default(false)
+  won       Boolean?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([playerId])
   @@map("shell_game_sessions")
@@ -2669,14 +2750,14 @@ model ShellGameSession {
 
 // Configuração customizável do calendário do Passe Apoiador
 model PassScheduleConfig {
-  id        String   @id @default("singleton")
-  schedule  Json     // DayReward[] — 30 itens
+  id                     String   @id @default("singleton")
+  schedule               Json // DayReward[] — 30 itens
   allowRetroactiveClaims Boolean  @default(false)
-  displayTitle String?
-  description  String?
-  flavorText   String?
-  updatedAt DateTime @updatedAt
-  updatedBy String?  // userId do admin que salvou por último
+  displayTitle           String?
+  description            String?
+  flavorText             String?
+  updatedAt              DateTime @updatedAt
+  updatedBy              String? // userId do admin que salvou por último
 
   @@map("pass_schedule_config")
 }
@@ -2684,15 +2765,15 @@ model PassScheduleConfig {
 // ── Liga Semanal dos Mascotes ──────────────────────────────────
 
 model WeeklyMascotLeague {
-  id               String              @id @default(cuid())
-  weekKey          String              @unique // e.g. "2026-W26"
+  id               String                          @id @default(cuid())
+  weekKey          String                          @unique // e.g. "2026-W26"
   weekStart        DateTime
   weekEnd          DateTime
-  status           WeeklyLeagueStatus  @default(REGISTRATION)
-  modifierJson     Json?               // {id, name, description, effectType, bonusPct, ...}
+  status           WeeklyLeagueStatus              @default(REGISTRATION)
+  modifierJson     Json? // {id, name, description, effectType, bonusPct, ...}
   championPlayerId String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  createdAt        DateTime                        @default(now())
+  updatedAt        DateTime                        @updatedAt
   participants     WeeklyMascotLeagueParticipant[]
   dailyTeams       WeeklyMascotLeagueDailyTeam[]
   matches          WeeklyMascotLeagueMatch[]
@@ -2703,22 +2784,22 @@ model WeeklyMascotLeague {
 }
 
 model WeeklyMascotLeagueParticipant {
-  id             String   @id @default(cuid())
+  id             String             @id @default(cuid())
   leagueId       String
   playerId       String
-  points         Int      @default(0)
-  wins           Int      @default(0)
-  losses         Int      @default(0)
-  draws          Int      @default(0)
-  woLosses       Int      @default(0)
-  byes           Int      @default(0)
-  survivorsScore Int      @default(0)
-  damageDealt    Int      @default(0)
-  damageTaken    Int      @default(0)
+  points         Int                @default(0)
+  wins           Int                @default(0)
+  losses         Int                @default(0)
+  draws          Int                @default(0)
+  woLosses       Int                @default(0)
+  byes           Int                @default(0)
+  survivorsScore Int                @default(0)
+  damageDealt    Int                @default(0)
+  damageTaken    Int                @default(0)
   finalRank      Int?
-  rewardGranted  Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  rewardGranted  Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   league         WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, playerId])
@@ -2727,17 +2808,17 @@ model WeeklyMascotLeagueParticipant {
 }
 
 model WeeklyMascotLeagueDailyTeam {
-  id            String    @id @default(cuid())
+  id            String             @id @default(cuid())
   leagueId      String
   playerId      String
-  battleDate    String    // "YYYY-MM-DD"
-  battleSlot    Int       // 1, 2, or 3
-  source        String    @default("MANUAL") // MANUAL | AUTO_FAVORITE | AUTO_COLLECTION
-  mascotIdsJson Json      // string[] of mascot IDs
-  rolesJson     Json?     // Record<mascotId, CombatRole>
+  battleDate    String // "YYYY-MM-DD"
+  battleSlot    Int // 1, 2, or 3
+  source        String             @default("MANUAL") // MANUAL | AUTO_FAVORITE | AUTO_COLLECTION
+  mascotIdsJson Json // string[] of mascot IDs
+  rolesJson     Json? // Record<mascotId, CombatRole>
   lockedAt      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
   league        WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, playerId, battleDate, battleSlot])
@@ -2746,31 +2827,31 @@ model WeeklyMascotLeagueDailyTeam {
 }
 
 model WeeklyMascotLeagueMatch {
-  id                  String             @id @default(cuid())
-  leagueId            String
-  roundNumber         Int
-  battleDate          String             // "YYYY-MM-DD"
-  battleSlot          Int                // 1, 2, or 3
-  scheduledAt         DateTime
-  playerAId           String
-  playerBId           String?
-  winnerId            String?
-  loserId             String?
-  isDraw              Boolean            @default(false)
-  playerASurvivors    Int                @default(0)
-  playerBSurvivors    Int                @default(0)
-  playerADamageDealt  Int                @default(0)
-  playerBDamageDealt  Int                @default(0)
-  playerADamageTaken  Int                @default(0)
-  playerBDamageTaken  Int                @default(0)
-  resultJson          Json?
-  replayJson          Json?
-  status              WeeklyMatchStatus  @default(SCHEDULED)
-  resolvedAt          DateTime?
-  createdAt           DateTime           @default(now())
-  league              WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  battleItems         WeeklyMascotLeagueBattleItem[]
-  bets                WeeklyMascotLeagueBet[]
+  id                 String                         @id @default(cuid())
+  leagueId           String
+  roundNumber        Int
+  battleDate         String // "YYYY-MM-DD"
+  battleSlot         Int // 1, 2, or 3
+  scheduledAt        DateTime
+  playerAId          String
+  playerBId          String?
+  winnerId           String?
+  loserId            String?
+  isDraw             Boolean                        @default(false)
+  playerASurvivors   Int                            @default(0)
+  playerBSurvivors   Int                            @default(0)
+  playerADamageDealt Int                            @default(0)
+  playerBDamageDealt Int                            @default(0)
+  playerADamageTaken Int                            @default(0)
+  playerBDamageTaken Int                            @default(0)
+  resultJson         Json?
+  replayJson         Json?
+  status             WeeklyMatchStatus              @default(SCHEDULED)
+  resolvedAt         DateTime?
+  createdAt          DateTime                       @default(now())
+  league             WeeklyMascotLeague             @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  battleItems        WeeklyMascotLeagueBattleItem[]
+  bets               WeeklyMascotLeagueBet[]
 
   @@index([leagueId, battleDate])
   @@index([playerAId])
@@ -2779,21 +2860,21 @@ model WeeklyMascotLeagueMatch {
 }
 
 model WeeklyMascotLeagueBattleItem {
-  id             String                    @id @default(cuid())
+  id             String                   @id @default(cuid())
   leagueId       String
   matchId        String?
   playerId       String
   itemId         String
-  effectType     String                    // POSITIVE or NEGATIVE
-  targetType     String                    // SELF or OPPONENT
+  effectType     String // POSITIVE or NEGATIVE
+  targetType     String // SELF or OPPONENT
   targetPlayerId String?
   battleDate     String
   battleSlot     Int
   consumedAt     DateTime?
   refundedAt     DateTime?
-  createdAt      DateTime                  @default(now())
-  league         WeeklyMascotLeague        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  match          WeeklyMascotLeagueMatch?  @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                 @default(now())
+  league         WeeklyMascotLeague       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  match          WeeklyMascotLeagueMatch? @relation(fields: [matchId], references: [id], onDelete: SetNull)
 
   @@index([leagueId, battleDate])
   @@index([playerId])
@@ -2801,46 +2882,46 @@ model WeeklyMascotLeagueBattleItem {
 }
 
 model WeeklyMascotScoutingAggregate {
-  playerId            String   @id
-  matches             Int      @default(0)
-  wins                Int      @default(0)
-  losses              Int      @default(0)
-  draws               Int      @default(0)
-  damageDealt         BigInt   @default(0)
-  mascotUsage         Json     @default("{}")
-  typeUsage           Json     @default("{}")
-  roleUsage           Json     @default("{}")
-  recentMatches       Json     @default("[]")
-  lastProcessedAt     DateTime?
+  playerId             String    @id
+  matches              Int       @default(0)
+  wins                 Int       @default(0)
+  losses               Int       @default(0)
+  draws                Int       @default(0)
+  damageDealt          BigInt    @default(0)
+  mascotUsage          Json      @default("{}")
+  typeUsage            Json      @default("{}")
+  roleUsage            Json      @default("{}")
+  recentMatches        Json      @default("[]")
+  lastProcessedAt      DateTime?
   lastProcessedMatchId String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  player              Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  player               Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@map("weekly_mascot_scouting_aggregates")
 }
 
 model WeeklyMascotLeagueMascotStats {
-  id               String   @id @default(cuid())
+  id               String             @id @default(cuid())
   leagueId         String
   mascotId         String
   ownerId          String
   combatRole       String
-  matchesPlayed    Int      @default(0)
-  wins             Int      @default(0)
-  losses           Int      @default(0)
-  damageDealt      Int      @default(0)
-  damageTaken      Int      @default(0)
-  kosDealt         Int      @default(0)
-  kosReceived      Int      @default(0)
-  buffsApplied     Int      @default(0)
-  debuffsApplied   Int      @default(0)
-  interceptions    Int      @default(0)
-  successfulFlanks Int      @default(0)
-  healingDone      Int      @default(0)
-  turnsSurvived    Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  matchesPlayed    Int                @default(0)
+  wins             Int                @default(0)
+  losses           Int                @default(0)
+  damageDealt      Int                @default(0)
+  damageTaken      Int                @default(0)
+  kosDealt         Int                @default(0)
+  kosReceived      Int                @default(0)
+  buffsApplied     Int                @default(0)
+  debuffsApplied   Int                @default(0)
+  interceptions    Int                @default(0)
+  successfulFlanks Int                @default(0)
+  healingDone      Int                @default(0)
+  turnsSurvived    Int                @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
   league           WeeklyMascotLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, mascotId])
@@ -2850,10 +2931,10 @@ model WeeklyMascotLeagueMascotStats {
 
 // Conteúdo editável do site (textos do manual, etc.)
 model SiteContent {
-  id        String   @id  // ex: "manual"
-  data      Json     @default("{}")  // Record<string, string> — chave → texto
+  id        String   @id // ex: "manual"
+  data      Json     @default("{}") // Record<string, string> — chave → texto
   updatedAt DateTime @updatedAt
-  updatedBy String?  // userId do admin que editou por último
+  updatedBy String? // userId do admin que editou por último
 
   @@map("site_content")
 }
@@ -2881,33 +2962,34 @@ enum TraceTarget {
 }
 
 model TraceRoom {
-  id               String          @id @default(cuid())
+  id               String           @id @default(cuid())
   hiderId          String
   hiderMascotId    String
   hunterId         String?
   hunterMascotId   String?
   routeType        TraceRouteType
-  routePath        String          // JSON: ["N","S","L","O"]
-  focusPoints      Int             // remaining hider focus
-  maxFocus         Int             // initial focus (= steps + vitality bonus)
-  currentStep      Int             @default(0)
-  status           TraceRoomStatus @default(WAITING)
+  routePath        String // JSON: ["N","S","L","O"]
+  focusPoints      Int // remaining hider focus
+  maxFocus         Int // initial focus (= steps + vitality bonus)
+  currentStep      Int              @default(0)
+  status           TraceRoomStatus  @default(WAITING)
   lastHunterMoveAt DateTime?
-  sinalizadorUsed  Boolean         @default(false)
-  skipNextMove     Boolean         @default(false) // event: hunter skips next move
-  hintDirection    String?         // event-revealed correct direction hint
-  isAdminSim       Boolean         @default(false)
+  sinalizadorUsed  Boolean          @default(false)
+  skipNextMove     Boolean          @default(false) // event: hunter skips next move
+  hintDirection    String? // event-revealed correct direction hint
+  isAdminSim       Boolean          @default(false)
   expiresAt        DateTime
   resolvedAt       DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  hider            Player          @relation("TraceRoomHider", fields: [hiderId], references: [id], onDelete: Cascade)
-  hiderMascot      Mascot          @relation("TraceRoomHiderMascot", fields: [hiderMascotId], references: [id], onDelete: Cascade)
-  hunter           Player?         @relation("TraceRoomHunter", fields: [hunterId], references: [id], onDelete: Cascade)
-  hunterMascot     Mascot?         @relation("TraceRoomHunterMascot", fields: [hunterMascotId], references: [id], onDelete: Cascade)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  hider            Player           @relation("TraceRoomHider", fields: [hiderId], references: [id], onDelete: Cascade)
+  hiderMascot      Mascot           @relation("TraceRoomHiderMascot", fields: [hiderMascotId], references: [id], onDelete: Cascade)
+  hunter           Player?          @relation("TraceRoomHunter", fields: [hunterId], references: [id], onDelete: Cascade)
+  hunterMascot     Mascot?          @relation("TraceRoomHunterMascot", fields: [hunterMascotId], references: [id], onDelete: Cascade)
   moves            TraceMove[]
   randomEvents     TraceRoomEvent[]
   eventLogs        TraceEventLog[]
+
   @@index([hiderId])
   @@index([hunterId])
   @@index([status])
@@ -2922,6 +3004,7 @@ model TraceMove {
   correct   Boolean
   createdAt DateTime  @default(now())
   room      TraceRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
   @@index([roomId])
   @@map("trace_moves")
 }
@@ -2935,6 +3018,7 @@ model TraceRoomEvent {
   effectApplied Boolean     @default(false)
   createdAt     DateTime    @default(now())
   room          TraceRoom   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
   @@index([roomId])
   @@map("trace_room_events")
 }
@@ -2946,6 +3030,7 @@ model TraceEventLog {
   playerName  String
   createdAt   DateTime   @default(now())
   room        TraceRoom? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
   @@index([createdAt])
   @@map("trace_event_logs")
 }
@@ -2957,6 +3042,7 @@ model GoldenPawTransaction {
   reason    String
   createdAt DateTime @default(now())
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
   @@index([playerId])
   @@map("golden_paw_transactions")
 }
@@ -3043,30 +3129,30 @@ enum RaidNotificationType {
 }
 
 model RaidEvent {
-  id                     String          @id @default(cuid())
-  name                   String
-  slug                   String          @unique
-  villainGroupName       String          @default("Ordem da Trapaca")
-  phase                  RaidEventPhase  @default(ANNOUNCED)
-  startsAt               DateTime?
-  investigationStartsAt  DateTime?
-  hideoutFoundAt         DateTime?
-  hideoutFoundByUserId   String?
-  raidStartsAt           DateTime?
-  raidEndsAt             DateTime?
-  bossName               String          @default("Capitao Trambique")
-  bossMascotName         String          @default("Mega Sableye Trapaceiro")
-  bossPokemonId          Int             @default(302)
-  bossMegaPokemonId      Int             @default(10066)
-  bossHpMax              Int             @default(1000000)
-  bossHpCurrent          Int             @default(1000000)
-  megaActivatedAt        DateTime?
-  megaThresholdPercent   Int             @default(30)
-  bossConfigJson         Json?
-  active                 Boolean         @default(false)
-  localOnly              Boolean         @default(true)
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
+  id                    String         @id @default(cuid())
+  name                  String
+  slug                  String         @unique
+  villainGroupName      String         @default("Ordem da Trapaca")
+  phase                 RaidEventPhase @default(ANNOUNCED)
+  startsAt              DateTime?
+  investigationStartsAt DateTime?
+  hideoutFoundAt        DateTime?
+  hideoutFoundByUserId  String?
+  raidStartsAt          DateTime?
+  raidEndsAt            DateTime?
+  bossName              String         @default("Capitao Trambique")
+  bossMascotName        String         @default("Mega Sableye Trapaceiro")
+  bossPokemonId         Int            @default(302)
+  bossMegaPokemonId     Int            @default(10066)
+  bossHpMax             Int            @default(1000000)
+  bossHpCurrent         Int            @default(1000000)
+  megaActivatedAt       DateTime?
+  megaThresholdPercent  Int            @default(30)
+  bossConfigJson        Json?
+  active                Boolean        @default(false)
+  localOnly             Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   sabotages      RaidSabotage[]
   clues          RaidClue[]
@@ -3105,21 +3191,21 @@ model RaidSabotage {
 }
 
 model RaidClue {
-  id             String          @id @default(cuid())
-  raidEventId    String
-  clueText       String          @db.Text
-  rarity         RaidClueRarity  @default(COMMON)
-  quality        RaidClueQuality @default(OK)
-  relatedStepKey String?
-  visible        Boolean         @default(false)
-  releasedAt     DateTime?
-  discoveredAt   DateTime?
+  id                   String          @id @default(cuid())
+  raidEventId          String
+  clueText             String          @db.Text
+  rarity               RaidClueRarity  @default(COMMON)
+  quality              RaidClueQuality @default(OK)
+  relatedStepKey       String?
+  visible              Boolean         @default(false)
+  releasedAt           DateTime?
+  discoveredAt         DateTime?
   discoveredByPlayerId String?
-  sortOrder      Int             @default(0)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  event          RaidEvent       @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
-  discoveredBy   Player?         @relation("RaidClueDiscoverer", fields: [discoveredByPlayerId], references: [id], onDelete: SetNull)
+  sortOrder            Int             @default(0)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  event                RaidEvent       @relation(fields: [raidEventId], references: [id], onDelete: Cascade)
+  discoveredBy         Player?         @relation("RaidClueDiscoverer", fields: [discoveredByPlayerId], references: [id], onDelete: SetNull)
 
   @@unique([raidEventId, sortOrder])
   @@index([raidEventId, visible, releasedAt])
@@ -3151,7 +3237,7 @@ model RaidMysteryStep {
 }
 
 model RaidHiddenInteraction {
-  id                  String              @id @default(cuid())
+  id                   String              @id @default(cuid())
   raidEventId          String
   stepKey              String
   pageKey              String
@@ -3207,7 +3293,7 @@ model RaidPasswordStamp {
 
 model RaidBattleAttempt {
   id                  String           @id @default(cuid())
-  raidEventId          String
+  raidEventId         String
   playerId            String
   teamSnapshotJson    Json
   bossSnapshotJson    Json
@@ -3227,7 +3313,7 @@ model RaidBattleAttempt {
 
 model RaidDamageRanking {
   id                  String    @id @default(cuid())
-  raidEventId          String
+  raidEventId         String
   playerId            String
   totalDamage         Int       @default(0)
   battleCount         Int       @default(0)
@@ -3249,7 +3335,7 @@ model RaidDamageRanking {
 
 model UserRaidNotification {
   id               String               @id @default(cuid())
-  raidEventId       String
+  raidEventId      String
   userId           String
   notificationType RaidNotificationType
   seenAt           DateTime?

@@ -55,6 +55,9 @@ function CreateListingForm() {
   const [category, setCategory] = useState<BazarItemCategory | "">("");
   const [listingType, setListingType] = useState<BazarListingType>("SALE");
   const [priceCoins, setPriceCoins] = useState("");
+  const [loanEnabled, setLoanEnabled] = useState(false);
+  const [loanAmountCoins, setLoanAmountCoins] = useState("");
+  const [loanInterestPct, setLoanInterestPct] = useState("0");
   const [wantedDesc, setWantedDesc] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState<7 | 14 | 30>(7);
@@ -103,6 +106,9 @@ function CreateListingForm() {
             category: category as BazarItemCategory,
             listingType,
             priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
+            loanEnabled,
+            loanAmountCoins: loanEnabled ? parseInt(loanAmountCoins || priceCoins) : undefined,
+            loanInterestPct: loanEnabled ? parseInt(loanInterestPct || "0") : undefined,
             wantedDesc: wantedDesc || undefined,
             description: description || undefined,
             durationDays: duration,
@@ -129,6 +135,7 @@ function CreateListingForm() {
     if (category === "ITEM" && (!selectedItem || itemQuantity < 1)) return false;
     if (isAuction) return !!minBid && parseInt(minBid) >= 1;
     if (listingType !== "TRADE" && (!priceCoins || parseInt(priceCoins) < 1)) return false;
+    if (loanEnabled && parseInt(loanAmountCoins || priceCoins) < 1) return false;
     return true;
   };
 
@@ -468,6 +475,33 @@ function CreateListingForm() {
               value={priceCoins} onChange={e => setPriceCoins(e.target.value.replace(/\D/g, ""))}
               placeholder="Ex: 2500"
               className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+          </div>
+        )}
+
+        {category && !isAuction && (
+          <div className="space-y-3 rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="checkbox" checked={loanEnabled} onChange={(event) => setLoanEnabled(event.target.checked)} className="mt-0.5 h-4 w-4 accent-cyan-400" />
+              <span>
+                <strong className="block text-sm text-cyan-100">Aceitar proposta de empréstimo</strong>
+                <span className="text-[10px] leading-relaxed text-slate-400">O comprador recebe o anúncio agora e fica devendo o valor financiado. O sistema registra parcelas, mas não cobra automaticamente.</span>
+              </span>
+            </label>
+            {loanEnabled && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-[11px] text-slate-300">
+                  Valor financiado
+                  <input type="number" min={1} value={loanAmountCoins} onChange={(event) => setLoanAmountCoins(event.target.value.replace(/\D/g, ""))} placeholder={priceCoins || "Ex: 2500"} className="mt-1 w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none" />
+                </label>
+                <label className="text-[11px] text-slate-300">
+                  Juros totais (%)
+                  <input type="number" min={0} max={100} value={loanInterestPct} onChange={(event) => setLoanInterestPct(event.target.value.replace(/\D/g, "").slice(0, 3))} className="mt-1 w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none" />
+                </label>
+                <p className="sm:col-span-2 text-[10px] text-cyan-200/70">
+                  Total prometido: {Math.ceil((parseInt(loanAmountCoins || priceCoins) || 0) * (100 + (parseInt(loanInterestPct) || 0)) / 100).toLocaleString("pt-BR")} ZC. Contrato de boa-fé, sem cobrança ou punição automática.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

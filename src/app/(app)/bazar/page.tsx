@@ -115,6 +115,9 @@ export default async function BazarPage({
                 className="rounded-xl border border-border px-3 py-2 text-xs text-slate-400 hover:text-slate-200 transition-colors">
                 Meus Anúncios
               </Link>
+              <Link href="/bazar/devedores" className="rounded-xl border border-orange-500/25 px-3 py-2 text-xs text-orange-200 hover:bg-orange-500/10">
+                Ranking de Devedores
+              </Link>
               <Link href="/bazar/criar"
                 className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors">
                 <Plus size={13}/> Anunciar

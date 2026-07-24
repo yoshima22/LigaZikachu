@@ -27,10 +27,12 @@ interface MyListing {
   status: string;
   payload: Record<string, unknown>;
   priceCoins: number | null;
+  loanAmountCoins: number | null;
+  loanInterestPct: number | null;
   expiresAt: Date;
   createdAt: Date;
   proposals: Array<{
-    id: string; proposerName: string; coinsOffer: number;
+    id: string; proposerName: string; coinsOffer: number; loanRequested: boolean;
     itemsOffer: Array<{ type: string; quantity: number; displayName: string; mascotId?: string }> | null;
     message: string | null; status: string; createdAt: Date;
   }>;
@@ -42,6 +44,7 @@ interface SentProposal {
   sellerName: string;
   listingPayload: Record<string, unknown>;
   coinsOffer: number;
+  loanRequested: boolean;
   itemsOffer: Array<{ type: string; quantity: number; displayName: string; mascotId?: string }> | null;
   message: string | null;
   status: string;
@@ -141,6 +144,7 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                           {p.coinsOffer > 0 && (
                             <p className="text-[11px] text-[#FFCB05] flex items-center gap-0.5"><Coins size={9}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC</p>
                           )}
+                          {p.loanRequested && <p className="text-[10px] font-bold text-cyan-300">Empréstimo: {(l.loanAmountCoins ?? 0).toLocaleString("pt-BR")} ZC a {l.loanInterestPct ?? 0}%</p>}
                           {proposalItemsText(p.itemsOffer) && (
                             <p className="text-[10px] text-slate-400 truncate">+ {proposalItemsText(p.itemsOffer)}</p>
                           )}
@@ -148,11 +152,14 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                         </div>
                         <div className="flex gap-1.5 shrink-0">
                           <button type="button" disabled={pending}
-                            onClick={() => startTransition(async () => {
+                            onClick={() => {
+                              if (p.loanRequested && !confirm("O item será entregue agora sem pagamento. O sistema não cobra a dívida automaticamente. Aceitar mesmo assim?")) return;
+                              startTransition(async () => {
                               const r = await acceptProposal(p.id);
                               if (r.error) toast.error(r.error);
                               else { toast.success("Proposta aceita!"); router.refresh(); }
-                            })}
+                              });
+                            }}
                             className="rounded-lg border border-green-500/30 bg-green-500/10 p-1.5 text-green-400 hover:bg-green-500/20 disabled:opacity-50">
                             <Check size={12}/>
                           </button>
@@ -194,6 +201,7 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                       {p.coinsOffer > 0 && (
                         <p className="text-[11px] text-[#FFCB05] flex items-center gap-0.5 mt-0.5"><Coins size={9}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC</p>
                       )}
+                      {p.loanRequested && <p className="mt-0.5 text-[11px] font-bold text-cyan-300">Proposta de empréstimo</p>}
                       {proposalItemsText(p.itemsOffer) && (
                         <p className="text-[10px] text-slate-400 truncate mt-0.5">+ {proposalItemsText(p.itemsOffer)}</p>
                       )}

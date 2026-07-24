@@ -34,6 +34,7 @@ interface ProposalItem {
   createdAt: Date;
   proposer: { id: string; displayName: string; avatarUrl: string | null };
   itemsOffer?: ProposalOfferedItem[] | null;
+  loanRequested: boolean;
 }
 
 interface AuctionBidItem {
@@ -53,6 +54,9 @@ interface ListingDetail {
   priceCoins: number | null;
   description: string | null;
   wantedDesc: string | null;
+  loanEnabled: boolean;
+  loanAmountCoins: number | null;
+  loanInterestPct: number | null;
   expiresAt: Date;
   player: {
     id: string;
@@ -143,6 +147,9 @@ export default function BazarListingPage(): React.JSX.Element {
         priceCoins: raw.priceCoins,
         description: raw.description ?? null,
         wantedDesc: raw.wantedDesc ?? null,
+        loanEnabled: raw.loanEnabled,
+        loanAmountCoins: raw.loanAmountCoins,
+        loanInterestPct: raw.loanInterestPct,
         expiresAt: raw.expiresAt,
         player: raw.player,
         proposals: (raw.proposals ?? []).map(p => ({
@@ -155,6 +162,7 @@ export default function BazarListingPage(): React.JSX.Element {
           itemsOffer: Array.isArray(p.itemsOffer)
             ? (p.itemsOffer as unknown as ProposalOfferedItem[])
             : null,
+          loanRequested: p.loanRequested,
         })),
         auctionBids: (raw.auctionBids ?? []).map(b => ({
           id: b.id, amount: b.amount, createdAt: b.createdAt, player: b.player,
@@ -248,6 +256,19 @@ export default function BazarListingPage(): React.JSX.Element {
     });
   };
 
+  const handleLoanProposal = () => {
+    if (!listing?.loanEnabled || !listing.loanAmountCoins) return;
+    const total = Math.ceil(listing.loanAmountCoins * (100 + (listing.loanInterestPct ?? 0)) / 100);
+    if (!confirm(`Solicitar empréstimo? Você receberá o item agora e reconhecerá uma dívida de ${total.toLocaleString("pt-BR")} ZC. O acordo é de boa-fé e não há cobrança automática.`)) return;
+    startTransition(async () => {
+      const r = await createProposal(id, 0, proposalMsg || undefined, undefined, true);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success("Proposta de empréstimo enviada.");
+      setProposalMsg("");
+      reloadListing();
+    });
+  };
+
   const handleFavorite = () => {
     startTransition(async () => {
       const r = await toggleFavorite(id);
@@ -256,6 +277,8 @@ export default function BazarListingPage(): React.JSX.Element {
   };
 
   const handleAccept = (proposalId: string) => {
+    const selected = listing?.proposals.find((proposal) => proposal.id === proposalId);
+    if (selected?.loanRequested && !confirm("Aceitar transfere o item agora e registra a dívida. O sistema não garante nem força o pagamento. Continuar?")) return;
     startTransition(async () => {
       const r = await acceptProposal(proposalId);
       if (r.error) { toast.error(r.error); return; }
@@ -584,6 +607,22 @@ export default function BazarListingPage(): React.JSX.Element {
                 </button>
               )}
 
+              {listing.loanEnabled && listing.loanAmountCoins && (
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-bold text-cyan-200">Solicitar por empréstimo</p>
+                    <p className="mt-1 text-xs text-slate-300">
+                      Principal: <strong>{listing.loanAmountCoins.toLocaleString("pt-BR")} ZC</strong> · Juros: <strong>{listing.loanInterestPct ?? 0}%</strong> · Total: <strong>{Math.ceil(listing.loanAmountCoins * (100 + (listing.loanInterestPct ?? 0)) / 100).toLocaleString("pt-BR")} ZC</strong>
+                    </p>
+                    <p className="mt-2 text-[10px] leading-relaxed text-orange-200">Acordo completamente de boa-fé. O sistema registra a dívida e os pagamentos, mas não cobra automaticamente nem garante o recebimento.</p>
+                  </div>
+                  <textarea value={proposalMsg} onChange={(event) => setProposalMsg(event.target.value)} placeholder="Mensagem ao vendedor (opcional)…" rows={2} className="w-full rounded-lg border border-cyan-500/20 bg-slate-950 px-3 py-2 text-xs text-white outline-none" />
+                  <button type="button" disabled={pending} onClick={handleLoanProposal} className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-40">
+                    Enviar proposta de empréstimo
+                  </button>
+                </div>
+              )}
+
               {isTrade && (
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
                   <p className="text-sm font-semibold text-blue-400 flex items-center gap-2">
@@ -639,7 +678,7 @@ export default function BazarListingPage(): React.JSX.Element {
                 <div key={p.id} className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-slate-300">
-                      {p.coinsOffer > 0 ? `${p.coinsOffer.toLocaleString("pt-BR")} ZC` : "Sem ZikaCoins"}
+                      {p.loanRequested ? "Empréstimo solicitado" : p.coinsOffer > 0 ? `${p.coinsOffer.toLocaleString("pt-BR")} ZC` : "Sem ZikaCoins"}
                     </span>
                     <span className={`text-[10px] font-semibold ${PROPOSAL_STATUS_COLOR[p.status] ?? "text-slate-400"}`}>
                       {PROPOSAL_STATUS_LABEL[p.status] ?? p.status}
@@ -689,6 +728,12 @@ export default function BazarListingPage(): React.JSX.Element {
                     <p className="text-sm text-[#FFCB05] flex items-center gap-1">
                       <Coins size={12}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC
                     </p>
+                  )}
+                  {p.loanRequested && (
+                    <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                      Empréstimo de {(listing.loanAmountCoins ?? 0).toLocaleString("pt-BR")} ZC a {listing.loanInterestPct ?? 0}% · total devido {Math.ceil((listing.loanAmountCoins ?? 0) * (100 + (listing.loanInterestPct ?? 0)) / 100).toLocaleString("pt-BR")} ZC.
+                      <p className="mt-1 text-[10px] text-orange-200">Ao aceitar, o item é transferido sem pagamento imediato. Cobrança não automática.</p>
+                    </div>
                   )}
                   {p.itemsOffer && p.itemsOffer.length > 0 && (
                     <ProposalItemsInline items={p.itemsOffer} />

@@ -296,6 +296,7 @@ export async function getListings(filters?: {
   const select = {
     id: true, category: true, listingType: true, status: true,
     payload: true, priceCoins: true, description: true, wantedDesc: true,
+    loanEnabled: true, loanAmountCoins: true, loanInterestPct: true,
     expiresAt: true, createdAt: true, views: true,
     minBidCoins: true, currentBidCoins: true, auctionEndsAt: true,
     player: { select: { id: true, displayName: true, avatarUrl: true } },
@@ -466,6 +467,9 @@ export interface CreateListingInput {
   priceCoins?: number;
   wantedDesc?: string;
   description?: string;
+  loanEnabled?: boolean;
+  loanAmountCoins?: number;
+  loanInterestPct?: number;
   durationDays: 7 | 14 | 30;
   // Mascot
   mascotId?: string;
@@ -490,6 +494,13 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     // Validação básica
     if (input.listingType !== "TRADE" && (!input.priceCoins || input.priceCoins < 1)) {
       return { error: "Defina um preço válido em ZikaCoins." };
+    }
+    const loanEnabled = Boolean(input.loanEnabled);
+    const loanAmountCoins = Math.floor(Number(input.loanAmountCoins) || 0);
+    const loanInterestPct = Math.floor(Number(input.loanInterestPct) || 0);
+    if (loanEnabled && loanAmountCoins < 1) return { error: "Defina o valor financiado do empréstimo." };
+    if (loanEnabled && (loanInterestPct < 0 || loanInterestPct > 100)) {
+      return { error: "Os juros do empréstimo devem ficar entre 0% e 100%." };
     }
 
     // Limite de 8 anúncios ativos por jogador
@@ -630,6 +641,9 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           priceCoins: input.listingType !== "TRADE" ? input.priceCoins : null,
           wantedDesc: input.wantedDesc,
           description: input.description,
+          loanEnabled,
+          loanAmountCoins: loanEnabled ? loanAmountCoins : null,
+          loanInterestPct: loanEnabled ? loanInterestPct : null,
           feeCharged: fee,
           expiresAt,
         },
@@ -838,7 +852,8 @@ export async function createProposal(
   listingId: string,
   coinsOffer: number,
   message?: string,
-  itemsOffer?: ProposalOfferItem[]
+  itemsOffer?: ProposalOfferItem[],
+  loanRequested = false,
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -857,7 +872,12 @@ export async function createProposal(
     if (listing.playerId === player.id) return { error: "Você não pode propor no seu próprio anúncio." };
     await assertBazarPairAllowed(prisma, player.id, listing.playerId);
 
-    const reservedCoins = Math.max(0, Math.floor(Number(coinsOffer) || 0));
+    if (loanRequested && !listing.loanEnabled) return { error: "Este anúncio não aceita empréstimo." };
+    if (loanRequested && (!listing.loanAmountCoins || listing.loanAmountCoins < 1)) return { error: "O empréstimo deste anúncio está inválido." };
+    if (loanRequested && (itemsOffer?.length || Number(coinsOffer) > 0)) {
+      return { error: "A proposta de empréstimo não pode combinar entrada em ZC ou itens." };
+    }
+    const reservedCoins = loanRequested ? 0 : Math.max(0, Math.floor(Number(coinsOffer) || 0));
 
     if (reservedCoins > 0) {
       const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
@@ -906,6 +926,7 @@ export async function createProposal(
           coinsOffer: reservedCoins,
           coinsEscrowed: reservedCoins > 0,
           message,
+          loanRequested,
           itemsOffer: reservedItems.length > 0
             ? reservedItems as unknown as import("@prisma/client").Prisma.InputJsonValue
             : undefined,
@@ -945,7 +966,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     await assertBazarPairAllowed(prisma, proposal.proposerId, proposal.listing.playerId);
 
     // Propostas novas jÃ¡ reservam ZC ao serem criadas. Este bloco preserva propostas antigas.
-    if (proposal.coinsOffer > 0 && !proposal.coinsEscrowed) {
+    if (!proposal.loanRequested && proposal.coinsOffer > 0 && !proposal.coinsEscrowed) {
       const proposerWallet = await prisma.zikaCoinWallet.findUnique({
         where: { playerId: proposal.proposerId },
       });
@@ -977,7 +998,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       });
 
       // Transferir coins (proponente → dono do anúncio)
-      if (proposal.coinsOffer > 0) {
+      if (!proposal.loanRequested && proposal.coinsOffer > 0) {
         if (!proposal.coinsEscrowed) {
           await tx.zikaCoinWallet.update({
             where: { playerId: proposal.proposerId },
@@ -1059,11 +1080,32 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       // Transferir item para o proponente
       await _transferItem(tx, listing, proposal.proposerId);
 
+      if (proposal.loanRequested) {
+        const principal = listing.loanAmountCoins ?? 0;
+        const interestPct = listing.loanInterestPct ?? 0;
+        if (!listing.loanEnabled || principal < 1) throw new Error("As condições do empréstimo não estão mais disponíveis.");
+        await tx.bazarLoan.create({
+          data: {
+            listingId: listing.id,
+            proposalId: proposal.id,
+            lenderId: player.id,
+            borrowerId: proposal.proposerId,
+            principalCoins: principal,
+            interestPct,
+            totalDueCoins: Math.ceil(principal * (100 + interestPct) / 100),
+            itemSnapshot: listing.payload as import("@prisma/client").Prisma.InputJsonValue,
+          },
+        });
+      }
+
       // Log
       const payload = listing.payload as Record<string, unknown>;
+      const loanDescription = proposal.loanRequested
+        ? ` por empréstimo de ${listing.loanAmountCoins} ZC a ${listing.loanInterestPct ?? 0}%`
+        : proposal.coinsOffer > 0 ? ` por ${proposal.coinsOffer} ZC` : "";
       const desc = listing.category === "MASCOT"
-        ? `${payload.nickname ?? payload.pokemonName} Nv.${payload.level} trocado${proposal.coinsOffer > 0 ? ` por ${proposal.coinsOffer} ZC` : ""}`
-        : `${payload.displayName} trocado${proposal.coinsOffer > 0 ? ` por ${proposal.coinsOffer} ZC` : ""}`;
+        ? `${payload.nickname ?? payload.pokemonName} Nv.${payload.level} trocado${loanDescription}`
+        : `${payload.displayName} trocado${loanDescription}`;
 
       await tx.bazarTransaction.create({
         data: {
@@ -1073,7 +1115,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
           sellerName: listing.player.displayName,
           buyerName: proposal.proposer.displayName,
           description: desc,
-          coinsAmount: proposal.coinsOffer,
+          coinsAmount: proposal.loanRequested ? 0 : proposal.coinsOffer,
           category: listing.category,
         },
       });
@@ -1171,6 +1213,98 @@ function purchaseStatusFromQuota(
     .filter((value) => value > now)
     .sort((a, b) => a.getTime() - b.getTime());
   return { available: 2 - rechargeAt.length, rechargeAt: rechargeAt.map((value) => value.toISOString()) };
+}
+
+export async function payBazarLoan(loanId: string, requestedAmount: number): Promise<{ error?: string; paid?: number; remaining?: number }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const amount = Math.floor(Number(requestedAmount) || 0);
+    if (amount < 1) return { error: "Informe uma parcela válida." };
+
+    const result = await prisma.$transaction(async (tx) => {
+      const loan = await tx.bazarLoan.findUnique({
+        where: { id: loanId },
+        include: {
+          lender: { select: { userId: true, displayName: true } },
+          borrower: { select: { displayName: true } },
+        },
+      });
+      if (!loan || loan.borrowerId !== player.id) throw new Error("Empréstimo não encontrado.");
+      if (loan.status !== "ACTIVE") throw new Error("Este empréstimo não está ativo.");
+
+      const remainingBefore = loan.totalDueCoins - loan.amountPaidCoins;
+      const payment = Math.min(amount, remainingBefore);
+      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < payment) throw new Error(`Saldo insuficiente. Disponível: ${wallet?.balance ?? 0} ZC.`);
+
+      const lenderWallet = await tx.zikaCoinWallet.upsert({
+        where: { playerId: loan.lenderId },
+        update: {},
+        create: { playerId: loan.lenderId, balance: 0 },
+      });
+      const remaining = remainingBefore - payment;
+      const reserved = await tx.bazarLoan.updateMany({
+        where: { id: loanId, status: "ACTIVE", amountPaidCoins: loan.amountPaidCoins },
+        data: {
+          amountPaidCoins: { increment: payment },
+          status: remaining === 0 ? "PAID" : "ACTIVE",
+          paidAt: remaining === 0 ? new Date() : null,
+        },
+      });
+      if (reserved.count !== 1) throw new Error("A dívida foi atualizada em outra operação. Tente novamente.");
+
+      await tx.zikaCoinWallet.update({
+        where: { playerId: player.id },
+        data: { balance: { decrement: payment }, totalSpent: { increment: payment } },
+      });
+      await tx.zikaCoinWallet.update({
+        where: { playerId: loan.lenderId },
+        data: { balance: { increment: payment }, totalEarned: { increment: payment } },
+      });
+      await tx.zikaCoinTransaction.createMany({
+        data: [
+          {
+            walletId: wallet.id,
+            type: "ADMIN_ADJUSTMENT",
+            amount: -payment,
+            balanceBefore: wallet.balance,
+            balanceAfter: wallet.balance - payment,
+            description: `Parcela de empréstimo para ${loan.lender.displayName}`,
+          },
+          {
+            walletId: lenderWallet.id,
+            type: "ADMIN_ADJUSTMENT",
+            amount: payment,
+            balanceBefore: lenderWallet.balance,
+            balanceAfter: lenderWallet.balance + payment,
+            description: `Parcela de empréstimo recebida de ${loan.borrower.displayName}`,
+          },
+        ],
+      });
+      await tx.bazarLoanPayment.create({
+        data: {
+          loanId,
+          payerId: player.id,
+          receiverId: loan.lenderId,
+          amountCoins: payment,
+          remainingCoins: remaining,
+        },
+      });
+      return { payment, remaining, lenderUserId: loan.lender.userId };
+    });
+
+    revalidatePath("/bazar/emprestimos");
+    revalidatePath("/bazar/devedores");
+    revalidateTag(`nav-${user.id}`);
+    revalidateTag(`nav-${result.lenderUserId}`);
+    return { paid: result.payment, remaining: result.remaining };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível pagar a parcela." };
+  }
 }
 
 export async function getMiauvadaoPurchaseStatus(playerId: string | null): Promise<MiauvadaoPurchaseStatus> {

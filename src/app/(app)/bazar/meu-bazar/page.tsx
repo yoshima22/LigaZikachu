@@ -2,7 +2,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, HandCoins, Plus } from "lucide-react";
 import { MyListingsClient } from "./_client";
 import { markBazarProposalsViewed } from "../actions";
 
@@ -70,10 +70,13 @@ export default async function MeuBazarPage() {
             </p>
           </div>
         </div>
-        <Link href="/bazar/criar"
-          className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700]">
-          <Plus size={12}/> Novo
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/bazar/emprestimos" className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200"><HandCoins size={12}/> Meus empréstimos</Link>
+          <Link href="/bazar/criar"
+            className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-3 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700]">
+            <Plus size={12}/> Novo
+          </Link>
+        </div>
       </div>
 
       <MyListingsClient
@@ -84,12 +87,15 @@ export default async function MeuBazarPage() {
           status: l.status,
           payload: l.payload as Record<string, unknown>,
           priceCoins: l.priceCoins,
+          loanAmountCoins: l.loanAmountCoins,
+          loanInterestPct: l.loanInterestPct,
           expiresAt: l.expiresAt,
           createdAt: l.createdAt,
           proposals: l.proposals.map(p => ({
             id: p.id,
             proposerName: p.proposer.displayName,
             coinsOffer: p.coinsOffer,
+            loanRequested: p.loanRequested,
             itemsOffer: Array.isArray(p.itemsOffer)
               ? p.itemsOffer as Array<{ type: string; quantity: number; displayName: string; mascotId?: string }>
               : null,
@@ -104,6 +110,7 @@ export default async function MeuBazarPage() {
           sellerName: p.listing.player.displayName,
           listingPayload: p.listing.payload as Record<string, unknown>,
           coinsOffer: p.coinsOffer,
+          loanRequested: p.loanRequested,
           itemsOffer: Array.isArray(p.itemsOffer)
             ? p.itemsOffer as Array<{ type: string; quantity: number; displayName: string; mascotId?: string }>
             : null,
