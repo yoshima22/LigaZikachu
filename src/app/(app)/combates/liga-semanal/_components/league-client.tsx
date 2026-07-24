@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
+import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import {
   startWeeklyLeagueNowAction,
   joinLeagueAction,
@@ -702,19 +703,22 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                     <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
                     <p className="text-[10px] font-semibold text-slate-200 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
                     <p className="text-[9px] text-slate-400">Nv.{m.level}</p>
-                    <select
-                      value={currentRole ?? "ATTACKER"}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setRoles(prev => ({ ...prev, [m.id]: e.target.value }))}
-                      title={currentRole ? COMBAT_ROLE_DESCRIPTIONS[currentRole] : ""}
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[9px] font-semibold text-yellow-300 outline-none hover:border-yellow-500/50"
-                    >
-                      {COMBAT_ROLE_OPTIONS.map(r => (
-                        <option key={r.value} value={r.value} title={r.description}>
-                          {r.label}{r.value === recRole ? " ★" : ""}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex w-full items-center gap-1">
+                      <select
+                        value={currentRole ?? "ATTACKER"}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setRoles(prev => ({ ...prev, [m.id]: e.target.value }))}
+                        title={currentRole ? COMBAT_ROLE_DESCRIPTIONS[currentRole] : ""}
+                        className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[9px] font-semibold text-yellow-300 outline-none hover:border-yellow-500/50"
+                      >
+                        {COMBAT_ROLE_OPTIONS.map(r => (
+                          <option key={r.value} value={r.value} title={r.description}>
+                            {r.label}{r.value === recRole ? " ★" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <CombatRoleHelpButton role={currentRole} stats={m} teamStats={selectedMascots as any[]} mode="LEAGUE" className="h-5 w-5" />
+                    </div>
                     {recRole && currentRole !== recRole && (
                       <p className="text-[8px] text-cyan-400">Sugerido: {getCombatRoleLabel(recRole)}</p>
                     )}
@@ -1247,7 +1251,10 @@ function ColinhaTab() {
         <div className="space-y-2">
           {COMBAT_ROLE_OPTIONS.map(({ value, label, description }) => (
             <div key={value} className="rounded-lg bg-slate-800/50 px-3 py-2">
-              <p className="text-xs font-semibold text-yellow-300">{label}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-yellow-300">{label}</p>
+                <CombatRoleHelpButton role={value} mode="LEAGUE" className="h-5 w-5" />
+              </div>
               <p className="text-[10px] text-slate-400">{description}</p>
             </div>
           ))}

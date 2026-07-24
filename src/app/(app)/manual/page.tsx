@@ -3,6 +3,8 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getManualContent } from "@/lib/manual-content";
 import { EditableText } from "./_components/EditableText";
+import { CombatRoleHelpButton } from "@/components/combat-role-help";
+import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
 
 function Section({ id, title, emoji, children }: { id: string; title: string; emoji: string; children: React.ReactNode }) {
   return (
@@ -410,6 +412,17 @@ export default async function ManualPage() {
 
       {/* ── 7. Posturas ───────────────────────────────────────────────────── */}
       <Section id="posturas" title="Posturas de Combate" emoji="🧭">
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <p className="text-xs font-semibold text-cyan-200">Abra uma postura para ver turnos, iniciativa, alvos e fórmulas detalhadas.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {COMBAT_ROLE_OPTIONS.map((role) => (
+              <div key={role.value} className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1 text-[10px] text-slate-300">
+                <span>{role.label}</span>
+                <CombatRoleHelpButton role={role.value} mode="GENERAL" className="h-5 w-5" />
+              </div>
+            ))}
+          </div>
+        </div>
         <Sub title="Efeitos por postura">
           <Table
             headers={["Postura", "Atributos diretos", "Efeito em números"]}

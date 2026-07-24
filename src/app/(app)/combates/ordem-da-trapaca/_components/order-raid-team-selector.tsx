@@ -7,6 +7,7 @@ import { Search, X } from "lucide-react";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { attackOrderRaidBossAction } from "../actions";
+import { CombatRoleHelpButton } from "@/components/combat-role-help";
 
 type RaidMascot = {
   id: string;
@@ -240,13 +241,16 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-slate-100">{nameOf(mascot)}</p>
                   <p className="text-[10px] text-slate-500">Nv.{mascot.level} · Σ{total(mascot)}</p>
-                  <select
-                    value={roles[mascot.id] ?? recommended(mascot)}
-                    onChange={(event) => setRoles((currentRoles) => ({ ...currentRoles, [mascot.id]: event.target.value as CombatRole }))}
-                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-slate-200"
-                  >
-                    {COMBAT_ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                  </select>
+                  <div className="mt-1 flex items-center gap-1">
+                    <select
+                      value={roles[mascot.id] ?? recommended(mascot)}
+                      onChange={(event) => setRoles((currentRoles) => ({ ...currentRoles, [mascot.id]: event.target.value as CombatRole }))}
+                      className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-slate-200"
+                    >
+                      {COMBAT_ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                    </select>
+                    <CombatRoleHelpButton role={roles[mascot.id] ?? recommended(mascot)} stats={mascot} teamStats={selectedMascots} mode="RAID" />
+                  </div>
                 </div>
                 <button type="button" onClick={() => toggle(mascot)} className="rounded px-2 py-1 text-xs font-black text-red-300 hover:bg-red-500/10">x</button>
               </div>

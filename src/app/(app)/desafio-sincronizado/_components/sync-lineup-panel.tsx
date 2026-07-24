@@ -7,6 +7,7 @@ import { Lock, Search, Unlock, X, CheckCircle2, Clock } from "lucide-react";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
 import { getStaticSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { addLineupMascotAction, lockLineupAction, removeLineupMascotAction, adminClearLineupAction, setLineupCombatRoleAction } from "../lineup-actions";
+import { CombatRoleHelpButton } from "@/components/combat-role-help";
 
 interface LineupEntry {
   id: string;
@@ -127,17 +128,20 @@ export function SyncLineupPanel({
                         {entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId)}
                       </p>
                       <p className="text-[9px] text-slate-500">Nv.{entry.mascot.level}</p>
-                      <select
-                        value={normalizeCombatRole(entry.combatRole)}
-                        disabled={pending}
-                        onChange={(event) => act(() => setLineupCombatRoleAction(entry.mascotId, event.target.value))}
-                        className="mt-0.5 w-full rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[8px] font-semibold text-slate-300 outline-none hover:border-[#FFCB05]/50 disabled:opacity-50"
-                        title={myLocked ? "Escalacao travada: voce ainda pode ajustar a postura." : "Postura de combate"}
-                      >
-                        {COMBAT_ROLE_OPTIONS.map((role) => (
-                          <option key={role.value} value={role.value}>{role.label}</option>
-                        ))}
-                      </select>
+                      <div className="mt-0.5 flex w-full items-center gap-1">
+                        <select
+                          value={normalizeCombatRole(entry.combatRole)}
+                          disabled={pending}
+                          onChange={(event) => act(() => setLineupCombatRoleAction(entry.mascotId, event.target.value))}
+                          className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[8px] font-semibold text-slate-300 outline-none hover:border-[#FFCB05]/50 disabled:opacity-50"
+                          title={myLocked ? "Escalacao travada: voce ainda pode ajustar a postura." : "Postura de combate"}
+                        >
+                          {COMBAT_ROLE_OPTIONS.map((role) => (
+                            <option key={role.value} value={role.value}>{role.label}</option>
+                          ))}
+                        </select>
+                        <CombatRoleHelpButton role={entry.combatRole} mode="SYNC" className="h-5 w-5" />
+                      </div>
                       {!myLocked && (
                         <button
                           type="button"

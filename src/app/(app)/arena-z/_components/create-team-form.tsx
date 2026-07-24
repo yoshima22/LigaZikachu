@@ -7,6 +7,7 @@ import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
+import { CombatRoleHelpButton } from "@/components/combat-role-help";
 
 export interface ValidMascot {
   id: string;
@@ -289,16 +290,19 @@ function SelectedBar({
                 <p className="text-[9px] text-slate-500">
                   Nv.{m.level} - Recomendada: <span className="text-[#FFCB05]">{getCombatRoleLabel(recommended)}</span>
                 </p>
-                <select
-                  value={role}
-                  onChange={(event) => onRoleChange(m.id, event.target.value as CombatRole)}
-                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 outline-none hover:border-[#FFCB05]/40"
-                  title="Postura deste mascote na equipe"
-                >
-                  {COMBAT_ROLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <div className="mt-1 flex items-center gap-1">
+                  <select
+                    value={role}
+                    onChange={(event) => onRoleChange(m.id, event.target.value as CombatRole)}
+                    className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 outline-none hover:border-[#FFCB05]/40"
+                    title="Postura deste mascote na equipe"
+                  >
+                    {COMBAT_ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <CombatRoleHelpButton role={role} stats={m} teamStats={selList} mode="ARENA" />
+                </div>
               </div>
             </div>
           );
@@ -473,7 +477,10 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-5">
           {COMBAT_ROLE_OPTIONS.map((role) => (
             <div key={role.value} className="rounded-lg border border-slate-800 bg-slate-900/50 p-2">
-              <p className="text-[10px] font-bold text-slate-200">{role.label}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold text-slate-200">{role.label}</p>
+                <CombatRoleHelpButton role={role.value} mode="ARENA" className="h-5 w-5" />
+              </div>
               <p className="mt-0.5 text-[9px] leading-snug text-slate-500">{role.description}</p>
             </div>
           ))}

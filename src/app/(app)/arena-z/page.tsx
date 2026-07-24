@@ -948,7 +948,13 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                         </p>
                         <p className="text-[10px] text-slate-500">Nv.{member.mascot.level} · {stateLabel(member.mascot.arenaState, member.mascot.restingUntil)}</p>
                         {team.status === "ACTIVE" && (
-                          <CombatRoleSelect teamId={team.id} mascotId={member.mascotId} value={member.combatRole} />
+                          <CombatRoleSelect
+                            teamId={team.id}
+                            mascotId={member.mascotId}
+                            value={member.combatRole}
+                            stats={{ ...member.mascot, name: member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId) }}
+                            teamStats={team.members.map(({ mascot }) => ({ ...mascot, name: mascot.nickname ?? getPokemonName(mascot.pokemonId) }))}
+                          />
                         )}
                       </div>
                       </div>
