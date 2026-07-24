@@ -160,7 +160,17 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (isDestructive && !confirm("Confirme novamente: isso não pode ser desfeito.")) return;
 
     startTransition(async () => {
-      let r: { error?: string; replacedExistingBuff?: boolean; megaName?: string; statRange?: string };
+      let r: {
+        error?: string;
+        replacedExistingBuff?: boolean;
+        megaName?: string;
+        statRange?: string;
+        honeyOutcome?: {
+          type: "NEW_FRIEND" | "BONUS_EVENT";
+          partnerName: string;
+          message: string;
+        } | null;
+      };
       const t = selectedBuffItem.type;
 
       if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
@@ -192,6 +202,10 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
         } else if (t === "WEAKNESS_POLICY") {
           toast.success(`${mascotName} está protegido contra ataques oportunistas! 🛡️`);
+        } else if (t === "MASCOT_BUFF_HAPPY" && r.honeyOutcome) {
+          toast.success(r.honeyOutcome.message, { duration: 8000 });
+        } else if (t === "MASCOT_BUFF_HAPPY") {
+          toast.success(`${mascotName} ficou com felicidade máxima! A chance social não ativou desta vez. 🍯`);
         } else {
           toast.success("Item usado com sucesso! ✨");
         }

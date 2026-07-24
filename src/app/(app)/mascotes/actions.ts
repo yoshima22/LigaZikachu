@@ -13,7 +13,7 @@ import {
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
 } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
-import { clearRunawayWarningIfRecovered } from "@/lib/mascot-bonds";
+import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
@@ -73,49 +73,106 @@ function isLabChoiceEgg(type: string, origin?: string | null) {
   return type === "LAB" || !!getLabEggGeneration(origin);
 }
 
-async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string) {
-  if (Math.random() >= 0.4) return;
+type HoneySocialOutcome =
+  | { type: "NEW_FRIEND"; partnerName: string; message: string }
+  | { type: "BONUS_EVENT"; partnerName: string; message: string }
+  | null;
+
+async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): Promise<HoneySocialOutcome> {
+  if (Math.random() >= 0.4) return null;
 
   const relations = await prisma.mascotRelation.findMany({
     where: { mascotAId: mascotId },
-    select: { mascotBId: true, type: true },
+    select: {
+      mascotBId: true,
+      type: true,
+      mascotB: {
+        select: {
+          nickname: true,
+          pokemonId: true,
+          playerId: true,
+          player: { select: { displayName: true } },
+        },
+      },
+    },
     orderBy: { interactionCount: "desc" },
-    take: 10,
   });
 
-  if (relations.length < 10) {
+  const friends = relations.filter((relation) => relation.type === "FRIEND");
+  if (friends.length < 10) {
     const candidates = await prisma.mascot.findMany({
       where: {
         id: { notIn: [mascotId, ...relations.map((relation) => relation.mascotBId)] },
         playerId: { not: playerId },
         player: { user: { role: "PLAYER" } },
       },
-      select: { id: true },
-      take: 20,
+      select: {
+        id: true,
+        nickname: true,
+        pokemonId: true,
+        player: { select: { displayName: true } },
+      },
+      orderBy: { lastInteractedAt: "desc" },
+      take: 40,
     });
     const candidate = candidates[Math.floor(Math.random() * candidates.length)];
     if (candidate) {
       await formFriendship(mascotId, candidate.id);
-      return;
+      const partnerName = candidate.nickname ?? getPokemonName(candidate.pokemonId);
+      return {
+        type: "NEW_FRIEND",
+        partnerName,
+        message: `A Bala de Mel aproximou ${partnerName} (${candidate.player.displayName}) e uma nova amizade nasceu!`,
+      };
     }
   }
 
-  const friends = relations.filter((relation) => relation.type === "FRIEND");
   const friend = friends[Math.floor(Math.random() * friends.length)];
-  if (!friend) return;
+  if (!friend) return null;
+  const partnerName = friend.mascotB.nickname ?? getPokemonName(friend.mascotB.pokemonId);
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId },
+    select: { nickname: true, pokemonId: true, player: { select: { displayName: true } } },
+  });
+  if (!mascot) return null;
+  const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const description = `${mascotName} (${mascot.player.displayName}) decidiu dividir a Bala de Mel com ${partnerName} (${friend.mascotB.player.displayName}).`;
   await prisma.$transaction([
     prisma.mascotRelation.update({
       where: { mascotAId_mascotBId: { mascotAId: mascotId, mascotBId: friend.mascotBId } },
-      data: { interactionCount: { increment: 1 } },
+      data: { interactionCount: { increment: 1 }, lastInteractionAt: new Date() },
     }),
     prisma.mascotRelation.updateMany({
       where: { mascotAId: friend.mascotBId, mascotBId: mascotId, type: "FRIEND" },
-      data: { interactionCount: { increment: 1 } },
+      data: { interactionCount: { increment: 1 }, lastInteractionAt: new Date() },
     }),
     prisma.mascotEvent.create({
       data: { mascotId, emoji: "💚", description: "A Bala de Mel inspirou um evento bônus com um amigo!" },
     }),
+    prisma.mascotEvent.create({
+      data: { mascotId: friend.mascotBId, emoji: "💚", description },
+    }),
+    prisma.mascotSocialEvent.create({
+      data: {
+        ownerId: playerId,
+        mascotAId: mascotId,
+        mascotBId: friend.mascotBId,
+        eventType: "SHARE_SNACK",
+        title: "Bala de Mel entre amigos",
+        description,
+        optionsJson: defaultBondOptions("SHARE_SNACK") as unknown as Prisma.InputJsonValue,
+        visibility: "INVOLVED_PLAYERS",
+        affectedPlayerIds: [playerId, friend.mascotB.playerId] as unknown as Prisma.InputJsonValue,
+        publicEligible: true,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+      },
+    }),
   ]);
+  return {
+    type: "BONUS_EVENT",
+    partnerName,
+    message: `A Bala de Mel gerou um evento bônus com ${partnerName}! Confira na página de Laços.`,
+  };
 }
 
 const LAB_CHOICES_MARKER = "LAB_CHOICES:";
@@ -640,7 +697,11 @@ export async function adminFormFriendshipAction(mascotAId: string, mascotBId: st
 }
 
 // Usar buff em um mascote
-export async function useMascotBuffAction(mascotId: string, itemId: string): Promise<{ error?: string; replacedExistingBuff?: boolean }> {
+export async function useMascotBuffAction(mascotId: string, itemId: string): Promise<{
+  error?: string;
+  replacedExistingBuff?: boolean;
+  honeyOutcome?: HoneySocialOutcome;
+}> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
@@ -737,12 +798,12 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       await tx.mascotEvent.create({ data: { mascotId, emoji: "✨", description: `Usou ${config.label}!` } });
     });
 
-    if (inventoryItem.item.type === "MASCOT_BUFF_HAPPY") {
-      await maybeTriggerHoneyFriendship(mascotId, player.id).catch(() => {});
-    }
+    const honeyOutcome = inventoryItem.item.type === "MASCOT_BUFF_HAPPY"
+      ? await maybeTriggerHoneyFriendship(mascotId, player.id).catch(() => null)
+      : null;
 
     revalidate(player.id);
-    return { replacedExistingBuff };
+    return { replacedExistingBuff, honeyOutcome };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
