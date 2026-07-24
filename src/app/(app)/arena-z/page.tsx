@@ -1149,7 +1149,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
               <h2 className="font-semibold text-blue-200 mb-1">🛡️ Aliados Feridos</h2>
               <p className="text-xs text-slate-500 mb-3">
-                Use seu escudo diário para reduzir o repouso de um aliado em 20 min.
+                Use seu escudo diário para recuperar totalmente um aliado e remover todo o repouso.
                 {shieldUsedToday && <span className="ml-1 text-slate-600">(Escudo já usado hoje — reseta à meia-noite BRT)</span>}
               </p>
               <div className="space-y-2">
@@ -1289,7 +1289,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-slate-200">🛡️ Escudo SUS</p>
-              <p>Cada jogador tem 1 escudo diário. Use para proteger um mascote amigo no SUS: reduz o repouso em 20 min <strong>e bloqueia o próximo ataque oportunista</strong>. Só funciona entre amigos.</p>
+              <p>Cada jogador tem 1 escudo diário. Use para proteger um mascote amigo no SUS: recupera o mascote por completo, remove todo o repouso <strong>e bloqueia o próximo ataque oportunista</strong>. Só funciona entre amigos.</p>
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-slate-200">😈 Ataques Oportunistas</p>

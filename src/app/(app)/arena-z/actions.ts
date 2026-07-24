@@ -370,11 +370,11 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
   }
 }
 
-export async function useSusShieldAction(targetMascotId: string): Promise<{ error?: string; newRestingUntil?: string }> {
+export async function useSusShieldAction(targetMascotId: string): Promise<{ error?: string; recovered?: boolean }> {
   try {
     const playerId = await getCurrentPlayerId();
     const result = await useSusShield(playerId, targetMascotId);
-    return { newRestingUntil: result.newRestingUntil.toISOString() };
+    return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao usar escudo." };
   }

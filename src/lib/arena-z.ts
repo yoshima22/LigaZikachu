@@ -2866,10 +2866,6 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
     throw new Error("Voce ja usou seu escudo diario. O escudo reseta a meia-noite (horario de Brasilia).");
   }
 
-  // Aplica: reduz tempo de repouso em 20 min + bloqueia proximo ataque oportunista
-  const currentRest = targetMascot.restingUntil ?? new Date(Date.now() + ARENA_Z_CONFIG.restAfterSusHours * 3_600_000);
-  const newRest = new Date(Math.max(Date.now() + 30 * 60_000, currentRest.getTime() - 20 * 60_000));
-
   // Verifica se já existe um escudo ativo (para não duplicar)
   const existingShield = await prisma.mascotBuff.findFirst({
     where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } },
@@ -2882,7 +2878,12 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
     });
     await tx.mascot.update({
       where: { id: targetMascotId },
-      data: { restingUntil: newRest, susRestBonusMinutes: { increment: 20 } },
+      data: {
+        arenaState: "FREE",
+        injuredAt: null,
+        restingUntil: null,
+        susRestBonusMinutes: 0,
+      },
     });
     // Cria escudo contra ataque oportunista (consumido automaticamente se atacado)
     if (!existingShield) {
@@ -2898,12 +2899,12 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
       data: {
         mascotId: targetMascotId,
         emoji: "🛡️",
-        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Repouso reduzido em 20 min + protegido contra o próximo ataque oportunista.`,
+        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Recuperação completa, repouso removido e proteção contra o próximo ataque oportunista.`,
       },
     });
   });
 
-  return { newRestingUntil: newRest };
+  return { recovered: true };
 }
 
 // ── Tutorial bonus ────────────────────────────────────────────────────────────

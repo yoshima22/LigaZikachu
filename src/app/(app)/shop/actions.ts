@@ -126,7 +126,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.WEAKNESS_POLICY,
     name: "Política de Fraqueza",
-    description: "Protege o Pokémon de ataques oportunistas enquanto ferido. Consumido ao bloquear um ataque.",
+    description: "Recupera completamente um mascote ferido ou em repouso, remove todo o tempo de repouso e o protege do próximo ataque oportunista. A proteção é consumida ao bloquear o ataque.",
     imageUrl: null,
     rarity: ShopItemRarity.UNCOMMON,
     price: 300,

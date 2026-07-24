@@ -15,6 +15,7 @@ interface BuffItem {
 interface MascotOption {
   id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean;
   arenaState?: string;
+  restingUntil?: Date | string | null;
   hatchedFromEggType?: string | null; hatchedFromEggOrigin?: string | null;
 }
 
@@ -85,6 +86,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const isMegaStone = selectedBuffItem ? isMegaStoneType(selectedBuffItem.type) : false;
   const selectedMegaStone = selectedBuffItem ? getMegaStoneByType(selectedBuffItem.type) : null;
   const isRainbowFeather = selectedBuffItem?.type === "RAINBOW_FEATHER";
+  const isWeaknessPolicy = selectedBuffItem?.type === "WEAKNESS_POLICY";
   const isAdminLabFeather = selectedBuffItem?.metadata?.adminLabOriginOverride === true;
   const featherTier = selectedBuffItem?.metadata?.eggTier;
   const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
@@ -100,6 +102,10 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       : "COMMON";
   };
   const eligibleMascots = mascots.filter((mascot) => {
+    if (isWeaknessPolicy) {
+      const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
+      return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;
+    }
     if (!isRainbowFeather) return true;
     if (mascot.arenaState && mascot.arenaState !== "FREE") return false;
     if (isAdminLabFeather) return !mascot.hatchedFromEggType && !mascot.hatchedFromEggOrigin;
@@ -201,7 +207,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else if (t === "LUCKY_EGG") {
           toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
         } else if (t === "WEAKNESS_POLICY") {
-          toast.success(`${mascotName} está protegido contra ataques oportunistas! 🛡️`);
+          toast.success(`${mascotName} foi totalmente recuperado, saiu do repouso e está protegido! 🛡️`);
         } else if (t === "MASCOT_BUFF_HAPPY" && r.honeyOutcome) {
           toast.success(r.honeyOutcome.message, { duration: 8000 });
         } else if (t === "MASCOT_BUFF_HAPPY") {
@@ -230,7 +236,16 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           const areas = EXP_BUFF_AREAS[buff.type];
           return (
             <button key={buff.id} type="button"
-              onClick={() => setSelectedBuff(buff.id)}
+              onClick={() => {
+                setSelectedBuff(buff.id);
+                if (buff.type === "WEAKNESS_POLICY") {
+                  const firstRecoverable = mascots.find((mascot) => {
+                    const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
+                    return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;
+                  });
+                  setSelectedMascot(firstRecoverable?.id ?? "");
+                }
+              }}
               className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
                 selectedBuff === buff.id
                   ? "border-[#FFCB05]/50 bg-[#FFCB05]/10"
@@ -326,6 +341,12 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
               );
             })}
           </select>
+          )}
+
+          {isWeaknessPolicy && mascotOptions.length === 0 && (
+            <p className="w-full text-xs text-slate-400">
+              Nenhum mascote ferido ou em repouso, incluindo os mascotes do banco.
+            </p>
           )}
 
           {/* Aviso de doses do mascote selecionado */}

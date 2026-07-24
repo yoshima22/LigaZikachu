@@ -332,7 +332,7 @@ export default async function ManualPage() {
               ["💊 Proteína Zika", "+2 permanentes em todos os 5 atributos (máx 3 doses por mascote)"],
               ["🍯 Bala de Mel", "Felicidade vai para 100 e há 40% de chance de nova amizade ou evento bônus com amigo"],
               ["💧 Água Sagrada", "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente"],
-              ["🛡️ Política de Fraqueza", "Protege contra ataques oportunistas na Arena Z (permanente)"],
+              ["🛡️ Política de Fraqueza", "Recupera completamente um mascote ferido/em repouso, remove todo o repouso e protege contra o próximo ataque oportunista"],
               ["📡 Compartilhador de XP", "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Pode ser desequipado pelo card do mascote — o item volta ao inventário."],
               ["📡 Compartilhador Geral", "Distribui 10% da EXP de Treinamento a todos os outros favoritos. Apenas um Compartilhador pode ficar equipado."],
               ["🏖️ Ticket de Férias", "Ao retornar, concede 4.000 EXP + 10 EXP por nível, além das recompensas de férias"],

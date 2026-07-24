@@ -1051,9 +1051,9 @@ export function SusShieldButton({ mascotId, shieldUsedToday }: { mascotId: strin
     <button
       type="button"
       disabled={pending || shieldUsedToday}
-      onClick={() => run(() => useSusShieldAction(mascotId), "🛡️ Escudo usado! Repouso reduzido em 20 min.")}
+      onClick={() => run(() => useSusShieldAction(mascotId), "🛡️ Escudo usado! Mascote totalmente recuperado e repouso removido.")}
       className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
-      title={shieldUsedToday ? "Você já usou seu escudo hoje" : "Usar escudo diário — reduz 20 min de repouso"}
+      title={shieldUsedToday ? "Você já usou seu escudo hoje" : "Usar escudo diário — recuperação completa e sem repouso"}
     >
       {shieldUsedToday ? "🛡️ Escudo usado" : "🛡️ Usar Escudo"}
     </button>

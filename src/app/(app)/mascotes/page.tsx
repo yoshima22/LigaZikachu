@@ -72,6 +72,7 @@ async function fetchMascotPageData(playerId: string) {
     foods,
     lastRetiredTeam,
     buffInventory,
+    weaknessPolicyMascots,
   ] = await retryMascotLoad(() => Promise.all([
     prisma.mascot.findMany({
       where: {
@@ -134,6 +135,30 @@ async function fetchMascotPageData(playerId: string) {
         item: { select: { id: true, name: true, type: true, description: true, imageUrl: true, metadata: true, rarity: true } }
       },
     }),
+    // Consulta mínima para a Política de Fraqueza: inclui elegíveis do banco sem carregar seus cards.
+    prisma.mascot.findMany({
+      where: {
+        playerId,
+        OR: [
+          { arenaState: "INJURED" },
+          { arenaState: "RESTING" },
+          { restingUntil: { gt: new Date() } },
+        ],
+      },
+      select: {
+        id: true,
+        pokemonId: true,
+        nickname: true,
+        level: true,
+        isEquipped: true,
+        isFavorite: true,
+        arenaState: true,
+        restingUntil: true,
+        hatchedFromEggType: true,
+        hatchedFromEggOrigin: true,
+      },
+      orderBy: [{ arenaState: "asc" }, { level: "desc" }, { id: "asc" }],
+    }),
   ]));
 
   const featuredIds = featuredMascots.map(m => m.id);
@@ -190,7 +215,7 @@ async function fetchMascotPageData(playerId: string) {
     return [];
   }) : [];
 
-  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots };
+  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, activeMascotBuffs, proteinBoostedMascots };
 }
 
 const getCachedMascotPageData = (playerId: string) =>
@@ -281,7 +306,7 @@ export default async function MascotesPage() {
     return {} as Record<string, string>;
   });
 
-  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, activeMascotBuffs, proteinBoostedMascots } = pageData;
+  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, activeMascotBuffs, proteinBoostedMascots } = pageData;
 
   const eggImageByType: Record<string, string> = {};
   for (const [type, url] of Object.entries(rawEggImages)) {
@@ -589,7 +614,7 @@ export default async function MascotesPage() {
         : null
     ),
   }))}
-  mascots={mascotData.map(m => ({
+  mascots={[...new Map([...mascotData, ...weaknessPolicyMascots].map(m => [m.id, {
     id: m.id,
     name: m.nickname ?? getPokemonName(m.pokemonId),
     pokemonId: m.pokemonId,
@@ -599,7 +624,8 @@ export default async function MascotesPage() {
     arenaState: m.arenaState,
     hatchedFromEggType: m.hatchedFromEggType,
     hatchedFromEggOrigin: m.hatchedFromEggOrigin,
-  }))}
+    restingUntil: m.restingUntil,
+  }])).values()]}
   proteinDoses={Object.fromEntries(proteinBoostedMascots.map(b => [b.mascotId, b._count.id]))}
   activeBuffsByMascot={Object.fromEntries([...buffsByMascotId.entries()].map(([id, buffs]) => [id, buffs.map(b => b.type)]))}
 />
