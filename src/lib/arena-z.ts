@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
-import { getCombatRoleLabel, getCombatActionsPerRound, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
@@ -418,7 +418,7 @@ function tryHealerAction(actor: ArenaMascot, allies: ArenaMascot[], hp: Map<stri
   if (wounded.length === 0) return null;
   wounded.sort((a, b) => (hp.get(a.id) ?? 0) - (hp.get(b.id) ?? 0));
   const target = wounded[0];
-  const heal = Math.max(5, Math.round(actor.charisma * 0.35 + actor.vitality * 0.25));
+  const heal = getHealerHealAmount(actor);
   const currentHp = hp.get(target.id) ?? 0;
   hp.set(target.id, Math.min(target.hp, currentHp + heal));
   healCount.set(actor.id, count + 1);

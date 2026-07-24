@@ -2,7 +2,7 @@ import { createHash, randomInt } from "crypto";
 import { ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName } from "@/lib/mascot-data";
-import { getCombatActionsPerRound, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { creditCoins } from "@/lib/zikacoins";
 
 export const ORDER_EVENT_SLUG = "ordem-da-trapaca";
@@ -1515,7 +1515,11 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
         .filter((m) => m.hp < m.maxHp)
         .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
       if (wounded && randomInt(100) < clamp(35 + Math.floor((healer.statCharisma + healer.statVitality) / 8), 35, 78)) {
-        const heal = Math.max(20, Math.round(healer.statCharisma * 0.35 + healer.statVitality * 0.25 + healer.level * 4));
+        const heal = getHealerHealAmount({
+          charisma: healer.statCharisma,
+          vitality: healer.statVitality,
+          level: healer.level,
+        });
         wounded.hp = Math.min(wounded.maxHp, wounded.hp + heal);
         log.push({ turn, actor: healer.name, actorId: healer.id, actorPokemonId: healer.pokemonId, actorRole: healer.combatRole, action: "HEAL", target: wounded.name, targetId: wounded.id, amount: heal, targetHp: wounded.hp });
       }

@@ -1,6 +1,6 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName } from "./mascot-data";
-import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, type CombatRole } from "./combat-roles";
+import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 
@@ -342,7 +342,7 @@ export function runLeagueCombat(
           if (wounded.length > 0) {
             wounded.sort((x, y) => (hp.get(x.id) ?? 0) - (hp.get(y.id) ?? 0));
             const target = wounded[0];
-            const heal = Math.max(5, Math.round(actor.charisma * 0.35 + actor.vitality * 0.25));
+            const heal = getHealerHealAmount(actor);
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({

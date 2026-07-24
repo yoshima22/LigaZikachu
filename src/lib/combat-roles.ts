@@ -41,7 +41,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Intercepta de 15% a 40% do dano de um aliado e recebe de 5% a 20% menos dano; causa 10% menos dano.",
   DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",
   SABOTEUR: "Atributos diretos: Instinto e Agilidade. Prioriza suportes e reduz em 15% a 40% os bônus dos Encorajadores inimigos enquanto estiver ativo.",
-  HEALER: "Atributos diretos: Carisma e Vitalidade. Cura aliados usando 35% do Carisma + 25% da Vitalidade. Número de curas escala com stats (2 a 5 por combate). Causa 20% menos dano.",
+  HEALER: "Atributos diretos: Carisma, Vitalidade e nível. Cura individualmente o aliado vivo ferido de menor HP em (35% do Carisma + 25% da Vitalidade + nível) × 2,5. O número de curas também escala com os atributos.",
   SCOUT: "Atributos diretos: Agilidade e Instinto. Concede até +8% de dano à equipe, tem 35% a 82% de chance de focar o alvo mais frágil e causa 5% menos dano.",
   PROVOKER: "Atributos diretos: Carisma e Instinto. Tem 20% a 55% de chance de redirecionar ataques para si e reduz o dano desviado em 8%; causa 8% menos dano.",
   SPECIALIST: "Atributo direto: o maior entre Força, Agilidade, Instinto, Vitalidade e Carisma. Recebe de +6% a +20% de dano.",
@@ -77,6 +77,18 @@ export function getCombatActionsPerRound(agility: number, opponentAgilities: num
   const gap = agility - opponentAverage;
   const actions = gap >= AGILITY_THIRD_ACTION_GAP ? 3 : gap >= AGILITY_EXTRA_ACTION_GAP ? 2 : 1;
   return { actions, opponentAverage, gap };
+}
+
+export const HEALER_POWER_MULTIPLIER = 2.5;
+
+/** Cura individual do Cuidador, escalando com Carisma, Vitalidade e nível. */
+export function getHealerHealAmount(stats: {
+  charisma: number;
+  vitality: number;
+  level: number;
+}) {
+  const base = stats.charisma * 0.35 + stats.vitality * 0.25 + stats.level;
+  return Math.max(15, Math.round(base * HEALER_POWER_MULTIPLIER));
 }
 
 export function recommendCombatRole(stats: {

@@ -9,11 +9,13 @@ import {
   COMBAT_ROLE_DESCRIPTIONS,
   getCombatRoleLabel,
   normalizeCombatRole,
+  getHealerHealAmount,
   type CombatRole,
 } from "@/lib/combat-roles";
 
 export type CombatRoleStats = {
   name?: string;
+  level?: number;
   statForce: number;
   statAgility: number;
   statVitality: number;
@@ -47,9 +49,9 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
     case "SABOTEUR":
       return [`Chance de interferência na Arena: ${pct(cap(0.18 + (i + a) / 400, 0.55))}.`, `Reduz entre 15% e 40% do bônus de Encorajadores na Liga, conforme Instinto + Agilidade.`, "Prefere Encorajadores e Cuidadores; o efeito é passivo e ele também ataca."];
     case "HEALER": {
-      const heal = Math.max(5, Math.round(c * 0.35 + v * 0.25));
+      const heal = getHealerHealAmount({ charisma: c, vitality: v, level: s.level ?? 1 });
       const count = 2 + Math.floor((c + v) / 40);
-      return [`Cura prevista por ação: ${heal} HP.`, `Limite previsto: ${count} curas por combate tradicional.`, "Na Arena/Liga, troca o ataque pela cura quando há aliado ferido; sem alvo para curar, ataca com -20% de dano. Em Raid, ataca e pode curar depois."];
+      return [`Cura individual prevista: ${heal} HP por ação. Fórmula: (35% do Carisma + 25% da Vitalidade + nível) × 2,5.`, `Limite previsto: ${count} curas por combate tradicional.`, "Escolhe um aliado vivo ferido, priorizando o de menor HP; não cura o time inteiro. Na Arena/Liga, troca o ataque pela cura. Em Raid, ataca e pode curar depois."];
     }
     case "SCOUT":
       return [`Bônus passivo de dano da equipe: ${pct(cap(a / 400 + i / 500, 0.08))}.`, `Chance de furar a atração do Defensor: ${pct(cap(0.35 + a / 150, 0.82))}.`, "Foca o inimigo de menor HP e causa -5% de dano próprio."];

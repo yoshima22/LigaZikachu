@@ -435,7 +435,7 @@ export default async function ManualPage() {
               ["Guardião", "Vitalidade + Carisma", "Intercepta 15% a 40% do dano de aliados; recebe 5% a 20% menos dano; causa 10% menos dano."],
               ["Duelista", "Força + Instinto", "+6% a +18% de dano base; +12% enquanto mantém duelo no mesmo alvo."],
               ["Sabotador", "Instinto + Agilidade", "Prioriza suportes e reduz 15% a 40% dos bônus de Encorajadores inimigos."],
-              ["Cuidador", "Carisma + Vitalidade", "Cura aliados com 35% do Carisma + 25% da Vitalidade; 2 a 5 curas por combate; causa 20% menos dano."],
+              ["Cuidador", "Carisma + Vitalidade + nível", "Cura individualmente o aliado vivo ferido de menor HP. Cada cura vale (35% do Carisma + 25% da Vitalidade + nível) × 2,5; a quantidade de curas também escala com os atributos."],
               ["Batedor", "Agilidade + Instinto", "Até +8% de dano para a equipe; 35% a 82% de chance de focar alvo frágil; causa 5% menos dano."],
               ["Provocador", "Carisma + Instinto", "20% a 55% de chance de redirecionar ataques para si e reduz 8% do dano desviado; causa 8% menos dano."],
               ["Especialista", "Maior atributo", "+6% a +20% de dano usando o melhor atributo do mascote."],
