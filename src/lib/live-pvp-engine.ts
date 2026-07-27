@@ -4,6 +4,7 @@ import type { LivePvpMove } from "@/lib/live-pvp-moves";
 export type LivePvpFighter = {
   id: string;
   pokemonId: number;
+  spriteUrl: string;
   name: string;
   level: number;
   types: string[];
@@ -29,11 +30,15 @@ function clone(fighter: LivePvpFighter): LivePvpFighter {
 }
 
 function attackStat(fighter: LivePvpFighter, move: LivePvpMove) {
-  return move.damageClass === "physical" ? fighter.force : Math.round((fighter.instinct + fighter.charisma) / 2);
+  return move.damageClass === "physical"
+    ? fighter.force
+    : Math.round((fighter.instinct + fighter.charisma) / 2);
 }
 
 function defenseStat(fighter: LivePvpFighter, move: LivePvpMove) {
-  return move.damageClass === "physical" ? fighter.vitality : Math.round((fighter.vitality + fighter.charisma) / 2);
+  return move.damageClass === "physical"
+    ? fighter.vitality
+    : Math.round((fighter.vitality + fighter.charisma) / 2);
 }
 
 function execute(
@@ -49,19 +54,35 @@ function execute(
     return;
   }
   if (move.damageClass === "status" || !move.power) {
-    events.push(`${attacker.name} usou ${move.name}. Efeitos avançados ainda não estão habilitados neste protótipo.`);
+    events.push(
+      `${attacker.name} usou ${move.name}. Efeitos avançados ainda não estão habilitados neste protótipo.`,
+    );
     return;
   }
 
   const levelFactor = (2 * attacker.level) / 5 + 2;
-  const raw = ((levelFactor * move.power * Math.max(1, attackStat(attacker, move))) / Math.max(1, defenseStat(defender, move))) / 50 + 2;
+  const raw =
+    (levelFactor * move.power * Math.max(1, attackStat(attacker, move))) /
+      Math.max(1, defenseStat(defender, move)) /
+      50 +
+    2;
   const stab = attacker.types.includes(move.type) ? 1.2 : 1;
   const typeMultiplier = getTypeAdvantageMultiplier(move.type, defender.types);
   const variance = 0.9 + random() * 0.1;
-  const damage = Math.max(1, Math.round(raw * stab * typeMultiplier * variance));
+  const damage = Math.max(
+    1,
+    Math.round(raw * stab * typeMultiplier * variance),
+  );
   defender.hp = Math.max(0, defender.hp - damage);
-  const effectiveness = typeMultiplier > 1 ? " Foi super efetivo!" : typeMultiplier < 1 ? " Não foi muito efetivo." : "";
-  events.push(`${attacker.name} usou ${move.name} e causou ${damage} de dano.${effectiveness}`);
+  const effectiveness =
+    typeMultiplier > 1
+      ? " Foi super efetivo!"
+      : typeMultiplier < 1
+        ? " Não foi muito efetivo."
+        : "";
+  events.push(
+    `${attacker.name} usou ${move.name} e causou ${damage} de dano.${effectiveness}`,
+  );
 }
 
 export function resolveLivePvpTurn(
@@ -75,14 +96,31 @@ export function resolveLivePvpTurn(
   const fighterB = clone(inputB);
   const priorityA = moveA?.priority ?? -99;
   const priorityB = moveB?.priority ?? -99;
-  const first: "A" | "B" = priorityA !== priorityB
-    ? (priorityA > priorityB ? "A" : "B")
-    : fighterA.agility !== fighterB.agility
-      ? (fighterA.agility > fighterB.agility ? "A" : "B")
-      : (random() < 0.5 ? "A" : "B");
+  const first: "A" | "B" =
+    priorityA !== priorityB
+      ? priorityA > priorityB
+        ? "A"
+        : "B"
+      : fighterA.agility !== fighterB.agility
+        ? fighterA.agility > fighterB.agility
+          ? "A"
+          : "B"
+        : random() < 0.5
+          ? "A"
+          : "B";
   const events: string[] = [];
-  const act = (attacker: LivePvpFighter, defender: LivePvpFighter, move: LivePvpMove | null, side: "A" | "B") => {
-    if (!move) { events.push(`${attacker.name} perdeu a ação por tempo esgotado (${side}).`); return; }
+  const act = (
+    attacker: LivePvpFighter,
+    defender: LivePvpFighter,
+    move: LivePvpMove | null,
+    side: "A" | "B",
+  ) => {
+    if (!move) {
+      events.push(
+        `${attacker.name} perdeu a ação por tempo esgotado (${side}).`,
+      );
+      return;
+    }
     execute(attacker, defender, move, random, events);
   };
 
