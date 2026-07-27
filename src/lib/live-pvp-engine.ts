@@ -50,11 +50,11 @@ const STATUS_LABEL: Record<string, string> = {
   confusion: "confusão",
 };
 const STAT_LABEL: Record<string, string> = {
-  attack: "Ataque",
-  defense: "Defesa",
-  "special-attack": "Ataque especial",
-  "special-defense": "Defesa especial",
-  speed: "Velocidade",
+  attack: "Força ofensiva",
+  defense: "Resistência por Vitalidade",
+  "special-attack": "Poder por Instinto e Carisma",
+  "special-defense": "Resistência por Vitalidade e Carisma",
+  speed: "Iniciativa",
   accuracy: "Precisão",
   evasion: "Evasão",
 };
@@ -81,7 +81,7 @@ function defenseStat(f: LivePvpFighter, m: LivePvpMove) {
     : staged(f, "special-defense", (f.vitality + f.charisma) / 2);
 }
 function initiative(f: LivePvpFighter) {
-  return staged(f, "defense", f.vitality);
+  return staged(f, "speed", f.vitality);
 }
 function chance(value: number | null | undefined, fallback = 100) {
   return value && value > 0 ? value : fallback;

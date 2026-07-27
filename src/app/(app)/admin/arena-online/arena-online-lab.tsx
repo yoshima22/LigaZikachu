@@ -102,11 +102,11 @@ const TYPE_ADVANTAGE: Record<string, string[]> = {
   normal: [],
 };
 const STAT_NAMES: Record<string, string> = {
-  attack: "Ataque",
-  defense: "Defesa",
-  "special-attack": "Ataque especial",
-  "special-defense": "Defesa especial",
-  speed: "Velocidade",
+  attack: "Força ofensiva",
+  defense: "Resistência por Vitalidade",
+  "special-attack": "Poder por Instinto e Carisma",
+  "special-defense": "Resistência por Vitalidade e Carisma",
+  speed: "Iniciativa",
   accuracy: "Precisão",
   evasion: "Evasão",
 };
@@ -159,7 +159,7 @@ function effectSummary(move: LivePvpMove) {
       : null;
   return [
     ailment,
-    move.flinchChance ? `💥 Recuo do alvo ${move.flinchChance}%` : null,
+    move.flinchChance ? `💥 Hesitação ${move.flinchChance}%` : null,
     move.drain
       ? `${move.drain > 0 ? "🩸 Drena" : "💔 Recuo"} ${Math.abs(move.drain)}%`
       : null,
@@ -171,6 +171,149 @@ function effectSummary(move: LivePvpMove) {
 }
 function stageMultiplier(stage = 0) {
   return stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
+}
+
+const EFFECT_GUIDE = [
+  {
+    group: "Condições negativas",
+    tone: "text-red-300",
+    effects: [
+      [
+        "Paralisia",
+        "A cada ação, há 25% de chance de o mascote não conseguir agir.",
+      ],
+      [
+        "Sono",
+        "Impede ações por 1 a 3 turnos. Descanso aplica exatamente 2 ações de sono.",
+      ],
+      [
+        "Congelamento",
+        "Impede a ação até descongelar; há 20% de chance de descongelar a cada tentativa.",
+      ],
+      [
+        "Confusão",
+        "Dura de 2 a 5 ações. Em cada uma, há 33,33% de chance de perder a ação e sofrer 10% do HP máximo.",
+      ],
+      [
+        "Queimadura",
+        "Causa 1/16 do HP máximo ao fim da rodada e reduz pela metade o dano de golpes físicos.",
+      ],
+      ["Veneno", "Causa 1/8 do HP máximo ao fim de cada rodada."],
+      [
+        "Veneno grave",
+        "O dano começa em 1/16 do HP máximo e aumenta progressivamente a cada rodada.",
+      ],
+      [
+        "Hesitação",
+        "Faz o alvo perder a próxima ação disponível. Não permanece como condição duradoura.",
+      ],
+    ],
+  },
+  {
+    group: "Melhorias e reduções",
+    tone: "text-cyan-300",
+    effects: [
+      ["Força ofensiva", "Altera a Força usada nos golpes físicos."],
+      [
+        "Resistência por Vitalidade",
+        "Altera a Vitalidade usada para resistir a golpes físicos.",
+      ],
+      [
+        "Poder por Instinto e Carisma",
+        "Altera a média de Instinto e Carisma usada nos golpes especiais.",
+      ],
+      [
+        "Resistência por Vitalidade e Carisma",
+        "Altera a média de Vitalidade e Carisma usada para resistir a golpes especiais.",
+      ],
+      [
+        "Iniciativa",
+        "Altera a iniciativa baseada em Vitalidade usada para desempatar golpes de mesma prioridade.",
+      ],
+      [
+        "Precisão e evasão",
+        "Precisão aumenta a chance de acertar; evasão do alvo a reduz. Cada estágio modifica o valor exibido no golpe.",
+      ],
+      [
+        "Estágios",
+        "Vão de -6 a +6. Um estágio positivo vale 1,5×; +2 vale 2×. Um estágio negativo aplica a redução inversa.",
+      ],
+    ],
+  },
+  {
+    group: "Outros efeitos",
+    tone: "text-emerald-300",
+    effects: [
+      [
+        "Cura",
+        "Recupera HP e, neste modo, escala com Carisma, Vitalidade e nível. A estimativa aparece no golpe.",
+      ],
+      [
+        "Drenagem",
+        "Recupera uma porcentagem do dano que o golpe realmente causou.",
+      ],
+      [
+        "Dano de recuo",
+        "Depois de acertar, o usuário perde uma porcentagem do dano causado.",
+      ],
+      [
+        "Proteção",
+        "Bloqueia completamente ataques direcionados ao usuário durante a rodada.",
+      ],
+      [
+        "Prioridade",
+        "É comparada antes da iniciativa. O maior número age primeiro; empates usam iniciativa e depois sorteio.",
+      ],
+      [
+        "Bônus de tipo",
+        "Golpes do mesmo tipo do usuário recebem 20% de bônus, além das vantagens e resistências de tipo.",
+      ],
+      [
+        "Acerto crítico",
+        "Tem chance base de 6,25%, pode ser ampliado pelo golpe e multiplica o dano por 1,5.",
+      ],
+    ],
+  },
+] as const;
+
+function EffectGuide() {
+  return (
+    <details className="group rounded-xl border border-purple-500/30 bg-purple-500/5">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-bold text-purple-200">
+        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-purple-400/50 text-xs">
+          ?
+        </span>
+        Entenda atributos, melhorias e condições de combate
+        <span className="float-right text-purple-300 transition-transform group-open:rotate-180">
+          ⌄
+        </span>
+      </summary>
+      <div className="grid gap-3 border-t border-purple-500/20 p-4 lg:grid-cols-3">
+        {EFFECT_GUIDE.map((section) => (
+          <section
+            key={section.group}
+            className="rounded-lg border border-slate-800 bg-slate-950/70 p-3"
+          >
+            <h3
+              className={`mb-3 text-xs font-bold uppercase tracking-wider ${section.tone}`}
+            >
+              {section.group}
+            </h3>
+            <div className="space-y-3">
+              {section.effects.map(([name, description]) => (
+                <div key={name}>
+                  <p className="text-xs font-bold text-slate-100">{name}</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">
+                    {description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </details>
+  );
 }
 function moveInfluence(
   move: LivePvpMove,
@@ -714,6 +857,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           pré-selecionados pela PokeAPI.
         </p>
       </header>
+      <EffectGuide />
       <ArenaOnlinePregame
         key={pregameReset}
         mascots={mascots}
