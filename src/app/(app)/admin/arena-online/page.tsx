@@ -18,6 +18,10 @@ export default async function ArenaOnlinePage() {
       nickname: true,
       level: true,
       isShiny: true,
+      performanceTag: true,
+      arenaState: true,
+      restingUntil: true,
+      bazarListed: true,
       statForce: true,
       statAgility: true,
       statCharisma: true,
@@ -30,6 +34,11 @@ export default async function ArenaOnlinePage() {
           mascotSpritePreference: true,
           megaSpritePreference: true,
         },
+      },
+      expeditions: {
+        where: { status: "ACTIVE" },
+        take: 1,
+        select: { id: true },
       },
     },
   });
@@ -44,6 +53,18 @@ export default async function ArenaOnlinePage() {
         spriteUrl: getPreferredSpriteUrl(mascot.pokemonId, mascot.player, {
           shiny: mascot.isShiny,
         }),
+        gameStatus: mascot.expeditions.length
+          ? "Em expedição"
+          : mascot.bazarListed
+            ? "Anunciado no bazar"
+            : mascot.arenaState === "INJURED"
+              ? "Ferido"
+              : mascot.arenaState === "RESTING" ||
+                  (mascot.restingUntil && mascot.restingUntil > new Date())
+                ? "Em repouso"
+                : mascot.arenaState === "ARENA"
+                  ? "Na Arena"
+                  : "Disponível",
       }))}
     />
   );

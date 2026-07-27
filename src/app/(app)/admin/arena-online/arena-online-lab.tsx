@@ -13,6 +13,8 @@ type MascotOption = {
   name: string;
   ownerName: string;
   ownerAvatarUrl: string | null;
+  performanceTag: string;
+  gameStatus: string;
   level: number;
   types: string[];
   spriteUrl: string;
@@ -173,6 +175,9 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [setB, setSetB] = useState<number[]>([]);
   const [ppA, setPpA] = useState<Record<number, number>>({});
   const [ppB, setPpB] = useState<Record<number, number>>({});
+  const [teamMovePreview, setTeamMovePreview] = useState<
+    Record<string, LivePvpMove[]>
+  >({});
   const [fighterA, setFighterA] = useState<LivePvpFighter | null>(null);
   const [fighterB, setFighterB] = useState<LivePvpFighter | null>(null);
   const [choiceA, setChoiceA] = useState<number | null>(null);
@@ -208,6 +213,21 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         return;
       }
       setter([...ids, id]);
+      const mascot = mascots.find((entry) => entry.id === id);
+      if (mascot && !teamMovePreview[id])
+        startTransition(async () => {
+          const result = await loadLivePvpMovesAction(
+            mascot.pokemonId,
+            mascot.level,
+          );
+          if (result.moves)
+            setTeamMovePreview((current) => ({
+              ...current,
+              [id]: result.moves!.filter((move) =>
+                (result.recommendedIds ?? []).includes(move.id),
+              ),
+            }));
+        });
     }
   };
 
@@ -233,6 +253,15 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       setSetB(b.recommendedIds ?? []);
       setPpA(Object.fromEntries(a.moves.map((move) => [move.id, move.pp])));
       setPpB(Object.fromEntries(b.moves.map((move) => [move.id, move.pp])));
+      setTeamMovePreview((current) => ({
+        ...current,
+        [firstA.id]: a.moves!.filter((move) =>
+          (a.recommendedIds ?? []).includes(move.id),
+        ),
+        [firstB.id]: b.moves!.filter((move) =>
+          (b.recommendedIds ?? []).includes(move.id),
+        ),
+      }));
       setIdA(firstA.id);
       setIdB(firstB.id);
       setFighterA(null);
@@ -521,12 +550,14 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           ids={teamIdsA}
           mascots={mascots}
           toggle={(id) => toggleTeam("A", id)}
+          movePreview={teamMovePreview}
         />
         <TeamPicker
           label="Jogador B"
           ids={teamIdsB}
           mascots={mascots}
           toggle={(id) => toggleTeam("B", id)}
+          movePreview={teamMovePreview}
         />
       </div>
       <button
@@ -657,47 +688,142 @@ function TeamPicker({
   ids,
   mascots,
   toggle,
+  movePreview,
 }: {
   label: string;
   ids: string[];
   mascots: MascotOption[];
   toggle: (id: string) => void;
+  movePreview: Record<string, LivePvpMove[]>;
 }) {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [tagFilter, setTagFilter] = useState("ALL");
+  const visible = mascots
+    .filter(
+      (m) =>
+        (!search ||
+          m.name
+            .toLocaleLowerCase("pt-BR")
+            .includes(search.toLocaleLowerCase("pt-BR")) ||
+          m.ownerName
+            .toLocaleLowerCase("pt-BR")
+            .includes(search.toLocaleLowerCase("pt-BR"))) &&
+        (typeFilter === "ALL" || m.types.includes(typeFilter)) &&
+        (tagFilter === "ALL" || m.performanceTag === tagFilter),
+    )
+    .sort(
+      (a, b) =>
+        Number(ids.includes(b.id)) - Number(ids.includes(a.id)) ||
+        b.level - a.level,
+    );
   return (
-    <div className="rounded-xl border border-border bg-slate-950/60 p-3">
+    <div className="rounded-2xl border border-cyan-500/25 bg-gradient-to-b from-cyan-500/5 to-slate-950/80 p-4 shadow-xl shadow-black/20">
       <div className="mb-2 flex items-center justify-between">
-        <strong className="text-sm text-white">{label}</strong>
-        <span className="text-xs text-cyan-300">{ids.length}/6</span>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
+            Montagem de equipe
+          </p>
+          <strong className="text-base text-white">{label}</strong>
+        </div>
+        <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-200">
+          {ids.length}/6 selecionados
+        </span>
       </div>
-      <div className="max-h-64 space-y-1 overflow-y-auto">
-        {mascots.map((m) => (
+      <div className="mb-3 grid gap-2 sm:grid-cols-3">
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar mascote..."
+          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400"
+        />
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+        >
+          <option value="ALL">Todos os tipos</option>
+          {Object.keys(TYPE_LABELS).map((type) => (
+            <option key={type} value={type}>
+              {TYPE_LABELS[type]}
+            </option>
+          ))}
+        </select>
+        <select
+          value={tagFilter}
+          onChange={(event) => setTagFilter(event.target.value)}
+          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+        >
+          <option value="ALL">Todas as tags</option>
+          <option value="FORTE">Forte</option>
+          <option value="NEUTRO">Neutro</option>
+          <option value="RUIM">Ruim</option>
+          <option value="PESSIMO">Péssimo</option>
+        </select>
+      </div>
+      <div className="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
+        {visible.map((m) => (
           <button
             type="button"
             key={m.id}
             onClick={() => toggle(m.id)}
-            className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left text-xs ${ids.includes(m.id) ? "border-cyan-400 bg-cyan-400/10" : "border-slate-800 bg-slate-900/50"}`}
+            className={`relative flex w-full items-start gap-3 rounded-xl border p-3 text-left text-xs transition ${ids.includes(m.id) ? "border-[#FFCB05] bg-[#FFCB05]/10 shadow-[0_0_18px_rgba(255,203,5,.12)]" : "border-slate-800 bg-slate-900/60 hover:border-cyan-500/40"}`}
           >
             <img
               src={m.spriteUrl}
               alt=""
-              className="h-9 w-9 object-contain [image-rendering:pixelated]"
+              className="h-16 w-16 object-contain [image-rendering:pixelated]"
             />
             <span className="min-w-0 flex-1">
               <b className="block truncate text-white">
                 {m.name} · Nv.{m.level}
               </b>
               <span className="text-slate-500">
-                {m.ownerName} ·{" "}
-                {m.types.map((t) => TYPE_LABELS[t] ?? t).join(" / ")}
+                {m.ownerName} · Nv.{m.level} · HP {toFighter(m).maxHp}
+              </span>
+              <span className="mt-1 flex flex-wrap gap-1">
+                {m.types.map((type) => (
+                  <span
+                    key={type}
+                    className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[9px] text-slate-200"
+                  >
+                    {TYPE_ICONS[type] ?? ""} {TYPE_LABELS[type] ?? type}
+                  </span>
+                ))}
+                <span className="rounded-full border border-purple-500/25 bg-purple-500/10 px-1.5 py-0.5 text-[9px] text-purple-200">
+                  {m.performanceTag}
+                </span>
+                <span
+                  className={`rounded-full border px-1.5 py-0.5 text-[9px] ${m.gameStatus === "Disponível" ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200" : "border-amber-500/25 bg-amber-500/10 text-amber-200"}`}
+                >
+                  {m.gameStatus}
+                </span>
+              </span>
+              <span className="mt-2 block text-[9px] text-slate-400">
+                <b className="text-slate-300">Status:</b> FOR {m.statForce} ·
+                AGI {m.statAgility} · CAR {m.statCharisma} · INS{" "}
+                {m.statInstinct} · VIT {m.statVitality}
+              </span>
+              <span className="mt-1 block text-[9px] text-slate-500">
+                <b className="text-slate-400">Ataques:</b>{" "}
+                {movePreview[m.id]?.map((move) => move.name).join(" · ") ??
+                  (ids.includes(m.id)
+                    ? "carregando golpes..."
+                    : "selecione para consultar")}
               </span>
             </span>
             {ids.includes(m.id) && (
-              <span className="font-bold text-cyan-300">
+              <span className="absolute right-3 top-3 rounded-full bg-[#FFCB05] px-2 py-1 font-bold text-slate-950">
                 {ids.indexOf(m.id) + 1}º
               </span>
             )}
           </button>
         ))}
+        {!visible.length && (
+          <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-xs text-slate-500">
+            Nenhum mascote encontrado com esses filtros.
+          </div>
+        )}
       </div>
     </div>
   );
