@@ -13,6 +13,11 @@ export type LivePvpMove = {
   target: string;
   effectChance: number | null;
   effect: string;
+  ailment: string;
+  ailmentChance: number;
+  flinchChance: number;
+  drain: number;
+  healing: number;
   statChanges: Array<{ stat: string; change: number }>;
 };
 
@@ -72,6 +77,7 @@ export async function getMove(move: string | number): Promise<LivePvpMove> {
     type: { name: string }; target: { name: string };
     names: Array<{ name: string; language: { name: string } }>;
     effect_entries: Array<{ short_effect: string; language: { name: string } }>;
+    meta: { ailment: { name: string }; ailment_chance: number; flinch_chance: number; drain: number; healing: number };
     stat_changes: Array<{ change: number; stat: { name: string } }>;
   };
   return {
@@ -87,6 +93,11 @@ export async function getMove(move: string | number): Promise<LivePvpMove> {
     target: data.target.name,
     effectChance: data.effect_chance,
     effect: data.effect_entries.find((entry) => entry.language.name === "en")?.short_effect ?? "",
+    ailment: data.meta.ailment.name,
+    ailmentChance: data.meta.ailment_chance,
+    flinchChance: data.meta.flinch_chance,
+    drain: data.meta.drain,
+    healing: data.meta.healing,
     statChanges: data.stat_changes.map((entry) => ({ stat: entry.stat.name, change: entry.change })),
   };
 }

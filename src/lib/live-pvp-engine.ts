@@ -3,6 +3,7 @@ import type { LivePvpMove } from "@/lib/live-pvp-moves";
 
 export type LivePvpFighter = {
   id: string;
+  pokemonId: number;
   name: string;
   level: number;
   types: string[];
