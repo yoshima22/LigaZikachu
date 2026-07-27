@@ -116,6 +116,14 @@ const AILMENT_LABELS: Record<string, string> = {
   freeze: "❄️ Congelamento",
   trap: "🪤 Aprisionamento",
 };
+const ACTIVE_STATUS_LABELS: Record<string, string> = {
+  paralysis: "⚡ PAR",
+  sleep: "💤 SLP",
+  poison: "☠️ PSN",
+  "badly-poisoned": "☠️ TOX",
+  burn: "🔥 BRN",
+  freeze: "❄️ FRZ",
+};
 function moveScaling(move: LivePvpMove) {
   if (move.damageClass === "physical")
     return "Poder: Força · Defesa rival: Vitalidade";
@@ -834,6 +842,16 @@ function FightBox({
             )}
           </div>
         ))}
+        {fighter.status && (
+          <span className="rounded-full border border-red-500/35 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-200">
+            {ACTIVE_STATUS_LABELS[fighter.status] ?? fighter.status}
+          </span>
+        )}
+        {!!fighter.confusionTurns && (
+          <span className="rounded-full border border-purple-500/35 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-200">
+            💫 Confuso ({fighter.confusionTurns})
+          </span>
+        )}
       </div>
       <div className="my-2 h-2 overflow-hidden rounded bg-slate-800">
         <div className="h-full bg-emerald-400" style={{ width: `${pct}%` }} />

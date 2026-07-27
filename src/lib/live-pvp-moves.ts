@@ -18,6 +18,9 @@ export type LivePvpMove = {
   flinchChance: number;
   drain: number;
   healing: number;
+  minHits: number | null;
+  maxHits: number | null;
+  critRate: number;
   statChanges: Array<{ stat: string; change: number }>;
 };
 
@@ -260,6 +263,9 @@ export async function getMove(move: string | number): Promise<LivePvpMove> {
       flinch_chance: number;
       drain: number;
       healing: number;
+      min_hits: number | null;
+      max_hits: number | null;
+      crit_rate: number;
     };
     stat_changes: Array<{ change: number; stat: { name: string } }>;
   };
@@ -281,6 +287,9 @@ export async function getMove(move: string | number): Promise<LivePvpMove> {
     flinchChance: data.meta.flinch_chance,
     drain: data.meta.drain,
     healing: data.meta.healing,
+    minHits: data.meta.min_hits,
+    maxHits: data.meta.max_hits,
+    critRate: data.meta.crit_rate,
     statChanges: data.stat_changes.map((entry) => ({
       stat: entry.stat.name,
       change: entry.change,
