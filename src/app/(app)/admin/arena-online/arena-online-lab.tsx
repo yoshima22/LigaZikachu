@@ -651,31 +651,6 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           toast.success("Pré-jogo concluído e golpes preparados.");
         }}
       />
-      <div className="grid gap-3 md:grid-cols-2">
-        <TeamPicker
-          label="Jogador A"
-          ids={teamIdsA}
-          mascots={mascots}
-          toggle={(id) => toggleTeam("A", id)}
-          movePreview={teamMovePreview}
-          reorder={(id, direction) => reorderTeam("A", id, direction)}
-        />
-        <TeamPicker
-          label="Jogador B"
-          ids={teamIdsB}
-          mascots={mascots}
-          toggle={(id) => toggleTeam("B", id)}
-          movePreview={teamMovePreview}
-          reorder={(id, direction) => reorderTeam("B", id, direction)}
-        />
-      </div>
-      <button
-        onClick={() => load()}
-        disabled={pending}
-        className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-      >
-        Recarregar golpes das equipes
-      </button>
       {movesA.length > 0 && (
         <>
           <button
@@ -745,9 +720,11 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
                     <p
                       key={i}
                       className={
-                        /^(PRÉ-JOGO|MOEDA|DRAFT|INICIAL|REVELAÇÃO)/.test(log)
-                          ? "rounded bg-slate-900 px-2 py-1.5 text-cyan-200"
-                          : "leading-relaxed"
+                        /^(PRÉ-JOGO|MOEDA|DRAFT|INICIAL|ORDEM|REVELAÇÃO)/.test(
+                          log,
+                        )
+                          ? "rounded border border-cyan-500/10 bg-slate-900 px-2 py-1.5 text-cyan-200"
+                          : "rounded border border-slate-800 bg-slate-900 px-2 py-1.5 leading-relaxed text-slate-300"
                       }
                     >
                       {log}

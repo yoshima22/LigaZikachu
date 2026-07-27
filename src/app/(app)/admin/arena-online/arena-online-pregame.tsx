@@ -38,9 +38,10 @@ export function ArenaOnlinePregame({
   const [pickedThisTurn, setPickedThisTurn] = useState<string[]>([]);
   const [teamA, setTeamA] = useState<string[]>([]);
   const [teamB, setTeamB] = useState<string[]>([]);
-  const [leadA, setLeadA] = useState<string | null>(null);
-  const [leadB, setLeadB] = useState<string | null>(null);
   const [leadTurn, setLeadTurn] = useState<Side>("A");
+  const [orderA, setOrderA] = useState<string[]>([]);
+  const [orderB, setOrderB] = useState<string[]>([]);
+  const [orderConfirmed, setOrderConfirmed] = useState({ A: false, B: false });
   const [draftMoves, setDraftMoves] = useState<
     Record<
       string,
@@ -80,8 +81,7 @@ export function ArenaOnlinePregame({
         ...pool.slice(0, need).map((m) => m.id),
       ]);
     } else if (stage === "LEADS") {
-      const team = leadTurn === "A" ? teamA : teamB;
-      confirmLead(team[0]);
+      confirmOrder();
     }
   };
   useEffect(() => {
@@ -140,6 +140,8 @@ export function ArenaOnlinePregame({
     setTeamB(nextB);
     setPickedThisTurn([]);
     if (nextA.length >= 6 && nextB.length >= 6) {
+      setOrderA(nextA);
+      setOrderB(nextB);
       setLeadTurn(first);
       setStage("LEADS");
       resetTimer();
@@ -150,28 +152,32 @@ export function ArenaOnlinePregame({
     setQuota(Math.min(2, 6 - (next === "A" ? nextA.length : nextB.length)));
     resetTimer();
   };
-  const confirmLead = (id: string | null) => {
-    if (!id) return;
-    onEvent(`INICIAL SECRETO · Jogador ${leadTurn} confirmou sua escolha.`);
-    if (leadTurn === "A") {
-      setLeadA(id);
-      if (!leadB) {
-        setLeadTurn("B");
-        resetTimer();
-        return;
-      }
-    } else {
-      setLeadB(id);
-      if (!leadA) {
-        setLeadTurn("A");
-        resetTimer();
-        return;
-      }
+  const reorder = (side: Side, index: number, direction: -1 | 1) => {
+    const order = side === "A" ? orderA : orderB;
+    const setter = side === "A" ? setOrderA : setOrderB;
+    const target = index + direction;
+    if (target < 0 || target >= order.length) return;
+    const next = [...order];
+    [next[index], next[target]] = [next[target], next[index]];
+    setter(next);
+  };
+  const confirmOrder = () => {
+    const current = leadTurn === "A" ? orderA : orderB;
+    if (current.length !== 6) return;
+    onEvent(
+      `ORDEM SECRETA · Jogador ${leadTurn} confirmou inicial e sequência completa.`,
+    );
+    const confirmed = { ...orderConfirmed, [leadTurn]: true };
+    setOrderConfirmed(confirmed);
+    if (!confirmed.A || !confirmed.B) {
+      setLeadTurn(other(leadTurn));
+      resetTimer();
+      return;
     }
-    const finalA = leadTurn === "A" ? id : leadA!;
-    const finalB = leadTurn === "B" ? id : leadB!;
-    const orderedA = [finalA, ...teamA.filter((value) => value !== finalA)];
-    const orderedB = [finalB, ...teamB.filter((value) => value !== finalB)];
+    const orderedA = orderA;
+    const orderedB = orderB;
+    const finalA = orderedA[0],
+      finalB = orderedB[0];
     onEvent(
       `REVELAÇÃO · ${mascots.find((m) => m.id === finalA)?.name} enfrenta ${mascots.find((m) => m.id === finalB)?.name}.`,
     );
@@ -189,6 +195,13 @@ export function ArenaOnlinePregame({
         ) ?? [],
     }));
   };
+  useEffect(() => {
+    if (stage !== "LEADS") return;
+    for (const id of [...orderA, ...orderB]) {
+      const mascot = mascots.find((m) => m.id === id);
+      if (mascot && !draftMoves[id]) void inspect(mascot);
+    }
+  }, [stage, orderA, orderB]);
   return (
     <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-slate-950 to-cyan-500/5 p-4">
       <div className="flex items-center justify-between">
@@ -393,43 +406,79 @@ export function ArenaOnlinePregame({
       {stage === "LEADS" && (
         <div className="mt-4">
           <p className="text-center text-sm text-white">
-            Jogador {leadTurn}: escolha seu inicial em segredo.
+            Jogador {leadTurn}: organize toda a equipe em segredo.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
-            {(leadTurn === "A" ? teamA : teamB).map((id) => {
+          <p className="mt-1 text-center text-[10px] text-slate-400">
+            O 1º será o inicial. Do 2º ao 6º fica definida a sequência de
+            entrada. O adversário só verá depois das duas confirmações.
+          </p>
+          <div className="mt-3 space-y-2">
+            {(leadTurn === "A" ? orderA : orderB).map((id, index) => {
               const m = mascots.find((entry) => entry.id === id);
               if (!m) return null;
-              const selected = (leadTurn === "A" ? leadA : leadB) === id;
               return (
-                <button
+                <div
                   key={id}
-                  onClick={() =>
-                    leadTurn === "A" ? setLeadA(id) : setLeadB(id)
-                  }
-                  className={`rounded-xl border p-3 ${selected ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+                  className={`flex items-center gap-3 rounded-xl border p-3 ${index === 0 ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
                 >
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${index === 0 ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-slate-200"}`}
+                  >
+                    {index + 1}º
+                  </span>
                   <img
                     src={m.spriteUrl}
                     alt=""
-                    className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
+                    className="h-14 w-14 object-contain [image-rendering:pixelated]"
                   />
-                  <b className="block text-xs text-white">{m.name}</b>
-                </button>
+                  <div className="min-w-0 flex-1">
+                    <b className="block text-xs text-white">
+                      {m.name} · Nv.{m.level}
+                    </b>
+                    <p className="text-[9px] text-slate-500">
+                      {index === 0 ? "Mascote inicial" : "Reserva"} · HP{" "}
+                      {55 + m.level * 6 + m.statVitality * 4} ·{" "}
+                      {m.types.join(" / ")}
+                    </p>
+                    <p className="mt-1 text-[8px] text-cyan-200">
+                      {draftMoves[m.id]
+                        ?.map((move) => `${move.name} (${move.pp} PP)`)
+                        .join(" · ") ?? "Ataques ainda não consultados"}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => reorder(leadTurn, index, -1)}
+                      className="rounded border border-slate-700 px-3 py-2 text-white disabled:opacity-20"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === 5}
+                      onClick={() => reorder(leadTurn, index, 1)}
+                      className="rounded border border-slate-700 px-3 py-2 text-white disabled:opacity-20"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>
           <button
-            onClick={() => confirmLead(leadTurn === "A" ? leadA : leadB)}
+            onClick={confirmOrder}
             className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"
           >
-            Confirmar inicial secreto
+            Confirmar inicial e sequência secreta
           </button>
         </div>
       )}
       {stage === "DONE" && (
         <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-center text-sm text-emerald-200">
-          Pré-jogo concluído. As equipes e os iniciais foram enviados para a
-          montagem abaixo.
+          Pré-jogo concluído. Iniciais e sequências foram confirmados.
         </div>
       )}
     </section>
