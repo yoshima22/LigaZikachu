@@ -2201,7 +2201,7 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
     include: {
       player: { select: { id: true, displayName: true } },
       relationsAsA: { where: { mascotBId: { not: undefined } } },
-      relationsAsB: { where: { type: "RIVAL" } },
+      relationsAsB: { where: { relationshipScore: { lte: -15 } } },
     }
   });
   if (!targetMascot) throw new Error("Mascote nao encontrado.");
@@ -2210,7 +2210,7 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   // Verifica se o atacante tem um mascote com relação RIVAL com o mascote alvo
   const rivalRelation = await prisma.mascotRelation.findFirst({
     where: {
-      type: "RIVAL",
+      relationshipScore: { lte: -15 },
       OR: [
         { mascotA: { playerId: attackerPlayerId }, mascotBId: targetMascotId },
         { mascotB: { playerId: attackerPlayerId }, mascotAId: targetMascotId },
@@ -2477,7 +2477,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   // Verifica relação de RIVAL entre mascotes dos dois jogadores
   const isRival = await prisma.mascotRelation.findFirst({
     where: {
-      type: "RIVAL",
+      relationshipScore: { lte: -15 },
       OR: [
         { mascotA: { playerId: attackTeam.playerId }, mascotB: { playerId: defenseTeam.playerId } },
         { mascotA: { playerId: defenseTeam.playerId }, mascotB: { playerId: attackTeam.playerId } },

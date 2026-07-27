@@ -54,16 +54,17 @@ export function MiauvadaoGames(props: Props) {
           isAdmin={props.isAdmin}
         />
       ) : (
-        <EggFusionGame playerId={props.playerId} vaultBalance={props.vaultBalance} initialCounts={props.eggCounts} />
+        <EggFusionGame playerId={props.playerId} balance={props.balance} vaultBalance={props.vaultBalance} initialCounts={props.eggCounts} />
       )}
     </div>
   );
 }
 
 function EggFusionGame({
-  playerId, vaultBalance, initialCounts,
+  playerId, balance, vaultBalance, initialCounts,
 }: {
   playerId: string | null;
+  balance: number;
   vaultBalance: number;
   initialCounts: Record<MiauvadaoFusionEggType, number>;
 }) {
@@ -72,7 +73,10 @@ function EggFusionGame({
   const [counts, setCounts] = useState(initialCounts);
   const [selected, setSelected] = useState<MiauvadaoFusionEggType[]>([]);
   const [result, setResult] = useState<string | null>(null);
-  const machineOnline = vaultBalance >= 500;
+  const [currentBalance, setCurrentBalance] = useState(balance);
+  const vaultReady = vaultBalance >= 250;
+  const playerReady = currentBalance >= 250;
+  const machineOnline = vaultReady && playerReady;
   const chances = useMemo(() => getMiauvadaoFusionChances(selected), [selected]);
 
   const selectedCount = (type: MiauvadaoFusionEggType) => selected.filter((item) => item === type).length;
@@ -88,7 +92,8 @@ function EggFusionGame({
   };
   const fuse = () => {
     if (!playerId) return toast.error("Faça login para usar a máquina.");
-    if (!machineOnline) return toast.error("O cofre do Miauvadão não possui os 500 ZC necessários.");
+    if (!vaultReady) return toast.error("A máquina está desligada: o cofre do Miauvadão precisa de 250 ZC.");
+    if (!playerReady) return toast.error("Saldo insuficiente: você precisa de 250 ZC para usar a máquina.");
     if (selected.length !== 3) return toast.error("Selecione exatamente 3 ovos.");
     if (!confirm("Os 3 ovos serão consumidos permanentemente, mesmo se a fusão falhar. Continuar?")) return;
     startTransition(async () => {
@@ -110,6 +115,7 @@ function EggFusionGame({
         ? "💥 Os três ovos quebraram. Nenhum ovo foi gerado."
         : `✨ Você recebeu ${LABELS[response.result ?? "COMMON"]}${bonus}.`);
       setSelected([]);
+      if (typeof response.newPlayerBalance === "number") setCurrentBalance(response.newPlayerBalance);
       router.refresh();
     });
   };
@@ -120,16 +126,21 @@ function EggFusionGame({
         <div>
           <h3 className="font-pixel text-sm text-[#FFCB05]">Máquina de Fusão de Ovos</h3>
           <p className="mt-1 max-w-2xl text-xs text-[#8b6c00]">
-            Consome exatamente três ovos e 500 ZC do cofre. Ingredientes melhores aumentam bastante as chances de resultados melhores.
+            Consome exatamente três ovos, 250 ZC do jogador e 250 ZC do cofre. Ingredientes melhores aumentam bastante as chances de resultados melhores.
           </p>
         </div>
         <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${machineOnline ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>
           {machineOnline ? "● Máquina ligada" : "● Máquina desligada"}
         </span>
       </div>
-      {!machineOnline && (
+      {!vaultReady && (
         <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          O cofre possui {vaultBalance.toLocaleString("pt-BR")} ZC. São necessários 500 ZC para alimentar a máquina.
+          O cofre possui {vaultBalance.toLocaleString("pt-BR")} ZC. São necessários 250 ZC do cofre para alimentar a máquina.
+        </p>
+      )}
+      {!playerReady && (
+        <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          Seu saldo é de {currentBalance.toLocaleString("pt-BR")} ZC. Você precisa de 250 ZC para realizar a fusão.
         </p>
       )}
 
@@ -190,7 +201,7 @@ function EggFusionGame({
       {result && <p className="mt-3 rounded-xl bg-white/5 px-3 py-2 text-xs text-slate-100">{result}</p>}
       <button type="button" onClick={fuse} disabled={pending || !machineOnline || selected.length !== 3}
         className="mt-4 w-full rounded-xl bg-[#FFCB05] px-4 py-2.5 text-sm font-black text-[#1A1A2E] disabled:opacity-40">
-        {pending ? "Fundindo..." : "Fundir 3 ovos · custo do cofre: 500 ZC"}
+        {pending ? "Fundindo..." : "Fundir 3 ovos · 250 ZC seus + 250 ZC do cofre"}
       </button>
     </div>
   );

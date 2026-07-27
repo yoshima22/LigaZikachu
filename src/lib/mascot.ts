@@ -757,7 +757,7 @@ export async function interactWithMascot(
 
   // Pré-busca multipliers de EXP para calcular o valor real antes de montar a mensagem
   const [relations, expBoostBuff] = await Promise.all([
-    prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true, interactionCount: true } }).catch(() => [] as { type: string; interactionCount: number }[]),
+    prisma.mascotRelation.findMany({ where: { mascotAId: mascotId }, select: { type: true, relationshipScore: true, interactionCount: true } }).catch(() => [] as { type: string; relationshipScore: number; interactionCount: number }[]),
     prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: now } } }).catch(() => null),
   ]);
   const expBoostItemMeta = expBoostBuff ? await getShopItemMeta("MASCOT_BUFF_EXP") : null;
@@ -765,8 +765,8 @@ export async function interactWithMascot(
   const picnicHappyBonus = 0;
 
   // Bônus social escalado por tier (§12 do doc social)
-  const friendRels     = relations.filter(r => r.type === "FRIEND");
-  const rivalRels      = relations.filter(r => r.type === "RIVAL");
+  const friendRels     = relations.filter(r => r.relationshipScore >= 15);
+  const rivalRels      = relations.filter(r => r.relationshipScore <= -15);
   const friendCount    = friendRels.length;
   const hasSuperFriend = friendRels.some(r => r.interactionCount >= 5);
   const rivalCount     = rivalRels.length;
@@ -1375,7 +1375,7 @@ export async function claimExpedition(
   const allyExpBonus = 1 + allyCount * 0.1;
   // Bônus de rival em expedição escalado por tier (§12.1 do doc social)
   const rivalRelsExp = await prisma.mascotRelation.findMany({
-    where: { mascotAId: expedition.mascotId, type: "RIVAL" },
+    where: { mascotAId: expedition.mascotId, relationshipScore: { lte: -15 } },
     select: { interactionCount: true },
   });
   const rivalCount = rivalRelsExp.length;
@@ -2137,7 +2137,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
 
   // ── Eventos de RIVAIS com efeitos reais ──────────────────────────────────
   const rivalPairs = await prisma.mascotRelation.findMany({
-    where: { type: "RIVAL" },
+    where: { relationshipScore: { lte: -15 } },
     include: {
       mascotA: { select: { id: true, pokemonId: true, nickname: true, playerId: true, arenaState: true, level: true, player: { select: { displayName: true } } } },
       mascotB: {

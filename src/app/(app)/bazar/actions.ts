@@ -143,7 +143,15 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
 
   // Sorteia até 3 itens distintos
   const shuffled = [...shopItems].sort(() => Math.random() - 0.5);
-  const chosen = shuffled.slice(0, 3);
+  const chosen: typeof shopItems = [];
+  let hasMegaStone = false;
+  for (const item of shuffled) {
+    const megaStone = isMegaStoneType(item.type);
+    if (megaStone && hasMegaStone) continue;
+    chosen.push(item);
+    if (megaStone) hasMegaStone = true;
+    if (chosen.length === 3) break;
+  }
 
   return chosen.map(item => {
     const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
@@ -1314,13 +1322,15 @@ export async function getMiauvadaoPurchaseStatus(playerId: string | null): Promi
   );
 }
 
-const MIAUVADAO_EGG_FUSION_VAULT_COST = 500;
+const MIAUVADAO_EGG_FUSION_VAULT_COST = 250;
+const MIAUVADAO_EGG_FUSION_PLAYER_COST = 250;
 
 export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]): Promise<{
   error?: string;
   result?: "BROKEN" | MiauvadaoFusionEggType | "LAB";
   lootBonusPct?: number;
   newVaultBalance?: number;
+  newPlayerBalance?: number;
 }> {
   try {
     const user = await getSessionUser();
@@ -1335,6 +1345,10 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
       if (config.vaultBalance < MIAUVADAO_EGG_FUSION_VAULT_COST) {
         throw new Error(`A máquina está desligada: o cofre precisa de pelo menos ${MIAUVADAO_EGG_FUSION_VAULT_COST} ZC para funcionar.`);
+      }
+      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < MIAUVADAO_EGG_FUSION_PLAYER_COST) {
+        throw new Error(`Saldo insuficiente: você precisa de ${MIAUVADAO_EGG_FUSION_PLAYER_COST} ZC para usar a máquina.`);
       }
 
       const required = eggTypes.reduce((map, type) => {
@@ -1364,6 +1378,12 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
       if (consumed.count !== 3) {
         throw new Error("Os ovos mudaram enquanto a fusão era processada. Nada foi consumido; tente novamente.");
       }
+      await creditCoins(tx, {
+        playerId: player.id,
+        type: "SHOP_PURCHASE",
+        amount: -MIAUVADAO_EGG_FUSION_PLAYER_COST,
+        description: "Uso da Máquina de Fusão de Ovos do Miauvadão",
+      });
       if (result !== "BROKEN") {
         await tx.mascotEgg.create({
           data: {
@@ -1384,7 +1404,12 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
           lastNpcMessageAt: new Date(),
         },
       });
-      return { result, lootBonusPct, newVaultBalance: updatedConfig.vaultBalance };
+      return {
+        result,
+        lootBonusPct,
+        newVaultBalance: updatedConfig.vaultBalance,
+        newPlayerBalance: wallet.balance - MIAUVADAO_EGG_FUSION_PLAYER_COST,
+      };
     }, { isolationLevel: "Serializable" });
 
     revalidateTag("miauvadao-config");
@@ -1570,7 +1595,9 @@ export async function refreshMiauvadaoOfferSlot(offerIndex: number): Promise<{ e
       if (!offers[offerIndex]) throw new Error("Slot não encontrado.");
       const candidates = await rollMiauvadaoOffers(config.vaultBalance);
       const existingIds = new Set(offers.map((offer) => offer.shopItemId));
-      const replacement = candidates.find((offer) => !existingIds.has(offer.shopItemId)) ?? candidates[0];
+      const anotherMegaStoneExists = offers.some((offer, index) => index !== offerIndex && isMegaStoneType(offer.itemType));
+      const eligibleCandidates = candidates.filter((offer) => !anotherMegaStoneExists || !isMegaStoneType(offer.itemType));
+      const replacement = eligibleCandidates.find((offer) => !existingIds.has(offer.shopItemId)) ?? eligibleCandidates[0];
       if (!replacement) throw new Error("Nenhum item elegível para a troca.");
       const updatedOffers = [...offers];
       updatedOffers[offerIndex] = replacement;

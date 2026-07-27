@@ -410,6 +410,13 @@ function getRelationTier(relation: MascotRelation) {
   return { score, label: "Quase Irmãos", emoji: "✨" };
 }
 
+function getRelationGroup(relation: MascotRelation): "FRIEND" | "KNOWN" | "RIVAL" {
+  const { score } = getRelationTier(relation);
+  if (score >= 15) return "FRIEND";
+  if (score <= -15) return "RIVAL";
+  return "KNOWN";
+}
+
 function ActiveBuffBadge({ type, expiresAt }: { type: string; expiresAt: Date }) {
   const { remaining, expired } = useTimerExpiry(expiresAt);
   if (expired) return null;
@@ -1428,21 +1435,23 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             <button type="button" onClick={() => setShowRelations(r => !r)}
               className="w-full flex items-center justify-between text-[10px] font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-300 transition-colors">
               <span>
-                💚 Amigos ({mascot.relations.filter(r => r.type === "FRIEND").length})
+                💚 Amigos ({mascot.relations.filter(r => getRelationGroup(r) === "FRIEND").length})
                 {" & "}
-                😤 Rivais ({mascot.relations.filter(r => r.type === "RIVAL").length})
+                👀 Conhecidos ({mascot.relations.filter(r => getRelationGroup(r) === "KNOWN").length})
+                {" & "}
+                😤 Rivais ({mascot.relations.filter(r => getRelationGroup(r) === "RIVAL").length})
               </span>
               <span>{showRelations ? "▲" : "▼"}</span>
             </button>
             {showRelations && (
               <div className="rounded-xl border border-border/40 bg-slate-900/30 p-2 space-y-1.5 max-h-48 overflow-y-auto">
                 {mascot.relations.map(rel => {
-                  const isFriend = rel.type === "FRIEND";
                   const tier = getRelationTier(rel);
+                  const group = getRelationGroup(rel);
                   const name_ = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
                   return (
                     <div key={rel.mascotB.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 border text-[10px] ${
-                      isFriend ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"
+                      group === "FRIEND" ? "border-green-500/20 bg-green-500/5" : group === "RIVAL" ? "border-red-500/20 bg-red-500/5" : "border-slate-500/20 bg-slate-500/5"
                     }`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={getSpriteUrl(rel.mascotB.pokemonId)} alt="" className="h-7 w-7 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
@@ -1450,7 +1459,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                         <p className="font-semibold text-slate-200 truncate">{name_}</p>
                         <p className="text-slate-500 truncate">de {rel.mascotB.ownerName}</p>
                       </div>
-                      <span className={`shrink-0 text-right text-[9px] font-semibold ${isFriend ? "text-green-300" : "text-red-300"}`}>
+                      <span className={`shrink-0 text-right text-[9px] font-semibold ${group === "FRIEND" ? "text-green-300" : group === "RIVAL" ? "text-red-300" : "text-slate-300"}`}>
                         <span className="block">{tier.emoji} {tier.label}</span>
                         <span className="block opacity-60">{tier.score > 0 ? "+" : ""}{tier.score} · {rel.interactionCount} interações</span>
                       </span>
