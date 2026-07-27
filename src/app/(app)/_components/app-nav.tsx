@@ -91,7 +91,8 @@ function buildProfileLinks(playerId?: string) {
 }
 
 const adminLinks = [
-  { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true }
+  { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true },
+  { href: "/admin/arena-online", label: "Arena Online", icon: Swords, adminOnly: true }
 ];
 
 type NavLink = {
