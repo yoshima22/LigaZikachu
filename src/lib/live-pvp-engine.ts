@@ -125,6 +125,7 @@ function canAct(f: LivePvpFighter, random: () => number, events: string[]) {
   return f.hp > 0;
 }
 function applyAilment(
+  attacker: LivePvpFighter,
   target: LivePvpFighter,
   move: LivePvpMove,
   random: () => number,
@@ -132,7 +133,14 @@ function applyAilment(
 ) {
   if (
     move.ailment === "none" ||
-    !rollPercent(random, chance(move.ailmentChance, move.effectChance ?? 100))
+    !rollPercent(
+      random,
+      Math.min(
+        100,
+        chance(move.ailmentChance, move.effectChance ?? 100) +
+          attackerSupportBonus(move, attacker),
+      ),
+    )
   )
     return;
   const immune =
@@ -172,6 +180,13 @@ function applyAilment(
     `${target.name} recebeu ${STATUS_LABEL[move.ailment] ?? move.ailment}.`,
   );
 }
+function attackerSupportBonus(move: LivePvpMove, attacker: LivePvpFighter) {
+  return Math.min(
+    15,
+    (SELF_TARGETS.has(move.target) ? attacker.charisma : attacker.instinct) /
+      18,
+  );
+}
 function applyStatChanges(
   attacker: LivePvpFighter,
   defender: LivePvpFighter,
@@ -179,18 +194,36 @@ function applyStatChanges(
   random: () => number,
   events: string[],
 ) {
+  const selfTarget = SELF_TARGETS.has(move.target);
+  const supportChance = Math.min(
+    18,
+    (selfTarget ? attacker.charisma : attacker.instinct) / 14,
+  );
   if (
     !move.statChanges.length ||
-    !rollPercent(random, chance(move.effectChance, 100))
+    !rollPercent(
+      random,
+      Math.min(100, chance(move.effectChance, 100) + supportChance),
+    )
   )
     return;
-  const target = SELF_TARGETS.has(move.target) ? attacker : defender;
+  const target = selfTarget ? attacker : defender;
   target.statStages ??= {};
   for (const change of move.statChanges) {
     const before = target.statStages[change.stat] ?? 0;
-    target.statStages[change.stat] = clamp(before + change.change, -6, 6);
+    const extra =
+      selfTarget &&
+      change.change > 0 &&
+      rollPercent(random, Math.min(35, attacker.charisma / 8))
+        ? 1
+        : 0;
+    target.statStages[change.stat] = clamp(
+      before + change.change + extra,
+      -6,
+      6,
+    );
     events.push(
-      `${target.name}: ${change.stat} ${change.change > 0 ? "subiu" : "caiu"} ${Math.abs(change.change)} estágio(s).`,
+      `${target.name}: ${change.stat} ${change.change > 0 ? "subiu" : "caiu"} ${Math.abs(change.change) + extra} estágio(s)${extra ? " com impulso do Carisma" : ""}.`,
     );
   }
 }
@@ -252,7 +285,17 @@ function execute(
     );
     return;
   }
-  if (["protect", "detect", "kings-shield", "spiky-shield", "baneful-bunker", "silk-trap", "burning-bulwark"].includes(move.slug)) {
+  if (
+    [
+      "protect",
+      "detect",
+      "kings-shield",
+      "spiky-shield",
+      "baneful-bunker",
+      "silk-trap",
+      "burning-bulwark",
+    ].includes(move.slug)
+  ) {
     attacker.protected = true;
     events.push(`${attacker.name} se protegeu contra ataques nesta rodada.`);
     return;
@@ -262,7 +305,9 @@ function execute(
     attacker.hp = attacker.maxHp;
     attacker.status = "sleep";
     attacker.statusTurns = 2;
-    events.push(`${attacker.name} usou ${move.name}, recuperou ${healed} HP e adormeceu por duas ações.`);
+    events.push(
+      `${attacker.name} usou ${move.name}, recuperou ${healed} HP e adormeceu por duas ações.`,
+    );
     return;
   }
   const bespoke = new Set([
@@ -327,12 +372,19 @@ function execute(
     );
   } else events.push(`${attacker.name} usou ${move.name}.`);
   if (move.healing) {
+    const supportScale =
+      0.75 +
+      attacker.charisma / 500 +
+      attacker.vitality / 750 +
+      attacker.level / 500;
     const healed = Math.min(
       attacker.maxHp - attacker.hp,
-      Math.round((attacker.maxHp * move.healing) / 100),
+      Math.round(((attacker.maxHp * move.healing) / 100) * supportScale),
     );
     attacker.hp += healed;
-    events.push(`${attacker.name} recuperou ${healed} HP.`);
+    events.push(
+      `${attacker.name} recuperou ${healed} HP com escala de Carisma, Vitalidade e nível.`,
+    );
   }
   if (move.drain > 0 && totalDamage) {
     const healed = Math.min(
@@ -351,6 +403,7 @@ function execute(
     events.push(`${attacker.name} sofreu ${recoil} de recuo.`);
   }
   applyAilment(
+    attacker,
     SELF_TARGETS.has(move.target) ? attacker : defender,
     move,
     random,

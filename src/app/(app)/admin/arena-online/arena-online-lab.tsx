@@ -131,6 +131,18 @@ function moveScaling(move: LivePvpMove) {
     return "Poder: Força · Defesa rival: Vitalidade";
   if (move.damageClass === "special")
     return "Poder: Instinto + Carisma · Defesa rival: Vitalidade + Carisma";
+  if (move.healing)
+    return "Suporte cuidador: cura escala com Carisma, Vitalidade e nível";
+  if (
+    move.statChanges.length &&
+    ["user", "users-field", "user-or-ally"].includes(move.target)
+  )
+    return "Suporte encorajador: Carisma pode ampliar o buff";
+  if (
+    move.ailment !== "none" ||
+    move.statChanges.some((change) => change.change < 0)
+  )
+    return "Suporte oportunista: Instinto aumenta a chance do efeito adverso";
   return "Golpe de suporte: não usa poder de ataque";
 }
 function effectSummary(move: LivePvpMove) {
@@ -177,6 +189,9 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [ppB, setPpB] = useState<Record<number, number>>({});
   const [teamMovePreview, setTeamMovePreview] = useState<
     Record<string, LivePvpMove[]>
+  >({});
+  const [ppLedger, setPpLedger] = useState<
+    Record<string, Record<number, number>>
   >({});
   const [fighterA, setFighterA] = useState<LivePvpFighter | null>(null);
   const [fighterB, setFighterB] = useState<LivePvpFighter | null>(null);
@@ -262,6 +277,15 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           (b.recommendedIds ?? []).includes(move.id),
         ),
       }));
+      setPpLedger((current) => ({
+        ...current,
+        [firstA.id]: Object.fromEntries(
+          a.moves!.map((move) => [move.id, move.pp]),
+        ),
+        [firstB.id]: Object.fromEntries(
+          b.moves!.map((move) => [move.id, move.pp]),
+        ),
+      }));
       setIdA(firstA.id);
       setIdB(firstB.id);
       setFighterA(null);
@@ -317,6 +341,28 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         setPpB((pp) => ({
           ...pp,
           [moveB.id]: Math.max(0, (pp[moveB.id] ?? moveB.pp) - 1),
+        }));
+      if (moveA)
+        setPpLedger((current) => ({
+          ...current,
+          [fighterA.id]: {
+            ...(current[fighterA.id] ?? {}),
+            [moveA.id]: Math.max(
+              0,
+              (current[fighterA.id]?.[moveA.id] ?? moveA.pp) - 1,
+            ),
+          },
+        }));
+      if (moveB)
+        setPpLedger((current) => ({
+          ...current,
+          [fighterB.id]: {
+            ...(current[fighterB.id] ?? {}),
+            [moveB.id]: Math.max(
+              0,
+              (current[fighterB.id]?.[moveB.id] ?? moveB.pp) - 1,
+            ),
+          },
         }));
       setFighterA(result.fighterA);
       setFighterB(result.fighterB);
@@ -427,6 +473,24 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         target.pokemonId,
         target.level,
       );
+      const recommended =
+        loaded.moves?.filter((move) =>
+          (loaded.recommendedIds ?? []).includes(move.id),
+        ) ?? [];
+      setTeamMovePreview((current) => ({
+        ...current,
+        [targetId]: recommended,
+      }));
+      setPpLedger((current) =>
+        current[targetId]
+          ? current
+          : {
+              ...current,
+              [targetId]: Object.fromEntries(
+                (loaded.moves ?? []).map((move) => [move.id, move.pp]),
+              ),
+            },
+      );
       if (loaded.error || !loaded.moves) {
         toast.error(loaded.error ?? "Falha ao carregar golpes.");
         return;
@@ -454,7 +518,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         setMovesA(loaded.moves);
         setSetA(loaded.recommendedIds ?? []);
         setPpA(
-          Object.fromEntries(loaded.moves.map((move) => [move.id, move.pp])),
+          ppLedger[next.id] ??
+            Object.fromEntries(loaded.moves.map((move) => [move.id, move.pp])),
         );
         setChoiceA(null);
         setActiveSide("B");
@@ -478,6 +543,17 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
             ...pp,
             [moveA.id]: Math.max(0, (pp[moveA.id] ?? moveA.pp) - 1),
           }));
+        if (moveA)
+          setPpLedger((current) => ({
+            ...current,
+            [fighterA.id]: {
+              ...(current[fighterA.id] ?? {}),
+              [moveA.id]: Math.max(
+                0,
+                (current[fighterA.id]?.[moveA.id] ?? moveA.pp) - 1,
+              ),
+            },
+          }));
         setFighterA(result.fighterA);
         setFighterB(result.fighterB);
         setTeamA((team) =>
@@ -494,7 +570,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       setMovesB(loaded.moves);
       setSetB(loaded.recommendedIds ?? []);
       setPpB(
-        Object.fromEntries(loaded.moves.map((move) => [move.id, move.pp])),
+        ppLedger[next.id] ??
+          Object.fromEntries(loaded.moves.map((move) => [move.id, move.pp])),
       );
       setChoiceA(null);
       setChoiceB(null);
@@ -612,6 +689,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
               team={teamA}
               pp={ppA}
               owner={mascots.find((m) => m.id === teamIdsA[0])}
+              movePreview={teamMovePreview}
+              ppLedger={ppLedger}
               onSwitch={(id) => switchMascot("A", id)}
             />
             <FightBox
@@ -624,6 +703,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
               team={teamB}
               pp={ppB}
               owner={mascots.find((m) => m.id === teamIdsB[0])}
+              movePreview={teamMovePreview}
+              ppLedger={ppLedger}
               onSwitch={(id) => switchMascot("B", id)}
             />
             <div className="rounded-xl border border-border bg-slate-950 p-3">
@@ -825,6 +906,98 @@ function TeamPicker({
           </div>
         )}
       </div>
+      <div className="mt-4 border-t border-cyan-500/20 pt-4">
+        <div className="mb-2 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#FFCB05]">
+              Equipe selecionada
+            </p>
+            <p className="text-[10px] text-slate-500">
+              Ordem de entrada e ficha completa dos escolhidos.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {ids.map((id, index) => {
+            const m = mascots.find((entry) => entry.id === id);
+            if (!m) return null;
+            const hp = toFighter(m).maxHp;
+            return (
+              <div
+                key={id}
+                className="rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/5 p-3"
+              >
+                <div className="flex gap-3">
+                  <div className="relative">
+                    <img
+                      src={m.spriteUrl}
+                      alt=""
+                      className="h-20 w-20 object-contain [image-rendering:pixelated]"
+                    />
+                    <span className="absolute -left-1 -top-1 rounded-full bg-[#FFCB05] px-2 py-1 text-[9px] font-black text-slate-950">
+                      {index + 1}º
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="truncate text-sm text-white">
+                        {m.name} · Nv.{m.level}
+                      </strong>
+                      <button
+                        type="button"
+                        onClick={() => toggle(m.id)}
+                        className="rounded border border-red-500/30 px-2 py-1 text-[9px] text-red-300"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      HP {hp} · {m.gameStatus} · Tag {m.performanceTag}
+                    </p>
+                    <div className="mt-1 flex gap-1">
+                      {m.types.map((type) => (
+                        <span
+                          key={type}
+                          className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[9px] text-slate-200"
+                        >
+                          {TYPE_ICONS[type] ?? ""} {TYPE_LABELS[type] ?? type}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[9px] text-slate-400">
+                      FOR {m.statForce} · AGI {m.statAgility} · CAR{" "}
+                      {m.statCharisma} · INS {m.statInstinct} · VIT{" "}
+                      {m.statVitality}
+                    </p>
+                    <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                      {(movePreview[m.id] ?? []).map((move) => (
+                        <div
+                          key={move.id}
+                          className="rounded bg-slate-950/70 px-2 py-1 text-[9px]"
+                        >
+                          <b className="text-slate-200">{move.name}</b>
+                          <span className="ml-1 text-slate-500">
+                            Poder {move.power ?? 0} · PP {move.pp}
+                          </span>
+                          <p className="text-cyan-300/60">
+                            {moveScaling(move)}
+                          </p>
+                        </div>
+                      ))}
+                      {!movePreview[m.id]?.length && (
+                        <p className="text-[9px] text-slate-500">
+                          Selecione novamente ou prepare a equipe para carregar
+                          os golpes.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -878,6 +1051,8 @@ function FightBox({
   team,
   pp,
   owner,
+  movePreview,
+  ppLedger,
   onSwitch,
 }: {
   side: Side;
@@ -889,6 +1064,8 @@ function FightBox({
   team: LivePvpFighter[];
   pp: Record<number, number>;
   owner?: MascotOption;
+  movePreview: Record<string, LivePvpMove[]>;
+  ppLedger: Record<string, Record<number, number>>;
   onSwitch: (id: string) => void;
 }) {
   const pct = Math.round((fighter.hp / fighter.maxHp) * 100);
@@ -1023,8 +1200,13 @@ function FightBox({
               type="button"
               key={member.id}
               onClick={() => setInspectedId(member.id)}
-              className="rounded-lg border border-slate-800 bg-slate-900 p-1 disabled:opacity-35"
+              className={`relative rounded-lg border p-1 ${member.hp <= 0 ? "border-red-500/60 bg-red-950/50" : "border-slate-800 bg-slate-900"}`}
             >
+              {member.hp <= 0 && (
+                <span className="absolute right-1 top-1 z-10 rounded bg-red-600 px-1.5 py-0.5 text-[8px] font-black text-white">
+                  K.O.
+                </span>
+              )}
               <img
                 src={member.spriteUrl}
                 alt=""
@@ -1090,6 +1272,33 @@ function FightBox({
                 <br />
                 <b>{inspected.vitality}</b>
               </span>
+            </div>
+            <div className="mt-3 space-y-1 border-t border-slate-800 pt-2">
+              <p className="font-bold uppercase tracking-wider text-slate-500">
+                Habilidades e PP
+              </p>
+              {(movePreview[inspected.id] ?? []).map((move) => (
+                <div
+                  key={move.id}
+                  className="flex items-center justify-between rounded bg-slate-900 px-2 py-1.5"
+                >
+                  <span className="text-slate-200">
+                    {TYPE_ICONS[move.type] ?? ""} {move.name}
+                  </span>
+                  <b
+                    className={
+                      (ppLedger[inspected.id]?.[move.id] ?? move.pp) <= 0
+                        ? "text-red-300"
+                        : "text-cyan-300"
+                    }
+                  >
+                    PP {ppLedger[inspected.id]?.[move.id] ?? move.pp}/{move.pp}
+                  </b>
+                </div>
+              ))}
+              {!movePreview[inspected.id]?.length && (
+                <p className="text-slate-500">Golpes ainda não carregados.</p>
+              )}
             </div>
             {inspected.id !== fighter.id && inspected.hp > 0 && (
               <button
