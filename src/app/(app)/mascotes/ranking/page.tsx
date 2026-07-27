@@ -9,7 +9,7 @@ interface PageProps {
   searchParams: Promise<{ tab?: string; page?: string }>;
 }
 
-const RANKING_PAGE_SIZE = 10;
+const RANKING_PAGE_SIZE = 40;
 const RANKING_MAX_PAGES = 5;
 
 const MASCOT_SELECT = {
@@ -95,7 +95,7 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
     const mascots = await prisma.mascot.findMany({
       where: PLAYER_FILTER, select: MASCOT_SELECT,
       orderBy: [{ battleWins: "desc" }, { battleLosses: "asc" }, { id: "asc" }],
-      take: 50,
+      take: 200,
     });
     return {
       ranking: mascots.map(m => {
@@ -118,7 +118,7 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
     const mascots = await prisma.mascot.findMany({
       where: PLAYER_FILTER, select: MASCOT_SELECT,
       orderBy: [{ level: "desc" }, { exp: "desc" }, { id: "asc" }],
-      take: 50,
+      take: 200,
     });
     return {
       ranking: mascots
@@ -130,7 +130,7 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
           extra: `${m.exp.toLocaleString("pt-BR")} EXP`,
         }))
         .sort((a, b) => b.level - a.level || b.value2 - a.value2 || b.totalStats - a.totalStats)
-        .slice(0, 50),
+        .slice(0, 200),
       diary: [],
     };
   }
@@ -150,7 +150,7 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
   const mascots = await prisma.mascot.findMany({
     where: PLAYER_FILTER, select: MASCOT_SELECT,
     orderBy: cfg.order,
-    take: 50,
+    take: 200,
   });
 
   return { ranking: statRanking(mascots as Parameters<typeof statRanking>[0], cfg.key, cfg.label), diary: [] };
@@ -222,7 +222,7 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
         <p className="text-sm text-slate-500">
           {isDiary
             ? "Últimos 25 eventos de todos os mascotes da Liga"
-            : "Top 50 mascotes · Somente jogadores PLAYER"}
+            : "Top 200 mascotes · 40 por página · Somente jogadores PLAYER"}
         </p>
       </div>
 
