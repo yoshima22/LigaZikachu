@@ -26,6 +26,7 @@ export default async function ArenaOnlinePage() {
       player: {
         select: {
           displayName: true,
+          avatarUrl: true,
           mascotSpritePreference: true,
           megaSpritePreference: true,
         },
@@ -38,6 +39,7 @@ export default async function ArenaOnlinePage() {
         ...mascot,
         name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
         ownerName: mascot.player.displayName,
+        ownerAvatarUrl: mascot.player.avatarUrl,
         types: getPokemonTypes(mascot.pokemonId),
         spriteUrl: getPreferredSpriteUrl(mascot.pokemonId, mascot.player, {
           shiny: mascot.isShiny,

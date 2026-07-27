@@ -12,6 +12,7 @@ type MascotOption = {
   pokemonId: number;
   name: string;
   ownerName: string;
+  ownerAvatarUrl: string | null;
   level: number;
   types: string[];
   spriteUrl: string;
@@ -162,6 +163,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [movesB, setMovesB] = useState<LivePvpMove[]>([]);
   const [setA, setSetA] = useState<number[]>([]);
   const [setB, setSetB] = useState<number[]>([]);
+  const [ppA, setPpA] = useState<Record<number, number>>({});
+  const [ppB, setPpB] = useState<Record<number, number>>({});
   const [fighterA, setFighterA] = useState<LivePvpFighter | null>(null);
   const [fighterB, setFighterB] = useState<LivePvpFighter | null>(null);
   const [choiceA, setChoiceA] = useState<number | null>(null);
@@ -220,6 +223,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       setMovesB(b.moves);
       setSetA(a.recommendedIds ?? []);
       setSetB(b.recommendedIds ?? []);
+      setPpA(Object.fromEntries(a.moves.map((move) => [move.id, move.pp])));
+      setPpB(Object.fromEntries(b.moves.map((move) => [move.id, move.pp])));
       setIdA(firstA.id);
       setIdB(firstB.id);
       setFighterA(null);
@@ -266,15 +271,27 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         moveA,
         moveB,
       });
+      if (moveA)
+        setPpA((pp) => ({
+          ...pp,
+          [moveA.id]: Math.max(0, (pp[moveA.id] ?? moveA.pp) - 1),
+        }));
+      if (moveB)
+        setPpB((pp) => ({
+          ...pp,
+          [moveB.id]: Math.max(0, (pp[moveB.id] ?? moveB.pp) - 1),
+        }));
       setFighterA(result.fighterA);
       setFighterB(result.fighterB);
       if (result.fighterA.transformedFromName) {
         setMovesA(selectedB);
         setSetA(selectedB.map((move) => move.id));
+        setPpA(Object.fromEntries(selectedB.map((move) => [move.id, 5])));
       }
       if (result.fighterB.transformedFromName) {
         setMovesB(selectedA);
         setSetB(selectedA.map((move) => move.id));
+        setPpB(Object.fromEntries(selectedA.map((move) => [move.id, 5])));
       }
       setTeamA((team) =>
         team.map((member) =>
@@ -309,10 +326,20 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
             setFighterA(next);
             setMovesA(loaded.moves ?? []);
             setSetA(loaded.recommendedIds ?? []);
+            setPpA(
+              Object.fromEntries(
+                (loaded.moves ?? []).map((move) => [move.id, move.pp]),
+              ),
+            );
           } else {
             setFighterB(next);
             setMovesB(loaded.moves ?? []);
             setSetB(loaded.recommendedIds ?? []);
+            setPpB(
+              Object.fromEntries(
+                (loaded.moves ?? []).map((move) => [move.id, move.pp]),
+              ),
+            );
           }
           setLogs((old) => [
             ...old,
@@ -389,6 +416,9 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         setFighterA(next);
         setMovesA(loaded.moves);
         setSetA(loaded.recommendedIds ?? []);
+        setPpA(
+          Object.fromEntries(loaded.moves.map((move) => [move.id, move.pp])),
+        );
         setChoiceA(null);
         setActiveSide("B");
         setSeconds(60);
@@ -406,6 +436,11 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           moveA,
           moveB: null,
         });
+        if (moveA)
+          setPpA((pp) => ({
+            ...pp,
+            [moveA.id]: Math.max(0, (pp[moveA.id] ?? moveA.pp) - 1),
+          }));
         setFighterA(result.fighterA);
         setFighterB(result.fighterB);
         setTeamA((team) =>
@@ -421,6 +456,9 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       } else setFighterB(next);
       setMovesB(loaded.moves);
       setSetB(loaded.recommendedIds ?? []);
+      setPpB(
+        Object.fromEntries(loaded.moves.map((move) => [move.id, move.pp])),
+      );
       setChoiceA(null);
       setChoiceB(null);
       setActiveSide("A");
@@ -533,6 +571,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
               choice={choiceA}
               setChoice={setChoiceA}
               team={teamA}
+              pp={ppA}
+              owner={mascots.find((m) => m.id === teamIdsA[0])}
               onSwitch={(id) => switchMascot("A", id)}
             />
             <FightBox
@@ -543,6 +583,8 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
               choice={choiceB}
               setChoice={setChoiceB}
               team={teamB}
+              pp={ppB}
+              owner={mascots.find((m) => m.id === teamIdsB[0])}
               onSwitch={(id) => switchMascot("B", id)}
             />
             <div className="rounded-xl border border-border bg-slate-950 p-3">
@@ -672,7 +714,7 @@ function MoveSet({ title, moves }: { title: string; moves: LivePvpMove[] }) {
               </span>
             </div>
             <p className="mt-1 text-slate-400">
-              Poder {m.power ?? "—"} · Precisão {m.accuracy ?? "sempre acerta"}
+              Poder {m.power ?? 0} · Precisão {m.accuracy ?? "sempre acerta"}
               {m.accuracy != null ? "%" : ""} · Prioridade{" "}
               {m.priority > 0 ? "+" : ""}
               {m.priority} · PP {m.pp}
@@ -700,6 +742,8 @@ function FightBox({
   choice,
   setChoice,
   team,
+  pp,
+  owner,
   onSwitch,
 }: {
   side: Side;
@@ -709,14 +753,39 @@ function FightBox({
   choice: number | null;
   setChoice: (id: number) => void;
   team: LivePvpFighter[];
+  pp: Record<number, number>;
+  owner?: MascotOption;
   onSwitch: (id: string) => void;
 }) {
   const pct = Math.round((fighter.hp / fighter.maxHp) * 100);
   const [openType, setOpenType] = useState<string | null>(null);
+  const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const inspected = team.find((member) => member.id === inspectedId) ?? null;
   return (
     <div
       className={`rounded-xl border bg-slate-950/70 p-4 ${active ? "border-cyan-400" : "border-border"}`}
     >
+      <div className="mb-3 flex items-center gap-3 border-b border-slate-800 pb-3">
+        {owner?.ownerAvatarUrl ? (
+          <img
+            src={owner.ownerAvatarUrl}
+            alt=""
+            className="h-10 w-10 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 font-bold text-slate-300">
+            {owner?.ownerName?.charAt(0) ?? side}
+          </div>
+        )}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">
+            Jogador {side}
+          </p>
+          <strong className="text-sm text-white">
+            {owner?.ownerName ?? `Jogador ${side}`}
+          </strong>
+        </div>
+      </div>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img
@@ -773,7 +842,7 @@ function FightBox({
         {moves.map((m) => (
           <button
             key={m.id}
-            disabled={!active}
+            disabled={!active || (pp[m.id] ?? m.pp) <= 0}
             onClick={() => setChoice(m.id)}
             className={`rounded-lg border p-2 text-left text-xs disabled:opacity-35 ${choice === m.id ? "border-cyan-400 bg-cyan-400/10" : "border-border"}`}
           >
@@ -781,8 +850,8 @@ function FightBox({
               {TYPE_ICONS[m.type] ?? "✦"} {m.name}
             </strong>
             <span className="ml-2 text-slate-500">
-              Poder {m.power ?? "—"} · Precisão {m.accuracy ?? "—"}
-              {m.accuracy != null ? "%" : ""} · PP {m.pp}
+              Poder {m.power ?? 0} · Precisão {m.accuracy ?? "—"}
+              {m.accuracy != null ? "%" : ""} · PP {pp[m.id] ?? m.pp}/{m.pp}
             </span>
             <span className="mt-1 block text-[10px] leading-relaxed text-cyan-300/75">
               {moveScaling(m)}
@@ -809,8 +878,7 @@ function FightBox({
             <button
               type="button"
               key={member.id}
-              disabled={!active || member.id === fighter.id || member.hp <= 0}
-              onClick={() => onSwitch(member.id)}
+              onClick={() => setInspectedId(member.id)}
               className="rounded-lg border border-slate-800 bg-slate-900 p-1 disabled:opacity-35"
             >
               <img
@@ -827,6 +895,70 @@ function FightBox({
             </button>
           ))}
         </div>
+        {inspected && (
+          <div className="mt-2 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3 text-[10px]">
+            <div className="flex items-center gap-2">
+              <img
+                src={inspected.spriteUrl}
+                alt=""
+                className="h-14 w-14 object-contain [image-rendering:pixelated]"
+              />
+              <div>
+                <strong className="text-sm text-white">
+                  {inspected.name} · Nv.{inspected.level}
+                </strong>
+                <p className="mt-1 text-slate-300">
+                  {inspected.types
+                    .map(
+                      (type) =>
+                        `${TYPE_ICONS[type] ?? ""} ${TYPE_LABELS[type] ?? type}`,
+                    )
+                    .join(" / ")}
+                </p>
+                <p className="mt-1 text-slate-400">
+                  HP {inspected.hp}/{inspected.maxHp}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-5 gap-1 text-center text-slate-300">
+              <span>
+                FOR
+                <br />
+                <b>{inspected.force}</b>
+              </span>
+              <span>
+                AGI
+                <br />
+                <b>{inspected.agility}</b>
+              </span>
+              <span>
+                CAR
+                <br />
+                <b>{inspected.charisma}</b>
+              </span>
+              <span>
+                INS
+                <br />
+                <b>{inspected.instinct}</b>
+              </span>
+              <span>
+                VIT
+                <br />
+                <b>{inspected.vitality}</b>
+              </span>
+            </div>
+            {inspected.id !== fighter.id && inspected.hp > 0 && (
+              <button
+                type="button"
+                disabled={!active}
+                onClick={() => onSwitch(inspected.id)}
+                className="mt-3 w-full rounded-lg bg-cyan-500 px-2 py-2 font-bold text-slate-950 disabled:opacity-35"
+              >
+                Trocar para {inspected.name}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
