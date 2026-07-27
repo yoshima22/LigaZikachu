@@ -1,70 +1,43 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { LivePvpMove } from "@/lib/live-pvp-moves";
 import type { LivePvpFighter } from "@/lib/live-pvp-engine";
 import { loadLivePvpMovesAction, resolveLivePvpTurnAction } from "./actions";
 
-type MascotOption = {
-  id: string; pokemonId: number; name: string; ownerName: string; level: number; types: string[];
-  statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number;
-};
+type Side = "A" | "B";
+type MascotOption = { id:string; pokemonId:number; name:string; ownerName:string; level:number; types:string[]; statForce:number; statAgility:number; statCharisma:number; statInstinct:number; statVitality:number };
 
-function toFighter(mascot: MascotOption): LivePvpFighter {
-  const maxHp = Math.max(10, Math.round(55 + mascot.level * 6 + mascot.statVitality * 4));
-  return { id: mascot.id, name: mascot.name, level: mascot.level, types: mascot.types, hp: maxHp, maxHp,
-    force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma,
-    instinct: mascot.statInstinct, vitality: mascot.statVitality };
-}
-
-function MoveBuilder({ moves, selected, onChange, label }: { moves: LivePvpMove[]; selected: number[]; onChange: (ids: number[]) => void; label: string }) {
-  return <div className="rounded-xl border border-border bg-slate-950/60 p-3">
-    <p className="mb-2 text-xs font-bold text-slate-200">{label}: escolha 4 golpes ({selected.length}/4)</p>
-    <div className="max-h-64 space-y-1 overflow-y-auto pr-1">{moves.map(move => {
-      const active = selected.includes(move.id);
-      return <button key={move.id} type="button" onClick={() => onChange(active ? selected.filter(id => id !== move.id) : selected.length < 4 ? [...selected, move.id] : selected)}
-        className={`flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-[11px] ${active ? "border-[#FFCB05]/60 bg-[#FFCB05]/10" : "border-border/60 bg-slate-900"}`}>
-        <span><strong className="text-slate-100">{move.name}</strong><span className="ml-2 text-slate-500">{move.type} · {move.damageClass}</span></span>
-        <span className="text-slate-400">P{move.power ?? "—"} · {move.accuracy ?? "—"}%</span>
-      </button>;
-    })}</div>
-  </div>;
-}
+function toFighter(m: MascotOption): LivePvpFighter { const maxHp=Math.max(10,Math.round(55+m.level*6+m.statVitality*4)); return { id:m.id,name:m.name,level:m.level,types:m.types,hp:maxHp,maxHp,force:m.statForce,agility:m.statAgility,charisma:m.statCharisma,instinct:m.statInstinct,vitality:m.statVitality }; }
 
 export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
-  const [pending, startTransition] = useTransition();
-  const [idA, setIdA] = useState(mascots[0]?.id ?? "");
-  const [idB, setIdB] = useState(mascots[1]?.id ?? mascots[0]?.id ?? "");
-  const [movesA, setMovesA] = useState<LivePvpMove[]>([]); const [movesB, setMovesB] = useState<LivePvpMove[]>([]);
-  const [setA, setSetA] = useState<number[]>([]); const [setB, setSetB] = useState<number[]>([]);
-  const [fighterA, setFighterA] = useState<LivePvpFighter | null>(null); const [fighterB, setFighterB] = useState<LivePvpFighter | null>(null);
-  const [choiceA, setChoiceA] = useState<number | null>(null); const [choiceB, setChoiceB] = useState<number | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const mascotA = useMemo(() => mascots.find(m => m.id === idA), [mascots, idA]);
-  const mascotB = useMemo(() => mascots.find(m => m.id === idB), [mascots, idB]);
-  const selectedMovesA = movesA.filter(m => setA.includes(m.id)); const selectedMovesB = movesB.filter(m => setB.includes(m.id));
+  const [pending,startTransition]=useTransition();
+  const [idA,setIdA]=useState(mascots[0]?.id??""); const [idB,setIdB]=useState(mascots[1]?.id??mascots[0]?.id??"");
+  const [movesA,setMovesA]=useState<LivePvpMove[]>([]); const [movesB,setMovesB]=useState<LivePvpMove[]>([]);
+  const [setA,setSetA]=useState<number[]>([]); const [setB,setSetB]=useState<number[]>([]);
+  const [fighterA,setFighterA]=useState<LivePvpFighter|null>(null); const [fighterB,setFighterB]=useState<LivePvpFighter|null>(null);
+  const [choiceA,setChoiceA]=useState<number|null>(null); const [choiceB,setChoiceB]=useState<number|null>(null);
+  const [activeSide,setActiveSide]=useState<Side>("A"); const [seconds,setSeconds]=useState(60);
+  const [afk,setAfk]=useState({A:0,B:0}); const [winner,setWinner]=useState<Side|null>(null); const [logs,setLogs]=useState<string[]>([]);
+  const mascotA=useMemo(()=>mascots.find(m=>m.id===idA),[mascots,idA]); const mascotB=useMemo(()=>mascots.find(m=>m.id===idB),[mascots,idB]);
+  const selectedA=movesA.filter(m=>setA.includes(m.id)); const selectedB=movesB.filter(m=>setB.includes(m.id));
 
-  const load = () => startTransition(async () => {
-    if (!mascotA || !mascotB || mascotA.id === mascotB.id) { toast.error("Escolha dois mascotes diferentes."); return; }
-    const [a, b] = await Promise.all([loadLivePvpMovesAction(mascotA.pokemonId, mascotA.level), loadLivePvpMovesAction(mascotB.pokemonId, mascotB.level)]);
-    if (a.error || b.error || !a.moves || !b.moves) { toast.error(a.error ?? b.error ?? "Falha ao carregar golpes."); return; }
-    setMovesA(a.moves); setMovesB(b.moves); setSetA([]); setSetB([]); setFighterA(null); setFighterB(null); setLogs([]);
-  });
-  const start = () => { if (!mascotA || !mascotB || setA.length !== 4 || setB.length !== 4) return toast.error("Escolha exatamente quatro golpes para cada mascote."); setFighterA(toFighter(mascotA)); setFighterB(toFighter(mascotB)); setLogs(["A batalha de laboratório começou."]); };
-  const turn = () => startTransition(async () => {
-    if (!fighterA || !fighterB || choiceA == null || choiceB == null) { toast.error("Escolha um golpe para cada lado."); return; }
-    const moveA = selectedMovesA.find(m => m.id === choiceA); const moveB = selectedMovesB.find(m => m.id === choiceB); if (!moveA || !moveB) return;
-    const result = await resolveLivePvpTurnAction({ fighterA, fighterB, moveA, moveB }); setFighterA(result.fighterA); setFighterB(result.fighterB); setLogs(old => [...old, ...result.events]); setChoiceA(null); setChoiceB(null);
-    if (result.winner) toast.success(`${result.winner === "A" ? result.fighterA.name : result.fighterB.name} venceu!`);
-  });
+  const load=()=>startTransition(async()=>{ if(!mascotA||!mascotB||mascotA.id===mascotB.id){toast.error("Escolha dois mascotes diferentes.");return;} const [a,b]=await Promise.all([loadLivePvpMovesAction(mascotA.pokemonId,mascotA.level),loadLivePvpMovesAction(mascotB.pokemonId,mascotB.level)]); if(a.error||b.error||!a.moves||!b.moves){toast.error(a.error??b.error??"Falha ao carregar golpes.");return;} setMovesA(a.moves);setMovesB(b.moves);setSetA(a.recommendedIds??[]);setSetB(b.recommendedIds??[]);setFighterA(null);setFighterB(null);setWinner(null);setLogs(["Quatro golpes legais foram pré-selecionados conforme nível e ordem de aprendizado."]); });
+  const begin=()=>{ if(!mascotA||!mascotB||setA.length!==4||setB.length!==4){toast.error("O sistema precisa de quatro golpes para cada mascote.");return;} setFighterA(toFighter(mascotA));setFighterB(toFighter(mascotB));setChoiceA(null);setChoiceB(null);setActiveSide("A");setSeconds(60);setAfk({A:0,B:0});setWinner(null);setLogs(old=>[...old,"A batalha começou. Jogador A tem 60 segundos."]);toast.success("Batalha iniciada!"); };
+  const resolveRound=(aId:number|null,bId:number|null)=>startTransition(async()=>{ if(!fighterA||!fighterB)return; const moveA=selectedA.find(m=>m.id===aId)??null; const moveB=selectedB.find(m=>m.id===bId)??null; const result=await resolveLivePvpTurnAction({fighterA,fighterB,moveA,moveB});setFighterA(result.fighterA);setFighterB(result.fighterB);setLogs(old=>[...old,...result.events]);setChoiceA(null);setChoiceB(null);setActiveSide("A");setSeconds(60);if(result.winner){setWinner(result.winner);toast.success(`${result.winner==="A"?result.fighterA.name:result.fighterB.name} venceu!`);} });
+  const confirm=()=>{ if(activeSide==="A"){if(choiceA==null){toast.error("Escolha um golpe.");return;}setAfk(v=>({...v,A:0}));setActiveSide("B");setSeconds(60);setLogs(v=>[...v,"Jogador A confirmou. Vez do Jogador B."]);}else{if(choiceB==null){toast.error("Escolha um golpe.");return;}setAfk(v=>({...v,B:0}));resolveRound(choiceA,choiceB);} };
+  const timeout=()=>{ const next=afk[activeSide]+1;setAfk(v=>({...v,[activeSide]:next}));setLogs(v=>[...v,`Jogador ${activeSide} perdeu a ação por tempo (${next}/3 consecutivas).`]);if(next>=3){const win=activeSide==="A"?"B":"A";setWinner(win);toast.error(`Jogador ${activeSide} foi derrotado por AFK.`);return;}if(activeSide==="A"){setChoiceA(null);setActiveSide("B");setSeconds(60);}else{setChoiceB(null);resolveRound(choiceA,null);} };
+  useEffect(()=>{if(!fighterA||!fighterB||winner||pending)return;const timer=setTimeout(()=>seconds>1?setSeconds(seconds-1):timeout(),1000);return()=>clearTimeout(timer);});
 
-  return <div className="space-y-5"><div><p className="text-xs uppercase tracking-widest text-purple-300">Laboratório admin local</p><h1 className="font-pixel text-lg text-[#FFCB05]">Arena Online</h1><p className="mt-2 text-sm text-slate-400">Protótipo isolado: não concede recompensas nem altera os mascotes reais.</p></div>
-    <div className="grid gap-3 md:grid-cols-2">{[[idA,setIdA,"Jogador A"],[idB,setIdB,"Jogador B"]].map(([value,setter,label]) => <label key={String(label)} className="text-xs text-slate-400">{String(label)}<select value={String(value)} onChange={e => (setter as (v:string)=>void)(e.target.value)} className="mt-1 w-full rounded-xl border border-border bg-slate-950 p-3 text-slate-100">{mascots.map(m => <option key={m.id} value={m.id}>{m.ownerName} — {m.name} Nv.{m.level}</option>)}</select></label>)}</div>
-    <button onClick={load} disabled={pending} className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Carregar golpes legais</button>
-    {movesA.length > 0 && <><div className="grid gap-3 lg:grid-cols-2"><MoveBuilder moves={movesA} selected={setA} onChange={setSetA} label={mascotA?.name ?? "A"}/><MoveBuilder moves={movesB} selected={setB} onChange={setSetB} label={mascotB?.name ?? "B"}/></div><button onClick={start} className="w-full rounded-xl bg-[#FFCB05] px-4 py-2 font-bold text-slate-950">Iniciar batalha de teste</button></>}
-    {fighterA && fighterB && <div className="grid gap-4 lg:grid-cols-[1fr_1fr_0.9fr]"><FightBox fighter={fighterA} moves={selectedMovesA} choice={choiceA} setChoice={setChoiceA}/><FightBox fighter={fighterB} moves={selectedMovesB} choice={choiceB} setChoice={setChoiceB}/><div className="rounded-xl border border-border bg-slate-950 p-3"><p className="mb-2 text-xs font-bold text-white">Log</p><div className="max-h-72 space-y-1 overflow-y-auto text-[11px] text-slate-400">{logs.map((log,i)=><p key={i}>{log}</p>)}</div><button onClick={turn} disabled={pending || fighterA.hp<=0 || fighterB.hp<=0} className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Resolver turno</button></div></div>}
+  return <div className="space-y-5"><header><p className="text-xs uppercase tracking-widest text-purple-300">Sandbox admin local</p><h1 className="font-pixel text-lg text-[#FFCB05]">Arena Online</h1><p className="mt-2 text-sm text-slate-400">Nada aqui altera os mascotes reais. Os golpes são temporários e pré-selecionados pela PokeAPI.</p></header>
+    <div className="grid gap-3 md:grid-cols-2"><MascotSelect label="Jogador A" value={idA} setValue={setIdA} mascots={mascots}/><MascotSelect label="Jogador B" value={idB} setValue={setIdB} mascots={mascots}/></div>
+    <button onClick={load} disabled={pending} className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Preparar golpes automaticamente</button>
+    {movesA.length>0&&<><div className="grid gap-3 md:grid-cols-2"><MoveSet title={mascotA?.name??"A"} moves={selectedA}/><MoveSet title={mascotB?.name??"B"} moves={selectedB}/></div><button onClick={begin} className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-bold text-slate-950">Iniciar batalha de teste</button></>}
+    {fighterA&&fighterB&&<><div className="rounded-xl border border-cyan-400/30 bg-cyan-400/5 p-3 text-center"><p className="text-xs text-slate-400">Vez do Jogador {activeSide}</p><strong className={`font-pixel text-2xl ${seconds<=10?"text-red-400":"text-cyan-300"}`}>{seconds}s</strong><p className="text-[10px] text-slate-500">AFK: A {afk.A}/3 · B {afk.B}/3</p>{winner&&<p className="mt-2 font-bold text-[#FFCB05]">Jogador {winner} venceu</p>}</div><div className="grid gap-4 lg:grid-cols-[1fr_1fr_0.9fr]"><FightBox side="A" active={activeSide==="A"&&!winner} fighter={fighterA} moves={selectedA} choice={choiceA} setChoice={setChoiceA}/><FightBox side="B" active={activeSide==="B"&&!winner} fighter={fighterB} moves={selectedB} choice={choiceB} setChoice={setChoiceB}/><div className="rounded-xl border border-border bg-slate-950 p-3"><p className="mb-2 text-xs font-bold text-white">Log</p><div className="max-h-72 space-y-1 overflow-y-auto text-[11px] text-slate-400">{logs.map((log,i)=><p key={i}>{log}</p>)}</div><button onClick={confirm} disabled={pending||!!winner} className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Confirmar golpe do Jogador {activeSide}</button></div></div></>}
   </div>;
 }
 
-function FightBox({ fighter, moves, choice, setChoice }: { fighter: LivePvpFighter; moves: LivePvpMove[]; choice: number|null; setChoice:(id:number)=>void }) { const pct=Math.round(fighter.hp/fighter.maxHp*100); return <div className="rounded-xl border border-border bg-slate-950/70 p-4"><div className="flex justify-between"><strong>{fighter.name}</strong><span className="text-xs">{fighter.hp}/{fighter.maxHp} HP</span></div><div className="my-2 h-2 overflow-hidden rounded bg-slate-800"><div className="h-full bg-emerald-400" style={{width:`${pct}%`}}/></div><div className="grid gap-2">{moves.map(m=><button key={m.id} onClick={()=>setChoice(m.id)} className={`rounded-lg border p-2 text-left text-xs ${choice===m.id?"border-cyan-400 bg-cyan-400/10":"border-border"}`}><strong>{m.name}</strong><span className="ml-2 text-slate-500">Poder {m.power??"—"} · PP {m.pp}</span></button>)}</div></div>; }
+function MascotSelect({label,value,setValue,mascots}:{label:string;value:string;setValue:(v:string)=>void;mascots:MascotOption[]}){return <label className="text-xs text-slate-400">{label}<select value={value} onChange={e=>setValue(e.target.value)} className="mt-1 w-full rounded-xl border border-border bg-slate-950 p-3 text-slate-100">{mascots.map(m=><option key={m.id} value={m.id}>{m.ownerName} — {m.name} Nv.{m.level}</option>)}</select></label>}
+function MoveSet({title,moves}:{title:string;moves:LivePvpMove[]}){return <div className="rounded-xl border border-border bg-slate-950/60 p-3"><p className="mb-2 text-xs font-bold text-white">Golpes de {title}</p>{moves.map(m=><p key={m.id} className="mb-1 rounded-lg bg-slate-900 p-2 text-xs"><strong>{m.name}</strong><span className="ml-2 text-slate-500">{m.type} · poder {m.power??"—"} · precisão {m.accuracy??"—"}%</span></p>)}</div>}
+function FightBox({side,active,fighter,moves,choice,setChoice}:{side:Side;active:boolean;fighter:LivePvpFighter;moves:LivePvpMove[];choice:number|null;setChoice:(id:number)=>void}){const pct=Math.round(fighter.hp/fighter.maxHp*100);return <div className={`rounded-xl border bg-slate-950/70 p-4 ${active?"border-cyan-400":"border-border"}`}><div className="flex justify-between"><strong>{fighter.name} <small className="text-slate-500">({side})</small></strong><span className="text-xs">{fighter.hp}/{fighter.maxHp} HP</span></div><div className="my-2 h-2 overflow-hidden rounded bg-slate-800"><div className="h-full bg-emerald-400" style={{width:`${pct}%`}}/></div><div className="grid gap-2">{moves.map(m=><button key={m.id} disabled={!active} onClick={()=>setChoice(m.id)} className={`rounded-lg border p-2 text-left text-xs disabled:opacity-35 ${choice===m.id?"border-cyan-400 bg-cyan-400/10":"border-border"}`}><strong>{m.name}</strong><span className="ml-2 text-slate-500">Poder {m.power??"—"} · PP {m.pp}</span></button>)}</div></div>}

@@ -20,6 +20,7 @@ type PokemonApiMove = {
   move: { name: string; url: string };
   version_group_details: Array<{
     level_learned_at: number;
+    order?: number;
     version_group: { name: string };
     move_learn_method: { name: string };
   }>;
@@ -38,19 +39,28 @@ function displayName(slug: string, names: Array<{ name: string; language: { name
     ?? slug.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 }
 
-export async function getLegalMoveSlugs(pokemonId: number, level: number) {
+async function getMoveCandidates(pokemonId: number, level: number) {
   const response = await fetch(`${POKE_API}/pokemon/${pokemonId}`, { next: { revalidate: 60 * 60 * 24 * 30 } });
   if (!response.ok) throw new Error("Não foi possível consultar os golpes deste Pokémon.");
   const pokemon = await response.json() as PokemonApiResponse;
   const availableVersions = new Set(pokemon.moves.flatMap((entry) => entry.version_group_details.map((detail) => detail.version_group.name)));
   const version = VERSION_PRIORITY.find((candidate) => availableVersions.has(candidate));
-  if (!version) return [];
+  if (!version) return { legal: [] as PokemonApiMove[], levelUp: [] as Array<{ entry: PokemonApiMove; level: number; order: number }> };
 
-  return pokemon.moves.filter((entry) => entry.version_group_details.some((detail) => {
+  const legal = pokemon.moves.filter((entry) => entry.version_group_details.some((detail) => {
     if (detail.version_group.name !== version) return false;
     if (detail.move_learn_method.name === "level-up") return detail.level_learned_at <= level;
     return ["machine", "tutor", "egg"].includes(detail.move_learn_method.name);
-  })).map((entry) => entry.move.name);
+  }));
+  const levelUp = legal.flatMap((entry) => entry.version_group_details
+    .filter((detail) => detail.version_group.name === version && detail.move_learn_method.name === "level-up" && detail.level_learned_at <= level)
+    .map((detail) => ({ entry, level: detail.level_learned_at, order: "order" in detail ? Number(detail.order ?? 0) : 0 })))
+    .sort((a, b) => b.level - a.level || b.order - a.order);
+  return { legal, levelUp };
+}
+
+export async function getLegalMoveSlugs(pokemonId: number, level: number) {
+  return (await getMoveCandidates(pokemonId, level)).legal.map((entry) => entry.move.name);
 }
 
 export async function getMove(move: string | number): Promise<LivePvpMove> {
@@ -85,4 +95,24 @@ export async function getLegalMoves(pokemonId: number, level: number, limit = 80
   const slugs = (await getLegalMoveSlugs(pokemonId, level)).slice(0, limit);
   const settled = await Promise.allSettled(slugs.map(getMove));
   return settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+}
+
+export async function getLegalMovesWithRecommendation(pokemonId: number, level: number, limit = 80) {
+  const candidates = await getMoveCandidates(pokemonId, level);
+  const legalSlugs = candidates.legal.map((entry) => entry.move.name).slice(0, limit);
+  const settled = await Promise.allSettled(legalSlugs.map(getMove));
+  const moves = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  const bySlug = new Map(moves.map((move) => [move.slug, move]));
+  const recommended: LivePvpMove[] = [];
+  for (const candidate of candidates.levelUp) {
+    const move = bySlug.get(candidate.entry.move.name);
+    if (move && !recommended.some((entry) => entry.id === move.id)) recommended.push(move);
+    if (recommended.length === 4) break;
+  }
+  if (recommended.length < 4) {
+    const fillers = moves.filter((move) => !recommended.some((entry) => entry.id === move.id))
+      .sort((a, b) => Number(b.power != null) - Number(a.power != null) || (b.power ?? 0) - (a.power ?? 0));
+    recommended.push(...fillers.slice(0, 4 - recommended.length));
+  }
+  return { moves, recommended: recommended.slice(0, 4) };
 }

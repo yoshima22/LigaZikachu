@@ -65,26 +65,32 @@ function execute(
 
 export function resolveLivePvpTurn(
   inputA: LivePvpFighter,
-  moveA: LivePvpMove,
+  moveA: LivePvpMove | null,
   inputB: LivePvpFighter,
-  moveB: LivePvpMove,
+  moveB: LivePvpMove | null,
   random: () => number = Math.random,
 ): LivePvpTurnResult {
   const fighterA = clone(inputA);
   const fighterB = clone(inputB);
-  const first: "A" | "B" = moveA.priority !== moveB.priority
-    ? (moveA.priority > moveB.priority ? "A" : "B")
+  const priorityA = moveA?.priority ?? -99;
+  const priorityB = moveB?.priority ?? -99;
+  const first: "A" | "B" = priorityA !== priorityB
+    ? (priorityA > priorityB ? "A" : "B")
     : fighterA.agility !== fighterB.agility
       ? (fighterA.agility > fighterB.agility ? "A" : "B")
       : (random() < 0.5 ? "A" : "B");
   const events: string[] = [];
+  const act = (attacker: LivePvpFighter, defender: LivePvpFighter, move: LivePvpMove | null, side: "A" | "B") => {
+    if (!move) { events.push(`${attacker.name} perdeu a ação por tempo esgotado (${side}).`); return; }
+    execute(attacker, defender, move, random, events);
+  };
 
   if (first === "A") {
-    execute(fighterA, fighterB, moveA, random, events);
-    execute(fighterB, fighterA, moveB, random, events);
+    act(fighterA, fighterB, moveA, "A");
+    act(fighterB, fighterA, moveB, "B");
   } else {
-    execute(fighterB, fighterA, moveB, random, events);
-    execute(fighterA, fighterB, moveA, random, events);
+    act(fighterB, fighterA, moveB, "B");
+    act(fighterA, fighterB, moveA, "A");
   }
 
   return {
