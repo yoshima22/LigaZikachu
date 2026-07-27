@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MascotOption } from "./arena-online-lab";
+import { loadLivePvpMovesAction } from "./actions";
 
 type Side = "A" | "B";
 type Stage =
@@ -17,9 +18,11 @@ const other = (side: Side): Side => (side === "A" ? "B" : "A");
 export function ArenaOnlinePregame({
   mascots,
   onComplete,
+  onEvent,
 }: {
   mascots: MascotOption[];
   onComplete: (a: string[], b: string[], first: Side) => void;
+  onEvent: (event: string) => void;
 }) {
   const [stage, setStage] = useState<Stage>("LOBBY");
   const [queue, setQueue] = useState(0);
@@ -38,11 +41,21 @@ export function ArenaOnlinePregame({
   const [leadA, setLeadA] = useState<string | null>(null);
   const [leadB, setLeadB] = useState<string | null>(null);
   const [leadTurn, setLeadTurn] = useState<Side>("A");
+  const [draftMoves, setDraftMoves] = useState<
+    Record<
+      string,
+      NonNullable<Awaited<ReturnType<typeof loadLivePvpMovesAction>>["moves"]>
+    >
+  >({});
   const resetTimer = () => setSeconds(30);
   const start = () => {
-    setCoinChooser(Math.random() < 0.5 ? "A" : "B");
+    const chooser = Math.random() < 0.5 ? "A" : "B";
+    setCoinChooser(chooser);
     setStage("COIN_PICK");
     resetTimer();
+    onEvent(
+      `PRÉ-JOGO · Jogador ${chooser} foi sorteado para escolher a moeda.`,
+    );
   };
   const players = useMemo(
     () => Array.from(new Set(mascots.map((m) => m.ownerName))),
@@ -83,6 +96,7 @@ export function ArenaOnlinePregame({
     const chosen = face ?? (Math.random() < 0.5 ? "CARA" : "COROA");
     if (!face) setFace(chosen);
     setStage("COIN_FLIP");
+    onEvent(`MOEDA · Jogador ${coinChooser} escolheu ${chosen}.`);
     setTimeout(() => {
       const result = Math.random() < 0.5 ? "CARA" : "COROA";
       const winner = result === chosen ? coinChooser : other(coinChooser);
@@ -90,7 +104,10 @@ export function ArenaOnlinePregame({
       setCoinWinner(winner);
       setStage("FIRST");
       resetTimer();
-    }, 1400);
+      onEvent(
+        `MOEDA · Resultado ${result}. Jogador ${winner} venceu o sorteio.`,
+      );
+    }, 1800);
   };
   const chooseFirst = (side: Side) => {
     setFirst(side);
@@ -98,6 +115,7 @@ export function ArenaOnlinePregame({
     setQuota(1);
     setStage("DRAFT");
     resetTimer();
+    onEvent(`DRAFT · Jogador ${side} fará a primeira seleção.`);
   };
   const toggleDraft = (id: string) =>
     setPickedThisTurn((current) =>
@@ -113,6 +131,9 @@ export function ArenaOnlinePregame({
     );
   const confirmDraft = (picks = pickedThisTurn) => {
     if (!picks.length) return;
+    onEvent(
+      `DRAFT · Jogador ${draftTurn} escolheu ${picks.map((id) => mascots.find((m) => m.id === id)?.name ?? id).join(", ")}.`,
+    );
     const nextA = draftTurn === "A" ? [...teamA, ...picks] : teamA;
     const nextB = draftTurn === "B" ? [...teamB, ...picks] : teamB;
     setTeamA(nextA);
@@ -131,6 +152,7 @@ export function ArenaOnlinePregame({
   };
   const confirmLead = (id: string | null) => {
     if (!id) return;
+    onEvent(`INICIAL SECRETO · Jogador ${leadTurn} confirmou sua escolha.`);
     if (leadTurn === "A") {
       setLeadA(id);
       if (!leadB) {
@@ -150,8 +172,22 @@ export function ArenaOnlinePregame({
     const finalB = leadTurn === "B" ? id : leadB!;
     const orderedA = [finalA, ...teamA.filter((value) => value !== finalA)];
     const orderedB = [finalB, ...teamB.filter((value) => value !== finalB)];
+    onEvent(
+      `REVELAÇÃO · ${mascots.find((m) => m.id === finalA)?.name} enfrenta ${mascots.find((m) => m.id === finalB)?.name}.`,
+    );
     onComplete(orderedA, orderedB, first);
     setStage("DONE");
+  };
+  const inspect = async (m: MascotOption) => {
+    if (draftMoves[m.id]) return;
+    const result = await loadLivePvpMovesAction(m.pokemonId, m.level);
+    setDraftMoves((current) => ({
+      ...current,
+      [m.id]:
+        result.moves?.filter((move) =>
+          (result.recommendedIds ?? []).includes(move.id),
+        ) ?? [],
+    }));
   };
   return (
     <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-slate-950 to-cyan-500/5 p-4">
@@ -234,11 +270,33 @@ export function ArenaOnlinePregame({
         </div>
       )}
       {stage === "COIN_FLIP" && (
-        <div className="py-10 text-center">
-          <div className="mx-auto flex h-28 w-28 animate-[spin_1.4s_ease-in-out] items-center justify-center rounded-full border-4 border-[#FFCB05] bg-amber-400 text-4xl shadow-[0_0_35px_rgba(255,203,5,.45)]">
-            ⚡
+        <div className="overflow-hidden py-12 text-center [perspective:900px]">
+          <div className="coin-flight relative mx-auto h-28 w-28 [transform-style:preserve-3d]">
+            <div className="absolute inset-0 flex items-center justify-center rounded-full border-4 border-yellow-200 bg-gradient-to-br from-yellow-200 via-[#FFCB05] to-amber-600 text-4xl shadow-[0_0_45px_rgba(255,203,5,.55)] [backface-visibility:hidden]">
+              ⚡
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center rounded-full border-4 border-amber-200 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 text-2xl font-black text-amber-950 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              LZ
+            </div>
           </div>
           <p className="mt-4 text-sm text-slate-300">A moeda está no ar...</p>
+          <style jsx>{`
+            @keyframes coinFlight {
+              0% {
+                transform: translateY(35px) rotateY(0) rotateX(10deg) scale(0.8);
+              }
+              45% {
+                transform: translateY(-70px) rotateY(900deg) rotateX(35deg)
+                  scale(1.12);
+              }
+              100% {
+                transform: translateY(0) rotateY(1800deg) rotateX(0) scale(1);
+              }
+            }
+            .coin-flight {
+              animation: coinFlight 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+            }
+          `}</style>
         </div>
       )}
       {stage === "FIRST" && coinWinner && (
@@ -279,18 +337,41 @@ export function ArenaOnlinePregame({
             {pool.map((m) => (
               <button
                 key={m.id}
+                onMouseEnter={() => inspect(m)}
+                onFocus={() => inspect(m)}
                 onClick={() => toggleDraft(m.id)}
-                className={`rounded-xl border p-2 text-center ${pickedThisTurn.includes(m.id) ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+                className={`rounded-xl border p-3 text-left ${pickedThisTurn.includes(m.id) ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
               >
                 <img
                   src={m.spriteUrl}
                   alt=""
-                  className="mx-auto h-12 w-12 object-contain [image-rendering:pixelated]"
+                  className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
                 />
                 <b className="block truncate text-[10px] text-white">
                   {m.name}
                 </b>
-                <span className="text-[9px] text-slate-500">Nv.{m.level}</span>
+                <span className="block text-center text-[9px] text-slate-500">
+                  Nv.{m.level} · HP {55 + m.level * 6 + m.statVitality * 4}
+                </span>
+                <span className="mt-1 flex flex-wrap justify-center gap-1">
+                  {m.types.map((type) => (
+                    <span
+                      key={type}
+                      className="rounded-full border border-slate-700 px-1 py-0.5 text-[8px] text-slate-300"
+                    >
+                      {type}
+                    </span>
+                  ))}
+                </span>
+                <span className="mt-2 block text-[8px] text-slate-400">
+                  FOR {m.statForce} · AGI {m.statAgility} · CAR {m.statCharisma}{" "}
+                  · INS {m.statInstinct} · VIT {m.statVitality}
+                </span>
+                <span className="mt-2 block border-t border-slate-800 pt-1 text-[8px] text-cyan-200">
+                  {draftMoves[m.id]
+                    ?.map((move) => `${move.name} (${move.pp} PP)`)
+                    .join(" · ") ?? "Passe o mouse para carregar ataques"}
+                </span>
               </button>
             ))}
           </div>

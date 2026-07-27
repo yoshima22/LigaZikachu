@@ -200,6 +200,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [choiceB, setChoiceB] = useState<number | null>(null);
   const [activeSide, setActiveSide] = useState<Side>("A");
   const [openingSide, setOpeningSide] = useState<Side>("A");
+  const [pregameReset, setPregameReset] = useState(0);
   const [seconds, setSeconds] = useState(60);
   const [afk, setAfk] = useState({ A: 0, B: 0 });
   const [winner, setWinner] = useState<Side | null>(null);
@@ -258,10 +259,10 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
     setter(next);
   };
 
-  const load = () =>
+  const load = (idsA = teamIdsA, idsB = teamIdsB) =>
     startTransition(async () => {
-      const firstA = mascots.find((m) => m.id === teamIdsA[0]);
-      const firstB = mascots.find((m) => m.id === teamIdsB[0]);
+      const firstA = mascots.find((m) => m.id === idsA[0]);
+      const firstB = mascots.find((m) => m.id === idsB[0]);
       if (!firstA || !firstB) {
         toast.error("Cada equipe precisa de ao menos um mascote.");
         return;
@@ -303,8 +304,10 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       setFighterA(null);
       setFighterB(null);
       setWinner(null);
-      setLogs([
-        "Quatro golpes legais foram pré-selecionados conforme nível e ordem de aprendizado.",
+      setLogs((old) => [
+        ...old,
+        "──────────────── PREPARAÇÃO DOS GOLPES ────────────────",
+        `Golpes de ${firstA.name} e ${firstB.name} preparados conforme nível e ordem de aprendizado.`,
       ]);
     });
   const begin = () => {
@@ -474,6 +477,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       `Jogador ${defeated} desistiu. Jogador ${victorious} venceu a batalha.`,
     ]);
     toast.success(`Jogador ${victorious} venceu por desistência.`);
+    setPregameReset((value) => value + 1);
   };
   const switchMascot = (side: Side, targetId: string) =>
     startTransition(async () => {
@@ -632,16 +636,19 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         </p>
       </header>
       <ArenaOnlinePregame
+        key={pregameReset}
         mascots={mascots}
+        onEvent={(event) =>
+          setLogs((old) => [...old, "────────────────────────────────", event])
+        }
         onComplete={(a, b, first) => {
           setTeamIdsA(a);
           setTeamIdsB(b);
           setOpeningSide(first);
           setIdA(a[0] ?? "");
           setIdB(b[0] ?? "");
-          toast.success(
-            "Pré-jogo concluído. Prepare os golpes para iniciar a batalha.",
-          );
+          load(a, b);
+          toast.success("Pré-jogo concluído e golpes preparados.");
         }}
       />
       <div className="grid gap-3 md:grid-cols-2">
@@ -663,18 +670,14 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         />
       </div>
       <button
-        onClick={load}
+        onClick={() => load()}
         disabled={pending}
         className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
       >
-        Preparar golpes automaticamente
+        Recarregar golpes das equipes
       </button>
       {movesA.length > 0 && (
         <>
-          <div className="grid gap-3 md:grid-cols-2">
-            <MoveSet title={mascotA?.name ?? "A"} moves={selectedA} />
-            <MoveSet title={mascotB?.name ?? "B"} moves={selectedB} />
-          </div>
           <button
             onClick={begin}
             className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-bold text-slate-950"
@@ -735,9 +738,22 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
             <div className="rounded-xl border border-border bg-slate-950 p-3">
               <p className="mb-2 text-xs font-bold text-white">Log</p>
               <div className="max-h-72 space-y-1 overflow-y-auto text-[11px] text-slate-400">
-                {logs.map((log, i) => (
-                  <p key={i}>{log}</p>
-                ))}
+                {logs.map((log, i) =>
+                  log.startsWith("─") ? (
+                    <div key={i} className="my-2 border-t border-slate-700" />
+                  ) : (
+                    <p
+                      key={i}
+                      className={
+                        /^(PRÉ-JOGO|MOEDA|DRAFT|INICIAL|REVELAÇÃO)/.test(log)
+                          ? "rounded bg-slate-900 px-2 py-1.5 text-cyan-200"
+                          : "leading-relaxed"
+                      }
+                    >
+                      {log}
+                    </p>
+                  ),
+                )}
               </div>
               <button
                 onClick={confirm}
@@ -1189,6 +1205,33 @@ function FightBox({
         </div>
         <span className="text-xs">
           {fighter.hp}/{fighter.maxHp} HP
+        </span>
+      </div>
+      <div className="mb-3 grid grid-cols-5 gap-1 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-center text-[9px] text-slate-400">
+        <span>
+          FOR
+          <br />
+          <b className="text-white">{fighter.force}</b>
+        </span>
+        <span>
+          AGI
+          <br />
+          <b className="text-white">{fighter.agility}</b>
+        </span>
+        <span>
+          CAR
+          <br />
+          <b className="text-white">{fighter.charisma}</b>
+        </span>
+        <span>
+          INS
+          <br />
+          <b className="text-white">{fighter.instinct}</b>
+        </span>
+        <span>
+          VIT
+          <br />
+          <b className="text-white">{fighter.vitality}</b>
         </span>
       </div>
       <div className="mb-3 flex flex-wrap gap-1">

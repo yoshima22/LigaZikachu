@@ -137,6 +137,29 @@ function describeMove(data: {
   };
   stat_changes: Array<{ change: number; stat: { name: string } }>;
 }) {
+  const special: Record<string, string> = {
+    mist: "Cria uma névoa que impede que os atributos do usuário sejam reduzidos durante cinco turnos.",
+    "perish-song":
+      "Todos os mascotes ativos que ouvirem a canção recebem uma contagem de três turnos e são derrotados quando ela chega a zero, salvo se forem substituídos.",
+    "rain-dance":
+      "Invoca chuva por cinco turnos: fortalece golpes de Água e enfraquece golpes de Fogo.",
+    recover:
+      "Recupera 50% do HP máximo, com a cura ajustada por Carisma, Vitalidade e nível neste modo.",
+    "future-sight":
+      "Prepara um ataque psíquico que atinge o alvo dois turnos depois, mesmo que o usuário tenha sido substituído.",
+    "power-swap":
+      "Troca com o alvo os estágios atuais de Ataque e Ataque Especial.",
+    "sheer-cold":
+      "Se acertar, causa nocaute imediato. Sua precisão base é baixa e o golpe pode falhar contra alvos incompatíveis.",
+    agility:
+      "Aumenta a Velocidade do usuário em dois estágios; neste modo, o Carisma pode ampliar o buff.",
+    protect:
+      "Bloqueia completamente ataques direcionados ao usuário durante a rodada.",
+    rest: "Recupera todo o HP do usuário e o faz dormir por duas ações.",
+    transform:
+      "Transforma o usuário em uma cópia visível do adversário ativo. Copia forma, tipos, atributos, estágios e os quatro golpes atuais, preservando o próprio HP.",
+  };
+  if (special[data.name]) return special[data.name];
   if (data.name === "transform")
     return "Transforma o usuário em uma cópia visível do adversário ativo. Copia forma, tipos, atributos e os quatro golpes atuais, mas preserva o próprio HP. O card continua sinalizando quem é o mascote transformado.";
   const parts: string[] = [];
