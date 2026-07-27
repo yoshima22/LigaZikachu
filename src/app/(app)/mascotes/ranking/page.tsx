@@ -6,8 +6,11 @@ import Link from "next/link";
 type RankTab = "level" | "force" | "agility" | "charisma" | "instinct" | "vitality" | "battles" | "diary";
 
 interface PageProps {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; page?: string }>;
 }
+
+const RANKING_PAGE_SIZE = 10;
+const RANKING_MAX_PAGES = 5;
 
 const MASCOT_SELECT = {
   id: true, pokemonId: true, nickname: true, level: true, exp: true,
@@ -25,6 +28,7 @@ type RankEntry = {
   id: string; pokemonId: number; nickname: string | null;
   ownerName: string; ownerId: string; level: number;
   value: number; value2: number; valueLabel: string;
+  totalStats: number;
   extra: string | null;
 };
 
@@ -45,7 +49,8 @@ function statRanking(
       id: mm.id, pokemonId: mm.pokemonId, nickname: mm.nickname,
       ownerName: mm.player.displayName, ownerId: mm.player.id, level: mm.level,
       value: mm[statKey] as number, value2: 0, valueLabel,
-      extra: `Nv.${mm.level} · Total stats ${mm.statForce + mm.statAgility + mm.statCharisma + mm.statInstinct + mm.statVitality}`,
+      totalStats: mm.statForce + mm.statAgility + mm.statCharisma + mm.statInstinct + mm.statVitality,
+      extra: `Nv.${mm.level}`,
     };
   });
 }
@@ -100,6 +105,7 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
           id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
           ownerName: m.player.displayName, ownerId: m.player.id, level: m.level,
           value: m.battleWins, value2: 0, valueLabel: "vitórias",
+          totalStats: m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality,
           extra: total > 0 ? `${pct}% aproveit. · ${m.battleLosses} derrotas` : "sem derrotas",
         };
       }),
@@ -196,6 +202,15 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
   const { ranking, diary } = await getCachedRanking(tab);
 
   const isDiary = tab === "diary";
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
+  const totalPages = isDiary
+    ? 1
+    : Math.max(1, Math.min(RANKING_MAX_PAGES, Math.ceil(ranking.length / RANKING_PAGE_SIZE)));
+  const currentPage = Number.isFinite(requestedPage)
+    ? Math.max(1, Math.min(totalPages, requestedPage))
+    : 1;
+  const pageOffset = (currentPage - 1) * RANKING_PAGE_SIZE;
+  const visibleRanking = ranking.slice(pageOffset, pageOffset + RANKING_PAGE_SIZE);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
@@ -290,16 +305,18 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
           {ranking.length === 0 && (
             <p className="py-12 text-center text-sm text-slate-500">Nenhum mascote encontrado.</p>
           )}
-          {ranking.map((entry, i) => (
+          {visibleRanking.map((entry, i) => {
+            const position = pageOffset + i;
+            return (
             <div
               key={entry.id}
               className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-slate-900/40 ${
                 i !== 0 ? "border-t border-border/40" : ""
-              } ${i < 3 ? "bg-[#FFCB05]/5" : ""}`}
+              } ${position < 3 ? "bg-[#FFCB05]/5" : ""}`}
             >
               {/* Posição */}
               <div className="w-7 shrink-0 flex justify-center">
-                <Medal pos={i} />
+                <Medal pos={position} />
               </div>
 
               {/* Sprite */}
@@ -326,6 +343,9 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
                 {entry.extra && (
                   <p className="text-[10px] text-slate-600 truncate">{entry.extra}</p>
                 )}
+                <p className="text-[10px] font-medium text-cyan-400/80">
+                  Status totais: {entry.totalStats.toLocaleString("pt-BR")}
+                </p>
               </div>
 
               {/* Valor */}
@@ -334,8 +354,38 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
                 <p className="text-[10px] text-slate-600">{entry.valueLabel}</p>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
+      )}
+
+      {!isDiary && totalPages > 1 && (
+        <nav aria-label="Paginação do ranking" className="flex flex-wrap items-center justify-center gap-1.5">
+          <Link
+            href={`/mascotes/ranking?tab=${tab}&page=${Math.max(1, currentPage - 1)}`}
+            aria-disabled={currentPage === 1}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold ${currentPage === 1 ? "pointer-events-none border-border/40 text-slate-700" : "border-border text-slate-300 hover:bg-slate-800"}`}
+          >
+            Anterior
+          </Link>
+          {Array.from({ length: totalPages }, (_, index) => index + 1).map(pageNumber => (
+            <Link
+              key={pageNumber}
+              href={`/mascotes/ranking?tab=${tab}&page=${pageNumber}`}
+              aria-current={pageNumber === currentPage ? "page" : undefined}
+              className={`min-w-9 rounded-lg border px-3 py-2 text-center text-xs font-bold ${pageNumber === currentPage ? "border-[#FFCB05] bg-[#FFCB05] text-slate-950" : "border-border text-slate-400 hover:bg-slate-800 hover:text-slate-200"}`}
+            >
+              {pageNumber}
+            </Link>
+          ))}
+          <Link
+            href={`/mascotes/ranking?tab=${tab}&page=${Math.min(totalPages, currentPage + 1)}`}
+            aria-disabled={currentPage === totalPages}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold ${currentPage === totalPages ? "pointer-events-none border-border/40 text-slate-700" : "border-border text-slate-300 hover:bg-slate-800"}`}
+          >
+            Próxima
+          </Link>
+        </nav>
       )}
 
       <div className="text-center">
