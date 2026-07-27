@@ -111,9 +111,8 @@ function displayName(
     swift: "Estrela Cadente",
   };
   return (
-    names.find((entry) => entry.language.name === "pt-BR")?.name ??
-    translated[slug] ??
     names.find((entry) => entry.language.name === "en")?.name ??
+    translated[slug] ??
     slug
       .split("-")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -122,6 +121,7 @@ function displayName(
 }
 
 function describeMove(data: {
+  name: string;
   damage_class: { name: string };
   power: number | null;
   accuracy: number | null;
@@ -134,6 +134,8 @@ function describeMove(data: {
   };
   stat_changes: Array<{ change: number; stat: { name: string } }>;
 }) {
+  if (data.name === "transform")
+    return "Transforma o usuário em uma cópia visível do adversário ativo. Copia forma, tipos, atributos e os quatro golpes atuais, mas preserva o próprio HP. O card continua sinalizando quem é o mascote transformado.";
   const parts: string[] = [];
   parts.push(
     data.damage_class.name === "status"

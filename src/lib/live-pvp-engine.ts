@@ -15,6 +15,7 @@ export type LivePvpFighter = {
   charisma: number;
   instinct: number;
   vitality: number;
+  transformedFromName?: string;
 };
 
 export type LivePvpTurnResult = {
@@ -49,6 +50,23 @@ function execute(
   events: string[],
 ) {
   if (attacker.hp <= 0 || defender.hp <= 0) return;
+  if (move.slug === "transform") {
+    const originalName = attacker.transformedFromName ?? attacker.name;
+    attacker.pokemonId = defender.pokemonId;
+    attacker.spriteUrl = defender.spriteUrl;
+    attacker.name = `${originalName} transformado em ${defender.transformedFromName ?? defender.name}`;
+    attacker.types = [...defender.types];
+    attacker.force = defender.force;
+    attacker.agility = defender.agility;
+    attacker.charisma = defender.charisma;
+    attacker.instinct = defender.instinct;
+    attacker.vitality = defender.vitality;
+    attacker.transformedFromName = originalName;
+    events.push(
+      `${originalName} usou Transform e copiou a forma, os tipos, os atributos e os golpes atuais de ${defender.name}. Seu HP foi preservado.`,
+    );
+    return;
+  }
   if (move.accuracy != null && random() * 100 >= move.accuracy) {
     events.push(`${attacker.name} usou ${move.name}, mas errou.`);
     return;

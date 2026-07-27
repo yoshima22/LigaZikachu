@@ -268,6 +268,14 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       });
       setFighterA(result.fighterA);
       setFighterB(result.fighterB);
+      if (result.fighterA.transformedFromName) {
+        setMovesA(selectedB);
+        setSetA(selectedB.map((move) => move.id));
+      }
+      if (result.fighterB.transformedFromName) {
+        setMovesB(selectedA);
+        setSetB(selectedA.map((move) => move.id));
+      }
       setTeamA((team) =>
         team.map((member) =>
           member.id === result.fighterA.id ? result.fighterA : member,
@@ -372,6 +380,12 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         `Jogador ${side} trocou para ${next.name}. A troca consumiu sua ação.`,
       ]);
       if (side === "A") {
+        if (fighterA)
+          setTeamA((team) =>
+            team.map((member) =>
+              member.id === fighterA.id ? fighterA : member,
+            ),
+          );
         setFighterA(next);
         setMovesA(loaded.moves);
         setSetA(loaded.recommendedIds ?? []);
@@ -380,6 +394,10 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
         setSeconds(60);
         return;
       }
+      if (fighterB)
+        setTeamB((team) =>
+          team.map((member) => (member.id === fighterB.id ? fighterB : member)),
+        );
       if (fighterA && choiceA != null) {
         const moveA = selectedA.find((move) => move.id === choiceA) ?? null;
         const result = await resolveLivePvpTurnAction({
@@ -704,7 +722,7 @@ function FightBox({
           <img
             src={fighter.spriteUrl}
             alt=""
-            className="h-12 w-12 object-contain [image-rendering:pixelated]"
+            className="h-20 w-20 object-contain [image-rendering:pixelated]"
           />
           <strong>
             {fighter.name} <small className="text-slate-500">({side})</small>
@@ -763,8 +781,22 @@ function FightBox({
               {TYPE_ICONS[m.type] ?? "✦"} {m.name}
             </strong>
             <span className="ml-2 text-slate-500">
-              Poder {m.power ?? "—"} · PP {m.pp}
+              Poder {m.power ?? "—"} · Precisão {m.accuracy ?? "—"}
+              {m.accuracy != null ? "%" : ""} · PP {m.pp}
             </span>
+            <span className="mt-1 block text-[10px] leading-relaxed text-cyan-300/75">
+              {moveScaling(m)}
+            </span>
+            {effectSummary(m) && (
+              <span className="mt-1 block text-[10px] leading-relaxed text-amber-300/75">
+                {effectSummary(m)}
+              </span>
+            )}
+            {m.effect && (
+              <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">
+                {m.effect}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -784,7 +816,7 @@ function FightBox({
               <img
                 src={member.spriteUrl}
                 alt=""
-                className="mx-auto h-8 w-8 object-contain [image-rendering:pixelated]"
+                className="mx-auto h-12 w-12 object-contain [image-rendering:pixelated]"
               />
               <span className="block truncate text-[9px] text-slate-300">
                 {member.name}
