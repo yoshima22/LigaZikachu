@@ -28,6 +28,8 @@ import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { ensureAdminLabRainbowFeather } from "@/lib/admin-lab-feather";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
+import { ProfileCollectionProgressPanel } from "@/components/profile/collection-progress";
+import { getProfileCollectionProgress } from "@/lib/profile-collection-progress";
 import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
 
@@ -101,7 +103,7 @@ export default async function PlayerDetailPage({
     ]);
   }
 
-  const [ranking, recentMatches, codesCount, allPlayers, dreamTeam, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, wishlistRows] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, collectionProgress, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, wishlistRows] = await Promise.all([
     activeSeason ? getCachedPlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -137,12 +139,7 @@ export default async function PlayerDetailPage({
           orderBy: { displayName: "asc" }
         })
       : [],
-    prisma.playerSticker.findMany({
-      where: { playerId, isFavorite: true },
-      include: { card: { select: { nationalId: true, displayName: true, imageUrl: true, rarity: true } } },
-      orderBy: { firstObtained: "asc" },
-      take: 6
-    }).catch(() => [] as { id: string; card: { nationalId: number; displayName: string; imageUrl: string | null; rarity: string } }[]),
+    getProfileCollectionProgress(playerId),
     prisma.playerInventory.findMany({
       where: { playerId, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true, rarity: true, theme: true, flavorText: true, entranceEffect: true } } }
@@ -467,25 +464,7 @@ export default async function PlayerDetailPage({
 
       {/* Conquistas removidas daqui — exibidas abaixo (seção única) */}
 
-      {/* Time dos Sonhos */}
-      {dreamTeam.length > 0 && (
-        <Card className="p-6">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">⭐ Time dos Sonhos</h2>
-          <div className="flex flex-wrap gap-3">
-            {dreamTeam.map((s) => (
-              <div key={s.id} className="flex flex-col items-center gap-1 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-2 w-20">
-                {s.card.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.card.imageUrl} alt={s.card.displayName} className="h-14 w-14 object-contain" />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-800 text-xs text-slate-500">#{s.card.nationalId}</div>
-                )}
-                <p className="text-center text-[10px] font-medium text-slate-300 leading-tight truncate w-full">{s.card.displayName}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <ProfileCollectionProgressPanel progress={collectionProgress} ownerName={player.displayName} />
 
       {(wishlist.length > 0 || isSelf) && (
         <PokemonWishlist

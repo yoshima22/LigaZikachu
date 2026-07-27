@@ -15,6 +15,8 @@ import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
+import { ProfileCollectionProgressPanel } from "@/components/profile/collection-progress";
+import { getProfileCollectionProgress } from "@/lib/profile-collection-progress";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
 import { getOrderPasswordStampForUser } from "@/lib/raid-event";
 
@@ -245,7 +247,7 @@ export default async function PerfilPage() {
     );
   }
 
-  const [ranking, recentMatches, dreamTeam, equippedItems, profileMascots, wishlistRows] = await Promise.all([
+  const [ranking, recentMatches, collectionProgress, equippedItems, profileMascots, wishlistRows] = await Promise.all([
     getCachedGlobalRanking(),
     prisma.match.findMany({
       where: {
@@ -267,12 +269,7 @@ export default async function PerfilPage() {
         }
       }
     }),
-    prisma.playerSticker.findMany({
-      where: { playerId: player.id, isFavorite: true },
-      include: { card: { select: { nationalId: true, displayName: true, imageUrl: true, rarity: true } } },
-      orderBy: { firstObtained: "asc" },
-      take: 6
-    }),
+    getProfileCollectionProgress(player.id),
     prisma.playerInventory.findMany({
       where: { playerId: player.id, equipped: true },
       include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true } } }
@@ -443,29 +440,7 @@ export default async function PerfilPage() {
         ownerName={player.displayName}
       />
 
-      {dreamTeam.length > 0 && (
-        <Card className="p-6">
-          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            ⭐ Time dos Sonhos
-          </h2>
-          <p className="mb-4 text-xs text-slate-500">As {dreamTeam.length} figurinhas favoritas deste treinador.</p>
-          <div className="flex flex-wrap gap-3">
-            {dreamTeam.map((s) => (
-              <div key={s.id} className="flex flex-col items-center gap-1 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-2 w-20">
-                {s.card.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.card.imageUrl} alt={s.card.displayName} className="h-14 w-14 object-contain" />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-800 text-xs text-slate-500">
-                    #{s.card.nationalId}
-                  </div>
-                )}
-                <p className="text-center text-[10px] font-medium text-slate-300 leading-tight truncate w-full">{s.card.displayName}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <ProfileCollectionProgressPanel progress={collectionProgress} ownerName={player.displayName} />
 
       <Card className="p-6">
         <h2 className="mb-4 text-sm font-semibold text-white">Insignias</h2>
