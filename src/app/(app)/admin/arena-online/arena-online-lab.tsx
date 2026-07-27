@@ -5,9 +5,10 @@ import { toast } from "sonner";
 import type { LivePvpMove } from "@/lib/live-pvp-moves";
 import type { LivePvpFighter } from "@/lib/live-pvp-engine";
 import { loadLivePvpMovesAction, resolveLivePvpTurnAction } from "./actions";
+import { ArenaOnlinePregame } from "./arena-online-pregame";
 
 type Side = "A" | "B";
-type MascotOption = {
+export type MascotOption = {
   id: string;
   pokemonId: number;
   name: string;
@@ -198,6 +199,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [choiceA, setChoiceA] = useState<number | null>(null);
   const [choiceB, setChoiceB] = useState<number | null>(null);
   const [activeSide, setActiveSide] = useState<Side>("A");
+  const [openingSide, setOpeningSide] = useState<Side>("A");
   const [seconds, setSeconds] = useState(60);
   const [afk, setAfk] = useState({ A: 0, B: 0 });
   const [winner, setWinner] = useState<Side | null>(null);
@@ -244,6 +246,16 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
             }));
         });
     }
+  };
+  const reorderTeam = (side: Side, id: string, direction: -1 | 1) => {
+    const ids = side === "A" ? teamIdsA : teamIdsB;
+    const setter = side === "A" ? setTeamIdsA : setTeamIdsB;
+    const index = ids.indexOf(id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= ids.length) return;
+    const next = [...ids];
+    [next[index], next[target]] = [next[target], next[index]];
+    setter(next);
   };
 
   const load = () =>
@@ -314,7 +326,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
     setFighterB(preparedB[0]);
     setChoiceA(null);
     setChoiceB(null);
-    setActiveSide("A");
+    setActiveSide(openingSide);
     setSeconds(60);
     setAfk({ A: 0, B: 0 });
     setWinner(null);
@@ -389,7 +401,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       setLogs((old) => [...old, ...result.events]);
       setChoiceA(null);
       setChoiceB(null);
-      setActiveSide("A");
+      setActiveSide(openingSide);
       setSeconds(60);
       if (result.winner) {
         const defeated = result.winner === "A" ? "B" : "A";
@@ -437,23 +449,21 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       }
     });
   const confirm = () => {
-    if (activeSide === "A") {
-      if (choiceA == null) {
-        toast.error("Escolha um golpe.");
-        return;
-      }
-      setAfk((v) => ({ ...v, A: 0 }));
-      setActiveSide("B");
-      setSeconds(60);
-      setLogs((v) => [...v, "Jogador A confirmou. Vez do Jogador B."]);
-    } else {
-      if (choiceB == null) {
-        toast.error("Escolha um golpe.");
-        return;
-      }
-      setAfk((v) => ({ ...v, B: 0 }));
-      resolveRound(choiceA, choiceB);
+    const choice = activeSide === "A" ? choiceA : choiceB;
+    if (choice == null) {
+      toast.error("Escolha um golpe.");
+      return;
     }
+    setAfk((v) => ({ ...v, [activeSide]: 0 }));
+    if (activeSide === openingSide) {
+      const next = activeSide === "A" ? "B" : "A";
+      setActiveSide(next);
+      setSeconds(60);
+      setLogs((v) => [
+        ...v,
+        `Jogador ${activeSide} confirmou. Vez do Jogador ${next}.`,
+      ]);
+    } else resolveRound(choiceA, choiceB);
   };
   const surrender = () => {
     const defeated = activeSide;
@@ -621,6 +631,19 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           pré-selecionados pela PokeAPI.
         </p>
       </header>
+      <ArenaOnlinePregame
+        mascots={mascots}
+        onComplete={(a, b, first) => {
+          setTeamIdsA(a);
+          setTeamIdsB(b);
+          setOpeningSide(first);
+          setIdA(a[0] ?? "");
+          setIdB(b[0] ?? "");
+          toast.success(
+            "Pré-jogo concluído. Prepare os golpes para iniciar a batalha.",
+          );
+        }}
+      />
       <div className="grid gap-3 md:grid-cols-2">
         <TeamPicker
           label="Jogador A"
@@ -628,6 +651,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           mascots={mascots}
           toggle={(id) => toggleTeam("A", id)}
           movePreview={teamMovePreview}
+          reorder={(id, direction) => reorderTeam("A", id, direction)}
         />
         <TeamPicker
           label="Jogador B"
@@ -635,6 +659,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
           mascots={mascots}
           toggle={(id) => toggleTeam("B", id)}
           movePreview={teamMovePreview}
+          reorder={(id, direction) => reorderTeam("B", id, direction)}
         />
       </div>
       <button
@@ -770,12 +795,14 @@ function TeamPicker({
   mascots,
   toggle,
   movePreview,
+  reorder,
 }: {
   label: string;
   ids: string[];
   mascots: MascotOption[];
   toggle: (id: string) => void;
   movePreview: Record<string, LivePvpMove[]>;
+  reorder: (id: string, direction: -1 | 1) => void;
 }) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
@@ -943,25 +970,38 @@ function TeamPicker({
                       <strong className="truncate text-sm text-white">
                         {m.name} · Nv.{m.level}
                       </strong>
-                      <button
-                        type="button"
-                        onClick={() => toggle(m.id)}
-                        className="rounded border border-red-500/30 px-2 py-1 text-[9px] text-red-300"
-                      >
-                        Remover
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => reorder(m.id, -1)}
+                          className="rounded border border-slate-700 px-2 py-1 text-[10px] text-slate-300 disabled:opacity-25"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === ids.length - 1}
+                          onClick={() => reorder(m.id, 1)}
+                          className="rounded border border-slate-700 px-2 py-1 text-[10px] text-slate-300 disabled:opacity-25"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggle(m.id)}
+                          className="rounded border border-red-500/30 px-2 py-1 text-[9px] text-red-300"
+                        >
+                          Remover
+                        </button>
+                      </div>
                     </div>
                     <p className="text-[10px] text-slate-400">
                       HP {hp} · {m.gameStatus} · Tag {m.performanceTag}
                     </p>
                     <div className="mt-1 flex gap-1">
                       {m.types.map((type) => (
-                        <span
-                          key={type}
-                          className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[9px] text-slate-200"
-                        >
-                          {TYPE_ICONS[type] ?? ""} {TYPE_LABELS[type] ?? type}
-                        </span>
+                        <TypeBadge key={type} type={type} />
                       ))}
                     </div>
                     <p className="mt-2 text-[9px] text-slate-400">
@@ -982,6 +1022,16 @@ function TeamPicker({
                           <p className="text-cyan-300/60">
                             {moveScaling(move)}
                           </p>
+                          {effectSummary(move) && (
+                            <p className="text-amber-300/60">
+                              {effectSummary(move)}
+                            </p>
+                          )}
+                          {move.effect && (
+                            <p className="mt-1 leading-relaxed text-slate-500">
+                              {move.effect}
+                            </p>
+                          )}
                         </div>
                       ))}
                       {!movePreview[m.id]?.length && (
@@ -999,6 +1049,35 @@ function TeamPicker({
         </div>
       </div>
     </div>
+  );
+}
+function TypeBadge({ type }: { type: string }) {
+  const [open, setOpen] = useState(false);
+  const strong = TYPE_ADVANTAGE[type] ?? [];
+  const weak = Object.entries(TYPE_ADVANTAGE)
+    .filter(([, targets]) => targets.includes(type))
+    .map(([attacker]) => attacker);
+  return (
+    <span className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[9px] text-slate-200"
+      >
+        {TYPE_ICONS[type] ?? ""} {TYPE_LABELS[type] ?? type}
+      </button>
+      {open && (
+        <span className="absolute left-0 top-full z-30 mt-1 block w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 text-[9px] shadow-xl">
+          <b className="text-emerald-300">Forte:</b>{" "}
+          {strong.map((value) => TYPE_LABELS[value] ?? value).join(", ") ||
+            "nenhum"}
+          <br />
+          <b className="text-red-300">Fraco:</b>{" "}
+          {weak.map((value) => TYPE_LABELS[value] ?? value).join(", ") ||
+            "nenhum"}
+        </span>
+      )}
+    </span>
   );
 }
 function MoveSet({ title, moves }: { title: string; moves: LivePvpMove[] }) {

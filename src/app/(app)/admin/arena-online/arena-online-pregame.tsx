@@ -1,0 +1,356 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { MascotOption } from "./arena-online-lab";
+
+type Side = "A" | "B";
+type Stage =
+  | "LOBBY"
+  | "COIN_PICK"
+  | "COIN_FLIP"
+  | "FIRST"
+  | "DRAFT"
+  | "LEADS"
+  | "DONE";
+const other = (side: Side): Side => (side === "A" ? "B" : "A");
+
+export function ArenaOnlinePregame({
+  mascots,
+  onComplete,
+}: {
+  mascots: MascotOption[];
+  onComplete: (a: string[], b: string[], first: Side) => void;
+}) {
+  const [stage, setStage] = useState<Stage>("LOBBY");
+  const [queue, setQueue] = useState(0);
+  const [nick, setNick] = useState("");
+  const [seconds, setSeconds] = useState(30);
+  const [coinChooser, setCoinChooser] = useState<Side>("A");
+  const [face, setFace] = useState<"CARA" | "COROA" | null>(null);
+  const [coinResult, setCoinResult] = useState<"CARA" | "COROA" | null>(null);
+  const [coinWinner, setCoinWinner] = useState<Side | null>(null);
+  const [first, setFirst] = useState<Side>("A");
+  const [draftTurn, setDraftTurn] = useState<Side>("A");
+  const [quota, setQuota] = useState(1);
+  const [pickedThisTurn, setPickedThisTurn] = useState<string[]>([]);
+  const [teamA, setTeamA] = useState<string[]>([]);
+  const [teamB, setTeamB] = useState<string[]>([]);
+  const [leadA, setLeadA] = useState<string | null>(null);
+  const [leadB, setLeadB] = useState<string | null>(null);
+  const [leadTurn, setLeadTurn] = useState<Side>("A");
+  const resetTimer = () => setSeconds(30);
+  const start = () => {
+    setCoinChooser(Math.random() < 0.5 ? "A" : "B");
+    setStage("COIN_PICK");
+    resetTimer();
+  };
+  const players = useMemo(
+    () => Array.from(new Set(mascots.map((m) => m.ownerName))),
+    [mascots],
+  );
+  const pool = mascots.filter(
+    (m) => !(teamA.includes(m.id) || teamB.includes(m.id)),
+  );
+  const auto = () => {
+    if (stage === "COIN_PICK") {
+      setFace(Math.random() < 0.5 ? "CARA" : "COROA");
+      flip();
+    } else if (stage === "FIRST" && coinWinner) {
+      chooseFirst(Math.random() < 0.5 ? coinWinner : other(coinWinner));
+    } else if (stage === "DRAFT") {
+      const need = Math.min(
+        quota - pickedThisTurn.length,
+        6 - (draftTurn === "A" ? teamA.length : teamB.length),
+      );
+      confirmDraft([
+        ...pickedThisTurn,
+        ...pool.slice(0, need).map((m) => m.id),
+      ]);
+    } else if (stage === "LEADS") {
+      const team = leadTurn === "A" ? teamA : teamB;
+      confirmLead(team[0]);
+    }
+  };
+  useEffect(() => {
+    if (["LOBBY", "COIN_FLIP", "DONE"].includes(stage)) return;
+    const timer = setTimeout(
+      () => (seconds > 1 ? setSeconds((value) => value - 1) : auto()),
+      1000,
+    );
+    return () => clearTimeout(timer);
+  });
+  const flip = () => {
+    const chosen = face ?? (Math.random() < 0.5 ? "CARA" : "COROA");
+    if (!face) setFace(chosen);
+    setStage("COIN_FLIP");
+    setTimeout(() => {
+      const result = Math.random() < 0.5 ? "CARA" : "COROA";
+      const winner = result === chosen ? coinChooser : other(coinChooser);
+      setCoinResult(result);
+      setCoinWinner(winner);
+      setStage("FIRST");
+      resetTimer();
+    }, 1400);
+  };
+  const chooseFirst = (side: Side) => {
+    setFirst(side);
+    setDraftTurn(side);
+    setQuota(1);
+    setStage("DRAFT");
+    resetTimer();
+  };
+  const toggleDraft = (id: string) =>
+    setPickedThisTurn((current) =>
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : current.length <
+            Math.min(
+              quota,
+              6 - (draftTurn === "A" ? teamA.length : teamB.length),
+            )
+          ? [...current, id]
+          : current,
+    );
+  const confirmDraft = (picks = pickedThisTurn) => {
+    if (!picks.length) return;
+    const nextA = draftTurn === "A" ? [...teamA, ...picks] : teamA;
+    const nextB = draftTurn === "B" ? [...teamB, ...picks] : teamB;
+    setTeamA(nextA);
+    setTeamB(nextB);
+    setPickedThisTurn([]);
+    if (nextA.length >= 6 && nextB.length >= 6) {
+      setLeadTurn(first);
+      setStage("LEADS");
+      resetTimer();
+      return;
+    }
+    const next = other(draftTurn);
+    setDraftTurn(next);
+    setQuota(Math.min(2, 6 - (next === "A" ? nextA.length : nextB.length)));
+    resetTimer();
+  };
+  const confirmLead = (id: string | null) => {
+    if (!id) return;
+    if (leadTurn === "A") {
+      setLeadA(id);
+      if (!leadB) {
+        setLeadTurn("B");
+        resetTimer();
+        return;
+      }
+    } else {
+      setLeadB(id);
+      if (!leadA) {
+        setLeadTurn("A");
+        resetTimer();
+        return;
+      }
+    }
+    const finalA = leadTurn === "A" ? id : leadA!;
+    const finalB = leadTurn === "B" ? id : leadB!;
+    const orderedA = [finalA, ...teamA.filter((value) => value !== finalA)];
+    const orderedB = [finalB, ...teamB.filter((value) => value !== finalB)];
+    onComplete(orderedA, orderedB, first);
+    setStage("DONE");
+  };
+  return (
+    <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-slate-950 to-cyan-500/5 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[.2em] text-purple-300">
+            Pré-jogo online · sandbox
+          </p>
+          <h2 className="text-lg font-black text-white">
+            Fluxo de matchmaking e draft
+          </h2>
+        </div>
+        {stage !== "LOBBY" && stage !== "DONE" && (
+          <span className="font-pixel text-xl text-[#FFCB05]">{seconds}s</span>
+        )}
+      </div>
+      {stage === "LOBBY" && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-cyan-500/25 bg-slate-950/70 p-4">
+            <p className="font-bold text-white">Fila pública</p>
+            <p className="mt-1 text-xs text-slate-400">
+              <b className="text-cyan-300">{queue}</b> jogador(es) procurando
+              partida neste teste.
+            </p>
+            <button
+              onClick={() => {
+                setQueue(2);
+                start();
+              }}
+              className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"
+            >
+              Procurar adversário
+            </button>
+          </div>
+          <div className="rounded-xl border border-purple-500/25 bg-slate-950/70 p-4">
+            <p className="font-bold text-white">Desafio direto</p>
+            <input
+              value={nick}
+              onChange={(event) => setNick(event.target.value)}
+              placeholder="Digite o nick..."
+              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            />
+            <p className="mt-1 text-[10px] text-slate-500">
+              Sandbox disponível: {players.join(", ") || "admins locais"}
+            </p>
+            <button
+              disabled={!nick.trim()}
+              onClick={start}
+              className="mt-3 w-full rounded-lg bg-purple-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-35"
+            >
+              Simular busca simultânea
+            </button>
+          </div>
+        </div>
+      )}
+      {stage === "COIN_PICK" && (
+        <div className="mt-5 text-center">
+          <p className="text-sm text-slate-300">
+            Jogador <b className="text-white">{coinChooser}</b> foi sorteado
+            para escolher.
+          </p>
+          <div className="mt-4 flex justify-center gap-3">
+            {(["CARA", "COROA"] as const).map((value) => (
+              <button
+                key={value}
+                onClick={() => setFace(value)}
+                className={`rounded-xl border px-8 py-4 font-black ${face === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-700 text-slate-300"}`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+          <button
+            disabled={!face}
+            onClick={flip}
+            className="mt-4 rounded-lg bg-[#FFCB05] px-6 py-2 text-sm font-bold text-slate-950 disabled:opacity-35"
+          >
+            Lançar moeda
+          </button>
+        </div>
+      )}
+      {stage === "COIN_FLIP" && (
+        <div className="py-10 text-center">
+          <div className="mx-auto flex h-28 w-28 animate-[spin_1.4s_ease-in-out] items-center justify-center rounded-full border-4 border-[#FFCB05] bg-amber-400 text-4xl shadow-[0_0_35px_rgba(255,203,5,.45)]">
+            ⚡
+          </div>
+          <p className="mt-4 text-sm text-slate-300">A moeda está no ar...</p>
+        </div>
+      )}
+      {stage === "FIRST" && coinWinner && (
+        <div className="mt-5 text-center">
+          <p className="text-xl font-black text-[#FFCB05]">
+            {coinResult}! Jogador {coinWinner} venceu.
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Escolha quem fará a primeira seleção.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button
+              onClick={() => chooseFirst(coinWinner)}
+              className="rounded-lg bg-cyan-500 px-5 py-2 text-xs font-bold text-slate-950"
+            >
+              Eu começo
+            </button>
+            <button
+              onClick={() => chooseFirst(other(coinWinner))}
+              className="rounded-lg border border-slate-700 px-5 py-2 text-xs font-bold text-white"
+            >
+              Adversário começa
+            </button>
+          </div>
+        </div>
+      )}
+      {stage === "DRAFT" && (
+        <div className="mt-4">
+          <p className="text-center text-sm text-white">
+            Jogador <b className="text-[#FFCB05]">{draftTurn}</b>: escolha{" "}
+            {Math.min(
+              quota,
+              6 - (draftTurn === "A" ? teamA.length : teamB.length),
+            )}{" "}
+            mascote(s) · A {teamA.length}/6 · B {teamB.length}/6
+          </p>
+          <div className="mt-3 grid max-h-80 grid-cols-2 gap-2 overflow-y-auto md:grid-cols-4 lg:grid-cols-6">
+            {pool.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => toggleDraft(m.id)}
+                className={`rounded-xl border p-2 text-center ${pickedThisTurn.includes(m.id) ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+              >
+                <img
+                  src={m.spriteUrl}
+                  alt=""
+                  className="mx-auto h-12 w-12 object-contain [image-rendering:pixelated]"
+                />
+                <b className="block truncate text-[10px] text-white">
+                  {m.name}
+                </b>
+                <span className="text-[9px] text-slate-500">Nv.{m.level}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            disabled={
+              pickedThisTurn.length !==
+              Math.min(
+                quota,
+                6 - (draftTurn === "A" ? teamA.length : teamB.length),
+              )
+            }
+            onClick={() => confirmDraft()}
+            className="mt-3 w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-35"
+          >
+            Confirmar escolhas
+          </button>
+        </div>
+      )}
+      {stage === "LEADS" && (
+        <div className="mt-4">
+          <p className="text-center text-sm text-white">
+            Jogador {leadTurn}: escolha seu inicial em segredo.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+            {(leadTurn === "A" ? teamA : teamB).map((id) => {
+              const m = mascots.find((entry) => entry.id === id);
+              if (!m) return null;
+              const selected = (leadTurn === "A" ? leadA : leadB) === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() =>
+                    leadTurn === "A" ? setLeadA(id) : setLeadB(id)
+                  }
+                  className={`rounded-xl border p-3 ${selected ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+                >
+                  <img
+                    src={m.spriteUrl}
+                    alt=""
+                    className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
+                  />
+                  <b className="block text-xs text-white">{m.name}</b>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => confirmLead(leadTurn === "A" ? leadA : leadB)}
+            className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"
+          >
+            Confirmar inicial secreto
+          </button>
+        </div>
+      )}
+      {stage === "DONE" && (
+        <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-center text-sm text-emerald-200">
+          Pré-jogo concluído. As equipes e os iniciais foram enviados para a
+          montagem abaixo.
+        </div>
+      )}
+    </section>
+  );
+}

@@ -71,9 +71,8 @@ function defenseStat(f: LivePvpFighter, m: LivePvpMove) {
     ? staged(f, "defense", f.vitality)
     : staged(f, "special-defense", (f.vitality + f.charisma) / 2);
 }
-function effectiveSpeed(f: LivePvpFighter) {
-  const speed = staged(f, "speed", f.agility);
-  return f.status === "paralysis" ? speed / 2 : speed;
+function initiative(f: LivePvpFighter) {
+  return staged(f, "defense", f.vitality);
 }
 function chance(value: number | null | undefined, fallback = 100) {
   return value && value > 0 ? value : fallback;
@@ -454,8 +453,8 @@ export function resolveLivePvpTurn(
       ? pA > pB
         ? "A"
         : "B"
-      : effectiveSpeed(fighterA) !== effectiveSpeed(fighterB)
-        ? effectiveSpeed(fighterA) > effectiveSpeed(fighterB)
+      : initiative(fighterA) !== initiative(fighterB)
+        ? initiative(fighterA) > initiative(fighterB)
           ? "A"
           : "B"
         : random() < 0.5
