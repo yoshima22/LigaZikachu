@@ -49,6 +49,15 @@ const STATUS_LABEL: Record<string, string> = {
   freeze: "congelamento",
   confusion: "confusão",
 };
+const STAT_LABEL: Record<string, string> = {
+  attack: "Ataque",
+  defense: "Defesa",
+  "special-attack": "Ataque especial",
+  "special-defense": "Defesa especial",
+  speed: "Velocidade",
+  accuracy: "Precisão",
+  evasion: "Evasão",
+};
 const SELF_TARGETS = new Set(["user", "users-field", "user-or-ally"]);
 const clamp = (n: number, min: number, max: number) =>
   Math.max(min, Math.min(max, n));
@@ -222,7 +231,7 @@ function applyStatChanges(
       6,
     );
     events.push(
-      `${target.name}: ${change.stat} ${change.change > 0 ? "subiu" : "caiu"} ${Math.abs(change.change) + extra} estágio(s)${extra ? " com impulso do Carisma" : ""}.`,
+      `${target.name}: ${STAT_LABEL[change.stat] ?? change.stat} ${change.change > 0 ? "subiu" : "caiu"} ${Math.abs(change.change) + extra} estágio(s)${extra ? " com impulso do Carisma" : ""}.`,
     );
   }
 }

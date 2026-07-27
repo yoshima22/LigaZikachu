@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { LivePvpMove } from "@/lib/live-pvp-moves";
 import type { LivePvpFighter } from "@/lib/live-pvp-engine";
@@ -169,6 +169,77 @@ function effectSummary(move: LivePvpMove) {
     .filter(Boolean)
     .join(" · ");
 }
+function stageMultiplier(stage = 0) {
+  return stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
+}
+function moveInfluence(
+  move: LivePvpMove,
+  actor: LivePvpFighter,
+  target: LivePvpFighter,
+) {
+  if (move.damageClass === "physical") {
+    const attack = Math.round(
+      actor.force * stageMultiplier(actor.statStages?.attack),
+    );
+    const defense = Math.round(
+      target.vitality * stageMultiplier(target.statStages?.defense),
+    );
+    const accuracy =
+      move.accuracy == null
+        ? 100
+        : Math.min(
+            100,
+            Math.round(
+              move.accuracy *
+                stageMultiplier(
+                  (actor.statStages?.accuracy ?? 0) -
+                    (target.statStages?.evasion ?? 0),
+                ),
+            ),
+          );
+    return `Cálculo atual: Força ${attack} contra Vitalidade ${defense} · precisão efetiva ${accuracy}%`;
+  }
+  if (move.damageClass === "special") {
+    const attack = Math.round(
+      ((actor.instinct + actor.charisma) / 2) *
+        stageMultiplier(actor.statStages?.["special-attack"]),
+    );
+    const defense = Math.round(
+      ((target.vitality + target.charisma) / 2) *
+        stageMultiplier(target.statStages?.["special-defense"]),
+    );
+    const accuracy =
+      move.accuracy == null
+        ? 100
+        : Math.min(
+            100,
+            Math.round(
+              move.accuracy *
+                stageMultiplier(
+                  (actor.statStages?.accuracy ?? 0) -
+                    (target.statStages?.evasion ?? 0),
+                ),
+            ),
+          );
+    return `Cálculo atual: média de Instinto e Carisma ${attack} contra média de Vitalidade e Carisma ${defense} · precisão efetiva ${accuracy}%`;
+  }
+  if (move.healing) {
+    const scale =
+      0.75 + actor.charisma / 500 + actor.vitality / 750 + actor.level / 500;
+    return `Cura estimada agora: ${Math.round(((actor.maxHp * move.healing) / 100) * scale)} HP · Carisma ${actor.charisma}, Vitalidade ${actor.vitality} e Nv.${actor.level}`;
+  }
+  if (
+    move.ailment !== "none" ||
+    move.statChanges.some((change) => change.change < 0)
+  ) {
+    const base = move.ailmentChance || move.effectChance || 100;
+    const bonus = Math.min(15, actor.instinct / 18);
+    return `Chance efetiva do efeito: ${Math.min(100, Math.round(base + bonus))}% · Instinto ${actor.instinct} acrescenta ${Math.round(bonus)} pontos percentuais`;
+  }
+  if (move.statChanges.length)
+    return `Carisma ${actor.charisma}: ${Math.min(35, Math.round(actor.charisma / 8))}% de chance de ampliar o buff em +1 estágio`;
+  return "Este efeito não usa um atributo ofensivo.";
+}
 
 export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [pending, startTransition] = useTransition();
@@ -205,6 +276,14 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
   const [afk, setAfk] = useState({ A: 0, B: 0 });
   const [winner, setWinner] = useState<Side | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = logRef.current;
+    if (element)
+      requestAnimationFrame(() =>
+        element.scrollTo({ top: element.scrollHeight, behavior: "smooth" }),
+      );
+  }, [logs]);
   const mascotA = useMemo(
     () => mascots.find((m) => m.id === idA),
     [mascots, idA],
@@ -686,6 +765,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
               side="A"
               active={activeSide === "A" && !winner}
               fighter={fighterA}
+              opponent={fighterB}
               moves={selectedA}
               choice={choiceA}
               setChoice={setChoiceA}
@@ -700,6 +780,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
               side="B"
               active={activeSide === "B" && !winner}
               fighter={fighterB}
+              opponent={fighterA}
               moves={selectedB}
               choice={choiceB}
               setChoice={setChoiceB}
@@ -712,7 +793,10 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
             />
             <div className="rounded-xl border border-border bg-slate-950 p-3">
               <p className="mb-2 text-xs font-bold text-white">Log</p>
-              <div className="max-h-72 space-y-1 overflow-y-auto text-[11px] text-slate-400">
+              <div
+                ref={logRef}
+                className="max-h-72 space-y-1 overflow-y-auto text-[11px] text-slate-400"
+              >
                 {logs.map((log, i) =>
                   log.startsWith("─") ? (
                     <div key={i} className="my-2 border-t border-slate-700" />
@@ -1117,6 +1201,7 @@ function FightBox({
   side,
   active,
   fighter,
+  opponent,
   moves,
   choice,
   setChoice,
@@ -1130,6 +1215,7 @@ function FightBox({
   side: Side;
   active: boolean;
   fighter: LivePvpFighter;
+  opponent: LivePvpFighter;
   moves: LivePvpMove[];
   choice: number | null;
   setChoice: (id: number) => void;
@@ -1180,9 +1266,6 @@ function FightBox({
             {fighter.name} <small className="text-slate-500">({side})</small>
           </strong>
         </div>
-        <span className="text-xs">
-          {fighter.hp}/{fighter.maxHp} HP
-        </span>
       </div>
       <div className="mb-3 grid grid-cols-5 gap-1 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-center text-[9px] text-slate-400">
         <span>
@@ -1255,7 +1338,13 @@ function FightBox({
           </span>
         )}
       </div>
-      <div className="my-2 h-2 overflow-hidden rounded bg-slate-800">
+      <div className="mb-1 mt-2 flex items-center justify-between text-[10px] text-slate-400">
+        <span>HP atual</span>
+        <strong className="text-slate-100">
+          {fighter.hp}/{fighter.maxHp} HP
+        </strong>
+      </div>
+      <div className="mb-3 h-2 overflow-hidden rounded bg-slate-800">
         <div className="h-full bg-emerald-400" style={{ width: `${pct}%` }} />
       </div>
       <div className="grid gap-2">
@@ -1275,6 +1364,9 @@ function FightBox({
             </span>
             <span className="mt-1 block text-[10px] leading-relaxed text-cyan-300/75">
               {moveScaling(m)}
+            </span>
+            <span className="mt-1 block rounded bg-cyan-500/5 px-2 py-1 text-[10px] leading-relaxed text-cyan-100/80">
+              {moveInfluence(m, fighter, opponent)}
             </span>
             {effectSummary(m) && (
               <span className="mt-1 block text-[10px] leading-relaxed text-amber-300/75">
