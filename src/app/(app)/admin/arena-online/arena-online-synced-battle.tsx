@@ -20,6 +20,7 @@ import {
   COMBAT_ROLE_VALUES,
   type CombatRole,
 } from "@/lib/combat-roles";
+import { tacticalBiomeAt, tacticalFogState } from "@/lib/tactical-arena";
 
 const FORMATIONS: Array<{
   id: TacticalFormation;
@@ -118,6 +119,36 @@ const EVENT_LABELS: Record<string, string> = {
   CONTROL: "ZONA DE CONTROLE",
   BLOCK: "MOVIMENTO BLOQUEADO",
   KO: "K.O.",
+  FOG: "NÉVOA",
+};
+const TYPE_LABELS: Record<string, string> = {
+  fire: "Fogo",
+  water: "Água",
+  grass: "Planta",
+  bug: "Inseto",
+  ice: "Gelo",
+  rock: "Pedra",
+  ground: "Terra",
+  electric: "Elétrico",
+  psychic: "Psíquico",
+  fairy: "Fada",
+  ghost: "Fantasma",
+  dark: "Sombrio",
+  dragon: "Dragão",
+  steel: "Aço",
+  normal: "Normal",
+  fighting: "Lutador",
+  poison: "Veneno",
+  flying: "Voador",
+};
+const SUPPORT_EFFECT_TEXT: Partial<Record<CombatRole, string>> = {
+  ENCOURAGER: "Aura de impulso aumenta o dano dos aliados próximos.",
+  SCOUT: "Revela alvos e abre bônus de dano para aliados próximos.",
+  GUARDIAN: "Pode interceptar parte do dano destinado a um aliado.",
+  DEFENDER: "Pode redirecionar ataques dentro de sua zona de proteção.",
+  PROVOKER: "Pode provocar o atacante e assumir o golpe.",
+  SABOTEUR: "Pode reduzir suporte inimigo e bloquear reações de postura.",
+  HEALER: "Mantém suporte de cura para aliados feridos próximos.",
 };
 const PERCENT_EVENTS = new Set([
   "DEFEND",
@@ -479,10 +510,36 @@ export function ArenaOnlineSyncedBattle({
                   </span>
                 )}
               </div>
+              {!!battle.biomes?.length && (
+                <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {battle.biomes.map((biome) => (
+                    <div
+                      key={biome.id}
+                      className="rounded-lg border border-slate-700 p-2"
+                      style={{ backgroundColor: biome.color }}
+                    >
+                      <b className="text-[10px] text-white">{biome.name}</b>
+                      <p className="text-[8px] text-emerald-300">
+                        Favorece{" "}
+                        {biome.favoredTypes
+                          .map((type) => TYPE_LABELS[type] ?? type)
+                          .join("/")}
+                      </p>
+                      <p className="text-[8px] text-red-300">
+                        Penaliza{" "}
+                        {biome.penalizedTypes
+                          .map((type) => TYPE_LABELS[type] ?? type)
+                          .join("/")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <div className="grid min-w-[720px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
                   {Array.from({ length: 8 }, (_, y) =>
                     Array.from({ length: 12 }, (_, x) => {
+                      const biome = tacticalBiomeAt(battle.biomes ?? [], x, y);
                       const validZone = sideA ? x <= 2 : x >= 9;
                       const unit = mine.find((entry) => {
                         const position = formationPositions[entry.id];
@@ -494,8 +551,14 @@ export function ArenaOnlineSyncedBattle({
                           type="button"
                           disabled={!validZone}
                           onClick={() => placeMascot(x, y)}
+                          style={{ backgroundColor: biome?.color }}
                           className={`relative aspect-square min-h-14 rounded border ${validZone ? (placementSelected ? "border-[#FFCB05] bg-[#FFCB05]/10 hover:bg-[#FFCB05]/25" : "border-cyan-500/40 bg-cyan-500/10") : "border-slate-800 bg-slate-950/70 opacity-35"}`}
                         >
+                          {!unit && biome && (
+                            <span className="absolute bottom-0.5 left-1 text-[7px] uppercase text-slate-500">
+                              {biome.name}
+                            </span>
+                          )}
                           {validZone && !unit && (
                             <span className="text-[9px] uppercase text-cyan-300/60">
                               Posicionar
@@ -668,6 +731,8 @@ export function ArenaOnlineSyncedBattle({
       if (event.amount == null) continue;
       if (event.kind === "ATTACK" && event.targetId === unit.id)
         hp += event.amount;
+      else if (event.kind === "FOG" && event.targetId === unit.id)
+        hp += event.amount;
       else if (event.kind === "GUARD" && event.unitId === unit.id)
         hp += event.amount;
       else if (event.kind === "HEAL" && event.targetId === unit.id)
@@ -675,6 +740,42 @@ export function ArenaOnlineSyncedBattle({
     }
     return { ...unit, x, y, hp: Math.max(0, Math.min(unit.maxHp, hp)) };
   });
+  const cinematicActor =
+    activeEvent?.kind === "ATTACK"
+      ? (visualUnits.find((unit) => unit.id === activeEvent.unitId) ?? null)
+      : null;
+  const cinematicTarget =
+    activeEvent?.kind === "ATTACK"
+      ? (visualUnits.find((unit) => unit.id === activeEvent.targetId) ?? null)
+      : null;
+  const cinematicActorIsA = cinematicActor
+    ? battle.teamA.some((unit) => unit.id === cinematicActor.id)
+    : false;
+  const cinematicAllies =
+    cinematicActor && cinematicTarget
+      ? visualUnits
+          .filter((unit) => {
+            if (
+              unit.hp <= 0 ||
+              unit.id === cinematicActor.id ||
+              unit.id === cinematicTarget.id
+            )
+              return false;
+            const unitIsA = battle.teamA.some((entry) => entry.id === unit.id);
+            const distanceToActor =
+              Math.abs(unit.x - cinematicActor.x) +
+              Math.abs(unit.y - cinematicActor.y);
+            const distanceToTarget =
+              Math.abs(unit.x - cinematicTarget.x) +
+              Math.abs(unit.y - cinematicTarget.y);
+            return (
+              !!SUPPORT_EFFECT_TEXT[unit.role] &&
+              ((unitIsA === cinematicActorIsA && distanceToActor <= 3) ||
+                (unitIsA !== cinematicActorIsA && distanceToTarget <= 3))
+            );
+          })
+          .slice(0, 4)
+      : [];
   const cell = (x: number, y: number) => {
     const positioned = visualUnits.find(
       (unit) =>
@@ -721,7 +822,10 @@ export function ArenaOnlineSyncedBattle({
         ? 2
         : effectiveAgility(selected) - enemyAverageAgility >= 60
           ? 1
-          : 0)
+          : 0) -
+      (tacticalFogState(battle.round, selected.x, selected.y) === "ACTIVE"
+        ? 1
+        : 0)
     : 0;
   const plannedPosition = selected
     ? {
@@ -921,6 +1025,39 @@ export function ArenaOnlineSyncedBattle({
           ))}
         </div>
       </div>
+      {!!battle.biomes?.length && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {battle.biomes.map((biome) => (
+            <div
+              key={biome.id}
+              className="rounded-xl border border-slate-700 p-2.5"
+              style={{ backgroundColor: biome.color }}
+            >
+              <b className="text-[11px] text-white">{biome.name}</b>
+              <p className="mt-1 text-[9px] text-emerald-300">
+                +10% atributo da postura:{" "}
+                {biome.favoredTypes
+                  .map((type) => TYPE_LABELS[type] ?? type)
+                  .join(", ")}
+              </p>
+              <p className="text-[9px] text-red-300">
+                −10%:{" "}
+                {biome.penalizedTypes
+                  .map((type) => TYPE_LABELS[type] ?? type)
+                  .join(", ")}
+              </p>
+            </div>
+          ))}
+          <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap gap-3 rounded-lg border border-purple-500/25 bg-purple-950/20 px-3 py-2 text-[9px] text-slate-300">
+            <b className="text-purple-200">Névoa de combate:</b>
+            <span>âmbar = fecha na próxima rodada</span>
+            <span className="text-fuchsia-300">
+              roxo = −1 movimento, −50% cura e dano crescente de 8% a 20% do HP
+              máximo
+            </span>
+          </div>
+        </div>
+      )}
       {activeEvent && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/10 px-4 py-3">
           <div>
@@ -952,6 +1089,81 @@ export function ArenaOnlineSyncedBattle({
       )}
       <div className="overflow-x-auto">
         <div className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
+          {cinematicActor &&
+            cinematicTarget &&
+            activeEvent?.kind === "ATTACK" && (
+              <div className="pointer-events-none absolute left-1/2 top-3 z-40 w-[min(92%,650px)] -translate-x-1/2 overflow-hidden rounded-2xl border border-fuchsia-300/70 bg-slate-950/95 p-3 shadow-[0_15px_70px_rgba(0,0,0,.8)] backdrop-blur">
+                <p className="mb-2 text-center text-[9px] font-black uppercase tracking-[.2em] text-fuchsia-300">
+                  Troca de dano · rodada {battle.round}
+                </p>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                  {[cinematicActor, cinematicTarget]
+                    .map((unit, index) => (
+                      <div
+                        key={unit.id}
+                        className={`rounded-xl border p-2 text-center ${index === 0 ? "border-cyan-400/50 bg-cyan-500/10" : "border-red-400/50 bg-red-500/10"}`}
+                      >
+                        <img
+                          src={unit.spriteUrl}
+                          onError={(event) => fallback(event, unit.pokemonId)}
+                          alt=""
+                          className="mx-auto h-20 w-20 object-contain drop-shadow-[0_0_12px_rgba(255,255,255,.3)]"
+                        />
+                        <b className="block truncate text-xs text-white">
+                          {unit.name}
+                        </b>
+                        <span className="text-[9px] text-slate-400">
+                          {COMBAT_ROLE_LABELS[unit.role]}
+                        </span>
+                      </div>
+                    ))
+                    .reduce<React.ReactNode[]>((nodes, card, index) => {
+                      if (index === 1)
+                        nodes.push(
+                          <div
+                            key="damage"
+                            className="animate-pulse text-center"
+                          >
+                            <span className="block text-2xl">⚔️</span>
+                            <b className="text-2xl text-red-400">
+                              −{activeEvent.amount ?? 0}
+                            </b>
+                            <span className="block text-[8px] uppercase text-slate-400">
+                              dano
+                            </span>
+                          </div>,
+                        );
+                      nodes.push(card);
+                      return nodes;
+                    }, [])}
+                </div>
+                {!!cinematicAllies.length && (
+                  <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                    {cinematicAllies.map((unit) => (
+                      <div
+                        key={unit.id}
+                        className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/90 p-1.5"
+                      >
+                        <img
+                          src={unit.spriteUrl}
+                          onError={(event) => fallback(event, unit.pokemonId)}
+                          alt=""
+                          className="h-8 w-8 object-contain"
+                        />
+                        <div className="min-w-0">
+                          <b className="block truncate text-[9px] text-white">
+                            {unit.name} · {COMBAT_ROLE_LABELS[unit.role]}
+                          </b>
+                          <p className="text-[8px] leading-tight text-cyan-200">
+                            {SUPPORT_EFFECT_TEXT[unit.role]}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           {activeEvent?.kind === "KO" && (
             <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-red-950/35 backdrop-blur-[1px]">
               <div className="animate-pulse rounded-2xl border-4 border-red-500 bg-slate-950/95 px-10 py-6 text-center shadow-[0_0_60px_rgba(239,68,68,.8)]">
@@ -964,7 +1176,9 @@ export function ArenaOnlineSyncedBattle({
           )}
           {Array.from({ length: 8 }, (_, y) =>
             Array.from({ length: 12 }, (_, x) => {
-              const unit = cell(x, y),
+              const biome = tacticalBiomeAt(battle.biomes ?? [], x, y),
+                fogState = tacticalFogState(battle.round, x, y),
+                unit = cell(x, y),
                 owned = !!unit && mine.some((entry) => entry.id === unit.id),
                 selectedUnit = unit?.id === selectedId,
                 acting = !!unit && activeEvent?.unitId === unit.id,
@@ -1022,8 +1236,21 @@ export function ArenaOnlineSyncedBattle({
                         : chooseTarget(unit)
                       : chooseCell(x, y)
                   }
-                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
+                  style={{ backgroundColor: biome?.color }}
+                  className={`relative aspect-square min-h-16 overflow-visible rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05]" : owned ? "border-cyan-500/50" : unit ? "border-red-500/40" : "border-slate-800"} ${fogState === "WARNING" ? "shadow-[inset_0_0_0_3px_rgba(251,191,36,.55)]" : ""} ${fogState === "ACTIVE" ? "before:pointer-events-none before:absolute before:inset-0 before:z-[1] before:rounded before:bg-purple-950/55 before:content-['']" : ""} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
+                  {!unit && biome && (
+                    <span className="pointer-events-none absolute bottom-0.5 left-1 z-[2] text-[7px] font-bold uppercase text-slate-500/80">
+                      {biome.name}
+                    </span>
+                  )}
+                  {fogState !== "SAFE" && (
+                    <span
+                      className={`pointer-events-none absolute right-1 top-1 z-[3] text-[8px] ${fogState === "ACTIVE" ? "text-fuchsia-200" : "text-amber-300"}`}
+                    >
+                      {fogState === "ACTIVE" ? "NÉVOA" : "AVISO"}
+                    </span>
+                  )}
                   {inProtectionArea && (
                     <span
                       className={`pointer-events-none absolute inset-1 z-0 rounded border-2 ${postureZoneTheme}`}

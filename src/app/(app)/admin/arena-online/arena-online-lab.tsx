@@ -12,6 +12,7 @@ import { ArenaOnlineSyncedBattle } from "./arena-online-synced-battle";
 type Side = "A" | "B";
 export type MascotOption = {
   id: string;
+  ownerId?: string;
   pokemonId: number;
   name: string;
   ownerName: string;

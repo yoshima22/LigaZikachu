@@ -9,6 +9,7 @@ import {
   chooseLivePvpCoinAction,
   chooseLivePvpFirstPlayerAction,
   getLivePvpMatchAction,
+  submitLivePvpBanAction,
   submitLivePvpDraftAction,
 } from "../../combates/arena-online/matchmaking-actions";
 
@@ -101,6 +102,7 @@ export function ArenaOnlineSyncedPregame({
       match.coinChooserId === identity.playerId) ||
     (match.phase === "FIRST_PICK" &&
       match.coinWinnerId === identity.playerId) ||
+    (match.phase === "BAN" && match.banTurnId === identity.playerId) ||
     (match.phase === "DRAFT" && match.draftTurnId === identity.playerId);
   const allMascots = useMemo(() => {
     const map = new Map<string, MascotOption>();
@@ -115,19 +117,23 @@ export function ArenaOnlineSyncedPregame({
       ? match.coinChooserId
       : match.phase === "FIRST_PICK"
         ? match.coinWinnerId
-        : match.phase === "DRAFT"
-          ? match.draftTurnId
-          : match.orderTurnId;
+        : match.phase === "BAN"
+          ? match.banTurnId
+          : match.phase === "DRAFT"
+            ? match.draftTurnId
+            : match.orderTurnId;
   const activePlayerName =
     activePlayerId === match.playerAId ? match.playerAName : match.playerBName;
   const waitingAction =
     match.phase === "COIN_PICK"
       ? `${activePlayerName} está escolhendo o lado da moeda.`
       : match.phase === "FIRST_PICK"
-        ? `${activePlayerName} está escolhendo quem começa o draft.`
-        : match.phase === "DRAFT"
-          ? `${activePlayerName} está escolhendo ${match.draftQuota} mascote${match.draftQuota === 1 ? "" : "s"} para a equipe.`
-          : "Preparando o combate.";
+        ? `${activePlayerName} está escolhendo quem começa os bans.`
+        : match.phase === "BAN"
+          ? `${activePlayerName} está escolhendo um mascote adversário para banir.`
+          : match.phase === "DRAFT"
+            ? `${activePlayerName} está escolhendo ${match.draftQuota} mascote${match.draftQuota === 1 ? "" : "s"} para a equipe.`
+            : "Preparando o combate.";
 
   const refresh = async () => {
     try {
@@ -181,7 +187,13 @@ export function ArenaOnlineSyncedPregame({
   useEffect(() => {
     setSelected([]);
     setPage(1);
-  }, [match.phase, match.draftTurnId, match.orderTurnId, ownTeam.join(",")]);
+  }, [
+    match.phase,
+    match.banTurnId,
+    match.draftTurnId,
+    match.orderTurnId,
+    ownTeam.join(","),
+  ]);
   useEffect(() => {
     if (match.phase !== "READY" || completedRevision.current === match.revision)
       return;
@@ -211,10 +223,25 @@ export function ArenaOnlineSyncedPregame({
       }
     });
 
-  const available = mascots.filter((mascot) => !ownTeam.includes(mascot.id));
-  const types = [...new Set(mascots.flatMap((mascot) => mascot.types))].sort();
+  const bannedAgainstMe =
+    viewerSide === "A" ? match.bansByBIds : match.bansByAIds;
+  const opponentId = viewerSide === "A" ? match.playerBId : match.playerAId;
+  const banPool = allMascots.filter((mascot) => mascot.ownerId === opponentId);
+  const sourceMascots = match.phase === "BAN" ? banPool : mascots;
+  const unavailableIds = new Set([
+    ...ownTeam,
+    ...match.bansByAIds,
+    ...match.bansByBIds,
+    ...bannedAgainstMe,
+  ]);
+  const available = sourceMascots.filter(
+    (mascot) => !unavailableIds.has(mascot.id),
+  );
+  const types = [
+    ...new Set(sourceMascots.flatMap((mascot) => mascot.types)),
+  ].sort();
   const tags = [
-    ...new Set(mascots.map((mascot) => mascot.performanceTag)),
+    ...new Set(sourceMascots.map((mascot) => mascot.performanceTag)),
   ].sort();
   const filtered = available.filter(
     (mascot) =>
@@ -227,7 +254,8 @@ export function ArenaOnlineSyncedPregame({
     (Math.min(page, pages) - 1) * 12,
     Math.min(page, pages) * 12,
   );
-  const required = Math.min(match.draftQuota, 6 - ownTeam.length);
+  const required =
+    match.phase === "BAN" ? 1 : Math.min(match.draftQuota, 6 - ownTeam.length);
 
   return (
     <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-slate-950 to-cyan-500/5 p-4">
@@ -261,6 +289,39 @@ export function ArenaOnlineSyncedPregame({
           </button>
         </div>
       </div>
+
+      {(match.phase === "BAN" ||
+        match.bansByAIds.length > 0 ||
+        match.bansByBIds.length > 0) && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {(
+            [
+              [match.playerAName, match.bansByAIds, match.banLimitA],
+              [match.playerBName, match.bansByBIds, match.banLimitB],
+            ] as const
+          ).map(([name, ids, limit]) => (
+            <div
+              key={name}
+              className="rounded-xl border border-red-500/25 bg-red-500/5 p-3"
+            >
+              <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-red-300">
+                Bans de {name} · {ids.length}/{limit}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {ids.map(
+                  (id) =>
+                    byId(id) && <MascotChip key={id} mascot={byId(id)!} />,
+                )}
+                {!ids.length && (
+                  <span className="text-[10px] text-slate-600">
+                    Nenhum ban confirmado.
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {(["A", "B"] as const).map((side) => {
@@ -369,7 +430,8 @@ export function ArenaOnlineSyncedPregame({
       {!coinAnimating && isMyTurn && match.phase === "FIRST_PICK" && (
         <div className="mt-5 text-center">
           <p className="text-sm text-white">
-            Você venceu a moeda ({match.coinResult}). Quem começa o draft?
+            Você venceu a moeda ({match.coinResult}). Quem começa os bans e o
+            draft?
           </p>
           <div className="mt-4 flex justify-center gap-2">
             <button
@@ -400,115 +462,127 @@ export function ArenaOnlineSyncedPregame({
         </div>
       )}
 
-      {!coinAnimating && isMyTurn && match.phase === "DRAFT" && (
-        <div className="mt-4">
-          <p className="text-center text-sm text-white">
-            Escolha {required} mascote(s) da sua conta.
-          </p>
-          <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_180px]">
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Buscar mascote..."
-              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
-            />
-            <select
-              value={type}
-              onChange={(event) => {
-                setType(event.target.value);
-                setPage(1);
-              }}
-              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
-            >
-              <option value="ALL">Todos os tipos</option>
-              {types.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-            <select
-              value={tag}
-              onChange={(event) => {
-                setTag(event.target.value);
-                setPage(1);
-              }}
-              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
-            >
-              <option value="ALL">Todas as tags</option>
-              {tags.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-            {visible.map((mascot) => (
-              <button
-                key={mascot.id}
-                onClick={() =>
-                  setSelected((current) =>
-                    current.includes(mascot.id)
-                      ? current.filter((id) => id !== mascot.id)
-                      : current.length < required
-                        ? [...current, mascot.id]
-                        : current,
-                  )
-                }
-                className={`rounded-xl border p-3 text-left ${selected.includes(mascot.id) ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+      {!coinAnimating &&
+        isMyTurn &&
+        (match.phase === "BAN" || match.phase === "DRAFT") && (
+          <div className="mt-4">
+            <p className="text-center text-sm text-white">
+              {match.phase === "BAN"
+                ? "Escolha um mascote da equipe adversária para banir."
+                : `Escolha ${required} mascote(s) da sua conta.`}
+            </p>
+            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_180px]">
+              <input
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Buscar mascote..."
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+              />
+              <select
+                value={type}
+                onChange={(event) => {
+                  setType(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
               >
-                <img
-                  src={mascot.spriteUrl}
-                  alt=""
-                  onError={(event) => spriteFallback(event, mascot.pokemonId)}
-                  className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
-                />
-                <b className="block truncate text-[10px] text-white">
-                  {mascot.name}
-                </b>
-                <span className="text-[9px] text-slate-500">
-                  Nv.{mascot.level} ·{" "}
-                  {mascot.types
-                    .map((entry) => TYPE_LABELS[entry] ?? entry)
-                    .join(" / ")}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400">
-            <span>
-              Página {Math.min(page, pages)} de {pages}
-            </span>
-            <div className="flex gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
-                className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                <option value="ALL">Todos os tipos</option>
+                {types.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={tag}
+                onChange={(event) => {
+                  setTag(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
               >
-                Anterior
-              </button>
-              <button
-                disabled={page >= pages}
-                onClick={() => setPage((value) => value + 1)}
-                className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
-              >
-                Próxima
-              </button>
+                <option value="ALL">Todas as tags</option>
+                {tags.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
+              {visible.map((mascot) => (
+                <button
+                  key={mascot.id}
+                  onClick={() =>
+                    setSelected((current) =>
+                      current.includes(mascot.id)
+                        ? current.filter((id) => id !== mascot.id)
+                        : current.length < required
+                          ? [...current, mascot.id]
+                          : current,
+                    )
+                  }
+                  className={`rounded-xl border p-3 text-left ${selected.includes(mascot.id) ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+                >
+                  <img
+                    src={mascot.spriteUrl}
+                    alt=""
+                    onError={(event) => spriteFallback(event, mascot.pokemonId)}
+                    className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
+                  />
+                  <b className="block truncate text-[10px] text-white">
+                    {mascot.name}
+                  </b>
+                  <span className="text-[9px] text-slate-500">
+                    Nv.{mascot.level} ·{" "}
+                    {mascot.types
+                      .map((entry) => TYPE_LABELS[entry] ?? entry)
+                      .join(" / ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400">
+              <span>
+                Página {Math.min(page, pages)} de {pages}
+              </span>
+              <div className="flex gap-1">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((value) => value - 1)}
+                  className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                >
+                  Anterior
+                </button>
+                <button
+                  disabled={page >= pages}
+                  onClick={() => setPage((value) => value + 1)}
+                  className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+            <button
+              disabled={pending || selected.length !== required}
+              onClick={() =>
+                act(() =>
+                  match.phase === "BAN"
+                    ? submitLivePvpBanAction(selected[0])
+                    : submitLivePvpDraftAction(selected),
+                )
+              }
+              className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-35 ${match.phase === "BAN" ? "bg-red-500 text-white" : "bg-[#FFCB05] text-slate-950"}`}
+            >
+              {match.phase === "BAN"
+                ? `Confirmar ban ${selected.length}/1`
+                : `Travar ${selected.length}/${required} escolha(s)`}
+            </button>
           </div>
-          <button
-            disabled={pending || selected.length !== required}
-            onClick={() => act(() => submitLivePvpDraftAction(selected))}
-            className="mt-3 w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-35"
-          >
-            Travar {selected.length}/{required} escolha(s)
-          </button>
-        </div>
-      )}
+        )}
 
       {match.phase === "READY" && (
         <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center font-bold text-emerald-200">

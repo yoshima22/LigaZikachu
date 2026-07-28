@@ -20,6 +20,12 @@ import {
   canAccessLivePvp,
   getLivePvpAccessConfig,
 } from "@/lib/live-pvp-access";
+import {
+  createTacticalBiomes,
+  tacticalBiomeAt,
+  tacticalFogState,
+  type TacticalBiome,
+} from "@/lib/tactical-arena";
 
 const QUEUE_PREFIX = "live_pvp_queue:";
 const MATCH_PREFIX = "live_pvp_match:";
@@ -44,6 +50,11 @@ export type LivePvpMatchValue = {
   coinChoice: "CARA" | "COROA" | null;
   coinWinnerId: string | null;
   firstPickerId: string | null;
+  banTurnId: string | null;
+  bansByAIds: string[];
+  bansByBIds: string[];
+  banLimitA: number;
+  banLimitB: number;
   draftTurnId: string | null;
   draftQuota: number;
   teamAIds: string[];
@@ -51,7 +62,7 @@ export type LivePvpMatchValue = {
   orderAIds: string[];
   orderBIds: string[];
   orderTurnId: string | null;
-  phase: "COIN_PICK" | "FIRST_PICK" | "DRAFT" | "ORDER" | "READY";
+  phase: "COIN_PICK" | "FIRST_PICK" | "BAN" | "DRAFT" | "ORDER" | "READY";
   deadline: string;
   revision: number;
   events: string[];
@@ -121,11 +132,12 @@ export type TacticalUnit = {
   y: number;
   shield: number;
   survivorUsed: boolean;
+  fogTurns: number;
   effects: Array<{
     id: string;
     label: string;
     kind: "BUFF" | "DEBUFF";
-    stat?: "force" | "agility" | "instinct" | "vitality";
+    stat?: "force" | "agility" | "charisma" | "instinct" | "vitality";
     value: number;
     duration: number;
   }>;
@@ -145,6 +157,7 @@ export type LivePvpBattleState = {
   round: number;
   logs: string[];
   lastEvents: TacticalBattleEvent[];
+  biomes: TacticalBiome[];
 };
 
 type MatchValue = LivePvpMatchValue;
@@ -156,6 +169,11 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     coinChoice: null,
     coinWinnerId: null,
     firstPickerId: null,
+    banTurnId: null,
+    bansByAIds: [],
+    bansByBIds: [],
+    banLimitA: 3,
+    banLimitB: 3,
     draftTurnId: null,
     draftQuota: 1,
     teamAIds: [],
@@ -180,10 +198,12 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     match.battle.teamA = match.battle.teamA.map((unit) => ({
       ...unit,
       effects: unit.effects ?? [],
+      fogTurns: unit.fogTurns ?? 0,
     }));
     match.battle.teamB = match.battle.teamB.map((unit) => ({
       ...unit,
       effects: unit.effects ?? [],
+      fogTurns: unit.fogTurns ?? 0,
     }));
   }
   if (match.phase === "ORDER") {
@@ -235,6 +255,7 @@ function fighterFromMascot(mascot: {
     y: -1,
     shield: 0,
     survivorUsed: false,
+    fogTurns: 0,
     effects: [],
   } satisfies TacticalUnit;
 }
@@ -242,6 +263,54 @@ const otherPlayerId = (match: MatchValue, playerId: string) =>
   playerId === match.playerAId ? match.playerBId : match.playerAId;
 const sideTeam = (match: MatchValue, playerId: string) =>
   playerId === match.playerAId ? match.teamAIds : match.teamBIds;
+const bansMadeBy = (match: MatchValue, playerId: string) =>
+  playerId === match.playerAId ? match.bansByAIds : match.bansByBIds;
+const bansAgainst = (match: MatchValue, playerId: string) =>
+  playerId === match.playerAId ? match.bansByBIds : match.bansByAIds;
+const banLimitFor = (match: MatchValue, playerId: string) =>
+  playerId === match.playerAId ? match.banLimitA : match.banLimitB;
+
+async function beginBanOrDraft(
+  tx: Prisma.TransactionClient,
+  match: MatchValue,
+  firstPlayerId: string,
+) {
+  const [countA, countB] = await Promise.all([
+    tx.mascot.count({ where: { playerId: match.playerAId } }),
+    tx.mascot.count({ where: { playerId: match.playerBId } }),
+  ]);
+  match.banLimitA = Math.min(3, Math.max(0, countB - 6));
+  match.banLimitB = Math.min(3, Math.max(0, countA - 6));
+  match.bansByAIds = [];
+  match.bansByBIds = [];
+  if (match.banLimitA || match.banLimitB) {
+    match.phase = "BAN";
+    match.banTurnId =
+      banLimitFor(match, firstPlayerId) > 0
+        ? firstPlayerId
+        : otherPlayerId(match, firstPlayerId);
+    match.draftTurnId = null;
+  } else {
+    match.phase = "DRAFT";
+    match.draftTurnId = firstPlayerId;
+    match.draftQuota = 1;
+  }
+}
+
+function advanceBanTurn(match: MatchValue, playerId: string) {
+  const other = otherPlayerId(match, playerId);
+  const currentDone =
+    bansMadeBy(match, playerId).length >= banLimitFor(match, playerId);
+  const otherDone =
+    bansMadeBy(match, other).length >= banLimitFor(match, other);
+  if (currentDone && otherDone) {
+    match.phase = "DRAFT";
+    match.banTurnId = null;
+    match.draftTurnId = match.firstPickerId ?? match.playerAId;
+    match.draftQuota = 1;
+  } else if (!otherDone) match.banTurnId = other;
+  else match.banTurnId = playerId;
+}
 
 async function findCurrentMatch(
   tx: Prisma.TransactionClient,
@@ -295,18 +364,36 @@ async function applyPregameTimeout(
   } else if (match.phase === "FIRST_PICK") {
     match.firstPickerId =
       Math.random() < 0.5 ? match.playerAId : match.playerBId;
-    match.draftTurnId = match.firstPickerId;
-    match.draftQuota = 1;
-    match.phase = "DRAFT";
+    await beginBanOrDraft(tx, match, match.firstPickerId);
     match.events.push(
       "O servidor sorteou quem inicia o draft por tempo esgotado.",
     );
+  } else if (match.phase === "BAN" && match.banTurnId) {
+    const playerId = match.banTurnId;
+    const opponentId = otherPlayerId(match, playerId);
+    const used = [...match.bansByAIds, ...match.bansByBIds];
+    const automatic = await tx.mascot.findFirst({
+      where: { playerId: opponentId, id: { notIn: used } },
+      orderBy: [{ level: "desc" }, { id: "asc" }],
+      select: { id: true, nickname: true, pokemonId: true },
+    });
+    if (automatic) {
+      if (playerId === match.playerAId) match.bansByAIds.push(automatic.id);
+      else match.bansByBIds.push(automatic.id);
+      match.events.push(
+        `O servidor baniu ${automatic.nickname ?? `#${automatic.pokemonId}`} por tempo esgotado.`,
+      );
+    }
+    advanceBanTurn(match, playerId);
   } else if (match.phase === "DRAFT" && match.draftTurnId) {
     const playerId = match.draftTurnId;
     const team = sideTeam(match, playerId);
     const required = Math.min(match.draftQuota, 6 - team.length);
     const automatic = await tx.mascot.findMany({
-      where: { playerId, id: { notIn: team } },
+      where: {
+        playerId,
+        id: { notIn: [...team, ...bansAgainst(match, playerId)] },
+      },
       orderBy: [{ level: "desc" }, { id: "asc" }],
       take: required,
       select: { id: true },
@@ -440,9 +527,12 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     ...match.orderBIds,
   ];
   const selectedMascots =
-    includeMascots && selectedIds.length
+    includeMascots && (selectedIds.length || match.phase === "BAN")
       ? await prisma.mascot.findMany({
-          where: { id: { in: [...new Set(selectedIds)] } },
+          where:
+            match.phase === "BAN"
+              ? { playerId: { in: [match.playerAId, match.playerBId] } }
+              : { id: { in: [...new Set(selectedIds)] } },
           select: {
             id: true,
             nickname: true,
@@ -506,6 +596,7 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     viewerId: player.id,
     selectedMascots: selectedMascots.map((mascot) => ({
       id: mascot.id,
+      ownerId: mascot.playerId,
       pokemonId: mascot.pokemonId,
       name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
       ownerName: mascot.player.displayName,
@@ -556,15 +647,42 @@ export async function chooseLivePvpFirstPlayerAction(firstPlayerId: string) {
     if (![match.playerAId, match.playerBId].includes(firstPlayerId))
       throw new Error("Jogador inicial inválido.");
     match.firstPickerId = firstPlayerId;
-    match.draftTurnId = firstPlayerId;
-    match.draftQuota = 1;
-    match.phase = "DRAFT";
+    await beginBanOrDraft(tx, match, firstPlayerId);
     match.deadline = nextDeadline();
     const firstName =
       firstPlayerId === match.playerAId ? match.playerAName : match.playerBName;
     match.events.push(
       `${player.displayName} escolheu ${firstName} para iniciar o draft.`,
     );
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
+export async function submitLivePvpBanAction(mascotId: string) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.phase !== "BAN" || match.banTurnId !== player.id)
+      throw new Error("Aguarde sua vez de banir.");
+    const opponentId = otherPlayerId(match, player.id);
+    const mascot = await tx.mascot.findFirst({
+      where: { id: mascotId, playerId: opponentId },
+      select: { id: true, nickname: true, pokemonId: true },
+    });
+    if (
+      !mascot ||
+      [...match.bansByAIds, ...match.bansByBIds].includes(mascot.id)
+    )
+      throw new Error("Este mascote não está disponível para banimento.");
+    if (player.id === match.playerAId) match.bansByAIds.push(mascot.id);
+    else match.bansByBIds.push(mascot.id);
+    match.events.push(
+      `${player.displayName} baniu ${mascot.nickname ?? `#${mascot.pokemonId}`}.`,
+    );
+    advanceBanTurn(match, player.id);
+    match.deadline = nextDeadline();
     await saveMatch(tx, match);
     return match;
   });
@@ -583,7 +701,10 @@ export async function submitLivePvpDraftAction(mascotIds: string[]) {
     if (uniqueIds.length !== required)
       throw new Error(`Selecione exatamente ${required} mascote(s).`);
     const valid = await tx.mascot.count({
-      where: { id: { in: uniqueIds }, playerId: player.id },
+      where: {
+        id: { in: uniqueIds, notIn: bansAgainst(match, player.id) },
+        playerId: player.id,
+      },
     });
     if (valid !== uniqueIds.length || uniqueIds.some((id) => team.includes(id)))
       throw new Error(
@@ -849,7 +970,7 @@ const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const effectiveStat = (
   unit: TacticalUnit,
-  stat: "force" | "agility" | "instinct" | "vitality",
+  stat: "force" | "agility" | "charisma" | "instinct" | "vitality",
 ) => {
   const modifier = (unit.effects ?? [])
     .filter((effect) => effect.stat === stat)
@@ -917,13 +1038,16 @@ function applyTacticalMovement(
         ) / enemies.length
       : effectiveStat(unit, "agility");
     const unitAgility = effectiveStat(unit, "agility");
+    const fogPenalty =
+      tacticalFogState(battle.round, unit.x, unit.y) === "ACTIVE" ? 1 : 0;
     const mobility =
       2 +
       (unitAgility - enemyAverage >= 140
         ? 2
         : unitAgility - enemyAverage >= 60
           ? 1
-          : 0);
+          : 0) -
+      fogPenalty;
     let x = order.x ?? unit.x,
       y = order.y ?? unit.y;
     if (order.type === "AUTO" && order.x == null && order.y == null) {
@@ -1003,6 +1127,39 @@ function resolveTacticalRound(match: MatchValue) {
     ),
   ];
 
+  const roleStat = (role: CombatRole) =>
+    role === "ATTACKER" || role === "DUELIST" || role === "SPECIALIST"
+      ? ("force" as const)
+      : role === "FLANK" || role === "SCOUT" || role === "SABOTEUR"
+        ? ("agility" as const)
+        : role === "ENCOURAGER" || role === "HEALER" || role === "PROVOKER"
+          ? ("charisma" as const)
+          : role === "OPPORTUNIST"
+            ? ("instinct" as const)
+            : ("vitality" as const);
+  for (const unit of all.filter((entry) => entry.hp > 0)) {
+    unit.effects = unit.effects.filter(
+      (effect) => !effect.id.startsWith("biome:"),
+    );
+    const biome = tacticalBiomeAt(battle.biomes ?? [], unit.x, unit.y);
+    if (!biome) continue;
+    const favored = unit.types.some((type) =>
+      biome.favoredTypes.includes(type),
+    );
+    const penalized = unit.types.some((type) =>
+      biome.penalizedTypes.includes(type),
+    );
+    if (favored || penalized)
+      unit.effects.push({
+        id: `biome:${biome.id}`,
+        label: `${biome.name}: ${favored ? "+10%" : "-10%"} em ${roleStat(unit.role)}`,
+        kind: favored ? "BUFF" : "DEBUFF",
+        stat: roleStat(unit.role),
+        value: 0.1,
+        duration: 2,
+      });
+  }
+
   const desired = all
     .filter((unit) => unit.hp > 0)
     .map((unit) => {
@@ -1017,13 +1174,16 @@ function resolveTacticalRound(match: MatchValue) {
           ) / enemies.length
         : effectiveStat(unit, "agility");
       const unitAgility = effectiveStat(unit, "agility");
+      const fogPenalty =
+        tacticalFogState(battle.round, unit.x, unit.y) === "ACTIVE" ? 1 : 0;
       const mobility =
         2 +
         (unitAgility - enemyAverage >= 140
           ? 2
           : unitAgility - enemyAverage >= 60
             ? 1
-            : 0);
+            : 0) -
+        fogPenalty;
       let x = order?.x ?? unit.x;
       let y = order?.y ?? unit.y;
       if (!order && x === unit.x && y === unit.y) {
@@ -1185,9 +1345,13 @@ function resolveTacticalRound(match: MatchValue) {
             (actor.charisma * 0.35 + actor.vitality * 0.25 + actor.level) * 2.5,
           ),
         );
+        const fogHealingPenalty =
+          tacticalFogState(battle.round, wounded.x, wounded.y) === "ACTIVE"
+            ? 0.5
+            : 1;
         const amount = Math.max(
           1,
-          Math.round(baseAmount * (saboteur ? 0.7 : 1)),
+          Math.round(baseAmount * (saboteur ? 0.7 : 1) * fogHealingPenalty),
         );
         if (saboteur)
           events.push({
@@ -1414,6 +1578,12 @@ function resolveTacticalRound(match: MatchValue) {
     )
       ? 1.3
       : 1;
+    const actorBiome = tacticalBiomeAt(battle.biomes ?? [], actor.x, actor.y);
+    const biomeMult = actorBiome?.favoredTypes.some((type) =>
+      actor.types.includes(type),
+    )
+      ? 1.08
+      : 1;
     const preparedShield = target.shield;
     const targetReduction =
       target.role === "DEFENDER"
@@ -1434,7 +1604,8 @@ function resolveTacticalRound(match: MatchValue) {
           (1 + encourage) *
           (1 + scoutBonus) *
           roleMult *
-          typeMult -
+          typeMult *
+          biomeMult -
           (effectiveStat(target, "vitality") * 0.8 + target.level)) *
           (1 - targetReduction) *
           (1 - target.shield),
@@ -1584,6 +1755,31 @@ function resolveTacticalRound(match: MatchValue) {
         text: `${target.name} foi nocauteado e saiu do combate.`,
       });
   }
+  for (const unit of all.filter((entry) => entry.hp > 0)) {
+    const fog = tacticalFogState(battle.round, unit.x, unit.y);
+    if (fog !== "ACTIVE") {
+      unit.fogTurns = 0;
+      continue;
+    }
+    unit.fogTurns += 1;
+    const percent = [8, 12, 16, 20][Math.min(3, unit.fogTurns - 1)];
+    const damage = Math.max(1, Math.round(unit.maxHp * (percent / 100)));
+    unit.hp = Math.max(0, unit.hp - damage);
+    events.push({
+      unitId: unit.id,
+      targetId: unit.id,
+      kind: "FOG",
+      text: `A névoa causou ${damage} de dano em ${unit.name} (${percent}% do HP máximo).`,
+      amount: damage,
+    });
+    if (unit.hp <= 0)
+      events.push({
+        unitId: unit.id,
+        targetId: unit.id,
+        kind: "KO",
+        text: `${unit.name} foi nocauteado pela névoa de combate.`,
+      });
+  }
   battle.lastEvents = events;
   battle.logs.push(
     `Rodada ${battle.round}`,
@@ -1599,7 +1795,7 @@ function resolveTacticalRound(match: MatchValue) {
   battle.deadline = nextTacticalDeadline();
   const remainingA = aliveA(),
     remainingB = aliveB();
-  if (!remainingA.length || !remainingB.length || battle.round > 12) {
+  if (!remainingA.length || !remainingB.length || battle.round > 18) {
     const score = (team: TacticalUnit[]) =>
       team.filter((unit) => unit.hp > 0).length * 10000 +
       team.reduce((sum, unit) => sum + unit.hp / unit.maxHp, 0);
@@ -1664,6 +1860,7 @@ export async function initializeLivePvpBattleAction() {
         `${match.playerAName} e ${match.playerBName} entraram na Arena Tática.`,
       ],
       lastEvents: [],
+      biomes: createTacticalBiomes(match.id),
     };
     await saveMatch(tx, match);
     return { ok: true };
@@ -1904,6 +2101,11 @@ export async function joinLivePvpQueueAction(targetName?: string) {
         coinChoice: null,
         coinWinnerId: null,
         firstPickerId: null,
+        banTurnId: null,
+        bansByAIds: [],
+        bansByBIds: [],
+        banLimitA: 3,
+        banLimitB: 3,
         draftTurnId: null,
         draftQuota: 1,
         teamAIds: [],
