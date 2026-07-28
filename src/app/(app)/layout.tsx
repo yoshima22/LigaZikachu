@@ -6,7 +6,10 @@ import { signOut } from "@/auth";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getManualSessionUser, MANUAL_SESSION_COOKIE } from "@/lib/manual-session";
+import {
+  getManualSessionUser,
+  MANUAL_SESSION_COOKIE,
+} from "@/lib/manual-session";
 import { getGlobalNotice } from "@/lib/app-settings";
 import { Button } from "@/components/ui/button";
 import { LogOut, Megaphone, Zap } from "lucide-react";
@@ -19,12 +22,22 @@ import { RouteTutorialHelpButton } from "@/components/tutorial/route-tutorial-he
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
 import { LogoutButton } from "@/components/logout-button";
-import { ORDER_EVENT_SLUG, ORDER_STEP_PUBLIC_REWARD_LABELS } from "@/lib/raid-event";
+import {
+  ORDER_EVENT_SLUG,
+  ORDER_STEP_PUBLIC_REWARD_LABELS,
+} from "@/lib/raid-event";
 import { OrderEventIntroModal } from "./_components/order-event-intro-modal";
 import { OrderEventRewardModal } from "./_components/order-event-reward-modal";
-import { markOrderIntroSeenAction, markOrderRewardSeenAction } from "./_components/order-event-intro-actions";
+import {
+  markOrderIntroSeenAction,
+  markOrderRewardSeenAction,
+} from "./_components/order-event-intro-actions";
 import { getPendingLeagueTickerEvents } from "@/lib/league-ticker";
 import { LeagueTicker } from "./_components/league-ticker";
+import {
+  canAccessLivePvp,
+  getLivePvpAccessConfig,
+} from "@/lib/live-pvp-access";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -37,29 +50,66 @@ const getNavData = (userId: string) =>
         select: { id: true, ptcglNick: true, avatarUrl: true },
       });
 
-      if (!player) return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0, unreadNews: 0 };
+      if (!player)
+        return {
+          player: null,
+          giftCount: 0,
+          wallet: null,
+          unreadDms: 0,
+          bazarAlerts: 0,
+          unreadNews: 0,
+        };
 
-      const giftCount = await prisma.playerGift.count({ where: { playerId: player.id, status: "UNCLAIMED" } }).catch(() => 0);
-      const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }).catch(() => null);
-      const unreadDms = await prisma.directMessage.count({ where: { receiverId: player.id, readAt: null } }).catch(() => 0);
-      const bazarAlerts = await prisma.bazarProposal.count({
-        where: {
-          OR: [
-            { listing: { playerId: player.id, status: "ACTIVE", expiresAt: { gt: new Date() } }, status: "PENDING" },
-            { proposerId: player.id, status: { in: ["ACCEPTED", "REJECTED"] }, viewedByProposerAt: null },
-          ],
-        },
-      }).catch(() => 0);
-      const latestNews = await prisma.newsPost.findMany({
-        where: { published: true },
-        orderBy: { publishedAt: "desc" },
-        take: 5,
-        select: { id: true },
-      }).catch(() => []);
+      const giftCount = await prisma.playerGift
+        .count({ where: { playerId: player.id, status: "UNCLAIMED" } })
+        .catch(() => 0);
+      const wallet = await prisma.zikaCoinWallet
+        .findUnique({
+          where: { playerId: player.id },
+          select: { balance: true },
+        })
+        .catch(() => null);
+      const unreadDms = await prisma.directMessage
+        .count({ where: { receiverId: player.id, readAt: null } })
+        .catch(() => 0);
+      const bazarAlerts = await prisma.bazarProposal
+        .count({
+          where: {
+            OR: [
+              {
+                listing: {
+                  playerId: player.id,
+                  status: "ACTIVE",
+                  expiresAt: { gt: new Date() },
+                },
+                status: "PENDING",
+              },
+              {
+                proposerId: player.id,
+                status: { in: ["ACCEPTED", "REJECTED"] },
+                viewedByProposerAt: null,
+              },
+            ],
+          },
+        })
+        .catch(() => 0);
+      const latestNews = await prisma.newsPost
+        .findMany({
+          where: { published: true },
+          orderBy: { publishedAt: "desc" },
+          take: 5,
+          select: { id: true },
+        })
+        .catch(() => []);
       const latestNewsIds = latestNews.map((news) => news.id);
-      const readNews = latestNewsIds.length > 0
-        ? await prisma.newsRead.count({ where: { playerId: player.id, postId: { in: latestNewsIds } } }).catch(() => 0)
-        : 0;
+      const readNews =
+        latestNewsIds.length > 0
+          ? await prisma.newsRead
+              .count({
+                where: { playerId: player.id, postId: { in: latestNewsIds } },
+              })
+              .catch(() => 0)
+          : 0;
       const unreadNews = Math.max(0, latestNewsIds.length - readNews);
 
       return { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews };
@@ -68,33 +118,55 @@ const getNavData = (userId: string) =>
     { revalidate: 60, tags: [`nav-${userId}`] },
   )();
 
-export default async function AppLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function AppLayout({
+  children,
+}: Readonly<{ children: ReactNode }>) {
   const session = await getAppSession().catch(() => null);
-  const user = session?.user ?? await getManualSessionUser();
+  const user = session?.user ?? (await getManualSessionUser());
   if (!user) redirect("/login");
 
   const admin = isAdmin(user.role);
 
   const navData = await getNavData(user.id).catch((error) => {
     console.error("[Layout] nav data failed", { userId: user.id, error });
-    return { player: null, giftCount: 0, wallet: null, unreadDms: 0, bazarAlerts: 0, unreadNews: 0 };
+    return {
+      player: null,
+      giftCount: 0,
+      wallet: null,
+      unreadDms: 0,
+      bazarAlerts: 0,
+      unreadNews: 0,
+    };
   });
-  const [globalNotice, tickerEvents] = await Promise.all([
+  const [globalNotice, tickerEvents, livePvpConfig] = await Promise.all([
     getGlobalNotice(),
-    navData.player ? getPendingLeagueTickerEvents(navData.player.id).catch(() => []) : Promise.resolve([]),
+    navData.player
+      ? getPendingLeagueTickerEvents(navData.player.id).catch(() => [])
+      : Promise.resolve([]),
+    getLivePvpAccessConfig().catch(() => ({
+      enabledGlobally: false,
+      allowedPlayerIds: [],
+    })),
   ]);
-  const orderIntro = await prisma.raidEvent.findUnique({
-    where: { slug: ORDER_EVENT_SLUG },
-    select: {
-      active: true,
-      phase: true,
-      notifications: {
-        where: { userId: user.id, notificationType: "ORDER_INTRO" },
-        select: { seenAt: true },
-        take: 1,
+  const livePvpVisible = canAccessLivePvp(
+    livePvpConfig,
+    navData.player?.id,
+    admin,
+  );
+  const orderIntro = await prisma.raidEvent
+    .findUnique({
+      where: { slug: ORDER_EVENT_SLUG },
+      select: {
+        active: true,
+        phase: true,
+        notifications: {
+          where: { userId: user.id, notificationType: "ORDER_INTRO" },
+          select: { seenAt: true },
+          take: 1,
+        },
       },
-    },
-  }).catch(() => null);
+    })
+    .catch(() => null);
   const shouldShowOrderIntro = Boolean(
     orderIntro?.active &&
     orderIntro.phase === "INVESTIGATION" &&
@@ -103,27 +175,30 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const orderEventVisible = Boolean(
     orderIntro &&
     orderIntro.phase !== "ENDED" &&
-    (orderIntro.active || orderIntro.phase === "RAID_DEFEATED")
+    (orderIntro.active || orderIntro.phase === "RAID_DEFEATED"),
   );
-  const pendingOrderReward = await prisma.userRaidNotification.findFirst({
-    where: {
-      userId: user.id,
-      seenAt: null,
-      notificationType: {
-        in: [
-          "ORDER_REWARD_ZIKALOOT",
-          "ORDER_REWARD_BAZAR",
-          "ORDER_REWARD_LAB",
-          "ORDER_REWARD_LEAGUE",
-          "ORDER_REWARD_MASCOTS",
-          "RAID_DEFEATED",
-        ],
+  const pendingOrderReward = await prisma.userRaidNotification
+    .findFirst({
+      where: {
+        userId: user.id,
+        seenAt: null,
+        notificationType: {
+          in: [
+            "ORDER_REWARD_ZIKALOOT",
+            "ORDER_REWARD_BAZAR",
+            "ORDER_REWARD_LAB",
+            "ORDER_REWARD_LEAGUE",
+            "ORDER_REWARD_MASCOTS",
+            "RAID_DEFEATED",
+          ],
+        },
       },
-    },
-    select: { id: true, notificationType: true },
-    orderBy: { createdAt: "asc" },
-  }).catch(() => null);
-  const { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews } = navData;
+      select: { id: true, notificationType: true },
+      orderBy: { createdAt: "asc" },
+    })
+    .catch(() => null);
+  const { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews } =
+    navData;
 
   return (
     <>
@@ -134,17 +209,25 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           style: {
             background: "#0f172a",
             border: "1px solid #1e293b",
-            color: "#f8fafc"
-          }
+            color: "#f8fafc",
+          },
         }}
       />
       <MaintenanceVisibilityGuard />
       <SessionPersistenceGuard />
-      {shouldShowOrderIntro && <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />}
+      {shouldShowOrderIntro && (
+        <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />
+      )}
       {pendingOrderReward && (
         <OrderEventRewardModal
           notificationId={pendingOrderReward.id}
-          title={pendingOrderReward.notificationType === "RAID_DEFEATED" ? "Capitao Trambique derrotado" : ORDER_STEP_PUBLIC_REWARD_LABELS[pendingOrderReward.notificationType] ?? "Travessura da Ordem"}
+          title={
+            pendingOrderReward.notificationType === "RAID_DEFEATED"
+              ? "Capitao Trambique derrotado"
+              : (ORDER_STEP_PUBLIC_REWARD_LABELS[
+                  pendingOrderReward.notificationType
+                ] ?? "Travessura da Ordem")
+          }
           onSeen={markOrderRewardSeenAction}
         />
       )}
@@ -153,7 +236,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         <header className="sticky top-0 z-40 border-b border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#1e1e3a] to-[#1A1A2E] pt-[env(safe-area-inset-top)] backdrop-blur-md">
           {/* Top bar with glow effect */}
           <div className="h-0.5 bg-gradient-to-r from-transparent via-[#FFCB05] to-transparent opacity-60"></div>
-          
+
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
             {/* Logo - Pokemon style */}
             <Link href="/dashboard" className="flex items-center gap-3 group">
@@ -171,12 +254,25 @@ export default async function AppLayout({ children }: Readonly<{ children: React
               </div>
             </Link>
 
-            <AppNav admin={admin} variant="desktop" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} orderEventVisible={orderEventVisible} />
+            <AppNav
+              admin={admin}
+              variant="desktop"
+              giftCount={giftCount}
+              unreadDms={unreadDms}
+              bazarAlerts={bazarAlerts}
+              unreadNews={unreadNews}
+              playerId={player?.id}
+              orderEventVisible={orderEventVisible}
+              livePvpVisible={livePvpVisible}
+            />
 
             {/* User + logout */}
             <div className="flex items-center gap-2.5">
               <RouteTutorialHelpButton />
-              <Link href={player ? `/jogadores/${player.id}` : "/perfil"} className="hidden items-center gap-2.5 hover:opacity-80 transition-opacity sm:flex">
+              <Link
+                href={player ? `/jogadores/${player.id}` : "/perfil"}
+                className="hidden items-center gap-2.5 hover:opacity-80 transition-opacity sm:flex"
+              >
                 {/* Texto à esquerda */}
                 <div className="text-right">
                   <p className="text-xs font-medium text-slate-200 leading-tight">
@@ -188,14 +284,20 @@ export default async function AppLayout({ children }: Readonly<{ children: React
                     </span>
                   )}
                   {player?.ptcglNick && (
-                    <span className="block text-[10px] text-slate-500 leading-tight">@{player.ptcglNick}</span>
+                    <span className="block text-[10px] text-slate-500 leading-tight">
+                      @{player.ptcglNick}
+                    </span>
                   )}
                 </div>
                 {/* Avatar à direita */}
                 <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
                   {player?.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={player.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                    <img
+                      src={player.avatarUrl}
+                      alt="avatar"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
                       {(user.name ?? user.email ?? "?")[0].toUpperCase()}
@@ -215,15 +317,31 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           </div>
 
           <div className="mx-auto max-w-7xl">
-            <AppNav admin={admin} variant="mobile" giftCount={giftCount} unreadDms={unreadDms} bazarAlerts={bazarAlerts} unreadNews={unreadNews} playerId={player?.id} orderEventVisible={orderEventVisible} />
+            <AppNav
+              admin={admin}
+              variant="mobile"
+              giftCount={giftCount}
+              unreadDms={unreadDms}
+              bazarAlerts={bazarAlerts}
+              unreadNews={unreadNews}
+              playerId={player?.id}
+              orderEventVisible={orderEventVisible}
+              livePvpVisible={livePvpVisible}
+            />
           </div>
           {globalNotice.message && (
             <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">
               <summary className="mx-auto flex max-w-7xl cursor-pointer list-none items-center gap-2 px-4 py-2 text-xs font-semibold text-[#FFCB05] sm:px-6">
                 <Megaphone size={14} />
-                <span className="truncate">Aviso da Liga: {globalNotice.message}</span>
-                <span className="ml-auto text-[10px] text-[#FFCB05]/70 group-open:hidden">abrir</span>
-                <span className="ml-auto hidden text-[10px] text-[#FFCB05]/70 group-open:inline">fechar</span>
+                <span className="truncate">
+                  Aviso da Liga: {globalNotice.message}
+                </span>
+                <span className="ml-auto text-[10px] text-[#FFCB05]/70 group-open:hidden">
+                  abrir
+                </span>
+                <span className="ml-auto hidden text-[10px] text-[#FFCB05]/70 group-open:inline">
+                  fechar
+                </span>
               </summary>
               <div className="mx-auto max-w-7xl px-4 pb-3 text-sm leading-relaxed text-yellow-50 sm:px-6">
                 {globalNotice.message}
@@ -239,7 +357,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         </header>
 
         {/* Main content */}
-        <main data-tutorial="page-content" className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-8">{children}</main>
+        <main
+          data-tutorial="page-content"
+          className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-8"
+        >
+          {children}
+        </main>
         <FcmTokenRegistrar />
         <AchievementNotifier />
         {!admin && <WelcomeTutorial />}

@@ -6,6 +6,7 @@ import type { LivePvpMove } from "@/lib/live-pvp-moves";
 import type { LivePvpFighter } from "@/lib/live-pvp-engine";
 import { loadLivePvpMovesAction, resolveLivePvpTurnAction } from "./actions";
 import { ArenaOnlinePregame } from "./arena-online-pregame";
+import { closeLivePvpMatchAction } from "../../combates/arena-online/matchmaking-actions";
 
 type Side = "A" | "B";
 export type MascotOption = {
@@ -384,7 +385,13 @@ function moveInfluence(
   return "Este efeito não usa um atributo ofensivo.";
 }
 
-export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
+export function ArenaOnlineLab({
+  mascots,
+  onlineIdentity,
+}: {
+  mascots: MascotOption[];
+  onlineIdentity?: { playerId: string; playerName: string };
+}) {
   const [pending, startTransition] = useTransition();
   const [idA, setIdA] = useState(mascots[0]?.id ?? "");
   const [idB, setIdB] = useState(mascots[1]?.id ?? mascots[0]?.id ?? "");
@@ -699,6 +706,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       `Jogador ${defeated} desistiu. Jogador ${victorious} venceu a batalha.`,
     ]);
     toast.success(`Jogador ${victorious} venceu por desistência.`);
+    if (onlineIdentity) void closeLivePvpMatchAction();
     setPregameReset((value) => value + 1);
   };
   const switchMascot = (side: Side, targetId: string) =>
@@ -861,6 +869,7 @@ export function ArenaOnlineLab({ mascots }: { mascots: MascotOption[] }) {
       <ArenaOnlinePregame
         key={pregameReset}
         mascots={mascots}
+        onlineIdentity={onlineIdentity}
         onEvent={(event) =>
           setLogs((old) => [...old, "────────────────────────────────", event])
         }

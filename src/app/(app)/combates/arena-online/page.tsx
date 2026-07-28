@@ -1,19 +1,33 @@
-import { requireAdmin } from "@/lib/auth/permissions";
+import { redirect } from "next/navigation";
+import { isAdmin } from "@/lib/auth/permissions";
+import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import {
+  canAccessLivePvp,
+  getLivePvpAccessConfig,
+} from "@/lib/live-pvp-access";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
-import { ArenaOnlineLab } from "./arena-online-lab";
-import { LivePvpAccessPanel } from "./access-panel";
-import { getLivePvpAccessConfig } from "@/lib/live-pvp-access";
+import { ArenaOnlineLab } from "../../admin/arena-online/arena-online-lab";
+import { LivePvpAccessPanel } from "../../admin/arena-online/access-panel";
 
 export const dynamic = "force-dynamic";
 
-export default async function ArenaOnlinePage() {
-  await requireAdmin();
-  const [mascots, accessConfig, players] = await Promise.all([
+export default async function LivePvpPage() {
+  const session = await getAppSession();
+  if (!session?.user) redirect("/login");
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) redirect("/dashboard");
+  const admin = isAdmin(session.user.role);
+  const config = await getLivePvpAccessConfig();
+  if (!canAccessLivePvp(config, player.id, admin)) redirect("/dashboard");
+
+  const [mascots, accessPlayers] = await Promise.all([
     prisma.mascot.findMany({
-      where: { player: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } } },
-      orderBy: [{ player: { displayName: "asc" } }, { level: "desc" }],
+      where: admin
+        ? { player: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } } }
+        : { playerId: player.id },
+      orderBy: [{ level: "desc" }, { nickname: "asc" }],
       take: 500,
       select: {
         id: true,
@@ -45,28 +59,33 @@ export default async function ArenaOnlinePage() {
         },
       },
     }),
-    getLivePvpAccessConfig(),
-    prisma.player.findMany({
-      where: { active: true, user: { status: "ACTIVE" } },
-      orderBy: { displayName: "asc" },
-      select: {
-        id: true,
-        displayName: true,
-        user: { select: { email: true } },
-      },
-    }),
+    admin
+      ? prisma.player.findMany({
+          where: { active: true, user: { status: "ACTIVE" } },
+          orderBy: { displayName: "asc" },
+          select: {
+            id: true,
+            displayName: true,
+            user: { select: { email: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
+
   return (
     <div className="space-y-5">
-      <LivePvpAccessPanel
-        initialConfig={accessConfig}
-        players={players.map((player) => ({
-          id: player.id,
-          displayName: player.displayName,
-          email: player.user.email,
-        }))}
-      />
+      {admin && (
+        <LivePvpAccessPanel
+          initialConfig={config}
+          players={accessPlayers.map((entry) => ({
+            id: entry.id,
+            displayName: entry.displayName,
+            email: entry.user.email,
+          }))}
+        />
+      )}
       <ArenaOnlineLab
+        onlineIdentity={{ playerId: player.id, playerName: player.displayName }}
         mascots={mascots.map((mascot) => ({
           ...mascot,
           name: mascot.nickname ?? getPokemonName(mascot.pokemonId),

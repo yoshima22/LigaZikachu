@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { MascotOption } from "./arena-online-lab";
 import { loadLivePvpMovesAction } from "./actions";
+import {
+  getLivePvpLobbyAction,
+  joinLivePvpQueueAction,
+  leaveLivePvpQueueAction,
+} from "../../combates/arena-online/matchmaking-actions";
 
 type Side = "A" | "B";
 type Stage =
@@ -19,14 +25,26 @@ export function ArenaOnlinePregame({
   mascots,
   onComplete,
   onEvent,
+  onlineIdentity,
 }: {
   mascots: MascotOption[];
   onComplete: (a: string[], b: string[], first: Side) => void;
   onEvent: (event: string) => void;
+  onlineIdentity?: { playerId: string; playerName: string };
 }) {
   const [stage, setStage] = useState<Stage>("LOBBY");
   const [queue, setQueue] = useState(0);
   const [nick, setNick] = useState("");
+  const [queuePending, setQueuePending] = useState(false);
+  const [onlineMatch, setOnlineMatch] =
+    useState<Awaited<ReturnType<typeof getLivePvpLobbyAction>>["match"]>(null);
+  const [serverCoinResult, setServerCoinResult] = useState<
+    "CARA" | "COROA" | null
+  >(null);
+  const [draftSearch, setDraftSearch] = useState("");
+  const [draftType, setDraftType] = useState("ALL");
+  const [draftTag, setDraftTag] = useState("ALL");
+  const [draftPage, setDraftPage] = useState(1);
   const [seconds, setSeconds] = useState(30);
   const [coinChooser, setCoinChooser] = useState<Side>("A");
   const [face, setFace] = useState<"CARA" | "COROA" | null>(null);
@@ -49,8 +67,16 @@ export function ArenaOnlinePregame({
     >
   >({});
   const resetTimer = () => setSeconds(30);
-  const start = () => {
-    const chooser = Math.random() < 0.5 ? "A" : "B";
+  const start = (match = onlineMatch) => {
+    const chooser: Side =
+      match && onlineIdentity
+        ? match.coinChooserId === match.playerAId
+          ? "A"
+          : "B"
+        : Math.random() < 0.5
+          ? "A"
+          : "B";
+    if (match) setServerCoinResult(match.coinResult);
     setCoinChooser(chooser);
     setStage("COIN_PICK");
     resetTimer();
@@ -62,8 +88,86 @@ export function ArenaOnlinePregame({
     () => Array.from(new Set(mascots.map((m) => m.ownerName))),
     [mascots],
   );
+  const refreshLobby = async () => {
+    if (!onlineIdentity) return;
+    try {
+      const state = await getLivePvpLobbyAction();
+      setQueue(state.queueCount);
+      if (state.match && !onlineMatch) {
+        setOnlineMatch(state.match);
+        onEvent(
+          `MATCHMAKING · ${state.match.playerAName} e ${state.match.playerBName} foram conectados pelo servidor.`,
+        );
+        start(state.match);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  useEffect(() => {
+    if (!onlineIdentity || stage !== "LOBBY") return;
+    void refreshLobby();
+    const timer = setInterval(() => void refreshLobby(), 3_000);
+    return () => clearInterval(timer);
+  }, [onlineIdentity, stage, onlineMatch]);
+  const joinQueue = async (direct = false) => {
+    setQueuePending(true);
+    try {
+      const state = await joinLivePvpQueueAction(direct ? nick : undefined);
+      setQueue(state.queueCount);
+      if (state.match) {
+        setOnlineMatch(state.match);
+        start(state.match);
+      } else {
+        toast.success(
+          direct
+            ? "Desafio enviado. Aguardando busca recíproca."
+            : "Você entrou na fila pública.",
+        );
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível entrar na fila.",
+      );
+    } finally {
+      setQueuePending(false);
+    }
+  };
   const pool = mascots.filter(
     (m) => !(teamA.includes(m.id) || teamB.includes(m.id)),
+  );
+  const draftTypes = useMemo(
+    () => [...new Set(mascots.flatMap((mascot) => mascot.types))].sort(),
+    [mascots],
+  );
+  const draftTags = useMemo(
+    () => [...new Set(mascots.map((mascot) => mascot.performanceTag))].sort(),
+    [mascots],
+  );
+  const filteredPool = pool.filter((mascot) => {
+    const query = draftSearch.trim().toLowerCase();
+    return (
+      (!query ||
+        mascot.name.toLowerCase().includes(query) ||
+        mascot.ownerName.toLowerCase().includes(query)) &&
+      (draftType === "ALL" || mascot.types.includes(draftType)) &&
+      (draftTag === "ALL" || mascot.performanceTag === draftTag)
+    );
+  });
+  const draftPageSize = 12;
+  const draftPageCount = Math.max(
+    1,
+    Math.ceil(filteredPool.length / draftPageSize),
+  );
+  const paginatedPool = filteredPool.slice(
+    (Math.min(draftPage, draftPageCount) - 1) * draftPageSize,
+    Math.min(draftPage, draftPageCount) * draftPageSize,
+  );
+  useEffect(
+    () => setDraftPage(1),
+    [draftSearch, draftType, draftTag, draftTurn],
   );
   const auto = () => {
     if (stage === "COIN_PICK") {
@@ -98,7 +202,8 @@ export function ArenaOnlinePregame({
     setStage("COIN_FLIP");
     onEvent(`MOEDA · Jogador ${coinChooser} escolheu ${chosen}.`);
     setTimeout(() => {
-      const result = Math.random() < 0.5 ? "CARA" : "COROA";
+      const result =
+        serverCoinResult ?? (Math.random() < 0.5 ? "CARA" : "COROA");
       const winner = result === chosen ? coinChooser : other(coinChooser);
       setCoinResult(result);
       setCoinWinner(winner);
@@ -226,14 +331,33 @@ export function ArenaOnlinePregame({
               partida neste teste.
             </p>
             <button
-              onClick={() => {
-                setQueue(2);
-                start();
-              }}
+              disabled={queuePending}
+              onClick={() => (onlineIdentity ? void joinQueue(false) : start())}
               className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"
             >
-              Procurar adversário
+              {onlineIdentity
+                ? "Procurar adversário real"
+                : "Procurar adversário"}
             </button>
+            {onlineIdentity && (
+              <button
+                type="button"
+                disabled={queuePending}
+                onClick={async () => {
+                  setQueuePending(true);
+                  try {
+                    const state = await leaveLivePvpQueueAction();
+                    setQueue(state.queueCount);
+                    toast.success("Você saiu da fila.");
+                  } finally {
+                    setQueuePending(false);
+                  }
+                }}
+                className="mt-2 w-full rounded-lg border border-slate-700 px-3 py-2 text-[10px] text-slate-300 disabled:opacity-40"
+              >
+                Sair da fila
+              </button>
+            )}
           </div>
           <div className="rounded-xl border border-purple-500/25 bg-slate-950/70 p-4">
             <p className="font-bold text-white">Desafio direto</p>
@@ -244,14 +368,16 @@ export function ArenaOnlinePregame({
               className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
             />
             <p className="mt-1 text-[10px] text-slate-500">
-              Sandbox disponível: {players.join(", ") || "admins locais"}
+              {onlineIdentity
+                ? "A partida começa quando os dois jogadores buscam um pelo outro."
+                : `Sandbox disponível: ${players.join(", ") || "admins locais"}`}
             </p>
             <button
-              disabled={!nick.trim()}
-              onClick={start}
+              disabled={!nick.trim() || queuePending}
+              onClick={() => (onlineIdentity ? void joinQueue(true) : start())}
               className="mt-3 w-full rounded-lg bg-purple-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-35"
             >
-              Simular busca simultânea
+              {onlineIdentity ? "Buscar jogador" : "Simular busca simultânea"}
             </button>
           </div>
         </div>
@@ -346,8 +472,40 @@ export function ArenaOnlinePregame({
             )}{" "}
             mascote(s) · A {teamA.length}/6 · B {teamB.length}/6
           </p>
-          <div className="mt-3 grid max-h-80 grid-cols-2 gap-2 overflow-y-auto md:grid-cols-4 lg:grid-cols-6">
-            {pool.map((m) => (
+          <div className="mt-3 grid gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 md:grid-cols-[1fr_180px_180px]">
+            <input
+              value={draftSearch}
+              onChange={(event) => setDraftSearch(event.target.value)}
+              placeholder="Buscar por mascote ou jogador..."
+              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            />
+            <select
+              value={draftType}
+              onChange={(event) => setDraftType(event.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            >
+              <option value="ALL">Todos os tipos</option>
+              {draftTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+            <select
+              value={draftTag}
+              onChange={(event) => setDraftTag(event.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+            >
+              <option value="ALL">Todas as tags</option>
+              {draftTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-3 grid min-h-80 grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
+            {paginatedPool.map((m) => (
               <button
                 key={m.id}
                 onMouseEnter={() => inspect(m)}
@@ -387,6 +545,37 @@ export function ArenaOnlinePregame({
                 </span>
               </button>
             ))}
+          </div>
+          {paginatedPool.length === 0 && (
+            <p className="py-10 text-center text-xs text-slate-500">
+              Nenhum mascote corresponde aos filtros.
+            </p>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-slate-400">
+            <span>
+              {filteredPool.length} mascote(s) · página{" "}
+              {Math.min(draftPage, draftPageCount)} de {draftPageCount}
+            </span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                disabled={draftPage <= 1}
+                onClick={() => setDraftPage((page) => Math.max(1, page - 1))}
+                className="rounded border border-slate-700 px-3 py-1.5 disabled:opacity-30"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                disabled={draftPage >= draftPageCount}
+                onClick={() =>
+                  setDraftPage((page) => Math.min(draftPageCount, page + 1))
+                }
+                className="rounded border border-slate-700 px-3 py-1.5 disabled:opacity-30"
+              >
+                Próxima
+              </button>
+            </div>
           </div>
           <button
             disabled={
