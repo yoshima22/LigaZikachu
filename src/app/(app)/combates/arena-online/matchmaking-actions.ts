@@ -5,6 +5,8 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import {
   canAccessLivePvp,
   getLivePvpAccessConfig,
@@ -22,7 +24,7 @@ type QueueValue = {
   joinedAt: string;
 };
 
-type MatchValue = {
+export type LivePvpMatchValue = {
   id: string;
   playerAId: string;
   playerAName: string;
@@ -30,9 +32,156 @@ type MatchValue = {
   playerBName: string;
   coinChooserId: string;
   coinResult: "CARA" | "COROA";
+  coinChoice: "CARA" | "COROA" | null;
+  coinWinnerId: string | null;
+  firstPickerId: string | null;
+  draftTurnId: string | null;
+  draftQuota: number;
+  teamAIds: string[];
+  teamBIds: string[];
+  orderAIds: string[];
+  orderBIds: string[];
+  orderTurnId: string | null;
+  phase: "COIN_PICK" | "FIRST_PICK" | "DRAFT" | "ORDER" | "READY";
+  deadline: string;
+  revision: number;
+  events: string[];
   status: "PREGAME" | "FINISHED";
   createdAt: string;
 };
+
+type MatchValue = LivePvpMatchValue;
+
+const nextDeadline = () => new Date(Date.now() + 30_000).toISOString();
+function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
+  return {
+    coinChoice: null,
+    coinWinnerId: null,
+    firstPickerId: null,
+    draftTurnId: null,
+    draftQuota: 1,
+    teamAIds: [],
+    teamBIds: [],
+    orderAIds: [],
+    orderBIds: [],
+    orderTurnId: null,
+    phase: "COIN_PICK",
+    deadline: nextDeadline(),
+    revision: 1,
+    events: [],
+    ...raw,
+  } as MatchValue;
+}
+const otherPlayerId = (match: MatchValue, playerId: string) =>
+  playerId === match.playerAId ? match.playerBId : match.playerAId;
+const sideTeam = (match: MatchValue, playerId: string) =>
+  playerId === match.playerAId ? match.teamAIds : match.teamBIds;
+
+async function findCurrentMatch(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+) {
+  const index = await tx.appSetting.findUnique({
+    where: { key: `${PLAYER_MATCH_PREFIX}${playerId}` },
+    select: { value: true },
+  });
+  const matchId = (index?.value as { matchId?: string } | undefined)?.matchId;
+  if (!matchId) throw new Error("Partida ativa não encontrada.");
+  const row = await tx.appSetting.findUnique({
+    where: { key: `${MATCH_PREFIX}${matchId}` },
+    select: { value: true },
+  });
+  const match = row?.value
+    ? normalizeMatch(row.value as Partial<MatchValue>)
+    : undefined;
+  if (!match || ![match.playerAId, match.playerBId].includes(playerId))
+    throw new Error("Partida inválida.");
+  return match;
+}
+
+async function saveMatch(tx: Prisma.TransactionClient, match: MatchValue) {
+  match.revision += 1;
+  await tx.appSetting.update({
+    where: { key: `${MATCH_PREFIX}${match.id}` },
+    data: { value: match as unknown as Prisma.InputJsonValue },
+  });
+}
+
+async function applyPregameTimeout(
+  tx: Prisma.TransactionClient,
+  match: MatchValue,
+) {
+  if (
+    new Date(match.deadline).getTime() > Date.now() ||
+    match.phase === "READY"
+  )
+    return false;
+  if (match.phase === "COIN_PICK") {
+    match.coinChoice = Math.random() < 0.5 ? "CARA" : "COROA";
+    match.coinWinnerId =
+      match.coinChoice === match.coinResult
+        ? match.coinChooserId
+        : otherPlayerId(match, match.coinChooserId);
+    match.phase = "FIRST_PICK";
+    match.events.push(
+      "O tempo da moeda acabou; o servidor escolheu automaticamente.",
+    );
+  } else if (match.phase === "FIRST_PICK") {
+    match.firstPickerId =
+      Math.random() < 0.5 ? match.playerAId : match.playerBId;
+    match.draftTurnId = match.firstPickerId;
+    match.draftQuota = 1;
+    match.phase = "DRAFT";
+    match.events.push(
+      "O servidor sorteou quem inicia o draft por tempo esgotado.",
+    );
+  } else if (match.phase === "DRAFT" && match.draftTurnId) {
+    const playerId = match.draftTurnId;
+    const team = sideTeam(match, playerId);
+    const required = Math.min(match.draftQuota, 6 - team.length);
+    const automatic = await tx.mascot.findMany({
+      where: { playerId, id: { notIn: team } },
+      orderBy: [{ level: "desc" }, { id: "asc" }],
+      take: required,
+      select: { id: true },
+    });
+    if (automatic.length !== required)
+      throw new Error(
+        "O jogador não possui mascotes suficientes para completar o draft.",
+      );
+    const nextTeam = [...team, ...automatic.map((mascot) => mascot.id)];
+    if (playerId === match.playerAId) match.teamAIds = nextTeam;
+    else match.teamBIds = nextTeam;
+    if (match.teamAIds.length === 6 && match.teamBIds.length === 6) {
+      match.phase = "ORDER";
+      match.orderTurnId = match.firstPickerId;
+      match.draftTurnId = null;
+    } else {
+      const next = otherPlayerId(match, playerId);
+      match.draftTurnId = next;
+      match.draftQuota = Math.min(2, 6 - sideTeam(match, next).length);
+    }
+    match.events.push(
+      "O servidor completou a escolha do draft por tempo esgotado.",
+    );
+  } else if (match.phase === "ORDER" && match.orderTurnId) {
+    const playerId = match.orderTurnId;
+    const team = [...sideTeam(match, playerId)];
+    if (playerId === match.playerAId) match.orderAIds = team;
+    else match.orderBIds = team;
+    const other = otherPlayerId(match, playerId);
+    const otherOrder =
+      other === match.playerAId ? match.orderAIds : match.orderBIds;
+    if (otherOrder.length === 6) {
+      match.phase = "READY";
+      match.orderTurnId = null;
+    } else match.orderTurnId = other;
+    match.events.push("O servidor manteve a ordem padrão por tempo esgotado.");
+  }
+  match.deadline = nextDeadline();
+  await saveMatch(tx, match);
+  return true;
+}
 
 async function requireLivePvpPlayer() {
   const user = await getSessionUser();
@@ -89,8 +238,196 @@ export async function getLivePvpLobbyAction() {
   return {
     queueCount: queue.length,
     queued: queue.some((entry) => entry.key === `${QUEUE_PREFIX}${player.id}`),
-    match: (match?.value as MatchValue | undefined) ?? null,
+    match: match?.value
+      ? normalizeMatch(match.value as Partial<MatchValue>)
+      : null,
   };
+}
+
+export async function getLivePvpMatchAction() {
+  const player = await requireLivePvpPlayer();
+  const match = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const current = await findCurrentMatch(tx, player.id);
+    await applyPregameTimeout(tx, current);
+    return current;
+  });
+  const selectedIds = [
+    ...match.teamAIds,
+    ...match.teamBIds,
+    ...match.orderAIds,
+    ...match.orderBIds,
+  ];
+  const selectedMascots = selectedIds.length
+    ? await prisma.mascot.findMany({
+        where: { id: { in: [...new Set(selectedIds)] } },
+        select: {
+          id: true,
+          nickname: true,
+          pokemonId: true,
+          level: true,
+          statForce: true,
+          statAgility: true,
+          statCharisma: true,
+          statInstinct: true,
+          statVitality: true,
+          performanceTag: true,
+          playerId: true,
+          isShiny: true,
+          player: {
+            select: {
+              displayName: true,
+              avatarUrl: true,
+              mascotSpritePreference: true,
+              megaSpritePreference: true,
+            },
+          },
+        },
+      })
+    : [];
+  return {
+    match,
+    viewerId: player.id,
+    selectedMascots: selectedMascots.map((mascot) => ({
+      id: mascot.id,
+      pokemonId: mascot.pokemonId,
+      name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
+      ownerName: mascot.player.displayName,
+      ownerAvatarUrl: mascot.player.avatarUrl,
+      performanceTag: mascot.performanceTag,
+      gameStatus: "Selecionado",
+      level: mascot.level,
+      types: getPokemonTypes(mascot.pokemonId),
+      spriteUrl: getPreferredSpriteUrl(mascot.pokemonId, mascot.player, {
+        shiny: mascot.isShiny,
+      }),
+      statForce: mascot.statForce,
+      statAgility: mascot.statAgility,
+      statCharisma: mascot.statCharisma,
+      statInstinct: mascot.statInstinct,
+      statVitality: mascot.statVitality,
+    })),
+  };
+}
+
+export async function chooseLivePvpCoinAction(choice: "CARA" | "COROA") {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.phase !== "COIN_PICK" || match.coinChooserId !== player.id)
+      throw new Error("A escolha da moeda pertence ao outro jogador.");
+    match.coinChoice = choice;
+    match.coinWinnerId =
+      choice === match.coinResult ? player.id : otherPlayerId(match, player.id);
+    match.phase = "FIRST_PICK";
+    match.deadline = nextDeadline();
+    match.events.push(
+      `${player.ptcglNick ?? player.displayName} escolheu ${choice}. O resultado foi ${match.coinResult}.`,
+    );
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
+export async function chooseLivePvpFirstPlayerAction(firstPlayerId: string) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.phase !== "FIRST_PICK" || match.coinWinnerId !== player.id)
+      throw new Error("Somente quem venceu a moeda pode escolher.");
+    if (![match.playerAId, match.playerBId].includes(firstPlayerId))
+      throw new Error("Jogador inicial inválido.");
+    match.firstPickerId = firstPlayerId;
+    match.draftTurnId = firstPlayerId;
+    match.draftQuota = 1;
+    match.phase = "DRAFT";
+    match.deadline = nextDeadline();
+    const firstName =
+      firstPlayerId === match.playerAId ? match.playerAName : match.playerBName;
+    match.events.push(
+      `${player.ptcglNick ?? player.displayName} escolheu ${firstName} para iniciar o draft.`,
+    );
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
+export async function submitLivePvpDraftAction(mascotIds: string[]) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.phase !== "DRAFT" || match.draftTurnId !== player.id)
+      throw new Error("Aguarde a vez do adversário.");
+    const team = sideTeam(match, player.id);
+    const required = Math.min(match.draftQuota, 6 - team.length);
+    const uniqueIds = [...new Set(mascotIds)];
+    if (uniqueIds.length !== required)
+      throw new Error(`Selecione exatamente ${required} mascote(s).`);
+    const valid = await tx.mascot.count({
+      where: { id: { in: uniqueIds }, playerId: player.id },
+    });
+    if (valid !== uniqueIds.length || uniqueIds.some((id) => team.includes(id)))
+      throw new Error(
+        "Uma das escolhas não pertence à sua conta ou já foi usada.",
+      );
+    const nextTeam = [...team, ...uniqueIds];
+    if (player.id === match.playerAId) match.teamAIds = nextTeam;
+    else match.teamBIds = nextTeam;
+    const names = await tx.mascot.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { nickname: true, pokemonId: true },
+    });
+    match.events.push(
+      `${player.ptcglNick ?? player.displayName} confirmou ${names.map((mascot) => mascot.nickname ?? `#${mascot.pokemonId}`).join(", ")}.`,
+    );
+    if (match.teamAIds.length === 6 && match.teamBIds.length === 6) {
+      match.phase = "ORDER";
+      match.orderTurnId = match.firstPickerId;
+      match.draftTurnId = null;
+    } else {
+      const next = otherPlayerId(match, player.id);
+      match.draftTurnId = next;
+      match.draftQuota = Math.min(2, 6 - sideTeam(match, next).length);
+    }
+    match.deadline = nextDeadline();
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
+export async function submitLivePvpOrderAction(order: string[]) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.phase !== "ORDER" || match.orderTurnId !== player.id)
+      throw new Error("Aguarde o adversário organizar a equipe.");
+    const team = sideTeam(match, player.id);
+    if (
+      order.length !== 6 ||
+      new Set(order).size !== 6 ||
+      order.some((id) => !team.includes(id))
+    )
+      throw new Error("A ordem precisa conter os seis mascotes escolhidos.");
+    if (player.id === match.playerAId) match.orderAIds = order;
+    else match.orderBIds = order;
+    match.events.push(
+      `${player.ptcglNick ?? player.displayName} travou a ordem da equipe.`,
+    );
+    const other = otherPlayerId(match, player.id);
+    const otherOrder =
+      other === match.playerAId ? match.orderAIds : match.orderBIds;
+    if (otherOrder.length === 6) {
+      match.phase = "READY";
+      match.orderTurnId = null;
+    } else match.orderTurnId = other;
+    match.deadline = nextDeadline();
+    await saveMatch(tx, match);
+    return match;
+  });
 }
 
 export async function leaveLivePvpQueueAction() {
@@ -147,7 +484,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
             { ptcglNick: { equals: targetName.trim(), mode: "insensitive" } },
           ],
         },
-        select: { id: true, displayName: true },
+        select: { id: true, displayName: true, ptcglNick: true },
       })
     : null;
   if (targetName?.trim() && !target)
@@ -184,9 +521,25 @@ export async function joinLivePvpQueueAction(targetName?: string) {
         playerAId: opponent.playerId,
         playerAName: opponent.playerName,
         playerBId: player.id,
-        playerBName: player.displayName,
+        playerBName: player.ptcglNick ?? player.displayName,
         coinChooserId: Math.random() < 0.5 ? opponent.playerId : player.id,
         coinResult: Math.random() < 0.5 ? "CARA" : "COROA",
+        coinChoice: null,
+        coinWinnerId: null,
+        firstPickerId: null,
+        draftTurnId: null,
+        draftQuota: 1,
+        teamAIds: [],
+        teamBIds: [],
+        orderAIds: [],
+        orderBIds: [],
+        orderTurnId: null,
+        phase: "COIN_PICK",
+        deadline: nextDeadline(),
+        revision: 1,
+        events: [
+          `${opponent.playerName} e ${player.ptcglNick ?? player.displayName} foram conectados.`,
+        ],
         status: "PREGAME",
         createdAt: new Date().toISOString(),
       };
@@ -232,7 +585,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
     }
     const value: QueueValue = {
       playerId: player.id,
-      playerName: player.displayName,
+      playerName: player.ptcglNick ?? player.displayName,
       targetPlayerId: target?.id ?? null,
       joinedAt: new Date().toISOString(),
     };

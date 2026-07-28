@@ -9,6 +9,7 @@ import {
   joinLivePvpQueueAction,
   leaveLivePvpQueueAction,
 } from "../../combates/arena-online/matchmaking-actions";
+import { ArenaOnlineSyncedPregame } from "./arena-online-synced-pregame";
 
 type Side = "A" | "B";
 type Stage =
@@ -28,7 +29,12 @@ export function ArenaOnlinePregame({
   onlineIdentity,
 }: {
   mascots: MascotOption[];
-  onComplete: (a: string[], b: string[], first: Side) => void;
+  onComplete: (
+    a: string[],
+    b: string[],
+    first: Side,
+    remoteMascots?: MascotOption[],
+  ) => void;
   onEvent: (event: string) => void;
   onlineIdentity?: { playerId: string; playerName: string };
 }) {
@@ -98,7 +104,6 @@ export function ArenaOnlinePregame({
         onEvent(
           `MATCHMAKING · ${state.match.playerAName} e ${state.match.playerBName} foram conectados pelo servidor.`,
         );
-        start(state.match);
       }
     } catch (error) {
       console.error(error);
@@ -117,7 +122,6 @@ export function ArenaOnlinePregame({
       setQueue(state.queueCount);
       if (state.match) {
         setOnlineMatch(state.match);
-        start(state.match);
       } else {
         toast.success(
           direct
@@ -307,6 +311,17 @@ export function ArenaOnlinePregame({
       if (mascot && !draftMoves[id]) void inspect(mascot);
     }
   }, [stage, orderA, orderB]);
+  if (onlineIdentity && onlineMatch) {
+    return (
+      <ArenaOnlineSyncedPregame
+        initialMatch={onlineMatch}
+        identity={onlineIdentity}
+        mascots={mascots}
+        onEvent={onEvent}
+        onComplete={onComplete}
+      />
+    );
+  }
   return (
     <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-slate-950 to-cyan-500/5 p-4">
       <div className="flex items-center justify-between">

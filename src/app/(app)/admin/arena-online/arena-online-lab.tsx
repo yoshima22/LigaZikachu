@@ -393,6 +393,14 @@ export function ArenaOnlineLab({
   onlineIdentity?: { playerId: string; playerName: string };
 }) {
   const [pending, startTransition] = useTransition();
+  const [remoteRoster, setRemoteRoster] = useState<MascotOption[]>([]);
+  const roster = useMemo(() => {
+    const map = new Map<string, MascotOption>();
+    [...mascots, ...remoteRoster].forEach((mascot) =>
+      map.set(mascot.id, mascot),
+    );
+    return [...map.values()];
+  }, [mascots, remoteRoster]);
   const [idA, setIdA] = useState(mascots[0]?.id ?? "");
   const [idB, setIdB] = useState(mascots[1]?.id ?? mascots[0]?.id ?? "");
   const [teamIdsA, setTeamIdsA] = useState<string[]>(
@@ -435,12 +443,12 @@ export function ArenaOnlineLab({
       );
   }, [logs]);
   const mascotA = useMemo(
-    () => mascots.find((m) => m.id === idA),
-    [mascots, idA],
+    () => roster.find((m) => m.id === idA),
+    [roster, idA],
   );
   const mascotB = useMemo(
-    () => mascots.find((m) => m.id === idB),
-    [mascots, idB],
+    () => roster.find((m) => m.id === idB),
+    [roster, idB],
   );
   const selectedA = movesA.filter((m) => setA.includes(m.id));
   const selectedB = movesB.filter((m) => setB.includes(m.id));
@@ -460,7 +468,7 @@ export function ArenaOnlineLab({
         return;
       }
       setter([...ids, id]);
-      const mascot = mascots.find((entry) => entry.id === id);
+      const mascot = roster.find((entry) => entry.id === id);
       if (mascot && !teamMovePreview[id])
         startTransition(async () => {
           const result = await loadLivePvpMovesAction(
@@ -488,10 +496,10 @@ export function ArenaOnlineLab({
     setter(next);
   };
 
-  const load = (idsA = teamIdsA, idsB = teamIdsB) =>
+  const load = (idsA = teamIdsA, idsB = teamIdsB, source = roster) =>
     startTransition(async () => {
-      const firstA = mascots.find((m) => m.id === idsA[0]);
-      const firstB = mascots.find((m) => m.id === idsB[0]);
+      const firstA = source.find((m) => m.id === idsA[0]);
+      const firstB = source.find((m) => m.id === idsB[0]);
       if (!firstA || !firstB) {
         toast.error("Cada equipe precisa de ao menos um mascote.");
         return;
@@ -545,11 +553,11 @@ export function ArenaOnlineLab({
       return;
     }
     const preparedA = teamIdsA
-      .map((id) => mascots.find((m) => m.id === id))
+      .map((id) => roster.find((m) => m.id === id))
       .filter((m): m is MascotOption => !!m)
       .map(toFighter);
     const preparedB = teamIdsB
-      .map((id) => mascots.find((m) => m.id === id))
+      .map((id) => roster.find((m) => m.id === id))
       .filter((m): m is MascotOption => !!m)
       .map(toFighter);
     setTeamA(preparedA);
@@ -711,7 +719,7 @@ export function ArenaOnlineLab({
   };
   const switchMascot = (side: Side, targetId: string) =>
     startTransition(async () => {
-      const target = mascots.find((m) => m.id === targetId);
+      const target = roster.find((m) => m.id === targetId);
       if (!target) return;
       const loaded = await loadLivePvpMovesAction(
         target.pokemonId,
@@ -873,13 +881,19 @@ export function ArenaOnlineLab({
         onEvent={(event) =>
           setLogs((old) => [...old, "────────────────────────────────", event])
         }
-        onComplete={(a, b, first) => {
+        onComplete={(a, b, first, matchedMascots = []) => {
+          const combined = [...roster];
+          for (const mascot of matchedMascots) {
+            if (!combined.some((entry) => entry.id === mascot.id))
+              combined.push(mascot);
+          }
+          setRemoteRoster(matchedMascots);
           setTeamIdsA(a);
           setTeamIdsB(b);
           setOpeningSide(first);
           setIdA(a[0] ?? "");
           setIdB(b[0] ?? "");
-          load(a, b);
+          load(a, b, combined);
           toast.success("Pré-jogo concluído e golpes preparados.");
         }}
       />
@@ -924,7 +938,7 @@ export function ArenaOnlineLab({
               setChoice={setChoiceA}
               team={teamA}
               pp={ppA}
-              owner={mascots.find((m) => m.id === teamIdsA[0])}
+              owner={roster.find((m) => m.id === teamIdsA[0])}
               movePreview={teamMovePreview}
               ppLedger={ppLedger}
               onSwitch={(id) => switchMascot("A", id)}
@@ -939,7 +953,7 @@ export function ArenaOnlineLab({
               setChoice={setChoiceB}
               team={teamB}
               pp={ppB}
-              owner={mascots.find((m) => m.id === teamIdsB[0])}
+              owner={roster.find((m) => m.id === teamIdsB[0])}
               movePreview={teamMovePreview}
               ppLedger={ppLedger}
               onSwitch={(id) => switchMascot("B", id)}
