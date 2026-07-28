@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { MascotOption } from "./arena-online-lab";
 import type { LivePvpMatchValue } from "../../combates/arena-online/matchmaking-actions";
 import {
+  closeLivePvpMatchAction,
   chooseLivePvpCoinAction,
   chooseLivePvpFirstPlayerAction,
   getLivePvpMatchAction,
@@ -33,6 +34,14 @@ const TYPE_LABELS: Record<string, string> = {
   steel: "Aço",
   fairy: "Fada",
 };
+function spriteFallback(
+  event: React.SyntheticEvent<HTMLImageElement>,
+  pokemonId: number,
+) {
+  const image = event.currentTarget;
+  image.onerror = null;
+  image.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+}
 
 function MascotChip({ mascot }: { mascot: MascotOption }) {
   return (
@@ -40,6 +49,7 @@ function MascotChip({ mascot }: { mascot: MascotOption }) {
       <img
         src={mascot.spriteUrl}
         alt=""
+        onError={(event) => spriteFallback(event, mascot.pokemonId)}
         className="h-10 w-10 object-contain [image-rendering:pixelated]"
       />
       <div className="min-w-0">
@@ -234,9 +244,26 @@ export function ArenaOnlineSyncedPregame({
             {match.playerAName} × {match.playerBName}
           </h2>
         </div>
-        {match.phase !== "READY" && (
-          <span className="font-pixel text-xl text-[#FFCB05]">{seconds}s</span>
-        )}
+        <div className="flex items-center gap-2">
+          {match.phase !== "READY" && (
+            <span className="font-pixel text-xl text-[#FFCB05]">
+              {seconds}s
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await closeLivePvpMatchAction();
+                window.location.reload();
+              })
+            }
+            className="rounded-lg border border-red-500/35 px-3 py-2 text-[10px] font-bold text-red-300"
+          >
+            Cancelar partida
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -437,6 +464,7 @@ export function ArenaOnlineSyncedPregame({
                 <img
                   src={mascot.spriteUrl}
                   alt=""
+                  onError={(event) => spriteFallback(event, mascot.pokemonId)}
                   className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
                 />
                 <b className="block truncate text-[10px] text-white">

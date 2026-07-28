@@ -4,11 +4,21 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { LivePvpMatchValue } from "../../combates/arena-online/matchmaking-actions";
 import {
+  closeLivePvpMatchAction,
   getLivePvpMatchAction,
   initializeLivePvpBattleAction,
   submitLivePvpBattleAction,
   surrenderLivePvpBattleAction,
 } from "../../combates/arena-online/matchmaking-actions";
+
+function spriteFallback(
+  event: React.SyntheticEvent<HTMLImageElement>,
+  pokemonId: number,
+) {
+  const image = event.currentTarget;
+  image.onerror = null;
+  image.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+}
 
 const TYPES: Record<string, string> = {
   normal: "Normal",
@@ -81,6 +91,7 @@ export function ArenaOnlineSyncedBattle({
         <img
           src={fighter.spriteUrl}
           alt=""
+          onError={(event) => spriteFallback(event, fighter.pokemonId)}
           className="h-28 w-28 object-contain [image-rendering:pixelated]"
         />
         <b className="mt-1 text-white">
@@ -203,6 +214,9 @@ export function ArenaOnlineSyncedBattle({
                   <img
                     src={fighter.spriteUrl}
                     alt=""
+                    onError={(event) =>
+                      spriteFallback(event, fighter.pokemonId)
+                    }
                     className="mx-auto h-12 w-12 object-contain"
                   />
                   <b className="block truncate">{fighter.name}</b>
@@ -235,6 +249,20 @@ export function ArenaOnlineSyncedBattle({
           className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300"
         >
           Desistir
+        </button>
+      )}
+      {battle.winnerId && (
+        <button
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              await closeLivePvpMatchAction();
+              window.location.reload();
+            })
+          }
+          className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200"
+        >
+          Encerrar partida e voltar ao lobby
         </button>
       )}
     </section>

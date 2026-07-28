@@ -252,6 +252,14 @@ async function requireLivePvpPlayer() {
   return player;
 }
 
+async function requireAuthenticatedPlayer() {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Sessão inválida.");
+  const player = await getSessionPlayer(user.id);
+  if (!player) throw new Error("Jogador não encontrado.");
+  return player;
+}
+
 function asQueue(value: Prisma.JsonValue): QueueValue | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const data = value as Record<string, unknown>;
@@ -343,6 +351,16 @@ export async function getLivePvpMatchAction() {
         },
       })
     : [];
+  const participants = await prisma.player.findMany({
+    where: { id: { in: [match.playerAId, match.playerBId] } },
+    select: { id: true, displayName: true },
+  });
+  match.playerAName =
+    participants.find((entry) => entry.id === match.playerAId)?.displayName ??
+    match.playerAName;
+  match.playerBName =
+    participants.find((entry) => entry.id === match.playerBId)?.displayName ??
+    match.playerBName;
   return {
     match,
     viewerId: player.id,
@@ -381,7 +399,7 @@ export async function chooseLivePvpCoinAction(choice: "CARA" | "COROA") {
     match.phase = "FIRST_PICK";
     match.deadline = nextDeadline();
     match.events.push(
-      `${player.ptcglNick ?? player.displayName} escolheu ${choice}. O resultado foi ${match.coinResult}.`,
+      `${player.displayName} escolheu ${choice}. O resultado foi ${match.coinResult}.`,
     );
     await saveMatch(tx, match);
     return match;
@@ -405,7 +423,7 @@ export async function chooseLivePvpFirstPlayerAction(firstPlayerId: string) {
     const firstName =
       firstPlayerId === match.playerAId ? match.playerAName : match.playerBName;
     match.events.push(
-      `${player.ptcglNick ?? player.displayName} escolheu ${firstName} para iniciar o draft.`,
+      `${player.displayName} escolheu ${firstName} para iniciar o draft.`,
     );
     await saveMatch(tx, match);
     return match;
@@ -439,7 +457,7 @@ export async function submitLivePvpDraftAction(mascotIds: string[]) {
       select: { nickname: true, pokemonId: true },
     });
     match.events.push(
-      `${player.ptcglNick ?? player.displayName} confirmou ${names.map((mascot) => mascot.nickname ?? `#${mascot.pokemonId}`).join(", ")}.`,
+      `${player.displayName} confirmou ${names.map((mascot) => mascot.nickname ?? `#${mascot.pokemonId}`).join(", ")}.`,
     );
     if (match.teamAIds.length === 6 && match.teamBIds.length === 6) {
       match.phase = "ORDER";
@@ -472,9 +490,7 @@ export async function submitLivePvpOrderAction(order: string[]) {
       throw new Error("A ordem precisa conter os seis mascotes escolhidos.");
     if (player.id === match.playerAId) match.orderAIds = order;
     else match.orderBIds = order;
-    match.events.push(
-      `${player.ptcglNick ?? player.displayName} travou a ordem da equipe.`,
-    );
+    match.events.push(`${player.displayName} travou a ordem da equipe.`);
     const other = otherPlayerId(match, player.id);
     const otherOrder =
       other === match.playerAId ? match.orderAIds : match.orderBIds;
@@ -595,9 +611,7 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
     const other = otherPlayerId(match, player.id);
     if (!battle.pendingA || !battle.pendingB) {
       battle.choiceTurnId = other;
-      battle.logs.push(
-        `${player.ptcglNick ?? player.displayName} confirmou uma ação.`,
-      );
+      battle.logs.push(`${player.displayName} confirmou uma ação.`);
       await saveMatch(tx, match);
       return match;
     }
@@ -652,23 +666,21 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
 }
 
 export async function surrenderLivePvpBattleAction() {
-  const player = await requireLivePvpPlayer();
+  const player = await requireAuthenticatedPlayer();
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
     const match = await findCurrentMatch(tx, player.id);
     if (!match.battle || match.battle.winnerId)
       throw new Error("A batalha já terminou.");
     match.battle.winnerId = otherPlayerId(match, player.id);
-    match.battle.logs.push(
-      `${player.ptcglNick ?? player.displayName} desistiu da batalha.`,
-    );
+    match.battle.logs.push(`${player.displayName} desistiu da batalha.`);
     await saveMatch(tx, match);
     return match;
   });
 }
 
 export async function closeLivePvpMatchAction() {
-  const player = await requireLivePvpPlayer();
+  const player = await requireAuthenticatedPlayer();
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
     const indexRow = await tx.appSetting.findUnique({
@@ -750,7 +762,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
         playerAId: opponent.playerId,
         playerAName: opponent.playerName,
         playerBId: player.id,
-        playerBName: player.ptcglNick ?? player.displayName,
+        playerBName: player.displayName,
         coinChooserId: Math.random() < 0.5 ? opponent.playerId : player.id,
         coinResult: Math.random() < 0.5 ? "CARA" : "COROA",
         coinChoice: null,
@@ -767,7 +779,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
         deadline: nextDeadline(),
         revision: 1,
         events: [
-          `${opponent.playerName} e ${player.ptcglNick ?? player.displayName} foram conectados.`,
+          `${opponent.playerName} e ${player.displayName} foram conectados.`,
         ],
         battle: null,
         status: "PREGAME",
@@ -815,7 +827,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
     }
     const value: QueueValue = {
       playerId: player.id,
-      playerName: player.ptcglNick ?? player.displayName,
+      playerName: player.displayName,
       targetPlayerId: target?.id ?? null,
       joinedAt: new Date().toISOString(),
     };
