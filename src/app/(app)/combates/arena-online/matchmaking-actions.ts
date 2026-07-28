@@ -829,11 +829,7 @@ function applyTacticalMovement(
   enemies: TacticalUnit[],
   orders: LivePvpBattleAction[],
 ) {
-  const events: TacticalBattleEvent[] = [
-    ...battle.lastEvents.filter((event) =>
-      ["MOVE", "BLOCK"].includes(event.kind),
-    ),
-  ];
+  const events: TacticalBattleEvent[] = [];
   const occupied = new Map(
     [...battle.teamA, ...battle.teamB]
       .filter((unit) => unit.hp > 0)
@@ -1177,6 +1173,13 @@ function resolveTacticalRound(match: MatchValue) {
       text: `${actor.name} atacou ${target.name} e causou ${damage} de dano.`,
       amount: damage,
     });
+    if (target.hp <= 0)
+      events.push({
+        unitId: target.id,
+        targetId: target.id,
+        kind: "KO",
+        text: `${target.name} foi nocauteado e saiu do combate.`,
+      });
   }
   battle.lastEvents = events;
   battle.logs.push(
@@ -1371,9 +1374,9 @@ export async function submitLivePvpBattleAction(
     if (sideA) battle.pendingA = normalized;
     else battle.pendingB = normalized;
     if (battle.pendingA && battle.pendingB) {
-      const previousStarter = battle.roundStarterId;
       resolveTacticalRound(match);
-      battle.roundStarterId = otherPlayerId(match, previousStarter);
+      // O vencedor da escolha inicial permanece como primeiro jogador das
+      // rodadas. Assim ninguém joga duas vezes seguidas na virada da rodada.
       battle.turnPlayerId = battle.roundStarterId;
     } else {
       battle.turnPlayerId = otherPlayerId(match, player.id);
