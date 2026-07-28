@@ -31,6 +31,8 @@ import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@p
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
+const PLAYER_TRANSACTION_VAULT_SHARE = 0.25;
+
 function revalidateBazar() {
   revalidatePath("/bazar");
   revalidatePath("/bazar/meu-bazar");
@@ -808,6 +810,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
         update: { balance: { increment: listing.priceCoins! } },
         create: { playerId: listing.playerId, balance: listing.priceCoins!, totalEarned: listing.priceCoins! },
       });
+      await creditMiauvadaoVaultFromPlayerTransaction(tx, listing.priceCoins!);
 
       // Transferir item para o comprador
       await _transferItem(tx, listing, player.id);
@@ -1018,6 +1021,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
           update: { balance: { increment: proposal.coinsOffer } },
           create: { playerId: player.id, balance: proposal.coinsOffer, totalEarned: proposal.coinsOffer },
         });
+        await creditMiauvadaoVaultFromPlayerTransaction(tx, proposal.coinsOffer);
       }
 
       // Transfer items from proposer to seller (if any)
@@ -1668,6 +1672,17 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
 // ── Utilitários internos ──────────────────────────────────────────────────────
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+async function creditMiauvadaoVaultFromPlayerTransaction(tx: TxClient, transactionCoins: number) {
+  const generatedCoins = Math.floor(transactionCoins * PLAYER_TRANSACTION_VAULT_SHARE);
+  if (generatedCoins < 1) return;
+
+  await tx.miauvadaoConfig.upsert({
+    where: { id: "singleton" },
+    update: { vaultBalance: { increment: generatedCoins } },
+    create: { id: "singleton", vaultBalance: generatedCoins },
+  });
+}
 
 function canonicalBazarPair(playerAId: string, playerBId: string) {
   return playerAId < playerBId
@@ -2668,6 +2683,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
         update: { balance: { increment: winnerBid } },
         create: { playerId: listing.playerId, balance: winnerBid, totalEarned: winnerBid },
       });
+      await creditMiauvadaoVaultFromPlayerTransaction(tx, winnerBid);
 
       // Transfere item ao vencedor
       await _transferItem(tx, listing, winnerId);
