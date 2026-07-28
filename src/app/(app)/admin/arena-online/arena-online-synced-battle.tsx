@@ -140,9 +140,42 @@ export function ArenaOnlineSyncedBattle({
     });
     act(() => submitLivePvpBattleAction(action));
   };
-  const card = (fighter: typeof activeA, name: string) => (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-      <p className="mb-2 text-xs font-bold text-cyan-200">{name}</p>
+  const surrender = () =>
+    startTransition(async () => {
+      setMatch((current) => {
+        if (!current?.battle) return current;
+        const next = structuredClone(current);
+        next.battle!.winnerId =
+          identity.playerId === next.playerAId
+            ? next.playerBId
+            : next.playerAId;
+        return next;
+      });
+      try {
+        await surrenderLivePvpBattleAction();
+      } catch (error) {
+        await refresh();
+        toast.error(
+          error instanceof Error ? error.message : "Não foi possível desistir.",
+        );
+      }
+    });
+  const card = (fighter: typeof activeA, name: string, owned: boolean) => (
+    <div
+      className={`rounded-xl border p-4 ${
+        owned
+          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_24px_rgba(34,211,238,.12)]"
+          : "border-slate-800 bg-slate-950/70"
+      }`}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-bold text-cyan-200">{name}</p>
+        {owned && (
+          <span className="rounded-full bg-cyan-400 px-2 py-1 text-[9px] font-black uppercase text-slate-950">
+            Seu Pokémon
+          </span>
+        )}
+      </div>
       <div className="flex flex-col items-center text-center">
         <img
           src={fighter.spriteUrl}
@@ -201,28 +234,48 @@ export function ArenaOnlineSyncedBattle({
   ) => (
     <div className="space-y-3">
       <div className="grid gap-2">
-        {(battle.moves[fighter.id] ?? []).map((move) => (
-          <button
-            key={move.id}
-            type="button"
-            disabled={
-              !owned ||
-              !myTurn ||
-              pending ||
-              (battle.pp[fighter.id]?.[move.id] ?? 0) <= 0
-            }
-            onClick={() => owned && choose({ type: "MOVE", moveId: move.id })}
-            className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-left text-xs disabled:cursor-default disabled:opacity-70"
-          >
-            <b>{move.name}</b>
-            <span className="ml-2 text-slate-500">
-              Poder {move.power ?? 0} · Precisão {move.accuracy ?? "—"}
-              {move.accuracy != null ? "%" : ""} · PP{" "}
-              {battle.pp[fighter.id]?.[move.id] ?? 0}/{move.pp}
-            </span>
-            <p className="mt-1 text-[10px] text-slate-400">{move.effect}</p>
-          </button>
-        ))}
+        {(battle.moves[fighter.id] ?? []).map((move) => {
+          const lastMoveId =
+            fighter.id === battle.lastMoveAActorId
+              ? battle.lastMoveAId
+              : fighter.id === battle.lastMoveBActorId
+                ? battle.lastMoveBId
+                : null;
+          const wasUsed = lastMoveId === move.id;
+          return (
+            <button
+              key={move.id}
+              type="button"
+              disabled={
+                !owned ||
+                !myTurn ||
+                pending ||
+                (battle.pp[fighter.id]?.[move.id] ?? 0) <= 0
+              }
+              onClick={() => owned && choose({ type: "MOVE", moveId: move.id })}
+              className={`rounded-lg border p-3 text-left text-xs transition ${
+                wasUsed
+                  ? "border-[#FFCB05] bg-[#FFCB05]/15 shadow-[0_0_18px_rgba(255,203,5,.18)]"
+                  : "border-slate-700 bg-slate-950"
+              } disabled:cursor-default disabled:opacity-70`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <b>{move.name}</b>
+                {wasUsed && (
+                  <span className="rounded bg-[#FFCB05] px-2 py-0.5 text-[9px] font-black uppercase text-slate-950">
+                    Último golpe usado
+                  </span>
+                )}
+              </div>
+              <span className="ml-2 text-slate-500">
+                Poder {move.power ?? 0} · Precisão {move.accuracy ?? "—"}
+                {move.accuracy != null ? "%" : ""} · PP{" "}
+                {battle.pp[fighter.id]?.[move.id] ?? 0}/{move.pp}
+              </span>
+              <p className="mt-1 text-[10px] text-slate-400">{move.effect}</p>
+            </button>
+          );
+        })}
       </div>
       <div>
         <p className="mb-2 text-[10px] uppercase text-slate-500">
@@ -278,7 +331,7 @@ export function ArenaOnlineSyncedBattle({
             ? `${battle.winnerId === match.playerAId ? match.playerAName : match.playerBName} venceu`
             : myTurn
               ? "Sua vez"
-              : `Ação confirmada · aguardando ${sideA ? match.playerBName : match.playerAName}`}
+              : `${sideA ? match.playerBName : match.playerAName} está escolhendo um ataque ou uma troca`}
           {!battle.winnerId && (
             <b className="ml-3 font-pixel text-lg text-[#FFCB05]">{seconds}s</b>
           )}
@@ -286,18 +339,19 @@ export function ArenaOnlineSyncedBattle({
       </div>
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-          {card(activeA, match.playerAName)}
+          {card(activeA, match.playerAName, sideA)}
           {battlePanel(activeA, battle.teamA, sideA)}
         </div>
         <div className="space-y-4">
-          {card(activeB, match.playerBName)}
+          {card(activeB, match.playerBName, !sideA)}
           {battlePanel(activeB, battle.teamB, !sideA)}
         </div>
       </div>
       {!myTurn && !battle.winnerId && (
         <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4 text-center text-xs text-cyan-100">
-          Sua ação foi registrada. Aguardando a escolha de{" "}
-          {sideA ? match.playerBName : match.playerAName}.
+          Sua ação foi registrada.{" "}
+          {sideA ? match.playerBName : match.playerAName} está escolhendo um
+          ataque ou uma troca de Pokémon.
         </div>
       )}
       <div
@@ -316,7 +370,7 @@ export function ArenaOnlineSyncedBattle({
       {!battle.winnerId && (
         <button
           disabled={pending}
-          onClick={() => act(surrenderLivePvpBattleAction)}
+          onClick={surrender}
           className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300"
         >
           Desistir
@@ -328,7 +382,7 @@ export function ArenaOnlineSyncedBattle({
           onClick={() =>
             startTransition(async () => {
               await closeLivePvpMatchAction();
-              window.location.reload();
+              window.location.href = "/combates/arena-online";
             })
           }
           className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200"

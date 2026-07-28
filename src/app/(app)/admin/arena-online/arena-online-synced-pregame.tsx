@@ -123,6 +123,16 @@ export function ArenaOnlineSyncedPregame({
           : match.orderTurnId;
   const activePlayerName =
     activePlayerId === match.playerAId ? match.playerAName : match.playerBName;
+  const waitingAction =
+    match.phase === "COIN_PICK"
+      ? `${activePlayerName} está escolhendo o lado da moeda.`
+      : match.phase === "FIRST_PICK"
+        ? `${activePlayerName} está escolhendo quem começa o draft.`
+        : match.phase === "DRAFT"
+          ? `${activePlayerName} está escolhendo ${match.draftQuota} mascote${match.draftQuota === 1 ? "" : "s"} para a equipe.`
+          : match.phase === "ORDER"
+            ? `${activePlayerName} está organizando a ordem da equipe.`
+            : "Preparando o combate.";
 
   const refresh = async () => {
     try {
@@ -315,6 +325,9 @@ export function ArenaOnlineSyncedPregame({
               : match.playerBName}
             ...
           </p>
+          <p className="mt-2 text-sm font-bold text-cyan-200">
+            Escolha: {match.coinChoice}
+          </p>
           <p className="mt-2 text-lg font-black text-[#FFCB05]">
             Resultado: {match.coinResult}
           </p>
@@ -340,9 +353,7 @@ export function ArenaOnlineSyncedPregame({
       {!coinAnimating && !isMyTurn && match.phase !== "READY" && (
         <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-8 text-center">
           <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
-          <p className="font-bold text-cyan-100">
-            Aguardando {activePlayerName} escolher
-          </p>
+          <p className="font-bold text-cyan-100">{waitingAction}</p>
           <p className="mt-1 text-xs text-slate-400">
             A tela será atualizada automaticamente quando a escolha for travada.
           </p>

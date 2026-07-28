@@ -68,6 +68,10 @@ export type LivePvpBattleState = {
   pp: Record<string, Record<number, number>>;
   pendingA: LivePvpBattleAction | null;
   pendingB: LivePvpBattleAction | null;
+  lastMoveAId?: number | null;
+  lastMoveBId?: number | null;
+  lastMoveAActorId?: string | null;
+  lastMoveBActorId?: string | null;
   deadline: string;
   choiceTurnId: string;
   roundStarterId: string;
@@ -659,6 +663,10 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
             (move) => move.id === actionB.moveId,
           ) ?? null)
         : null;
+    battle.lastMoveAId = moveA?.id ?? null;
+    battle.lastMoveBId = moveB?.id ?? null;
+    battle.lastMoveAActorId = moveA ? fighterA.id : null;
+    battle.lastMoveBActorId = moveB ? fighterB.id : null;
     if (moveA) battle.pp[fighterA.id][moveA.id] -= 1;
     if (moveB) battle.pp[fighterB.id][moveB.id] -= 1;
     const result = resolveLivePvpTurn(fighterA, moveA, fighterB, moveB);
@@ -724,17 +732,18 @@ export async function closeLivePvpMatchAction() {
     const match = matchRow?.value as MatchValue | undefined;
     if (!match || ![match.playerAId, match.playerBId].includes(player.id))
       return;
-    await tx.appSetting.deleteMany({
-      where: {
-        key: {
-          in: [
-            `${PLAYER_MATCH_PREFIX}${match.playerAId}`,
-            `${PLAYER_MATCH_PREFIX}${match.playerBId}`,
-            `${MATCH_PREFIX}${matchId}`,
-          ],
-        },
-      },
+    await tx.appSetting.delete({
+      where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
     });
+    const otherId = otherPlayerId(match, player.id);
+    const otherIndex = await tx.appSetting.findUnique({
+      where: { key: `${PLAYER_MATCH_PREFIX}${otherId}` },
+      select: { key: true },
+    });
+    if (!otherIndex)
+      await tx.appSetting.deleteMany({
+        where: { key: `${MATCH_PREFIX}${matchId}` },
+      });
   });
   return { ok: true };
 }
