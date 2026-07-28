@@ -386,8 +386,17 @@ export function ArenaOnlineSyncedPregame({
 
       {coinAnimating && (
         <div className="overflow-hidden py-10 text-center [perspective:900px]">
-          <div className="coin-sync mx-auto flex h-28 w-28 items-center justify-center rounded-full border-4 border-yellow-200 bg-gradient-to-br from-yellow-200 via-[#FFCB05] to-amber-600 text-3xl font-black text-amber-950 shadow-[0_0_45px_rgba(255,203,5,.55)]">
-            LZ
+          <div
+            className={`coin-sync coin-${match.coinResult.toLowerCase()} relative mx-auto h-28 w-28 [transform-style:preserve-3d]`}
+          >
+            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full border-4 border-yellow-100 bg-gradient-to-br from-yellow-100 via-[#FFCB05] to-amber-600 text-amber-950 shadow-[0_0_45px_rgba(255,203,5,.55)] [backface-visibility:hidden]">
+              <span className="text-4xl">⚡</span>
+              <b className="text-[10px] tracking-[.18em]">CARA</b>
+            </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full border-4 border-amber-200 bg-gradient-to-br from-amber-300 via-orange-400 to-amber-800 text-amber-950 shadow-[0_0_45px_rgba(251,146,60,.5)] [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              <span className="text-4xl">♛</span>
+              <b className="text-[10px] tracking-[.18em]">COROA</b>
+            </div>
           </div>
           <p className="mt-4 text-sm text-slate-300">
             Moeda lançada por{" "}
@@ -403,7 +412,7 @@ export function ArenaOnlineSyncedPregame({
             Resultado: {match.coinResult}
           </p>
           <style jsx>{`
-            @keyframes coinSync {
+            @keyframes coinSyncCara {
               0% {
                 transform: translateY(30px) rotateY(0) scale(0.8);
               }
@@ -414,9 +423,24 @@ export function ArenaOnlineSyncedPregame({
                 transform: translateY(0) rotateY(1800deg) scale(1);
               }
             }
-            .coin-sync {
-              animation: coinSync 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-              transform-style: preserve-3d;
+            @keyframes coinSyncCoroa {
+              0% {
+                transform: translateY(30px) rotateY(0) scale(0.8);
+              }
+              45% {
+                transform: translateY(-65px) rotateY(990deg) scale(1.12);
+              }
+              100% {
+                transform: translateY(0) rotateY(1980deg) scale(1);
+              }
+            }
+            .coin-cara {
+              animation: coinSyncCara 1.8s cubic-bezier(0.2, 0.7, 0.2, 1)
+                forwards;
+            }
+            .coin-coroa {
+              animation: coinSyncCoroa 1.8s cubic-bezier(0.2, 0.7, 0.2, 1)
+                forwards;
             }
           `}</style>
         </div>

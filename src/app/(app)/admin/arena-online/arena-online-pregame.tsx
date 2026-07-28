@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { MascotOption } from "./arena-online-lab";
 import { loadLivePvpMovesAction } from "./actions";
 import {
+  createLivePvpBotMatchAction,
   getLivePvpLobbyAction,
   joinLivePvpQueueAction,
   leaveLivePvpQueueAction,
@@ -157,6 +158,22 @@ export function ArenaOnlinePregame({
       setQueuePending(false);
     }
   };
+  const startBotMatch = async () => {
+    setQueuePending(true);
+    try {
+      const match = await createLivePvpBotMatchAction();
+      setOnlineMatch(match);
+      toast.success("Treino contra o Professor Enguiça preparado.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível preparar o bot.",
+      );
+    } finally {
+      setQueuePending(false);
+    }
+  };
   const pool = mascots.filter(
     (m) => !(teamA.includes(m.id) || teamB.includes(m.id)),
   );
@@ -220,14 +237,13 @@ export function ArenaOnlinePregame({
   });
   const flip = () => {
     const chosen = face ?? (Math.random() < 0.5 ? "CARA" : "COROA");
+    const result = serverCoinResult ?? (Math.random() < 0.5 ? "CARA" : "COROA");
     if (!face) setFace(chosen);
+    setCoinResult(result);
     setStage("COIN_FLIP");
     onEvent(`MOEDA · Jogador ${coinChooser} escolheu ${chosen}.`);
     setTimeout(() => {
-      const result =
-        serverCoinResult ?? (Math.random() < 0.5 ? "CARA" : "COROA");
       const winner = result === chosen ? coinChooser : other(coinChooser);
-      setCoinResult(result);
       setCoinWinner(winner);
       setStage("FIRST");
       resetTimer();
@@ -428,6 +444,27 @@ export function ArenaOnlinePregame({
               {onlineIdentity ? "Buscar jogador" : "Buscar jogador"}
             </button>
           </div>
+          {onlineIdentity && (
+            <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4">
+              <div>
+                <p className="font-bold text-white">
+                  Treino contra o Professor Enguiça
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  O bot recebe uma equipe de nível próximo, movimenta, ataca e
+                  se defende automaticamente. O treino não entra no ranking.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={queuePending}
+                onClick={() => void startBotMatch()}
+                className="rounded-lg bg-emerald-500 px-5 py-2 text-xs font-black text-slate-950 disabled:opacity-40"
+              >
+                Jogar contra bot
+              </button>
+            </div>
+          )}
         </div>
       )}
       {stage === "LOBBY" && (
@@ -479,19 +516,46 @@ export function ArenaOnlinePregame({
               <p>
                 <b className="text-emerald-300">Movimento:</b> são 2 casas base;
                 +1 ao superar a Agilidade média inimiga em 60 e +2 ao superar em
-                140. Sair de uma zona de controle custa uma casa adicional.
+                140. A distância é calculada por linhas e colunas — cada casa
+                horizontal ou vertical custa 1 e não há diagonal. Sair de uma
+                casa adjacente a um inimigo custa +1 movimento; Flancos ignoram
+                esse custo. A névoa ativa remove 1 ponto de movimento.
               </p>
               <p>
-                <b className="text-red-300">Ataque:</b> as casas vermelhas
-                indicam alcance. Agilidade define a ordem da resolução; tipos,
-                bioma, atributos, postura e efeitos próximos alteram o
-                resultado.
+                <b className="text-red-300">Atacar:</b> força o mascote a atacar
+                nesta rodada e permite indicar um alvo válido. Sem alvo manual,
+                a postura escolhe entre os inimigos alcançáveis. Atacante,
+                Defensor, Guardião, Provocador e Sobrevivente alcançam 1 casa;
+                Batedor, Cuidador e Encorajador alcançam 3; as demais posturas
+                alcançam 2. Um evento secreto de alcance adiciona +1. Agilidade
+                define quem resolve primeiro; Força, Instinto, nível, tipos,
+                bioma, defesa rival e a postura alteram o dano.
               </p>
               <p>
-                <b className="text-blue-300">Defesa e posturas:</b> Defender
-                prepara redução de dano. Defensores redirecionam, Guardiões
-                interceptam, Cuidadores curam e Encorajadores impulsionam
-                aliados dentro de suas áreas.
+                <b className="text-blue-300">Defender:</b> não ataca na rodada e
+                prepara redução para o próximo ataque direto: 45% para Defensor,
+                38% para Guardião e 32% para as demais posturas. Um Guardião
+                defendendo pode interceptar até duas vezes; um Defensor
+                defendendo também aumenta a chance de redirecionar.
+              </p>
+              <p>
+                <b className="text-fuchsia-300">Alcances de postura:</b>{" "}
+                Defensor e Guardião protegem até 2 casas; Provocador atua até 3;
+                Cuidador cura até 3; Encorajador impulsiona até 3; Sabotador
+                interfere em suportes até 3; Batedor marca inimigos até 4 e seu
+                bônus beneficia aliados a até 3 casas. Posturas ofensivas usam o
+                próprio alcance de ataque. Selecione um mascote e use “Mostrar
+                alcance da postura” para visualizar a área no grid. O cálculo
+                parte da posição final planejada; atributos e nível não aumentam
+                casas por conta própria — somente a postura e bônus explícitos
+                de alcance fazem isso.
+              </p>
+              <p>
+                <b className="text-cyan-200">Mover + agir:</b> Mover sozinho
+                confirma apenas o deslocamento. Depois de escolher o destino,
+                ainda é possível selecionar Atacar ou Defender; a ação será
+                calculada a partir da posição final. “Agir pela postura” não
+                movimenta automaticamente o mascote.
               </p>
               <p>
                 <b className="text-cyan-300">Biomas:</b> ficam misturados pelo
@@ -508,6 +572,13 @@ export function ArenaOnlinePregame({
                 <b className="text-purple-300">Névoa:</b> fecha das bordas para
                 o centro. Dentro dela há −1 movimento, −50% de cura e dano
                 crescente de 8% a 20% do HP máximo.
+              </p>
+              <p>
+                <b className="text-emerald-300">Treino contra bot:</b> monta
+                automaticamente uma equipe adversária com nível próximo ao dos
+                seis mascotes mais fortes da conta. O Professor Enguiça
+                movimenta, ataca e prepara defesa pelo servidor. O resultado
+                nunca entra no ranking do Beta.
               </p>
               <p>
                 <b className="text-[#FFCB05]">Turnos e cores:</b> cada jogador
@@ -547,17 +618,21 @@ export function ArenaOnlinePregame({
       )}
       {stage === "COIN_FLIP" && (
         <div className="overflow-hidden py-12 text-center [perspective:900px]">
-          <div className="coin-flight relative mx-auto h-28 w-28 [transform-style:preserve-3d]">
-            <div className="absolute inset-0 flex items-center justify-center rounded-full border-4 border-yellow-200 bg-gradient-to-br from-yellow-200 via-[#FFCB05] to-amber-600 text-4xl shadow-[0_0_45px_rgba(255,203,5,.55)] [backface-visibility:hidden]">
-              ⚡
+          <div
+            className={`coin-flight coin-${coinResult?.toLowerCase() ?? "cara"} relative mx-auto h-28 w-28 [transform-style:preserve-3d]`}
+          >
+            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full border-4 border-yellow-200 bg-gradient-to-br from-yellow-200 via-[#FFCB05] to-amber-600 shadow-[0_0_45px_rgba(255,203,5,.55)] [backface-visibility:hidden]">
+              <span className="text-4xl">⚡</span>
+              <b className="text-[10px] text-amber-950">CARA</b>
             </div>
-            <div className="absolute inset-0 flex items-center justify-center rounded-full border-4 border-amber-200 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 text-2xl font-black text-amber-950 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-              LZ
+            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full border-4 border-amber-200 bg-gradient-to-br from-amber-300 via-orange-400 to-amber-800 font-black text-amber-950 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              <span className="text-4xl">♛</span>
+              <b className="text-[10px]">COROA</b>
             </div>
           </div>
           <p className="mt-4 text-sm text-slate-300">A moeda está no ar...</p>
           <style jsx>{`
-            @keyframes coinFlight {
+            @keyframes coinFlightCara {
               0% {
                 transform: translateY(35px) rotateY(0) rotateX(10deg) scale(0.8);
               }
@@ -569,8 +644,25 @@ export function ArenaOnlinePregame({
                 transform: translateY(0) rotateY(1800deg) rotateX(0) scale(1);
               }
             }
-            .coin-flight {
-              animation: coinFlight 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+            @keyframes coinFlightCoroa {
+              0% {
+                transform: translateY(35px) rotateY(0) rotateX(10deg) scale(0.8);
+              }
+              45% {
+                transform: translateY(-70px) rotateY(990deg) rotateX(35deg)
+                  scale(1.12);
+              }
+              100% {
+                transform: translateY(0) rotateY(1980deg) rotateX(0) scale(1);
+              }
+            }
+            .coin-cara {
+              animation: coinFlightCara 1.8s cubic-bezier(0.2, 0.7, 0.2, 1)
+                forwards;
+            }
+            .coin-coroa {
+              animation: coinFlightCoroa 1.8s cubic-bezier(0.2, 0.7, 0.2, 1)
+                forwards;
             }
           `}</style>
         </div>

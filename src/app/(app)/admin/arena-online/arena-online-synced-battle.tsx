@@ -270,6 +270,7 @@ export function ArenaOnlineSyncedBattle({
   const [interactionMode, setInteractionMode] = useState<
     "MENU" | "MOVE" | "ATTACK" | "DEFEND" | null
   >(null);
+  const [showPostureRange, setShowPostureRange] = useState(false);
   const [seconds, setSeconds] = useState(30);
   const [eventPlayback, setEventPlayback] = useState<{
     signature: string;
@@ -348,7 +349,9 @@ export function ArenaOnlineSyncedBattle({
     setOrders({});
     setSelectedId(null);
     setInteractionMode(null);
+    setShowPostureRange(false);
   }, [battle?.round]);
+  useEffect(() => setShowPostureRange(false), [selectedId]);
   useEffect(() => {
     if (battle?.phase === "FORMATION" && mine.length && placement.length === 0)
       setPlacement(mine.map((unit) => unit.id));
@@ -914,6 +917,11 @@ export function ArenaOnlineSyncedBattle({
           ? 3
           : 0
     : 0;
+  const postureEffectRange = selected
+    ? selected.role === "SCOUT"
+      ? 4
+      : protectionRange || attackRange
+    : 0;
   const postureZoneLabel = selected
     ? selected.role === "DEFENDER"
       ? "Zona de redirecionamento"
@@ -1328,13 +1336,13 @@ export function ArenaOnlineSyncedBattle({
                     attackRange &&
                   !(x === plannedPosition.x && y === plannedPosition.y),
                 inProtectionArea =
-                  interactionMode === "DEFEND" &&
+                  (interactionMode === "DEFEND" || showPostureRange) &&
                   !playbackRunning &&
                   !!plannedPosition &&
-                  protectionRange > 0 &&
+                  postureEffectRange > 0 &&
                   Math.abs(x - plannedPosition.x) +
                     Math.abs(y - plannedPosition.y) <=
-                    protectionRange,
+                    postureEffectRange,
                 plannedDestination =
                   !!selected &&
                   orders[selected.id]?.x === x &&
@@ -1636,10 +1644,22 @@ export function ArenaOnlineSyncedBattle({
                     {TACTICAL_ROLE_DETAILS[selected.role]}
                     {postureZoneLabel && (
                       <span className="mt-1 block font-bold text-blue-300">
-                        {postureZoneLabel}: {protectionRange} casa(s).
+                        {postureZoneLabel}: {postureEffectRange} casa(s).
                       </span>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPostureRange((current) => !current);
+                      setInteractionMode("MENU");
+                    }}
+                    className={`mt-2 w-full rounded-lg border px-3 py-2 text-[10px] font-black ${showPostureRange ? "border-fuchsia-300 bg-fuchsia-500/20 text-fuchsia-100" : "border-blue-500/30 bg-blue-500/10 text-blue-200"}`}
+                  >
+                    {showPostureRange
+                      ? "Ocultar alcance da postura"
+                      : `Mostrar alcance da postura (${postureEffectRange} casas)`}
+                  </button>
                   {!!selected.effects?.length && (
                     <div className="mt-2 space-y-1 rounded-lg border border-purple-500/25 bg-purple-500/10 p-2">
                       <b className="text-[10px] uppercase tracking-wider text-purple-200">

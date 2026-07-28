@@ -33,6 +33,7 @@ const QUEUE_PREFIX = "live_pvp_queue:";
 const MATCH_PREFIX = "live_pvp_match:";
 const PLAYER_MATCH_PREFIX = "live_pvp_player_match:";
 const TERRAIN_RANKING_PREFIX = "terrain_battle_ranking:";
+const TERRAIN_BOT_ID = "terrain-professor-bot";
 const ACTIVE_WINDOW_MS = 90_000;
 
 type QueueValue = {
@@ -72,6 +73,8 @@ export type LivePvpMatchValue = {
   battle: LivePvpBattleState | null;
   status: "PREGAME" | "FINISHED";
   rankingRecorded: boolean;
+  botControlled?: boolean;
+  botMascotIds?: string[];
   createdAt: string;
 };
 
@@ -203,6 +206,8 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     events: [],
     battle: null,
     rankingRecorded: false,
+    botControlled: false,
+    botMascotIds: [],
     ...raw,
   } as MatchValue;
   if (match.battle && !match.battle.deadline)
@@ -376,6 +381,7 @@ async function recordTerrainBattleResult(
   )
     return;
   match.rankingRecorded = true;
+  if (match.botControlled) return;
   const administrativePlayers = await tx.player.findMany({
     where: {
       id: { in: [match.playerAId, match.playerBId] },
@@ -2193,12 +2199,17 @@ export async function initializeLivePvpBattleAction() {
     const teamAIds = match.orderAIds.length ? match.orderAIds : match.teamAIds;
     const teamBIds = match.orderBIds.length ? match.orderBIds : match.teamBIds;
     const biomes = createTacticalBiomes(match.id, arenaConfig.biomeImages);
+    const teamA = teamAIds.map((id) => fighterFromMascot(byId.get(id)!));
+    const rawTeamB = teamBIds.map((id) => fighterFromMascot(byId.get(id)!));
+    const teamB = match.botControlled
+      ? formationUnits(rawTeamB, "WEDGE", false)
+      : rawTeamB;
     match.battle = {
-      teamA: teamAIds.map((id) => fighterFromMascot(byId.get(id)!)),
-      teamB: teamBIds.map((id) => fighterFromMascot(byId.get(id)!)),
+      teamA,
+      teamB,
       phase: "FORMATION",
       formationA: null,
-      formationB: null,
+      formationB: match.botControlled ? "WEDGE" : null,
       pendingA: null,
       pendingB: null,
       turnPlayerId: match.firstPickerId ?? match.playerAId,
@@ -2335,6 +2346,53 @@ export async function submitLivePvpBattleAction(
       `${player.displayName} concluiu a movimentação da rodada ${battle.round}.`,
       ...movementEvents.map((event) => event.text),
     );
+    if (match.botControlled && sideA) {
+      battle.pendingA = normalized;
+      const botOrders: LivePvpBattleAction[] = battle.teamB
+        .filter((unit) => unit.hp > 0)
+        .map((unit) => {
+          const target = nearest(
+            unit,
+            battle.teamA.filter((enemy) => enemy.hp > 0),
+          );
+          let x = unit.x;
+          let y = unit.y;
+          if (target) {
+            for (let step = 0; step < 2; step++) {
+              const horizontal =
+                Math.abs(target.x - x) >= Math.abs(target.y - y);
+              if (horizontal && target.x !== x) x += Math.sign(target.x - x);
+              else if (target.y !== y) y += Math.sign(target.y - y);
+            }
+          }
+          return unit.hp / unit.maxHp <= 0.28
+            ? { type: "DEFEND" as const, mascotId: unit.id, x, y }
+            : {
+                type: "ATTACK" as const,
+                mascotId: unit.id,
+                x,
+                y,
+                targetId: target?.id,
+              };
+        });
+      const botMovementEvents = applyTacticalMovement(
+        battle,
+        battle.teamB,
+        battle.teamA,
+        botOrders,
+      );
+      battle.pendingB = botOrders;
+      battle.lastEvents = [...movementEvents, ...botMovementEvents];
+      battle.logs.push(
+        `Professor Enguiça (BOT) concluiu a movimentação da rodada ${battle.round}.`,
+        ...botMovementEvents.map((event) => event.text),
+      );
+      resolveTacticalRound(match);
+      await recordTerrainBattleResult(tx, match);
+      battle.turnPlayerId = match.playerAId;
+      await saveMatch(tx, match);
+      return { ok: true };
+    }
     if (sideA) battle.pendingA = normalized;
     else battle.pendingB = normalized;
     if (battle.pendingA && battle.pendingB) {
@@ -2400,6 +2458,121 @@ export async function closeLivePvpMatchAction() {
       });
   });
   return { ok: true };
+}
+
+export async function createLivePvpBotMatchAction() {
+  const player = await requireLivePvpPlayer();
+  const [existing, ownMascots] = await Promise.all([
+    prisma.appSetting.findUnique({
+      where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
+      select: { value: true },
+    }),
+    prisma.mascot.findMany({
+      where: { playerId: player.id },
+      orderBy: [{ level: "desc" }, { id: "asc" }],
+      take: 6,
+      select: { id: true, level: true },
+    }),
+  ]);
+  if (existing)
+    throw new Error("Encerre a partida atual antes de enfrentar o bot.");
+  if (ownMascots.length < 6)
+    throw new Error(
+      "Você precisa ter pelo menos seis mascotes para enfrentar o bot.",
+    );
+  const averageLevel = Math.round(
+    ownMascots.reduce((sum, mascot) => sum + mascot.level, 0) /
+      ownMascots.length,
+  );
+  let botMascots = await prisma.mascot.findMany({
+    where: {
+      playerId: { not: player.id },
+      level: { gte: Math.max(1, averageLevel - 12), lte: averageLevel + 12 },
+      player: { active: true, user: { status: "ACTIVE" } },
+    },
+    orderBy: [{ level: "desc" }, { id: "asc" }],
+    take: 40,
+    select: { id: true, level: true },
+  });
+  if (botMascots.length < 6)
+    botMascots = await prisma.mascot.findMany({
+      where: {
+        playerId: { not: player.id },
+        player: { active: true, user: { status: "ACTIVE" } },
+      },
+      orderBy: [{ level: "desc" }, { id: "asc" }],
+      take: 40,
+      select: { id: true, level: true },
+    });
+  botMascots = botMascots
+    .sort(
+      (a, b) =>
+        Math.abs(a.level - averageLevel) - Math.abs(b.level - averageLevel) ||
+        b.level - a.level,
+    )
+    .slice(0, 6);
+  if (botMascots.length < 6)
+    throw new Error("Não há mascotes suficientes para montar a equipe do bot.");
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const id = randomUUID();
+    const match: MatchValue = {
+      id,
+      playerAId: player.id,
+      playerAName: player.displayName,
+      playerBId: TERRAIN_BOT_ID,
+      playerBName: "Professor Enguiça (BOT)",
+      coinChooserId: player.id,
+      coinResult: Math.random() < 0.5 ? "CARA" : "COROA",
+      coinChoice: null,
+      coinWinnerId: player.id,
+      firstPickerId: player.id,
+      banTurnId: null,
+      bansByAIds: [],
+      bansByBIds: [],
+      banLimitA: 0,
+      banLimitB: 0,
+      draftTurnId: null,
+      draftQuota: 1,
+      teamAIds: ownMascots.map((mascot) => mascot.id),
+      teamBIds: botMascots.map((mascot) => mascot.id),
+      orderAIds: ownMascots.map((mascot) => mascot.id),
+      orderBIds: botMascots.map((mascot) => mascot.id),
+      orderTurnId: null,
+      phase: "READY",
+      deadline: nextDeadline(),
+      revision: 1,
+      events: [
+        `${player.displayName} iniciou um treino contra o Professor Enguiça (BOT).`,
+        "As equipes rápidas foram equilibradas pela média de nível.",
+      ],
+      battle: null,
+      status: "PREGAME",
+      rankingRecorded: false,
+      botControlled: true,
+      botMascotIds: botMascots.map((mascot) => mascot.id),
+      createdAt: new Date().toISOString(),
+    };
+    await Promise.all([
+      tx.appSetting.deleteMany({
+        where: { key: `${QUEUE_PREFIX}${player.id}` },
+      }),
+      tx.appSetting.create({
+        data: {
+          key: `${MATCH_PREFIX}${id}`,
+          value: match as unknown as Prisma.InputJsonValue,
+        },
+      }),
+      tx.appSetting.create({
+        data: {
+          key: `${PLAYER_MATCH_PREFIX}${player.id}`,
+          value: { matchId: id },
+        },
+      }),
+    ]);
+    return match;
+  });
 }
 
 export async function joinLivePvpQueueAction(targetName?: string) {
