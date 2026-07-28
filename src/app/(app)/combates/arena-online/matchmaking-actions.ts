@@ -316,12 +316,17 @@ export async function getLivePvpLobbyAction() {
 
 export async function getLivePvpMatchAction(includeMascots = true) {
   const player = await requireLivePvpPlayer();
-  const match = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
-    const current = await findCurrentMatch(tx, player.id);
-    await applyPregameTimeout(tx, current);
-    return current;
-  });
+  let match = await prisma.$transaction((tx) =>
+    findCurrentMatch(tx, player.id),
+  );
+  if (!match.battle) {
+    match = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+      const current = await findCurrentMatch(tx, player.id);
+      await applyPregameTimeout(tx, current);
+      return current;
+    });
+  }
   const selectedIds = [
     ...match.teamAIds,
     ...match.teamBIds,
@@ -368,15 +373,19 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     match.playerBName;
   const responseMatch = structuredClone(match);
   if (!includeMascots && responseMatch.battle) {
-    const activeId =
-      player.id === responseMatch.playerAId
-        ? responseMatch.battle.activeAId
-        : responseMatch.battle.activeBId;
+    const activeIds = [
+      responseMatch.battle.activeAId,
+      responseMatch.battle.activeBId,
+    ];
     responseMatch.battle.moves = {
-      [activeId]: responseMatch.battle.moves[activeId] ?? [],
+      ...Object.fromEntries(
+        activeIds.map((id) => [id, responseMatch.battle!.moves[id] ?? []]),
+      ),
     };
     responseMatch.battle.pp = {
-      [activeId]: responseMatch.battle.pp[activeId] ?? {},
+      ...Object.fromEntries(
+        activeIds.map((id) => [id, responseMatch.battle!.pp[id] ?? {}]),
+      ),
     };
   }
   return {
@@ -693,7 +702,7 @@ export async function surrenderLivePvpBattleAction() {
     match.battle.winnerId = otherPlayerId(match, player.id);
     match.battle.logs.push(`${player.displayName} desistiu da batalha.`);
     await saveMatch(tx, match);
-    return match;
+    return { ok: true };
   });
 }
 
