@@ -98,6 +98,67 @@ const ACTIONS: Array<{
       "Mantém a posição final e não realiza ataque, cura ou defesa nesta rodada.",
   },
 ];
+const EVENT_LABELS: Record<string, string> = {
+  MOVE: "MOVENDO",
+  ATTACK: "ATACANDO",
+  HEAL: "CURANDO",
+  DEFEND: "DEFENDENDO",
+  GUARD: "INTERCEPTANDO",
+  BUFF: "IMPULSIONADO",
+  DEBUFF: "INTERFERÊNCIA",
+  MARK: "ALVO MARCADO",
+  SABOTAGE: "SABOTANDO",
+  REDIRECT: "REDIRECIONANDO",
+  PROVOKE: "PROVOCANDO",
+  BYPASS: "FLANQUEANDO",
+  INTERFERENCE: "REAÇÃO BLOQUEADA",
+  SCOUT_BONUS: "ALVO REVELADO",
+  SURVIVE: "SOBREVIVEU",
+  MITIGATE: "DANO REDUZIDO",
+  CONTROL: "ZONA DE CONTROLE",
+  BLOCK: "MOVIMENTO BLOQUEADO",
+  KO: "K.O.",
+};
+const PERCENT_EVENTS = new Set([
+  "DEFEND",
+  "BUFF",
+  "DEBUFF",
+  "MARK",
+  "SABOTAGE",
+  "REDIRECT",
+  "PROVOKE",
+  "BYPASS",
+  "SCOUT_BONUS",
+  "MITIGATE",
+]);
+const TACTICAL_ROLE_DETAILS: Record<CombatRole, string> = {
+  DEFENDER:
+    "Protege aliados a até 2 casas, redireciona uma vez por rodada e recebe redução baseada em Vitalidade. Preparar defesa aumenta a chance e reduz 45% do próximo ataque.",
+  ATTACKER:
+    "Avança sobre alvos fortes, recebe bônus de dano por Força e causa mais 15% contra Defensores.",
+  FLANK:
+    "Ignora o primeiro custo de zona de controle, prioriza inimigos feridos e pode atravessar o redirecionamento do Defensor.",
+  OPPORTUNIST:
+    "Pode aplicar por 3 rodadas uma redução visível em Força, Agilidade, Instinto ou Vitalidade.",
+  ENCOURAGER:
+    "Concede uma aura de dano de até 3 casas. Sabotadores próximos reduzem a aura em 30%.",
+  GUARDIAN:
+    "Intercepta dano de aliados a até 2 casas. Preparar defesa permite duas interceptações e reduz 38% do próximo ataque direto.",
+  DUELIST:
+    "Marca o primeiro rival atingido e recebe 12% adicional nos ataques seguintes contra o mesmo alvo.",
+  SABOTEUR:
+    "Sua aura de 3 casas reduz cura e impulso em 30%; seus ataques podem bloquear a próxima reação de postura.",
+  HEALER:
+    "Cura o aliado ferido de menor percentual de HP a até 3 casas. A cura escala com Carisma, Vitalidade e nível.",
+  SCOUT:
+    "Marca o inimigo mais ferido a até 4 casas. Aliados próximos causam 8% a mais contra o alvo marcado.",
+  PROVOKER:
+    "Pode tomar para si um ataque contra um aliado a até 3 casas e reduz em 8% o dano redirecionado.",
+  SPECIALIST:
+    "Recebe bônus ofensivo baseado no maior atributo atual, incluindo alterações causadas por efeitos.",
+  SURVIVOR:
+    "Reduz dano por Vitalidade, fica mais forte abaixo de 30% de HP e sobrevive uma vez com 1 HP.",
+};
 
 function fallback(
   event: React.SyntheticEvent<HTMLImageElement>,
@@ -649,9 +710,37 @@ export function ArenaOnlineSyncedBattle({
           ? 3
           : 0
     : 0;
+  const postureZoneLabel = selected
+    ? selected.role === "DEFENDER"
+      ? "Zona de redirecionamento"
+      : selected.role === "GUARDIAN"
+        ? "Zona de interceptação"
+        : selected.role === "PROVOKER"
+          ? "Zona de provocação"
+          : selected.role === "HEALER"
+            ? "Alcance de cura"
+            : selected.role === "ENCOURAGER"
+              ? "Aura de impulso"
+              : selected.role === "SABOTEUR"
+                ? "Aura de sabotagem"
+                : selected.role === "SCOUT"
+                  ? "Alcance de marcação"
+                  : null
+    : null;
+  const leavingEnemyControl =
+    !!selected &&
+    selected.role !== "FLANK" &&
+    opponents.some(
+      (enemy) =>
+        enemy.hp > 0 &&
+        Math.abs(enemy.x - selected.x) + Math.abs(enemy.y - selected.y) === 1,
+    );
   const canMoveTo = (x: number, y: number) =>
     !!selected &&
-    Math.abs(x - selected.x) + Math.abs(y - selected.y) <= mobility &&
+    Math.abs(x - selected.x) +
+      Math.abs(y - selected.y) +
+      (leavingEnemyControl && (x !== selected.x || y !== selected.y) ? 1 : 0) <=
+      mobility &&
     (!cell(x, y) || cell(x, y)?.id === selected.id);
   const chooseCell = (x: number, y: number) => {
     if (!selected || ownPending || !isMyTurn) return;
@@ -744,9 +833,13 @@ export function ArenaOnlineSyncedBattle({
           <span className="text-red-300">□ Vermelho: área de ataque</span>
           {protectionRange > 0 && (
             <span className="text-blue-300">
-              ■ Azul: proteção/suporte ({protectionRange})
+              ■ Azul: {postureZoneLabel ?? "proteção/suporte"} (
+              {protectionRange})
             </span>
           )}
+          <span className="text-orange-300">
+            ■ Laranja: zona de controle inimiga; sair custa +1 movimento
+          </span>
           <span className="text-[#FFCB05]">■ Amarelo: destino planejado</span>
         </div>
       )}
@@ -788,19 +881,21 @@ export function ArenaOnlineSyncedBattle({
           </div>
           {activeEvent.amount != null && (
             <span
-              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
+              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
             >
-              {activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF"
-                ? "+"
-                : activeEvent.kind === "DEFEND"
-                  ? "🛡 "
-                  : "−"}
-              {activeEvent.amount}
-              {activeEvent.kind === "DEFEND" ||
+              {activeEvent.kind === "HEAL" ||
               activeEvent.kind === "BUFF" ||
-              activeEvent.kind === "DEBUFF"
-                ? "%"
-                : ""}
+              activeEvent.kind === "SCOUT_BONUS"
+                ? "+"
+                : activeEvent.kind === "DEFEND" ||
+                    activeEvent.kind === "GUARD" ||
+                    activeEvent.kind === "MITIGATE"
+                  ? "🛡 "
+                  : ["ATTACK", "DEBUFF", "SABOTAGE"].includes(activeEvent.kind)
+                    ? "−"
+                    : ""}
+              {activeEvent.amount}
+              {PERCENT_EVENTS.has(activeEvent.kind) ? "%" : ""}
             </span>
           )}
         </div>
@@ -832,6 +927,11 @@ export function ArenaOnlineSyncedBattle({
                   !!unit &&
                   activeEvent?.kind === "KO" &&
                   activeEvent.unitId === unit.id,
+                enemyControlCell = opponents.some(
+                  (enemy) =>
+                    enemy.hp > 0 &&
+                    Math.abs(enemy.x - x) + Math.abs(enemy.y - y) === 1,
+                ),
                 validMove = isMyTurn && !ownPending && canMoveTo(x, y),
                 inAttackArea =
                   !!plannedPosition &&
@@ -866,7 +966,7 @@ export function ArenaOnlineSyncedBattle({
                         : chooseTarget(unit)
                       : chooseCell(x, y)
                   }
-                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
+                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
                   {plannedDestination && (
                     <span className="absolute left-1 top-1 z-10 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
@@ -924,38 +1024,28 @@ export function ArenaOnlineSyncedBattle({
                       </div>
                       {acting && (
                         <span className="absolute -top-2 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded bg-fuchsia-500 px-2 py-0.5 text-[8px] font-black text-white">
-                          {activeEvent?.kind === "ATTACK"
-                            ? "ATACANDO"
-                            : activeEvent?.kind === "KO"
-                              ? "K.O."
-                              : activeEvent?.kind === "HEAL"
-                                ? "CURANDO"
-                                : activeEvent?.kind === "DEFEND"
-                                  ? "DEFENDENDO"
-                                  : activeEvent?.kind === "GUARD"
-                                    ? "INTERCEPTANDO"
-                                    : activeEvent?.kind === "BUFF"
-                                      ? "IMPULSIONADO"
-                                      : activeEvent?.kind === "DEBUFF"
-                                        ? "INTERFERÊNCIA"
-                                        : "POSIÇÃO CONFIRMADA"}
+                          {EVENT_LABELS[activeEvent?.kind ?? ""] ??
+                            activeEvent?.kind}
                         </span>
                       )}
                       {targeted && activeEvent?.amount != null && (
                         <span
-                          className={`absolute -top-3 left-1/2 z-30 -translate-x-1/2 animate-pulse whitespace-nowrap text-base font-black drop-shadow ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
+                          className={`absolute -top-3 left-1/2 z-30 -translate-x-1/2 animate-pulse whitespace-nowrap text-base font-black drop-shadow ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
                         >
                           {activeEvent.kind === "HEAL" ||
-                          activeEvent.kind === "BUFF"
+                          activeEvent.kind === "BUFF" ||
+                          activeEvent.kind === "SCOUT_BONUS"
                             ? "+"
-                            : activeEvent.kind === "GUARD"
+                            : activeEvent.kind === "GUARD" ||
+                                activeEvent.kind === "MITIGATE"
                               ? "🛡 "
-                              : "−"}
+                              : ["ATTACK", "DEBUFF", "SABOTAGE"].includes(
+                                    activeEvent.kind,
+                                  )
+                                ? "−"
+                                : ""}
                           {activeEvent.amount}
-                          {activeEvent.kind === "BUFF" ||
-                          activeEvent.kind === "DEBUFF"
-                            ? "%"
-                            : ""}
+                          {PERCENT_EVENTS.has(activeEvent.kind) ? "%" : ""}
                         </span>
                       )}
                     </>
@@ -989,6 +1079,36 @@ export function ArenaOnlineSyncedBattle({
                   1. Clique em uma célula verde. 2. Escolha a ação. 3. Confira o
                   resumo e confirme todas as ordens.
                 </p>
+                <div className="mt-2 rounded-lg border border-blue-500/25 bg-blue-500/10 p-2 text-[11px] leading-relaxed text-blue-100">
+                  <b className="block text-blue-300">
+                    Efeito tático de {COMBAT_ROLE_LABELS[selected.role]}
+                  </b>
+                  {TACTICAL_ROLE_DETAILS[selected.role]}
+                  {postureZoneLabel && (
+                    <span className="mt-1 block font-bold text-blue-300">
+                      {postureZoneLabel}: {protectionRange} casa(s).
+                    </span>
+                  )}
+                </div>
+                {!!selected.effects?.length && (
+                  <div className="mt-2 space-y-1 rounded-lg border border-purple-500/25 bg-purple-500/10 p-2">
+                    <b className="text-[10px] uppercase tracking-wider text-purple-200">
+                      Efeitos ativos
+                    </b>
+                    {selected.effects.map((effect) => (
+                      <p
+                        key={effect.id}
+                        className="text-[10px] text-purple-100"
+                      >
+                        {effect.kind === "BUFF" ? "↑" : "↓"} {effect.label}
+                        {effect.value > 0
+                          ? ` · ${Math.round(effect.value * 100)}%`
+                          : ""}
+                        {` · ${effect.duration} rodada(s)`}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {orders[selected.id]?.type === "ATTACK" && (
                   <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-200">
                     Clique em um inimigo dentro da área vermelha para definir o

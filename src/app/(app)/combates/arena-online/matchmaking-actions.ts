@@ -940,17 +940,25 @@ function applyTacticalMovement(
         y = unit.y + (x === unit.x ? dy : 0);
       }
     }
+    const leavingEnemyControl =
+      unit.role !== "FLANK" &&
+      enemies.some((enemy) => enemy.hp > 0 && distance(unit, enemy) === 1) &&
+      (x !== unit.x || y !== unit.y);
+    const movementCost =
+      distance(unit, { x, y }) + (leavingEnemyControl ? 1 : 0);
     const valid =
-      x >= 0 &&
-      x < 12 &&
-      y >= 0 &&
-      y < 8 &&
-      distance(unit, { x, y }) <= mobility;
+      x >= 0 && x < 12 && y >= 0 && y < 8 && movementCost <= mobility;
     const destinationOwner = occupied.get(`${x}:${y}`);
     if (!valid || (destinationOwner && destinationOwner !== unit.id)) {
       order.x = unit.x;
       order.y = unit.y;
-      if (valid && destinationOwner)
+      if (!valid && leavingEnemyControl)
+        events.push({
+          unitId: unit.id,
+          kind: "CONTROL",
+          text: `${unit.name} não conseguiu sair da zona de controle inimiga com a mobilidade disponível.`,
+        });
+      else if (valid && destinationOwner)
         events.push({
           unitId: unit.id,
           kind: "BLOCK",
@@ -1071,6 +1079,75 @@ function resolveTacticalRound(match: MatchValue) {
     } else occupied.add(`${move.unit.x}:${move.unit.y}`);
   }
 
+  for (const [scouts, enemies] of [
+    [aliveA(), aliveB()],
+    [aliveB(), aliveA()],
+  ] as const) {
+    for (const scout of scouts.filter((unit) => unit.role === "SCOUT")) {
+      const target = enemies
+        .filter((unit) => distance(scout, unit) <= 4)
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (!target) continue;
+      const markId = `scout:${scout.id}`;
+      const alreadyMarked = target.effects.some(
+        (effect) => effect.id === markId,
+      );
+      for (const enemy of enemies)
+        enemy.effects = enemy.effects.filter((effect) => effect.id !== markId);
+      target.effects.push({
+        id: markId,
+        label: `Marcado por ${scout.name}`,
+        kind: "DEBUFF",
+        value: 0.08,
+        duration: 3,
+      });
+      if (!alreadyMarked)
+        events.push({
+          unitId: scout.id,
+          targetId: target.id,
+          kind: "MARK",
+          text: `${scout.name} marcou ${target.name}; aliados próximos causam 8% a mais de dano nesse alvo.`,
+          amount: 8,
+        });
+    }
+  }
+
+  const reactionBlocked = (unit: TacticalUnit) => {
+    const blocked = unit.effects.find((effect) =>
+      effect.id.startsWith("reaction-block:"),
+    );
+    if (!blocked) return false;
+    unit.effects = unit.effects.filter((effect) => effect.id !== blocked.id);
+    events.push({
+      unitId: unit.id,
+      targetId: unit.id,
+      kind: "INTERFERENCE",
+      text: `${unit.name} perdeu sua reação de postura por Interferência.`,
+    });
+    return true;
+  };
+  const reactionUses = new Map<string, number>();
+  const reactionLimit = (unit: TacticalUnit) =>
+    unit.role === "GUARDIAN" && orders.get(unit.id)?.type === "DEFEND" ? 2 : 1;
+  const reactionAvailable = (unit: TacticalUnit) =>
+    (reactionUses.get(unit.id) ?? 0) < reactionLimit(unit);
+  const recordReaction = (unit: TacticalUnit) =>
+    reactionUses.set(unit.id, (reactionUses.get(unit.id) ?? 0) + 1);
+
+  for (const unit of all) unit.shield = 0;
+  for (const unit of all.filter((entry) => entry.hp > 0)) {
+    if (orders.get(unit.id)?.type !== "DEFEND") continue;
+    unit.shield =
+      unit.role === "DEFENDER" ? 0.45 : unit.role === "GUARDIAN" ? 0.38 : 0.32;
+    events.push({
+      unitId: unit.id,
+      targetId: unit.id,
+      kind: "DEFEND",
+      text: `${unit.name} preparou ${Math.round(unit.shield * 100)}% de defesa para o próximo ataque direto.`,
+      amount: Math.round(unit.shield * 100),
+    });
+  }
+
   const actors = [...all]
     .filter((unit) => unit.hp > 0)
     .sort(
@@ -1080,7 +1157,6 @@ function resolveTacticalRound(match: MatchValue) {
     );
   for (const actor of actors) {
     if (actor.hp <= 0) continue;
-    actor.shield = 0;
     const ownA = battle.teamA.some((entry) => entry.id === actor.id);
     const allies = ownA ? aliveA() : aliveB();
     const enemies = ownA ? aliveB() : aliveA();
@@ -1088,21 +1164,7 @@ function resolveTacticalRound(match: MatchValue) {
     const order = orders.get(actor.id);
     const action = order?.type ?? "AUTO";
     if (action === "WAIT") continue;
-    if (action === "DEFEND") {
-      actor.shield =
-        actor.role === "DEFENDER"
-          ? 0.45
-          : actor.role === "GUARDIAN"
-            ? 0.38
-            : 0.32;
-      events.push({
-        unitId: actor.id,
-        kind: "DEFEND",
-        text: `${actor.name} preparou ${Math.round(actor.shield * 100)}% de defesa.`,
-        amount: Math.round(actor.shield * 100),
-      });
-      continue;
-    }
+    if (action === "DEFEND") continue;
     if (actor.role === "HEALER" && action === "AUTO") {
       const wounded = allies
         .filter(
@@ -1114,12 +1176,27 @@ function resolveTacticalRound(match: MatchValue) {
         )
         .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
       if (wounded) {
-        const amount = Math.max(
+        const saboteur = enemies.find(
+          (unit) => unit.role === "SABOTEUR" && distance(unit, actor) <= 3,
+        );
+        const baseAmount = Math.max(
           15,
           Math.round(
             (actor.charisma * 0.35 + actor.vitality * 0.25 + actor.level) * 2.5,
           ),
         );
+        const amount = Math.max(
+          1,
+          Math.round(baseAmount * (saboteur ? 0.7 : 1)),
+        );
+        if (saboteur)
+          events.push({
+            unitId: saboteur.id,
+            targetId: actor.id,
+            kind: "SABOTAGE",
+            text: `${saboteur.name} reduziu em 30% a cura de ${actor.name}.`,
+            amount: 30,
+          });
         wounded.hp = Math.min(wounded.maxHp, wounded.hp + amount);
         events.push({
           unitId: actor.id,
@@ -1145,34 +1222,107 @@ function resolveTacticalRound(match: MatchValue) {
       (action === "ATTACK" && order?.targetId
         ? candidates.find((unit) => unit.id === order.targetId)
         : null) ?? candidates[0];
+    if (actor.role === "DUELIST") {
+      const marked = candidates.find((unit) =>
+        unit.effects.some((effect) => effect.id === `duelist:${actor.id}`),
+      );
+      if (marked && !order?.targetId) target = marked;
+    }
+    const originalTarget = target;
     const defenders = enemies.filter(
       (unit) =>
-        unit.role === "DEFENDER" && distance(unit, target) <= 2 && unit.hp > 0,
+        unit.role === "DEFENDER" &&
+        distance(unit, target) <= 2 &&
+        unit.hp > 0 &&
+        reactionAvailable(unit) &&
+        !reactionBlocked(unit),
     );
     const defender = defenders[0];
-    if (defender && actor.role !== "FLANK") {
-      const chance = actor.role === "ATTACKER" ? 0.62 : 0.78;
-      if (deterministicRoll(battle.round, actor.id, defender.id) < chance)
+    if (defender && actor.role === "FLANK") {
+      const bypassChance = Math.min(
+        0.82,
+        0.35 + effectiveStat(actor, "agility") / 530,
+      );
+      if (
+        deterministicRoll(battle.round, actor.id, defender.id, "flank") <
+        bypassChance
+      )
+        events.push({
+          unitId: actor.id,
+          targetId: defender.id,
+          kind: "BYPASS",
+          text: `${actor.name} flanqueou a zona de ${defender.name} e manteve o alvo original.`,
+          amount: Math.round(bypassChance * 100),
+        });
+      else target = defender;
+    } else if (defender) {
+      const baseChance = actor.role === "ATTACKER" ? 0.62 : 0.78;
+      const chance = Math.min(
+        0.95,
+        baseChance + (orders.get(defender.id)?.type === "DEFEND" ? 0.2 : 0),
+      );
+      if (deterministicRoll(battle.round, actor.id, defender.id) < chance) {
         target = defender;
+        recordReaction(defender);
+        events.push({
+          unitId: defender.id,
+          targetId: originalTarget.id,
+          kind: "REDIRECT",
+          text: `${defender.name} redirecionou o ataque que iria atingir ${originalTarget.name}.`,
+          amount: Math.round(chance * 100),
+        });
+      }
+    }
+    if (target === originalTarget) {
+      const provoker = enemies.find(
+        (unit) =>
+          unit.role === "PROVOKER" &&
+          unit.id !== target.id &&
+          distance(unit, target) <= 3 &&
+          reactionAvailable(unit) &&
+          !reactionBlocked(unit),
+      );
+      if (provoker) {
+        const chance = Math.min(
+          0.55,
+          0.2 + (provoker.charisma + provoker.instinct) / 850,
+        );
+        if (
+          deterministicRoll(battle.round, actor.id, provoker.id, "provoke") <
+          chance
+        ) {
+          target = provoker;
+          recordReaction(provoker);
+          events.push({
+            unitId: provoker.id,
+            targetId: originalTarget.id,
+            kind: "PROVOKE",
+            text: `${provoker.name} provocou ${actor.name} e tomou o ataque no lugar de ${originalTarget.name}.`,
+            amount: Math.round(chance * 100),
+          });
+        }
+      }
     }
     let roleMult =
       actor.role === "ATTACKER"
         ? 1.08 + Math.min(0.18, actor.force / 420)
         : actor.role === "FLANK"
           ? 1.04 + Math.min(0.14, actor.agility / 500)
-          : actor.role === "SPECIALIST"
-            ? 1.06 +
-              Math.min(
-                0.14,
-                Math.max(
-                  actor.force,
-                  actor.agility,
-                  actor.instinct,
-                  actor.vitality,
-                  actor.charisma,
-                ) / 500,
-              )
-            : 1;
+          : actor.role === "DUELIST"
+            ? 1.06 + Math.min(0.12, actor.force / 520)
+            : actor.role === "SPECIALIST"
+              ? 1.06 +
+                Math.min(
+                  0.14,
+                  Math.max(
+                    actor.force,
+                    actor.agility,
+                    actor.instinct,
+                    actor.vitality,
+                    actor.charisma,
+                  ) / 500,
+                )
+              : 1;
     if (actor.role === "ATTACKER" && target.role === "DEFENDER")
       roleMult *= 1.15;
     if (
@@ -1180,15 +1330,58 @@ function resolveTacticalRound(match: MatchValue) {
       ["ENCOURAGER", "HEALER", "OPPORTUNIST"].includes(target.role)
     )
       roleMult *= 1.12;
-    const encourage = allies
+    if (actor.role === "GUARDIAN") roleMult *= 0.9;
+    if (actor.role === "PROVOKER") roleMult *= 0.92;
+    if (actor.role === "SCOUT") roleMult *= 0.95;
+    if (actor.role === "SURVIVOR" && actor.hp / actor.maxHp < 0.3)
+      roleMult *= 1.15;
+    if (actor.role === "DUELIST") {
+      const markId = `duelist:${actor.id}`;
+      const hasMark = target.effects.some((effect) => effect.id === markId);
+      if (!hasMark) {
+        for (const enemy of enemies)
+          enemy.effects = enemy.effects.filter(
+            (effect) => effect.id !== markId,
+          );
+        target.effects.push({
+          id: markId,
+          label: `Duelo com ${actor.name}`,
+          kind: "DEBUFF",
+          value: 0.12,
+          duration: 5,
+        });
+        events.push({
+          unitId: actor.id,
+          targetId: target.id,
+          kind: "MARK",
+          text: `${actor.name} marcou ${target.name} como rival do duelo.`,
+          amount: 12,
+        });
+      }
+      if (hasMark) roleMult *= 1.12;
+    }
+    const encourager = allies
       .filter(
         (unit) => unit.role === "ENCOURAGER" && distance(unit, actor) <= 3,
       )
-      .reduce(
-        (best, unit) =>
-          Math.max(best, Math.min(0.18, 0.04 + unit.charisma / 650)),
-        0,
-      );
+      .sort((a, b) => b.charisma - a.charisma)[0];
+    const encouragementBase = encourager
+      ? Math.min(0.18, 0.04 + encourager.charisma / 650)
+      : 0;
+    const encouragementSaboteur = encourager
+      ? enemies.find(
+          (unit) => unit.role === "SABOTEUR" && distance(unit, encourager) <= 3,
+        )
+      : null;
+    const encourage = encouragementBase * (encouragementSaboteur ? 0.7 : 1);
+    if (encouragementSaboteur && encourager)
+      events.push({
+        unitId: encouragementSaboteur.id,
+        targetId: encourager.id,
+        kind: "SABOTAGE",
+        text: `${encouragementSaboteur.name} reduziu em 30% a aura de ${encourager.name}.`,
+        amount: 30,
+      });
     if (encourage > 0)
       events.push({
         unitId: actor.id,
@@ -1196,6 +1389,22 @@ function resolveTacticalRound(match: MatchValue) {
         kind: "BUFF",
         text: `${actor.name} recebeu ${Math.round(encourage * 100)}% de impulso de um Encorajador próximo.`,
         amount: Math.round(encourage * 100),
+      });
+    const scoutBonus = allies.some(
+      (scout) =>
+        scout.role === "SCOUT" &&
+        distance(scout, actor) <= 3 &&
+        target.effects.some((effect) => effect.id === `scout:${scout.id}`),
+    )
+      ? 0.08
+      : 0;
+    if (scoutBonus > 0)
+      events.push({
+        unitId: actor.id,
+        targetId: target.id,
+        kind: "SCOUT_BONUS",
+        text: `${actor.name} aproveitou a marca do Batedor contra ${target.name}: +8% de dano.`,
+        amount: 8,
       });
     const typeMult = getPokemonTypes(actor.pokemonId).some(
       (type) =>
@@ -1205,6 +1414,16 @@ function resolveTacticalRound(match: MatchValue) {
     )
       ? 1.3
       : 1;
+    const preparedShield = target.shield;
+    const targetReduction =
+      target.role === "DEFENDER"
+        ? Math.min(0.35, 0.08 + effectiveStat(target, "vitality") / 500)
+        : target.role === "GUARDIAN"
+          ? Math.min(0.2, 0.05 + effectiveStat(target, "vitality") / 750)
+          : target.role === "SURVIVOR"
+            ? Math.min(0.15, effectiveStat(target, "vitality") / 900) +
+              (target.hp / target.maxHp < 0.3 ? 0.25 : 0)
+            : 0;
     let damage = Math.max(
       1,
       Math.round(
@@ -1213,19 +1432,35 @@ function resolveTacticalRound(match: MatchValue) {
           effectiveStat(actor, "instinct") * 0.7 +
           (battle.round % 12)) *
           (1 + encourage) *
+          (1 + scoutBonus) *
           roleMult *
           typeMult -
           (effectiveStat(target, "vitality") * 0.8 + target.level)) *
+          (1 - targetReduction) *
           (1 - target.shield),
       ),
     );
+    if (targetReduction > 0)
+      events.push({
+        unitId: target.id,
+        targetId: target.id,
+        kind: "MITIGATE",
+        text: `${target.name} reduziu ${Math.round(targetReduction * 100)}% do dano com sua postura.`,
+        amount: Math.round(targetReduction * 100),
+      });
+    if (preparedShield > 0) target.shield = 0;
+    if (target.role === "PROVOKER" && target.id !== originalTarget.id)
+      damage = Math.max(1, Math.round(damage * 0.92));
     const guardian = (ownA ? aliveB() : aliveA()).find(
       (unit) =>
         unit.role === "GUARDIAN" &&
         unit.id !== target.id &&
-        distance(unit, target) <= 2,
+        distance(unit, target) <= 2 &&
+        reactionAvailable(unit) &&
+        !reactionBlocked(unit),
     );
     if (guardian) {
+      recordReaction(guardian);
       const absorbed = Math.round(
         damage *
           Math.min(0.4, 0.15 + (guardian.vitality + guardian.charisma) / 600),
@@ -1239,6 +1474,13 @@ function resolveTacticalRound(match: MatchValue) {
         text: `${guardian.name} interceptou ${absorbed} de dano por ${target.name}.`,
         amount: absorbed,
       });
+      if (guardian.hp <= 0)
+        events.push({
+          unitId: guardian.id,
+          targetId: guardian.id,
+          kind: "KO",
+          text: `${guardian.name} foi nocauteado ao interceptar o ataque.`,
+        });
     }
     if (
       target.role === "SURVIVOR" &&
@@ -1247,6 +1489,12 @@ function resolveTacticalRound(match: MatchValue) {
     ) {
       damage = target.hp - 1;
       target.survivorUsed = true;
+      events.push({
+        unitId: target.id,
+        targetId: target.id,
+        kind: "SURVIVE",
+        text: `${target.name} ativou Sobrevivente e resistiu ao golpe fatal com 1 HP.`,
+      });
     }
     target.hp = Math.max(0, target.hp - damage);
     events.push({
@@ -1296,6 +1544,35 @@ function resolveTacticalRound(match: MatchValue) {
           kind: "DEBUFF",
           text: `${actor.name} aplicou ${Math.round(value * 100)}% de Interferência em ${target.name} por 3 rodadas.`,
           amount: Math.round(value * 100),
+        });
+      }
+    }
+    if (actor.role === "SABOTEUR" && target.hp > 0) {
+      const chance = Math.min(
+        0.55,
+        0.18 + (actor.instinct + actor.agility) / 900,
+      );
+      if (
+        deterministicRoll(battle.round, actor.id, target.id, "sabotage") <
+        chance
+      ) {
+        const effectId = `reaction-block:${actor.id}`;
+        target.effects = [
+          ...target.effects.filter((effect) => effect.id !== effectId),
+          {
+            id: effectId,
+            label: "Reação de postura bloqueada",
+            kind: "DEBUFF",
+            value: 1,
+            duration: 3,
+          },
+        ];
+        events.push({
+          unitId: actor.id,
+          targetId: target.id,
+          kind: "SABOTAGE",
+          text: `${actor.name} bloqueou a próxima reação de postura de ${target.name}.`,
+          amount: Math.round(chance * 100),
         });
       }
     }
