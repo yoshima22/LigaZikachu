@@ -969,6 +969,7 @@ export function ArenaOnlineSyncedBattle({
   };
   const chooseCell = (x: number, y: number) => {
     if (!selected || ownPending || !isMyTurn || playbackRunning) return;
+    if (interactionMode !== "MOVE") return;
     if (!canMoveTo(x, y)) {
       toast.error("Célula inválida: fora do alcance ou ocupada por um rival.");
       return;
@@ -1142,11 +1143,12 @@ export function ArenaOnlineSyncedBattle({
           </div>
           {activeEvent.amount != null && (
             <span
-              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
+              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" || activeEvent.kind === "SECRET_EVENT" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
             >
               {activeEvent.kind === "HEAL" ||
               activeEvent.kind === "BUFF" ||
-              activeEvent.kind === "SCOUT_BONUS"
+              activeEvent.kind === "SCOUT_BONUS" ||
+              activeEvent.kind === "SECRET_EVENT"
                 ? "+"
                 : activeEvent.kind === "DEFEND" ||
                     activeEvent.kind === "GUARD" ||
@@ -1161,7 +1163,7 @@ export function ArenaOnlineSyncedBattle({
           )}
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto px-16 py-10">
         <div
           data-tactical-selection-area
           className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2"
@@ -1251,6 +1253,29 @@ export function ArenaOnlineSyncedBattle({
               </div>
             </div>
           )}
+          {activeEvent?.kind === "SECRET_EVENT" && (
+            <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-fuchsia-950/45 backdrop-blur-[2px]">
+              <div className="w-[min(88%,520px)] animate-pulse rounded-2xl border-2 border-fuchsia-300 bg-slate-950/95 px-6 py-5 text-center shadow-[0_0_70px_rgba(217,70,239,.75)]">
+                <p className="font-pixel text-4xl text-fuchsia-300">? → ✦</p>
+                {all.find((unit) => unit.id === activeEvent.unitId) && (
+                  <img
+                    src={
+                      all.find((unit) => unit.id === activeEvent.unitId)!
+                        .spriteUrl
+                    }
+                    alt=""
+                    className="mx-auto mt-2 h-20 w-20 object-contain drop-shadow-[0_0_14px_rgba(232,121,249,.8)]"
+                  />
+                )}
+                <p className="mt-2 text-[10px] font-black uppercase tracking-[.2em] text-fuchsia-300">
+                  Evento secreto revelado
+                </p>
+                <p className="mt-2 text-base font-black text-white">
+                  {activeEvent.text}
+                </p>
+              </div>
+            </div>
+          )}
           {Array.from({ length: 8 }, (_, y) =>
             Array.from({ length: 12 }, (_, x) => {
               const biome = tacticalBiomeAt(
@@ -1326,7 +1351,9 @@ export function ArenaOnlineSyncedBattle({
                           ? chooseCell(x, y)
                           : (setSelectedId(unit.id), setInteractionMode("MENU"))
                         : chooseTarget(unit)
-                      : chooseCell(x, y)
+                      : interactionMode === "MOVE"
+                        ? chooseCell(x, y)
+                        : (setSelectedId(null), setInteractionMode("MENU"))
                   }
                   style={{
                     backgroundColor: biome?.color,
@@ -1397,6 +1424,19 @@ export function ArenaOnlineSyncedBattle({
                       >
                         {owned ? "SEU" : "RIVAL"}
                       </span>
+                      {owned && orders[unit.id] && (
+                        <span
+                          className={`pointer-events-none absolute bottom-0.5 left-0.5 z-[12] rounded px-1 py-0.5 text-[6px] font-black tracking-wider ${orders[unit.id].type === "ATTACK" ? "bg-red-500 text-white" : orders[unit.id].type === "DEFEND" ? "bg-blue-500 text-white" : "bg-emerald-500 text-white"}`}
+                        >
+                          {orders[unit.id].type === "ATTACK"
+                            ? "ATACAR"
+                            : orders[unit.id].type === "DEFEND"
+                              ? "DEFENDER"
+                              : orders[unit.id].type === "WAIT"
+                                ? "MOVER"
+                                : "POSTURA"}
+                        </span>
+                      )}
                       {selectedUnit &&
                         isMyTurn &&
                         !ownPending &&
@@ -1408,6 +1448,15 @@ export function ArenaOnlineSyncedBattle({
                               onClick={(event) => {
                                 event.stopPropagation();
                                 setInteractionMode("MOVE");
+                                setOrders((old) => ({
+                                  ...old,
+                                  [unit.id]: {
+                                    ...(old[unit.id] ?? {}),
+                                    type: "WAIT",
+                                    mascotId: unit.id,
+                                    targetId: undefined,
+                                  },
+                                }));
                               }}
                               onKeyDown={(event) => {
                                 if (
@@ -1417,9 +1466,19 @@ export function ArenaOnlineSyncedBattle({
                                   event.preventDefault();
                                   event.stopPropagation();
                                   setInteractionMode("MOVE");
+                                  setOrders((old) => ({
+                                    ...old,
+                                    [unit.id]: {
+                                      ...(old[unit.id] ?? {}),
+                                      type: "WAIT",
+                                      mascotId: unit.id,
+                                      targetId: undefined,
+                                    },
+                                  }));
                                 }
                               }}
-                              className={`absolute left-1/2 top-0 z-50 -translate-x-1/2 cursor-pointer whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-black shadow-xl ${interactionMode === "MOVE" ? "border-emerald-300 bg-emerald-500 text-white" : "border-emerald-400 bg-slate-950 text-emerald-200 hover:bg-emerald-500/30"}`}
+                              title="Escolher um destino. Sem selecionar Atacar depois, o mascote apenas se movimenta."
+                              className={`absolute -top-9 left-1/2 z-50 -translate-x-1/2 cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-[9px] font-black shadow-xl ${interactionMode === "MOVE" ? "border-emerald-300 bg-emerald-500 text-white" : "border-emerald-400 bg-slate-950 text-emerald-200 hover:bg-emerald-500/30"}`}
                             >
                               Mover
                             </span>
@@ -1438,7 +1497,8 @@ export function ArenaOnlineSyncedBattle({
                                   },
                                 }));
                               }}
-                              className={`absolute left-0 top-1/2 z-50 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-black shadow-xl ${interactionMode === "ATTACK" ? "border-red-300 bg-red-500 text-white" : "border-red-400 bg-slate-950 text-red-200 hover:bg-red-500/30"}`}
+                              title="Forçar um ataque nesta rodada e, opcionalmente, escolher um alvo dentro do alcance."
+                              className={`absolute -left-14 top-1/2 z-50 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-[9px] font-black shadow-xl ${interactionMode === "ATTACK" ? "border-red-300 bg-red-500 text-white" : "border-red-400 bg-slate-950 text-red-200 hover:bg-red-500/30"}`}
                             >
                               Atacar
                             </span>
@@ -1458,7 +1518,8 @@ export function ArenaOnlineSyncedBattle({
                                   },
                                 }));
                               }}
-                              className={`absolute right-0 top-1/2 z-50 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-black shadow-xl ${interactionMode === "DEFEND" ? "border-blue-300 bg-blue-500 text-white" : "border-blue-400 bg-slate-950 text-blue-200 hover:bg-blue-500/30"}`}
+                              title="Sacrificar o ataque desta rodada para preparar redução contra o próximo dano direto."
+                              className={`absolute -right-16 top-1/2 z-50 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-[9px] font-black shadow-xl ${interactionMode === "DEFEND" ? "border-blue-300 bg-blue-500 text-white" : "border-blue-400 bg-slate-950 text-blue-200 hover:bg-blue-500/30"}`}
                             >
                               Defender
                             </span>
@@ -1505,11 +1566,12 @@ export function ArenaOnlineSyncedBattle({
                       )}
                       {targeted && activeEvent?.amount != null && (
                         <span
-                          className={`absolute right-0 top-1/2 z-30 -translate-y-1/2 translate-x-1/2 animate-pulse whitespace-nowrap rounded-lg bg-slate-950/95 px-1.5 py-0.5 text-base font-black shadow-xl ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
+                          className={`absolute right-0 top-1/2 z-30 -translate-y-1/2 translate-x-1/2 animate-pulse whitespace-nowrap rounded-lg bg-slate-950/95 px-1.5 py-0.5 text-base font-black shadow-xl ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" || activeEvent.kind === "SECRET_EVENT" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
                         >
                           {activeEvent.kind === "HEAL" ||
                           activeEvent.kind === "BUFF" ||
-                          activeEvent.kind === "SCOUT_BONUS"
+                          activeEvent.kind === "SCOUT_BONUS" ||
+                          activeEvent.kind === "SECRET_EVENT"
                             ? "+"
                             : activeEvent.kind === "GUARD" ||
                                 activeEvent.kind === "MITIGATE"

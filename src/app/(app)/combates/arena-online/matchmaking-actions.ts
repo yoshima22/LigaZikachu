@@ -376,6 +376,16 @@ async function recordTerrainBattleResult(
   )
     return;
   match.rankingRecorded = true;
+  const administrativePlayers = await tx.player.findMany({
+    where: {
+      id: { in: [match.playerAId, match.playerBId] },
+      user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+    },
+    select: { id: true },
+  });
+  // Partidas de teste ou moderação com qualquer administrador nunca alteram
+  // a classificação pública da Batalha de Terreno.
+  if (administrativePlayers.length) return;
   const winnerId = match.battle.winnerId;
   for (const [playerId, playerName] of [
     [match.playerAId, match.playerAName],
@@ -537,20 +547,31 @@ function asQueue(value: Prisma.JsonValue): QueueValue | null {
 export async function getLivePvpLobbyAction() {
   const player = await requireLivePvpPlayer();
   const cutoff = new Date(Date.now() - ACTIVE_WINDOW_MS);
-  let [queue, matchIndex, rankingRows] = await Promise.all([
-    prisma.appSetting.findMany({
-      where: { key: { startsWith: QUEUE_PREFIX }, updatedAt: { gte: cutoff } },
-      select: { key: true, value: true },
-    }),
-    prisma.appSetting.findUnique({
-      where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
-      select: { value: true },
-    }),
-    prisma.appSetting.findMany({
-      where: { key: { startsWith: TERRAIN_RANKING_PREFIX } },
-      select: { value: true },
-    }),
-  ]);
+  let [queue, matchIndex, rankingRows, administrativePlayers] =
+    await Promise.all([
+      prisma.appSetting.findMany({
+        where: {
+          key: { startsWith: QUEUE_PREFIX },
+          updatedAt: { gte: cutoff },
+        },
+        select: { key: true, value: true },
+      }),
+      prisma.appSetting.findUnique({
+        where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
+        select: { value: true },
+      }),
+      prisma.appSetting.findMany({
+        where: { key: { startsWith: TERRAIN_RANKING_PREFIX } },
+        select: { value: true },
+      }),
+      prisma.player.findMany({
+        where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } },
+        select: { id: true },
+      }),
+    ]);
+  const administrativePlayerIds = new Set(
+    administrativePlayers.map((entry) => entry.id),
+  );
   const ownQueue = queue.find(
     (entry) => entry.key === `${QUEUE_PREFIX}${player.id}`,
   );
@@ -587,7 +608,10 @@ export async function getLivePvpLobbyAction() {
             draws: number;
           },
       )
-      .filter((entry) => !!entry?.playerId)
+      .filter(
+        (entry) =>
+          !!entry?.playerId && !administrativePlayerIds.has(entry.playerId),
+      )
       .sort(
         (a, b) =>
           b.wins - a.wins ||
@@ -1149,9 +1173,22 @@ function activateSecretEvents(
     let label = "Evento secreto ativado";
     let amount = 0;
     if (secret.type === "HEAL") {
-      amount = Math.max(1, Math.round(unit.maxHp * 0.2));
-      unit.hp = Math.min(unit.maxHp, unit.hp + amount);
-      label = `Fonte restauradora: ${unit.name} recuperou ${amount} HP`;
+      const potential = Math.max(1, Math.round(unit.maxHp * 0.2));
+      amount = Math.min(potential, unit.maxHp - unit.hp);
+      if (amount > 0) {
+        unit.hp += amount;
+        label = `Fonte restauradora: ${unit.name} recuperou ${amount} HP`;
+      } else {
+        unit.effects.push({
+          id: `secret:ward:${secret.id}`,
+          label: "Fonte transbordante: −15% de dano recebido por 3 rodadas",
+          kind: "BUFF",
+          value: 0.15,
+          duration: 4,
+        });
+        amount = 15;
+        label = `${unit.name} já estava com HP máximo e recebeu 15% de proteção por 3 rodadas`;
+      }
     } else {
       const config =
         secret.type === "POWER"
@@ -1262,20 +1299,6 @@ function applyTacticalMovement(
       fogPenalty;
     let x = order.x ?? unit.x,
       y = order.y ?? unit.y;
-    if (order.type === "AUTO" && order.x == null && order.y == null) {
-      const target = nearest(
-        unit,
-        enemies.filter((entry) => entry.hp > 0),
-      );
-      if (target) {
-        const dx = Math.sign(target.x - unit.x),
-          dy = Math.sign(target.y - unit.y);
-        x =
-          unit.x +
-          (Math.abs(target.x - unit.x) >= Math.abs(target.y - unit.y) ? dx : 0);
-        y = unit.y + (x === unit.x ? dy : 0);
-      }
-    }
     const leavingEnemyControl =
       unit.role !== "FLANK" &&
       enemies.some((enemy) => enemy.hp > 0 && distance(unit, enemy) === 1) &&
@@ -1396,7 +1419,7 @@ function resolveTacticalRound(match: MatchValue) {
   const aliveB = () => battle.teamB.filter((unit) => unit.hp > 0);
   const events: TacticalBattleEvent[] = [
     ...battle.lastEvents.filter((event) =>
-      ["MOVE", "BLOCK"].includes(event.kind),
+      ["MOVE", "BLOCK", "CONTROL", "SECRET_EVENT"].includes(event.kind),
     ),
   ];
 
@@ -2268,7 +2291,9 @@ export async function submitLivePvpBattleAction(
       sideA ? battle.teamB : battle.teamA,
       normalized,
     );
-    battle.lastEvents = movementEvents;
+    const previousMovementEvents =
+      battle.pendingA || battle.pendingB ? battle.lastEvents : [];
+    battle.lastEvents = [...previousMovementEvents, ...movementEvents];
     battle.logs.push(
       `${player.displayName} concluiu a movimentação da rodada ${battle.round}.`,
       ...movementEvents.map((event) => event.text),

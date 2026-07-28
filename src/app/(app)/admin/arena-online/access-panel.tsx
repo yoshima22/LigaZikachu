@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { LivePvpAccessConfig } from "@/lib/live-pvp-access";
 import { TACTICAL_BIOMES, type TacticalBiomeId } from "@/lib/tactical-arena";
 import {
+  resetTerrainBattleRankingAction,
   updateLivePvpAccessAction,
   updateLivePvpBiomeImageAction,
 } from "./access-actions";
@@ -60,6 +61,26 @@ export function LivePvpAccessPanel({
       setBiomeImages((current) => ({ ...current, [biomeId]: image }));
     };
     reader.readAsDataURL(file);
+  };
+  const resetRanking = () => {
+    if (
+      !window.confirm(
+        "Zerar todas as vitórias, derrotas e empates da Batalha de Terreno?",
+      )
+    )
+      return;
+    startTransition(async () => {
+      try {
+        const result = await resetTerrainBattleRankingAction();
+        toast.success(
+          `Ranking zerado. ${result.deletedEntries} registro(s) removido(s).`,
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Falha ao zerar ranking.",
+        );
+      }
+    });
   };
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
@@ -120,6 +141,22 @@ export function LivePvpAccessPanel({
             );
           })}
         </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/25 bg-red-500/5 p-3">
+        <div>
+          <b className="text-sm text-white">Ranking do Beta</b>
+          <p className="mt-1 text-[10px] text-slate-400">
+            Partidas que envolvam ADMIN ou SUPER ADMIN não entram no ranking.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={resetRanking}
+          className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-200 disabled:opacity-40"
+        >
+          Resetar ranking
+        </button>
       </div>
       <div className="mt-4 rounded-xl border border-emerald-500/20 bg-slate-950/70 p-3">
         <div className="mb-3">

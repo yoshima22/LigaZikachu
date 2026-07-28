@@ -11,6 +11,8 @@ import {
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { TACTICAL_BIOMES, type TacticalBiomeId } from "@/lib/tactical-arena";
 
+const TERRAIN_RANKING_PREFIX = "terrain_battle_ranking:";
+
 export async function updateLivePvpAccessAction(input: {
   enabledGlobally?: boolean;
   playerId?: string;
@@ -88,4 +90,26 @@ export async function updateLivePvpBiomeImageAction(input: {
   ]);
   revalidatePath("/admin/arena-online");
   return { ok: true, config: value };
+}
+
+export async function resetTerrainBattleRankingAction() {
+  const admin = await requireAdmin();
+  const result = await prisma.$transaction(async (tx) => {
+    const deleted = await tx.appSetting.deleteMany({
+      where: { key: { startsWith: TERRAIN_RANKING_PREFIX } },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: admin.id,
+        entityType: "TERRAIN_BATTLE_RANKING",
+        entityId: "beta",
+        action: "RESET",
+        after: { deletedEntries: deleted.count },
+      },
+    });
+    return deleted.count;
+  });
+  revalidatePath("/combates/arena-online");
+  revalidatePath("/admin/arena-online");
+  return { ok: true, deletedEntries: result };
 }
