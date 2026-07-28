@@ -47,12 +47,16 @@ export function ArenaOnlineSyncedBattle({
   identity: { playerId: string; playerName: string };
 }) {
   const [match, setMatch] = useState<LivePvpMatchValue | null>(null);
+  const [seconds, setSeconds] = useState(30);
   const [pending, startTransition] = useTransition();
   const logRef = useRef<HTMLDivElement>(null);
   const refresh = async () => {
-    const state = await getLivePvpMatchAction();
+    const state = await getLivePvpMatchAction(false);
     setMatch(state.match);
-    if (!state.match.battle) setMatch(await initializeLivePvpBattleAction());
+    if (!state.match.battle) {
+      await initializeLivePvpBattleAction();
+      setMatch((await getLivePvpMatchAction(false)).match);
+    }
   };
   useEffect(() => {
     void refresh();
@@ -65,6 +69,21 @@ export function ArenaOnlineSyncedBattle({
       behavior: "smooth",
     });
   }, [match?.battle?.logs.length]);
+  useEffect(() => {
+    if (!match?.battle) return;
+    const update = () =>
+      setSeconds(
+        Math.max(
+          0,
+          Math.ceil(
+            (new Date(match.battle!.deadline).getTime() - Date.now()) / 1000,
+          ),
+        ),
+      );
+    update();
+    const timer = setInterval(update, 500);
+    return () => clearInterval(timer);
+  }, [match?.battle?.deadline]);
   if (!match?.battle)
     return (
       <div className="rounded-xl border border-cyan-500/25 p-8 text-center text-cyan-200">
@@ -73,13 +92,15 @@ export function ArenaOnlineSyncedBattle({
     );
   const battle = match.battle;
   const sideA = identity.playerId === match.playerAId;
-  const myTurn = battle.choiceTurnId === identity.playerId && !battle.winnerId;
+  const ownPending = sideA ? battle.pendingA : battle.pendingB;
+  const myTurn = !ownPending && !battle.winnerId;
   const activeA = battle.teamA.find((f) => f.id === battle.activeAId)!;
   const activeB = battle.teamB.find((f) => f.id === battle.activeBId)!;
-  const act = (fn: () => Promise<LivePvpMatchValue>) =>
+  const act = (fn: () => Promise<unknown>) =>
     startTransition(async () => {
       try {
-        setMatch(await fn());
+        await fn();
+        await refresh();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Ação recusada.");
       }
@@ -151,12 +172,15 @@ export function ArenaOnlineSyncedBattle({
             Round {battle.round} · {match.playerAName} × {match.playerBName}
           </h2>
         </div>
-        <span className="text-xs text-slate-400">
+        <span className="text-right text-xs text-slate-400">
           {battle.winnerId
             ? `${battle.winnerId === match.playerAId ? match.playerAName : match.playerBName} venceu`
             : myTurn
               ? "Sua vez"
-              : `Aguardando ${battle.choiceTurnId === match.playerAId ? match.playerAName : match.playerBName}`}
+              : `Ação confirmada · aguardando ${sideA ? match.playerBName : match.playerAName}`}
+          {!battle.winnerId && (
+            <b className="ml-3 font-pixel text-lg text-[#FFCB05]">{seconds}s</b>
+          )}
         </span>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -227,6 +251,12 @@ export function ArenaOnlineSyncedBattle({
               ))}
             </div>
           </div>
+        </div>
+      )}
+      {!myTurn && !battle.winnerId && (
+        <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4 text-center text-xs text-cyan-100">
+          Sua ação foi registrada. Aguardando a escolha de{" "}
+          {sideA ? match.playerBName : match.playerAName}.
         </div>
       )}
       <div

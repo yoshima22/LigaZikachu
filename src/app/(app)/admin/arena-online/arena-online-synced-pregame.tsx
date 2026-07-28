@@ -170,7 +170,7 @@ export function ArenaOnlineSyncedPregame({
       return;
     animatedCoinRevision.current = match.revision;
     setCoinAnimating(true);
-    const timer = setTimeout(() => setCoinAnimating(false), 1900);
+    const timer = setTimeout(() => setCoinAnimating(false), 4200);
     return () => clearTimeout(timer);
   }, [match.coinChoice, match.phase, match.revision]);
   useEffect(() => {
@@ -314,6 +314,9 @@ export function ArenaOnlineSyncedPregame({
               ? match.playerAName
               : match.playerBName}
             ...
+          </p>
+          <p className="mt-2 text-lg font-black text-[#FFCB05]">
+            Resultado: {match.coinResult}
           </p>
           <style jsx>{`
             @keyframes coinSync {

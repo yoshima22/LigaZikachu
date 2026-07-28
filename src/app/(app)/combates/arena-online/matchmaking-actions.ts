@@ -68,6 +68,7 @@ export type LivePvpBattleState = {
   pp: Record<string, Record<number, number>>;
   pendingA: LivePvpBattleAction | null;
   pendingB: LivePvpBattleAction | null;
+  deadline: string;
   choiceTurnId: string;
   roundStarterId: string;
   winnerId: string | null;
@@ -79,7 +80,7 @@ type MatchValue = LivePvpMatchValue;
 
 const nextDeadline = () => new Date(Date.now() + 30_000).toISOString();
 function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
-  return {
+  const match = {
     coinChoice: null,
     coinWinnerId: null,
     firstPickerId: null,
@@ -97,6 +98,9 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     battle: null,
     ...raw,
   } as MatchValue;
+  if (match.battle && !match.battle.deadline)
+    match.battle.deadline = nextDeadline();
+  return match;
 }
 
 function fighterFromMascot(mascot: {
@@ -310,7 +314,7 @@ export async function getLivePvpLobbyAction() {
   };
 }
 
-export async function getLivePvpMatchAction() {
+export async function getLivePvpMatchAction(includeMascots = true) {
   const player = await requireLivePvpPlayer();
   const match = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
@@ -324,33 +328,34 @@ export async function getLivePvpMatchAction() {
     ...match.orderAIds,
     ...match.orderBIds,
   ];
-  const selectedMascots = selectedIds.length
-    ? await prisma.mascot.findMany({
-        where: { id: { in: [...new Set(selectedIds)] } },
-        select: {
-          id: true,
-          nickname: true,
-          pokemonId: true,
-          level: true,
-          statForce: true,
-          statAgility: true,
-          statCharisma: true,
-          statInstinct: true,
-          statVitality: true,
-          performanceTag: true,
-          playerId: true,
-          isShiny: true,
-          player: {
-            select: {
-              displayName: true,
-              avatarUrl: true,
-              mascotSpritePreference: true,
-              megaSpritePreference: true,
+  const selectedMascots =
+    includeMascots && selectedIds.length
+      ? await prisma.mascot.findMany({
+          where: { id: { in: [...new Set(selectedIds)] } },
+          select: {
+            id: true,
+            nickname: true,
+            pokemonId: true,
+            level: true,
+            statForce: true,
+            statAgility: true,
+            statCharisma: true,
+            statInstinct: true,
+            statVitality: true,
+            performanceTag: true,
+            playerId: true,
+            isShiny: true,
+            player: {
+              select: {
+                displayName: true,
+                avatarUrl: true,
+                mascotSpritePreference: true,
+                megaSpritePreference: true,
+              },
             },
           },
-        },
-      })
-    : [];
+        })
+      : [];
   const participants = await prisma.player.findMany({
     where: { id: { in: [match.playerAId, match.playerBId] } },
     select: { id: true, displayName: true },
@@ -361,8 +366,21 @@ export async function getLivePvpMatchAction() {
   match.playerBName =
     participants.find((entry) => entry.id === match.playerBId)?.displayName ??
     match.playerBName;
+  const responseMatch = structuredClone(match);
+  if (!includeMascots && responseMatch.battle) {
+    const activeId =
+      player.id === responseMatch.playerAId
+        ? responseMatch.battle.activeAId
+        : responseMatch.battle.activeBId;
+    responseMatch.battle.moves = {
+      [activeId]: responseMatch.battle.moves[activeId] ?? [],
+    };
+    responseMatch.battle.pp = {
+      [activeId]: responseMatch.battle.pp[activeId] ?? {},
+    };
+  }
   return {
-    match,
+    match: responseMatch,
     viewerId: player.id,
     selectedMascots: selectedMascots.map((mascot) => ({
       id: mascot.id,
@@ -569,6 +587,7 @@ export async function initializeLivePvpBattleAction() {
       pp,
       pendingA: null,
       pendingB: null,
+      deadline: nextDeadline(),
       choiceTurnId: starter,
       roundStarterId: starter,
       winnerId: null,
@@ -590,9 +609,9 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
     const battle = match.battle;
     if (!battle || battle.winnerId)
       throw new Error("A batalha não está aceitando ações.");
-    if (battle.choiceTurnId !== player.id)
-      throw new Error("Aguarde a ação do adversário.");
     const sideA = player.id === match.playerAId;
+    if (sideA ? battle.pendingA : battle.pendingB)
+      throw new Error("Sua ação desta rodada já foi confirmada.");
     const team = sideA ? battle.teamA : battle.teamB;
     const activeId = sideA ? battle.activeAId : battle.activeBId;
     if (action.type === "MOVE") {
@@ -608,12 +627,10 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
     }
     if (sideA) battle.pendingA = action;
     else battle.pendingB = action;
-    const other = otherPlayerId(match, player.id);
     if (!battle.pendingA || !battle.pendingB) {
-      battle.choiceTurnId = other;
       battle.logs.push(`${player.displayName} confirmou uma ação.`);
       await saveMatch(tx, match);
-      return match;
+      return { ok: true };
     }
     const actionA = battle.pendingA;
     const actionB = battle.pendingB;
@@ -658,10 +675,11 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
     battle.pendingA = null;
     battle.pendingB = null;
     battle.round += 1;
+    battle.deadline = nextDeadline();
     battle.roundStarterId = otherPlayerId(match, battle.roundStarterId);
     battle.choiceTurnId = battle.roundStarterId;
     await saveMatch(tx, match);
-    return match;
+    return { ok: true };
   });
 }
 

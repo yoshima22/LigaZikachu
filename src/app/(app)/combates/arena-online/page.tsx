@@ -24,9 +24,7 @@ export default async function LivePvpPage() {
 
   const [mascots, accessPlayers] = await Promise.all([
     prisma.mascot.findMany({
-      where: admin
-        ? { player: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } } }
-        : { playerId: player.id },
+      where: { playerId: player.id },
       orderBy: [{ level: "desc" }, { nickname: "asc" }],
       take: 500,
       select: {
