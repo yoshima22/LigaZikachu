@@ -146,6 +146,7 @@ export default async function AppLayout({
     getLivePvpAccessConfig().catch(() => ({
       enabledGlobally: false,
       allowedPlayerIds: [],
+      biomeImages: {},
     })),
   ]);
   const livePvpVisible = canAccessLivePvp(

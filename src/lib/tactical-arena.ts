@@ -12,6 +12,7 @@ export type TacticalBiome = {
   favoredTypes: string[];
   penalizedTypes: string[];
   color: string;
+  imageUrl?: string;
 };
 
 export const TACTICAL_BIOMES: TacticalBiome[] = [
@@ -66,10 +67,14 @@ function hash(text: string) {
   return value >>> 0;
 }
 
-export function createTacticalBiomes(seed: string) {
+export function createTacticalBiomes(
+  seed: string,
+  images: Partial<Record<TacticalBiomeId, string>> = {},
+) {
   return [...TACTICAL_BIOMES]
     .sort((a, b) => hash(`${seed}:${a.id}`) - hash(`${seed}:${b.id}`))
-    .slice(0, 4);
+    .slice(0, 4)
+    .map((biome) => ({ ...biome, imageUrl: images[biome.id] || undefined }));
 }
 
 export function tacticalBiomeAt(biomes: TacticalBiome[], x: number, y: number) {

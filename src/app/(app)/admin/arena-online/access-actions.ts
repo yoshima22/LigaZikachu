@@ -8,6 +8,8 @@ import {
   getLivePvpAccessConfig,
   LIVE_PVP_ACCESS_KEY,
 } from "@/lib/live-pvp-access";
+import { uploadDataUrlAsset } from "@/lib/asset-storage";
+import { TACTICAL_BIOMES, type TacticalBiomeId } from "@/lib/tactical-arena";
 
 export async function updateLivePvpAccessAction(input: {
   enabledGlobally?: boolean;
@@ -24,6 +26,7 @@ export async function updateLivePvpAccessAction(input: {
   const value = {
     enabledGlobally: input.enabledGlobally ?? current.enabledGlobally,
     allowedPlayerIds: [...allowed],
+    biomeImages: current.biomeImages,
   };
   await prisma.$transaction([
     prisma.appSetting.upsert({
@@ -43,6 +46,46 @@ export async function updateLivePvpAccessAction(input: {
     }),
   ]);
   revalidatePath("/combates/arena-online");
+  revalidatePath("/admin/arena-online");
+  return { ok: true, config: value };
+}
+
+export async function updateLivePvpBiomeImageAction(input: {
+  biomeId: TacticalBiomeId;
+  image: string;
+}) {
+  const admin = await requireAdmin();
+  if (!TACTICAL_BIOMES.some((biome) => biome.id === input.biomeId))
+    throw new Error("Bioma inválido.");
+  const current = await getLivePvpAccessConfig();
+  const image = input.image.trim()
+    ? await uploadDataUrlAsset(
+        input.image.trim(),
+        "arena-online/biomas",
+        input.biomeId,
+      )
+    : "";
+  const value = {
+    ...current,
+    biomeImages: { ...current.biomeImages, [input.biomeId]: image },
+  };
+  await prisma.$transaction([
+    prisma.appSetting.upsert({
+      where: { key: LIVE_PVP_ACCESS_KEY },
+      create: { key: LIVE_PVP_ACCESS_KEY, value },
+      update: { value },
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorUserId: admin.id,
+        entityType: "LIVE_PVP_BIOME",
+        entityId: input.biomeId,
+        action: "UPDATE_IMAGE",
+        before: current as unknown as Prisma.InputJsonValue,
+        after: value as unknown as Prisma.InputJsonValue,
+      },
+    }),
+  ]);
   revalidatePath("/admin/arena-online");
   return { ok: true, config: value };
 }

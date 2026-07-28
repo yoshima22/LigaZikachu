@@ -525,6 +525,8 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     ...match.teamBIds,
     ...match.orderAIds,
     ...match.orderBIds,
+    ...match.bansByAIds,
+    ...match.bansByBIds,
   ];
   const selectedMascots =
     includeMascots && (selectedIds.length || match.phase === "BAN")
@@ -1025,6 +1027,8 @@ function applyTacticalMovement(
       .filter((unit) => unit.hp > 0)
       .map((unit) => [`${unit.x}:${unit.y}`, unit.id]),
   );
+  const alliedIds = new Set(team.map((unit) => unit.id));
+  const claimedDestinations = new Set<string>();
   for (const unit of [...team]
     .filter((entry) => entry.hp > 0)
     .sort(
@@ -1073,7 +1077,23 @@ function applyTacticalMovement(
     const valid =
       x >= 0 && x < 12 && y >= 0 && y < 8 && movementCost <= mobility;
     const destinationOwner = occupied.get(`${x}:${y}`);
-    if (!valid || (destinationOwner && destinationOwner !== unit.id)) {
+    const destinationOwnerOrder = destinationOwner
+      ? orders.find((entry) => entry.mascotId === destinationOwner)
+      : null;
+    const alliedOwnerWillVacate =
+      !!destinationOwner &&
+      alliedIds.has(destinationOwner) &&
+      !!destinationOwnerOrder &&
+      ((destinationOwnerOrder.x ?? x) !== x ||
+        (destinationOwnerOrder.y ?? y) !== y);
+    const destinationClaimed = claimedDestinations.has(`${x}:${y}`);
+    if (
+      !valid ||
+      destinationClaimed ||
+      (destinationOwner &&
+        destinationOwner !== unit.id &&
+        !alliedOwnerWillVacate)
+    ) {
       order.x = unit.x;
       order.y = unit.y;
       if (!valid && leavingEnemyControl)
@@ -1105,6 +1125,7 @@ function applyTacticalMovement(
     unit.y = y;
     order.x = x;
     order.y = y;
+    claimedDestinations.add(`${x}:${y}`);
     occupied.set(`${x}:${y}`, unit.id);
   }
   return events;
@@ -1811,6 +1832,7 @@ function resolveTacticalRound(match: MatchValue) {
 
 export async function initializeLivePvpBattleAction() {
   const player = await requireLivePvpPlayer();
+  const arenaConfig = await getLivePvpAccessConfig();
   const current = await prisma.$transaction((tx) =>
     findCurrentMatch(tx, player.id),
   );
@@ -1860,7 +1882,7 @@ export async function initializeLivePvpBattleAction() {
         `${match.playerAName} e ${match.playerBName} entraram na Arena Tática.`,
       ],
       lastEvents: [],
-      biomes: createTacticalBiomes(match.id),
+      biomes: createTacticalBiomes(match.id, arenaConfig.biomeImages),
     };
     await saveMatch(tx, match);
     return { ok: true };

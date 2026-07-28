@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { LivePvpAccessConfig } from "@/lib/live-pvp-access";
-import { updateLivePvpAccessAction } from "./access-actions";
+import { TACTICAL_BIOMES, type TacticalBiomeId } from "@/lib/tactical-arena";
+import {
+  updateLivePvpAccessAction,
+  updateLivePvpBiomeImageAction,
+} from "./access-actions";
 
 type PlayerAccessOption = { id: string; displayName: string; email: string };
 
@@ -16,6 +20,7 @@ export function LivePvpAccessPanel({
 }) {
   const [config, setConfig] = useState(initialConfig);
   const [search, setSearch] = useState("");
+  const [biomeImages, setBiomeImages] = useState(initialConfig.biomeImages);
   const [pending, startTransition] = useTransition();
   const visible = players.filter((player) =>
     `${player.displayName} ${player.email}`
@@ -30,6 +35,32 @@ export function LivePvpAccessPanel({
         toast.success("Acesso à Arena Online atualizado.");
       }
     });
+  const saveBiome = (biomeId: TacticalBiomeId, image: string) =>
+    startTransition(async () => {
+      try {
+        const result = await updateLivePvpBiomeImageAction({ biomeId, image });
+        setConfig(result.config);
+        setBiomeImages(result.config.biomeImages);
+        toast.success("Imagem do bioma atualizada.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Falha ao salvar imagem.",
+        );
+      }
+    });
+  const readBiomeFile = (biomeId: TacticalBiomeId, file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Selecione uma imagem válida.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result ?? "");
+      setBiomeImages((current) => ({ ...current, [biomeId]: image }));
+    };
+    reader.readAsDataURL(file);
+  };
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -85,6 +116,84 @@ export function LivePvpAccessPanel({
                 >
                   {allowed ? "Remover acesso" : "Liberar teste"}
                 </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-4 rounded-xl border border-emerald-500/20 bg-slate-950/70 p-3">
+        <div className="mb-3">
+          <b className="text-sm text-white">Texturas dos biomas</b>
+          <p className="mt-1 text-[10px] text-slate-400">
+            As imagens aparecem opacas sob as casas do grid. É possível enviar
+            um arquivo ou cadastrar uma URL pública.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {TACTICAL_BIOMES.map((biome) => {
+            const image = biomeImages[biome.id] ?? "";
+            return (
+              <div
+                key={biome.id}
+                className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900"
+              >
+                <div
+                  className="relative h-24 bg-cover bg-center"
+                  style={{
+                    backgroundColor: biome.color,
+                    backgroundImage: image
+                      ? `linear-gradient(rgba(2,6,23,.62), rgba(2,6,23,.62)), url(${image})`
+                      : undefined,
+                  }}
+                >
+                  <b className="absolute bottom-2 left-3 text-xs text-white">
+                    {biome.name}
+                  </b>
+                </div>
+                <div className="space-y-2 p-3">
+                  <input
+                    value={image.startsWith("data:") ? "" : image}
+                    onChange={(event) =>
+                      setBiomeImages((current) => ({
+                        ...current,
+                        [biome.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="https://..."
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-[10px] text-white"
+                  />
+                  <div className="flex gap-2">
+                    <label className="flex-1 cursor-pointer rounded border border-cyan-500/30 px-2 py-1.5 text-center text-[9px] font-bold text-cyan-200">
+                      Escolher arquivo
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className="hidden"
+                        onChange={(event) =>
+                          readBiomeFile(biome.id, event.target.files?.[0])
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => saveBiome(biome.id, image)}
+                      className="rounded bg-emerald-500 px-3 py-1.5 text-[9px] font-black text-slate-950 disabled:opacity-40"
+                    >
+                      Salvar
+                    </button>
+                    {!!image && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => saveBiome(biome.id, "")}
+                        className="rounded border border-red-500/30 px-2 py-1.5 text-[9px] text-red-300"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })}

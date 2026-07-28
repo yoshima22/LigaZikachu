@@ -243,12 +243,20 @@ export function ArenaOnlineSyncedPregame({
   const tags = [
     ...new Set(sourceMascots.map((mascot) => mascot.performanceTag)),
   ].sort();
-  const filtered = available.filter(
-    (mascot) =>
-      (!search || mascot.name.toLowerCase().includes(search.toLowerCase())) &&
-      (type === "ALL" || mascot.types.includes(type)) &&
-      (tag === "ALL" || mascot.performanceTag === tag),
-  );
+  const strength = (mascot: MascotOption) =>
+    mascot.statForce +
+    mascot.statAgility +
+    mascot.statCharisma +
+    mascot.statInstinct +
+    mascot.statVitality;
+  const filtered = available
+    .filter(
+      (mascot) =>
+        (!search || mascot.name.toLowerCase().includes(search.toLowerCase())) &&
+        (type === "ALL" || mascot.types.includes(type)) &&
+        (tag === "ALL" || mascot.performanceTag === tag),
+    )
+    .sort((a, b) => strength(b) - strength(a) || b.level - a.level);
   const pages = Math.max(1, Math.ceil(filtered.length / 12));
   const visible = filtered.slice(
     (Math.min(page, pages) - 1) * 12,
@@ -296,8 +304,8 @@ export function ArenaOnlineSyncedPregame({
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {(
             [
-              [match.playerAName, match.bansByAIds, match.banLimitA],
-              [match.playerBName, match.bansByBIds, match.banLimitB],
+              [match.playerAName, match.bansByBIds, match.banLimitB],
+              [match.playerBName, match.bansByAIds, match.banLimitA],
             ] as const
           ).map(([name, ids, limit]) => (
             <div
@@ -305,13 +313,29 @@ export function ArenaOnlineSyncedPregame({
               className="rounded-xl border border-red-500/25 bg-red-500/5 p-3"
             >
               <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-red-300">
-                Bans de {name} · {ids.length}/{limit}
+                Banidos de {name} · {ids.length}/{limit}
               </p>
               <div className="grid gap-2 sm:grid-cols-3">
-                {ids.map(
-                  (id) =>
-                    byId(id) && <MascotChip key={id} mascot={byId(id)!} />,
-                )}
+                {[...ids]
+                  .sort((a, b) => {
+                    const first = byId(a),
+                      second = byId(b);
+                    return first && second
+                      ? strength(second) - strength(first)
+                      : 0;
+                  })
+                  .map((id) =>
+                    byId(id) ? (
+                      <MascotChip key={id} mascot={byId(id)!} />
+                    ) : (
+                      <div
+                        key={id}
+                        className="rounded-lg border border-red-500/20 bg-red-950/20 p-2 text-[9px] text-red-200"
+                      >
+                        Mascote banido indisponível
+                      </div>
+                    ),
+                  )}
                 {!ids.length && (
                   <span className="text-[10px] text-slate-600">
                     Nenhum ban confirmado.

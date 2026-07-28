@@ -279,6 +279,16 @@ export function ArenaOnlineSyncedBattle({
     : null;
   const isMyTurn = !!battle && battle.turnPlayerId === identity.playerId;
   useEffect(() => {
+    if (!selectedId) return;
+    const clearSelection = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!isMyTurn || !target?.closest("[data-tactical-selection-area]"))
+        setSelectedId(null);
+    };
+    document.addEventListener("mousedown", clearSelection);
+    return () => document.removeEventListener("mousedown", clearSelection);
+  }, [selectedId, isMyTurn]);
+  useEffect(() => {
     setOrders({});
     setSelectedId(null);
   }, [battle?.round]);
@@ -551,7 +561,14 @@ export function ArenaOnlineSyncedBattle({
                           type="button"
                           disabled={!validZone}
                           onClick={() => placeMascot(x, y)}
-                          style={{ backgroundColor: biome?.color }}
+                          style={{
+                            backgroundColor: biome?.color,
+                            backgroundImage: biome?.imageUrl
+                              ? `linear-gradient(rgba(2,6,23,.65), rgba(2,6,23,.65)), url(${biome.imageUrl})`
+                              : undefined,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }}
                           className={`relative aspect-square min-h-14 rounded border ${validZone ? (placementSelected ? "border-[#FFCB05] bg-[#FFCB05]/10 hover:bg-[#FFCB05]/25" : "border-cyan-500/40 bg-cyan-500/10") : "border-slate-800 bg-slate-950/70 opacity-35"}`}
                         >
                           {!unit && biome && (
@@ -889,13 +906,26 @@ export function ArenaOnlineSyncedBattle({
         enemy.hp > 0 &&
         Math.abs(enemy.x - selected.x) + Math.abs(enemy.y - selected.y) === 1,
     );
-  const canMoveTo = (x: number, y: number) =>
-    !!selected &&
-    Math.abs(x - selected.x) +
-      Math.abs(y - selected.y) +
-      (leavingEnemyControl && (x !== selected.x || y !== selected.y) ? 1 : 0) <=
-      mobility &&
-    (!cell(x, y) || cell(x, y)?.id === selected.id);
+  const canMoveTo = (x: number, y: number) => {
+    if (!selected) return false;
+    const occupant = cell(x, y);
+    const occupantOrder = occupant ? orders[occupant.id] : null;
+    const alliedOccupantWillVacate =
+      !!occupant &&
+      mine.some((unit) => unit.id === occupant.id) &&
+      !!occupantOrder &&
+      ((occupantOrder.x ?? occupant.x) !== occupant.x ||
+        (occupantOrder.y ?? occupant.y) !== occupant.y);
+    return (
+      Math.abs(x - selected.x) +
+        Math.abs(y - selected.y) +
+        (leavingEnemyControl && (x !== selected.x || y !== selected.y)
+          ? 1
+          : 0) <=
+        mobility &&
+      (!occupant || occupant.id === selected.id || alliedOccupantWillVacate)
+    );
+  };
   const chooseCell = (x: number, y: number) => {
     if (!selected || ownPending || !isMyTurn || playbackRunning) return;
     if (!canMoveTo(x, y)) {
@@ -1050,6 +1080,7 @@ export function ArenaOnlineSyncedBattle({
           ))}
           <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap gap-3 rounded-lg border border-purple-500/25 bg-purple-950/20 px-3 py-2 text-[9px] text-slate-300">
             <b className="text-purple-200">Névoa de combate:</b>
+            <span>fecha simultaneamente das bordas para o centro</span>
             <span>âmbar = fecha na próxima rodada</span>
             <span className="text-fuchsia-300">
               roxo = −1 movimento, −50% cura e dano crescente de 8% a 20% do HP
@@ -1088,7 +1119,10 @@ export function ArenaOnlineSyncedBattle({
         </div>
       )}
       <div className="overflow-x-auto">
-        <div className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
+        <div
+          data-tactical-selection-area
+          className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2"
+        >
           {cinematicActor &&
             cinematicTarget &&
             activeEvent?.kind === "ATTACK" && (
@@ -1236,7 +1270,14 @@ export function ArenaOnlineSyncedBattle({
                         : chooseTarget(unit)
                       : chooseCell(x, y)
                   }
-                  style={{ backgroundColor: biome?.color }}
+                  style={{
+                    backgroundColor: biome?.color,
+                    backgroundImage: biome?.imageUrl
+                      ? `linear-gradient(rgba(2,6,23,.68), rgba(2,6,23,.68)), url(${biome.imageUrl})`
+                      : undefined,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }}
                   className={`relative aspect-square min-h-16 overflow-visible rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05]" : owned ? "border-cyan-500/50" : unit ? "border-red-500/40" : "border-slate-800"} ${fogState === "WARNING" ? "shadow-[inset_0_0_0_3px_rgba(251,191,36,.55)]" : ""} ${fogState === "ACTIVE" ? "before:pointer-events-none before:absolute before:inset-0 before:z-[1] before:rounded before:bg-purple-950/55 before:content-['']" : ""} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
                   {!unit && biome && (
@@ -1351,7 +1392,10 @@ export function ArenaOnlineSyncedBattle({
         isMyTurn &&
         !ownPending &&
         !playbackRunning && (
-          <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+          <div
+            data-tactical-selection-area
+            className="grid gap-4 lg:grid-cols-[1fr_1.4fr]"
+          >
             <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
               {selected ? (
                 <>
