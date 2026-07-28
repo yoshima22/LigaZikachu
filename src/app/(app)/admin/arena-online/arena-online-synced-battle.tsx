@@ -628,7 +628,7 @@ export function ArenaOnlineSyncedBattle({
                           style={{
                             backgroundColor: biome?.color,
                             backgroundImage: biome?.imageUrl
-                              ? `linear-gradient(rgba(2,6,23,.65), rgba(2,6,23,.65)), url(${biome.imageUrl})`
+                              ? `linear-gradient(rgba(2,6,23,.78), rgba(2,6,23,.78)), url(${biome.imageUrl})`
                               : undefined,
                             backgroundSize: "cover",
                             backgroundPosition: "center",
@@ -955,13 +955,8 @@ export function ArenaOnlineSyncedBattle({
   const canMoveTo = (x: number, y: number) => {
     if (!selected) return false;
     const occupant = cell(x, y);
-    const occupantOrder = occupant ? orders[occupant.id] : null;
-    const alliedOccupantWillVacate =
-      !!occupant &&
-      mine.some((unit) => unit.id === occupant.id) &&
-      !!occupantOrder &&
-      ((occupantOrder.x ?? occupant.x) !== occupant.x ||
-        (occupantOrder.y ?? occupant.y) !== occupant.y);
+    const alliedOccupant =
+      !!occupant && mine.some((unit) => unit.id === occupant.id);
     return (
       Math.abs(x - selected.x) +
         Math.abs(y - selected.y) +
@@ -969,13 +964,13 @@ export function ArenaOnlineSyncedBattle({
           ? 1
           : 0) <=
         mobility &&
-      (!occupant || occupant.id === selected.id || alliedOccupantWillVacate)
+      (!occupant || occupant.id === selected.id || alliedOccupant)
     );
   };
   const chooseCell = (x: number, y: number) => {
     if (!selected || ownPending || !isMyTurn || playbackRunning) return;
     if (!canMoveTo(x, y)) {
-      toast.error("Célula inválida: fora do alcance ou já ocupada.");
+      toast.error("Célula inválida: fora do alcance ou ocupada por um rival.");
       return;
     }
     setOrders((old) => ({
@@ -1166,60 +1161,6 @@ export function ArenaOnlineSyncedBattle({
           )}
         </div>
       )}
-      {selected && isMyTurn && !ownPending && !playbackRunning && (
-        <div
-          data-tactical-selection-area
-          className="flex flex-wrap items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-2"
-        >
-          <img
-            src={selected.spriteUrl}
-            alt=""
-            className="h-9 w-9 object-contain"
-          />
-          <b className="mr-auto text-xs text-white">
-            {selected.name}: escolha uma ação
-          </b>
-          <button
-            onClick={() => setInteractionMode("MOVE")}
-            className={`rounded-lg border px-3 py-2 text-[10px] font-black ${interactionMode === "MOVE" ? "border-emerald-400 bg-emerald-500/20 text-emerald-200" : "border-slate-700 text-slate-300"}`}
-          >
-            Movimentar
-          </button>
-          <button
-            onClick={() => {
-              setInteractionMode("ATTACK");
-              setOrders((old) => ({
-                ...old,
-                [selected.id]: {
-                  ...(old[selected.id] ?? {}),
-                  type: "ATTACK",
-                  mascotId: selected.id,
-                },
-              }));
-            }}
-            className={`rounded-lg border px-3 py-2 text-[10px] font-black ${interactionMode === "ATTACK" ? "border-red-400 bg-red-500/20 text-red-200" : "border-slate-700 text-slate-300"}`}
-          >
-            Atacar
-          </button>
-          <button
-            onClick={() => {
-              setInteractionMode("DEFEND");
-              setOrders((old) => ({
-                ...old,
-                [selected.id]: {
-                  ...(old[selected.id] ?? {}),
-                  type: "DEFEND",
-                  mascotId: selected.id,
-                  targetId: undefined,
-                },
-              }));
-            }}
-            className={`rounded-lg border px-3 py-2 text-[10px] font-black ${interactionMode === "DEFEND" ? "border-blue-400 bg-blue-500/20 text-blue-200" : "border-slate-700 text-slate-300"}`}
-          >
-            Defender
-          </button>
-        </div>
-      )}
       <div className="overflow-x-auto">
         <div
           data-tactical-selection-area
@@ -1318,8 +1259,8 @@ export function ArenaOnlineSyncedBattle({
                   y,
                   battle.biomeCells,
                 ),
-                revealedSecret = battle.secretEvents.find(
-                  (event) => event.x === x && event.y === y && event.triggered,
+                secretCell = battle.secretEvents.find(
+                  (event) => event.x === x && event.y === y,
                 ),
                 fogState = tacticalFogState(battle.round, x, y),
                 unit = cell(x, y),
@@ -1390,12 +1331,12 @@ export function ArenaOnlineSyncedBattle({
                   style={{
                     backgroundColor: biome?.color,
                     backgroundImage: biome?.imageUrl
-                      ? `linear-gradient(rgba(2,6,23,.68), rgba(2,6,23,.68)), url(${biome.imageUrl})`
+                      ? `linear-gradient(rgba(2,6,23,.78), rgba(2,6,23,.78)), url(${biome.imageUrl})`
                       : undefined,
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                   }}
-                  className={`relative aspect-square min-h-16 overflow-visible rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05]" : owned ? "border-cyan-500/50" : unit ? "border-red-500/40" : "border-slate-800"} ${fogState === "WARNING" ? "shadow-[inset_0_0_0_3px_rgba(251,191,36,.55)]" : ""} ${fogState === "ACTIVE" ? "before:pointer-events-none before:absolute before:inset-0 before:z-[1] before:rounded before:bg-purple-950/55 before:content-['']" : ""} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
+                  className={`relative aspect-square min-h-16 overflow-visible rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "z-30 border-2 border-[#FFCB05] shadow-[0_0_18px_rgba(255,203,5,.9)]" : owned ? "border-2 border-cyan-300 shadow-[inset_0_0_0_2px_rgba(34,211,238,.35),0_0_10px_rgba(34,211,238,.35)]" : unit ? "border-2 border-red-400 shadow-[inset_0_0_0_2px_rgba(248,113,113,.3),0_0_10px_rgba(248,113,113,.3)]" : "border-slate-800"} ${fogState === "WARNING" ? "shadow-[inset_0_0_0_3px_rgba(251,191,36,.55)]" : ""} ${fogState === "ACTIVE" ? "before:pointer-events-none before:absolute before:inset-0 before:z-[1] before:rounded before:bg-purple-950/55 before:content-['']" : ""} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
                   {!unit && biome && (
                     <span className="pointer-events-none absolute bottom-0.5 left-1 z-[2] text-[7px] font-bold uppercase text-slate-500/80">
@@ -1409,9 +1350,14 @@ export function ArenaOnlineSyncedBattle({
                       {fogState === "ACTIVE" ? "NÉVOA" : "AVISO"}
                     </span>
                   )}
-                  {revealedSecret && (
+                  {secretCell && !secretCell.triggered && (
+                    <span className="pointer-events-none absolute inset-1 z-[4] flex items-center justify-center rounded border border-fuchsia-300/60 bg-slate-950/75 font-pixel text-2xl text-fuchsia-200 shadow-[inset_0_0_20px_rgba(217,70,239,.2)]">
+                      ?
+                    </span>
+                  )}
+                  {secretCell?.triggered && (
                     <span
-                      title={revealedSecret.label ?? "Evento secreto revelado"}
+                      title={secretCell.label ?? "Evento secreto revelado"}
                       className="pointer-events-none absolute left-1 top-1 z-[4] rounded bg-fuchsia-500/90 px-1 py-0.5 text-[8px] font-black text-white shadow"
                     >
                       ✦
@@ -1446,6 +1392,78 @@ export function ArenaOnlineSyncedBattle({
                   )}
                   {unit && (
                     <>
+                      <span
+                        className={`pointer-events-none absolute bottom-0.5 right-0.5 z-[12] rounded px-1 py-0.5 text-[6px] font-black tracking-wider ${owned ? "bg-cyan-300 text-slate-950" : "bg-red-400 text-slate-950"}`}
+                      >
+                        {owned ? "SEU" : "RIVAL"}
+                      </span>
+                      {selectedUnit &&
+                        isMyTurn &&
+                        !ownPending &&
+                        !playbackRunning && (
+                          <>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setInteractionMode("MOVE");
+                              }}
+                              onKeyDown={(event) => {
+                                if (
+                                  event.key === "Enter" ||
+                                  event.key === " "
+                                ) {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  setInteractionMode("MOVE");
+                                }
+                              }}
+                              className={`absolute left-1/2 top-0 z-50 -translate-x-1/2 cursor-pointer whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-black shadow-xl ${interactionMode === "MOVE" ? "border-emerald-300 bg-emerald-500 text-white" : "border-emerald-400 bg-slate-950 text-emerald-200 hover:bg-emerald-500/30"}`}
+                            >
+                              Mover
+                            </span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setInteractionMode("ATTACK");
+                                setOrders((old) => ({
+                                  ...old,
+                                  [unit.id]: {
+                                    ...(old[unit.id] ?? {}),
+                                    type: "ATTACK",
+                                    mascotId: unit.id,
+                                  },
+                                }));
+                              }}
+                              className={`absolute left-0 top-1/2 z-50 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-black shadow-xl ${interactionMode === "ATTACK" ? "border-red-300 bg-red-500 text-white" : "border-red-400 bg-slate-950 text-red-200 hover:bg-red-500/30"}`}
+                            >
+                              Atacar
+                            </span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setInteractionMode("DEFEND");
+                                setOrders((old) => ({
+                                  ...old,
+                                  [unit.id]: {
+                                    ...(old[unit.id] ?? {}),
+                                    type: "DEFEND",
+                                    mascotId: unit.id,
+                                    targetId: undefined,
+                                  },
+                                }));
+                              }}
+                              className={`absolute right-0 top-1/2 z-50 -translate-y-1/2 cursor-pointer whitespace-nowrap rounded-full border px-2 py-1 text-[8px] font-black shadow-xl ${interactionMode === "DEFEND" ? "border-blue-300 bg-blue-500 text-white" : "border-blue-400 bg-slate-950 text-blue-200 hover:bg-blue-500/30"}`}
+                            >
+                              Defender
+                            </span>
+                          </>
+                        )}
                       <img
                         src={unit.spriteUrl}
                         loading="lazy"
@@ -1539,53 +1557,9 @@ export function ArenaOnlineSyncedBattle({
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-slate-400">
-                    Escolha uma ação abaixo. O grid mostrará somente as casas
-                    relacionadas à opção selecionada.
+                    As ações aparecem ao redor do mascote selecionado no grid. O
+                    mapa destaca somente as casas relacionadas à opção ativa.
                   </p>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setInteractionMode("MOVE")}
-                      className={`rounded-lg border px-2 py-2 text-[10px] font-black ${interactionMode === "MOVE" ? "border-emerald-400 bg-emerald-500/15 text-emerald-200" : "border-slate-700 text-slate-300"}`}
-                    >
-                      Movimentar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInteractionMode("ATTACK");
-                        setOrders((old) => ({
-                          ...old,
-                          [selected.id]: {
-                            ...(old[selected.id] ?? {}),
-                            type: "ATTACK",
-                            mascotId: selected.id,
-                          },
-                        }));
-                      }}
-                      className={`rounded-lg border px-2 py-2 text-[10px] font-black ${interactionMode === "ATTACK" ? "border-red-400 bg-red-500/15 text-red-200" : "border-slate-700 text-slate-300"}`}
-                    >
-                      Atacar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInteractionMode("DEFEND");
-                        setOrders((old) => ({
-                          ...old,
-                          [selected.id]: {
-                            ...(old[selected.id] ?? {}),
-                            type: "DEFEND",
-                            mascotId: selected.id,
-                            targetId: undefined,
-                          },
-                        }));
-                      }}
-                      className={`rounded-lg border px-2 py-2 text-[10px] font-black ${interactionMode === "DEFEND" ? "border-blue-400 bg-blue-500/15 text-blue-200" : "border-slate-700 text-slate-300"}`}
-                    >
-                      Defender
-                    </button>
-                  </div>
                   <div className="mt-2 rounded-lg border border-blue-500/25 bg-blue-500/10 p-2 text-[11px] leading-relaxed text-blue-100">
                     <b className="block text-blue-300">
                       Efeito tático de {COMBAT_ROLE_LABELS[selected.role]}

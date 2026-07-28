@@ -666,8 +666,18 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     match.playerBName;
   const responseMatch = structuredClone(match);
   if (responseMatch.battle)
-    responseMatch.battle.secretEvents =
-      responseMatch.battle.secretEvents.filter((event) => event.triggered);
+    responseMatch.battle.secretEvents = responseMatch.battle.secretEvents.map(
+      (event) =>
+        event.triggered
+          ? event
+          : {
+              id: event.id,
+              x: event.x,
+              y: event.y,
+              type: "SECRET" as const,
+              triggered: false,
+            },
+    );
   if (!includeMascots && responseMatch.battle) {
     if (responseMatch.battle.phase === "FORMATION") {
       if (player.id === responseMatch.playerAId) {
@@ -1274,6 +1284,40 @@ function applyTacticalMovement(
       distance(unit, { x, y }) + (leavingEnemyControl ? 1 : 0);
     const valid =
       x >= 0 && x < 12 && y >= 0 && y < 8 && movementCost <= mobility;
+    const desiredX = x;
+    const desiredY = y;
+    const desiredOwner = occupied.get(`${desiredX}:${desiredY}`);
+    const movementWasBlocked =
+      valid && !!desiredOwner && desiredOwner !== unit.id;
+    if (movementWasBlocked) {
+      const fallback = Array.from({ length: 8 }, (_, candidateY) =>
+        Array.from({ length: 12 }, (_, candidateX) => ({
+          x: candidateX,
+          y: candidateY,
+        })),
+      )
+        .flat()
+        .filter((candidate) => {
+          const owner = occupied.get(`${candidate.x}:${candidate.y}`);
+          const cost =
+            distance(unit, candidate) +
+            (leavingEnemyControl &&
+            (candidate.x !== unit.x || candidate.y !== unit.y)
+              ? 1
+              : 0);
+          return (!owner || owner === unit.id) && cost <= mobility;
+        })
+        .sort(
+          (a, b) =>
+            distance(a, { x: desiredX, y: desiredY }) -
+              distance(b, { x: desiredX, y: desiredY }) ||
+            distance(unit, b) - distance(unit, a) ||
+            a.y - b.y ||
+            a.x - b.x,
+        )[0];
+      x = fallback?.x ?? unit.x;
+      y = fallback?.y ?? unit.y;
+    }
     const destinationOwner = occupied.get(`${x}:${y}`);
     const destinationOwnerOrder = destinationOwner
       ? orders.find((entry) => entry.mascotId === destinationOwner)
@@ -1318,6 +1362,15 @@ function applyTacticalMovement(
         fromY: unit.y,
         toX: x,
         toY: y,
+      });
+    if (movementWasBlocked)
+      events.push({
+        unitId: unit.id,
+        kind: "BLOCK",
+        text:
+          x === unit.x && y === unit.y
+            ? `Movimentação bloqueada: ${unit.name} não conseguiu avançar porque o destino (${desiredX + 1}, ${desiredY + 1}) permaneceu ocupado.`
+            : `Movimentação bloqueada: ${unit.name} avançou somente até (${x + 1}, ${y + 1}) porque o destino (${desiredX + 1}, ${desiredY + 1}) permaneceu ocupado.`,
       });
     unit.x = x;
     unit.y = y;
