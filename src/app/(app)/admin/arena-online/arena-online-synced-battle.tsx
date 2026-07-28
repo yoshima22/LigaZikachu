@@ -1032,9 +1032,6 @@ export function ArenaOnlineSyncedBattle({
             Rodada {battle.round} · {match.playerAName} × {match.playerBName}
           </h2>
         </div>
-        {battle.phase !== "FINISHED" && (
-          <b className="font-pixel text-xl text-[#FFCB05]">{seconds}s</b>
-        )}
       </header>
       {battle.phase === "PLANNING" && (
         <div
@@ -1163,7 +1160,17 @@ export function ArenaOnlineSyncedBattle({
           )}
         </div>
       )}
-      <div className="overflow-x-auto px-16 py-10">
+      <div className="relative overflow-x-auto px-16 pb-10 pt-14">
+        {battle.phase !== "FINISHED" && (
+          <div
+            className={`absolute right-16 top-2 z-40 flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xl ${isMyTurn ? "border-[#FFCB05]/60 bg-[#FFCB05]/15" : "border-cyan-400/40 bg-slate-950/95"}`}
+          >
+            <span className="text-[9px] font-black uppercase tracking-wider text-slate-300">
+              {isMyTurn ? "Seu turno" : "Turno adversário"}
+            </span>
+            <b className="font-pixel text-xl text-[#FFCB05]">{seconds}s</b>
+          </div>
+        )}
         <div
           data-tactical-selection-area
           className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2"

@@ -1123,9 +1123,11 @@ const deterministicRoll = (round: number, ...ids: string[]) => {
   return (hash >>> 0) / 4294967296;
 };
 function createSecretEvents(seed: string): TacticalSecretEvent[] {
-  const cells = Array.from({ length: 64 }, (_, index) => ({
-    x: 2 + (index % 8),
-    y: Math.floor(index / 8),
+  // As três colunas iniciais de cada lado são reservadas à formação. Os
+  // eventos ficam somente no miolo do mapa e são espaçados entre si.
+  const cells = Array.from({ length: 48 }, (_, index) => ({
+    x: 3 + (index % 6),
+    y: Math.floor(index / 6),
   })).sort(
     (a, b) =>
       deterministicRoll(0, seed, `${a.x}:${a.y}`) -
@@ -1141,7 +1143,41 @@ function createSecretEvents(seed: string): TacticalSecretEvent[] {
     "POWER",
     "MOBILITY",
   ];
-  return cells.slice(0, types.length).map((cell, index) => ({
+  const spacedCells: Array<{ x: number; y: number }> = [];
+  for (const cell of cells) {
+    if (spacedCells.every((selected) => distance(selected, cell) >= 3))
+      spacedCells.push(cell);
+    if (spacedCells.length === types.length) break;
+  }
+  // O fallback só é usado se uma combinação extrema da ordem embaralhada não
+  // preencher as oito casas mantendo três passos de distância.
+  for (const cell of cells) {
+    if (spacedCells.length === types.length) break;
+    if (
+      !spacedCells.some(
+        (selected) => selected.x === cell.x && selected.y === cell.y,
+      ) &&
+      spacedCells.every((selected) => distance(selected, cell) >= 2)
+    )
+      spacedCells.push(cell);
+  }
+  while (spacedCells.length < types.length) {
+    const remaining = cells
+      .filter(
+        (cell) =>
+          !spacedCells.some(
+            (selected) => selected.x === cell.x && selected.y === cell.y,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          Math.min(...spacedCells.map((selected) => distance(selected, b))) -
+          Math.min(...spacedCells.map((selected) => distance(selected, a))),
+      );
+    if (!remaining[0]) break;
+    spacedCells.push(remaining[0]);
+  }
+  return spacedCells.map((cell, index) => ({
     id: `secret:${index}:${cell.x}:${cell.y}`,
     ...cell,
     type: types[index],
@@ -2291,9 +2327,10 @@ export async function submitLivePvpBattleAction(
       sideA ? battle.teamB : battle.teamA,
       normalized,
     );
-    const previousMovementEvents =
-      battle.pendingA || battle.pendingB ? battle.lastEvents : [];
-    battle.lastEvents = [...previousMovementEvents, ...movementEvents];
+    // Cada turno publica somente seu próprio lote visual. Quando o segundo
+    // jogador confirma, os movimentos do primeiro já foram assistidos e não
+    // devem reiniciar junto da resolução dos ataques.
+    battle.lastEvents = movementEvents;
     battle.logs.push(
       `${player.displayName} concluiu a movimentação da rodada ${battle.round}.`,
       ...movementEvents.map((event) => event.text),
