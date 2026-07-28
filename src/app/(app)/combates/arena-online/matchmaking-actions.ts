@@ -61,10 +61,34 @@ export type LivePvpMatchValue = {
 };
 
 export type LivePvpBattleAction =
-  | { type: "AUTO"; mascotId: string; x?: number; y?: number }
-  | { type: "ATTACK"; mascotId: string; x?: number; y?: number }
-  | { type: "DEFEND"; mascotId: string; x?: number; y?: number }
-  | { type: "WAIT"; mascotId: string; x?: number; y?: number };
+  | {
+      type: "AUTO";
+      mascotId: string;
+      x?: number;
+      y?: number;
+      targetId?: string;
+    }
+  | {
+      type: "ATTACK";
+      mascotId: string;
+      x?: number;
+      y?: number;
+      targetId?: string;
+    }
+  | {
+      type: "DEFEND";
+      mascotId: string;
+      x?: number;
+      y?: number;
+      targetId?: string;
+    }
+  | {
+      type: "WAIT";
+      mascotId: string;
+      x?: number;
+      y?: number;
+      targetId?: string;
+    };
 export type TacticalFormation = "WALL" | "WEDGE" | "SPLIT";
 export type TacticalPlacement = { mascotId: string; x: number; y: number };
 export type TacticalBattleEvent = {
@@ -97,6 +121,14 @@ export type TacticalUnit = {
   y: number;
   shield: number;
   survivorUsed: boolean;
+  effects: Array<{
+    id: string;
+    label: string;
+    kind: "BUFF" | "DEBUFF";
+    stat?: "force" | "agility" | "instinct" | "vitality";
+    value: number;
+    duration: number;
+  }>;
 };
 export type LivePvpBattleState = {
   teamA: TacticalUnit[];
@@ -144,6 +176,16 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     match.battle.turnPlayerId = match.firstPickerId ?? match.playerAId;
   if (match.battle && !match.battle.roundStarterId)
     match.battle.roundStarterId = match.firstPickerId ?? match.playerAId;
+  if (match.battle) {
+    match.battle.teamA = match.battle.teamA.map((unit) => ({
+      ...unit,
+      effects: unit.effects ?? [],
+    }));
+    match.battle.teamB = match.battle.teamB.map((unit) => ({
+      ...unit,
+      effects: unit.effects ?? [],
+    }));
+  }
   if (match.phase === "ORDER") {
     match.orderAIds = [...match.teamAIds];
     match.orderBIds = [...match.teamBIds];
@@ -193,6 +235,7 @@ function fighterFromMascot(mascot: {
     y: -1,
     shield: 0,
     survivorUsed: false,
+    effects: [],
   } satisfies TacticalUnit;
 }
 const otherPlayerId = (match: MatchValue, playerId: string) =>
@@ -804,6 +847,19 @@ const FORMATION_CELLS: Record<TacticalFormation, Array<[number, number]>> = {
 };
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const effectiveStat = (
+  unit: TacticalUnit,
+  stat: "force" | "agility" | "instinct" | "vitality",
+) => {
+  const modifier = (unit.effects ?? [])
+    .filter((effect) => effect.stat === stat)
+    .reduce(
+      (total, effect) =>
+        total + (effect.kind === "BUFF" ? effect.value : -effect.value),
+      0,
+    );
+  return Math.max(1, Math.round(unit[stat] * (1 + modifier)));
+};
 const deterministicRoll = (round: number, ...ids: string[]) => {
   const text = `${round}:${ids.join(":")}`;
   let hash = 2166136261;
@@ -850,16 +906,22 @@ function applyTacticalMovement(
   );
   for (const unit of [...team]
     .filter((entry) => entry.hp > 0)
-    .sort((a, b) => b.agility - a.agility)) {
+    .sort(
+      (a, b) => effectiveStat(b, "agility") - effectiveStat(a, "agility"),
+    )) {
     const order = orders.find((entry) => entry.mascotId === unit.id)!;
     const enemyAverage = enemies.length
-      ? enemies.reduce((sum, entry) => sum + entry.agility, 0) / enemies.length
-      : unit.agility;
+      ? enemies.reduce(
+          (sum, entry) => sum + effectiveStat(entry, "agility"),
+          0,
+        ) / enemies.length
+      : effectiveStat(unit, "agility");
+    const unitAgility = effectiveStat(unit, "agility");
     const mobility =
       2 +
-      (unit.agility - enemyAverage >= 140
+      (unitAgility - enemyAverage >= 140
         ? 2
-        : unit.agility - enemyAverage >= 60
+        : unitAgility - enemyAverage >= 60
           ? 1
           : 0);
     let x = order.x ?? unit.x,
@@ -941,14 +1003,17 @@ function resolveTacticalRound(match: MatchValue) {
         : aliveA();
       const order = orders.get(unit.id);
       const enemyAverage = enemies.length
-        ? enemies.reduce((sum, entry) => sum + entry.agility, 0) /
-          enemies.length
-        : unit.agility;
+        ? enemies.reduce(
+            (sum, entry) => sum + effectiveStat(entry, "agility"),
+            0,
+          ) / enemies.length
+        : effectiveStat(unit, "agility");
+      const unitAgility = effectiveStat(unit, "agility");
       const mobility =
         2 +
-        (unit.agility - enemyAverage >= 140
+        (unitAgility - enemyAverage >= 140
           ? 2
-          : unit.agility - enemyAverage >= 60
+          : unitAgility - enemyAverage >= 60
             ? 1
             : 0);
       let x = order?.x ?? unit.x;
@@ -978,7 +1043,8 @@ function resolveTacticalRound(match: MatchValue) {
     })
     .sort(
       (a, b) =>
-        b.unit.agility - a.unit.agility || a.unit.id.localeCompare(b.unit.id),
+        effectiveStat(b.unit, "agility") - effectiveStat(a.unit, "agility") ||
+        a.unit.id.localeCompare(b.unit.id),
     );
   const occupied = new Set<string>();
   const initialOccupied = new Map(
@@ -1009,7 +1075,8 @@ function resolveTacticalRound(match: MatchValue) {
     .filter((unit) => unit.hp > 0)
     .sort(
       (a, b) =>
-        b.agility - a.agility || deterministicRoll(battle.round, a.id) - 0.5,
+        effectiveStat(b, "agility") - effectiveStat(a, "agility") ||
+        deterministicRoll(battle.round, a.id) - 0.5,
     );
   for (const actor of actors) {
     if (actor.hp <= 0) continue;
@@ -1074,7 +1141,10 @@ function resolveTacticalRound(match: MatchValue) {
       candidates.sort((a, b) => b.force - a.force);
     else if (actor.role === "OPPORTUNIST")
       candidates.sort((a, b) => a.instinct - b.instinct);
-    let target = candidates[0];
+    let target =
+      (action === "ATTACK" && order?.targetId
+        ? candidates.find((unit) => unit.id === order.targetId)
+        : null) ?? candidates[0];
     const defenders = enemies.filter(
       (unit) =>
         unit.role === "DEFENDER" && distance(unit, target) <= 2 && unit.hp > 0,
@@ -1138,14 +1208,14 @@ function resolveTacticalRound(match: MatchValue) {
     let damage = Math.max(
       1,
       Math.round(
-        ((actor.force * 1.8 +
+        ((effectiveStat(actor, "force") * 1.8 +
           actor.level * 2 +
-          actor.instinct * 0.7 +
+          effectiveStat(actor, "instinct") * 0.7 +
           (battle.round % 12)) *
           (1 + encourage) *
           roleMult *
           typeMult -
-          (target.vitality * 0.8 + target.level)) *
+          (effectiveStat(target, "vitality") * 0.8 + target.level)) *
           (1 - target.shield),
       ),
     );
@@ -1186,6 +1256,49 @@ function resolveTacticalRound(match: MatchValue) {
       text: `${actor.name} atacou ${target.name} e causou ${damage} de dano.`,
       amount: damage,
     });
+    if (actor.role === "OPPORTUNIST" && target.hp > 0) {
+      const chance = Math.min(
+        0.62,
+        0.22 + effectiveStat(actor, "instinct") / 500,
+      );
+      if (
+        deterministicRoll(battle.round, actor.id, target.id, "opportunist") <
+        chance
+      ) {
+        const stats = ["force", "agility", "instinct", "vitality"] as const;
+        const stat =
+          stats[
+            Math.floor(
+              deterministicRoll(battle.round, target.id, actor.id, "stat") *
+                stats.length,
+            )
+          ];
+        const value = Math.min(
+          0.25,
+          0.08 + effectiveStat(actor, "instinct") / 900,
+        );
+        target.effects = [
+          ...target.effects.filter(
+            (effect) => effect.id !== `opportunist:${actor.id}:${stat}`,
+          ),
+          {
+            id: `opportunist:${actor.id}:${stat}`,
+            label: `Interferência: ${stat === "force" ? "Força" : stat === "agility" ? "Agilidade" : stat === "instinct" ? "Instinto" : "Vitalidade"}`,
+            kind: "DEBUFF",
+            stat,
+            value,
+            duration: 4,
+          },
+        ];
+        events.push({
+          unitId: actor.id,
+          targetId: target.id,
+          kind: "DEBUFF",
+          text: `${actor.name} aplicou ${Math.round(value * 100)}% de Interferência em ${target.name} por 3 rodadas.`,
+          amount: Math.round(value * 100),
+        });
+      }
+    }
     if (target.hp <= 0)
       events.push({
         unitId: target.id,
@@ -1201,6 +1314,10 @@ function resolveTacticalRound(match: MatchValue) {
   );
   battle.pendingA = null;
   battle.pendingB = null;
+  for (const unit of all)
+    unit.effects = unit.effects
+      .map((effect) => ({ ...effect, duration: effect.duration - 1 }))
+      .filter((effect) => effect.duration > 0);
   battle.round += 1;
   battle.deadline = nextTacticalDeadline();
   const remainingA = aliveA(),

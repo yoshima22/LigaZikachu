@@ -129,6 +129,7 @@ export function ArenaOnlineSyncedBattle({
     signature: string;
     index: number;
   }>({ signature: "", index: -1 });
+  const [moveFrame, setMoveFrame] = useState(0);
   const [pending, startTransition] = useTransition();
   const refreshing = useRef(false),
     timeoutKey = useRef("");
@@ -279,7 +280,7 @@ export function ArenaOnlineSyncedBattle({
     }
     setEventPlayback({ signature: eventSignature, index: 0 });
     const eventCount = battle?.lastEvents.length ?? 0;
-    const eventDelay = 620;
+    const eventDelay = 2000;
     const timer = setInterval(
       () =>
         setEventPlayback((current) =>
@@ -299,7 +300,7 @@ export function ArenaOnlineSyncedBattle({
             : current,
         );
       },
-      Math.max(900, eventCount * eventDelay + 450),
+      Math.max(2200, eventCount * eventDelay + 300),
     );
     return () => {
       clearInterval(timer);
@@ -310,6 +311,26 @@ export function ArenaOnlineSyncedBattle({
     eventPlayback.signature === eventSignature && eventPlayback.index >= 0
       ? (battle?.lastEvents[eventPlayback.index] ?? null)
       : null;
+  useEffect(() => {
+    setMoveFrame(0);
+    if (
+      activeEvent?.kind !== "MOVE" ||
+      activeEvent.fromX == null ||
+      activeEvent.fromY == null ||
+      activeEvent.toX == null ||
+      activeEvent.toY == null
+    )
+      return;
+    const steps =
+      Math.abs(activeEvent.toX - activeEvent.fromX) +
+      Math.abs(activeEvent.toY - activeEvent.fromY);
+    if (!steps) return;
+    const timer = setInterval(
+      () => setMoveFrame((frame) => Math.min(steps, frame + 1)),
+      Math.max(220, Math.floor(1650 / steps)),
+    );
+    return () => clearInterval(timer);
+  }, [eventPlayback.signature, eventPlayback.index]);
   const applyFormationTemplate = (nextFormation: TacticalFormation) => {
     setFormation(nextFormation);
     setFormationPositions(
@@ -523,7 +544,37 @@ export function ArenaOnlineSyncedBattle({
 
   const all = [...battle.teamA, ...battle.teamB];
   const opponents = sideA ? battle.teamB : battle.teamA;
+  const animatedMovePosition = (() => {
+    if (
+      activeEvent?.kind !== "MOVE" ||
+      activeEvent.fromX == null ||
+      activeEvent.fromY == null ||
+      activeEvent.toX == null ||
+      activeEvent.toY == null
+    )
+      return null;
+    const dx = activeEvent.toX - activeEvent.fromX;
+    const horizontalSteps = Math.abs(dx);
+    if (moveFrame <= horizontalSteps)
+      return {
+        x: activeEvent.fromX + Math.sign(dx) * moveFrame,
+        y: activeEvent.fromY,
+      };
+    const dy = activeEvent.toY - activeEvent.fromY;
+    return {
+      x: activeEvent.toX,
+      y:
+        activeEvent.fromY +
+        Math.sign(dy) * Math.min(Math.abs(dy), moveFrame - horizontalSteps),
+    };
+  })();
   const cell = (x: number, y: number) => {
+    if (
+      animatedMovePosition?.x === x &&
+      animatedMovePosition.y === y &&
+      activeEvent
+    )
+      return all.find((unit) => unit.id === activeEvent.unitId);
     const positioned = all.find(
       (unit) =>
         unit.x === x &&
@@ -532,19 +583,45 @@ export function ArenaOnlineSyncedBattle({
           activeEvent?.targetId === unit.id ||
           (activeEvent?.kind === "KO" && activeEvent.unitId === unit.id)),
     );
+    if (
+      activeEvent &&
+      positioned?.id === activeEvent.unitId &&
+      activeEvent.kind === "MOVE" &&
+      animatedMovePosition &&
+      (animatedMovePosition.x !== x || animatedMovePosition.y !== y)
+    )
+      return undefined;
     return positioned;
   };
+  const effectiveAgility = (unit: TacticalUnit) =>
+    Math.max(
+      1,
+      Math.round(
+        unit.agility *
+          (1 +
+            (unit.effects ?? [])
+              .filter((effect) => effect.stat === "agility")
+              .reduce(
+                (sum, effect) =>
+                  sum + (effect.kind === "BUFF" ? effect.value : -effect.value),
+                0,
+              )),
+      ),
+    );
+  const initiative = [...all]
+    .filter((unit) => unit.hp > 0)
+    .sort((a, b) => effectiveAgility(b) - effectiveAgility(a));
   const enemyAverageAgility = opponents.filter((unit) => unit.hp > 0).length
     ? opponents
         .filter((unit) => unit.hp > 0)
-        .reduce((sum, unit) => sum + unit.agility, 0) /
+        .reduce((sum, unit) => sum + effectiveAgility(unit), 0) /
       opponents.filter((unit) => unit.hp > 0).length
     : 0;
   const mobility = selected
     ? 2 +
-      (selected.agility - enemyAverageAgility >= 140
+      (effectiveAgility(selected) - enemyAverageAgility >= 140
         ? 2
-        : selected.agility - enemyAverageAgility >= 60
+        : effectiveAgility(selected) - enemyAverageAgility >= 60
           ? 1
           : 0)
     : 0;
@@ -592,6 +669,35 @@ export function ArenaOnlineSyncedBattle({
     }));
     toast.success(
       `${selected.name} planeja mover para coluna ${x + 1}, linha ${y + 1}.`,
+    );
+  };
+  const chooseTarget = (target: TacticalUnit) => {
+    if (!selected || ownPending || !isMyTurn) return;
+    if (orders[selected.id]?.type !== "ATTACK") {
+      toast.info("Escolha 'Forçar ataque' antes de marcar um alvo inimigo.");
+      return;
+    }
+    const origin = plannedPosition ?? selected;
+    if (
+      Math.abs(origin.x - target.x) + Math.abs(origin.y - target.y) >
+      attackRange
+    ) {
+      toast.error(
+        "Esse alvo ficará fora do alcance após o movimento planejado.",
+      );
+      return;
+    }
+    setOrders((old) => ({
+      ...old,
+      [selected.id]: {
+        ...(old[selected.id] ?? { type: "ATTACK", mascotId: selected.id }),
+        type: "ATTACK",
+        mascotId: selected.id,
+        targetId: target.id,
+      },
+    }));
+    toast.success(
+      `${selected.name} atacará ${target.name} se o alvo continuar válido.`,
     );
   };
   const surrendered = async () => {
@@ -644,6 +750,34 @@ export function ArenaOnlineSyncedBattle({
           <span className="text-[#FFCB05]">■ Amarelo: destino planejado</span>
         </div>
       )}
+      <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <b className="text-xs uppercase tracking-wider text-white">
+            Iniciativa da resolução
+          </b>
+          <span className="text-[10px] text-slate-400">
+            Maior Agilidade age primeiro
+          </span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {initiative.map((unit, index) => (
+            <div
+              key={`initiative-${unit.id}`}
+              className={`flex shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 ${mine.some((entry) => entry.id === unit.id) ? "border-cyan-500/30 bg-cyan-500/10" : "border-red-500/30 bg-red-500/10"}`}
+            >
+              <b className="text-[#FFCB05]">{index + 1}º</b>
+              <img
+                src={unit.spriteUrl}
+                alt=""
+                className="h-7 w-7 object-contain"
+              />
+              <span className="text-[10px] text-white">
+                {unit.name} · AGI {effectiveAgility(unit)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
       {activeEvent && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/10 px-4 py-3">
           <div>
@@ -654,7 +788,7 @@ export function ArenaOnlineSyncedBattle({
           </div>
           {activeEvent.amount != null && (
             <span
-              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
+              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
             >
               {activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF"
                 ? "+"
@@ -662,7 +796,9 @@ export function ArenaOnlineSyncedBattle({
                   ? "🛡 "
                   : "−"}
               {activeEvent.amount}
-              {activeEvent.kind === "DEFEND" || activeEvent.kind === "BUFF"
+              {activeEvent.kind === "DEFEND" ||
+              activeEvent.kind === "BUFF" ||
+              activeEvent.kind === "DEBUFF"
                 ? "%"
                 : ""}
             </span>
@@ -688,6 +824,10 @@ export function ArenaOnlineSyncedBattle({
                 selectedUnit = unit?.id === selectedId,
                 acting = !!unit && activeEvent?.unitId === unit.id,
                 targeted = !!unit && activeEvent?.targetId === unit.id,
+                manuallyTargeted =
+                  !!unit &&
+                  !!selected &&
+                  orders[selected.id]?.targetId === unit.id,
                 knockedOut =
                   !!unit &&
                   activeEvent?.kind === "KO" &&
@@ -720,9 +860,13 @@ export function ArenaOnlineSyncedBattle({
                   key={`${x}-${y}`}
                   type="button"
                   onClick={() =>
-                    unit && owned ? setSelectedId(unit.id) : chooseCell(x, y)
+                    unit
+                      ? owned
+                        ? setSelectedId(unit.id)
+                        : chooseTarget(unit)
+                      : chooseCell(x, y)
                   }
-                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
+                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
                   {plannedDestination && (
                     <span className="absolute left-1 top-1 z-10 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
@@ -738,6 +882,11 @@ export function ArenaOnlineSyncedBattle({
                       → {ally.name}
                     </span>
                   ))}
+                  {manuallyTargeted && (
+                    <span className="absolute right-1 top-1 z-30 rounded bg-orange-500 px-1 py-0.5 text-[8px] font-black text-white">
+                      ALVO
+                    </span>
+                  )}
                   {unit && (
                     <>
                       <img
@@ -753,6 +902,20 @@ export function ArenaOnlineSyncedBattle({
                       <span className="text-slate-400">
                         {COMBAT_ROLE_LABELS[unit.role]}
                       </span>
+                      {!!unit.effects?.length && (
+                        <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
+                          {unit.effects.map((effect) => (
+                            <span
+                              key={effect.id}
+                              title={`${effect.label}: ${Math.round(effect.value * 100)}% por ${effect.duration} rodada(s)`}
+                              className={`rounded px-1 text-[7px] font-black ${effect.kind === "BUFF" ? "bg-emerald-500/25 text-emerald-200" : "bg-purple-500/30 text-purple-200"}`}
+                            >
+                              {effect.kind === "BUFF" ? "↑" : "↓"}{" "}
+                              {effect.duration}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="mx-1 mt-1 h-1 rounded bg-slate-800">
                         <div
                           className="h-full rounded bg-emerald-400"
@@ -773,12 +936,14 @@ export function ArenaOnlineSyncedBattle({
                                     ? "INTERCEPTANDO"
                                     : activeEvent?.kind === "BUFF"
                                       ? "IMPULSIONADO"
-                                      : "POSIÇÃO CONFIRMADA"}
+                                      : activeEvent?.kind === "DEBUFF"
+                                        ? "INTERFERÊNCIA"
+                                        : "POSIÇÃO CONFIRMADA"}
                         </span>
                       )}
                       {targeted && activeEvent?.amount != null && (
                         <span
-                          className={`absolute -top-3 left-1/2 z-30 -translate-x-1/2 animate-pulse whitespace-nowrap text-base font-black drop-shadow ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
+                          className={`absolute -top-3 left-1/2 z-30 -translate-x-1/2 animate-pulse whitespace-nowrap text-base font-black drop-shadow ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
                         >
                           {activeEvent.kind === "HEAL" ||
                           activeEvent.kind === "BUFF"
@@ -787,7 +952,10 @@ export function ArenaOnlineSyncedBattle({
                               ? "🛡 "
                               : "−"}
                           {activeEvent.amount}
-                          {activeEvent.kind === "BUFF" ? "%" : ""}
+                          {activeEvent.kind === "BUFF" ||
+                          activeEvent.kind === "DEBUFF"
+                            ? "%"
+                            : ""}
                         </span>
                       )}
                     </>
@@ -821,6 +989,13 @@ export function ArenaOnlineSyncedBattle({
                   1. Clique em uma célula verde. 2. Escolha a ação. 3. Confira o
                   resumo e confirme todas as ordens.
                 </p>
+                {orders[selected.id]?.type === "ATTACK" && (
+                  <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-200">
+                    Clique em um inimigo dentro da área vermelha para definir o
+                    alvo. Sem alvo manual, a postura escolherá o melhor alvo
+                    válido.
+                  </p>
+                )}
                 {orders[selected.id]?.x != null && (
                   <p className="mt-2 rounded-lg bg-[#FFCB05]/10 p-2 text-xs text-[#FFCB05]">
                     Destino: coluna {(orders[selected.id].x ?? 0) + 1}, linha{" "}
@@ -829,6 +1004,18 @@ export function ArenaOnlineSyncedBattle({
                       (action) => action.id === orders[selected.id].type,
                     )?.label ?? orders[selected.id].type}
                     .
+                    {orders[selected.id].targetId && (
+                      <>
+                        {" "}
+                        Alvo:{" "}
+                        {
+                          all.find(
+                            (unit) => unit.id === orders[selected.id].targetId,
+                          )?.name
+                        }
+                        .
+                      </>
+                    )}
                   </p>
                 )}
                 <div className="mt-3 grid grid-cols-2 gap-2">
