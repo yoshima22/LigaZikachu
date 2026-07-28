@@ -144,6 +144,12 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     match.battle.turnPlayerId = match.firstPickerId ?? match.playerAId;
   if (match.battle && !match.battle.roundStarterId)
     match.battle.roundStarterId = match.firstPickerId ?? match.playerAId;
+  if (match.phase === "ORDER") {
+    match.orderAIds = [...match.teamAIds];
+    match.orderBIds = [...match.teamBIds];
+    match.orderTurnId = null;
+    match.phase = "READY";
+  }
   return match;
 }
 
@@ -270,8 +276,10 @@ async function applyPregameTimeout(
     if (playerId === match.playerAId) match.teamAIds = nextTeam;
     else match.teamBIds = nextTeam;
     if (match.teamAIds.length === 6 && match.teamBIds.length === 6) {
-      match.phase = "ORDER";
-      match.orderTurnId = match.firstPickerId;
+      match.orderAIds = [...match.teamAIds];
+      match.orderBIds = [...match.teamBIds];
+      match.phase = "READY";
+      match.orderTurnId = null;
       match.draftTurnId = null;
     } else {
       const next = otherPlayerId(match, playerId);
@@ -549,8 +557,10 @@ export async function submitLivePvpDraftAction(mascotIds: string[]) {
       `${player.displayName} confirmou ${names.map((mascot) => mascot.nickname ?? `#${mascot.pokemonId}`).join(", ")}.`,
     );
     if (match.teamAIds.length === 6 && match.teamBIds.length === 6) {
-      match.phase = "ORDER";
-      match.orderTurnId = match.firstPickerId;
+      match.orderAIds = [...match.teamAIds];
+      match.orderBIds = [...match.teamBIds];
+      match.phase = "READY";
+      match.orderTurnId = null;
       match.draftTurnId = null;
     } else {
       const next = otherPlayerId(match, player.id);
@@ -609,7 +619,10 @@ export async function initializeLivePvpBattleActionLegacy() {
   );
   if (current.phase !== "READY") throw new Error("O draft ainda não terminou.");
   if (current.battle) return current;
-  const ids = [...current.orderAIds, ...current.orderBIds];
+  const ids = [
+    ...(current.orderAIds.length ? current.orderAIds : current.teamAIds),
+    ...(current.orderBIds.length ? current.orderBIds : current.teamBIds),
+  ];
   const mascots = await prisma.mascot.findMany({
     where: { id: { in: ids } },
     select: {
@@ -1213,7 +1226,10 @@ export async function initializeLivePvpBattleAction() {
   );
   if (current.phase !== "READY") throw new Error("O draft ainda não terminou.");
   if (current.battle) return { ok: true };
-  const ids = [...current.orderAIds, ...current.orderBIds];
+  const ids = [
+    ...(current.orderAIds.length ? current.orderAIds : current.teamAIds),
+    ...(current.orderBIds.length ? current.orderBIds : current.teamBIds),
+  ];
   const mascots = await prisma.mascot.findMany({
     where: { id: { in: ids } },
     select: {
@@ -1235,9 +1251,11 @@ export async function initializeLivePvpBattleAction() {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
     const match = await findCurrentMatch(tx, player.id);
     if (match.battle) return { ok: true };
+    const teamAIds = match.orderAIds.length ? match.orderAIds : match.teamAIds;
+    const teamBIds = match.orderBIds.length ? match.orderBIds : match.teamBIds;
     match.battle = {
-      teamA: match.orderAIds.map((id) => fighterFromMascot(byId.get(id)!)),
-      teamB: match.orderBIds.map((id) => fighterFromMascot(byId.get(id)!)),
+      teamA: teamAIds.map((id) => fighterFromMascot(byId.get(id)!)),
+      teamB: teamBIds.map((id) => fighterFromMascot(byId.get(id)!)),
       phase: "FORMATION",
       formationA: null,
       formationB: null,

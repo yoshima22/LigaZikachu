@@ -279,6 +279,7 @@ export function ArenaOnlineSyncedBattle({
     }
     setEventPlayback({ signature: eventSignature, index: 0 });
     const eventCount = battle?.lastEvents.length ?? 0;
+    const eventDelay = 620;
     const timer = setInterval(
       () =>
         setEventPlayback((current) =>
@@ -287,7 +288,7 @@ export function ArenaOnlineSyncedBattle({
             ? current
             : { ...current, index: current.index + 1 },
         ),
-      950,
+      eventDelay,
     );
     const stop = setTimeout(
       () => {
@@ -298,7 +299,7 @@ export function ArenaOnlineSyncedBattle({
             : current,
         );
       },
-      Math.max(1200, eventCount * 950 + 700),
+      Math.max(900, eventCount * eventDelay + 450),
     );
     return () => {
       clearInterval(timer);
@@ -523,12 +524,6 @@ export function ArenaOnlineSyncedBattle({
   const all = [...battle.teamA, ...battle.teamB];
   const opponents = sideA ? battle.teamB : battle.teamA;
   const cell = (x: number, y: number) => {
-    if (
-      activeEvent?.kind === "MOVE" &&
-      activeEvent.fromX === x &&
-      activeEvent.fromY === y
-    )
-      return all.find((unit) => unit.id === activeEvent.unitId);
     const positioned = all.find(
       (unit) =>
         unit.x === x &&
@@ -537,14 +532,6 @@ export function ArenaOnlineSyncedBattle({
           activeEvent?.targetId === unit.id ||
           (activeEvent?.kind === "KO" && activeEvent.unitId === unit.id)),
     );
-    if (
-      activeEvent &&
-      positioned?.id === activeEvent.unitId &&
-      activeEvent.kind === "MOVE" &&
-      activeEvent.toX === x &&
-      activeEvent.toY === y
-    )
-      return undefined;
     return positioned;
   };
   const enemyAverageAgility = opponents.filter((unit) => unit.hp > 0).length
@@ -683,7 +670,17 @@ export function ArenaOnlineSyncedBattle({
         </div>
       )}
       <div className="overflow-x-auto">
-        <div className="grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
+        <div className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
+          {activeEvent?.kind === "KO" && (
+            <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-red-950/35 backdrop-blur-[1px]">
+              <div className="animate-pulse rounded-2xl border-4 border-red-500 bg-slate-950/95 px-10 py-6 text-center shadow-[0_0_60px_rgba(239,68,68,.8)]">
+                <p className="font-pixel text-5xl text-red-500">K.O.</p>
+                <p className="mt-3 text-lg font-black text-white">
+                  {activeEvent.text}
+                </p>
+              </div>
+            </div>
+          )}
           {Array.from({ length: 8 }, (_, y) =>
             Array.from({ length: 12 }, (_, x) => {
               const unit = cell(x, y),
@@ -695,10 +692,6 @@ export function ArenaOnlineSyncedBattle({
                   !!unit &&
                   activeEvent?.kind === "KO" &&
                   activeEvent.unitId === unit.id,
-                movementOrigin =
-                  activeEvent?.kind === "MOVE" &&
-                  activeEvent.fromX === x &&
-                  activeEvent.fromY === y,
                 validMove = isMyTurn && !ownPending && canMoveTo(x, y),
                 inAttackArea =
                   !!plannedPosition &&
@@ -729,7 +722,7 @@ export function ArenaOnlineSyncedBattle({
                   onClick={() =>
                     unit && owned ? setSelectedId(unit.id) : chooseCell(x, y)
                   }
-                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-500 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${movementOrigin ? "bg-cyan-400/25 ring-2 ring-cyan-300" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
+                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
                   {plannedDestination && (
                     <span className="absolute left-1 top-1 z-10 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
@@ -751,7 +744,7 @@ export function ArenaOnlineSyncedBattle({
                         src={unit.spriteUrl}
                         loading="lazy"
                         onError={(e) => fallback(e, unit.pokemonId)}
-                        className={`mx-auto h-9 w-9 object-contain transition-all duration-500 ${acting ? (activeEvent?.kind === "MOVE" ? "translate-x-1 -translate-y-2 scale-110" : "scale-125 drop-shadow-[0_0_8px_rgba(232,121,249,.9)]") : ""} ${targeted ? "scale-90 brightness-150" : ""} ${knockedOut ? "rotate-12 scale-75 grayscale opacity-50" : ""}`}
+                        className={`mx-auto h-9 w-9 object-contain transition-all duration-300 ${acting ? (activeEvent?.kind === "MOVE" ? "scale-110 drop-shadow-[0_0_8px_rgba(34,211,238,.9)]" : "scale-125 drop-shadow-[0_0_8px_rgba(232,121,249,.9)]") : ""} ${targeted ? "scale-90 brightness-150" : ""} ${knockedOut ? "rotate-12 scale-75 grayscale opacity-50" : ""}`}
                         alt=""
                       />
                       <b className="block truncate px-1 text-white">
@@ -780,7 +773,7 @@ export function ArenaOnlineSyncedBattle({
                                     ? "INTERCEPTANDO"
                                     : activeEvent?.kind === "BUFF"
                                       ? "IMPULSIONADO"
-                                      : "MOVENDO"}
+                                      : "POSIÇÃO CONFIRMADA"}
                         </span>
                       )}
                       {targeted && activeEvent?.amount != null && (

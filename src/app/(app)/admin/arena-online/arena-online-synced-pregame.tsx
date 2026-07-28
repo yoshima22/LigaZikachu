@@ -10,7 +10,6 @@ import {
   chooseLivePvpFirstPlayerAction,
   getLivePvpMatchAction,
   submitLivePvpDraftAction,
-  submitLivePvpOrderAction,
 } from "../../combates/arena-online/matchmaking-actions";
 
 type Side = "A" | "B";
@@ -86,7 +85,6 @@ export function ArenaOnlineSyncedPregame({
   const [match, setMatch] = useState(initialMatch);
   const [remoteMascots, setRemoteMascots] = useState<MascotOption[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [order, setOrder] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("ALL");
   const [tag, setTag] = useState("ALL");
@@ -103,8 +101,7 @@ export function ArenaOnlineSyncedPregame({
       match.coinChooserId === identity.playerId) ||
     (match.phase === "FIRST_PICK" &&
       match.coinWinnerId === identity.playerId) ||
-    (match.phase === "DRAFT" && match.draftTurnId === identity.playerId) ||
-    (match.phase === "ORDER" && match.orderTurnId === identity.playerId);
+    (match.phase === "DRAFT" && match.draftTurnId === identity.playerId);
   const allMascots = useMemo(() => {
     const map = new Map<string, MascotOption>();
     [...mascots, ...remoteMascots].forEach((mascot) =>
@@ -130,9 +127,7 @@ export function ArenaOnlineSyncedPregame({
         ? `${activePlayerName} está escolhendo quem começa o draft.`
         : match.phase === "DRAFT"
           ? `${activePlayerName} está escolhendo ${match.draftQuota} mascote${match.draftQuota === 1 ? "" : "s"} para a equipe.`
-          : match.phase === "ORDER"
-            ? `${activePlayerName} está organizando a ordem da equipe.`
-            : "Preparando o combate.";
+          : "Preparando o combate.";
 
   const refresh = async () => {
     try {
@@ -186,8 +181,6 @@ export function ArenaOnlineSyncedPregame({
   useEffect(() => {
     setSelected([]);
     setPage(1);
-    if (match.phase === "ORDER" && match.orderTurnId === identity.playerId)
-      setOrder([...ownTeam]);
   }, [match.phase, match.draftTurnId, match.orderTurnId, ownTeam.join(",")]);
   useEffect(() => {
     if (match.phase !== "READY" || completedRevision.current === match.revision)
@@ -197,8 +190,8 @@ export function ArenaOnlineSyncedPregame({
       `PRÉ-JOGO ONLINE · ${match.playerAName} e ${match.playerBName} concluíram o draft sincronizado.`,
     );
     onComplete(
-      match.orderAIds,
-      match.orderBIds,
+      match.teamAIds,
+      match.teamBIds,
       match.firstPickerId === match.playerAId ? "A" : "B",
       remoteMascots,
     );
@@ -235,13 +228,6 @@ export function ArenaOnlineSyncedPregame({
     Math.min(page, pages) * 12,
   );
   const required = Math.min(match.draftQuota, 6 - ownTeam.length);
-  const reorder = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= order.length) return;
-    const next = [...order];
-    [next[index], next[target]] = [next[target], next[index]];
-    setOrder(next);
-  };
 
   return (
     <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-slate-950 to-cyan-500/5 p-4">
@@ -520,52 +506,6 @@ export function ArenaOnlineSyncedPregame({
             className="mt-3 w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-35"
           >
             Travar {selected.length}/{required} escolha(s)
-          </button>
-        </div>
-      )}
-
-      {!coinAnimating && isMyTurn && match.phase === "ORDER" && (
-        <div className="mt-4">
-          <p className="text-center text-sm text-white">
-            Defina o inicial e a sequência completa da sua equipe.
-          </p>
-          <div className="mt-3 space-y-2">
-            {order.map((id, index) => {
-              const mascot = byId(id);
-              if (!mascot) return null;
-              return (
-                <div
-                  key={id}
-                  className={`flex items-center gap-3 rounded-xl border p-3 ${index === 0 ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
-                >
-                  <span className="font-bold text-[#FFCB05]">{index + 1}º</span>
-                  <MascotChip mascot={mascot} />
-                  <div className="ml-auto flex gap-1">
-                    <button
-                      disabled={index === 0}
-                      onClick={() => reorder(index, -1)}
-                      className="rounded border border-slate-700 px-3 py-2 disabled:opacity-20"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      disabled={index === 5}
-                      onClick={() => reorder(index, 1)}
-                      className="rounded border border-slate-700 px-3 py-2 disabled:opacity-20"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <button
-            disabled={pending || order.length !== 6}
-            onClick={() => act(() => submitLivePvpOrderAction(order))}
-            className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-35"
-          >
-            Travar ordem da equipe
           </button>
         </div>
       )}

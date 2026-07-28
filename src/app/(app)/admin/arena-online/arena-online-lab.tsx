@@ -877,33 +877,39 @@ export function ArenaOnlineLab({
         </p>
       </header>
       {!onlineIdentity && <EffectGuide />}
-      <ArenaOnlinePregame
-        key={pregameReset}
-        mascots={mascots}
-        onlineIdentity={onlineIdentity}
-        onEvent={(event) =>
-          setLogs((old) => [...old, "────────────────────────────────", event])
-        }
-        onComplete={(a, b, first, matchedMascots = []) => {
-          const combined = [...roster];
-          for (const mascot of matchedMascots) {
-            if (!combined.some((entry) => entry.id === mascot.id))
-              combined.push(mascot);
+      {(!onlineIdentity || !onlineBattleReady) && (
+        <ArenaOnlinePregame
+          key={pregameReset}
+          mascots={mascots}
+          onlineIdentity={onlineIdentity}
+          onEvent={(event) =>
+            setLogs((old) => [
+              ...old,
+              "────────────────────────────────",
+              event,
+            ])
           }
-          setRemoteRoster(matchedMascots);
-          setTeamIdsA(a);
-          setTeamIdsB(b);
-          setOpeningSide(first);
-          setIdA(a[0] ?? "");
-          setIdB(b[0] ?? "");
-          if (onlineIdentity) {
-            setOnlineBattleReady(true);
-            return;
-          }
-          load(a, b, combined);
-          toast.success("Pré-jogo concluído e golpes preparados.");
-        }}
-      />
+          onComplete={(a, b, first, matchedMascots = []) => {
+            const combined = [...roster];
+            for (const mascot of matchedMascots) {
+              if (!combined.some((entry) => entry.id === mascot.id))
+                combined.push(mascot);
+            }
+            setRemoteRoster(matchedMascots);
+            setTeamIdsA(a);
+            setTeamIdsB(b);
+            setOpeningSide(first);
+            setIdA(a[0] ?? "");
+            setIdB(b[0] ?? "");
+            if (onlineIdentity) {
+              setOnlineBattleReady(true);
+              return;
+            }
+            load(a, b, combined);
+            toast.success("Pré-jogo concluído e golpes preparados.");
+          }}
+        />
+      )}
       {onlineIdentity && onlineBattleReady && (
         <ArenaOnlineSyncedBattle identity={onlineIdentity} />
       )}
