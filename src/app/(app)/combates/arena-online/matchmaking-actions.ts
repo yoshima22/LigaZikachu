@@ -159,6 +159,8 @@ export type LivePvpBattleState = {
   pendingB: LivePvpBattleAction[] | null;
   turnPlayerId: string;
   roundStarterId: string;
+  actionWindowPending: boolean;
+  actionStartsAt: string;
   deadline: string;
   winnerId: string | null;
   round: number;
@@ -183,6 +185,20 @@ type MatchValue = LivePvpMatchValue;
 
 const nextDeadline = () => new Date(Date.now() + 30_000).toISOString();
 const nextTacticalDeadline = () => new Date(Date.now() + 120_000).toISOString();
+const TACTICAL_EVENT_PLAYBACK_MS = 2_000;
+const TACTICAL_TURN_BANNER_MS = 1_600;
+
+function scheduleTacticalActionWindow(
+  battle: LivePvpBattleState,
+  eventCount = battle.lastEvents.length,
+) {
+  const startsAt =
+    Date.now() + eventCount * TACTICAL_EVENT_PLAYBACK_MS + TACTICAL_TURN_BANNER_MS;
+  battle.actionWindowPending = eventCount > 0;
+  battle.actionStartsAt = new Date(startsAt).toISOString();
+  battle.deadline = new Date(startsAt + 120_000).toISOString();
+}
+
 function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
   const match = {
     coinChoice: null,
@@ -212,6 +228,10 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
   } as MatchValue;
   if (match.battle && !match.battle.deadline)
     match.battle.deadline = nextDeadline();
+  if (match.battle && !match.battle.actionStartsAt)
+    match.battle.actionStartsAt = new Date().toISOString();
+  if (match.battle && match.battle.actionWindowPending == null)
+    match.battle.actionWindowPending = false;
   if (match.battle && !match.battle.turnPlayerId)
     match.battle.turnPlayerId = match.firstPickerId ?? match.playerAId;
   if (match.battle && !match.battle.roundStarterId)
@@ -2146,7 +2166,7 @@ function resolveTacticalRound(match: MatchValue) {
       .map((effect) => ({ ...effect, duration: effect.duration - 1 }))
       .filter((effect) => effect.duration > 0);
   battle.round += 1;
-  battle.deadline = nextTacticalDeadline();
+  scheduleTacticalActionWindow(battle);
   const remainingA = aliveA(),
     remainingB = aliveB();
   if (!remainingA.length || !remainingB.length || battle.round > 18) {
@@ -2160,6 +2180,7 @@ function resolveTacticalRound(match: MatchValue) {
           ? match.playerAId
           : match.playerBId;
     battle.phase = "FINISHED";
+    battle.actionWindowPending = false;
   }
 }
 
@@ -2214,6 +2235,8 @@ export async function initializeLivePvpBattleAction() {
       pendingB: null,
       turnPlayerId: match.firstPickerId ?? match.playerAId,
       roundStarterId: match.firstPickerId ?? match.playerAId,
+      actionWindowPending: false,
+      actionStartsAt: new Date().toISOString(),
       deadline: nextTacticalDeadline(),
       winnerId: null,
       round: 1,
@@ -2300,9 +2323,32 @@ export async function submitLivePvpFormationAction(
     if (battle.formationA && battle.formationB) {
       battle.phase = "PLANNING";
       battle.turnPlayerId = battle.roundStarterId;
-      battle.deadline = nextTacticalDeadline();
+      scheduleTacticalActionWindow(battle, 0);
       battle.logs.push("As formações foram reveladas. Rodada 1 iniciada.");
     }
+    await saveMatch(tx, match);
+    return { ok: true };
+  });
+}
+
+export async function acknowledgeLivePvpPlaybackAction() {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    const battle = match.battle;
+    if (
+      !battle ||
+      battle.phase !== "PLANNING" ||
+      battle.turnPlayerId !== player.id ||
+      !battle.actionWindowPending
+    )
+      return { ok: true };
+
+    const startsAt = Date.now() + TACTICAL_TURN_BANNER_MS;
+    battle.actionWindowPending = false;
+    battle.actionStartsAt = new Date(startsAt).toISOString();
+    battle.deadline = new Date(startsAt + 120_000).toISOString();
     await saveMatch(tx, match);
     return { ok: true };
   });
@@ -2318,6 +2364,11 @@ export async function submitLivePvpBattleAction(
       battle = match.battle;
     if (!battle || battle.phase !== "PLANNING" || battle.winnerId)
       throw new Error("A rodada não está aceitando ordens.");
+    if (
+      battle.actionWindowPending ||
+      new Date(battle.actionStartsAt).getTime() > Date.now()
+    )
+      throw new Error("Aguarde o fim das animações e o início do turno.");
     if (battle.turnPlayerId !== player.id)
       throw new Error("Aguarde o turno de movimentação do adversário.");
     const sideA = player.id === match.playerAId,
@@ -2403,7 +2454,7 @@ export async function submitLivePvpBattleAction(
       battle.turnPlayerId = battle.roundStarterId;
     } else {
       battle.turnPlayerId = otherPlayerId(match, player.id);
-      battle.deadline = nextTacticalDeadline();
+      scheduleTacticalActionWindow(battle, movementEvents.length);
     }
     await saveMatch(tx, match);
     return { ok: true };
@@ -2533,19 +2584,19 @@ export async function createLivePvpBotMatchAction() {
       bansByBIds: [],
       banLimitA: 0,
       banLimitB: 0,
-      draftTurnId: null,
-      draftQuota: 1,
-      teamAIds: ownMascots.map((mascot) => mascot.id),
+      draftTurnId: player.id,
+      draftQuota: 6,
+      teamAIds: [],
       teamBIds: botMascots.map((mascot) => mascot.id),
-      orderAIds: ownMascots.map((mascot) => mascot.id),
+      orderAIds: [],
       orderBIds: botMascots.map((mascot) => mascot.id),
       orderTurnId: null,
-      phase: "READY",
+      phase: "DRAFT",
       deadline: nextDeadline(),
       revision: 1,
       events: [
         `${player.displayName} iniciou um treino contra o Professor Enguiça (BOT).`,
-        "As equipes rápidas foram equilibradas pela média de nível.",
+        "Escolha os seis mascotes que enfrentarão a equipe preparada pelo Professor Enguiça.",
       ],
       battle: null,
       status: "PREGAME",

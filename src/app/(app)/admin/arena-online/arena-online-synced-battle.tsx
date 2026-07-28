@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  acknowledgeLivePvpPlaybackAction,
   closeLivePvpMatchAction,
   getLivePvpMatchAction,
   initializeLivePvpBattleAction,
@@ -272,6 +273,7 @@ export function ArenaOnlineSyncedBattle({
   >(null);
   const [showPostureRange, setShowPostureRange] = useState(false);
   const [seconds, setSeconds] = useState(30);
+  const [turnGateLocked, setTurnGateLocked] = useState(false);
   const [eventPlayback, setEventPlayback] = useState<{
     signature: string;
     index: number;
@@ -279,7 +281,8 @@ export function ArenaOnlineSyncedBattle({
   const [moveFrame, setMoveFrame] = useState(0);
   const [pending, startTransition] = useTransition();
   const refreshing = useRef(false),
-    timeoutKey = useRef("");
+    timeoutKey = useRef(""),
+    acknowledgedPlayback = useRef("");
 
   const refresh = async () => {
     if (refreshing.current) return;
@@ -307,17 +310,30 @@ export function ArenaOnlineSyncedBattle({
   useEffect(() => {
     const deadline = match?.battle?.deadline;
     if (!deadline) return;
-    const update = () =>
+    const startsAt = match?.battle?.actionStartsAt
+      ? new Date(match.battle.actionStartsAt).getTime()
+      : 0;
+    const update = () => {
+      const now = Date.now();
+      const locked = !!match?.battle?.actionWindowPending || startsAt > now;
+      setTurnGateLocked(locked);
       setSeconds(
-        Math.max(
-          0,
-          Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000),
-        ),
+        locked
+          ? 120
+          : Math.max(
+              0,
+              Math.ceil((new Date(deadline).getTime() - now) / 1000),
+            ),
       );
+    };
     update();
     const timer = setInterval(update, 500);
     return () => clearInterval(timer);
-  }, [match?.battle?.deadline]);
+  }, [
+    match?.battle?.deadline,
+    match?.battle?.actionStartsAt,
+    match?.battle?.actionWindowPending,
+  ]);
 
   const battle = match?.battle;
   const sideA = !!match && identity.playerId === match.playerAId;
@@ -337,14 +353,18 @@ export function ArenaOnlineSyncedBattle({
     if (!selectedId) return;
     const clearSelection = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (!isMyTurn || !target?.closest("[data-tactical-selection-area]")) {
+      if (
+        !isMyTurn ||
+        turnGateLocked ||
+        !target?.closest("[data-tactical-selection-area]")
+      ) {
         setSelectedId(null);
         setInteractionMode(null);
       }
     };
     document.addEventListener("mousedown", clearSelection);
     return () => document.removeEventListener("mousedown", clearSelection);
-  }, [selectedId, isMyTurn]);
+  }, [selectedId, isMyTurn, turnGateLocked]);
   useEffect(() => {
     setOrders({});
     setSelectedId(null);
@@ -377,6 +397,7 @@ export function ArenaOnlineSyncedBattle({
       !battle ||
       seconds > 0 ||
       battle.winnerId ||
+      turnGateLocked ||
       ownPending ||
       (battle.phase === "FORMATION" && formationLocked)
     )
@@ -409,6 +430,7 @@ export function ArenaOnlineSyncedBattle({
     battle?.phase,
     battle?.round,
     battle?.deadline,
+    turnGateLocked,
     ownPending,
     isMyTurn,
     formationLocked,
@@ -426,14 +448,18 @@ export function ArenaOnlineSyncedBattle({
     });
   const selected = mine.find((unit) => unit.id === selectedId) ?? null;
   const eventSignature = useMemo(
-    () =>
-      (battle?.lastEvents ?? [])
-        .map(
-          (event) =>
-            `${event.kind}:${event.unitId}:${event.targetId ?? ""}:${event.amount ?? ""}:${event.text}`,
-        )
-        .join("|"),
-    [battle?.lastEvents],
+    () => {
+      const events = battle?.lastEvents ?? [];
+      if (!events.length) return "";
+      return `${battle?.round ?? 0}:` +
+        events
+          .map(
+            (event) =>
+              `${event.kind}:${event.unitId}:${event.targetId ?? ""}:${event.amount ?? ""}:${event.text}`,
+          )
+          .join("|");
+    },
+    [battle?.lastEvents, battle?.round],
   );
   useEffect(() => {
     if (!eventSignature) {
@@ -475,6 +501,40 @@ export function ArenaOnlineSyncedBattle({
     eventPlayback.index < (battle?.lastEvents.length ?? 0)
       ? (battle?.lastEvents[eventPlayback.index] ?? null)
       : null;
+  const playbackComplete =
+    !!battle &&
+    !!eventSignature &&
+    eventPlayback.signature === eventSignature &&
+    eventPlayback.index >= battle.lastEvents.length;
+  useEffect(() => {
+    if (
+      !battle?.actionWindowPending ||
+      battle.phase !== "PLANNING" ||
+      !isMyTurn ||
+      !playbackComplete
+    )
+      return;
+    const key = `${battle.round}:${eventSignature}`;
+    if (acknowledgedPlayback.current === key) return;
+    acknowledgedPlayback.current = key;
+    void acknowledgeLivePvpPlaybackAction()
+      .then(refresh)
+      .catch((error) => {
+        acknowledgedPlayback.current = "";
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível liberar o próximo turno.",
+        );
+      });
+  }, [
+    battle?.actionWindowPending,
+    battle?.phase,
+    battle?.round,
+    isMyTurn,
+    playbackComplete,
+    eventSignature,
+  ]);
   const movePath = visualMovePath(
     activeEvent,
     battle ? [...battle.teamA, ...battle.teamB] : [],
@@ -758,6 +818,7 @@ export function ArenaOnlineSyncedBattle({
     eventPlayback.signature === eventSignature ? eventPlayback.index : -1;
   const playbackRunning =
     !!eventSignature && playbackIndex < battle.lastEvents.length;
+  const interactionLocked = playbackRunning || turnGateLocked || pending;
   const animatedMovePosition = movePath.length
     ? movePath[Math.min(moveFrame, movePath.length - 1)]
     : null;
@@ -976,7 +1037,7 @@ export function ArenaOnlineSyncedBattle({
     );
   };
   const chooseCell = (x: number, y: number) => {
-    if (!selected || ownPending || !isMyTurn || playbackRunning) return;
+    if (!selected || ownPending || !isMyTurn || interactionLocked) return;
     if (interactionMode !== "MOVE") return;
     if (!canMoveTo(x, y)) {
       toast.error("Célula inválida: fora do alcance ou ocupada por um rival.");
@@ -996,7 +1057,7 @@ export function ArenaOnlineSyncedBattle({
     setInteractionMode("MENU");
   };
   const chooseTarget = (target: TacticalUnit) => {
-    if (!selected || ownPending || !isMyTurn || playbackRunning) return;
+    if (!selected || ownPending || !isMyTurn || interactionLocked) return;
     if (orders[selected.id]?.type !== "ATTACK") {
       toast.info("Escolha 'Forçar ataque' antes de marcar um alvo inimigo.");
       return;
@@ -1029,6 +1090,12 @@ export function ArenaOnlineSyncedBattle({
     await surrenderLivePvpBattleAction();
     await refresh();
   };
+  const resultHeadline = !battle.winnerId
+    ? "EMPATE!"
+    : battle.winnerId === identity.playerId
+      ? "VOCÊ GANHOU!"
+      : "VOCÊ PERDEU!";
+  const viewerWon = battle.winnerId === identity.playerId;
   return (
     <section className="space-y-4 rounded-2xl border border-cyan-500/30 bg-slate-950/60 p-4">
       <header className="flex items-center justify-between gap-3">
@@ -1046,9 +1113,13 @@ export function ArenaOnlineSyncedBattle({
           className={`rounded-xl border p-4 ${isMyTurn ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-cyan-500/30 bg-cyan-500/5"}`}
         >
           <b className={isMyTurn ? "text-[#FFCB05]" : "text-cyan-200"}>
-            {isMyTurn
-              ? `Seu turno de movimentação — ${identity.playerName}`
-              : `${battle.turnPlayerId === match.playerAId ? match.playerAName : match.playerBName} está movimentando e definindo ações`}
+            {playbackRunning
+              ? "Resolvendo as ações da rodada — cronômetros pausados"
+              : turnGateLocked
+                ? "Preparando a troca de turno — cronômetros pausados"
+                : isMyTurn
+                  ? `Seu turno de movimentação — ${identity.playerName}`
+                  : `${battle.turnPlayerId === match.playerAId ? match.playerAName : match.playerBName} está movimentando e definindo ações`}
           </b>
           <p className="mt-1 text-xs text-slate-400">
             Os movimentos deste turno são aplicados primeiro. Depois dos dois
@@ -1174,21 +1245,44 @@ export function ArenaOnlineSyncedBattle({
             className={`absolute right-16 top-2 z-40 flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xl ${isMyTurn ? "border-[#FFCB05]/60 bg-[#FFCB05]/15" : "border-cyan-400/40 bg-slate-950/95"}`}
           >
             <span className="text-[9px] font-black uppercase tracking-wider text-slate-300">
-              {isMyTurn ? "Seu turno" : "Turno adversário"}
+              {playbackRunning
+                ? "Resolvendo ações"
+                : turnGateLocked
+                  ? "Cronômetro pausado"
+                  : isMyTurn
+                    ? "Seu turno"
+                    : "Turno adversário"}
             </span>
-            <b className="font-pixel text-xl text-[#FFCB05]">{seconds}s</b>
+            <b className="font-pixel text-xl text-[#FFCB05]">
+              {playbackRunning || turnGateLocked ? "II" : `${seconds}s`}
+            </b>
           </div>
         )}
         <div
           data-tactical-selection-area
           className="relative grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2"
         >
+          {turnGateLocked && !playbackRunning && battle.phase === "PLANNING" && (
+            <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center bg-slate-950/55 backdrop-blur-[2px]">
+              <div className={`relative overflow-hidden rounded-2xl border-2 px-12 py-7 text-center shadow-[0_0_70px_rgba(34,211,238,.45)] ${isMyTurn ? "border-[#FFCB05] bg-gradient-to-br from-amber-500/30 via-slate-950 to-cyan-500/20" : "border-cyan-300 bg-gradient-to-br from-cyan-500/25 via-slate-950 to-purple-500/20"}`}>
+                <span className="absolute inset-x-0 top-0 h-1 animate-pulse bg-gradient-to-r from-transparent via-white to-transparent" />
+                <p className={`font-pixel text-4xl drop-shadow-[0_3px_0_rgba(0,0,0,.8)] ${isMyTurn ? "text-[#FFCB05]" : "text-cyan-200"}`}>
+                  {isMyTurn ? "SEU TURNO" : "TURNO DO ADVERSÁRIO"}
+                </p>
+                <p className="mt-3 text-xs font-black uppercase tracking-[.25em] text-white">
+                  {isMyTurn
+                    ? "Prepare suas movimentações e ações"
+                    : `${battle.turnPlayerId === match.playerAId ? match.playerAName : match.playerBName} vai agir`}
+                </p>
+              </div>
+            </div>
+          )}
           {cinematicActor &&
             cinematicTarget &&
             activeEvent?.kind === "ATTACK" && (
               <div className="pointer-events-none absolute left-1/2 top-3 z-40 w-[min(92%,650px)] -translate-x-1/2 overflow-hidden rounded-2xl border border-fuchsia-300/70 bg-slate-950/95 p-3 shadow-[0_15px_70px_rgba(0,0,0,.8)] backdrop-blur">
-                <p className="mb-2 text-center text-[9px] font-black uppercase tracking-[.2em] text-fuchsia-300">
-                  Troca de dano · rodada {battle.round}
+                <p className="mb-2 text-center text-[10px] font-black uppercase tracking-[.2em] text-fuchsia-300">
+                  {cinematicActor.name} ataca {cinematicTarget.name} · rodada {battle.round}
                 </p>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                   {[cinematicActor, cinematicTarget]
@@ -1197,6 +1291,9 @@ export function ArenaOnlineSyncedBattle({
                         key={unit.id}
                         className={`rounded-xl border p-2 text-center ${index === 0 ? "border-cyan-400/50 bg-cyan-500/10" : "border-red-400/50 bg-red-500/10"}`}
                       >
+                        <span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${index === 0 ? "bg-cyan-400 text-slate-950" : "bg-red-500 text-white"}`}>
+                          {index === 0 ? "Atacante" : "Defensor"}
+                        </span>
                         <img
                           src={unit.spriteUrl}
                           onError={(event) => fallback(event, unit.pokemonId)}
@@ -1207,7 +1304,10 @@ export function ArenaOnlineSyncedBattle({
                           {unit.name}
                         </b>
                         <span className="text-[9px] text-slate-400">
-                          {COMBAT_ROLE_LABELS[unit.role]}
+                          {battle.teamA.some((entry) => entry.id === unit.id)
+                            ? match.playerAName
+                            : match.playerBName}
+                          {" · "}{COMBAT_ROLE_LABELS[unit.role]}
                         </span>
                       </div>
                     ))
@@ -1218,12 +1318,13 @@ export function ArenaOnlineSyncedBattle({
                             key="damage"
                             className="animate-pulse text-center"
                           >
-                            <span className="block text-2xl">⚔️</span>
+                            <span className="block text-3xl text-red-300">→</span>
+                            <span className="block text-[8px] font-black uppercase tracking-wider text-red-300">Ataque</span>
                             <b className="text-2xl text-red-400">
                               −{activeEvent.amount ?? 0}
                             </b>
                             <span className="block text-[8px] uppercase text-slate-400">
-                              dano
+                              dano recebido
                             </span>
                           </div>,
                         );
@@ -1325,11 +1426,11 @@ export function ArenaOnlineSyncedBattle({
                   interactionMode === "MOVE" &&
                   isMyTurn &&
                   !ownPending &&
-                  !playbackRunning &&
+                  !interactionLocked &&
                   canMoveTo(x, y),
                 inAttackArea =
                   interactionMode === "ATTACK" &&
-                  !playbackRunning &&
+                  !interactionLocked &&
                   !!plannedPosition &&
                   Math.abs(x - plannedPosition.x) +
                     Math.abs(y - plannedPosition.y) <=
@@ -1337,7 +1438,7 @@ export function ArenaOnlineSyncedBattle({
                   !(x === plannedPosition.x && y === plannedPosition.y),
                 inProtectionArea =
                   (interactionMode === "DEFEND" || showPostureRange) &&
-                  !playbackRunning &&
+                  !interactionLocked &&
                   !!plannedPosition &&
                   postureEffectRange > 0 &&
                   Math.abs(x - plannedPosition.x) +
@@ -1357,7 +1458,20 @@ export function ArenaOnlineSyncedBattle({
                 <button
                   key={`${x}-${y}`}
                   type="button"
-                  onClick={() =>
+                  disabled={
+                    interactionLocked ||
+                    battle.phase !== "PLANNING" ||
+                    !isMyTurn ||
+                    !!ownPending
+                  }
+                  onClick={() => {
+                    if (
+                      interactionLocked ||
+                      battle.phase !== "PLANNING" ||
+                      !isMyTurn ||
+                      ownPending
+                    )
+                      return;
                     unit
                       ? owned
                         ? interactionMode === "MOVE" &&
@@ -1368,8 +1482,8 @@ export function ArenaOnlineSyncedBattle({
                         : chooseTarget(unit)
                       : interactionMode === "MOVE"
                         ? chooseCell(x, y)
-                        : (setSelectedId(null), setInteractionMode("MENU"))
-                  }
+                        : (setSelectedId(null), setInteractionMode("MENU"));
+                  }}
                   style={{
                     backgroundColor: biome?.color,
                     backgroundImage: biome?.imageUrl
@@ -1455,7 +1569,7 @@ export function ArenaOnlineSyncedBattle({
                       {selectedUnit &&
                         isMyTurn &&
                         !ownPending &&
-                        !playbackRunning && (
+                        !interactionLocked && (
                           <>
                             <span
                               role="button"
@@ -1611,7 +1725,7 @@ export function ArenaOnlineSyncedBattle({
       {battle.phase === "PLANNING" &&
         isMyTurn &&
         !ownPending &&
-        !playbackRunning && (
+        !interactionLocked && (
           <div
             data-tactical-selection-area
             className="grid gap-4 lg:grid-cols-[1fr_1.4fr]"
@@ -1793,29 +1907,39 @@ export function ArenaOnlineSyncedBattle({
       </div>
       {battle.phase !== "FINISHED" ? (
         <button
-          disabled={pending}
+          disabled={pending || interactionLocked}
           onClick={() => run(surrendered)}
-          className="w-full rounded-lg border border-red-500/40 bg-red-500/10 p-3 font-bold text-red-300"
+          className="w-full rounded-lg border border-red-500/40 bg-red-500/10 p-3 font-bold text-red-300 disabled:cursor-wait disabled:opacity-40"
         >
-          Desistir
+          {interactionLocked ? "Aguarde a animação..." : "Desistir"}
         </button>
       ) : (
         <div className="space-y-3">
-          <p className="text-center text-lg font-black text-[#FFCB05]">
-            {battle.winnerId
-              ? `${battle.winnerId === match.playerAId ? match.playerAName : match.playerBName} venceu!`
-              : "Empate!"}
-          </p>
+          <div className={`relative overflow-hidden rounded-3xl border-2 px-6 py-10 text-center shadow-[0_0_80px_rgba(0,0,0,.75)] ${viewerWon ? "border-[#FFCB05] bg-gradient-to-br from-amber-500/30 via-slate-950 to-emerald-500/20" : battle.winnerId ? "border-red-500 bg-gradient-to-br from-red-500/25 via-slate-950 to-purple-500/20" : "border-cyan-400 bg-gradient-to-br from-cyan-500/20 via-slate-950 to-purple-500/20"}`}>
+            <div className="pointer-events-none absolute inset-0 animate-pulse bg-[radial-gradient(circle_at_center,rgba(255,255,255,.14),transparent_58%)]" />
+            <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-around text-2xl opacity-80">
+              <span>✦</span><span>◆</span><span>✧</span><span>◆</span><span>✦</span>
+            </div>
+            <p className={`relative font-pixel text-5xl drop-shadow-[0_4px_0_rgba(0,0,0,.85)] md:text-7xl ${viewerWon ? "text-[#FFCB05]" : battle.winnerId ? "text-red-400" : "text-cyan-300"}`}>
+              {resultHeadline}
+            </p>
+            <p className="relative mt-5 text-sm font-black uppercase tracking-[.25em] text-white">
+              {battle.winnerId
+                ? `${battle.winnerId === match.playerAId ? match.playerAName : match.playerBName} venceu a Batalha de Terreno`
+                : "As duas equipes terminaram equilibradas"}
+            </p>
+          </div>
           <button
+            disabled={interactionLocked}
             onClick={() =>
               run(async () => {
                 await closeLivePvpMatchAction();
                 window.location.href = "/combates/arena-online";
               })
             }
-            className="w-full rounded-xl bg-cyan-500 p-3 font-black text-slate-950"
+            className="w-full rounded-xl bg-cyan-500 p-3 font-black text-slate-950 disabled:cursor-wait disabled:opacity-40"
           >
-            Voltar ao lobby
+            {interactionLocked ? "Concluindo animações..." : "Voltar ao lobby"}
           </button>
         </div>
       )}
