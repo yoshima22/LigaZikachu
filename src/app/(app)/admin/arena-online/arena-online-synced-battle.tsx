@@ -11,6 +11,7 @@ import {
   surrenderLivePvpBattleAction,
   type LivePvpBattleAction,
   type LivePvpMatchValue,
+  type TacticalBattleEvent,
   type TacticalFormation,
   type TacticalUnit,
 } from "../../combates/arena-online/matchmaking-actions";
@@ -32,8 +33,8 @@ const FORMATIONS: Array<{
   },
   {
     id: "WEDGE",
-    name: "Cunha",
-    detail: "Dois na frente, dois no meio e dois atrás.",
+    name: "Formação equilibrada",
+    detail: "Duas linhas de proteção com atacantes e suportes recuados.",
   },
   {
     id: "SPLIT",
@@ -67,11 +68,35 @@ const FORMATION_SLOTS: Record<TacticalFormation, Array<[number, number]>> = {
     [0, 7],
   ],
 };
-const ACTIONS: Array<{ id: LivePvpBattleAction["type"]; label: string }> = [
-  { id: "AUTO", label: "Automático" },
-  { id: "ATTACK", label: "Atacar" },
-  { id: "DEFEND", label: "Defender" },
-  { id: "WAIT", label: "Aguardar" },
+const ACTIONS: Array<{
+  id: LivePvpBattleAction["type"];
+  label: string;
+  detail: string;
+}> = [
+  {
+    id: "AUTO",
+    label: "Agir pela postura",
+    detail:
+      "O servidor escolhe a melhor ação para a postura: atacar, curar, proteger ou se reposicionar.",
+  },
+  {
+    id: "ATTACK",
+    label: "Forçar ataque",
+    detail:
+      "Ataca o alvo prioritário da postura que estiver dentro do alcance após os movimentos.",
+  },
+  {
+    id: "DEFEND",
+    label: "Preparar defesa",
+    detail:
+      "Não ataca nesta rodada e reduz o próximo dano direto recebido: 45% Defensor, 38% Guardião, 32% demais.",
+  },
+  {
+    id: "WAIT",
+    label: "Não agir",
+    detail:
+      "Mantém a posição final e não realiza ataque, cura ou defesa nesta rodada.",
+  },
 ];
 
 function fallback(
@@ -94,9 +119,16 @@ export function ArenaOnlineSyncedBattle({
   const [placementSelected, setPlacementSelected] = useState<string | null>(
     null,
   );
+  const [formationPositions, setFormationPositions] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
   const [orders, setOrders] = useState<Record<string, LivePvpBattleAction>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(30);
+  const [eventPlayback, setEventPlayback] = useState<{
+    signature: string;
+    index: number;
+  }>({ signature: "", index: -1 });
   const [pending, startTransition] = useTransition();
   const refreshing = useRef(false),
     timeoutKey = useRef("");
@@ -163,6 +195,22 @@ export function ArenaOnlineSyncedBattle({
   }, [battle?.phase, mine.length, placement.length]);
   useEffect(() => {
     if (
+      battle?.phase !== "FORMATION" ||
+      !mine.length ||
+      Object.keys(formationPositions).length
+    )
+      return;
+    setFormationPositions(
+      Object.fromEntries(
+        mine.map((unit, index) => {
+          const [baseX, y] = FORMATION_SLOTS[formation][index];
+          return [unit.id, { x: sideA ? baseX : 11 - baseX, y }];
+        }),
+      ),
+    );
+  }, [battle?.phase, mine.length, sideA]);
+  useEffect(() => {
+    if (
       !battle ||
       seconds > 0 ||
       battle.winnerId ||
@@ -182,6 +230,10 @@ export function ArenaOnlineSyncedBattle({
         placement.length === mine.length
           ? placement
           : mine.map((unit) => unit.id),
+        mine.map((unit) => ({
+          mascotId: unit.id,
+          ...(formationPositions[unit.id] ?? { x: unit.x, y: unit.y }),
+        })),
       ).then(refresh);
     else if (battle.phase === "PLANNING" && isMyTurn)
       void submitLivePvpBattleAction(
@@ -210,21 +262,68 @@ export function ArenaOnlineSyncedBattle({
       }
     });
   const selected = mine.find((unit) => unit.id === selectedId) ?? null;
-  const lastByUnit = useMemo(
+  const eventSignature = useMemo(
     () =>
-      new Map((battle?.lastEvents ?? []).map((event) => [event.unitId, event])),
+      (battle?.lastEvents ?? [])
+        .map(
+          (event) =>
+            `${event.kind}:${event.unitId}:${event.targetId ?? ""}:${event.amount ?? ""}:${event.text}`,
+        )
+        .join("|"),
     [battle?.lastEvents],
   );
-  const assignPlacementSlot = (slot: number) => {
+  useEffect(() => {
+    if (!eventSignature) {
+      setEventPlayback({ signature: "", index: -1 });
+      return;
+    }
+    setEventPlayback({ signature: eventSignature, index: 0 });
+    const eventCount = battle?.lastEvents.length ?? 0;
+    const timer = setInterval(
+      () =>
+        setEventPlayback((current) =>
+          current.signature !== eventSignature ||
+          current.index >= eventCount - 1
+            ? current
+            : { ...current, index: current.index + 1 },
+        ),
+      950,
+    );
+    const stop = setTimeout(
+      () => clearInterval(timer),
+      Math.max(1200, eventCount * 950),
+    );
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [eventSignature]);
+  const activeEvent: TacticalBattleEvent | null =
+    eventPlayback.signature === eventSignature && eventPlayback.index >= 0
+      ? (battle?.lastEvents[eventPlayback.index] ?? null)
+      : null;
+  const applyFormationTemplate = (nextFormation: TacticalFormation) => {
+    setFormation(nextFormation);
+    setFormationPositions(
+      Object.fromEntries(
+        mine.map((unit, index) => {
+          const [baseX, y] = FORMATION_SLOTS[nextFormation][index];
+          return [unit.id, { x: sideA ? baseX : 11 - baseX, y }];
+        }),
+      ),
+    );
+  };
+  const placeMascot = (x: number, y: number) => {
     if (!placementSelected) return;
-    setPlacement((current) => {
-      const next =
-        current.length === mine.length
-          ? [...current]
-          : mine.map((unit) => unit.id);
-      const from = next.indexOf(placementSelected);
-      if (from < 0) return next;
-      [next[from], next[slot]] = [next[slot], next[from]];
+    const occupied = Object.entries(formationPositions).find(
+      ([id, position]) =>
+        id !== placementSelected && position.x === x && position.y === y,
+    );
+    setFormationPositions((current) => {
+      const next = { ...current };
+      const previous = next[placementSelected];
+      next[placementSelected] = { x, y };
+      if (occupied && previous) next[occupied[0]] = previous;
       return next;
     });
     setPlacementSelected(null);
@@ -261,7 +360,7 @@ export function ArenaOnlineSyncedBattle({
               {FORMATIONS.map((entry) => (
                 <button
                   key={entry.id}
-                  onClick={() => setFormation(entry.id)}
+                  onClick={() => applyFormationTemplate(entry.id)}
                   className={`rounded-xl border p-4 text-left ${formation === entry.id ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
                 >
                   <b className="text-white">{entry.name}</b>
@@ -272,10 +371,13 @@ export function ArenaOnlineSyncedBattle({
             <div className="rounded-xl border border-purple-500/25 bg-slate-950/80 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <b className="text-sm text-white">Posições iniciais</b>
+                  <b className="text-sm text-white">
+                    Editor visual de posições iniciais
+                  </b>
                   <p className="text-xs text-slate-400">
-                    Clique em um mascote abaixo e depois no espaço da formação
-                    onde ele deve começar.
+                    Clique em um mascote abaixo e depois em qualquer casa
+                    iluminada da sua zona inicial. Uma casa ocupada troca os
+                    dois mascotes de lugar.
                   </p>
                 </div>
                 {placementSelected && (
@@ -285,38 +387,53 @@ export function ArenaOnlineSyncedBattle({
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                {FORMATION_SLOTS[formation].map(([x, y], slot) => {
-                  const unit = mine.find(
-                    (entry) => entry.id === placement[slot],
-                  );
-                  const displayX = sideA ? x : 11 - x;
-                  return (
-                    <button
-                      key={`${formation}-${slot}`}
-                      type="button"
-                      onClick={() => assignPlacementSlot(slot)}
-                      className={`min-h-20 rounded-xl border p-2 text-center ${placementSelected ? "border-[#FFCB05]/60 bg-[#FFCB05]/5" : "border-slate-700 bg-slate-900"}`}
-                    >
-                      <span className="block text-[9px] uppercase text-slate-500">
-                        Espaço {slot + 1} · coluna {displayX + 1}, linha {y + 1}
-                      </span>
-                      {unit && (
-                        <>
-                          <img
-                            src={unit.spriteUrl}
-                            alt=""
-                            className="mx-auto h-10 w-10 object-contain"
-                          />
-                          <b className="block truncate text-xs text-white">
-                            {unit.name}
-                          </b>
-                        </>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="overflow-x-auto">
+                <div className="grid min-w-[720px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
+                  {Array.from({ length: 8 }, (_, y) =>
+                    Array.from({ length: 12 }, (_, x) => {
+                      const validZone = sideA ? x <= 2 : x >= 9;
+                      const unit = mine.find((entry) => {
+                        const position = formationPositions[entry.id];
+                        return position?.x === x && position.y === y;
+                      });
+                      return (
+                        <button
+                          key={`formation-${x}-${y}`}
+                          type="button"
+                          disabled={!validZone}
+                          onClick={() => placeMascot(x, y)}
+                          className={`relative aspect-square min-h-14 rounded border ${validZone ? (placementSelected ? "border-[#FFCB05] bg-[#FFCB05]/10 hover:bg-[#FFCB05]/25" : "border-cyan-500/40 bg-cyan-500/10") : "border-slate-800 bg-slate-950/70 opacity-35"}`}
+                        >
+                          {validZone && !unit && (
+                            <span className="text-[9px] uppercase text-cyan-300/60">
+                              Posicionar
+                            </span>
+                          )}
+                          {unit && (
+                            <>
+                              <img
+                                src={unit.spriteUrl}
+                                onError={(event) =>
+                                  fallback(event, unit.pokemonId)
+                                }
+                                alt=""
+                                className="mx-auto h-9 w-9 object-contain"
+                              />
+                              <b className="block truncate px-1 text-[9px] text-white">
+                                {unit.name}
+                              </b>
+                            </>
+                          )}
+                        </button>
+                      );
+                    }),
+                  ).flat()}
+                </div>
               </div>
+              <p className="mt-2 text-[10px] text-slate-500">
+                Sua zona inicial está iluminada. O centro e o território
+                adversário ficam bloqueados nesta etapa.
+              </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {mine.map((unit) => (
@@ -377,6 +494,13 @@ export function ArenaOnlineSyncedBattle({
                     placement.length === mine.length
                       ? placement
                       : mine.map((unit) => unit.id),
+                    mine.map((unit) => ({
+                      mascotId: unit.id,
+                      ...(formationPositions[unit.id] ?? {
+                        x: unit.x,
+                        y: unit.y,
+                      }),
+                    })),
                   ),
                 )
               }
@@ -503,6 +627,31 @@ export function ArenaOnlineSyncedBattle({
           <span className="text-[#FFCB05]">■ Amarelo: destino planejado</span>
         </div>
       )}
+      {activeEvent && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/10 px-4 py-3">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">
+              Resolução {eventPlayback.index + 1}/{battle.lastEvents.length}
+            </p>
+            <b className="text-sm text-white">{activeEvent.text}</b>
+          </div>
+          {activeEvent.amount != null && (
+            <span
+              className={`text-2xl font-black ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "DEFEND" || activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
+            >
+              {activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF"
+                ? "+"
+                : activeEvent.kind === "DEFEND"
+                  ? "🛡 "
+                  : "−"}
+              {activeEvent.amount}
+              {activeEvent.kind === "DEFEND" || activeEvent.kind === "BUFF"
+                ? "%"
+                : ""}
+            </span>
+          )}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <div className="grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
           {Array.from({ length: 8 }, (_, y) =>
@@ -510,7 +659,12 @@ export function ArenaOnlineSyncedBattle({
               const unit = cell(x, y),
                 owned = !!unit && mine.some((entry) => entry.id === unit.id),
                 selectedUnit = unit?.id === selectedId,
-                event = unit ? lastByUnit.get(unit.id) : null,
+                acting = !!unit && activeEvent?.unitId === unit.id,
+                targeted = !!unit && activeEvent?.targetId === unit.id,
+                movementOrigin =
+                  activeEvent?.kind === "MOVE" &&
+                  activeEvent.fromX === x &&
+                  activeEvent.fromY === y,
                 validMove = isMyTurn && !ownPending && canMoveTo(x, y),
                 inAttackArea =
                   !!plannedPosition &&
@@ -535,7 +689,7 @@ export function ArenaOnlineSyncedBattle({
                   onClick={() =>
                     unit && owned ? setSelectedId(unit.id) : chooseCell(x, y)
                   }
-                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-500 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""}`}
+                  className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-500 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${movementOrigin ? "bg-cyan-400/25 ring-2 ring-cyan-300" : ""}`}
                 >
                   {plannedDestination && (
                     <span className="absolute left-1 top-1 z-10 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
@@ -548,7 +702,7 @@ export function ArenaOnlineSyncedBattle({
                         src={unit.spriteUrl}
                         loading="lazy"
                         onError={(e) => fallback(e, unit.pokemonId)}
-                        className={`mx-auto h-9 w-9 object-contain ${event?.kind === "MOVE" ? "animate-bounce" : event?.kind === "ATTACK" ? "animate-pulse" : ""}`}
+                        className={`mx-auto h-9 w-9 object-contain transition-all duration-500 ${acting ? (activeEvent?.kind === "MOVE" ? "-translate-y-2 scale-110" : "scale-125 drop-shadow-[0_0_8px_rgba(232,121,249,.9)]") : ""} ${targeted ? "scale-90 brightness-150" : ""}`}
                         alt=""
                       />
                       <b className="block truncate px-1 text-white">
@@ -563,9 +717,33 @@ export function ArenaOnlineSyncedBattle({
                           style={{ width: `${(100 * unit.hp) / unit.maxHp}%` }}
                         />
                       </div>
-                      {event && (
-                        <span className="absolute -top-1 left-1/2 z-10 -translate-x-1/2 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
-                          {event.kind}
+                      {acting && (
+                        <span className="absolute -top-2 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded bg-fuchsia-500 px-2 py-0.5 text-[8px] font-black text-white">
+                          {activeEvent?.kind === "ATTACK"
+                            ? "ATACANDO"
+                            : activeEvent?.kind === "HEAL"
+                              ? "CURANDO"
+                              : activeEvent?.kind === "DEFEND"
+                                ? "DEFENDENDO"
+                                : activeEvent?.kind === "GUARD"
+                                  ? "INTERCEPTANDO"
+                                  : activeEvent?.kind === "BUFF"
+                                    ? "IMPULSIONADO"
+                                    : "MOVENDO"}
+                        </span>
+                      )}
+                      {targeted && activeEvent?.amount != null && (
+                        <span
+                          className={`absolute -top-3 left-1/2 z-30 -translate-x-1/2 animate-pulse whitespace-nowrap text-base font-black drop-shadow ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" ? "text-emerald-300" : activeEvent.kind === "GUARD" ? "text-blue-300" : "text-red-400"}`}
+                        >
+                          {activeEvent.kind === "HEAL" ||
+                          activeEvent.kind === "BUFF"
+                            ? "+"
+                            : activeEvent.kind === "GUARD"
+                              ? "🛡 "
+                              : "−"}
+                          {activeEvent.amount}
+                          {activeEvent.kind === "BUFF" ? "%" : ""}
                         </span>
                       )}
                     </>
@@ -622,7 +800,10 @@ export function ArenaOnlineSyncedBattle({
                       }
                       className={`rounded-lg border p-2 text-xs ${orders[selected.id]?.type === action.id ? "border-[#FFCB05] bg-[#FFCB05]/10 text-[#FFCB05]" : "border-slate-700 text-slate-300"}`}
                     >
-                      {action.label}
+                      <b className="block">{action.label}</b>
+                      <span className="mt-1 block text-left text-[10px] font-normal leading-relaxed opacity-75">
+                        {action.detail}
+                      </span>
                     </button>
                   ))}
                 </div>

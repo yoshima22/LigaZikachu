@@ -66,6 +66,18 @@ export type LivePvpBattleAction =
   | { type: "DEFEND"; mascotId: string; x?: number; y?: number }
   | { type: "WAIT"; mascotId: string; x?: number; y?: number };
 export type TacticalFormation = "WALL" | "WEDGE" | "SPLIT";
+export type TacticalPlacement = { mascotId: string; x: number; y: number };
+export type TacticalBattleEvent = {
+  unitId: string;
+  targetId?: string;
+  kind: string;
+  text: string;
+  amount?: number;
+  fromX?: number;
+  fromY?: number;
+  toX?: number;
+  toY?: number;
+};
 export type TacticalUnit = {
   id: string;
   pokemonId: number;
@@ -100,7 +112,7 @@ export type LivePvpBattleState = {
   winnerId: string | null;
   round: number;
   logs: string[];
-  lastEvents: Array<{ unitId: string; kind: string; text: string }>;
+  lastEvents: TacticalBattleEvent[];
 };
 
 type MatchValue = LivePvpMatchValue;
@@ -817,7 +829,7 @@ function applyTacticalMovement(
   enemies: TacticalUnit[],
   orders: LivePvpBattleAction[],
 ) {
-  const events: Array<{ unitId: string; kind: string; text: string }> = [
+  const events: TacticalBattleEvent[] = [
     ...battle.lastEvents.filter((event) =>
       ["MOVE", "BLOCK"].includes(event.kind),
     ),
@@ -881,6 +893,10 @@ function applyTacticalMovement(
         unitId: unit.id,
         kind: "MOVE",
         text: `${unit.name} moveu de (${unit.x + 1}, ${unit.y + 1}) para (${x + 1}, ${y + 1}).`,
+        fromX: unit.x,
+        fromY: unit.y,
+        toX: x,
+        toY: y,
       });
     unit.x = x;
     unit.y = y;
@@ -902,7 +918,7 @@ function resolveTacticalRound(match: MatchValue) {
   const all = [...battle.teamA, ...battle.teamB];
   const aliveA = () => battle.teamA.filter((unit) => unit.hp > 0);
   const aliveB = () => battle.teamB.filter((unit) => unit.hp > 0);
-  const events: Array<{ unitId: string; kind: string; text: string }> = [
+  const events: TacticalBattleEvent[] = [
     ...battle.lastEvents.filter((event) =>
       ["MOVE", "BLOCK"].includes(event.kind),
     ),
@@ -1007,6 +1023,7 @@ function resolveTacticalRound(match: MatchValue) {
         unitId: actor.id,
         kind: "DEFEND",
         text: `${actor.name} preparou ${Math.round(actor.shield * 100)}% de defesa.`,
+        amount: Math.round(actor.shield * 100),
       });
       continue;
     }
@@ -1030,8 +1047,10 @@ function resolveTacticalRound(match: MatchValue) {
         wounded.hp = Math.min(wounded.maxHp, wounded.hp + amount);
         events.push({
           unitId: actor.id,
+          targetId: wounded.id,
           kind: "HEAL",
           text: `${actor.name} curou ${wounded.name} em ${amount} HP.`,
+          amount,
         });
         continue;
       }
@@ -1091,6 +1110,14 @@ function resolveTacticalRound(match: MatchValue) {
           Math.max(best, Math.min(0.18, 0.04 + unit.charisma / 650)),
         0,
       );
+    if (encourage > 0)
+      events.push({
+        unitId: actor.id,
+        targetId: actor.id,
+        kind: "BUFF",
+        text: `${actor.name} recebeu ${Math.round(encourage * 100)}% de impulso de um Encorajador próximo.`,
+        amount: Math.round(encourage * 100),
+      });
     const typeMult = getPokemonTypes(actor.pokemonId).some(
       (type) =>
         getPokemonTypes(target.pokemonId) &&
@@ -1128,8 +1155,10 @@ function resolveTacticalRound(match: MatchValue) {
       damage -= absorbed;
       events.push({
         unitId: guardian.id,
+        targetId: target.id,
         kind: "GUARD",
         text: `${guardian.name} interceptou ${absorbed} de dano por ${target.name}.`,
+        amount: absorbed,
       });
     }
     if (
@@ -1143,8 +1172,10 @@ function resolveTacticalRound(match: MatchValue) {
     target.hp = Math.max(0, target.hp - damage);
     events.push({
       unitId: actor.id,
+      targetId: target.id,
       kind: "ATTACK",
       text: `${actor.name} atacou ${target.name} e causou ${damage} de dano.`,
+      amount: damage,
     });
   }
   battle.lastEvents = events;
@@ -1228,6 +1259,7 @@ export async function submitLivePvpFormationAction(
   formation: TacticalFormation,
   roles: Record<string, CombatRole>,
   orderedIds?: string[],
+  positions?: TacticalPlacement[],
 ) {
   const player = await requireLivePvpPlayer();
   return prisma.$transaction(async (tx) => {
@@ -1250,12 +1282,45 @@ export async function submitLivePvpFormationAction(
     for (const unit of team)
       if (roles[unit.id] && COMBAT_ROLE_VALUES.includes(roles[unit.id]))
         unit.role = roles[unit.id];
+    const customPositions =
+      positions?.length === team.length ? positions : null;
+    if (customPositions) {
+      const ids = new Set(customPositions.map((entry) => entry.mascotId));
+      const cells = new Set(
+        customPositions.map((entry) => `${entry.x}:${entry.y}`),
+      );
+      const validColumns = sideA
+        ? (x: number) => x >= 0 && x <= 2
+        : (x: number) => x >= 9 && x <= 11;
+      if (
+        ids.size !== team.length ||
+        cells.size !== team.length ||
+        customPositions.some(
+          (entry) =>
+            !team.some((unit) => unit.id === entry.mascotId) ||
+            !validColumns(entry.x) ||
+            entry.y < 0 ||
+            entry.y > 7,
+        )
+      )
+        throw new Error(
+          "As posições devem ficar nas três colunas iniciais e não podem se sobrepor.",
+        );
+    }
+    const positionedTeam = customPositions
+      ? team.map((unit) => {
+          const position = customPositions.find(
+            (entry) => entry.mascotId === unit.id,
+          )!;
+          return { ...unit, x: position.x, y: position.y };
+        })
+      : formationUnits(team, formation, sideA, placement);
     if (sideA) {
       battle.formationA = formation;
-      battle.teamA = formationUnits(team, formation, true, placement);
+      battle.teamA = positionedTeam;
     } else {
       battle.formationB = formation;
-      battle.teamB = formationUnits(team, formation, false, placement);
+      battle.teamB = positionedTeam;
     }
     if (battle.formationA && battle.formationB) {
       battle.phase = "PLANNING";
