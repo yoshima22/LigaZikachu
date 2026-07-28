@@ -94,6 +94,8 @@ export type LivePvpBattleState = {
   formationB: TacticalFormation | null;
   pendingA: LivePvpBattleAction[] | null;
   pendingB: LivePvpBattleAction[] | null;
+  turnPlayerId: string;
+  roundStarterId: string;
   deadline: string;
   winnerId: string | null;
   round: number;
@@ -104,7 +106,7 @@ export type LivePvpBattleState = {
 type MatchValue = LivePvpMatchValue;
 
 const nextDeadline = () => new Date(Date.now() + 30_000).toISOString();
-const nextTacticalDeadline = () => new Date(Date.now() + 40_000).toISOString();
+const nextTacticalDeadline = () => new Date(Date.now() + 120_000).toISOString();
 function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
   const match = {
     coinChoice: null,
@@ -126,6 +128,10 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
   } as MatchValue;
   if (match.battle && !match.battle.deadline)
     match.battle.deadline = nextDeadline();
+  if (match.battle && !match.battle.turnPlayerId)
+    match.battle.turnPlayerId = match.firstPickerId ?? match.playerAId;
+  if (match.battle && !match.battle.roundStarterId)
+    match.battle.roundStarterId = match.firstPickerId ?? match.playerAId;
   return match;
 }
 
@@ -411,9 +417,21 @@ export async function getLivePvpMatchAction(includeMascots = true) {
   const responseMatch = structuredClone(match);
   if (!includeMascots && responseMatch.battle) {
     if (responseMatch.battle.phase === "FORMATION") {
-      if (player.id === responseMatch.playerAId)
+      if (player.id === responseMatch.playerAId) {
         responseMatch.battle.formationB = null;
-      else responseMatch.battle.formationA = null;
+        responseMatch.battle.teamB = responseMatch.battle.teamB.map((unit) => ({
+          ...unit,
+          x: -1,
+          y: -1,
+        }));
+      } else {
+        responseMatch.battle.formationA = null;
+        responseMatch.battle.teamA = responseMatch.battle.teamA.map((unit) => ({
+          ...unit,
+          x: -1,
+          y: -1,
+        }));
+      }
     }
     if (player.id === responseMatch.playerAId)
       responseMatch.battle.pendingB = responseMatch.battle.pendingB ? [] : null;
@@ -629,6 +647,8 @@ export async function initializeLivePvpBattleActionLegacy() {
       pp,
       pendingA: null,
       pendingB: null,
+      turnPlayerId: match.firstPickerId ?? match.playerAId,
+      roundStarterId: match.firstPickerId ?? match.playerAId,
       deadline: nextDeadline(),
       choiceTurnId: starter,
       roundStarterId: starter,
@@ -776,8 +796,13 @@ const formationUnits = (
   units: TacticalUnit[],
   formation: TacticalFormation,
   sideA: boolean,
+  orderedIds?: string[],
 ) =>
-  units.map((unit, index) => {
+  (
+    orderedIds
+      ?.map((id) => units.find((unit) => unit.id === id)!)
+      .filter(Boolean) ?? units
+  ).map((unit, index) => {
     const [baseX, y] = FORMATION_CELLS[formation][index];
     return { ...unit, x: sideA ? baseX : 11 - baseX, y };
   });
@@ -785,6 +810,86 @@ const nearest = (unit: TacticalUnit, targets: TacticalUnit[]) =>
   [...targets].sort(
     (a, b) => distance(unit, a) - distance(unit, b) || a.hp - b.hp,
   )[0];
+
+function applyTacticalMovement(
+  battle: LivePvpBattleState,
+  team: TacticalUnit[],
+  enemies: TacticalUnit[],
+  orders: LivePvpBattleAction[],
+) {
+  const events: Array<{ unitId: string; kind: string; text: string }> = [
+    ...battle.lastEvents.filter((event) =>
+      ["MOVE", "BLOCK"].includes(event.kind),
+    ),
+  ];
+  const occupied = new Map(
+    [...battle.teamA, ...battle.teamB]
+      .filter((unit) => unit.hp > 0)
+      .map((unit) => [`${unit.x}:${unit.y}`, unit.id]),
+  );
+  for (const unit of [...team]
+    .filter((entry) => entry.hp > 0)
+    .sort((a, b) => b.agility - a.agility)) {
+    const order = orders.find((entry) => entry.mascotId === unit.id)!;
+    const enemyAverage = enemies.length
+      ? enemies.reduce((sum, entry) => sum + entry.agility, 0) / enemies.length
+      : unit.agility;
+    const mobility =
+      2 +
+      (unit.agility - enemyAverage >= 140
+        ? 2
+        : unit.agility - enemyAverage >= 60
+          ? 1
+          : 0);
+    let x = order.x ?? unit.x,
+      y = order.y ?? unit.y;
+    if (order.type === "AUTO" && order.x == null && order.y == null) {
+      const target = nearest(
+        unit,
+        enemies.filter((entry) => entry.hp > 0),
+      );
+      if (target) {
+        const dx = Math.sign(target.x - unit.x),
+          dy = Math.sign(target.y - unit.y);
+        x =
+          unit.x +
+          (Math.abs(target.x - unit.x) >= Math.abs(target.y - unit.y) ? dx : 0);
+        y = unit.y + (x === unit.x ? dy : 0);
+      }
+    }
+    const valid =
+      x >= 0 &&
+      x < 12 &&
+      y >= 0 &&
+      y < 8 &&
+      distance(unit, { x, y }) <= mobility;
+    const destinationOwner = occupied.get(`${x}:${y}`);
+    if (!valid || (destinationOwner && destinationOwner !== unit.id)) {
+      order.x = unit.x;
+      order.y = unit.y;
+      if (valid && destinationOwner)
+        events.push({
+          unitId: unit.id,
+          kind: "BLOCK",
+          text: `${unit.name} não conseguiu ocupar (${x + 1}, ${y + 1}); a célula já estava ocupada.`,
+        });
+      continue;
+    }
+    occupied.delete(`${unit.x}:${unit.y}`);
+    if (unit.x !== x || unit.y !== y)
+      events.push({
+        unitId: unit.id,
+        kind: "MOVE",
+        text: `${unit.name} moveu de (${unit.x + 1}, ${unit.y + 1}) para (${x + 1}, ${y + 1}).`,
+      });
+    unit.x = x;
+    unit.y = y;
+    order.x = x;
+    order.y = y;
+    occupied.set(`${x}:${y}`, unit.id);
+  }
+  return events;
+}
 
 function resolveTacticalRound(match: MatchValue) {
   const battle = match.battle!;
@@ -797,7 +902,11 @@ function resolveTacticalRound(match: MatchValue) {
   const all = [...battle.teamA, ...battle.teamB];
   const aliveA = () => battle.teamA.filter((unit) => unit.hp > 0);
   const aliveB = () => battle.teamB.filter((unit) => unit.hp > 0);
-  const events: Array<{ unitId: string; kind: string; text: string }> = [];
+  const events: Array<{ unitId: string; kind: string; text: string }> = [
+    ...battle.lastEvents.filter((event) =>
+      ["MOVE", "BLOCK"].includes(event.kind),
+    ),
+  ];
 
   const desired = all
     .filter((unit) => unit.hp > 0)
@@ -819,7 +928,7 @@ function resolveTacticalRound(match: MatchValue) {
             : 0);
       let x = order?.x ?? unit.x;
       let y = order?.y ?? unit.y;
-      if ((!order || order.type === "AUTO") && x === unit.x && y === unit.y) {
+      if (!order && x === unit.x && y === unit.y) {
         const target = nearest(unit, enemies);
         if (target) {
           const dx = Math.sign(target.x - unit.x),
@@ -1100,6 +1209,8 @@ export async function initializeLivePvpBattleAction() {
       formationB: null,
       pendingA: null,
       pendingB: null,
+      turnPlayerId: match.firstPickerId ?? match.playerAId,
+      roundStarterId: match.firstPickerId ?? match.playerAId,
       deadline: nextTacticalDeadline(),
       winnerId: null,
       round: 1,
@@ -1116,6 +1227,7 @@ export async function initializeLivePvpBattleAction() {
 export async function submitLivePvpFormationAction(
   formation: TacticalFormation,
   roles: Record<string, CombatRole>,
+  orderedIds?: string[],
 ) {
   const player = await requireLivePvpPlayer();
   return prisma.$transaction(async (tx) => {
@@ -1126,15 +1238,28 @@ export async function submitLivePvpFormationAction(
       throw new Error("A formação já foi encerrada.");
     const sideA = player.id === match.playerAId,
       team = sideA ? battle.teamA : battle.teamB;
+    const placement = orderedIds?.length
+      ? orderedIds
+      : team.map((unit) => unit.id);
+    if (
+      placement.length !== team.length ||
+      new Set(placement).size !== team.length ||
+      placement.some((id) => !team.some((unit) => unit.id === id))
+    )
+      throw new Error("Posicionamento inicial inválido.");
     for (const unit of team)
       if (roles[unit.id] && COMBAT_ROLE_VALUES.includes(roles[unit.id]))
         unit.role = roles[unit.id];
-    if (sideA) battle.formationA = formation;
-    else battle.formationB = formation;
+    if (sideA) {
+      battle.formationA = formation;
+      battle.teamA = formationUnits(team, formation, true, placement);
+    } else {
+      battle.formationB = formation;
+      battle.teamB = formationUnits(team, formation, false, placement);
+    }
     if (battle.formationA && battle.formationB) {
-      battle.teamA = formationUnits(battle.teamA, battle.formationA, true);
-      battle.teamB = formationUnits(battle.teamB, battle.formationB, false);
       battle.phase = "PLANNING";
+      battle.turnPlayerId = battle.roundStarterId;
       battle.deadline = nextTacticalDeadline();
       battle.logs.push("As formações foram reveladas. Rodada 1 iniciada.");
     }
@@ -1153,10 +1278,10 @@ export async function submitLivePvpBattleAction(
       battle = match.battle;
     if (!battle || battle.phase !== "PLANNING" || battle.winnerId)
       throw new Error("A rodada não está aceitando ordens.");
+    if (battle.turnPlayerId !== player.id)
+      throw new Error("Aguarde o turno de movimentação do adversário.");
     const sideA = player.id === match.playerAId,
       team = sideA ? battle.teamA : battle.teamB;
-    if (sideA ? battle.pendingA : battle.pendingB)
-      throw new Error("Suas ordens já foram confirmadas.");
     const list = Array.isArray(actions) ? actions : [actions];
     const normalized = team
       .filter((unit) => unit.hp > 0)
@@ -1167,9 +1292,28 @@ export async function submitLivePvpBattleAction(
             mascotId: unit.id,
           },
       );
+    const movementEvents = applyTacticalMovement(
+      battle,
+      team,
+      sideA ? battle.teamB : battle.teamA,
+      normalized,
+    );
+    battle.lastEvents = movementEvents;
+    battle.logs.push(
+      `${player.displayName} concluiu a movimentação da rodada ${battle.round}.`,
+      ...movementEvents.map((event) => event.text),
+    );
     if (sideA) battle.pendingA = normalized;
     else battle.pendingB = normalized;
-    if (battle.pendingA && battle.pendingB) resolveTacticalRound(match);
+    if (battle.pendingA && battle.pendingB) {
+      const previousStarter = battle.roundStarterId;
+      resolveTacticalRound(match);
+      battle.roundStarterId = otherPlayerId(match, previousStarter);
+      battle.turnPlayerId = battle.roundStarterId;
+    } else {
+      battle.turnPlayerId = otherPlayerId(match, player.id);
+      battle.deadline = nextTacticalDeadline();
+    }
     await saveMatch(tx, match);
     return { ok: true };
   });
