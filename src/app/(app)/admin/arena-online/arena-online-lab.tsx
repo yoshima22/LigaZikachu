@@ -7,6 +7,7 @@ import type { LivePvpFighter } from "@/lib/live-pvp-engine";
 import { loadLivePvpMovesAction, resolveLivePvpTurnAction } from "./actions";
 import { ArenaOnlinePregame } from "./arena-online-pregame";
 import { closeLivePvpMatchAction } from "../../combates/arena-online/matchmaking-actions";
+import { ArenaOnlineSyncedBattle } from "./arena-online-synced-battle";
 
 type Side = "A" | "B";
 export type MascotOption = {
@@ -394,6 +395,7 @@ export function ArenaOnlineLab({
 }) {
   const [pending, startTransition] = useTransition();
   const [remoteRoster, setRemoteRoster] = useState<MascotOption[]>([]);
+  const [onlineBattleReady, setOnlineBattleReady] = useState(false);
   const roster = useMemo(() => {
     const map = new Map<string, MascotOption>();
     [...mascots, ...remoteRoster].forEach((mascot) =>
@@ -893,11 +895,18 @@ export function ArenaOnlineLab({
           setOpeningSide(first);
           setIdA(a[0] ?? "");
           setIdB(b[0] ?? "");
+          if (onlineIdentity) {
+            setOnlineBattleReady(true);
+            return;
+          }
           load(a, b, combined);
           toast.success("Pré-jogo concluído e golpes preparados.");
         }}
       />
-      {movesA.length > 0 && (
+      {onlineIdentity && onlineBattleReady && (
+        <ArenaOnlineSyncedBattle identity={onlineIdentity} />
+      )}
+      {!onlineIdentity && movesA.length > 0 && (
         <>
           <button
             onClick={begin}

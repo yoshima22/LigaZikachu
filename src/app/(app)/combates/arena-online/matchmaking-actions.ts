@@ -8,6 +8,11 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import {
+  getLegalMovesWithRecommendation,
+  type LivePvpMove,
+} from "@/lib/live-pvp-moves";
+import { resolveLivePvpTurn, type LivePvpFighter } from "@/lib/live-pvp-engine";
+import {
   canAccessLivePvp,
   getLivePvpAccessConfig,
 } from "@/lib/live-pvp-access";
@@ -46,8 +51,28 @@ export type LivePvpMatchValue = {
   deadline: string;
   revision: number;
   events: string[];
+  battle: LivePvpBattleState | null;
   status: "PREGAME" | "FINISHED";
   createdAt: string;
+};
+
+export type LivePvpBattleAction =
+  | { type: "MOVE"; moveId: number }
+  | { type: "SWITCH"; mascotId: string };
+export type LivePvpBattleState = {
+  teamA: LivePvpFighter[];
+  teamB: LivePvpFighter[];
+  activeAId: string;
+  activeBId: string;
+  moves: Record<string, LivePvpMove[]>;
+  pp: Record<string, Record<number, number>>;
+  pendingA: LivePvpBattleAction | null;
+  pendingB: LivePvpBattleAction | null;
+  choiceTurnId: string;
+  roundStarterId: string;
+  winnerId: string | null;
+  round: number;
+  logs: string[];
 };
 
 type MatchValue = LivePvpMatchValue;
@@ -69,8 +94,41 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     deadline: nextDeadline(),
     revision: 1,
     events: [],
+    battle: null,
     ...raw,
   } as MatchValue;
+}
+
+function fighterFromMascot(mascot: {
+  id: string;
+  pokemonId: number;
+  nickname: string | null;
+  level: number;
+  statForce: number;
+  statAgility: number;
+  statCharisma: number;
+  statInstinct: number;
+  statVitality: number;
+}) {
+  const maxHp = Math.max(
+    10,
+    Math.round(55 + mascot.level * 6 + mascot.statVitality * 4),
+  );
+  return {
+    id: mascot.id,
+    pokemonId: mascot.pokemonId,
+    spriteUrl: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/${mascot.pokemonId}.gif`,
+    name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
+    level: mascot.level,
+    types: getPokemonTypes(mascot.pokemonId),
+    hp: maxHp,
+    maxHp,
+    force: mascot.statForce,
+    agility: mascot.statAgility,
+    charisma: mascot.statCharisma,
+    instinct: mascot.statInstinct,
+    vitality: mascot.statVitality,
+  } satisfies LivePvpFighter;
 }
 const otherPlayerId = (match: MatchValue, playerId: string) =>
   playerId === match.playerAId ? match.playerBId : match.playerAId;
@@ -438,6 +496,177 @@ export async function leaveLivePvpQueueAction() {
   return getLivePvpLobbyAction();
 }
 
+export async function initializeLivePvpBattleAction() {
+  const player = await requireLivePvpPlayer();
+  const current = await prisma.$transaction((tx) =>
+    findCurrentMatch(tx, player.id),
+  );
+  if (current.phase !== "READY") throw new Error("O draft ainda não terminou.");
+  if (current.battle) return current;
+  const ids = [...current.orderAIds, ...current.orderBIds];
+  const mascots = await prisma.mascot.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      pokemonId: true,
+      nickname: true,
+      level: true,
+      statForce: true,
+      statAgility: true,
+      statCharisma: true,
+      statInstinct: true,
+      statVitality: true,
+    },
+  });
+  const byId = new Map(mascots.map((mascot) => [mascot.id, mascot]));
+  if (mascots.length !== 12)
+    throw new Error("Não foi possível montar as duas equipes completas.");
+  const loaded = await Promise.all(
+    mascots.map(async (mascot) => {
+      const result = await getLegalMovesWithRecommendation(
+        mascot.pokemonId,
+        mascot.level,
+      );
+      return [mascot.id, result.recommended] as const;
+    }),
+  );
+  const moves = Object.fromEntries(loaded);
+  const pp = Object.fromEntries(
+    loaded.map(([id, list]) => [
+      id,
+      Object.fromEntries(list.map((move) => [move.id, move.pp])),
+    ]),
+  );
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.battle) return match;
+    const teamA = match.orderAIds.map((id) => fighterFromMascot(byId.get(id)!));
+    const teamB = match.orderBIds.map((id) => fighterFromMascot(byId.get(id)!));
+    const starter = match.firstPickerId ?? match.playerAId;
+    match.battle = {
+      teamA,
+      teamB,
+      activeAId: teamA[0].id,
+      activeBId: teamB[0].id,
+      moves,
+      pp,
+      pendingA: null,
+      pendingB: null,
+      choiceTurnId: starter,
+      roundStarterId: starter,
+      winnerId: null,
+      round: 1,
+      logs: [
+        `A batalha entre ${match.playerAName} e ${match.playerBName} começou.`,
+      ],
+    };
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
+export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    const battle = match.battle;
+    if (!battle || battle.winnerId)
+      throw new Error("A batalha não está aceitando ações.");
+    if (battle.choiceTurnId !== player.id)
+      throw new Error("Aguarde a ação do adversário.");
+    const sideA = player.id === match.playerAId;
+    const team = sideA ? battle.teamA : battle.teamB;
+    const activeId = sideA ? battle.activeAId : battle.activeBId;
+    if (action.type === "MOVE") {
+      const move = battle.moves[activeId]?.find(
+        (entry) => entry.id === action.moveId,
+      );
+      if (!move || (battle.pp[activeId]?.[move.id] ?? 0) <= 0)
+        throw new Error("Golpe indisponível.");
+    } else {
+      const target = team.find((entry) => entry.id === action.mascotId);
+      if (!target || target.hp <= 0 || target.id === activeId)
+        throw new Error("Troca inválida.");
+    }
+    if (sideA) battle.pendingA = action;
+    else battle.pendingB = action;
+    const other = otherPlayerId(match, player.id);
+    if (!battle.pendingA || !battle.pendingB) {
+      battle.choiceTurnId = other;
+      battle.logs.push(
+        `${player.ptcglNick ?? player.displayName} confirmou uma ação.`,
+      );
+      await saveMatch(tx, match);
+      return match;
+    }
+    const actionA = battle.pendingA;
+    const actionB = battle.pendingB;
+    if (actionA.type === "SWITCH") battle.activeAId = actionA.mascotId;
+    if (actionB.type === "SWITCH") battle.activeBId = actionB.mascotId;
+    let fighterA = battle.teamA.find((entry) => entry.id === battle.activeAId)!;
+    let fighterB = battle.teamB.find((entry) => entry.id === battle.activeBId)!;
+    const moveA =
+      actionA.type === "MOVE"
+        ? (battle.moves[fighterA.id].find(
+            (move) => move.id === actionA.moveId,
+          ) ?? null)
+        : null;
+    const moveB =
+      actionB.type === "MOVE"
+        ? (battle.moves[fighterB.id].find(
+            (move) => move.id === actionB.moveId,
+          ) ?? null)
+        : null;
+    if (moveA) battle.pp[fighterA.id][moveA.id] -= 1;
+    if (moveB) battle.pp[fighterB.id][moveB.id] -= 1;
+    const result = resolveLivePvpTurn(fighterA, moveA, fighterB, moveB);
+    battle.teamA = battle.teamA.map((entry) =>
+      entry.id === result.fighterA.id ? result.fighterA : entry,
+    );
+    battle.teamB = battle.teamB.map((entry) =>
+      entry.id === result.fighterB.id ? result.fighterB : entry,
+    );
+    fighterA = result.fighterA;
+    fighterB = result.fighterB;
+    if (fighterA.hp <= 0)
+      battle.activeAId =
+        battle.teamA.find((entry) => entry.hp > 0)?.id ?? battle.activeAId;
+    if (fighterB.hp <= 0)
+      battle.activeBId =
+        battle.teamB.find((entry) => entry.hp > 0)?.id ?? battle.activeBId;
+    const aliveA = battle.teamA.some((entry) => entry.hp > 0),
+      aliveB = battle.teamB.some((entry) => entry.hp > 0);
+    if (!aliveA || !aliveB)
+      battle.winnerId = aliveA ? match.playerAId : match.playerBId;
+    battle.logs.push(...result.events);
+    battle.pendingA = null;
+    battle.pendingB = null;
+    battle.round += 1;
+    battle.roundStarterId = otherPlayerId(match, battle.roundStarterId);
+    battle.choiceTurnId = battle.roundStarterId;
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
+export async function surrenderLivePvpBattleAction() {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (!match.battle || match.battle.winnerId)
+      throw new Error("A batalha já terminou.");
+    match.battle.winnerId = otherPlayerId(match, player.id);
+    match.battle.logs.push(
+      `${player.ptcglNick ?? player.displayName} desistiu da batalha.`,
+    );
+    await saveMatch(tx, match);
+    return match;
+  });
+}
+
 export async function closeLivePvpMatchAction() {
   const player = await requireLivePvpPlayer();
   await prisma.$transaction(async (tx) => {
@@ -540,6 +769,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
         events: [
           `${opponent.playerName} e ${player.ptcglNick ?? player.displayName} foram conectados.`,
         ],
+        battle: null,
         status: "PREGAME",
         createdAt: new Date().toISOString(),
       };

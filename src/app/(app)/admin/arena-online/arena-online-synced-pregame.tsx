@@ -13,6 +13,26 @@ import {
 } from "../../combates/arena-online/matchmaking-actions";
 
 type Side = "A" | "B";
+const TYPE_LABELS: Record<string, string> = {
+  normal: "Normal",
+  fire: "Fogo",
+  water: "Água",
+  electric: "Elétrico",
+  grass: "Planta",
+  ice: "Gelo",
+  fighting: "Lutador",
+  poison: "Veneno",
+  ground: "Terra",
+  flying: "Voador",
+  psychic: "Psíquico",
+  bug: "Inseto",
+  rock: "Pedra",
+  ghost: "Fantasma",
+  dragon: "Dragão",
+  dark: "Sombrio",
+  steel: "Aço",
+  fairy: "Fada",
+};
 
 function MascotChip({ mascot }: { mascot: MascotOption }) {
   return (
@@ -27,7 +47,8 @@ function MascotChip({ mascot }: { mascot: MascotOption }) {
           {mascot.name}
         </p>
         <p className="text-[9px] text-slate-500">
-          Nv.{mascot.level} · {mascot.types.join(" / ")}
+          Nv.{mascot.level} ·{" "}
+          {mascot.types.map((type) => TYPE_LABELS[type] ?? type).join(" / ")}
         </p>
       </div>
     </div>
@@ -61,6 +82,8 @@ export function ArenaOnlineSyncedPregame({
   const [tag, setTag] = useState("ALL");
   const [page, setPage] = useState(1);
   const [seconds, setSeconds] = useState(30);
+  const [coinAnimating, setCoinAnimating] = useState(false);
+  const animatedCoinRevision = useRef<number | null>(null);
   const [pending, startTransition] = useTransition();
   const completedRevision = useRef<number | null>(null);
   const viewerSide: Side = identity.playerId === match.playerAId ? "A" : "B";
@@ -128,6 +151,18 @@ export function ArenaOnlineSyncedPregame({
     );
     return () => clearInterval(timer);
   }, [match.deadline]);
+  useEffect(() => {
+    if (
+      !match.coinChoice ||
+      match.phase !== "FIRST_PICK" ||
+      animatedCoinRevision.current === match.revision
+    )
+      return;
+    animatedCoinRevision.current = match.revision;
+    setCoinAnimating(true);
+    const timer = setTimeout(() => setCoinAnimating(false), 1900);
+    return () => clearTimeout(timer);
+  }, [match.coinChoice, match.phase, match.revision]);
   useEffect(() => {
     setSelected([]);
     setPage(1);
@@ -241,7 +276,38 @@ export function ArenaOnlineSyncedPregame({
         })}
       </div>
 
-      {!isMyTurn && match.phase !== "READY" && (
+      {coinAnimating && (
+        <div className="overflow-hidden py-10 text-center [perspective:900px]">
+          <div className="coin-sync mx-auto flex h-28 w-28 items-center justify-center rounded-full border-4 border-yellow-200 bg-gradient-to-br from-yellow-200 via-[#FFCB05] to-amber-600 text-3xl font-black text-amber-950 shadow-[0_0_45px_rgba(255,203,5,.55)]">
+            LZ
+          </div>
+          <p className="mt-4 text-sm text-slate-300">
+            Moeda lançada por{" "}
+            {match.coinChooserId === match.playerAId
+              ? match.playerAName
+              : match.playerBName}
+            ...
+          </p>
+          <style jsx>{`
+            @keyframes coinSync {
+              0% {
+                transform: translateY(30px) rotateY(0) scale(0.8);
+              }
+              45% {
+                transform: translateY(-65px) rotateY(900deg) scale(1.12);
+              }
+              100% {
+                transform: translateY(0) rotateY(1800deg) scale(1);
+              }
+            }
+            .coin-sync {
+              animation: coinSync 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+              transform-style: preserve-3d;
+            }
+          `}</style>
+        </div>
+      )}
+      {!coinAnimating && !isMyTurn && match.phase !== "READY" && (
         <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-8 text-center">
           <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
           <p className="font-bold text-cyan-100">
@@ -253,7 +319,7 @@ export function ArenaOnlineSyncedPregame({
         </div>
       )}
 
-      {isMyTurn && match.phase === "COIN_PICK" && (
+      {!coinAnimating && isMyTurn && match.phase === "COIN_PICK" && (
         <div className="mt-5 text-center">
           <p className="text-sm text-white">
             {identity.playerName}, escolha o lado da moeda.
@@ -273,7 +339,7 @@ export function ArenaOnlineSyncedPregame({
         </div>
       )}
 
-      {isMyTurn && match.phase === "FIRST_PICK" && (
+      {!coinAnimating && isMyTurn && match.phase === "FIRST_PICK" && (
         <div className="mt-5 text-center">
           <p className="text-sm text-white">
             Você venceu a moeda ({match.coinResult}). Quem começa o draft?
@@ -307,7 +373,7 @@ export function ArenaOnlineSyncedPregame({
         </div>
       )}
 
-      {isMyTurn && match.phase === "DRAFT" && (
+      {!coinAnimating && isMyTurn && match.phase === "DRAFT" && (
         <div className="mt-4">
           <p className="text-center text-sm text-white">
             Escolha {required} mascote(s) da sua conta.
@@ -377,7 +443,10 @@ export function ArenaOnlineSyncedPregame({
                   {mascot.name}
                 </b>
                 <span className="text-[9px] text-slate-500">
-                  Nv.{mascot.level} · {mascot.types.join(" / ")}
+                  Nv.{mascot.level} ·{" "}
+                  {mascot.types
+                    .map((entry) => TYPE_LABELS[entry] ?? entry)
+                    .join(" / ")}
                 </span>
               </button>
             ))}
@@ -413,7 +482,7 @@ export function ArenaOnlineSyncedPregame({
         </div>
       )}
 
-      {isMyTurn && match.phase === "ORDER" && (
+      {!coinAnimating && isMyTurn && match.phase === "ORDER" && (
         <div className="mt-4">
           <p className="text-center text-sm text-white">
             Defina o inicial e a sequência completa da sua equipe.
