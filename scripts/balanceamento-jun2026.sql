@@ -99,7 +99,7 @@ WHERE type = 'MASCOT_BUFF_STAT';
 -- Bala de Mel (MASCOT_BUFF_HAPPY)
 UPDATE shop_items SET
   price = 300,
-  description = 'Leva a felicidade do mascote para 100 e muda o humor para Feliz por 3 horas. Excelente para preparar o mascote antes de treino ou expedição.'
+  description = 'Leva a felicidade do mascote para 100 e tem 40% de chance de criar uma nova amizade (se houver espaço entre os 10 amigos) ou gerar um evento social bônus com um amigo atual.'
 WHERE type = 'MASCOT_BUFF_HAPPY';
 
 -- Amuleto da Sorte (MASCOT_BUFF_LUCK)
