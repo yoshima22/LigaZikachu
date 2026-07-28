@@ -336,7 +336,7 @@ export function ArenaOnlineSyncedBattle({
   );
   useEffect(() => {
     if (!eventSignature) {
-      setEventPlayback({ signature: "", index: -1 });
+      setEventPlayback({ signature: "", index: 0 });
       return;
     }
     setEventPlayback({ signature: eventSignature, index: 0 });
@@ -357,7 +357,7 @@ export function ArenaOnlineSyncedBattle({
         clearInterval(timer);
         setEventPlayback((current) =>
           current.signature === eventSignature
-            ? { signature: eventSignature, index: -1 }
+            ? { signature: eventSignature, index: eventCount }
             : current,
         );
       },
@@ -369,7 +369,9 @@ export function ArenaOnlineSyncedBattle({
     };
   }, [eventSignature]);
   const activeEvent: TacticalBattleEvent | null =
-    eventPlayback.signature === eventSignature && eventPlayback.index >= 0
+    eventPlayback.signature === eventSignature &&
+    eventPlayback.index >= 0 &&
+    eventPlayback.index < (battle?.lastEvents.length ?? 0)
       ? (battle?.lastEvents[eventPlayback.index] ?? null)
       : null;
   useEffect(() => {
@@ -605,6 +607,10 @@ export function ArenaOnlineSyncedBattle({
 
   const all = [...battle.teamA, ...battle.teamB];
   const opponents = sideA ? battle.teamB : battle.teamA;
+  const playbackIndex =
+    eventPlayback.signature === eventSignature ? eventPlayback.index : -1;
+  const playbackRunning =
+    !!eventSignature && playbackIndex < battle.lastEvents.length;
   const animatedMovePosition = (() => {
     if (
       activeEvent?.kind !== "MOVE" ||
@@ -629,29 +635,60 @@ export function ArenaOnlineSyncedBattle({
         Math.sign(dy) * Math.min(Math.abs(dy), moveFrame - horizontalSteps),
     };
   })();
-  const cell = (x: number, y: number) => {
+  const visualUnits = all.map((unit) => {
+    let x = unit.x,
+      y = unit.y,
+      hp = unit.hp;
+    const movementIndex = battle.lastEvents.findIndex(
+      (event) => event.kind === "MOVE" && event.unitId === unit.id,
+    );
+    const movement = battle.lastEvents[movementIndex];
     if (
-      animatedMovePosition?.x === x &&
-      animatedMovePosition.y === y &&
-      activeEvent
-    )
-      return all.find((unit) => unit.id === activeEvent.unitId);
-    const positioned = all.find(
+      movement &&
+      movementIndex > playbackIndex &&
+      movement.fromX != null &&
+      movement.fromY != null
+    ) {
+      x = movement.fromX;
+      y = movement.fromY;
+    } else if (
+      movement &&
+      movementIndex === playbackIndex &&
+      animatedMovePosition
+    ) {
+      x = animatedMovePosition.x;
+      y = animatedMovePosition.y;
+    }
+    for (
+      let index = battle.lastEvents.length - 1;
+      index > playbackIndex;
+      index--
+    ) {
+      const event = battle.lastEvents[index];
+      if (event.amount == null) continue;
+      if (event.kind === "ATTACK" && event.targetId === unit.id)
+        hp += event.amount;
+      else if (event.kind === "GUARD" && event.unitId === unit.id)
+        hp += event.amount;
+      else if (event.kind === "HEAL" && event.targetId === unit.id)
+        hp -= event.amount;
+    }
+    return { ...unit, x, y, hp: Math.max(0, Math.min(unit.maxHp, hp)) };
+  });
+  const cell = (x: number, y: number) => {
+    const positioned = visualUnits.find(
       (unit) =>
         unit.x === x &&
         unit.y === y &&
         (unit.hp > 0 ||
           activeEvent?.targetId === unit.id ||
-          (activeEvent?.kind === "KO" && activeEvent.unitId === unit.id)),
+          battle.lastEvents.some(
+            (event, index) =>
+              event.kind === "KO" &&
+              event.unitId === unit.id &&
+              index >= playbackIndex,
+          )),
     );
-    if (
-      activeEvent &&
-      positioned?.id === activeEvent.unitId &&
-      activeEvent.kind === "MOVE" &&
-      animatedMovePosition &&
-      (animatedMovePosition.x !== x || animatedMovePosition.y !== y)
-    )
-      return undefined;
     return positioned;
   };
   const effectiveAgility = (unit: TacticalUnit) =>
@@ -727,6 +764,19 @@ export function ArenaOnlineSyncedBattle({
                   ? "Alcance de marcação"
                   : null
     : null;
+  const postureZoneTheme = selected
+    ? selected.role === "HEALER"
+      ? "border-emerald-400/80 bg-emerald-500/20"
+      : selected.role === "ENCOURAGER"
+        ? "border-amber-300/80 bg-amber-400/20"
+        : selected.role === "SABOTEUR"
+          ? "border-purple-400/80 bg-purple-500/20"
+          : selected.role === "PROVOKER"
+            ? "border-orange-400/80 bg-orange-500/20"
+            : selected.role === "SCOUT"
+              ? "border-cyan-300/80 bg-cyan-400/20"
+              : "border-blue-400/80 bg-blue-500/20"
+    : "border-blue-400/80 bg-blue-500/20";
   const leavingEnemyControl =
     !!selected &&
     selected.role !== "FLANK" &&
@@ -743,7 +793,7 @@ export function ArenaOnlineSyncedBattle({
       mobility &&
     (!cell(x, y) || cell(x, y)?.id === selected.id);
   const chooseCell = (x: number, y: number) => {
-    if (!selected || ownPending || !isMyTurn) return;
+    if (!selected || ownPending || !isMyTurn || playbackRunning) return;
     if (!canMoveTo(x, y)) {
       toast.error("Célula inválida: fora do alcance ou já ocupada.");
       return;
@@ -761,7 +811,7 @@ export function ArenaOnlineSyncedBattle({
     );
   };
   const chooseTarget = (target: TacticalUnit) => {
-    if (!selected || ownPending || !isMyTurn) return;
+    if (!selected || ownPending || !isMyTurn || playbackRunning) return;
     if (orders[selected.id]?.type !== "ATTACK") {
       toast.info("Escolha 'Forçar ataque' antes de marcar um alvo inimigo.");
       return;
@@ -932,14 +982,20 @@ export function ArenaOnlineSyncedBattle({
                     enemy.hp > 0 &&
                     Math.abs(enemy.x - x) + Math.abs(enemy.y - y) === 1,
                 ),
-                validMove = isMyTurn && !ownPending && canMoveTo(x, y),
+                validMove =
+                  isMyTurn &&
+                  !ownPending &&
+                  !playbackRunning &&
+                  canMoveTo(x, y),
                 inAttackArea =
+                  !playbackRunning &&
                   !!plannedPosition &&
                   Math.abs(x - plannedPosition.x) +
                     Math.abs(y - plannedPosition.y) <=
                     attackRange &&
                   !(x === plannedPosition.x && y === plannedPosition.y),
                 inProtectionArea =
+                  !playbackRunning &&
                   !!plannedPosition &&
                   protectionRange > 0 &&
                   Math.abs(x - plannedPosition.x) +
@@ -968,6 +1024,14 @@ export function ArenaOnlineSyncedBattle({
                   }
                   className={`relative aspect-square min-h-16 rounded border text-[9px] transition-all duration-300 ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70"} ${validMove ? "ring-2 ring-emerald-400/70 hover:bg-emerald-500/20" : ""} ${enemyControlCell && selected ? "shadow-[inset_0_0_12px_rgba(249,115,22,.28)]" : ""} ${inAttackArea ? "after:pointer-events-none after:absolute after:inset-1 after:rounded after:border after:border-red-400/50" : ""} ${inProtectionArea ? "shadow-[inset_0_0_14px_rgba(59,130,246,.22)]" : ""} ${plannedDestination ? "ring-4 ring-[#FFCB05] bg-[#FFCB05]/20" : ""} ${acting ? "z-10 ring-4 ring-fuchsia-400 bg-fuchsia-500/20" : ""} ${targeted ? "z-10 ring-4 ring-red-500 bg-red-500/25" : ""} ${manuallyTargeted ? "z-10 ring-4 ring-orange-400 bg-orange-500/20" : ""} ${knockedOut ? "z-20 ring-4 ring-red-600 bg-red-950" : ""}`}
                 >
+                  {inProtectionArea && (
+                    <span
+                      className={`pointer-events-none absolute inset-1 z-0 rounded border-2 ${postureZoneTheme}`}
+                    />
+                  )}
+                  {inAttackArea && (
+                    <span className="pointer-events-none absolute inset-2 z-0 rounded border border-red-400/80 bg-red-500/10" />
+                  )}
                   {plannedDestination && (
                     <span className="absolute left-1 top-1 z-10 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
                       DESTINO
@@ -993,13 +1057,13 @@ export function ArenaOnlineSyncedBattle({
                         src={unit.spriteUrl}
                         loading="lazy"
                         onError={(e) => fallback(e, unit.pokemonId)}
-                        className={`mx-auto h-9 w-9 object-contain transition-all duration-300 ${acting ? (activeEvent?.kind === "MOVE" ? "scale-110 drop-shadow-[0_0_8px_rgba(34,211,238,.9)]" : "scale-125 drop-shadow-[0_0_8px_rgba(232,121,249,.9)]") : ""} ${targeted ? "scale-90 brightness-150" : ""} ${knockedOut ? "rotate-12 scale-75 grayscale opacity-50" : ""}`}
+                        className={`relative z-10 mx-auto h-9 w-9 object-contain transition-all duration-300 ${acting ? (activeEvent?.kind === "MOVE" ? "scale-110 drop-shadow-[0_0_8px_rgba(34,211,238,.9)]" : "scale-125 drop-shadow-[0_0_8px_rgba(232,121,249,.9)]") : ""} ${targeted ? "scale-90 brightness-150" : ""} ${knockedOut ? "rotate-12 scale-75 grayscale opacity-50" : ""}`}
                         alt=""
                       />
-                      <b className="block truncate px-1 text-white">
+                      <b className="relative z-10 block truncate px-1 text-white">
                         {unit.name}
                       </b>
-                      <span className="text-slate-400">
+                      <span className="relative z-10 text-slate-300">
                         {COMBAT_ROLE_LABELS[unit.role]}
                       </span>
                       {!!unit.effects?.length && (
@@ -1016,7 +1080,7 @@ export function ArenaOnlineSyncedBattle({
                           ))}
                         </div>
                       )}
-                      <div className="mx-1 mt-1 h-1 rounded bg-slate-800">
+                      <div className="relative z-10 mx-1 mt-1 h-1 rounded bg-slate-800">
                         <div
                           className="h-full rounded bg-emerald-400"
                           style={{ width: `${(100 * unit.hp) / unit.maxHp}%` }}
@@ -1030,7 +1094,7 @@ export function ArenaOnlineSyncedBattle({
                       )}
                       {targeted && activeEvent?.amount != null && (
                         <span
-                          className={`absolute -top-3 left-1/2 z-30 -translate-x-1/2 animate-pulse whitespace-nowrap text-base font-black drop-shadow ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
+                          className={`absolute right-0 top-1/2 z-30 -translate-y-1/2 translate-x-1/2 animate-pulse whitespace-nowrap rounded-lg bg-slate-950/95 px-1.5 py-0.5 text-base font-black shadow-xl ${activeEvent.kind === "HEAL" || activeEvent.kind === "BUFF" || activeEvent.kind === "SCOUT_BONUS" ? "text-emerald-300" : activeEvent.kind === "DEBUFF" ? "text-purple-300" : activeEvent.kind === "GUARD" || activeEvent.kind === "MITIGATE" ? "text-blue-300" : "text-red-400"}`}
                         >
                           {activeEvent.kind === "HEAL" ||
                           activeEvent.kind === "BUFF" ||
@@ -1056,173 +1120,179 @@ export function ArenaOnlineSyncedBattle({
           ).flat()}
         </div>
       </div>
-      {battle.phase === "PLANNING" && isMyTurn && !ownPending && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
-          <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
-            {selected ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <img
-                    src={selected.spriteUrl}
-                    className="h-16 w-16 object-contain"
-                    alt=""
-                  />
-                  <div>
-                    <b className="text-white">{selected.name}</b>
-                    <p className="text-xs text-cyan-200">
-                      {COMBAT_ROLE_LABELS[selected.role]} · HP {selected.hp}/
-                      {selected.maxHp}
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-slate-400">
-                  1. Clique em uma célula verde. 2. Escolha a ação. 3. Confira o
-                  resumo e confirme todas as ordens.
-                </p>
-                <div className="mt-2 rounded-lg border border-blue-500/25 bg-blue-500/10 p-2 text-[11px] leading-relaxed text-blue-100">
-                  <b className="block text-blue-300">
-                    Efeito tático de {COMBAT_ROLE_LABELS[selected.role]}
-                  </b>
-                  {TACTICAL_ROLE_DETAILS[selected.role]}
-                  {postureZoneLabel && (
-                    <span className="mt-1 block font-bold text-blue-300">
-                      {postureZoneLabel}: {protectionRange} casa(s).
-                    </span>
-                  )}
-                </div>
-                {!!selected.effects?.length && (
-                  <div className="mt-2 space-y-1 rounded-lg border border-purple-500/25 bg-purple-500/10 p-2">
-                    <b className="text-[10px] uppercase tracking-wider text-purple-200">
-                      Efeitos ativos
-                    </b>
-                    {selected.effects.map((effect) => (
-                      <p
-                        key={effect.id}
-                        className="text-[10px] text-purple-100"
-                      >
-                        {effect.kind === "BUFF" ? "↑" : "↓"} {effect.label}
-                        {effect.value > 0
-                          ? ` · ${Math.round(effect.value * 100)}%`
-                          : ""}
-                        {` · ${effect.duration} rodada(s)`}
+      {battle.phase === "PLANNING" &&
+        isMyTurn &&
+        !ownPending &&
+        !playbackRunning && (
+          <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+            <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
+              {selected ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={selected.spriteUrl}
+                      className="h-16 w-16 object-contain"
+                      alt=""
+                    />
+                    <div>
+                      <b className="text-white">{selected.name}</b>
+                      <p className="text-xs text-cyan-200">
+                        {COMBAT_ROLE_LABELS[selected.role]} · HP {selected.hp}/
+                        {selected.maxHp}
                       </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-400">
+                    1. Clique em uma célula verde. 2. Escolha a ação. 3. Confira
+                    o resumo e confirme todas as ordens.
+                  </p>
+                  <div className="mt-2 rounded-lg border border-blue-500/25 bg-blue-500/10 p-2 text-[11px] leading-relaxed text-blue-100">
+                    <b className="block text-blue-300">
+                      Efeito tático de {COMBAT_ROLE_LABELS[selected.role]}
+                    </b>
+                    {TACTICAL_ROLE_DETAILS[selected.role]}
+                    {postureZoneLabel && (
+                      <span className="mt-1 block font-bold text-blue-300">
+                        {postureZoneLabel}: {protectionRange} casa(s).
+                      </span>
+                    )}
+                  </div>
+                  {!!selected.effects?.length && (
+                    <div className="mt-2 space-y-1 rounded-lg border border-purple-500/25 bg-purple-500/10 p-2">
+                      <b className="text-[10px] uppercase tracking-wider text-purple-200">
+                        Efeitos ativos
+                      </b>
+                      {selected.effects.map((effect) => (
+                        <p
+                          key={effect.id}
+                          className="text-[10px] text-purple-100"
+                        >
+                          {effect.kind === "BUFF" ? "↑" : "↓"} {effect.label}
+                          {effect.value > 0
+                            ? ` · ${Math.round(effect.value * 100)}%`
+                            : ""}
+                          {` · ${effect.duration} rodada(s)`}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {orders[selected.id]?.type === "ATTACK" && (
+                    <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-200">
+                      Clique em um inimigo dentro da área vermelha para definir
+                      o alvo. Sem alvo manual, a postura escolherá o melhor alvo
+                      válido.
+                    </p>
+                  )}
+                  {orders[selected.id]?.x != null && (
+                    <p className="mt-2 rounded-lg bg-[#FFCB05]/10 p-2 text-xs text-[#FFCB05]">
+                      Destino: coluna {(orders[selected.id].x ?? 0) + 1}, linha{" "}
+                      {(orders[selected.id].y ?? 0) + 1} · Ação:{" "}
+                      {ACTIONS.find(
+                        (action) => action.id === orders[selected.id].type,
+                      )?.label ?? orders[selected.id].type}
+                      .
+                      {orders[selected.id].targetId && (
+                        <>
+                          {" "}
+                          Alvo:{" "}
+                          {
+                            all.find(
+                              (unit) =>
+                                unit.id === orders[selected.id].targetId,
+                            )?.name
+                          }
+                          .
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {ACTIONS.map((action) => (
+                      <button
+                        key={action.id}
+                        onClick={() =>
+                          setOrders((old) => ({
+                            ...old,
+                            [selected.id]: {
+                              ...(old[selected.id] ?? {
+                                mascotId: selected.id,
+                              }),
+                              type: action.id,
+                              mascotId: selected.id,
+                            },
+                          }))
+                        }
+                        className={`rounded-lg border p-2 text-xs ${orders[selected.id]?.type === action.id ? "border-[#FFCB05] bg-[#FFCB05]/10 text-[#FFCB05]" : "border-slate-700 text-slate-300"}`}
+                      >
+                        <b className="block">{action.label}</b>
+                        <span className="mt-1 block text-left text-[10px] font-normal leading-relaxed opacity-75">
+                          {action.detail}
+                        </span>
+                      </button>
                     ))}
                   </div>
-                )}
-                {orders[selected.id]?.type === "ATTACK" && (
-                  <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-200">
-                    Clique em um inimigo dentro da área vermelha para definir o
-                    alvo. Sem alvo manual, a postura escolherá o melhor alvo
-                    válido.
-                  </p>
-                )}
-                {orders[selected.id]?.x != null && (
-                  <p className="mt-2 rounded-lg bg-[#FFCB05]/10 p-2 text-xs text-[#FFCB05]">
-                    Destino: coluna {(orders[selected.id].x ?? 0) + 1}, linha{" "}
-                    {(orders[selected.id].y ?? 0) + 1} · Ação:{" "}
-                    {ACTIONS.find(
-                      (action) => action.id === orders[selected.id].type,
-                    )?.label ?? orders[selected.id].type}
-                    .
-                    {orders[selected.id].targetId && (
-                      <>
-                        {" "}
-                        Alvo:{" "}
-                        {
-                          all.find(
-                            (unit) => unit.id === orders[selected.id].targetId,
-                          )?.name
-                        }
-                        .
-                      </>
-                    )}
-                  </p>
-                )}
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {ACTIONS.map((action) => (
+                </>
+              ) : (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  Selecione um dos seus mascotes no grid.
+                </p>
+              )}
+            </div>
+            <div className="rounded-xl border border-slate-800 p-4">
+              <p className="mb-3 text-xs font-bold uppercase text-slate-400">
+                Ordens da equipe
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {mine
+                  .filter((unit) => unit.hp > 0)
+                  .map((unit) => (
                     <button
-                      key={action.id}
-                      onClick={() =>
-                        setOrders((old) => ({
-                          ...old,
-                          [selected.id]: {
-                            ...(old[selected.id] ?? { mascotId: selected.id }),
-                            type: action.id,
-                            mascotId: selected.id,
-                          },
-                        }))
-                      }
-                      className={`rounded-lg border p-2 text-xs ${orders[selected.id]?.type === action.id ? "border-[#FFCB05] bg-[#FFCB05]/10 text-[#FFCB05]" : "border-slate-700 text-slate-300"}`}
+                      key={unit.id}
+                      onClick={() => setSelectedId(unit.id)}
+                      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 p-2 text-left text-xs"
                     >
-                      <b className="block">{action.label}</b>
-                      <span className="mt-1 block text-left text-[10px] font-normal leading-relaxed opacity-75">
-                        {action.detail}
+                      <span className="text-white">{unit.name}</span>
+                      <span className="text-right">
+                        <b className="block text-cyan-300">
+                          {ACTIONS.find(
+                            (action) =>
+                              action.id === (orders[unit.id]?.type ?? "AUTO"),
+                          )?.label ?? "Agir pela postura"}
+                        </b>
+                        {orders[unit.id]?.x != null && (
+                          <span className="text-[9px] text-[#FFCB05]">
+                            C{(orders[unit.id].x ?? 0) + 1}/L
+                            {(orders[unit.id].y ?? 0) + 1}
+                          </span>
+                        )}
                       </span>
                     </button>
                   ))}
-                </div>
-              </>
-            ) : (
-              <p className="py-8 text-center text-sm text-slate-400">
-                Selecione um dos seus mascotes no grid.
-              </p>
-            )}
-          </div>
-          <div className="rounded-xl border border-slate-800 p-4">
-            <p className="mb-3 text-xs font-bold uppercase text-slate-400">
-              Ordens da equipe
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {mine
-                .filter((unit) => unit.hp > 0)
-                .map((unit) => (
-                  <button
-                    key={unit.id}
-                    onClick={() => setSelectedId(unit.id)}
-                    className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 p-2 text-left text-xs"
-                  >
-                    <span className="text-white">{unit.name}</span>
-                    <span className="text-right">
-                      <b className="block text-cyan-300">
-                        {ACTIONS.find(
-                          (action) =>
-                            action.id === (orders[unit.id]?.type ?? "AUTO"),
-                        )?.label ?? "Agir pela postura"}
-                      </b>
-                      {orders[unit.id]?.x != null && (
-                        <span className="text-[9px] text-[#FFCB05]">
-                          C{(orders[unit.id].x ?? 0) + 1}/L
-                          {(orders[unit.id].y ?? 0) + 1}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                ))}
+              </div>
+              <button
+                disabled={pending}
+                onClick={() =>
+                  run(() =>
+                    submitLivePvpBattleAction(
+                      mine
+                        .filter((unit) => unit.hp > 0)
+                        .map(
+                          (unit) =>
+                            orders[unit.id] ?? {
+                              type: "AUTO",
+                              mascotId: unit.id,
+                            },
+                        ),
+                    ),
+                  )
+                }
+                className="mt-4 w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-black text-slate-950"
+              >
+                Confirmar todas as ordens
+              </button>
             </div>
-            <button
-              disabled={pending}
-              onClick={() =>
-                run(() =>
-                  submitLivePvpBattleAction(
-                    mine
-                      .filter((unit) => unit.hp > 0)
-                      .map(
-                        (unit) =>
-                          orders[unit.id] ?? {
-                            type: "AUTO",
-                            mascotId: unit.id,
-                          },
-                      ),
-                  ),
-                )
-              }
-              className="mt-4 w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-black text-slate-950"
-            >
-              Confirmar todas as ordens
-            </button>
           </div>
-        </div>
-      )}
+        )}
       {battle.phase === "PLANNING" && !isMyTurn && (
         <div className="rounded-xl border border-cyan-500/25 p-6 text-center text-cyan-100">
           {ownPending
