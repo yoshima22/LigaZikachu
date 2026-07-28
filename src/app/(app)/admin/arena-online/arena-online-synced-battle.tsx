@@ -1,45 +1,60 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { LivePvpMatchValue } from "../../combates/arena-online/matchmaking-actions";
 import {
   closeLivePvpMatchAction,
   getLivePvpMatchAction,
   initializeLivePvpBattleAction,
   submitLivePvpBattleAction,
+  submitLivePvpFormationAction,
   surrenderLivePvpBattleAction,
+  type LivePvpBattleAction,
+  type LivePvpMatchValue,
+  type TacticalFormation,
+  type TacticalUnit,
 } from "../../combates/arena-online/matchmaking-actions";
+import {
+  COMBAT_ROLE_LABELS,
+  COMBAT_ROLE_VALUES,
+  type CombatRole,
+} from "@/lib/combat-roles";
 
-function spriteFallback(
+const FORMATIONS: Array<{
+  id: TacticalFormation;
+  name: string;
+  detail: string;
+}> = [
+  {
+    id: "WALL",
+    name: "Muralha",
+    detail: "Seis mascotes próximos da linha de frente.",
+  },
+  {
+    id: "WEDGE",
+    name: "Cunha",
+    detail: "Dois na frente, dois no meio e dois atrás.",
+  },
+  {
+    id: "SPLIT",
+    name: "Dividida",
+    detail: "Pressão separada pelas partes superior e inferior.",
+  },
+];
+const ACTIONS: Array<{ id: LivePvpBattleAction["type"]; label: string }> = [
+  { id: "AUTO", label: "Automático" },
+  { id: "ATTACK", label: "Atacar" },
+  { id: "DEFEND", label: "Defender" },
+  { id: "WAIT", label: "Aguardar" },
+];
+
+function fallback(
   event: React.SyntheticEvent<HTMLImageElement>,
   pokemonId: number,
 ) {
-  const image = event.currentTarget;
-  image.onerror = null;
-  image.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
+  event.currentTarget.onerror = null;
+  event.currentTarget.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
-
-const TYPES: Record<string, string> = {
-  normal: "Normal",
-  fire: "Fogo",
-  water: "Água",
-  electric: "Elétrico",
-  grass: "Planta",
-  ice: "Gelo",
-  fighting: "Lutador",
-  poison: "Veneno",
-  ground: "Terra",
-  flying: "Voador",
-  psychic: "Psíquico",
-  bug: "Inseto",
-  rock: "Pedra",
-  ghost: "Fantasma",
-  dragon: "Dragão",
-  dark: "Sombrio",
-  steel: "Aço",
-  fairy: "Fada",
-};
 
 export function ArenaOnlineSyncedBattle({
   identity,
@@ -47,14 +62,18 @@ export function ArenaOnlineSyncedBattle({
   identity: { playerId: string; playerName: string };
 }) {
   const [match, setMatch] = useState<LivePvpMatchValue | null>(null);
+  const [formation, setFormation] = useState<TacticalFormation>("WEDGE");
+  const [roles, setRoles] = useState<Record<string, CombatRole>>({});
+  const [orders, setOrders] = useState<Record<string, LivePvpBattleAction>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(30);
   const [pending, startTransition] = useTransition();
-  const logRef = useRef<HTMLDivElement>(null);
-  const timeoutHandledRef = useRef("");
-  const refreshingRef = useRef(false);
+  const refreshing = useRef(false),
+    timeoutKey = useRef("");
+
   const refresh = async () => {
-    if (refreshingRef.current) return;
-    refreshingRef.current = true;
+    if (refreshing.current) return;
+    refreshing.current = true;
     try {
       const state = await getLivePvpMatchAction(false);
       setMatch(state.match);
@@ -62,303 +81,379 @@ export function ArenaOnlineSyncedBattle({
         await initializeLivePvpBattleAction();
         setMatch((await getLivePvpMatchAction(false)).match);
       }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Partida indisponível.",
+      );
     } finally {
-      refreshingRef.current = false;
+      refreshing.current = false;
     }
   };
   useEffect(() => {
     void refresh();
-    const timer = setInterval(() => void refresh(), 1200);
+    const timer = setInterval(() => void refresh(), 1500);
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
-    logRef.current?.scrollTo({
-      top: logRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [match?.battle?.logs.length]);
-  useEffect(() => {
-    if (!match?.battle) return;
+    const deadline = match?.battle?.deadline;
+    if (!deadline) return;
     const update = () =>
       setSeconds(
         Math.max(
           0,
-          Math.ceil(
-            (new Date(match.battle!.deadline).getTime() - Date.now()) / 1000,
-          ),
+          Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000),
         ),
       );
     update();
     const timer = setInterval(update, 500);
     return () => clearInterval(timer);
   }, [match?.battle?.deadline]);
+
+  const battle = match?.battle;
+  const sideA = !!match && identity.playerId === match.playerAId;
+  const mine = battle ? (sideA ? battle.teamA : battle.teamB) : [];
+  const ownPending = battle
+    ? sideA
+      ? battle.pendingA
+      : battle.pendingB
+    : null;
+  const formationLocked = battle
+    ? sideA
+      ? battle.formationA
+      : battle.formationB
+    : null;
   useEffect(() => {
-    const battle = match?.battle;
-    if (!battle || battle.winnerId || seconds > 0) return;
-    const sideA = identity.playerId === match.playerAId;
-    if (sideA ? battle.pendingA : battle.pendingB) return;
-    const activeId = sideA ? battle.activeAId : battle.activeBId;
-    const move = (battle.moves[activeId] ?? []).find(
-      (entry) => (battle.pp[activeId]?.[entry.id] ?? 0) > 0,
-    );
-    if (!move) return;
-    const key = `${battle.deadline}:${identity.playerId}`;
-    if (timeoutHandledRef.current === key) return;
-    timeoutHandledRef.current = key;
-    void submitLivePvpBattleAction({ type: "MOVE", moveId: move.id })
-      .then(refresh)
-      .catch(() => refresh());
-  }, [seconds, match, identity.playerId]);
-  if (!match?.battle)
-    return (
-      <div className="rounded-xl border border-cyan-500/25 p-8 text-center text-cyan-200">
-        Preparando golpes e equipes no servidor...
-      </div>
-    );
-  const battle = match.battle;
-  const sideA = identity.playerId === match.playerAId;
-  const ownPending = sideA ? battle.pendingA : battle.pendingB;
-  const myTurn = !ownPending && !battle.winnerId;
-  const activeA = battle.teamA.find((f) => f.id === battle.activeAId)!;
-  const activeB = battle.teamB.find((f) => f.id === battle.activeBId)!;
-  const act = (fn: () => Promise<unknown>) =>
+    if (
+      !battle ||
+      seconds > 0 ||
+      battle.winnerId ||
+      ownPending ||
+      (battle.phase === "FORMATION" && formationLocked)
+    )
+      return;
+    const key = `${battle.phase}:${battle.round}:${battle.deadline}:${identity.playerId}`;
+    if (timeoutKey.current === key) return;
+    timeoutKey.current = key;
+    if (battle.phase === "FORMATION")
+      void submitLivePvpFormationAction(
+        "WEDGE",
+        Object.fromEntries(
+          mine.map((unit) => [unit.id, roles[unit.id] ?? unit.role]),
+        ),
+      ).then(refresh);
+    else if (battle.phase === "PLANNING")
+      void submitLivePvpBattleAction(
+        mine
+          .filter((unit) => unit.hp > 0)
+          .map((unit) => ({ type: "AUTO", mascotId: unit.id })),
+      ).then(refresh);
+  }, [seconds, battle?.phase, battle?.round, battle?.deadline, ownPending]);
+
+  const run = (action: () => Promise<unknown>) =>
     startTransition(async () => {
       try {
-        await fn();
+        await action();
         await refresh();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Ação recusada.");
-      }
-    });
-  const choose = (action: Parameters<typeof submitLivePvpBattleAction>[0]) => {
-    setMatch((current) => {
-      if (!current?.battle) return current;
-      const next = structuredClone(current);
-      if (identity.playerId === next.playerAId) next.battle!.pendingA = action;
-      else next.battle!.pendingB = action;
-      return next;
-    });
-    act(() => submitLivePvpBattleAction(action));
-  };
-  const surrender = () =>
-    startTransition(async () => {
-      setMatch((current) => {
-        if (!current?.battle) return current;
-        const next = structuredClone(current);
-        next.battle!.winnerId =
-          identity.playerId === next.playerAId
-            ? next.playerBId
-            : next.playerAId;
-        return next;
-      });
-      try {
-        await surrenderLivePvpBattleAction();
-      } catch (error) {
         await refresh();
-        toast.error(
-          error instanceof Error ? error.message : "Não foi possível desistir.",
-        );
       }
     });
-  const card = (fighter: typeof activeA, name: string, owned: boolean) => (
-    <div
-      className={`rounded-xl border p-4 ${
-        owned
-          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_24px_rgba(34,211,238,.12)]"
-          : "border-slate-800 bg-slate-950/70"
-      }`}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-bold text-cyan-200">{name}</p>
-        {owned && (
-          <span className="rounded-full bg-cyan-400 px-2 py-1 text-[9px] font-black uppercase text-slate-950">
-            Seu Pokémon
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col items-center text-center">
-        <img
-          src={fighter.spriteUrl}
-          alt=""
-          onError={(event) => spriteFallback(event, fighter.pokemonId)}
-          className="h-28 w-28 object-contain [image-rendering:pixelated]"
-        />
-        <b className="mt-1 text-white">
-          {fighter.name} · Nv.{fighter.level}
-        </b>
-        <div className="mt-2 flex gap-1">
-          {fighter.types.map((type) => (
-            <span
-              key={type}
-              className="rounded-full border border-slate-700 px-2 py-1 text-[9px] text-slate-300"
-            >
-              {TYPES[type] ?? type}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="mt-3 flex justify-between text-[10px]">
-        <span className="text-slate-500">HP</span>
-        <b>
-          {fighter.hp}/{fighter.maxHp}
-        </b>
-      </div>
-      <div className="mt-1 h-2 overflow-hidden rounded bg-slate-800">
-        <div
-          className="h-full bg-emerald-400"
-          style={{
-            width: `${Math.max(0, (fighter.hp / fighter.maxHp) * 100)}%`,
-          }}
-        />
-      </div>
-      <div className="mt-3 grid grid-cols-5 gap-1 text-center text-[9px] text-slate-500">
-        {[
-          ["FOR", fighter.force],
-          ["AGI", fighter.agility],
-          ["CAR", fighter.charisma],
-          ["INS", fighter.instinct],
-          ["VIT", fighter.vitality],
-        ].map(([label, value]) => (
-          <span key={label}>
-            {label}
-            <b className="block text-white">{value}</b>
-          </span>
-        ))}
-      </div>
-    </div>
+  const selected = mine.find((unit) => unit.id === selectedId) ?? null;
+  const lastByUnit = useMemo(
+    () =>
+      new Map((battle?.lastEvents ?? []).map((event) => [event.unitId, event])),
+    [battle?.lastEvents],
   );
-  const battlePanel = (
-    fighter: typeof activeA,
-    team: typeof battle.teamA,
-    owned: boolean,
-  ) => (
-    <div className="space-y-3">
-      <div className="grid gap-2">
-        {(battle.moves[fighter.id] ?? []).map((move) => {
-          const lastMoveId =
-            fighter.id === battle.lastMoveAActorId
-              ? battle.lastMoveAId
-              : fighter.id === battle.lastMoveBActorId
-                ? battle.lastMoveBId
-                : null;
-          const wasUsed = lastMoveId === move.id;
-          return (
-            <button
-              key={move.id}
-              type="button"
-              disabled={
-                !owned ||
-                !myTurn ||
-                pending ||
-                (battle.pp[fighter.id]?.[move.id] ?? 0) <= 0
-              }
-              onClick={() => owned && choose({ type: "MOVE", moveId: move.id })}
-              className={`rounded-lg border p-3 text-left text-xs transition ${
-                wasUsed
-                  ? "border-[#FFCB05] bg-[#FFCB05]/15 shadow-[0_0_18px_rgba(255,203,5,.18)]"
-                  : "border-slate-700 bg-slate-950"
-              } disabled:cursor-default disabled:opacity-70`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <b>{move.name}</b>
-                {wasUsed && (
-                  <span className="rounded bg-[#FFCB05] px-2 py-0.5 text-[9px] font-black uppercase text-slate-950">
-                    Último golpe usado
-                  </span>
-                )}
-              </div>
-              <span className="ml-2 text-slate-500">
-                Poder {move.power ?? 0} · Precisão {move.accuracy ?? "—"}
-                {move.accuracy != null ? "%" : ""} · PP{" "}
-                {battle.pp[fighter.id]?.[move.id] ?? 0}/{move.pp}
-              </span>
-              <p className="mt-1 text-[10px] text-slate-400">{move.effect}</p>
-            </button>
-          );
-        })}
+
+  if (!match || !battle)
+    return (
+      <div className="rounded-xl border border-cyan-500/30 p-10 text-center text-cyan-200">
+        Preparando a Arena Tática...
       </div>
-      <div>
-        <p className="mb-2 text-[10px] uppercase text-slate-500">
-          {owned ? "Trocar consome a ação" : "Equipe visível do adversário"}
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {team.map((entry) => (
+    );
+
+  if (battle.phase === "FORMATION")
+    return (
+      <section className="space-y-5 rounded-2xl border border-purple-500/35 bg-purple-500/5 p-5">
+        <header className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-purple-300">
+              Arena Tática · formação secreta
+            </p>
+            <h2 className="text-lg font-black text-white">
+              Escolha a formação e as posturas
+            </h2>
+          </div>
+          <b className="font-pixel text-xl text-[#FFCB05]">{seconds}s</b>
+        </header>
+        {formationLocked ? (
+          <div className="rounded-xl border border-cyan-500/30 p-10 text-center text-cyan-100">
+            Formação confirmada. Aguardando o adversário.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-3">
+              {FORMATIONS.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => setFormation(entry.id)}
+                  className={`rounded-xl border p-4 text-left ${formation === entry.id ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950"}`}
+                >
+                  <b className="text-white">{entry.name}</b>
+                  <p className="mt-1 text-xs text-slate-400">{entry.detail}</p>
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {mine.map((unit) => (
+                <div
+                  key={unit.id}
+                  className="rounded-xl border border-cyan-500/20 bg-slate-950 p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={unit.spriteUrl}
+                      onError={(event) => fallback(event, unit.pokemonId)}
+                      className="h-14 w-14 object-contain"
+                      alt=""
+                    />
+                    <div>
+                      <b className="text-white">{unit.name}</b>
+                      <p className="text-[10px] text-slate-500">
+                        FOR {unit.force} · AGI {unit.agility} · VIT{" "}
+                        {unit.vitality}
+                      </p>
+                    </div>
+                  </div>
+                  <select
+                    value={roles[unit.id] ?? unit.role}
+                    onChange={(event) =>
+                      setRoles((old) => ({
+                        ...old,
+                        [unit.id]: event.target.value as CombatRole,
+                      }))
+                    }
+                    className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-white"
+                  >
+                    {COMBAT_ROLE_VALUES.map((role) => (
+                      <option key={role} value={role}>
+                        {COMBAT_ROLE_LABELS[role]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
             <button
-              key={entry.id}
-              type="button"
-              disabled={
-                !owned ||
-                !myTurn ||
-                pending ||
-                entry.hp <= 0 ||
-                entry.id === fighter.id
-              }
+              disabled={pending}
               onClick={() =>
-                owned && choose({ type: "SWITCH", mascotId: entry.id })
+                run(() =>
+                  submitLivePvpFormationAction(
+                    formation,
+                    Object.fromEntries(
+                      mine.map((unit) => [
+                        unit.id,
+                        roles[unit.id] ?? unit.role,
+                      ]),
+                    ),
+                  ),
+                )
               }
-              className="rounded-lg border border-slate-700 p-2 text-[10px] disabled:cursor-default disabled:opacity-50"
+              className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-black text-slate-950"
             >
-              <img
-                src={entry.spriteUrl}
-                alt=""
-                loading="lazy"
-                onError={(event) => spriteFallback(event, entry.pokemonId)}
-                className="mx-auto h-12 w-12 object-contain"
-              />
-              <b className="block truncate">{entry.name}</b>
-              <span>
-                {entry.hp}/{entry.maxHp}
-              </span>
+              Confirmar formação secreta
             </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+          </>
+        )}
+      </section>
+    );
+
+  const all = [...battle.teamA, ...battle.teamB];
+  const cell = (x: number, y: number) =>
+    all.find((unit) => unit.hp > 0 && unit.x === x && unit.y === y);
+  const chooseCell = (x: number, y: number) => {
+    if (!selected || ownPending) return;
+    setOrders((old) => ({
+      ...old,
+      [selected.id]: {
+        ...(old[selected.id] ?? { type: "AUTO", mascotId: selected.id }),
+        x,
+        y,
+      },
+    }));
+  };
+  const surrendered = async () => {
+    await surrenderLivePvpBattleAction();
+    await refresh();
+  };
   return (
-    <section className="space-y-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
-      <div className="flex items-center justify-between">
+    <section className="space-y-4 rounded-2xl border border-cyan-500/30 bg-slate-950/60 p-4">
+      <header className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] uppercase tracking-widest text-cyan-300">
-            Combate online sincronizado
+            Arena Online Tática · protótipo 1
           </p>
-          <h2 className="font-bold text-white">
-            Round {battle.round} · {match.playerAName} × {match.playerBName}
+          <h2 className="font-black text-white">
+            Rodada {battle.round} · {match.playerAName} × {match.playerBName}
           </h2>
         </div>
-        <span className="text-right text-xs text-slate-400">
-          {battle.winnerId
-            ? `${battle.winnerId === match.playerAId ? match.playerAName : match.playerBName} venceu`
-            : myTurn
-              ? "Sua vez"
-              : `${sideA ? match.playerBName : match.playerAName} está escolhendo um ataque ou uma troca`}
-          {!battle.winnerId && (
-            <b className="ml-3 font-pixel text-lg text-[#FFCB05]">{seconds}s</b>
-          )}
-        </span>
-      </div>
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <div className="space-y-4">
-          {card(activeA, match.playerAName, sideA)}
-          {battlePanel(activeA, battle.teamA, sideA)}
+        {battle.phase !== "FINISHED" && (
+          <b className="font-pixel text-xl text-[#FFCB05]">{seconds}s</b>
+        )}
+      </header>
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[840px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
+          {Array.from({ length: 8 }, (_, y) =>
+            Array.from({ length: 12 }, (_, x) => {
+              const unit = cell(x, y),
+                owned = !!unit && mine.some((entry) => entry.id === unit.id),
+                selectedUnit = unit?.id === selectedId,
+                event = unit ? lastByUnit.get(unit.id) : null;
+              return (
+                <button
+                  key={`${x}-${y}`}
+                  type="button"
+                  onClick={() =>
+                    unit && owned ? setSelectedId(unit.id) : chooseCell(x, y)
+                  }
+                  className={`relative aspect-square min-h-16 rounded border text-[9px] ${selectedUnit ? "border-[#FFCB05] bg-[#FFCB05]/15" : owned ? "border-cyan-500/50 bg-cyan-500/10" : unit ? "border-red-500/40 bg-red-500/10" : "border-slate-800 bg-slate-950/70 hover:bg-slate-800"}`}
+                >
+                  {unit && (
+                    <>
+                      <img
+                        src={unit.spriteUrl}
+                        loading="lazy"
+                        onError={(e) => fallback(e, unit.pokemonId)}
+                        className="mx-auto h-9 w-9 object-contain"
+                        alt=""
+                      />
+                      <b className="block truncate px-1 text-white">
+                        {unit.name}
+                      </b>
+                      <span className="text-slate-400">
+                        {COMBAT_ROLE_LABELS[unit.role]}
+                      </span>
+                      <div className="mx-1 mt-1 h-1 rounded bg-slate-800">
+                        <div
+                          className="h-full rounded bg-emerald-400"
+                          style={{ width: `${(100 * unit.hp) / unit.maxHp}%` }}
+                        />
+                      </div>
+                      {event && (
+                        <span className="absolute -top-1 left-1/2 z-10 -translate-x-1/2 rounded bg-[#FFCB05] px-1 text-[8px] font-black text-slate-950">
+                          {event.kind}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            }),
+          ).flat()}
         </div>
-        <div className="space-y-4">
-          {card(activeB, match.playerBName, !sideA)}
-          {battlePanel(activeB, battle.teamB, !sideA)}
-        </div>
       </div>
-      {!myTurn && !battle.winnerId && (
-        <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4 text-center text-xs text-cyan-100">
-          Sua ação foi registrada.{" "}
-          {sideA ? match.playerBName : match.playerAName} está escolhendo um
-          ataque ou uma troca de Pokémon.
+      {battle.phase === "PLANNING" && !ownPending && (
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+          <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
+            {selected ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={selected.spriteUrl}
+                    className="h-16 w-16 object-contain"
+                    alt=""
+                  />
+                  <div>
+                    <b className="text-white">{selected.name}</b>
+                    <p className="text-xs text-cyan-200">
+                      {COMBAT_ROLE_LABELS[selected.role]} · HP {selected.hp}/
+                      {selected.maxHp}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-slate-400">
+                  Clique em uma célula para definir o destino. A distância
+                  válida depende da Agilidade.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {ACTIONS.map((action) => (
+                    <button
+                      key={action.id}
+                      onClick={() =>
+                        setOrders((old) => ({
+                          ...old,
+                          [selected.id]: {
+                            ...(old[selected.id] ?? { mascotId: selected.id }),
+                            type: action.id,
+                            mascotId: selected.id,
+                          },
+                        }))
+                      }
+                      className={`rounded-lg border p-2 text-xs ${orders[selected.id]?.type === action.id ? "border-[#FFCB05] bg-[#FFCB05]/10 text-[#FFCB05]" : "border-slate-700 text-slate-300"}`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Selecione um dos seus mascotes no grid.
+              </p>
+            )}
+          </div>
+          <div className="rounded-xl border border-slate-800 p-4">
+            <p className="mb-3 text-xs font-bold uppercase text-slate-400">
+              Ordens da equipe
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {mine
+                .filter((unit) => unit.hp > 0)
+                .map((unit) => (
+                  <button
+                    key={unit.id}
+                    onClick={() => setSelectedId(unit.id)}
+                    className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 p-2 text-left text-xs"
+                  >
+                    <span className="text-white">{unit.name}</span>
+                    <b className="text-cyan-300">
+                      {orders[unit.id]?.type ?? "AUTO"}
+                    </b>
+                  </button>
+                ))}
+            </div>
+            <button
+              disabled={pending}
+              onClick={() =>
+                run(() =>
+                  submitLivePvpBattleAction(
+                    mine
+                      .filter((unit) => unit.hp > 0)
+                      .map(
+                        (unit) =>
+                          orders[unit.id] ?? {
+                            type: "AUTO",
+                            mascotId: unit.id,
+                          },
+                      ),
+                  ),
+                )
+              }
+              className="mt-4 w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-black text-slate-950"
+            >
+              Confirmar todas as ordens
+            </button>
+          </div>
         </div>
       )}
-      <div
-        ref={logRef}
-        className="max-h-52 space-y-1 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3"
-      >
-        {battle.logs.map((log, index) => (
+      {battle.phase === "PLANNING" && ownPending && (
+        <div className="rounded-xl border border-cyan-500/25 p-6 text-center text-cyan-100">
+          Ordens confirmadas. O adversário ainda está planejando.
+        </div>
+      )}
+      <div className="max-h-52 space-y-1 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3">
+        {battle.logs.slice(-30).map((log, index) => (
           <p
             key={`${index}-${log}`}
             className="rounded bg-slate-900 px-2 py-1 text-[11px] text-slate-300"
@@ -367,28 +462,33 @@ export function ArenaOnlineSyncedBattle({
           </p>
         ))}
       </div>
-      {!battle.winnerId && (
+      {battle.phase !== "FINISHED" ? (
         <button
           disabled={pending}
-          onClick={surrender}
-          className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300"
+          onClick={() => run(surrendered)}
+          className="w-full rounded-lg border border-red-500/40 bg-red-500/10 p-3 font-bold text-red-300"
         >
           Desistir
         </button>
-      )}
-      {battle.winnerId && (
-        <button
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              await closeLivePvpMatchAction();
-              window.location.href = "/combates/arena-online";
-            })
-          }
-          className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200"
-        >
-          Encerrar partida e voltar ao lobby
-        </button>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-center text-lg font-black text-[#FFCB05]">
+            {battle.winnerId
+              ? `${battle.winnerId === match.playerAId ? match.playerAName : match.playerBName} venceu!`
+              : "Empate!"}
+          </p>
+          <button
+            onClick={() =>
+              run(async () => {
+                await closeLivePvpMatchAction();
+                window.location.href = "/combates/arena-online";
+              })
+            }
+            className="w-full rounded-xl bg-cyan-500 p-3 font-black text-slate-950"
+          >
+            Voltar ao lobby
+          </button>
+        </div>
       )}
     </section>
   );

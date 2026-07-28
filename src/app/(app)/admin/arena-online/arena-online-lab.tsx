@@ -871,11 +871,12 @@ export function ArenaOnlineLab({
         </p>
         <h1 className="font-pixel text-lg text-[#FFCB05]">Arena Online</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Nada aqui altera os mascotes reais. Os golpes são temporários e
-          pré-selecionados pela PokeAPI.
+          {onlineIdentity
+            ? "Protótipo tático: formação, movimentação simultânea e posturas. Nenhum mascote real perde HP ou sofre repouso."
+            : "Sandbox legado local. Nada aqui altera os mascotes reais."}
         </p>
       </header>
-      <EffectGuide />
+      {!onlineIdentity && <EffectGuide />}
       <ArenaOnlinePregame
         key={pregameReset}
         mascots={mascots}

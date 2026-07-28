@@ -5,13 +5,17 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import {
+  getPokemonName,
+  getPokemonTypes,
+  getTypeAdvantageMultiplier,
+} from "@/lib/mascot-data";
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import {
-  getLegalMovesWithRecommendation,
-  type LivePvpMove,
-} from "@/lib/live-pvp-moves";
-import { resolveLivePvpTurn, type LivePvpFighter } from "@/lib/live-pvp-engine";
+  COMBAT_ROLE_VALUES,
+  recommendCombatRole,
+  type CombatRole,
+} from "@/lib/combat-roles";
 import {
   canAccessLivePvp,
   getLivePvpAccessConfig,
@@ -57,32 +61,50 @@ export type LivePvpMatchValue = {
 };
 
 export type LivePvpBattleAction =
-  | { type: "MOVE"; moveId: number }
-  | { type: "SWITCH"; mascotId: string };
+  | { type: "AUTO"; mascotId: string; x?: number; y?: number }
+  | { type: "ATTACK"; mascotId: string; x?: number; y?: number }
+  | { type: "DEFEND"; mascotId: string; x?: number; y?: number }
+  | { type: "WAIT"; mascotId: string; x?: number; y?: number };
+export type TacticalFormation = "WALL" | "WEDGE" | "SPLIT";
+export type TacticalUnit = {
+  id: string;
+  pokemonId: number;
+  spriteUrl: string;
+  name: string;
+  level: number;
+  types: string[];
+  hp: number;
+  maxHp: number;
+  force: number;
+  agility: number;
+  charisma: number;
+  instinct: number;
+  vitality: number;
+  role: CombatRole;
+  x: number;
+  y: number;
+  shield: number;
+  survivorUsed: boolean;
+};
 export type LivePvpBattleState = {
-  teamA: LivePvpFighter[];
-  teamB: LivePvpFighter[];
-  activeAId: string;
-  activeBId: string;
-  moves: Record<string, LivePvpMove[]>;
-  pp: Record<string, Record<number, number>>;
-  pendingA: LivePvpBattleAction | null;
-  pendingB: LivePvpBattleAction | null;
-  lastMoveAId?: number | null;
-  lastMoveBId?: number | null;
-  lastMoveAActorId?: string | null;
-  lastMoveBActorId?: string | null;
+  teamA: TacticalUnit[];
+  teamB: TacticalUnit[];
+  phase: "FORMATION" | "PLANNING" | "FINISHED";
+  formationA: TacticalFormation | null;
+  formationB: TacticalFormation | null;
+  pendingA: LivePvpBattleAction[] | null;
+  pendingB: LivePvpBattleAction[] | null;
   deadline: string;
-  choiceTurnId: string;
-  roundStarterId: string;
   winnerId: string | null;
   round: number;
   logs: string[];
+  lastEvents: Array<{ unitId: string; kind: string; text: string }>;
 };
 
 type MatchValue = LivePvpMatchValue;
 
 const nextDeadline = () => new Date(Date.now() + 30_000).toISOString();
+const nextTacticalDeadline = () => new Date(Date.now() + 40_000).toISOString();
 function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
   const match = {
     coinChoice: null,
@@ -136,7 +158,18 @@ function fighterFromMascot(mascot: {
     charisma: mascot.statCharisma,
     instinct: mascot.statInstinct,
     vitality: mascot.statVitality,
-  } satisfies LivePvpFighter;
+    role: recommendCombatRole({
+      statForce: mascot.statForce,
+      statAgility: mascot.statAgility,
+      statCharisma: mascot.statCharisma,
+      statInstinct: mascot.statInstinct,
+      statVitality: mascot.statVitality,
+    }),
+    x: -1,
+    y: -1,
+    shield: 0,
+    survivorUsed: false,
+  } satisfies TacticalUnit;
 }
 const otherPlayerId = (match: MatchValue, playerId: string) =>
   playerId === match.playerAId ? match.playerBId : match.playerAId;
@@ -377,20 +410,15 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     match.playerBName;
   const responseMatch = structuredClone(match);
   if (!includeMascots && responseMatch.battle) {
-    const activeIds = [
-      responseMatch.battle.activeAId,
-      responseMatch.battle.activeBId,
-    ];
-    responseMatch.battle.moves = {
-      ...Object.fromEntries(
-        activeIds.map((id) => [id, responseMatch.battle!.moves[id] ?? []]),
-      ),
-    };
-    responseMatch.battle.pp = {
-      ...Object.fromEntries(
-        activeIds.map((id) => [id, responseMatch.battle!.pp[id] ?? {}]),
-      ),
-    };
+    if (responseMatch.battle.phase === "FORMATION") {
+      if (player.id === responseMatch.playerAId)
+        responseMatch.battle.formationB = null;
+      else responseMatch.battle.formationA = null;
+    }
+    if (player.id === responseMatch.playerAId)
+      responseMatch.battle.pendingB = responseMatch.battle.pendingB ? [] : null;
+    else
+      responseMatch.battle.pendingA = responseMatch.battle.pendingA ? [] : null;
   }
   return {
     match: responseMatch,
@@ -543,7 +571,8 @@ export async function leaveLivePvpQueueAction() {
   return getLivePvpLobbyAction();
 }
 
-export async function initializeLivePvpBattleAction() {
+/* Legacy prototype with individual PokéAPI moves, retained temporarily for reference.
+export async function initializeLivePvpBattleActionLegacy() {
   const player = await requireLivePvpPlayer();
   const current = await prisma.$transaction((tx) =>
     findCurrentMatch(tx, player.id),
@@ -700,6 +729,452 @@ export async function submitLivePvpBattleAction(action: LivePvpBattleAction) {
   });
 }
 
+*/
+
+const FORMATION_CELLS: Record<TacticalFormation, Array<[number, number]>> = {
+  WALL: [
+    [2, 1],
+    [2, 2],
+    [2, 3],
+    [2, 4],
+    [2, 5],
+    [2, 6],
+  ],
+  WEDGE: [
+    [2, 2],
+    [2, 5],
+    [1, 1],
+    [1, 6],
+    [0, 2],
+    [0, 5],
+  ],
+  SPLIT: [
+    [2, 0],
+    [1, 1],
+    [0, 2],
+    [2, 5],
+    [1, 6],
+    [0, 7],
+  ],
+};
+const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const deterministicRoll = (round: number, ...ids: string[]) => {
+  const text = `${round}:${ids.join(":")}`;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++)
+    hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return (hash >>> 0) / 4294967296;
+};
+const roleRange = (role: CombatRole) =>
+  ["DEFENDER", "ATTACKER", "GUARDIAN", "PROVOKER", "SURVIVOR"].includes(role)
+    ? 1
+    : role === "SCOUT" || role === "HEALER" || role === "ENCOURAGER"
+      ? 3
+      : 2;
+const formationUnits = (
+  units: TacticalUnit[],
+  formation: TacticalFormation,
+  sideA: boolean,
+) =>
+  units.map((unit, index) => {
+    const [baseX, y] = FORMATION_CELLS[formation][index];
+    return { ...unit, x: sideA ? baseX : 11 - baseX, y };
+  });
+const nearest = (unit: TacticalUnit, targets: TacticalUnit[]) =>
+  [...targets].sort(
+    (a, b) => distance(unit, a) - distance(unit, b) || a.hp - b.hp,
+  )[0];
+
+function resolveTacticalRound(match: MatchValue) {
+  const battle = match.battle!;
+  const orders = new Map(
+    [...(battle.pendingA ?? []), ...(battle.pendingB ?? [])].map((order) => [
+      order.mascotId,
+      order,
+    ]),
+  );
+  const all = [...battle.teamA, ...battle.teamB];
+  const aliveA = () => battle.teamA.filter((unit) => unit.hp > 0);
+  const aliveB = () => battle.teamB.filter((unit) => unit.hp > 0);
+  const events: Array<{ unitId: string; kind: string; text: string }> = [];
+
+  const desired = all
+    .filter((unit) => unit.hp > 0)
+    .map((unit) => {
+      const enemies = battle.teamA.some((entry) => entry.id === unit.id)
+        ? aliveB()
+        : aliveA();
+      const order = orders.get(unit.id);
+      const enemyAverage = enemies.length
+        ? enemies.reduce((sum, entry) => sum + entry.agility, 0) /
+          enemies.length
+        : unit.agility;
+      const mobility =
+        2 +
+        (unit.agility - enemyAverage >= 140
+          ? 2
+          : unit.agility - enemyAverage >= 60
+            ? 1
+            : 0);
+      let x = order?.x ?? unit.x;
+      let y = order?.y ?? unit.y;
+      if ((!order || order.type === "AUTO") && x === unit.x && y === unit.y) {
+        const target = nearest(unit, enemies);
+        if (target) {
+          const dx = Math.sign(target.x - unit.x),
+            dy = Math.sign(target.y - unit.y);
+          x =
+            unit.x +
+            (Math.abs(target.x - unit.x) >= Math.abs(target.y - unit.y)
+              ? dx
+              : 0);
+          y = unit.y + (x === unit.x ? dy : 0);
+        }
+      }
+      if (
+        x < 0 ||
+        x > 11 ||
+        y < 0 ||
+        y > 7 ||
+        Math.abs(x - unit.x) + Math.abs(y - unit.y) > mobility
+      )
+        return { unit, x: unit.x, y: unit.y };
+      return { unit, x, y };
+    })
+    .sort(
+      (a, b) =>
+        b.unit.agility - a.unit.agility || a.unit.id.localeCompare(b.unit.id),
+    );
+  const occupied = new Set<string>();
+  const initialOccupied = new Map(
+    all
+      .filter((unit) => unit.hp > 0)
+      .map((unit) => [`${unit.x}:${unit.y}`, unit.id]),
+  );
+  for (const move of desired) {
+    const key = `${move.x}:${move.y}`;
+    const initialOwner = initialOccupied.get(key);
+    if (
+      !occupied.has(key) &&
+      (!initialOwner || initialOwner === move.unit.id)
+    ) {
+      if (move.unit.x !== move.x || move.unit.y !== move.y)
+        events.push({
+          unitId: move.unit.id,
+          kind: "MOVE",
+          text: `${move.unit.name} moveu para (${move.x + 1}, ${move.y + 1}).`,
+        });
+      move.unit.x = move.x;
+      move.unit.y = move.y;
+      occupied.add(key);
+    } else occupied.add(`${move.unit.x}:${move.unit.y}`);
+  }
+
+  const actors = [...all]
+    .filter((unit) => unit.hp > 0)
+    .sort(
+      (a, b) =>
+        b.agility - a.agility || deterministicRoll(battle.round, a.id) - 0.5,
+    );
+  for (const actor of actors) {
+    if (actor.hp <= 0) continue;
+    actor.shield = 0;
+    const ownA = battle.teamA.some((entry) => entry.id === actor.id);
+    const allies = ownA ? aliveA() : aliveB();
+    const enemies = ownA ? aliveB() : aliveA();
+    if (!enemies.length) break;
+    const order = orders.get(actor.id);
+    const action = order?.type ?? "AUTO";
+    if (action === "WAIT") continue;
+    if (action === "DEFEND") {
+      actor.shield =
+        actor.role === "DEFENDER"
+          ? 0.45
+          : actor.role === "GUARDIAN"
+            ? 0.38
+            : 0.32;
+      events.push({
+        unitId: actor.id,
+        kind: "DEFEND",
+        text: `${actor.name} preparou ${Math.round(actor.shield * 100)}% de defesa.`,
+      });
+      continue;
+    }
+    if (actor.role === "HEALER" && action === "AUTO") {
+      const wounded = allies
+        .filter(
+          (unit) =>
+            unit.id !== actor.id &&
+            unit.hp > 0 &&
+            unit.hp < unit.maxHp &&
+            distance(actor, unit) <= 3,
+        )
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (wounded) {
+        const amount = Math.max(
+          15,
+          Math.round(
+            (actor.charisma * 0.35 + actor.vitality * 0.25 + actor.level) * 2.5,
+          ),
+        );
+        wounded.hp = Math.min(wounded.maxHp, wounded.hp + amount);
+        events.push({
+          unitId: actor.id,
+          kind: "HEAL",
+          text: `${actor.name} curou ${wounded.name} em ${amount} HP.`,
+        });
+        continue;
+      }
+    }
+    let candidates = enemies.filter(
+      (unit) => distance(actor, unit) <= roleRange(actor.role),
+    );
+    if (!candidates.length) continue;
+    if (actor.role === "FLANK" || actor.role === "SCOUT")
+      candidates.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+    else if (actor.role === "ATTACKER")
+      candidates.sort((a, b) => b.force - a.force);
+    else if (actor.role === "OPPORTUNIST")
+      candidates.sort((a, b) => a.instinct - b.instinct);
+    let target = candidates[0];
+    const defenders = enemies.filter(
+      (unit) =>
+        unit.role === "DEFENDER" && distance(unit, target) <= 2 && unit.hp > 0,
+    );
+    const defender = defenders[0];
+    if (defender && actor.role !== "FLANK") {
+      const chance = actor.role === "ATTACKER" ? 0.62 : 0.78;
+      if (deterministicRoll(battle.round, actor.id, defender.id) < chance)
+        target = defender;
+    }
+    let roleMult =
+      actor.role === "ATTACKER"
+        ? 1.08 + Math.min(0.18, actor.force / 420)
+        : actor.role === "FLANK"
+          ? 1.04 + Math.min(0.14, actor.agility / 500)
+          : actor.role === "SPECIALIST"
+            ? 1.06 +
+              Math.min(
+                0.14,
+                Math.max(
+                  actor.force,
+                  actor.agility,
+                  actor.instinct,
+                  actor.vitality,
+                  actor.charisma,
+                ) / 500,
+              )
+            : 1;
+    if (actor.role === "ATTACKER" && target.role === "DEFENDER")
+      roleMult *= 1.15;
+    if (
+      actor.role === "FLANK" &&
+      ["ENCOURAGER", "HEALER", "OPPORTUNIST"].includes(target.role)
+    )
+      roleMult *= 1.12;
+    const encourage = allies
+      .filter(
+        (unit) => unit.role === "ENCOURAGER" && distance(unit, actor) <= 3,
+      )
+      .reduce(
+        (best, unit) =>
+          Math.max(best, Math.min(0.18, 0.04 + unit.charisma / 650)),
+        0,
+      );
+    const typeMult = getPokemonTypes(actor.pokemonId).some(
+      (type) =>
+        getPokemonTypes(target.pokemonId) &&
+        getTypeAdvantageMultiplier([type], getPokemonTypes(target.pokemonId)) >
+          1,
+    )
+      ? 1.3
+      : 1;
+    let damage = Math.max(
+      1,
+      Math.round(
+        ((actor.force * 1.8 +
+          actor.level * 2 +
+          actor.instinct * 0.7 +
+          (battle.round % 12)) *
+          (1 + encourage) *
+          roleMult *
+          typeMult -
+          (target.vitality * 0.8 + target.level)) *
+          (1 - target.shield),
+      ),
+    );
+    const guardian = (ownA ? aliveB() : aliveA()).find(
+      (unit) =>
+        unit.role === "GUARDIAN" &&
+        unit.id !== target.id &&
+        distance(unit, target) <= 2,
+    );
+    if (guardian) {
+      const absorbed = Math.round(
+        damage *
+          Math.min(0.4, 0.15 + (guardian.vitality + guardian.charisma) / 600),
+      );
+      guardian.hp = Math.max(0, guardian.hp - absorbed);
+      damage -= absorbed;
+      events.push({
+        unitId: guardian.id,
+        kind: "GUARD",
+        text: `${guardian.name} interceptou ${absorbed} de dano por ${target.name}.`,
+      });
+    }
+    if (
+      target.role === "SURVIVOR" &&
+      !target.survivorUsed &&
+      target.hp - damage <= 0
+    ) {
+      damage = target.hp - 1;
+      target.survivorUsed = true;
+    }
+    target.hp = Math.max(0, target.hp - damage);
+    events.push({
+      unitId: actor.id,
+      kind: "ATTACK",
+      text: `${actor.name} atacou ${target.name} e causou ${damage} de dano.`,
+    });
+  }
+  battle.lastEvents = events;
+  battle.logs.push(
+    `Rodada ${battle.round}`,
+    ...events.map((event) => event.text),
+  );
+  battle.pendingA = null;
+  battle.pendingB = null;
+  battle.round += 1;
+  battle.deadline = nextTacticalDeadline();
+  const remainingA = aliveA(),
+    remainingB = aliveB();
+  if (!remainingA.length || !remainingB.length || battle.round > 12) {
+    const score = (team: TacticalUnit[]) =>
+      team.filter((unit) => unit.hp > 0).length * 10000 +
+      team.reduce((sum, unit) => sum + unit.hp / unit.maxHp, 0);
+    battle.winnerId =
+      score(battle.teamA) === score(battle.teamB)
+        ? null
+        : score(battle.teamA) > score(battle.teamB)
+          ? match.playerAId
+          : match.playerBId;
+    battle.phase = "FINISHED";
+  }
+}
+
+export async function initializeLivePvpBattleAction() {
+  const player = await requireLivePvpPlayer();
+  const current = await prisma.$transaction((tx) =>
+    findCurrentMatch(tx, player.id),
+  );
+  if (current.phase !== "READY") throw new Error("O draft ainda não terminou.");
+  if (current.battle) return { ok: true };
+  const ids = [...current.orderAIds, ...current.orderBIds];
+  const mascots = await prisma.mascot.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      pokemonId: true,
+      nickname: true,
+      level: true,
+      statForce: true,
+      statAgility: true,
+      statCharisma: true,
+      statInstinct: true,
+      statVitality: true,
+    },
+  });
+  const byId = new Map(mascots.map((mascot) => [mascot.id, mascot]));
+  if (mascots.length !== 12)
+    throw new Error("Não foi possível montar as duas equipes completas.");
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id);
+    if (match.battle) return { ok: true };
+    match.battle = {
+      teamA: match.orderAIds.map((id) => fighterFromMascot(byId.get(id)!)),
+      teamB: match.orderBIds.map((id) => fighterFromMascot(byId.get(id)!)),
+      phase: "FORMATION",
+      formationA: null,
+      formationB: null,
+      pendingA: null,
+      pendingB: null,
+      deadline: nextTacticalDeadline(),
+      winnerId: null,
+      round: 1,
+      logs: [
+        `${match.playerAName} e ${match.playerBName} entraram na Arena Tática.`,
+      ],
+      lastEvents: [],
+    };
+    await saveMatch(tx, match);
+    return { ok: true };
+  });
+}
+
+export async function submitLivePvpFormationAction(
+  formation: TacticalFormation,
+  roles: Record<string, CombatRole>,
+) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id),
+      battle = match.battle;
+    if (!battle || battle.phase !== "FORMATION")
+      throw new Error("A formação já foi encerrada.");
+    const sideA = player.id === match.playerAId,
+      team = sideA ? battle.teamA : battle.teamB;
+    for (const unit of team)
+      if (roles[unit.id] && COMBAT_ROLE_VALUES.includes(roles[unit.id]))
+        unit.role = roles[unit.id];
+    if (sideA) battle.formationA = formation;
+    else battle.formationB = formation;
+    if (battle.formationA && battle.formationB) {
+      battle.teamA = formationUnits(battle.teamA, battle.formationA, true);
+      battle.teamB = formationUnits(battle.teamB, battle.formationB, false);
+      battle.phase = "PLANNING";
+      battle.deadline = nextTacticalDeadline();
+      battle.logs.push("As formações foram reveladas. Rodada 1 iniciada.");
+    }
+    await saveMatch(tx, match);
+    return { ok: true };
+  });
+}
+
+export async function submitLivePvpBattleAction(
+  actions: LivePvpBattleAction[] | LivePvpBattleAction,
+) {
+  const player = await requireLivePvpPlayer();
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
+    const match = await findCurrentMatch(tx, player.id),
+      battle = match.battle;
+    if (!battle || battle.phase !== "PLANNING" || battle.winnerId)
+      throw new Error("A rodada não está aceitando ordens.");
+    const sideA = player.id === match.playerAId,
+      team = sideA ? battle.teamA : battle.teamB;
+    if (sideA ? battle.pendingA : battle.pendingB)
+      throw new Error("Suas ordens já foram confirmadas.");
+    const list = Array.isArray(actions) ? actions : [actions];
+    const normalized = team
+      .filter((unit) => unit.hp > 0)
+      .map(
+        (unit) =>
+          list.find((entry) => entry.mascotId === unit.id) ?? {
+            type: "AUTO" as const,
+            mascotId: unit.id,
+          },
+      );
+    if (sideA) battle.pendingA = normalized;
+    else battle.pendingB = normalized;
+    if (battle.pendingA && battle.pendingB) resolveTacticalRound(match);
+    await saveMatch(tx, match);
+    return { ok: true };
+  });
+}
+
 export async function surrenderLivePvpBattleAction() {
   const player = await requireAuthenticatedPlayer();
   return prisma.$transaction(async (tx) => {
@@ -708,6 +1183,7 @@ export async function surrenderLivePvpBattleAction() {
     if (!match.battle || match.battle.winnerId)
       throw new Error("A batalha já terminou.");
     match.battle.winnerId = otherPlayerId(match, player.id);
+    match.battle.phase = "FINISHED";
     match.battle.logs.push(`${player.displayName} desistiu da batalha.`);
     await saveMatch(tx, match);
     return { ok: true };
