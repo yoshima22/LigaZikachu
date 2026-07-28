@@ -867,14 +867,21 @@ export function ArenaOnlineLab({
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-xs uppercase tracking-widest text-purple-300">
-          Sandbox admin local
-        </p>
-        <h1 className="font-pixel text-lg text-[#FFCB05]">Arena Online</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-pixel text-lg text-[#FFCB05]">
+            Batalha de Terreno
+          </h1>
+          <span className="rounded-full border border-purple-400/40 bg-purple-500/15 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-purple-200">
+            Beta
+          </span>
+        </div>
         <p className="mt-2 text-sm text-slate-400">
           {onlineIdentity
-            ? "Protótipo tático: formação, movimentação simultânea e posturas. Nenhum mascote real perde HP ou sofre repouso."
-            : "Sandbox legado local. Nada aqui altera os mascotes reais."}
+            ? "Combate tático por terreno, movimentação e posturas. Durante o Beta, o modo não gera ZC, EXP ou outras recompensas e não altera o HP real dos mascotes."
+            : "Ambiente administrativo da Batalha de Terreno. Nenhuma simulação altera os mascotes reais."}
+        </p>
+        <p className="mt-1 text-xs font-bold text-purple-300">
+          O ranking será resetado no lançamento oficial.
         </p>
       </header>
       {!onlineIdentity && <EffectGuide />}
@@ -920,7 +927,7 @@ export function ArenaOnlineLab({
             onClick={begin}
             className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 font-bold text-slate-950"
           >
-            Iniciar batalha de teste
+            Iniciar simulação administrativa
           </button>
         </>
       )}

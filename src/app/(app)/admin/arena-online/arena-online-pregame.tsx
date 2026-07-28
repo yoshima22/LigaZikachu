@@ -40,6 +40,18 @@ export function ArenaOnlinePregame({
 }) {
   const [stage, setStage] = useState<Stage>("LOBBY");
   const [queue, setQueue] = useState(0);
+  const [queuePlayers, setQueuePlayers] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [ranking, setRanking] = useState<
+    Array<{
+      playerId: string;
+      playerName: string;
+      wins: number;
+      losses: number;
+      draws: number;
+    }>
+  >([]);
   const [nick, setNick] = useState("");
   const [queuePending, setQueuePending] = useState(false);
   const [onlineMatch, setOnlineMatch] =
@@ -99,6 +111,8 @@ export function ArenaOnlinePregame({
     try {
       const state = await getLivePvpLobbyAction();
       setQueue(state.queueCount);
+      setQueuePlayers(state.queuePlayers);
+      setRanking(state.ranking);
       if (state.match && !onlineMatch) {
         setOnlineMatch(state.match);
         onEvent(
@@ -120,6 +134,10 @@ export function ArenaOnlinePregame({
     try {
       const state = await joinLivePvpQueueAction(direct ? nick : undefined);
       setQueue(state.queueCount);
+      if ("queuePlayers" in state && Array.isArray(state.queuePlayers))
+        setQueuePlayers(state.queuePlayers);
+      if ("ranking" in state && Array.isArray(state.ranking))
+        setRanking(state.ranking);
       if (state.match) {
         setOnlineMatch(state.match);
       } else {
@@ -327,10 +345,10 @@ export function ArenaOnlinePregame({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[.2em] text-purple-300">
-            Pré-jogo online · sandbox
+            Batalha de Terreno · Beta
           </p>
           <h2 className="text-lg font-black text-white">
-            Fluxo de matchmaking e draft
+            Matchmaking e preparação
           </h2>
         </div>
         {stage !== "LOBBY" && stage !== "DONE" && (
@@ -343,16 +361,29 @@ export function ArenaOnlinePregame({
             <p className="font-bold text-white">Fila pública</p>
             <p className="mt-1 text-xs text-slate-400">
               <b className="text-cyan-300">{queue}</b> jogador(es) procurando
-              partida neste teste.
+              partida agora.
             </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {queuePlayers.map((entry) => (
+                <span
+                  key={entry.id}
+                  className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[9px] font-bold text-cyan-100"
+                >
+                  {entry.name}
+                </span>
+              ))}
+              {!queuePlayers.length && (
+                <span className="text-[10px] text-slate-600">
+                  Nenhum jogador na fila pública.
+                </span>
+              )}
+            </div>
             <button
               disabled={queuePending}
               onClick={() => (onlineIdentity ? void joinQueue(false) : start())}
               className="mt-3 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"
             >
-              {onlineIdentity
-                ? "Procurar adversário real"
-                : "Procurar adversário"}
+              {onlineIdentity ? "Procurar adversário" : "Procurar adversário"}
             </button>
             {onlineIdentity && (
               <button
@@ -363,6 +394,8 @@ export function ArenaOnlinePregame({
                   try {
                     const state = await leaveLivePvpQueueAction();
                     setQueue(state.queueCount);
+                    setQueuePlayers(state.queuePlayers);
+                    setRanking(state.ranking);
                     toast.success("Você saiu da fila.");
                   } finally {
                     setQueuePending(false);
@@ -385,16 +418,105 @@ export function ArenaOnlinePregame({
             <p className="mt-1 text-[10px] text-slate-500">
               {onlineIdentity
                 ? "A partida começa quando os dois jogadores buscam um pelo outro."
-                : `Sandbox disponível: ${players.join(", ") || "admins locais"}`}
+                : `Jogadores disponíveis: ${players.join(", ") || "administradores"}`}
             </p>
             <button
               disabled={!nick.trim() || queuePending}
               onClick={() => (onlineIdentity ? void joinQueue(true) : start())}
               className="mt-3 w-full rounded-lg bg-purple-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-35"
             >
-              {onlineIdentity ? "Buscar jogador" : "Simular busca simultânea"}
+              {onlineIdentity ? "Buscar jogador" : "Buscar jogador"}
             </button>
           </div>
+        </div>
+      )}
+      {stage === "LOBBY" && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-[.9fr_1.1fr]">
+          <div className="rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-4">
+            <div className="flex items-center justify-between">
+              <b className="text-sm text-white">Ranking do Beta</b>
+              <span className="rounded-full bg-[#FFCB05]/15 px-2 py-1 text-[9px] font-black text-[#FFCB05]">
+                SEM RECOMPENSAS
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-slate-400">
+              O ranking será zerado no lançamento oficial.
+            </p>
+            <div className="mt-3 max-h-64 space-y-1 overflow-y-auto">
+              {ranking.map((entry, index) => (
+                <div
+                  key={entry.playerId}
+                  className="grid grid-cols-[28px_1fr_auto] items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-1.5 text-[10px]"
+                >
+                  <b className="text-[#FFCB05]">{index + 1}º</b>
+                  <span className="truncate font-bold text-white">
+                    {entry.playerName}
+                  </span>
+                  <span className="text-slate-400">
+                    <b className="text-emerald-300">{entry.wins}V</b> ·{" "}
+                    <b className="text-red-300">{entry.losses}D</b> ·{" "}
+                    {entry.draws}E
+                  </span>
+                </div>
+              ))}
+              {!ranking.length && (
+                <p className="py-5 text-center text-[10px] text-slate-600">
+                  O ranking começa com a primeira batalha concluída.
+                </p>
+              )}
+            </div>
+          </div>
+          <details className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-4">
+            <summary className="cursor-pointer text-sm font-black text-purple-200">
+              Como funciona a Batalha de Terreno
+            </summary>
+            <div className="mt-4 space-y-3 text-[11px] leading-relaxed text-slate-300">
+              <p>
+                <b className="text-white">Pré-jogo:</b> moeda, três banimentos
+                por jogador, draft alternado de seis mascotes e posicionamento
+                secreto.
+              </p>
+              <p>
+                <b className="text-emerald-300">Movimento:</b> são 2 casas base;
+                +1 ao superar a Agilidade média inimiga em 60 e +2 ao superar em
+                140. Sair de uma zona de controle custa uma casa adicional.
+              </p>
+              <p>
+                <b className="text-red-300">Ataque:</b> as casas vermelhas
+                indicam alcance. Agilidade define a ordem da resolução; tipos,
+                bioma, atributos, postura e efeitos próximos alteram o
+                resultado.
+              </p>
+              <p>
+                <b className="text-blue-300">Defesa e posturas:</b> Defender
+                prepara redução de dano. Defensores redirecionam, Guardiões
+                interceptam, Cuidadores curam e Encorajadores impulsionam
+                aliados dentro de suas áreas.
+              </p>
+              <p>
+                <b className="text-cyan-300">Biomas:</b> ficam misturados pelo
+                mapa. Tipos favorecidos ganham +10% no atributo principal da
+                postura e +8% no ataque; tipos penalizados perdem 10% desse
+                atributo.
+              </p>
+              <p>
+                <b className="text-fuchsia-300">Eventos secretos:</b> algumas
+                casas escondem cura ou benefícios de Força, Agilidade, alcance e
+                proteção. Só são revelados quando alguém ocupa a casa.
+              </p>
+              <p>
+                <b className="text-purple-300">Névoa:</b> fecha das bordas para
+                o centro. Dentro dela há −1 movimento, −50% de cura e dano
+                crescente de 8% a 20% do HP máximo.
+              </p>
+              <p>
+                <b className="text-[#FFCB05]">Turnos e cores:</b> cada jogador
+                planeja separadamente por até dois minutos. Verde indica
+                movimento, vermelho ataque, azul área defensiva, amarelo destino
+                e âmbar aviso da névoa.
+              </p>
+            </div>
+          </details>
         </div>
       )}
       {stage === "COIN_PICK" && (

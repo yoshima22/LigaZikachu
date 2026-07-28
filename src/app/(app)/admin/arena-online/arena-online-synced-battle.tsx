@@ -120,6 +120,7 @@ const EVENT_LABELS: Record<string, string> = {
   BLOCK: "MOVIMENTO BLOQUEADO",
   KO: "K.O.",
   FOG: "NÉVOA",
+  SECRET_EVENT: "EVENTO SECRETO",
 };
 const TYPE_LABELS: Record<string, string> = {
   fire: "Fogo",
@@ -199,6 +200,56 @@ function fallback(
   event.currentTarget.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`;
 }
 
+function visualMovePath(
+  event: TacticalBattleEvent | null,
+  units: TacticalUnit[],
+) {
+  if (
+    event?.kind !== "MOVE" ||
+    event.fromX == null ||
+    event.fromY == null ||
+    event.toX == null ||
+    event.toY == null
+  )
+    return [];
+  const start = { x: event.fromX, y: event.fromY };
+  const target = { x: event.toX, y: event.toY };
+  const blocked = new Set(
+    units
+      .filter((unit) => unit.hp > 0 && unit.id !== event.unitId)
+      .map((unit) => `${unit.x}:${unit.y}`),
+  );
+  blocked.delete(`${target.x}:${target.y}`);
+  const queue: Array<Array<{ x: number; y: number }>> = [[start]];
+  const visited = new Set([`${start.x}:${start.y}`]);
+  while (queue.length) {
+    const path = queue.shift()!;
+    const current = path[path.length - 1];
+    if (current.x === target.x && current.y === target.y) return path;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      const next = { x: current.x + dx, y: current.y + dy };
+      const key = `${next.x}:${next.y}`;
+      if (
+        next.x < 0 ||
+        next.x > 11 ||
+        next.y < 0 ||
+        next.y > 7 ||
+        visited.has(key) ||
+        blocked.has(key)
+      )
+        continue;
+      visited.add(key);
+      queue.push([...path, next]);
+    }
+  }
+  return [start, target];
+}
+
 export function ArenaOnlineSyncedBattle({
   identity,
 }: {
@@ -216,6 +267,9 @@ export function ArenaOnlineSyncedBattle({
   >({});
   const [orders, setOrders] = useState<Record<string, LivePvpBattleAction>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [interactionMode, setInteractionMode] = useState<
+    "MENU" | "MOVE" | "ATTACK" | "DEFEND" | null
+  >(null);
   const [seconds, setSeconds] = useState(30);
   const [eventPlayback, setEventPlayback] = useState<{
     signature: string;
@@ -282,8 +336,10 @@ export function ArenaOnlineSyncedBattle({
     if (!selectedId) return;
     const clearSelection = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (!isMyTurn || !target?.closest("[data-tactical-selection-area]"))
+      if (!isMyTurn || !target?.closest("[data-tactical-selection-area]")) {
         setSelectedId(null);
+        setInteractionMode(null);
+      }
     };
     document.addEventListener("mousedown", clearSelection);
     return () => document.removeEventListener("mousedown", clearSelection);
@@ -291,6 +347,7 @@ export function ArenaOnlineSyncedBattle({
   useEffect(() => {
     setOrders({});
     setSelectedId(null);
+    setInteractionMode(null);
   }, [battle?.round]);
   useEffect(() => {
     if (battle?.phase === "FORMATION" && mine.length && placement.length === 0)
@@ -415,6 +472,10 @@ export function ArenaOnlineSyncedBattle({
     eventPlayback.index < (battle?.lastEvents.length ?? 0)
       ? (battle?.lastEvents[eventPlayback.index] ?? null)
       : null;
+  const movePath = visualMovePath(
+    activeEvent,
+    battle ? [...battle.teamA, ...battle.teamB] : [],
+  );
   useEffect(() => {
     setMoveFrame(0);
     if (
@@ -425,16 +486,14 @@ export function ArenaOnlineSyncedBattle({
       activeEvent.toY == null
     )
       return;
-    const steps =
-      Math.abs(activeEvent.toX - activeEvent.fromX) +
-      Math.abs(activeEvent.toY - activeEvent.fromY);
+    const steps = Math.max(0, movePath.length - 1);
     if (!steps) return;
     const timer = setInterval(
       () => setMoveFrame((frame) => Math.min(steps, frame + 1)),
       Math.max(220, Math.floor(1650 / steps)),
     );
     return () => clearInterval(timer);
-  }, [eventPlayback.signature, eventPlayback.index]);
+  }, [eventPlayback.signature, eventPlayback.index, movePath.length]);
   const applyFormationTemplate = (nextFormation: TacticalFormation) => {
     setFormation(nextFormation);
     setFormationPositions(
@@ -549,7 +608,12 @@ export function ArenaOnlineSyncedBattle({
                 <div className="grid min-w-[720px] grid-cols-12 gap-1 rounded-xl border border-slate-700 bg-slate-900 p-2">
                   {Array.from({ length: 8 }, (_, y) =>
                     Array.from({ length: 12 }, (_, x) => {
-                      const biome = tacticalBiomeAt(battle.biomes ?? [], x, y);
+                      const biome = tacticalBiomeAt(
+                        battle.biomes ?? [],
+                        x,
+                        y,
+                        battle.biomeCells,
+                      );
                       const validZone = sideA ? x <= 2 : x >= 9;
                       const unit = mine.find((entry) => {
                         const position = formationPositions[entry.id];
@@ -691,30 +755,9 @@ export function ArenaOnlineSyncedBattle({
     eventPlayback.signature === eventSignature ? eventPlayback.index : -1;
   const playbackRunning =
     !!eventSignature && playbackIndex < battle.lastEvents.length;
-  const animatedMovePosition = (() => {
-    if (
-      activeEvent?.kind !== "MOVE" ||
-      activeEvent.fromX == null ||
-      activeEvent.fromY == null ||
-      activeEvent.toX == null ||
-      activeEvent.toY == null
-    )
-      return null;
-    const dx = activeEvent.toX - activeEvent.fromX;
-    const horizontalSteps = Math.abs(dx);
-    if (moveFrame <= horizontalSteps)
-      return {
-        x: activeEvent.fromX + Math.sign(dx) * moveFrame,
-        y: activeEvent.fromY,
-      };
-    const dy = activeEvent.toY - activeEvent.fromY;
-    return {
-      x: activeEvent.toX,
-      y:
-        activeEvent.fromY +
-        Math.sign(dy) * Math.min(Math.abs(dy), moveFrame - horizontalSteps),
-    };
-  })();
+  const animatedMovePosition = movePath.length
+    ? movePath[Math.min(moveFrame, movePath.length - 1)]
+    : null;
   const visualUnits = all.map((unit) => {
     let x = unit.x,
       y = unit.y,
@@ -851,13 +894,16 @@ export function ArenaOnlineSyncedBattle({
       }
     : null;
   const attackRange = selected
-    ? ["DEFENDER", "ATTACKER", "GUARDIAN", "PROVOKER", "SURVIVOR"].includes(
+    ? (["DEFENDER", "ATTACKER", "GUARDIAN", "PROVOKER", "SURVIVOR"].includes(
         selected.role,
       )
-      ? 1
-      : ["SCOUT", "HEALER", "ENCOURAGER"].includes(selected.role)
-        ? 3
-        : 2
+        ? 1
+        : ["SCOUT", "HEALER", "ENCOURAGER"].includes(selected.role)
+          ? 3
+          : 2) +
+      (selected.effects.some((effect) => effect.id.startsWith("secret:range"))
+        ? 1
+        : 0)
     : 0;
   const protectionRange = selected
     ? selected.role === "PROVOKER"
@@ -943,6 +989,7 @@ export function ArenaOnlineSyncedBattle({
     toast.success(
       `${selected.name} planeja mover para coluna ${x + 1}, linha ${y + 1}.`,
     );
+    setInteractionMode("MENU");
   };
   const chooseTarget = (target: TacticalUnit) => {
     if (!selected || ownPending || !isMyTurn || playbackRunning) return;
@@ -969,6 +1016,7 @@ export function ArenaOnlineSyncedBattle({
         targetId: target.id,
       },
     }));
+    setInteractionMode("MENU");
     toast.success(
       `${selected.name} atacará ${target.name} se o alvo continuar válido.`,
     );
@@ -982,7 +1030,7 @@ export function ArenaOnlineSyncedBattle({
       <header className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] uppercase tracking-widest text-cyan-300">
-            Arena Online Tática · protótipo 1
+            Batalha de Terreno · Beta
           </p>
           <h2 className="font-black text-white">
             Rodada {battle.round} · {match.playerAName} × {match.playerBName}
@@ -1118,6 +1166,60 @@ export function ArenaOnlineSyncedBattle({
           )}
         </div>
       )}
+      {selected && isMyTurn && !ownPending && !playbackRunning && (
+        <div
+          data-tactical-selection-area
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-2"
+        >
+          <img
+            src={selected.spriteUrl}
+            alt=""
+            className="h-9 w-9 object-contain"
+          />
+          <b className="mr-auto text-xs text-white">
+            {selected.name}: escolha uma ação
+          </b>
+          <button
+            onClick={() => setInteractionMode("MOVE")}
+            className={`rounded-lg border px-3 py-2 text-[10px] font-black ${interactionMode === "MOVE" ? "border-emerald-400 bg-emerald-500/20 text-emerald-200" : "border-slate-700 text-slate-300"}`}
+          >
+            Movimentar
+          </button>
+          <button
+            onClick={() => {
+              setInteractionMode("ATTACK");
+              setOrders((old) => ({
+                ...old,
+                [selected.id]: {
+                  ...(old[selected.id] ?? {}),
+                  type: "ATTACK",
+                  mascotId: selected.id,
+                },
+              }));
+            }}
+            className={`rounded-lg border px-3 py-2 text-[10px] font-black ${interactionMode === "ATTACK" ? "border-red-400 bg-red-500/20 text-red-200" : "border-slate-700 text-slate-300"}`}
+          >
+            Atacar
+          </button>
+          <button
+            onClick={() => {
+              setInteractionMode("DEFEND");
+              setOrders((old) => ({
+                ...old,
+                [selected.id]: {
+                  ...(old[selected.id] ?? {}),
+                  type: "DEFEND",
+                  mascotId: selected.id,
+                  targetId: undefined,
+                },
+              }));
+            }}
+            className={`rounded-lg border px-3 py-2 text-[10px] font-black ${interactionMode === "DEFEND" ? "border-blue-400 bg-blue-500/20 text-blue-200" : "border-slate-700 text-slate-300"}`}
+          >
+            Defender
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <div
           data-tactical-selection-area
@@ -1210,7 +1312,15 @@ export function ArenaOnlineSyncedBattle({
           )}
           {Array.from({ length: 8 }, (_, y) =>
             Array.from({ length: 12 }, (_, x) => {
-              const biome = tacticalBiomeAt(battle.biomes ?? [], x, y),
+              const biome = tacticalBiomeAt(
+                  battle.biomes ?? [],
+                  x,
+                  y,
+                  battle.biomeCells,
+                ),
+                revealedSecret = battle.secretEvents.find(
+                  (event) => event.x === x && event.y === y && event.triggered,
+                ),
                 fogState = tacticalFogState(battle.round, x, y),
                 unit = cell(x, y),
                 owned = !!unit && mine.some((entry) => entry.id === unit.id),
@@ -1231,11 +1341,13 @@ export function ArenaOnlineSyncedBattle({
                     Math.abs(enemy.x - x) + Math.abs(enemy.y - y) === 1,
                 ),
                 validMove =
+                  interactionMode === "MOVE" &&
                   isMyTurn &&
                   !ownPending &&
                   !playbackRunning &&
                   canMoveTo(x, y),
                 inAttackArea =
+                  interactionMode === "ATTACK" &&
                   !playbackRunning &&
                   !!plannedPosition &&
                   Math.abs(x - plannedPosition.x) +
@@ -1243,6 +1355,7 @@ export function ArenaOnlineSyncedBattle({
                     attackRange &&
                   !(x === plannedPosition.x && y === plannedPosition.y),
                 inProtectionArea =
+                  interactionMode === "DEFEND" &&
                   !playbackRunning &&
                   !!plannedPosition &&
                   protectionRange > 0 &&
@@ -1266,7 +1379,11 @@ export function ArenaOnlineSyncedBattle({
                   onClick={() =>
                     unit
                       ? owned
-                        ? setSelectedId(unit.id)
+                        ? interactionMode === "MOVE" &&
+                          selected &&
+                          unit.id !== selected.id
+                          ? chooseCell(x, y)
+                          : (setSelectedId(unit.id), setInteractionMode("MENU"))
                         : chooseTarget(unit)
                       : chooseCell(x, y)
                   }
@@ -1290,6 +1407,14 @@ export function ArenaOnlineSyncedBattle({
                       className={`pointer-events-none absolute right-1 top-1 z-[3] text-[8px] ${fogState === "ACTIVE" ? "text-fuchsia-200" : "text-amber-300"}`}
                     >
                       {fogState === "ACTIVE" ? "NÉVOA" : "AVISO"}
+                    </span>
+                  )}
+                  {revealedSecret && (
+                    <span
+                      title={revealedSecret.label ?? "Evento secreto revelado"}
+                      className="pointer-events-none absolute left-1 top-1 z-[4] rounded bg-fuchsia-500/90 px-1 py-0.5 text-[8px] font-black text-white shadow"
+                    >
+                      ✦
                     </span>
                   )}
                   {inProtectionArea && (
@@ -1414,9 +1539,53 @@ export function ArenaOnlineSyncedBattle({
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-slate-400">
-                    1. Clique em uma célula verde. 2. Escolha a ação. 3. Confira
-                    o resumo e confirme todas as ordens.
+                    Escolha uma ação abaixo. O grid mostrará somente as casas
+                    relacionadas à opção selecionada.
                   </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInteractionMode("MOVE")}
+                      className={`rounded-lg border px-2 py-2 text-[10px] font-black ${interactionMode === "MOVE" ? "border-emerald-400 bg-emerald-500/15 text-emerald-200" : "border-slate-700 text-slate-300"}`}
+                    >
+                      Movimentar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInteractionMode("ATTACK");
+                        setOrders((old) => ({
+                          ...old,
+                          [selected.id]: {
+                            ...(old[selected.id] ?? {}),
+                            type: "ATTACK",
+                            mascotId: selected.id,
+                          },
+                        }));
+                      }}
+                      className={`rounded-lg border px-2 py-2 text-[10px] font-black ${interactionMode === "ATTACK" ? "border-red-400 bg-red-500/15 text-red-200" : "border-slate-700 text-slate-300"}`}
+                    >
+                      Atacar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInteractionMode("DEFEND");
+                        setOrders((old) => ({
+                          ...old,
+                          [selected.id]: {
+                            ...(old[selected.id] ?? {}),
+                            type: "DEFEND",
+                            mascotId: selected.id,
+                            targetId: undefined,
+                          },
+                        }));
+                      }}
+                      className={`rounded-lg border px-2 py-2 text-[10px] font-black ${interactionMode === "DEFEND" ? "border-blue-400 bg-blue-500/15 text-blue-200" : "border-slate-700 text-slate-300"}`}
+                    >
+                      Defender
+                    </button>
+                  </div>
                   <div className="mt-2 rounded-lg border border-blue-500/25 bg-blue-500/10 p-2 text-[11px] leading-relaxed text-blue-100">
                     <b className="block text-blue-300">
                       Efeito tático de {COMBAT_ROLE_LABELS[selected.role]}
@@ -1447,7 +1616,7 @@ export function ArenaOnlineSyncedBattle({
                       ))}
                     </div>
                   )}
-                  {orders[selected.id]?.type === "ATTACK" && (
+                  {interactionMode === "ATTACK" && (
                     <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-200">
                       Clique em um inimigo dentro da área vermelha para definir
                       o alvo. Sem alvo manual, a postura escolherá o melhor alvo
@@ -1477,31 +1646,6 @@ export function ArenaOnlineSyncedBattle({
                       )}
                     </p>
                   )}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {ACTIONS.map((action) => (
-                      <button
-                        key={action.id}
-                        onClick={() =>
-                          setOrders((old) => ({
-                            ...old,
-                            [selected.id]: {
-                              ...(old[selected.id] ?? {
-                                mascotId: selected.id,
-                              }),
-                              type: action.id,
-                              mascotId: selected.id,
-                            },
-                          }))
-                        }
-                        className={`rounded-lg border p-2 text-xs ${orders[selected.id]?.type === action.id ? "border-[#FFCB05] bg-[#FFCB05]/10 text-[#FFCB05]" : "border-slate-700 text-slate-300"}`}
-                      >
-                        <b className="block">{action.label}</b>
-                        <span className="mt-1 block text-left text-[10px] font-normal leading-relaxed opacity-75">
-                          {action.detail}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
                 </>
               ) : (
                 <p className="py-8 text-center text-sm text-slate-400">
@@ -1519,7 +1663,10 @@ export function ArenaOnlineSyncedBattle({
                   .map((unit) => (
                     <button
                       key={unit.id}
-                      onClick={() => setSelectedId(unit.id)}
+                      onClick={() => {
+                        setSelectedId(unit.id);
+                        setInteractionMode("MENU");
+                      }}
                       className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 p-2 text-left text-xs"
                     >
                       <span className="text-white">{unit.name}</span>

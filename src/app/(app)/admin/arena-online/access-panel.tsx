@@ -32,7 +32,7 @@ export function LivePvpAccessPanel({
       const result = await updateLivePvpAccessAction(input);
       if (result.ok) {
         setConfig(result.config);
-        toast.success("Acesso à Arena Online atualizado.");
+        toast.success("Acesso à Batalha de Terreno atualizado.");
       }
     });
   const saveBiome = (biomeId: TacticalBiomeId, image: string) =>
@@ -68,7 +68,7 @@ export function LivePvpAccessPanel({
           <p className="text-[10px] font-black uppercase tracking-[.2em] text-amber-300">
             Controle de publicação
           </p>
-          <h2 className="font-bold text-white">Acesso à Arena Online</h2>
+          <h2 className="font-bold text-white">Acesso à Batalha de Terreno</h2>
           <p className="mt-1 text-xs text-slate-400">
             Administradores sempre possuem acesso. Para os demais, o modo nasce
             desligado e invisível.
@@ -114,7 +114,7 @@ export function LivePvpAccessPanel({
                   }
                   className={`rounded-md border px-3 py-1.5 text-[10px] font-bold disabled:opacity-40 ${allowed ? "border-red-500/40 text-red-300" : "border-cyan-500/40 text-cyan-300"}`}
                 >
-                  {allowed ? "Remover acesso" : "Liberar teste"}
+                  {allowed ? "Remover acesso" : "Liberar acesso"}
                 </button>
               </div>
             );

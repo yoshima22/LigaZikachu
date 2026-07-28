@@ -21,15 +21,18 @@ import {
   getLivePvpAccessConfig,
 } from "@/lib/live-pvp-access";
 import {
+  createTacticalBiomeCells,
   createTacticalBiomes,
   tacticalBiomeAt,
   tacticalFogState,
   type TacticalBiome,
+  type TacticalBiomeId,
 } from "@/lib/tactical-arena";
 
 const QUEUE_PREFIX = "live_pvp_queue:";
 const MATCH_PREFIX = "live_pvp_match:";
 const PLAYER_MATCH_PREFIX = "live_pvp_player_match:";
+const TERRAIN_RANKING_PREFIX = "terrain_battle_ranking:";
 const ACTIVE_WINDOW_MS = 90_000;
 
 type QueueValue = {
@@ -68,6 +71,7 @@ export type LivePvpMatchValue = {
   events: string[];
   battle: LivePvpBattleState | null;
   status: "PREGAME" | "FINISHED";
+  rankingRecorded: boolean;
   createdAt: string;
 };
 
@@ -158,6 +162,18 @@ export type LivePvpBattleState = {
   logs: string[];
   lastEvents: TacticalBattleEvent[];
   biomes: TacticalBiome[];
+  biomeCells: TacticalBiomeId[];
+  secretEvents: TacticalSecretEvent[];
+};
+
+export type TacticalSecretEvent = {
+  id: string;
+  x: number;
+  y: number;
+  type: "SECRET" | "HEAL" | "POWER" | "MOBILITY" | "RANGE" | "WARD";
+  triggered: boolean;
+  triggeredBy?: string;
+  label?: string;
 };
 
 type MatchValue = LivePvpMatchValue;
@@ -186,6 +202,7 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
     revision: 1,
     events: [],
     battle: null,
+    rankingRecorded: false,
     ...raw,
   } as MatchValue;
   if (match.battle && !match.battle.deadline)
@@ -195,6 +212,12 @@ function normalizeMatch(raw: Partial<MatchValue>): MatchValue {
   if (match.battle && !match.battle.roundStarterId)
     match.battle.roundStarterId = match.firstPickerId ?? match.playerAId;
   if (match.battle) {
+    match.battle.biomes = match.battle.biomes ?? [];
+    match.battle.biomeCells =
+      match.battle.biomeCells?.length === 96
+        ? match.battle.biomeCells
+        : createTacticalBiomeCells(match.id, match.battle.biomes);
+    match.battle.secretEvents = match.battle.secretEvents ?? [];
     match.battle.teamA = match.battle.teamA.map((unit) => ({
       ...unit,
       effects: unit.effects ?? [],
@@ -342,6 +365,49 @@ async function saveMatch(tx: Prisma.TransactionClient, match: MatchValue) {
   });
 }
 
+async function recordTerrainBattleResult(
+  tx: Prisma.TransactionClient,
+  match: MatchValue,
+) {
+  if (
+    match.rankingRecorded ||
+    !match.battle ||
+    match.battle.phase !== "FINISHED"
+  )
+    return;
+  match.rankingRecorded = true;
+  const winnerId = match.battle.winnerId;
+  for (const [playerId, playerName] of [
+    [match.playerAId, match.playerAName],
+    [match.playerBId, match.playerBName],
+  ] as const) {
+    const key = `${TERRAIN_RANKING_PREFIX}${playerId}`;
+    const currentRow = await tx.appSetting.findUnique({
+      where: { key },
+      select: { value: true },
+    });
+    const current = (currentRow?.value ?? {}) as {
+      wins?: number;
+      losses?: number;
+      draws?: number;
+    };
+    const value = {
+      playerId,
+      playerName,
+      wins: (current.wins ?? 0) + (winnerId === playerId ? 1 : 0),
+      losses:
+        (current.losses ?? 0) + (!!winnerId && winnerId !== playerId ? 1 : 0),
+      draws: (current.draws ?? 0) + (!winnerId ? 1 : 0),
+      updatedAt: new Date().toISOString(),
+    };
+    await tx.appSetting.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value },
+    });
+  }
+}
+
 async function applyPregameTimeout(
   tx: Prisma.TransactionClient,
   match: MatchValue,
@@ -445,7 +511,9 @@ async function requireLivePvpPlayer() {
   if (!player) throw new Error("Jogador não encontrado.");
   const config = await getLivePvpAccessConfig();
   if (!canAccessLivePvp(config, player.id, isAdmin(user.role)))
-    throw new Error("Arena Online ainda não foi liberada para esta conta.");
+    throw new Error(
+      "Batalha de Terreno ainda não foi liberada para esta conta.",
+    );
   return player;
 }
 
@@ -469,13 +537,17 @@ function asQueue(value: Prisma.JsonValue): QueueValue | null {
 export async function getLivePvpLobbyAction() {
   const player = await requireLivePvpPlayer();
   const cutoff = new Date(Date.now() - ACTIVE_WINDOW_MS);
-  let [queue, matchIndex] = await Promise.all([
+  let [queue, matchIndex, rankingRows] = await Promise.all([
     prisma.appSetting.findMany({
       where: { key: { startsWith: QUEUE_PREFIX }, updatedAt: { gte: cutoff } },
       select: { key: true, value: true },
     }),
     prisma.appSetting.findUnique({
       where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
+      select: { value: true },
+    }),
+    prisma.appSetting.findMany({
+      where: { key: { startsWith: TERRAIN_RANKING_PREFIX } },
       select: { value: true },
     }),
   ]);
@@ -500,6 +572,29 @@ export async function getLivePvpLobbyAction() {
     : null;
   return {
     queueCount: queue.length,
+    queuePlayers: queue
+      .map((entry) => asQueue(entry.value))
+      .filter((entry): entry is QueueValue => !!entry && !entry.targetPlayerId)
+      .map((entry) => ({ id: entry.playerId, name: entry.playerName })),
+    ranking: rankingRows
+      .map(
+        (row) =>
+          row.value as unknown as {
+            playerId: string;
+            playerName: string;
+            wins: number;
+            losses: number;
+            draws: number;
+          },
+      )
+      .filter((entry) => !!entry?.playerId)
+      .sort(
+        (a, b) =>
+          b.wins - a.wins ||
+          a.losses - b.losses ||
+          a.playerName.localeCompare(b.playerName),
+      )
+      .slice(0, 20),
     queued: queue.some((entry) => entry.key === `${QUEUE_PREFIX}${player.id}`),
     match: match?.value
       ? normalizeMatch(match.value as Partial<MatchValue>)
@@ -570,6 +665,9 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     participants.find((entry) => entry.id === match.playerBId)?.displayName ??
     match.playerBName;
   const responseMatch = structuredClone(match);
+  if (responseMatch.battle)
+    responseMatch.battle.secretEvents =
+      responseMatch.battle.secretEvents.filter((event) => event.triggered);
   if (!includeMascots && responseMatch.battle) {
     if (responseMatch.battle.phase === "FORMATION") {
       if (player.id === responseMatch.playerAId) {
@@ -990,12 +1088,112 @@ const deterministicRoll = (round: number, ...ids: string[]) => {
     hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
   return (hash >>> 0) / 4294967296;
 };
+function createSecretEvents(seed: string): TacticalSecretEvent[] {
+  const cells = Array.from({ length: 64 }, (_, index) => ({
+    x: 2 + (index % 8),
+    y: Math.floor(index / 8),
+  })).sort(
+    (a, b) =>
+      deterministicRoll(0, seed, `${a.x}:${a.y}`) -
+      deterministicRoll(0, seed, `${b.x}:${b.y}`),
+  );
+  const types: TacticalSecretEvent["type"][] = [
+    "HEAL",
+    "POWER",
+    "MOBILITY",
+    "RANGE",
+    "WARD",
+    "HEAL",
+    "POWER",
+    "MOBILITY",
+  ];
+  return cells.slice(0, types.length).map((cell, index) => ({
+    id: `secret:${index}:${cell.x}:${cell.y}`,
+    ...cell,
+    type: types[index],
+    triggered: false,
+  }));
+}
 const roleRange = (role: CombatRole) =>
   ["DEFENDER", "ATTACKER", "GUARDIAN", "PROVOKER", "SURVIVOR"].includes(role)
     ? 1
     : role === "SCOUT" || role === "HEALER" || role === "ENCOURAGER"
       ? 3
       : 2;
+const unitRange = (unit: TacticalUnit) =>
+  roleRange(unit.role) +
+  (unit.effects.some((effect) => effect.id.startsWith("secret:range")) ? 1 : 0);
+
+function activateSecretEvents(
+  battle: LivePvpBattleState,
+  team: TacticalUnit[],
+  events: TacticalBattleEvent[],
+) {
+  for (const unit of team.filter((entry) => entry.hp > 0)) {
+    const secret = battle.secretEvents.find(
+      (entry) => !entry.triggered && entry.x === unit.x && entry.y === unit.y,
+    );
+    if (!secret) continue;
+    secret.triggered = true;
+    secret.triggeredBy = unit.id;
+    let label = "Evento secreto ativado";
+    let amount = 0;
+    if (secret.type === "HEAL") {
+      amount = Math.max(1, Math.round(unit.maxHp * 0.2));
+      unit.hp = Math.min(unit.maxHp, unit.hp + amount);
+      label = `Fonte restauradora: ${unit.name} recuperou ${amount} HP`;
+    } else {
+      const config =
+        secret.type === "POWER"
+          ? {
+              id: "power",
+              stat: "force" as const,
+              value: 0.1,
+              duration: 99,
+              text: "+10% de Força nesta batalha",
+            }
+          : secret.type === "MOBILITY"
+            ? {
+                id: "mobility",
+                stat: "agility" as const,
+                value: 0.2,
+                duration: 4,
+                text: "+20% de Agilidade por 3 rodadas",
+              }
+            : secret.type === "RANGE"
+              ? {
+                  id: "range",
+                  value: 1,
+                  duration: 4,
+                  text: "+1 casa de alcance por 3 rodadas",
+                }
+              : {
+                  id: "ward",
+                  value: 0.15,
+                  duration: 4,
+                  text: "−15% de dano recebido por 3 rodadas",
+                };
+      unit.effects.push({
+        id: `secret:${config.id}:${secret.id}`,
+        label: config.text,
+        kind: "BUFF",
+        stat: "stat" in config ? config.stat : undefined,
+        value: config.value,
+        duration: config.duration,
+      });
+      amount = Math.round(config.value * 100);
+      label = `${unit.name} encontrou ${config.text}`;
+    }
+    secret.label = label;
+    events.push({
+      unitId: unit.id,
+      targetId: unit.id,
+      kind: "SECRET_EVENT",
+      text: label,
+      amount,
+    });
+  }
+}
 const formationUnits = (
   units: TacticalUnit[],
   formation: TacticalFormation,
@@ -1128,6 +1326,7 @@ function applyTacticalMovement(
     claimedDestinations.add(`${x}:${y}`);
     occupied.set(`${x}:${y}`, unit.id);
   }
+  activateSecretEvents(battle, team, events);
   return events;
 }
 
@@ -1162,7 +1361,12 @@ function resolveTacticalRound(match: MatchValue) {
     unit.effects = unit.effects.filter(
       (effect) => !effect.id.startsWith("biome:"),
     );
-    const biome = tacticalBiomeAt(battle.biomes ?? [], unit.x, unit.y);
+    const biome = tacticalBiomeAt(
+      battle.biomes ?? [],
+      unit.x,
+      unit.y,
+      battle.biomeCells,
+    );
     if (!biome) continue;
     const favored = unit.types.some((type) =>
       biome.favoredTypes.includes(type),
@@ -1394,7 +1598,7 @@ function resolveTacticalRound(match: MatchValue) {
       }
     }
     let candidates = enemies.filter(
-      (unit) => distance(actor, unit) <= roleRange(actor.role),
+      (unit) => distance(actor, unit) <= unitRange(actor),
     );
     if (!candidates.length) continue;
     if (actor.role === "FLANK" || actor.role === "SCOUT")
@@ -1599,13 +1803,23 @@ function resolveTacticalRound(match: MatchValue) {
     )
       ? 1.3
       : 1;
-    const actorBiome = tacticalBiomeAt(battle.biomes ?? [], actor.x, actor.y);
+    const actorBiome = tacticalBiomeAt(
+      battle.biomes ?? [],
+      actor.x,
+      actor.y,
+      battle.biomeCells,
+    );
     const biomeMult = actorBiome?.favoredTypes.some((type) =>
       actor.types.includes(type),
     )
       ? 1.08
       : 1;
     const preparedShield = target.shield;
+    const secretWard = target.effects.some((effect) =>
+      effect.id.startsWith("secret:ward"),
+    )
+      ? 0.15
+      : 0;
     const targetReduction =
       target.role === "DEFENDER"
         ? Math.min(0.35, 0.08 + effectiveStat(target, "vitality") / 500)
@@ -1629,6 +1843,7 @@ function resolveTacticalRound(match: MatchValue) {
           biomeMult -
           (effectiveStat(target, "vitality") * 0.8 + target.level)) *
           (1 - targetReduction) *
+          (1 - secretWard) *
           (1 - target.shield),
       ),
     );
@@ -1865,6 +2080,7 @@ export async function initializeLivePvpBattleAction() {
     if (match.battle) return { ok: true };
     const teamAIds = match.orderAIds.length ? match.orderAIds : match.teamAIds;
     const teamBIds = match.orderBIds.length ? match.orderBIds : match.teamBIds;
+    const biomes = createTacticalBiomes(match.id, arenaConfig.biomeImages);
     match.battle = {
       teamA: teamAIds.map((id) => fighterFromMascot(byId.get(id)!)),
       teamB: teamBIds.map((id) => fighterFromMascot(byId.get(id)!)),
@@ -1882,7 +2098,9 @@ export async function initializeLivePvpBattleAction() {
         `${match.playerAName} e ${match.playerBName} entraram na Arena Tática.`,
       ],
       lastEvents: [],
-      biomes: createTacticalBiomes(match.id, arenaConfig.biomeImages),
+      biomes,
+      biomeCells: createTacticalBiomeCells(match.id, biomes),
+      secretEvents: createSecretEvents(match.id),
     };
     await saveMatch(tx, match);
     return { ok: true };
@@ -2006,6 +2224,7 @@ export async function submitLivePvpBattleAction(
     else battle.pendingB = normalized;
     if (battle.pendingA && battle.pendingB) {
       resolveTacticalRound(match);
+      await recordTerrainBattleResult(tx, match);
       // O vencedor da escolha inicial permanece como primeiro jogador das
       // rodadas. Assim ninguém joga duas vezes seguidas na virada da rodada.
       battle.turnPlayerId = battle.roundStarterId;
@@ -2028,6 +2247,7 @@ export async function surrenderLivePvpBattleAction() {
     match.battle.winnerId = otherPlayerId(match, player.id);
     match.battle.phase = "FINISHED";
     match.battle.logs.push(`${player.displayName} desistiu da batalha.`);
+    await recordTerrainBattleResult(tx, match);
     await saveMatch(tx, match);
     return { ok: true };
   });
@@ -2087,7 +2307,9 @@ export async function joinLivePvpQueueAction(targetName?: string) {
     throw new Error("Jogador não encontrado pelo nome ou nick informado.");
   const config = await getLivePvpAccessConfig();
   if (target && !canAccessLivePvp(config, target.id, false))
-    throw new Error("Esse jogador ainda não possui acesso à Arena Online.");
+    throw new Error(
+      "Esse jogador ainda não possui acesso à Batalha de Terreno.",
+    );
 
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(73422026)`;
@@ -2143,6 +2365,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
         ],
         battle: null,
         status: "PREGAME",
+        rankingRecorded: false,
         createdAt: new Date().toISOString(),
       };
       await Promise.all([

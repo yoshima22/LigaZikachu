@@ -18,7 +18,7 @@ async function requireLivePvpAccess() {
   const player = await getSessionPlayer(user.id);
   const config = await getLivePvpAccessConfig();
   if (!canAccessLivePvp(config, player?.id, isAdmin(user.role)))
-    throw new Error("Arena Online não liberada para esta conta.");
+    throw new Error("Batalha de Terreno não liberada para esta conta.");
 }
 
 export async function loadLivePvpMovesAction(

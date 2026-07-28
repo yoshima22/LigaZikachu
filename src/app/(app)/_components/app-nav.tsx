@@ -62,10 +62,11 @@ const combatLinks = [
   { href: "/arena-z", label: "Arena Z", icon: Swords, adminOnly: false },
   {
     href: "/combates/arena-online",
-    label: "Arena Online",
+    label: "Batalha de Terreno",
     icon: Swords,
     adminOnly: false,
     livePvpOnly: true,
+    beta: true,
   },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
   {
@@ -203,6 +204,7 @@ type NavLink = {
   tutorialId?: string;
   eventOnly?: boolean;
   livePvpOnly?: boolean;
+  beta?: boolean;
 };
 
 export function AppNav({
@@ -500,25 +502,32 @@ function NavDropdown({
       </button>
       {open && (
         <div className="absolute right-0 top-10 z-50 min-w-48 rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
-          {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
-            <Link
-              key={href}
-              href={href}
-              prefetch={false}
-              onClick={() => setOpenMenu(null)}
-              className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]"
-            >
-              <span className="flex items-center gap-2">
-                <ItemIcon size={14} />
-                {itemLabel}
-              </span>
-              {badgeHrefs[href] > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                  {badgeHrefs[href]}
+          {visibleLinks.map(
+            ({ href, label: itemLabel, icon: ItemIcon, beta }) => (
+              <Link
+                key={href}
+                href={href}
+                prefetch={false}
+                onClick={() => setOpenMenu(null)}
+                className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]"
+              >
+                <span className="flex items-center gap-2">
+                  <ItemIcon size={14} />
+                  {itemLabel}
+                  {beta && (
+                    <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[8px] font-black text-purple-200">
+                      BETA
+                    </span>
+                  )}
                 </span>
-              )}
-            </Link>
-          ))}
+                {badgeHrefs[href] > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    {badgeHrefs[href]}
+                  </span>
+                )}
+              </Link>
+            ),
+          )}
         </div>
       )}
     </div>
@@ -579,25 +588,32 @@ function MobileNavGroup({
       </button>
       {open && (
         <div className="absolute left-0 top-9 z-[60] min-w-44 max-h-[60vh] overflow-y-auto rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
-          {visibleLinks.map(({ href, label: itemLabel, icon: ItemIcon }) => (
-            <Link
-              key={href}
-              href={href}
-              prefetch={false}
-              onClick={() => setOpenMenu(null)}
-              className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
-            >
-              <span className="flex items-center gap-2">
-                <ItemIcon size={13} />
-                {itemLabel}
-              </span>
-              {badgeHrefs[href] > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                  {badgeHrefs[href]}
+          {visibleLinks.map(
+            ({ href, label: itemLabel, icon: ItemIcon, beta }) => (
+              <Link
+                key={href}
+                href={href}
+                prefetch={false}
+                onClick={() => setOpenMenu(null)}
+                className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+              >
+                <span className="flex items-center gap-2">
+                  <ItemIcon size={13} />
+                  {itemLabel}
+                  {beta && (
+                    <span className="rounded bg-purple-500/20 px-1 py-0.5 text-[7px] font-black text-purple-200">
+                      BETA
+                    </span>
+                  )}
                 </span>
-              )}
-            </Link>
-          ))}
+                {badgeHrefs[href] > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    {badgeHrefs[href]}
+                  </span>
+                )}
+              </Link>
+            ),
+          )}
         </div>
       )}
     </div>

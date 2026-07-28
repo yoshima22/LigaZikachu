@@ -77,8 +77,33 @@ export function createTacticalBiomes(
     .map((biome) => ({ ...biome, imageUrl: images[biome.id] || undefined }));
 }
 
-export function tacticalBiomeAt(biomes: TacticalBiome[], x: number, y: number) {
+export function createTacticalBiomeCells(
+  seed: string,
+  biomes: TacticalBiome[],
+) {
+  if (!biomes.length) return [];
+  const cells = Array.from(
+    { length: 96 },
+    (_, index) => biomes[index % biomes.length].id,
+  );
+  for (let index = cells.length - 1; index > 0; index -= 1) {
+    const target = hash(`${seed}:biome-cell:${index}`) % (index + 1);
+    [cells[index], cells[target]] = [cells[target], cells[index]];
+  }
+  return cells;
+}
+
+export function tacticalBiomeAt(
+  biomes: TacticalBiome[],
+  x: number,
+  y: number,
+  cells?: TacticalBiomeId[],
+) {
   if (!biomes.length) return null;
+  if (cells?.length === 96) {
+    const id = cells[y * 12 + x];
+    return biomes.find((biome) => biome.id === id) ?? null;
+  }
   const quadrant = (x >= 6 ? 1 : 0) + (y >= 4 ? 2 : 0);
   return biomes[quadrant % biomes.length] ?? null;
 }
