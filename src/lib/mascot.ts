@@ -1088,7 +1088,7 @@ async function rollItemExpeditionReward(
   return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
 }
 
-function describeExpeditionReward(reward: ExpeditionReward) {
+async function describeExpeditionReward(reward: ExpeditionReward) {
   switch (reward.type) {
     case "EGG": {
       const eggLabel = reward.eggType === "SPECIAL" ? "Especial" : reward.eggType === "RARE" ? "Raro" : "Comum";
@@ -1132,7 +1132,11 @@ function describeExpeditionReward(reward: ExpeditionReward) {
         WEAKNESS_POLICY:  "Política de Fraqueza",
         LUCKY_EGG:        "Ovo da Sorte",
       };
-      const label = BUFF_LABELS[reward.shopItemType] ?? "Item Especial";
+      const registeredItem = await prisma.shopItem.findFirst({
+        where: { type: reward.shopItemType as import("@prisma/client").ShopItemType },
+        select: { name: true },
+      });
+      const label = registeredItem?.name ?? BUFF_LABELS[reward.shopItemType] ?? "Item Especial";
       return {
         title: `${label} encontrado!`,
         description: "Seu mascote voltou da expedição com um item especial.",
@@ -1414,7 +1418,7 @@ export async function claimExpedition(
   if (reward.type === "MEGA_STONE") {
     await ensureMegaStoneShopItems(false);
   }
-  const gift = mode === "TRAINING" ? null : describeExpeditionReward(reward);
+  const gift = mode === "TRAINING" ? null : await describeExpeditionReward(reward);
   const storedRewardJson: Record<string, Prisma.InputJsonValue> = {
     ...reward,
     mode,

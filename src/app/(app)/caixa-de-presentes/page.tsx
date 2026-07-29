@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Gift, Ticket } from "lucide-react";
-import { GiftStatus, GiftType } from "@prisma/client";
+import { GiftStatus, GiftType, type ShopItemType } from "@prisma/client";
 import { getAppSession } from "@/lib/session";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -33,6 +33,7 @@ interface BoosterPayload {
   sourceBatch?: string | null;
   reason?: string;
   reasonDetail?: string | null;
+  buffType?: string | null;
 }
 
 function formatDate(date: Date | null) {
@@ -75,6 +76,18 @@ export default async function GiftBoxPage() {
     },
     orderBy: { createdAt: "desc" }
   });
+  const buffTypes = [...new Set(
+    gifts
+      .map((gift) => getBoosterPayload(gift.payload).buffType)
+      .filter((type): type is string => !!type),
+  )];
+  const buffItems = buffTypes.length
+    ? await prisma.shopItem.findMany({
+        where: { type: { in: buffTypes as ShopItemType[] } },
+        select: { type: true, name: true },
+      })
+    : [];
+  const buffNameByType = new Map(buffItems.map((item) => [item.type, item.name]));
   const unclaimedCount = gifts.length;
 
   return (
@@ -101,15 +114,21 @@ export default async function GiftBoxPage() {
           {gifts.map((gift) => {
             const status = giftStatusMap[gift.status];
             const payload = getBoosterPayload(gift.payload);
+            const registeredRewardName = payload.buffType
+              ? buffNameByType.get(payload.buffType as ShopItemType)
+              : null;
             const rewardDetail =
-              payload.rewardLabel ?? payload.sourceBatch ?? payload.reasonDetail ?? gift.description;
+              registeredRewardName ?? payload.rewardLabel ?? payload.sourceBatch ?? payload.reasonDetail ?? gift.description;
+            const title = registeredRewardName && gift.title.includes("Item Especial")
+              ? gift.title.replace("Item Especial", registeredRewardName)
+              : gift.title;
 
             return (
               <Card key={gift.id} className="flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-widest text-slate-500">{giftTypeLabels[gift.type]}</p>
-                    <h2 className="mt-1 text-base font-semibold text-white">{gift.title}</h2>
+                    <h2 className="mt-1 text-base font-semibold text-white">{title}</h2>
                   </div>
                   <StatusBadge variant={status.variant} label={status.label} />
                 </div>
