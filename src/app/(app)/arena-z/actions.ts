@@ -278,9 +278,20 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
     const mascotIds = [...new Set(log.flatMap(turn => [turn.actorId, turn.targetId]).filter(Boolean))];
     const mascots = await prisma.mascot.findMany({
       where: { id: { in: mascotIds } },
-      select: { id: true, pokemonId: true, nickname: true, level: true },
+      select: { id: true, pokemonId: true, nickname: true, level: true, statVitality: true },
     });
     const mascotById = new Map(mascots.map(mascot => [mascot.id, mascot]));
+    const replayMascots = Array.isArray(loot?.replayMascots)
+      ? loot.replayMascots as Array<{
+          id: string;
+          pokemonId: number;
+          name: string;
+          level: number;
+          ownerId: string | null;
+          maxHp: number;
+        }>
+      : [];
+    const replayMascotById = new Map(replayMascots.map((mascot) => [mascot.id, mascot]));
     const damageByTarget = new Map<string, number>();
     for (const turn of log) {
       if (turn.action === "ATTACK") {
@@ -295,6 +306,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
     }
     const toMascotInfo = (id: string) => {
       const mascot = mascotById.get(id);
+      const snapshot = replayMascotById.get(id);
       const fallbackName = log.find(turn => turn.actorId === id)?.actorName
         ?? log.find(turn => turn.targetId === id)?.targetName
         ?? "Mascote";
@@ -302,10 +314,13 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       const survived = winningPlayerId !== null && fighterOwner.get(id) === winningPlayerId;
       return {
         id,
-        pokemonId: mascot?.pokemonId ?? 0,
-        name: mascot?.nickname ?? fallbackName,
-        level: mascot?.level ?? 1,
-        maxHp: Math.max(1, received + (survived ? 100 : 0)),
+        pokemonId: snapshot?.pokemonId ?? mascot?.pokemonId ?? 0,
+        name: snapshot?.name ?? mascot?.nickname ?? fallbackName,
+        level: snapshot?.level ?? mascot?.level ?? 1,
+        maxHp: snapshot?.maxHp
+          ?? (mascot
+            ? Math.max(10, Math.round(55 + mascot.level * 6 + mascot.statVitality * 4))
+            : Math.max(1, received + (survived ? 100 : 0))),
       };
     };
     const playerMascotIds = mascotIds.filter(id => fighterOwner.get(id) === playerId);
@@ -315,10 +330,10 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       action: turn.action,
       attackerId: turn.actorId,
       attackerName: turn.actorName,
-      attackerPokemonId: mascotById.get(turn.actorId)?.pokemonId ?? 0,
+      attackerPokemonId: replayMascotById.get(turn.actorId)?.pokemonId ?? mascotById.get(turn.actorId)?.pokemonId ?? 0,
       defenderId: turn.targetId,
       defenderName: turn.targetName,
-      defenderPokemonId: mascotById.get(turn.targetId)?.pokemonId ?? 0,
+      defenderPokemonId: replayMascotById.get(turn.targetId)?.pokemonId ?? mascotById.get(turn.targetId)?.pokemonId ?? 0,
       damage: turn.damage,
       advantageApplied: !!turn.advantageApplied,
       isPlayerAttacker: turn.actorOwnerId === playerId,

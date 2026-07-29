@@ -38,6 +38,7 @@ interface Fighter {
   side: "A" | "B";
   maxHp: number;
   hp: number;
+  hasExactMaxHp: boolean;
   role?: string;
 }
 
@@ -88,6 +89,7 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
         side,
         maxHp: mascot.maxHp ?? 100,
         hp: mascot.maxHp ?? 100,
+        hasExactMaxHp: typeof mascot.maxHp === "number" && mascot.maxHp > 0,
         role: mascot.role,
       });
     }
@@ -98,14 +100,14 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
       seen.set(t.actorId, {
         id: t.actorId, name: resolveName(t.actorName, t.actorPokemonId),
         pokemonId: t.actorPokemonId, level: t.actorLevel, side: getSide(t.actorOwnerId),
-        maxHp: 100, hp: 100, role: t.actorRole,
+        maxHp: 100, hp: 100, hasExactMaxHp: false, role: t.actorRole,
       });
     }
     if (!seen.has(t.targetId)) {
       seen.set(t.targetId, {
         id: t.targetId, name: resolveName(t.targetName, t.targetPokemonId),
         pokemonId: t.targetPokemonId, level: t.targetLevel, side: getSide(t.targetOwnerId),
-        maxHp: 100, hp: 100, role: t.targetRole,
+        maxHp: 100, hp: 100, hasExactMaxHp: false, role: t.targetRole,
       });
     }
     if (t.actorPokemonId && !seen.get(t.actorId)!.pokemonId) seen.get(t.actorId)!.pokemonId = t.actorPokemonId;
@@ -141,7 +143,9 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
   }
   for (const fighter of seen.values()) {
     const received = damageTaken.get(fighter.id) ?? 0;
-    fighter.maxHp = Math.max(fighter.maxHp, received + (survivorIds.has(fighter.id) ? 100 : 0), 1);
+    if (!fighter.hasExactMaxHp) {
+      fighter.maxHp = Math.max(received + (survivorIds.has(fighter.id) ? 100 : 0), 1);
+    }
     fighter.hp = fighter.maxHp;
   }
   return [...seen.values()];

@@ -1869,9 +1869,19 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
         loserPlayerId: won ? null : playerId,
         rounds: combat.rounds,
         turnLog: combat.log as unknown as Prisma.InputJsonValue,
-        lootResult: (teamDefeated
-          ? { reward, preserved: defeatPreserved, burned: defeatSplit?.burned, stolenByBot: defeatSplit?.stolen, teamDefeated: true }
-          : reward) as unknown as Prisma.InputJsonValue,
+        lootResult: {
+          ...(teamDefeated
+            ? { reward, preserved: defeatPreserved, burned: defeatSplit?.burned, stolenByBot: defeatSplit?.stolen, teamDefeated: true }
+            : reward),
+          replayMascots: [...attackers, ...defenders].map((mascot) => ({
+            id: mascot.id,
+            pokemonId: mascot.pokemonId,
+            name: mascot.name,
+            level: mascot.level,
+            ownerId: mascot.ownerId,
+            maxHp: mascot.hp,
+          })),
+        } as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
       },
     });
@@ -2570,6 +2580,14 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
           defenseRewardCoins,
           attackerEgg: attackerEgg ?? null,
           defenderEgg: defenderEgg ?? null,
+          replayMascots: [...attackers, ...defenders].map((mascot) => ({
+            id: mascot.id,
+            pokemonId: mascot.pokemonId,
+            name: mascot.name,
+            level: mascot.level,
+            ownerId: mascot.ownerId,
+            maxHp: mascot.hp,
+          })),
         } as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
       },

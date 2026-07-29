@@ -32,6 +32,8 @@ export type LeagueBattleResult = {
   teamBDamageTaken: number;
   log: ArenaTurnLog[];
   rounds: number;
+  lineupA: LeagueMascot[];
+  lineupB: LeagueMascot[];
 };
 
 export type LeagueCombatOptions = {
@@ -478,6 +480,10 @@ export function runLeagueCombat(
     teamBDamageTaken: totalDmgA,
     log,
     rounds: round - 1,
+    // Cópias já com modificador semanal, sabotagem e itens aplicados. O replay
+    // precisa deste snapshot para não tentar deduzir HP a partir do dano total.
+    lineupA: a.map((mascot) => ({ ...mascot })),
+    lineupB: b.map((mascot) => ({ ...mascot })),
   };
 }
 

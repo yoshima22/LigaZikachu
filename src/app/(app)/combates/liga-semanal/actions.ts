@@ -1176,11 +1176,11 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       resultJson: {
         winner: result.winner,
         rounds: result.rounds,
-        lineupA: teamAMascots.map((mascot) => ({
+        lineupA: result.lineupA.map((mascot) => ({
           id: mascot.id, name: mascot.name, pokemonId: mascot.pokemonId, level: mascot.level,
           ownerId: mascot.ownerId, role: getCombatRoleLabel(mascot.combatRole), maxHp: mascot.hp,
         })),
-        lineupB: teamBMascots.map((mascot) => ({
+        lineupB: result.lineupB.map((mascot) => ({
           id: mascot.id, name: mascot.name, pokemonId: mascot.pokemonId, level: mascot.level,
           ownerId: mascot.ownerId, role: getCombatRoleLabel(mascot.combatRole), maxHp: mascot.hp,
         })),
