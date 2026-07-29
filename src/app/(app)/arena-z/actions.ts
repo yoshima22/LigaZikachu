@@ -220,7 +220,6 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
     const currentPlayer = await getSessionPlayer(user.id);
     if (!currentPlayer) return { error: "Perfil de jogador não encontrado." };
     const admin = isAdmin(user.role);
-    const playerId = admin && perspectivePlayerId ? perspectivePlayerId : currentPlayer.id;
     const battle = await prisma.arenaBattle.findUnique({
       where: { id: battleId },
       select: {
@@ -232,12 +231,19 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       },
     });
     if (!battle) return { error: "Batalha não encontrada." };
-    if (perspectivePlayerId && !admin && perspectivePlayerId !== currentPlayer.id) {
-      return { error: "Sem permissão." };
-    }
-    if (battle.attackerPlayerId !== playerId && battle.defenderPlayerId !== playerId) {
+    const participantIds = [battle.attackerPlayerId, battle.defenderPlayerId].filter(
+      (id): id is string => !!id,
+    );
+    const currentPlayerParticipated = participantIds.includes(currentPlayer.id);
+    const publicPvpReplay = battle.type === "PVP" && participantIds.length === 2;
+    if (!admin && !currentPlayerParticipated && !publicPvpReplay) {
       return { error: "O jogador selecionado não participou deste combate." };
     }
+    const requestedPerspective = perspectivePlayerId && participantIds.includes(perspectivePlayerId)
+      ? perspectivePlayerId
+      : null;
+    const playerId = requestedPerspective
+      ?? (currentPlayerParticipated ? currentPlayer.id : battle.attackerPlayerId!);
     // Garante que o jogador participou desta batalha
     const attackerName = battle.attackerPlayer?.displayName ?? battle.attackerPlayer?.ptcglNick ?? "Atacante";
     const defenderName = battle.type === "BOT"
@@ -292,6 +298,10 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
         }>
       : [];
     const replayMascotById = new Map(replayMascots.map((mascot) => [mascot.id, mascot]));
+    const parseLegacyBot = (id: string) => {
+      const match = /^bot-\d+-(\d+)-(\d+)$/.exec(id);
+      return match ? { pokemonId: Number(match[1]), level: Number(match[2]) } : null;
+    };
     const damageByTarget = new Map<string, number>();
     for (const turn of log) {
       if (turn.action === "ATTACK") {
@@ -307,6 +317,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
     const toMascotInfo = (id: string) => {
       const mascot = mascotById.get(id);
       const snapshot = replayMascotById.get(id);
+      const legacyBot = parseLegacyBot(id);
       const fallbackName = log.find(turn => turn.actorId === id)?.actorName
         ?? log.find(turn => turn.targetId === id)?.targetName
         ?? "Mascote";
@@ -314,9 +325,9 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       const survived = winningPlayerId !== null && fighterOwner.get(id) === winningPlayerId;
       return {
         id,
-        pokemonId: snapshot?.pokemonId ?? mascot?.pokemonId ?? 0,
+        pokemonId: snapshot?.pokemonId ?? mascot?.pokemonId ?? legacyBot?.pokemonId ?? 0,
         name: snapshot?.name ?? mascot?.nickname ?? fallbackName,
-        level: snapshot?.level ?? mascot?.level ?? 1,
+        level: snapshot?.level ?? mascot?.level ?? legacyBot?.level ?? 1,
         maxHp: snapshot?.maxHp
           ?? (mascot
             ? Math.max(10, Math.round(55 + mascot.level * 6 + mascot.statVitality * 4))
@@ -330,10 +341,16 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       action: turn.action,
       attackerId: turn.actorId,
       attackerName: turn.actorName,
-      attackerPokemonId: replayMascotById.get(turn.actorId)?.pokemonId ?? mascotById.get(turn.actorId)?.pokemonId ?? 0,
+      attackerPokemonId: replayMascotById.get(turn.actorId)?.pokemonId
+        ?? mascotById.get(turn.actorId)?.pokemonId
+        ?? parseLegacyBot(turn.actorId)?.pokemonId
+        ?? 0,
       defenderId: turn.targetId,
       defenderName: turn.targetName,
-      defenderPokemonId: replayMascotById.get(turn.targetId)?.pokemonId ?? mascotById.get(turn.targetId)?.pokemonId ?? 0,
+      defenderPokemonId: replayMascotById.get(turn.targetId)?.pokemonId
+        ?? mascotById.get(turn.targetId)?.pokemonId
+        ?? parseLegacyBot(turn.targetId)?.pokemonId
+        ?? 0,
       damage: turn.damage,
       advantageApplied: !!turn.advantageApplied,
       isPlayerAttacker: turn.actorOwnerId === playerId,
@@ -352,10 +369,10 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
         rounds: battle.rounds,
         happenedAt: battle.createdAt.toISOString(),
         isCurrentUserDefender,
-        defenderLoot,
-        defenseRewardCoins,
-        defenderEgg,
-        attackerEgg,
+        defenderLoot: admin || currentPlayerParticipated ? defenderLoot : null,
+        defenseRewardCoins: admin || currentPlayerParticipated ? defenseRewardCoins : 0,
+        defenderEgg: admin || currentPlayerParticipated ? defenderEgg : null,
+        attackerEgg: admin || currentPlayerParticipated ? attackerEgg : null,
         turnLines,
         battleAnimation,
         playerMascots: playerMascotIds.map(toMascotInfo),

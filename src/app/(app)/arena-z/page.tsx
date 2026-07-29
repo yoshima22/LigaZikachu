@@ -106,13 +106,14 @@ function getTeamBlockedReason(team: TeamReadiness): string | null {
 export default async function ArenaZPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; viewAs?: string }>;
+  searchParams: Promise<{ tab?: string; viewAs?: string; history?: string }>;
 }) {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
   const admin = isAdmin(session.user.role);
   const params = await searchParams;
   const activeTab: Tab = (TABS.includes(params.tab as Tab) ? params.tab : "salas") as Tab;
+  const historyView = params.history === "pvp" ? "pvp" : "mine";
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -201,7 +202,28 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     }),
     needsRoomsData ? getCachedOpponentTeams() : Promise.resolve([] as Awaited<ReturnType<typeof getCachedOpponentTeams>>),
     needsBattleHistory
-      ? Promise.all([
+      ? historyView === "pvp"
+        ? prisma.arenaBattle.findMany({
+            where: {
+              type: "PVP",
+              attackerPlayerId: { not: null },
+              defenderPlayerId: { not: null },
+            },
+            select: {
+              id: true, type: true, status: true, result: true,
+              attackerPlayerId: true, defenderPlayerId: true,
+              attackTeamId: true, defenseTeamId: true,
+              botName: true, levelBandMin: true, levelBandMax: true,
+              winnerPlayerId: true, loserPlayerId: true,
+              lootResult: true, injuredMascotIds: true,
+              createdAt: true,
+              attackerPlayer: { select: { displayName: true, ptcglNick: true } },
+              defenderPlayer: { select: { displayName: true, ptcglNick: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 30,
+          })
+        : Promise.all([
           prisma.arenaBattle.findMany({
             where: { attackerPlayerId: historyPlayerId },
             select: {
@@ -234,11 +256,11 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             orderBy: { createdAt: "desc" },
             take: 15,
           }),
-        ]).then(([asAttacker, asDefender]) =>
+          ]).then(([asAttacker, asDefender]) =>
           [...asAttacker, ...asDefender]
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
             .slice(0, 15)
-        )
+          )
       : Promise.resolve([]),
     prisma.arenaBattle.findFirst({
       where: {
@@ -1216,12 +1238,31 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
             <h2 className="flex items-center gap-2 font-semibold text-slate-200">
               <History size={16} /> Histórico de Combates
-              {viewAsPlayer && <span className="text-xs font-normal text-amber-300">— {viewAsPlayer.displayName}</span>}
+              {viewAsPlayer && historyView === "mine" && <span className="text-xs font-normal text-amber-300">— {viewAsPlayer.displayName}</span>}
             </h2>
-            {admin && (
+            {admin && historyView === "mine" && (
               <AdminArenaHistorySelector currentViewAs={params.viewAs ?? ""} />
             )}
           </div>
+          <div className="mt-4 inline-flex rounded-xl border border-border bg-slate-950 p-1">
+            <Link
+              href="/arena-z?tab=historico"
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${historyView === "mine" ? "bg-[#FFCB05]/15 text-[#FFCB05]" : "text-slate-400 hover:text-white"}`}
+            >
+              Meus combates
+            </Link>
+            <Link
+              href="/arena-z?tab=historico&history=pvp"
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${historyView === "pvp" ? "bg-red-500/15 text-red-200" : "text-slate-400 hover:text-white"}`}
+            >
+              Combates PvP da Arena
+            </Link>
+          </div>
+          {historyView === "pvp" && (
+            <p className="mt-2 text-xs text-slate-500">
+              Somente confrontos entre jogadores. Batalhas de terceiros contra bots permanecem privadas.
+            </p>
+          )}
           <div className="mt-4 space-y-3">
             {battles.length === 0 ? (
               <p className="text-sm text-slate-500">Nenhum combate registrado.</p>
@@ -1245,18 +1286,21 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                       <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">{resultLabel}</span>
                     </span>
                   </summary>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                  {historyView === "mine" && <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
                     {loot && <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[#FFCB05]">{loot.label}: {loot.coins} ZC / {loot.exp} EXP</span>}
                     {injuredCount > 0 && <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200">{injuredCount} ferido(s)</span>}
                     {preservedLoot && (preservedLoot.coins > 0 || preservedLoot.exp > 0) && <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-green-200">Preservado: {preservedLoot.coins} ZC</span>}
                     {stolenByBotLoot && stolenByBotLoot.coins > 0 && <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-1 text-orange-200">Bot roubou: {stolenByBotLoot.coins} ZC</span>}
                     {burnedLoot && burnedLoot.coins > 0 && <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-yellow-200">Queimado: {burnedLoot.coins} ZC</span>}
-                  </div>
+                  </div>}
                   <div className="mt-2 space-y-0.5 text-xs text-slate-400">
                     {formatTurnLog(log).slice(0, 10).map((line, i) => <p key={i}>{line}</p>)}
                     {log.length > 10 && <p className="text-slate-600">...mais {log.length - 10} turno(s)</p>}
                   </div>
-                  <ArenaHistoryReplayButton battleId={battle.id} perspectivePlayerId={historyPlayerId} />
+                  <ArenaHistoryReplayButton
+                    battleId={battle.id}
+                    perspectivePlayerId={historyView === "pvp" ? (battle.attackerPlayerId ?? historyPlayerId) : historyPlayerId}
+                  />
                 </details>
               );
             })}
