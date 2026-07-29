@@ -282,17 +282,27 @@ export function ArenaOnlineSyncedBattle({
   const [pending, startTransition] = useTransition();
   const refreshing = useRef(false),
     timeoutKey = useRef(""),
-    acknowledgedPlayback = useRef("");
+    acknowledgedPlayback = useRef(""),
+    revisionRef = useRef<number | null>(null);
 
-  const refresh = async () => {
+  const refresh = async (force = false) => {
     if (refreshing.current) return;
     refreshing.current = true;
     try {
-      const state = await getLivePvpMatchAction(false);
+      const state = await getLivePvpMatchAction(
+        false,
+        force ? undefined : (revisionRef.current ?? undefined),
+      );
+      if (!state.match) return;
+      revisionRef.current = state.match.revision;
       setMatch(state.match);
       if (!state.match.battle) {
         await initializeLivePvpBattleAction();
-        setMatch((await getLivePvpMatchAction(false)).match);
+        const initialized = await getLivePvpMatchAction(false);
+        if (initialized.match) {
+          revisionRef.current = initialized.match.revision;
+          setMatch(initialized.match);
+        }
       }
     } catch (error) {
       toast.error(
@@ -304,8 +314,17 @@ export function ArenaOnlineSyncedBattle({
   };
   useEffect(() => {
     void refresh();
-    const timer = setInterval(() => void refresh(), 1500);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, 1500);
+    const onVisible = () => {
+      if (!document.hidden) void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
   useEffect(() => {
     const deadline = match?.battle?.deadline;
@@ -418,13 +437,13 @@ export function ArenaOnlineSyncedBattle({
           mascotId: unit.id,
           ...(formationPositions[unit.id] ?? { x: unit.x, y: unit.y }),
         })),
-      ).then(refresh);
+      ).then(() => refresh(true));
     else if (battle.phase === "PLANNING" && isMyTurn)
       void submitLivePvpBattleAction(
         mine
           .filter((unit) => unit.hp > 0)
           .map((unit) => ({ type: "AUTO", mascotId: unit.id })),
-      ).then(refresh);
+      ).then(() => refresh(true));
   }, [
     seconds,
     battle?.phase,
@@ -440,10 +459,10 @@ export function ArenaOnlineSyncedBattle({
     startTransition(async () => {
       try {
         await action();
-        await refresh();
+        await refresh(true);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Ação recusada.");
-        await refresh();
+        await refresh(true);
       }
     });
   const selected = mine.find((unit) => unit.id === selectedId) ?? null;
@@ -518,7 +537,7 @@ export function ArenaOnlineSyncedBattle({
     if (acknowledgedPlayback.current === key) return;
     acknowledgedPlayback.current = key;
     void acknowledgeLivePvpPlaybackAction()
-      .then(refresh)
+      .then(() => refresh(true))
       .catch((error) => {
         acknowledgedPlayback.current = "";
         toast.error(

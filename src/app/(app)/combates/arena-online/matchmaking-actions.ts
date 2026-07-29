@@ -383,6 +383,10 @@ async function findCurrentMatch(
 }
 
 async function saveMatch(tx: Prisma.TransactionClient, match: MatchValue) {
+  // A interface exibe apenas o trecho recente. Limitar o histórico evita que o
+  // JSON persistido e cada atualização legítima cresçam durante partidas longas.
+  match.events = match.events.slice(-80);
+  if (match.battle) match.battle.logs = match.battle.logs.slice(-100);
   match.revision += 1;
   await tx.appSetting.update({
     where: { key: `${MATCH_PREFIX}${match.id}` },
@@ -570,11 +574,10 @@ function asQueue(value: Prisma.JsonValue): QueueValue | null {
     : null;
 }
 
-export async function getLivePvpLobbyAction() {
+export async function getLivePvpLobbyAction(includeRanking = true) {
   const player = await requireLivePvpPlayer();
   const cutoff = new Date(Date.now() - ACTIVE_WINDOW_MS);
-  let [queue, matchIndex, rankingRows, administrativePlayers] =
-    await Promise.all([
+  let [queue, matchIndex] = await Promise.all([
       prisma.appSetting.findMany({
         where: {
           key: { startsWith: QUEUE_PREFIX },
@@ -586,6 +589,9 @@ export async function getLivePvpLobbyAction() {
         where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
         select: { value: true },
       }),
+    ]);
+  const [rankingRows, administrativePlayers] = includeRanking
+    ? await Promise.all([
       prisma.appSetting.findMany({
         where: { key: { startsWith: TERRAIN_RANKING_PREFIX } },
         select: { value: true },
@@ -594,7 +600,8 @@ export async function getLivePvpLobbyAction() {
         where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } },
         select: { id: true },
       }),
-    ]);
+    ])
+    : [[], []];
   const administrativePlayerIds = new Set(
     administrativePlayers.map((entry) => entry.id),
   );
@@ -623,7 +630,7 @@ export async function getLivePvpLobbyAction() {
       .map((entry) => asQueue(entry.value))
       .filter((entry): entry is QueueValue => !!entry && !entry.targetPlayerId)
       .map((entry) => ({ id: entry.playerId, name: entry.playerName })),
-    ranking: rankingRows
+    ranking: includeRanking ? rankingRows
       .map(
         (row) =>
           row.value as unknown as {
@@ -644,7 +651,7 @@ export async function getLivePvpLobbyAction() {
           a.losses - b.losses ||
           a.playerName.localeCompare(b.playerName),
       )
-      .slice(0, 20),
+      .slice(0, 20) : null,
     queued: queue.some((entry) => entry.key === `${QUEUE_PREFIX}${player.id}`),
     match: match?.value
       ? normalizeMatch(match.value as Partial<MatchValue>)
@@ -652,7 +659,10 @@ export async function getLivePvpLobbyAction() {
   };
 }
 
-export async function getLivePvpMatchAction(includeMascots = true) {
+export async function getLivePvpMatchAction(
+  includeMascots = true,
+  knownRevision?: number,
+) {
   const player = await requireLivePvpPlayer();
   let match = await prisma.$transaction((tx) =>
     findCurrentMatch(tx, player.id),
@@ -665,6 +675,18 @@ export async function getLivePvpMatchAction(includeMascots = true) {
       return current;
     });
   }
+  // O cliente consulta a partida com frequência para manter os dois lados
+  // sincronizados. Quando a revisão não mudou, devolvemos somente este pulso
+  // em vez de retransmitir equipes, mapa, logs e eventos inteiros.
+  if (knownRevision === match.revision) {
+    return {
+      match: null,
+      viewerId: player.id,
+      selectedMascots: [],
+      unchanged: true as const,
+      revision: match.revision,
+    };
+  }
   const selectedIds = [
     ...match.teamAIds,
     ...match.teamBIds,
@@ -674,10 +696,11 @@ export async function getLivePvpMatchAction(includeMascots = true) {
     ...match.bansByBIds,
   ];
   const selectedMascots =
-    includeMascots && (selectedIds.length || match.phase === "BAN")
+    includeMascots &&
+    (selectedIds.length || match.phase === "BAN" || match.phase === "DRAFT")
       ? await prisma.mascot.findMany({
           where:
-            match.phase === "BAN"
+            match.phase === "BAN" || match.phase === "DRAFT"
               ? { playerId: { in: [match.playerAId, match.playerBId] } }
               : { id: { in: [...new Set(selectedIds)] } },
           select: {
@@ -754,6 +777,8 @@ export async function getLivePvpMatchAction(includeMascots = true) {
   return {
     match: responseMatch,
     viewerId: player.id,
+    unchanged: false as const,
+    revision: responseMatch.revision,
     selectedMascots: selectedMascots.map((mascot) => ({
       id: mascot.id,
       ownerId: mascot.playerId,

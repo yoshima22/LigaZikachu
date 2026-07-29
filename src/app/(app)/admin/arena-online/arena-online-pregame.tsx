@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { MascotOption } from "./arena-online-lab";
 import { loadLivePvpMovesAction } from "./actions";
@@ -55,6 +55,7 @@ export function ArenaOnlinePregame({
   >([]);
   const [nick, setNick] = useState("");
   const [queuePending, setQueuePending] = useState(false);
+  const hiddenLobbyTicks = useRef(0);
   const [onlineMatch, setOnlineMatch] =
     useState<Awaited<ReturnType<typeof getLivePvpLobbyAction>>["match"]>(null);
   const [serverCoinResult, setServerCoinResult] = useState<
@@ -107,13 +108,13 @@ export function ArenaOnlinePregame({
     () => Array.from(new Set(mascots.map((m) => m.ownerName))),
     [mascots],
   );
-  const refreshLobby = async () => {
+  const refreshLobby = async (includeRanking = false) => {
     if (!onlineIdentity) return;
     try {
-      const state = await getLivePvpLobbyAction();
+      const state = await getLivePvpLobbyAction(includeRanking);
       setQueue(state.queueCount);
       setQueuePlayers(state.queuePlayers);
-      setRanking(state.ranking);
+      if (state.ranking) setRanking(state.ranking);
       if (state.match && !onlineMatch) {
         setOnlineMatch(state.match);
         onEvent(
@@ -126,9 +127,29 @@ export function ArenaOnlinePregame({
   };
   useEffect(() => {
     if (!onlineIdentity || stage !== "LOBBY") return;
-    void refreshLobby();
-    const timer = setInterval(() => void refreshLobby(), 3_000);
-    return () => clearInterval(timer);
+    void refreshLobby(true);
+    const timer = setInterval(() => {
+      if (!document.hidden) {
+        hiddenLobbyTicks.current = 0;
+        void refreshLobby();
+        return;
+      }
+      // Mantém a vaga na fila viva em segundo plano sem continuar consultando
+      // a cada três segundos.
+      hiddenLobbyTicks.current += 1;
+      if (hiddenLobbyTicks.current >= 10) {
+        hiddenLobbyTicks.current = 0;
+        void refreshLobby();
+      }
+    }, 3_000);
+    const onVisible = () => {
+      if (!document.hidden) void refreshLobby();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [onlineIdentity, stage, onlineMatch]);
   const joinQueue = async (direct = false) => {
     setQueuePending(true);
@@ -411,7 +432,7 @@ export function ArenaOnlinePregame({
                     const state = await leaveLivePvpQueueAction();
                     setQueue(state.queueCount);
                     setQueuePlayers(state.queuePlayers);
-                    setRanking(state.ranking);
+                    if (state.ranking) setRanking(state.ranking);
                     toast.success("Você saiu da fila.");
                   } finally {
                     setQueuePending(false);

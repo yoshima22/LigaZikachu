@@ -95,6 +95,8 @@ export function ArenaOnlineSyncedPregame({
   const animatedCoinRevision = useRef<number | null>(null);
   const [pending, startTransition] = useTransition();
   const completedRevision = useRef<number | null>(null);
+  const revisionRef = useRef(initialMatch.revision);
+  const mascotPoolLoaded = useRef(false);
   const viewerSide: Side = identity.playerId === match.playerAId ? "A" : "B";
   const ownTeam = viewerSide === "A" ? match.teamAIds : match.teamBIds;
   const isMyTurn =
@@ -135,11 +137,34 @@ export function ArenaOnlineSyncedPregame({
             ? `${activePlayerName} está escolhendo ${match.draftQuota} mascote${match.draftQuota === 1 ? "" : "s"} para a equipe.`
             : "Preparando o combate.";
 
-  const refresh = async () => {
+  const refresh = async (force = false, includeMascots = false) => {
     try {
-      const state = await getLivePvpMatchAction();
+      let state = await getLivePvpMatchAction(
+        includeMascots,
+        force ? undefined : revisionRef.current,
+      );
+      if (!state.match) return;
+      if (
+        !includeMascots &&
+        !mascotPoolLoaded.current &&
+        (state.match.phase === "BAN" || state.match.phase === "DRAFT")
+      ) {
+        state = await getLivePvpMatchAction(true);
+        if (!state.match) return;
+      }
+      revisionRef.current = state.match.revision;
       setMatch(state.match);
-      setRemoteMascots(state.selectedMascots as MascotOption[]);
+      if (state.selectedMascots.length) {
+        mascotPoolLoaded.current =
+          state.match.phase === "BAN" || state.match.phase === "DRAFT";
+        setRemoteMascots((current) => {
+          const merged = new Map(current.map((mascot) => [mascot.id, mascot]));
+          (state.selectedMascots as MascotOption[]).forEach((mascot) =>
+            merged.set(mascot.id, mascot),
+          );
+          return [...merged.values()];
+        });
+      }
       setSeconds(
         Math.max(
           0,
@@ -155,9 +180,18 @@ export function ArenaOnlineSyncedPregame({
     }
   };
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), 1_500);
-    return () => clearInterval(timer);
+    void refresh(true, true);
+    const timer = setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, 1_500);
+    const onVisible = () => {
+      if (!document.hidden) void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
   useEffect(() => {
     const timer = setInterval(
@@ -212,8 +246,14 @@ export function ArenaOnlineSyncedPregame({
   const act = (action: () => Promise<LivePvpMatchValue>) =>
     startTransition(async () => {
       try {
-        setMatch(await action());
-        await refresh();
+        const next = await action();
+        revisionRef.current = next.revision;
+        setMatch(next);
+        if (
+          !mascotPoolLoaded.current &&
+          (next.phase === "BAN" || next.phase === "DRAFT")
+        )
+          await refresh(true, true);
       } catch (error) {
         toast.error(
           error instanceof Error
