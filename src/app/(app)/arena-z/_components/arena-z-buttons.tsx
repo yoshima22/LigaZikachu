@@ -89,15 +89,25 @@ type AnimTurn = {
 type MascotInfo = { id: string; pokemonId: number; name: string; level: number; maxHp: number };
 
 // ── Animação de combate ───────────────────────────────────────────────────────
-function HpBar({ current, max, isPlayer }: { current: number; max: number; isPlayer: boolean }) {
-  const pct = max > 0 ? Math.max(0, Math.min(100, (current / max) * 100)) : 0;
+function HpBar({ current, max }: { current: number; max: number }) {
+  const safeMax = Math.max(1, Math.round(max));
+  const safeCurrent = Math.max(0, Math.min(safeMax, Math.round(current)));
+  const pct = Math.max(0, Math.min(100, (safeCurrent / safeMax) * 100));
   const color = pct > 50 ? "bg-green-400" : pct > 20 ? "bg-yellow-400" : "bg-red-500";
   return (
-    <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${color}`}
-        style={{ width: `${pct}%` }}
-      />
+    <div className="w-full" aria-label={`${safeCurrent} de ${safeMax} pontos de vida`}>
+      <div className="mb-0.5 flex items-center justify-between gap-1 text-[8px] leading-none sm:text-[9px]">
+        <span className="font-bold uppercase tracking-wide text-slate-500">HP</span>
+        <span className="shrink-0 font-semibold tabular-nums text-slate-300">
+          {safeCurrent} / {safeMax}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-700">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -143,8 +153,7 @@ function MascotPanel({
         {mascot.name} - Nv.{mascot.level}
       </span>
       <div className="mt-1 w-full">
-        <HpBar current={currentHp} max={mascot.maxHp} isPlayer={isPlayer} />
-        <span className="block truncate text-center text-[7px] text-slate-500 sm:text-[8px]">{Math.max(0, currentHp)}/{mascot.maxHp}</span>
+        <HpBar current={currentHp} max={mascot.maxHp} />
       </div>
     </div>
   );

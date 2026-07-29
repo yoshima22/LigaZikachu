@@ -148,11 +148,21 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
 }
 
 function HpBar({ hp, maxHp }: { hp: number; maxHp: number }) {
-  const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const safeMaxHp = Math.max(1, Math.round(maxHp));
+  const currentHp = Math.max(0, Math.min(safeMaxHp, Math.round(hp)));
+  const pct = Math.max(0, Math.min(100, (currentHp / safeMaxHp) * 100));
   const color = pct > 50 ? "bg-green-500" : pct > 25 ? "bg-yellow-500" : "bg-red-500";
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-      <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+    <div className="mt-0.5 w-full" aria-label={`${currentHp} de ${safeMaxHp} pontos de vida`}>
+      <div className="mb-0.5 flex items-center justify-between gap-2 text-[9px] leading-none">
+        <span className="font-bold uppercase tracking-wide text-slate-500">HP</span>
+        <span className="shrink-0 font-semibold tabular-nums text-slate-300">
+          {currentHp} / {safeMaxHp}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
