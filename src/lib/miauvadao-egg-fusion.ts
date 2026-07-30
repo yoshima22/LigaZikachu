@@ -23,7 +23,7 @@ const ANCHORS: Array<Record<MiauvadaoFusionResult, number>> = [
   { BROKEN: 25, COMMON: 3, EVENT: 5, RARE: 10, SPECIAL: 42, LAB: 15 },
 ];
 
-const BREAK_CHANCE_MULTIPLIER = 0.75;
+const BREAK_CHANCE_MULTIPLIER = 0.35;
 
 export function getMiauvadaoFusionChances(eggTypes: MiauvadaoFusionEggType[]) {
   const average = eggTypes.length
@@ -37,15 +37,14 @@ export function getMiauvadaoFusionChances(eggTypes: MiauvadaoFusionEggType[]) {
     results[result] = ANCHORS[low][result] + (ANCHORS[high][result] - ANCHORS[low][result]) * fraction;
   }
 
-  // A quebra foi reduzida em aproximadamente 25%. A chance retirada dela e
-  // redistribuida proporcionalmente entre os ovos para o total continuar 100%.
+  // A quebra foi reduzida em aproximadamente 65%. A chance retirada dela
+  // retorna integralmente como ovo da faixa mais próxima à média dos
+  // ingredientes. Assim, arriscar ovos bons continua oferecendo progressão,
+  // mas uma falha parcial tende a preservar o investimento do jogador.
   const originalBrokenChance = results.BROKEN;
   const reducedBrokenChance = Math.round(originalBrokenChance * BREAK_CHANCE_MULTIPLIER);
-  const originalEggChance = 100 - originalBrokenChance;
-  const redistributedEggChance = 100 - reducedBrokenChance;
-  for (const result of ["COMMON", "EVENT", "RARE", "SPECIAL", "LAB"] as const) {
-    results[result] = results[result] / originalEggChance * redistributedEggChance;
-  }
+  const equivalentResult = MIAUVADAO_FUSION_EGG_TYPES[Math.round(average)];
+  results[equivalentResult] += originalBrokenChance - reducedBrokenChance;
   results.BROKEN = reducedBrokenChance;
 
   return results;
