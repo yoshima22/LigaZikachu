@@ -9,7 +9,7 @@ import {
   adminSimFinalizeAction,
   type SimRoundResult,
 } from "../simulation-actions";
-import { SyncBattleReplayModal, type SyncReplayJson } from "./sync-battle-replay";
+import { SyncCombatReplayModal, type AnySyncReplayJson } from "./sync-battle-replay";
 
 type Phase = "idle" | "setup_done" | "round1_done" | "round2_done" | "round3_done" | "done";
 
@@ -80,8 +80,8 @@ export function SimulationButton() {
 
   // Replay modal
   const [replayOpen, setReplayOpen] = useState(false);
-  const [replayData, setReplayData] = useState<SyncReplayJson | null>(null);
-  const [replayMatch, setReplayMatch] = useState<{ teamAName: string; teamBName: string } | null>(null);
+  const [replayData, setReplayData] = useState<AnySyncReplayJson | null>(null);
+  const [replayMatch, setReplayMatch] = useState<MatchData | null>(null);
 
   const run = () => {
     setError(null);
@@ -131,8 +131,8 @@ export function SimulationButton() {
 
   const openReplay = (match: MatchData) => {
     if (match.replayJson && typeof match.replayJson === "object") {
-      setReplayData(match.replayJson as SyncReplayJson);
-      setReplayMatch({ teamAName: match.teamAName, teamBName: match.teamBName });
+      setReplayData(match.replayJson as AnySyncReplayJson);
+      setReplayMatch(match);
       setReplayOpen(true);
     }
   };
@@ -293,9 +293,12 @@ export function SimulationButton() {
 
       {/* Replay modal */}
       {replayOpen && replayData && replayMatch && (
-        <SyncBattleReplayModal
+        <SyncCombatReplayModal
           teamAName={replayMatch.teamAName}
           teamBName={replayMatch.teamBName}
+          result={replayMatch.result}
+          survivingA={replayMatch.survivingA}
+          survivingB={replayMatch.survivingB}
           replay={replayData}
           onFinish={() => setReplayOpen(false)}
         />

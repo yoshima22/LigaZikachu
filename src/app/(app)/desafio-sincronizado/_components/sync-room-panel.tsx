@@ -13,8 +13,8 @@ import {
   adminFinalizeRoomAction,
 } from "../combat-actions";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
-import { SyncBattleReplayModal } from "./sync-battle-replay";
-import type { SyncReplayJson } from "./sync-battle-replay";
+import { SyncCombatReplayModal, isStandardSyncReplay } from "./sync-battle-replay";
+import type { AnySyncReplayJson, SyncReplayJson } from "./sync-battle-replay";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -145,7 +145,7 @@ export function SyncRoomPanel({ room, playerId, isAdmin, myLineupMascots }: Prop
               <Zap size={13} /> Iniciar desempate
             </button>
           )}
-          {isAdmin && (room.status === "FINISHED" || allRoundsDone) && (
+          {isAdmin && room.status === "FINISHED" && (
             <button
               disabled={pending}
               onClick={() => act(() => adminFinalizeRoomAction(room.id))}
@@ -162,7 +162,7 @@ export function SyncRoomPanel({ room, playerId, isAdmin, myLineupMascots }: Prop
 
       {/* Rodadas */}
       {room.rounds
-        .sort((a, b) => a.roundNumber - b.roundNumber)
+        .sort((a, b) => (a.roundNumber === 0 ? 99 : a.roundNumber) - (b.roundNumber === 0 ? 99 : b.roundNumber))
         .map((round) => (
           <RoundCard
             key={round.id}
@@ -204,8 +204,8 @@ function buildRanking(room: Room): RankingEntry[] {
     const entry = byTeam.get(score.teamId);
     if (!entry) continue;
     entry.wins = Math.max(entry.wins, score.wins); // mesmo valor para ambos os jogadores da dupla
-    entry.damageDone += score.damageDone;
-    entry.damageTaken += score.damageTaken;
+    entry.damageDone = Math.max(entry.damageDone, score.damageDone);
+    entry.damageTaken = Math.max(entry.damageTaken, score.damageTaken);
     if (score.finalPosition) entry.finalPosition = score.finalPosition;
     if (score.rewardGranted) entry.rewardGranted = true;
   }
@@ -520,17 +520,21 @@ function MatchResult({ match, room, modifier }: { match: RoundMatch; room: Room;
     : match.botName ?? "Bot Sincronizado";
   const winner = match.result === "TEAM_A_WIN" ? nameA : match.result === "TEAM_B_WIN" ? nameB : "Empate";
 
-  const replay = match.replayJson as SyncReplayJson | null;
-  const hasReplay = replay?.rounds && replay.rounds.length > 0;
+  const replay = match.replayJson as AnySyncReplayJson | null;
+  const hasReplay = Boolean(replay && (isStandardSyncReplay(replay) ? replay.log.length > 0 : (replay as SyncReplayJson).rounds?.length > 0));
 
   const modifierLabel = modifier ? parseModifierEffect(modifier.effectJson) : null;
 
   return (
     <>
       {showModal && hasReplay && (
-        <SyncBattleReplayModal
+        <SyncCombatReplayModal
           teamAName={nameA}
           teamBName={nameB}
+          teamAId={teamA.id}
+          result={match.result}
+          survivingA={match.survivingA}
+          survivingB={match.survivingB}
           replay={replay!}
           modifierName={modifier?.name ?? null}
           modifierEffect={modifierLabel}

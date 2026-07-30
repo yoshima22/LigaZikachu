@@ -51,9 +51,49 @@ function buildRoundPairings<T>(teams: T[], roundNumber: number): [T, T | null][]
   return pairings;
 }
 
+type TeamStanding = { teamId: string; wins: number; damageDone: number; damageTaken: number };
+
+function compareTeamStanding(a: TeamStanding, b: TeamStanding) {
+  if (b.wins !== a.wins) return b.wins - a.wins;
+  if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
+  return a.damageTaken - b.damageTaken;
+}
+
+function sameTiebreakCriteria(a: TeamStanding, b: TeamStanding) {
+  return a.wins === b.wins && a.damageDone === b.damageDone && a.damageTaken === b.damageTaken;
+}
+
+async function closeRegularRounds(tx: Prisma.TransactionClient, roomId: string) {
+  const scores = await tx.syncEventScore.findMany({ where: { roomId } });
+  const byTeam = new Map<string, TeamStanding>();
+  for (const score of scores) {
+    const current = byTeam.get(score.teamId) ?? { teamId: score.teamId, wins: 0, damageDone: 0, damageTaken: 0 };
+    current.wins = Math.max(current.wins, score.wins);
+    current.damageDone = Math.max(current.damageDone, score.damageDone);
+    current.damageTaken = Math.max(current.damageTaken, score.damageTaken);
+    byTeam.set(score.teamId, current);
+  }
+  const ranking = [...byTeam.values()].sort(compareTeamStanding);
+  const tiedAtTop = ranking.length > 1 ? ranking.filter((entry) => sameTiebreakCriteria(entry, ranking[0])) : [];
+  for (let index = 0; index < ranking.length; index++) {
+    const entry = ranking[index];
+    const isTopTie = tiedAtTop.some((tied) => tied.teamId === entry.teamId);
+    await tx.syncEventScore.updateMany({
+      where: { roomId, teamId: entry.teamId },
+      data: { finalPosition: isTopTie ? null : index + 1 },
+    });
+  }
+  await tx.syncEventRoom.update({
+    where: { id: roomId },
+    data: tiedAtTop.length >= 2
+      ? { status: "TIEBREAK", finishedAt: null }
+      : { status: "FINISHED", finishedAt: new Date() },
+  });
+}
+
 function makeSyncBotMascots(baseMascots: SyntheticSyncMascot[], seed: number): SyntheticSyncMascot[] {
   const fallbackLevel = 12;
-  const count = Math.max(3, Math.min(6, baseMascots.length || 6));
+  const count = 6;
   const avg = (field: keyof Pick<SyntheticSyncMascot, "level" | "statForce" | "statAgility" | "statVitality" | "statCharisma" | "statInstinct" | "happiness">, fallback: number) => {
     if (baseMascots.length === 0) return fallback;
     return baseMascots.reduce((sum, mascot) => sum + Number(mascot[field] ?? fallback), 0) / baseMascots.length;
@@ -71,6 +111,7 @@ function makeSyncBotMascots(baseMascots: SyntheticSyncMascot[], seed: number): S
     const pokemonId = pokemonPool[(seed + index * 3) % pokemonPool.length];
     return {
       id: `sync-bot-${seed}-${index}-${pokemonId}`,
+      playerId: "sync-bot",
       pokemonId,
       nickname: `Sombra ${getPokemonName(pokemonId)}`,
       level,
@@ -81,7 +122,7 @@ function makeSyncBotMascots(baseMascots: SyntheticSyncMascot[], seed: number): S
       statInstinct: instinct,
       happiness: Math.round(avg("happiness", 70)),
       mood: "FOCUSED",
-      combatRole: index % 3 === 0 ? "DEFENDER" : index % 3 === 1 ? "ATTACKER" : "SUPPORT",
+      combatRole: index % 3 === 0 ? "DEFENDER" : index % 3 === 1 ? "ATTACKER" : "HEALER",
     };
   });
 }
@@ -576,10 +617,7 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
 
       // Se foi a última rodada (3), verifica se sala acabou
       if (round.roundNumber === 3) {
-        await tx.syncEventRoom.update({
-          where: { id: round.roomId },
-          data: { status: "FINISHED", finishedAt: new Date() },
-        });
+        await closeRegularRounds(tx, round.roomId);
       }
 
       // Se foi desempate (roundNumber=0), atribui posições finais e fecha sala
@@ -665,18 +703,21 @@ export async function adminStartTiebreakAction(roomId: string): Promise<{ error?
       const teamScores = room.scores.filter((s) => s.teamId === team.id);
       // Ambos jogadores têm o mesmo wins (foi incrementado identicamente) — pega o maior
       const wins = Math.max(...teamScores.map((s) => s.wins), 0);
-      const damageDone = teamScores.reduce((sum, s) => sum + s.damageDone, 0);
-      const damageTaken = teamScores.reduce((sum, s) => sum + s.damageTaken, 0);
+      const damageDone = Math.max(...teamScores.map((s) => s.damageDone), 0);
+      const damageTaken = Math.max(...teamScores.map((s) => s.damageTaken), 0);
       teamWins.set(team.id, { wins, damageDone, damageTaken, name });
     }
 
     // Encontra o máximo de vitórias
-    const maxWins = Math.max(...[...teamWins.values()].map((t) => t.wins));
-
-    // Duplas empatadas no topo
-    const tiedTeamIds = [...teamWins.entries()]
-      .filter(([, v]) => v.wins === maxWins)
-      .map(([id]) => id);
+    const ordered = [...teamWins.entries()].sort(([, a], [, b]) =>
+      compareTeamStanding({ teamId: "a", ...a }, { teamId: "b", ...b })
+    );
+    const best = ordered[0]?.[1];
+    const tiedTeamIds = best
+      ? ordered
+          .filter(([, value]) => sameTiebreakCriteria({ teamId: "a", ...value }, { teamId: "b", ...best }))
+          .map(([id]) => id)
+      : [];
 
     if (tiedTeamIds.length < 2) {
       return { error: "Não há empate no 1º lugar. Nenhum desempate necessário." };

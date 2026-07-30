@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { getCombatRoleLabel, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
-import { getPokemonElement, getTypeAdvantageMultiplier, getPokemonName } from "@/lib/mascot-data";
+import { type CombatRole } from "@/lib/combat-roles";
+import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { pokemonGeneration } from "@/lib/sync-round-modifiers";
 import type { SyncMatchResult } from "@prisma/client";
 
@@ -31,6 +31,7 @@ export type ModEffect =
   | { type: "GENERATION_STAT_BOOST"; selectedGeneration: number; value: number }
   | { type: "STAT_SWAP_TOP"; stat: string; swapTo: string }
   | { type: "TOP_TOTAL_STATS_NERF"; value: number }
+  | { type: "TEAM_STAT_ADVANTAGE"; stat: "statCharisma" | "statForce"; value: number }
   | { type: "CHARISMA_WINS" }
   | { type: "FORCE_TEAM_AHEAD" }
   | { type: string };
@@ -57,6 +58,7 @@ type MascotRow = {
   happiness: number;
   mood: string;
   combatRole?: CombatRole | string | null;
+  playerId?: string;
   [key: string]: unknown;
 };
 
@@ -310,101 +312,29 @@ function applyModToMascot(m: MascotRow, modEffect: ModEffect | null, modContext:
       return m;
     }
 
+    case "TEAM_STAT_ADVANTAGE": {
+      const e = modEffect as { type: "TEAM_STAT_ADVANTAGE"; stat: "statCharisma" | "statForce"; value: number };
+      const sumA = e.stat === "statCharisma" ? modContext.charismaSumA : modContext.forceSumA;
+      const sumB = e.stat === "statCharisma" ? modContext.charismaSumB : modContext.forceSumB;
+      if ((side === "A" && sumA > sumB) || (side === "B" && sumB > sumA)) {
+        return { ...m, ...scaleAll(1 + e.value) };
+      }
+      return m;
+    }
+
     default:
       return m;
   }
-}
-
-function roleBaseScore(m: {
-  statForce: number;
-  statAgility: number;
-  statVitality: number;
-  statCharisma: number;
-  statInstinct: number;
-  combatRole?: CombatRole | string | null;
-}) {
-  const role = normalizeCombatRole(m.combatRole);
-  switch (role) {
-    case "DEFENDER":
-      return m.statVitality * 0.52 + m.statForce * 0.2 + m.statInstinct * 0.18 + m.statCharisma * 0.1;
-    case "ATTACKER":
-      return m.statForce * 0.58 + m.statInstinct * 0.2 + m.statAgility * 0.17 + m.statVitality * 0.05;
-    case "FLANK":
-      return m.statAgility * 0.52 + m.statForce * 0.22 + m.statInstinct * 0.2 + m.statVitality * 0.06;
-    case "OPPORTUNIST":
-      return m.statInstinct * 0.52 + m.statForce * 0.2 + m.statAgility * 0.16 + m.statCharisma * 0.12;
-    case "ENCOURAGER":
-      return m.statCharisma * 0.52 + m.statVitality * 0.2 + m.statInstinct * 0.16 + m.statAgility * 0.12;
-    case "GUARDIAN":
-      return m.statVitality * 0.40 + m.statCharisma * 0.30 + m.statForce * 0.15 + m.statInstinct * 0.15;
-    case "DUELIST":
-      return m.statForce * 0.40 + m.statInstinct * 0.30 + m.statAgility * 0.18 + m.statVitality * 0.12;
-    case "SABOTEUR":
-      return m.statInstinct * 0.38 + m.statAgility * 0.32 + m.statForce * 0.18 + m.statCharisma * 0.12;
-    case "HEALER":
-      return m.statCharisma * 0.40 + m.statVitality * 0.30 + m.statInstinct * 0.18 + m.statAgility * 0.12;
-    case "SCOUT":
-      return m.statAgility * 0.35 + m.statInstinct * 0.35 + m.statForce * 0.18 + m.statCharisma * 0.12;
-    case "PROVOKER":
-      return m.statCharisma * 0.38 + m.statInstinct * 0.32 + m.statVitality * 0.18 + m.statForce * 0.12;
-    case "SPECIALIST": {
-      const sorted = [m.statForce, m.statAgility, m.statVitality, m.statInstinct, m.statCharisma].sort((a, b) => b - a);
-      return sorted[0] * 0.55 + sorted[1] * 0.25 + sorted[2] * 0.12 + sorted[3] * 0.08;
-    }
-    case "SURVIVOR":
-      return m.statVitality * 0.40 + m.statInstinct * 0.30 + m.statForce * 0.18 + m.statAgility * 0.12;
-    default:
-      return m.statForce * 0.58 + m.statInstinct * 0.2 + m.statAgility * 0.17 + m.statVitality * 0.05;
-  }
-}
-
-function roleMatchupMultiplier(attacker: MascotRow, defender: MascotRow) {
-  const a = normalizeCombatRole(attacker.combatRole);
-  const d = normalizeCombatRole(defender.combatRole);
-  let mult = 1;
-  if (a === "ATTACKER" && d === "DEFENDER") mult *= 1.12;
-  if (a === "FLANK" && (d === "ENCOURAGER" || d === "OPPORTUNIST")) mult *= 1.12;
-  if (a === "OPPORTUNIST" && attacker.statInstinct > defender.statInstinct) mult *= 1.1;
-  if (a === "DEFENDER" && d === "FLANK" && attacker.statVitality > defender.statAgility) mult *= 1.08;
-  if (a === "ENCOURAGER") mult *= 1 + Math.min(0.12, attacker.statCharisma / 700);
-  if (a === "DUELIST") mult *= 1.08;
-  if (a === "SABOTEUR" && (d === "ENCOURAGER" || d === "HEALER")) mult *= 1.10;
-  if (a === "SCOUT") mult *= 1 + Math.min(0.06, (attacker.statAgility + attacker.statInstinct) / 1200);
-  if (a === "PROVOKER") mult *= 1 + Math.min(0.08, attacker.statCharisma / 800);
-  if (a === "GUARDIAN") mult *= 0.92;
-  if (a === "HEALER") mult *= 0.85;
-  if (a === "SURVIVOR") mult *= 1.04;
-  if (a === "SPECIALIST") {
-    const maxS = Math.max(attacker.statForce, attacker.statAgility, attacker.statVitality, attacker.statInstinct, attacker.statCharisma);
-    mult *= 1 + Math.min(0.10, maxS / 800);
-  }
-  return mult;
-}
-
-function mascotScore(m: {
-  statForce: number;
-  statAgility: number;
-  statVitality: number;
-  statCharisma: number;
-  statInstinct: number;
-  happiness: number;
-  mood: string;
-  pokemonId: number;
-  combatRole?: CombatRole | string | null;
-}, opponent: MascotRow): number {
-  const elemSelf = getPokemonElement(m.pokemonId);
-  const elemOpp  = getPokemonElement(opponent.pokemonId);
-  const typeMult = getTypeAdvantageMultiplier(elemSelf, elemOpp);
-  const base = roleBaseScore(m);
-  const mood  = m.mood === "CONFIDENT" ? 10 : m.mood === "ANGRY" ? 5 : 0;
-  return (base + m.happiness / 10 + mood + Math.random() * 15) * typeMult * roleMatchupMultiplier(m as MascotRow, opponent);
 }
 
 export async function loadModEffect(modifierId: string | null): Promise<ModEffect | null> {
   if (!modifierId) return null;
   const mod = await prisma.syncEventModifier.findUnique({ where: { id: modifierId }, select: { effectJson: true } });
   if (mod?.effectJson && typeof mod.effectJson === "object" && !Array.isArray(mod.effectJson)) {
-    return mod.effectJson as unknown as ModEffect;
+    const effect = mod.effectJson as unknown as ModEffect;
+    if (effect.type === "CHARISMA_WINS") return { type: "TEAM_STAT_ADVANTAGE", stat: "statCharisma", value: 0.08 };
+    if (effect.type === "FORCE_TEAM_AHEAD") return { type: "TEAM_STAT_ADVANTAGE", stat: "statForce", value: 0.08 };
+    return effect;
   }
   return null;
 }
@@ -420,11 +350,17 @@ export async function runSyncBattle(params: {
   const { teamA, teamB, selections, modifierId } = params;
   const modEffect = params.modEffect !== undefined ? params.modEffect : await loadModEffect(modifierId);
 
-  const getTeamMascotIds = (teamId: string) =>
-    selections.filter((s) => s.teamId === teamId).flatMap((s) => s.mascotIds);
+  const getTeamMascotIds = (team: TeamInput) => {
+    const result: string[] = [];
+    for (const playerId of [team.playerAId, team.playerBId].filter(Boolean) as string[]) {
+      const selection = selections.find((s) => s.teamId === team.id && s.playerId === playerId);
+      if (selection) result.push(...selection.mascotIds);
+    }
+    return result;
+  };
 
-  const mascotIdsA = getTeamMascotIds(teamA.id);
-  const mascotIdsB = getTeamMascotIds(teamB.id);
+  const mascotIdsA = getTeamMascotIds(teamA);
+  const mascotIdsB = params.syntheticMascotsB?.map((m) => m.id) ?? getTeamMascotIds(teamB);
 
   const [rawA, rawB] = await Promise.all([
     prisma.mascot.findMany({ where: { id: { in: mascotIdsA } } }),
@@ -439,8 +375,12 @@ export async function runSyncBattle(params: {
   });
   const roleByMascot = new Map(lineupRoles.map((entry) => [entry.mascotId, entry.combatRole]));
 
-  const mascotsA = (rawA as MascotRow[]).map((m) => ({ ...m, combatRole: roleByMascot.get(m.id) ?? "ATTACKER" }));
-  const mascotsB = (rawB as MascotRow[]).map((m) => ({ ...m, combatRole: roleByMascot.get(m.id) ?? "ATTACKER" }));
+  const orderMascots = (raw: MascotRow[], ids: string[]) => {
+    const byId = new Map(raw.map((m) => [m.id, m]));
+    return ids.map((id) => byId.get(id)).filter((m): m is MascotRow => Boolean(m));
+  };
+  const mascotsA = orderMascots(rawA as MascotRow[], mascotIdsA).map((m) => ({ ...m, combatRole: roleByMascot.get(m.id) ?? m.combatRole ?? "ATTACKER" }));
+  const mascotsB = orderMascots(rawB as MascotRow[], mascotIdsB).map((m) => ({ ...m, combatRole: roleByMascot.get(m.id) ?? m.combatRole ?? "ATTACKER" }));
 
   // Compute cross-team context for complex modifiers
   const modContext = computeModContext(mascotsA, mascotsB, modEffect);
@@ -449,70 +389,33 @@ export async function runSyncBattle(params: {
   const boostedA = mascotsA.map((m) => applyModToMascot(m, modEffect, modContext, "A"));
   const boostedB = mascotsB.map((m) => applyModToMascot(m, modEffect, modContext, "B"));
 
-  // Handle FORCE_TEAM_AHEAD: give winning team a head-start surviving count
-  let survivingA = 0;
-  let survivingB = 0;
-  if (modEffect?.type === "FORCE_TEAM_AHEAD") {
-    const fSumA = modContext.forceSumA;
-    const fSumB = modContext.forceSumB;
-    if (fSumA > fSumB) survivingA = 1;
-    else if (fSumB > fSumA) survivingB = 1;
+  const lineupA = boostedA.map((m, index) => toLeagueMascot({ ...m, playerId: teamA.id }, index + 1, m.combatRole));
+  const lineupB = boostedB.map((m, index) => toLeagueMascot({ ...m, playerId: teamB.id }, index + 1, m.combatRole));
+  if (lineupA.length !== 6 || lineupB.length !== 6) {
+    throw new Error(`Cada dupla precisa levar exatamente 6 mascotes ao combate (3 por jogador). Recebidos: ${lineupA.length} x ${lineupB.length}.`);
   }
 
-  const logEntries: object[] = [];
-  let teamADamage = 0;
-  let teamBDamage = 0;
-
-  // Handle CHARISMA_WINS: skip battle, determine winner purely by charisma sum
-  if (modEffect?.type === "CHARISMA_WINS") {
-    if (modContext.charismaSumA >= modContext.charismaSumB) survivingA++;
-    else survivingB++;
-    const result: SyncMatchResult = survivingA > survivingB ? "TEAM_A_WIN" : "TEAM_B_WIN";
-    return {
-      result,
-      teamADamage: modContext.charismaSumA,
-      teamBDamage: modContext.charismaSumB,
-      survivingA,
-      survivingB,
-      replayJson: { rounds: [], modifierId, note: "CHARISMA_WINS" },
-    };
-  }
-
-  const paired = Math.min(boostedA.length, boostedB.length);
-  for (let i = 0; i < paired; i++) {
-    const a = boostedA[i];
-    const b = boostedB[i];
-    const scoreA = mascotScore(a, b);
-    const scoreB = mascotScore(b, a);
-    const aWins  = scoreA > scoreB;
-    teamADamage += Math.round(scoreA);
-    teamBDamage += Math.round(scoreB);
-    if (aWins) survivingA++; else survivingB++;
-    logEntries.push({
-      slot: i + 1,
-      nameA: a.nickname ?? getPokemonName(a.pokemonId),
-      nameB: b.nickname ?? getPokemonName(b.pokemonId),
-      pokemonIdA: a.pokemonId,
-      pokemonIdB: b.pokemonId,
-      roleA: getCombatRoleLabel(a.combatRole),
-      roleB: getCombatRoleLabel(b.combatRole),
-      scoreA: Math.round(scoreA),
-      scoreB: Math.round(scoreB),
-      winner: aWins ? "A" : "B",
-    });
-  }
-
-  let result: SyncMatchResult;
-  if (survivingA > survivingB) result = "TEAM_A_WIN";
-  else if (survivingB > survivingA) result = "TEAM_B_WIN";
-  else result = teamADamage >= teamBDamage ? "TEAM_A_WIN" : "TEAM_B_WIN";
+  const battle = runLeagueCombat(lineupA, lineupB, null, [], []);
+  const result: SyncMatchResult = battle.winner === "A" ? "TEAM_A_WIN" : battle.winner === "B" ? "TEAM_B_WIN" : "DRAW";
+  const serializeLineup = (lineup: typeof battle.lineupA) => lineup.map((m) => ({
+    id: m.id, name: m.name, pokemonId: m.pokemonId, level: m.level,
+    ownerId: m.ownerId, role: m.combatRole, maxHp: m.hp,
+  }));
 
   return {
     result,
-    teamADamage,
-    teamBDamage,
-    survivingA,
-    survivingB,
-    replayJson: { rounds: logEntries, modifierId },
+    teamADamage: battle.teamADamageDealt,
+    teamBDamage: battle.teamBDamageDealt,
+    survivingA: battle.teamASurvivors,
+    survivingB: battle.teamBSurvivors,
+    replayJson: {
+      version: 2,
+      engine: "STANDARD_COMBAT",
+      modifierId,
+      combatRounds: battle.rounds,
+      log: battle.log,
+      lineupA: serializeLineup(battle.lineupA),
+      lineupB: serializeLineup(battle.lineupB),
+    },
   };
 }

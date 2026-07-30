@@ -340,7 +340,8 @@ export default async function DesafioSincronizadoPage() {
             <p className="mt-1 text-xs leading-5 text-slate-500">
               Todos os horários usam Brasília (BRT). A janela de inscrição abre e fecha automaticamente para jogadores.
               Forma a Arena Sincronizada única. As rodadas ficam agendadas; o sistema abre a seleção de cada rodada,
-              e o modificador aparece antes dos 3 mascotes escolhidos.
+              e o modificador aparece antes dos 3 mascotes escolhidos por cada integrante. Os 6 mascotes da dupla
+              lutam juntos pelo motor completo da Arena e da Liga Semanal.
             </p>
           </div>
         </div>
@@ -355,8 +356,8 @@ export default async function DesafioSincronizadoPage() {
         <div className="mt-4 grid gap-2 text-xs text-slate-400 md:grid-cols-4">
           <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">1.</span> Jogadores juntam metades válidas e montam o ticket completo.</p>
           <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">2.</span> Duplas entram, confirmam presença e travam 9 mascotes por jogador.</p>
-          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">3.</span> Em cada rodada, o modificador é revelado antes da escolha dos 3 mascotes.</p>
-          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">4.</span> A arena roda por pareamentos; duplas ímpares enfrentam o Bot Sincronizado.</p>
+          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">3.</span> Em cada rodada, cada jogador escolhe 3: a dupla entra com 6 mascotes, tipos e posturas.</p>
+          <p className="rounded-xl border border-border bg-slate-950/50 p-3"><span className="font-semibold text-slate-200">4.</span> São 3 rodadas. O ranking usa vitórias, dano causado e menor dano recebido; igualdade total abre desempate.</p>
         </div>
       </section>
 

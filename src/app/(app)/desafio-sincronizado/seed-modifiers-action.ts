@@ -77,14 +77,14 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "CONCURSO_DE_CARISMA",
     name: "Concurso de Carisma",
-    description: "A dupla com maior soma de Carisma vence sem combate.",
-    effectJson: { type: "CHARISMA_WINS" },
+    description: "A dupla com maior soma de Carisma recebe +8% em todos os atributos; o combate completo ainda decide o vencedor.",
+    effectJson: { type: "TEAM_STAT_ADVANTAGE", stat: "statCharisma", value: 0.08 },
   },
   {
     key: "QUEDA_DE_BRACO",
     name: "Queda de Braço",
-    description: "A dupla com maior soma de Força começa vencendo 1 confronto interno.",
-    effectJson: { type: "FORCE_TEAM_AHEAD" },
+    description: "A dupla com maior soma de Força recebe +8% em todos os atributos; o combate completo ainda decide o vencedor.",
+    effectJson: { type: "TEAM_STAT_ADVANTAGE", stat: "statForce", value: 0.08 },
   },
   {
     key: "CORRIDA_DE_AGILIDADE",
@@ -274,7 +274,7 @@ export async function adminSeedModifiersAction(): Promise<{ error?: string; crea
     for (const mod of MODIFIERS) {
       await prisma.syncEventModifier.upsert({
         where: { key: mod.key },
-        update: {},
+        update: { name: mod.name, description: mod.description, effectJson: mod.effectJson },
         create: {
           key: mod.key,
           name: mod.name,

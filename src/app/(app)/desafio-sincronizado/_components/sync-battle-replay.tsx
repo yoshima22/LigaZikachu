@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { getSpriteUrl } from "@/lib/mascot-data";
+import {
+  LeagueBattleReplayModal,
+  type ReplayLineupFighter,
+  type TurnLog,
+} from "@/app/(app)/combates/liga-semanal/_components/league-battle-replay";
 
 export interface SyncReplaySlot {
   slot: number;
@@ -19,6 +24,77 @@ export interface SyncReplaySlot {
 export interface SyncReplayJson {
   rounds: SyncReplaySlot[];
   modifierId?: string | null;
+}
+
+export interface StandardSyncReplayJson {
+  version: 2;
+  engine: "STANDARD_COMBAT";
+  modifierId?: string | null;
+  combatRounds: number;
+  log: TurnLog[];
+  lineupA: ReplayLineupFighter[];
+  lineupB: ReplayLineupFighter[];
+}
+
+export type AnySyncReplayJson = SyncReplayJson | StandardSyncReplayJson;
+
+export function isStandardSyncReplay(replay: unknown): replay is StandardSyncReplayJson {
+  if (!replay || typeof replay !== "object") return false;
+  const value = replay as Partial<StandardSyncReplayJson>;
+  return value.version === 2 && value.engine === "STANDARD_COMBAT" && Array.isArray(value.log);
+}
+
+export function SyncCombatReplayModal({
+  teamAName,
+  teamBName,
+  teamAId,
+  result,
+  survivingA,
+  survivingB,
+  replay,
+  modifierName,
+  modifierEffect,
+  onFinish,
+}: {
+  teamAName: string;
+  teamBName: string;
+  teamAId?: string;
+  result?: string | null;
+  survivingA: number;
+  survivingB: number;
+  replay: AnySyncReplayJson;
+  modifierName?: string | null;
+  modifierEffect?: string | null;
+  onFinish: () => void;
+}) {
+  if (isStandardSyncReplay(replay)) {
+    const resolvedTeamAId = teamAId ?? replay.lineupA[0]?.ownerId;
+    return (
+      <LeagueBattleReplayModal
+        playerAName={teamAName}
+        playerBName={teamBName}
+        playerAId={resolvedTeamAId}
+        winnerId={result === "TEAM_A_WIN" ? resolvedTeamAId : result === "TEAM_B_WIN" ? "TEAM_B" : null}
+        isDraw={result === "DRAW"}
+        replay={replay.log}
+        playerASurvivors={survivingA}
+        playerBSurvivors={survivingB}
+        lineupA={replay.lineupA}
+        lineupB={replay.lineupB}
+        onFinish={onFinish}
+      />
+    );
+  }
+  return (
+    <SyncBattleReplayModal
+      teamAName={teamAName}
+      teamBName={teamBName}
+      replay={replay}
+      modifierName={modifierName}
+      modifierEffect={modifierEffect}
+      onFinish={onFinish}
+    />
+  );
 }
 
 function ScoreBar({ score, max, side }: { score: number; max: number; side: "A" | "B" }) {
