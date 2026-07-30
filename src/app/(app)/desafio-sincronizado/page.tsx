@@ -103,7 +103,6 @@ export default async function DesafioSincronizadoPage() {
       where: { ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
       include: { generatedByPlayer: { select: { id: true, displayName: true, ptcglNick: true } } },
       orderBy: [{ side: "asc" }, { createdAt: "desc" }],
-      take: 80,
     }),
     prisma.syncTicket.findMany({
       where: { ownerId: player.id, status: { in: ["AVAILABLE", "RESERVED"] } },
