@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { SyncTicketSide } from "@prisma/client";
+import { EggType, Prisma, SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
@@ -16,6 +16,7 @@ import {
   transferSyncTicketHalf,
   SYNC_TICKET_TYPES,
 } from "@/lib/sync-challenge";
+import { parseSyncRewardsConfig, type SyncRewardPosition } from "@/lib/sync-event-rewards";
 
 async function requireCurrentPlayer() {
   const user = await getSessionUser();
@@ -547,6 +548,42 @@ export async function updateSyncChallengeConfigAction(formData: FormData): Promi
         },
       });
     }
+  });
+  revalidatePath("/desafio-sincronizado");
+}
+
+export async function updateSyncRewardsAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const current = await prisma.syncChallengeConfig.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton" },
+    select: { rewardsJson: true },
+  });
+  const rewards = parseSyncRewardsConfig(current.rewardsJson);
+  const positions: SyncRewardPosition[] = ["1", "2", "3", "4", "participation"];
+  const selectedItemIds = new Set<string>();
+
+  for (const position of positions) {
+    const prefix = `reward_${position}`;
+    const coins = Math.max(0, Math.min(1_000_000, Math.floor(Number(formData.get(`${prefix}_coins`)) || 0)));
+    const rawEggType = String(formData.get(`${prefix}_eggType`) ?? "");
+    const eggType = Object.values(EggType).includes(rawEggType as EggType) ? rawEggType as EggType : null;
+    const eggQuantity = eggType ? Math.max(1, Math.min(99, Math.floor(Number(formData.get(`${prefix}_eggQuantity`)) || 1))) : 0;
+    const shopItemId = String(formData.get(`${prefix}_shopItemId`) ?? "").trim() || null;
+    const shopItemQuantity = Math.max(1, Math.min(99, Math.floor(Number(formData.get(`${prefix}_shopItemQuantity`)) || 1)));
+    if (shopItemId) selectedItemIds.add(shopItemId);
+    rewards[position] = { coins, eggType, eggQuantity, shopItemId, shopItemQuantity };
+  }
+
+  if (selectedItemIds.size > 0) {
+    const validItems = await prisma.shopItem.count({ where: { id: { in: [...selectedItemIds] } } });
+    if (validItems !== selectedItemIds.size) throw new Error("Um dos itens selecionados não existe mais na ZikaShop.");
+  }
+
+  await prisma.syncChallengeConfig.update({
+    where: { id: "singleton" },
+    data: { rewardsJson: rewards as unknown as Prisma.InputJsonValue },
   });
   revalidatePath("/desafio-sincronizado");
 }

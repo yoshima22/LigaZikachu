@@ -14,6 +14,8 @@ import { EventPreview } from "./_components/event-preview";
 import { SimulationButton } from "./_components/simulation-button";
 import { UndoSimulationButton } from "./_components/undo-simulation-button";
 import { HalvesSection } from "./_components/halves-section";
+import { AdminRewardsPanel } from "./_components/admin-rewards-panel";
+import { getSyncRewardsConfig } from "@/lib/sync-event-rewards";
 import {
   leaveTeamAction,
   confirmTeamAction,
@@ -251,6 +253,17 @@ export default async function DesafioSincronizadoPage() {
     orderBy: { name: "asc" },
   });
   const allModifiers = admin ? await prisma.syncEventModifier.findMany({ orderBy: { active: "desc" } }) : [];
+  const [rewardConfig, rewardItems] = await Promise.all([
+    getSyncRewardsConfig(),
+    prisma.shopItem.findMany({
+      select: { id: true, name: true, type: true, active: true, inventoryEnabled: true },
+      orderBy: [{ name: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
+  const configuredRewardItemIds = new Set(Object.values(rewardConfig).map((reward) => reward.shopItemId).filter(Boolean));
+  const publicRewardItems = rewardItems
+    .filter((item) => configuredRewardItemIds.has(item.id))
+    .map(({ id, name }) => ({ id, name }));
 
   // Ranking público de hoje — todas as salas do dia
   const { toBrtDateString } = await import("@/lib/date-utils");
@@ -329,7 +342,7 @@ export default async function DesafioSincronizadoPage() {
           <Sparkles size={18} className="text-[#FFCB05]" />
           <h2 className="font-semibold text-slate-100">O que está em jogo</h2>
         </div>
-        <EventPreview modifiers={activeModifiers} />
+        <EventPreview modifiers={activeModifiers} rewards={rewardConfig} rewardItems={publicRewardItems} />
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
@@ -720,6 +733,8 @@ export default async function DesafioSincronizadoPage() {
             </form>
             <ModifierPanel modifiers={allModifiers} />
           </div>
+
+          <AdminRewardsPanel rewards={rewardConfig} items={rewardItems} />
         </section>
       )}
 

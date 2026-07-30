@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Gift, Sparkles, Swords, Ticket, Zap } from "lucide-react";
+import type { SyncRewardPosition, SyncRewardsConfig } from "@/lib/sync-event-rewards";
 
 // ── Recompensas fixas por posição ──────────────────────────────────────────────
 
-const REWARDS = [
+const REWARD_DISPLAY = [
   {
     position: 1,
     medal: "🥇",
@@ -111,9 +112,15 @@ interface PublicModifier {
 
 interface Props {
   modifiers: PublicModifier[];
+  rewards: SyncRewardsConfig;
+  rewardItems: { id: string; name: string }[];
 }
 
-export function EventPreview({ modifiers }: Props) {
+const EGG_NAMES: Record<string, string> = {
+  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", EVENT: "Ovo de Evento", LAB: "Ovo de Laboratório",
+};
+
+export function EventPreview({ modifiers, rewards, rewardItems }: Props) {
   const [openSection, setOpenSection] = useState<"rewards" | "modifiers" | "tickets" | null>("rewards");
   const [openCategory, setOpenCategory] = useState<string | null>(null);
 
@@ -142,20 +149,25 @@ export function EventPreview({ modifiers }: Props) {
               todas as duplas abaixo do 4º lugar recebem a mesma recompensa de participacao.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
-            {REWARDS.map((r) => (
+            {REWARD_DISPLAY.map((r) => {
+              const key: SyncRewardPosition = r.position <= 4 ? String(r.position) as SyncRewardPosition : "participation";
+              const reward = rewards[key];
+              const itemName = reward.shopItemId ? rewardItems.find((item) => item.id === reward.shopItemId)?.name : null;
+              return (
               <div key={r.position} className={`rounded-xl border p-3 ${r.highlight}`}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg">{r.medal}</span>
                   <span className="text-sm font-bold text-slate-200">{r.label}</span>
                 </div>
                 <div className="space-y-1 text-xs">
-                  <p className={`font-bold ${r.coinColor}`}>💰 {r.coins} ZC</p>
-                  <p className="text-slate-300">🥚 {r.egg}</p>
-                  <p className="text-slate-300">🎁 {r.item}</p>
+                  <p className={`font-bold ${r.coinColor}`}>💰 {reward.coins} ZC</p>
+                  <p className="text-slate-300">🥚 {reward.eggType ? `${reward.eggQuantity}x ${EGG_NAMES[reward.eggType] ?? reward.eggType.replaceAll("_", " ")}` : "Sem ovo"}</p>
+                  <p className="text-slate-300">🎁 {itemName ? `${reward.shopItemQuantity}x ${itemName}` : "Sem item"}</p>
                 </div>
                 <p className="mt-2 text-[10px] text-slate-500">por jogador da dupla</p>
               </div>
-            ))}
+              );
+            })}
             </div>
           </div>
         )}

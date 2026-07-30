@@ -147,6 +147,22 @@ async function applyGiftReward(
     return {};
   }
 
+  const shopItemId = typeof payload.shopItemId === "string" ? payload.shopItemId.trim() : null;
+  if (shopItemId) {
+    const quantity = typeof payload.quantity === "number" && payload.quantity > 0
+      ? Math.floor(payload.quantity)
+      : 1;
+    const shopItem = await tx.shopItem.findUnique({ where: { id: shopItemId }, select: { id: true } });
+    if (shopItem) {
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+        update: { quantity: { increment: quantity } },
+        create: { playerId, itemId: shopItem.id, quantity, equipped: false, source: "EVENT_REWARD" },
+      });
+    }
+    return {};
+  }
+
   const itemName = typeof payload.item === "string" ? payload.item.trim() : null;
   if (itemName) {
     const quantity = typeof payload.quantity === "number" && payload.quantity > 0

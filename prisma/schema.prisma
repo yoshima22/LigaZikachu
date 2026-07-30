@@ -1657,6 +1657,7 @@ model SyncChallengeConfig {
   expedition6hDropChance      Float     @default(0.08)
   recycleDropChance           Float     @default(0.70)
   tcgWinDropChance            Float     @default(1.00)
+  rewardsJson                 Json?
   updatedAt                   DateTime  @updatedAt
 
   @@map("sync_challenge_config")
