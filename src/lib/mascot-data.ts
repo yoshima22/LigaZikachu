@@ -1900,7 +1900,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   459:"grass/ice",460:"grass/ice",
   461:"dark/ice",462:"electric/steel",463:"normal",464:"ground/rock",
   465:"grass",466:"electric",467:"fire",
-  468:"normal/flying",469:"bug/flying",470:"grass",471:"ice",
+  468:"fairy/flying",469:"bug/flying",470:"grass",471:"ice",
   472:"ground/flying",473:"ice/ground",474:"normal",
   475:"psychic/fighting",476:"rock/steel",477:"ghost",478:"ice/ghost",
   479:"electric/ghost",
@@ -1986,7 +1986,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   708:"ghost/grass",709:"ghost/grass",710:"ghost/grass",711:"ghost/grass",
   712:"ice",713:"ice",714:"flying/dragon",715:"flying/dragon",
   // Gen 6 legendaries
-  716:"fairy",717:"dark/flying",718:"dragon/ground",719:"rock/fairy",720:"psychic",721:"psychic/dark",
+  716:"fairy",717:"dark/flying",718:"dragon/ground",719:"rock/fairy",720:"psychic",721:"fire/water",
   // ── Gen 7 ──────────────────────────────────────────────────────────────────
   722:"grass/flying",723:"grass/flying",724:"grass/ghost",
   725:"fire",726:"fire",727:"fire/dark",
