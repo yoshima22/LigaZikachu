@@ -15,6 +15,7 @@ import { SimulationButton } from "./_components/simulation-button";
 import { UndoSimulationButton } from "./_components/undo-simulation-button";
 import { HalvesSection } from "./_components/halves-section";
 import { AdminRewardsPanel } from "./_components/admin-rewards-panel";
+import { CleanupPreviousEventButton } from "./_components/cleanup-previous-event-button";
 import { getSyncRewardsConfig } from "@/lib/sync-event-rewards";
 import {
   leaveTeamAction,
@@ -268,6 +269,7 @@ export default async function DesafioSincronizadoPage() {
   // Ranking público de hoje — todas as salas do dia
   const { toBrtDateString } = await import("@/lib/date-utils");
   const todayDate = toBrtDateString(new Date());
+  const scheduledEventDate = config.round1At && config.round1At > new Date() ? toBrtDateString(config.round1At) : null;
   const todayRooms = await prisma.syncEventRoom.findMany({
     where: { date: todayDate, status: { not: "CANCELLED" } },
     orderBy: { roomIndex: "asc" },
@@ -713,6 +715,7 @@ export default async function DesafioSincronizadoPage() {
                 Fechar inscrições e formar salas agora
               </button>
             </form>
+            <CleanupPreviousEventButton scheduledDate={scheduledEventDate} />
           </div>
 
           <div className="border-t border-border pt-5 space-y-3">
