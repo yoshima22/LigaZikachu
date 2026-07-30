@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 import { openStickerPackByName } from "@/app/(app)/passe-apoiador/pack-opener";
+import { grantSyncTicketShopItem } from "@/lib/sync-challenge";
 
 const claimGiftSchema = z.object({
   giftId: z.string().min(1),
@@ -152,8 +153,9 @@ async function applyGiftReward(
     const quantity = typeof payload.quantity === "number" && payload.quantity > 0
       ? Math.floor(payload.quantity)
       : 1;
-    const shopItem = await tx.shopItem.findUnique({ where: { id: shopItemId }, select: { id: true } });
+    const shopItem = await tx.shopItem.findUnique({ where: { id: shopItemId }, select: { id: true, type: true } });
     if (shopItem) {
+      if (await grantSyncTicketShopItem(tx, playerId, shopItem.type, quantity, "gift-claim")) return {};
       await tx.playerInventory.upsert({
         where: { playerId_itemId: { playerId, itemId: shopItem.id } },
         update: { quantity: { increment: quantity } },
@@ -170,9 +172,10 @@ async function applyGiftReward(
       : 1;
     const shopItem = await tx.shopItem.findFirst({
       where: { name: { equals: itemName, mode: "insensitive" }, active: true },
-      select: { id: true, name: true },
+      select: { id: true, name: true, type: true },
     });
     if (shopItem) {
+      if (await grantSyncTicketShopItem(tx, playerId, shopItem.type, quantity, "gift-claim")) return {};
       await tx.playerInventory.upsert({
         where: { playerId_itemId: { playerId, itemId: shopItem.id } },
         update: { quantity: { increment: quantity } },

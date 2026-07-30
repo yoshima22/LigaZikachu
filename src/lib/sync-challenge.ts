@@ -257,6 +257,68 @@ export async function grantValidSyncTicketForPlayer(tx: Prisma.TransactionClient
   return combineSyncTicketHalves(tx, { playerId, leftHalfId: left.id, rightHalfId: right.id });
 }
 
+export async function grantSyncTicketShopItem(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  itemType: string,
+  quantity = 1,
+  source = "shop-item-reward",
+) {
+  const safeQuantity = Math.max(1, Math.min(99, Math.floor(quantity)));
+  if (itemType === SYNC_TICKET_TYPES.fireLeft || itemType === SYNC_TICKET_TYPES.waterRight) {
+    const side = itemType === SYNC_TICKET_TYPES.fireLeft ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT;
+    await tx.syncTicketHalf.createMany({
+      data: Array.from({ length: safeQuantity }, () => ({
+        side,
+        ownerId: playerId,
+        generatedByPlayerId: playerId,
+        sourceAction: source,
+        status: "AVAILABLE" as const,
+      })),
+    });
+    await tx.auditLog.create({
+      data: {
+        entityType: "SyncTicketHalf",
+        entityId: `bulk:${playerId}:${Date.now()}`,
+        action: "GENERATED_BULK",
+        after: { side, playerId, generatedByPlayerId: playerId, sourceAction: source, quantity: safeQuantity },
+      },
+    }).catch(() => null);
+    return true;
+  }
+  if (itemType === SYNC_TICKET_TYPES.complete) {
+    for (let index = 0; index < safeQuantity; index++) await grantValidSyncTicketForPlayer(tx, playerId);
+    return true;
+  }
+  return false;
+}
+
+export async function reconcileSyncTicketInventory(tx: Prisma.TransactionClient, playerId: string) {
+  const legacyItems = await tx.playerInventory.findMany({
+    where: {
+      playerId,
+      quantity: { gt: 0 },
+      item: { type: { in: [SYNC_TICKET_TYPES.fireLeft, SYNC_TICKET_TYPES.waterRight] as never[] } },
+    },
+    select: { id: true, quantity: true, item: { select: { type: true } } },
+  });
+  let converted = 0;
+  for (const inventory of legacyItems) {
+    const removed = await tx.playerInventory.deleteMany({ where: { id: inventory.id } });
+    if (removed.count !== 1) continue;
+    const granted = await grantSyncTicketShopItem(
+      tx,
+      playerId,
+      inventory.item.type,
+      inventory.quantity,
+      "legacy-inventory-reconciliation",
+    );
+    if (!granted) throw new Error("Tipo de ticket sincronizado inválido durante a reconciliação.");
+    converted += inventory.quantity;
+  }
+  return converted;
+}
+
 type SyncWindowConfig = {
   registrationOpensAt?: Date | string | null;
   registrationClosesAt?: Date | string | null;

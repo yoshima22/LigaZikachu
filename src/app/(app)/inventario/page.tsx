@@ -2,6 +2,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Package, Ticket } from "lucide-react";
 import { InventoryClient } from "./_components/inventory-client";
+import { reconcileSyncTicketInventory } from "@/lib/sync-challenge";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export default async function InventarioPage() {
       Crie um perfil de jogador para acessar o inventário.
     </div>
   );
+
+  await prisma.$transaction((tx) => reconcileSyncTicketInventory(tx, player.id));
 
   const [inventory, syncLeftCount, syncRightCount, syncCompleteCount] = await Promise.all([
     prisma.playerInventory.findMany({
