@@ -1037,7 +1037,23 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useRainbowFeatherAction(mascotId: string, itemId: string): Promise<{ error?: string; statRange?: string }> {
+type RainbowFeatherComparisonSnapshot = {
+  name: string;
+  pokemonName: string;
+  level: number;
+  personality: string;
+  statForce: number;
+  statAgility: number;
+  statCharisma: number;
+  statInstinct: number;
+  statVitality: number;
+};
+
+export async function useRainbowFeatherAction(mascotId: string, itemId: string): Promise<{
+  error?: string;
+  statRange?: string;
+  comparison?: { before: RainbowFeatherComparisonSnapshot; after: RainbowFeatherComparisonSnapshot };
+}> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1081,7 +1097,11 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
       });
       return reset;
     });
-    revalidate(player.id); return { statRange: `${result.statMin}–${result.statMax}` };
+    revalidate(player.id);
+    return {
+      statRange: `${result.statMin}–${result.statMax}`,
+      comparison: result.comparison,
+    };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

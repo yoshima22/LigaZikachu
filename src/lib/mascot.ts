@@ -3009,6 +3009,13 @@ export async function applyRainbowFeather(
   const personality = randomPersonality();
   const basePokemonId = getRainbowFeatherBaseForm(mascot.pokemonId);
   const resetDefaultNickname = mascot.nickname === getPokemonName(mascot.pokemonId);
+  const resetStats = {
+    statForce: randomInt(statMin, statMax),
+    statAgility: randomInt(statMin, statMax),
+    statCharisma: randomInt(statMin, statMax),
+    statInstinct: randomInt(statMin, statMax),
+    statVitality: randomInt(statMin, statMax),
+  };
   await db.mascot.update({
     where: { id: mascotId },
     data: {
@@ -3017,11 +3024,7 @@ export async function applyRainbowFeather(
       evolutionLocked: false,
       ...(resetDefaultNickname ? { nickname: null } : {}),
       personality,
-      statForce: randomInt(statMin, statMax),
-      statAgility: randomInt(statMin, statMax),
-      statCharisma: randomInt(statMin, statMax),
-      statInstinct: randomInt(statMin, statMax),
-      statVitality: randomInt(statMin, statMax),
+      ...resetStats,
       happiness: 50, mood: "NEUTRAL",
       ...(adminLabOriginOverride
         ? {
@@ -3046,6 +3049,26 @@ export async function applyRainbowFeather(
     actualEggTier: adminLabOriginOverride ? "LAB" : actualEggTier,
     usedFallback: !adminLabOriginOverride && !mascot.hatchedFromEggType,
     basePokemonId,
+    comparison: {
+      before: {
+        name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
+        pokemonName: getPokemonName(mascot.pokemonId),
+        level: mascot.level,
+        personality: mascot.personality,
+        statForce: mascot.statForce,
+        statAgility: mascot.statAgility,
+        statCharisma: mascot.statCharisma,
+        statInstinct: mascot.statInstinct,
+        statVitality: mascot.statVitality,
+      },
+      after: {
+        name: resetDefaultNickname ? getPokemonName(basePokemonId) : (mascot.nickname ?? getPokemonName(basePokemonId)),
+        pokemonName: getPokemonName(basePokemonId),
+        level: 1,
+        personality,
+        ...resetStats,
+      },
+    },
   };
 }
 

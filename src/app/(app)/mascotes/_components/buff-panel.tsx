@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Zap } from "lucide-react";
+import { ArrowRight, Sparkles, X, Zap } from "lucide-react";
 import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction } from "../actions";
 import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
+import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
@@ -18,6 +19,31 @@ interface MascotOption {
   restingUntil?: Date | string | null;
   hatchedFromEggType?: string | null; hatchedFromEggOrigin?: string | null;
 }
+
+type RainbowFeatherSnapshot = {
+  name: string;
+  pokemonName: string;
+  level: number;
+  personality: string;
+  statForce: number;
+  statAgility: number;
+  statCharisma: number;
+  statInstinct: number;
+  statVitality: number;
+};
+
+type RainbowFeatherComparison = {
+  before: RainbowFeatherSnapshot;
+  after: RainbowFeatherSnapshot;
+};
+
+const FEATHER_STATS = [
+  ["Força", "statForce"],
+  ["Agilidade", "statAgility"],
+  ["Carisma", "statCharisma"],
+  ["Instinto", "statInstinct"],
+  ["Vitalidade", "statVitality"],
+] as const;
 
 const BUFF_EMOJI: Record<string, string> = {
   MASCOT_BUFF_EXP:   "⚡",
@@ -77,6 +103,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
   const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? mascots.find(m => m.isFavorite)?.id ?? "");
+  const [featherComparison, setFeatherComparison] = useState<RainbowFeatherComparison | null>(null);
 
   if (buffs.length === 0) return null;
 
@@ -171,6 +198,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         replacedExistingBuff?: boolean;
         megaName?: string;
         statRange?: string;
+        comparison?: RainbowFeatherComparison;
         honeyOutcome?: {
           type: "NEW_FRIEND" | "BONUS_EVENT";
           partnerName: string;
@@ -200,8 +228,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         } else if (t === "RAINBOW_FEATHER") {
           toast.success(`${mascotName} renasceu no nível 1 com atributos ${r.statRange ?? "ressorteados"}! 🌈`);
-          // Garante que o card irmão descarte qualquer snapshot anterior do RSC/cache.
-          window.setTimeout(() => window.location.reload(), 600);
+          if (r.comparison) setFeatherComparison(r.comparison);
+          else window.setTimeout(() => window.location.reload(), 600);
         } else if (isMegaStoneType(t)) {
           toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
         } else if (t === "LUCKY_EGG") {
@@ -215,7 +243,9 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else {
           toast.success("Item usado com sucesso! ✨");
         }
-        router.refresh();
+        // A Pena mantém o painel montado para exibir o comparativo. O card é
+        // recarregado ao fechar o modal; outros itens continuam atualizando já.
+        if (t !== "RAINBOW_FEATHER" || !r.comparison) router.refresh();
       }
     });
   };
@@ -382,6 +412,99 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           >
             {pending ? "Usando…" : "Usar item ✨"}
           </button>
+        </div>
+      )}
+
+      {featherComparison && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="feather-comparison-title"
+        >
+          <div className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-fuchsia-400/40 bg-gradient-to-b from-slate-900 to-slate-950 p-5 shadow-2xl shadow-fuchsia-950/50 sm:p-7">
+            <button
+              type="button"
+              onClick={() => {
+                setFeatherComparison(null);
+                window.location.reload();
+              }}
+              className="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-900 p-2 text-slate-400 transition hover:border-slate-500 hover:text-white"
+              aria-label="Fechar comparação"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="mb-6 pr-12">
+              <div className="mb-2 flex items-center gap-2 text-fuchsia-300">
+                <Sparkles size={18} />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Renascimento concluído</span>
+              </div>
+              <h3 id="feather-comparison-title" className="text-xl font-black text-white sm:text-2xl">
+                Resultado da Pena Arco-Íris
+              </h3>
+              <p className="mt-1 text-xs text-slate-400">Confira exatamente o que mudou no mascote.</p>
+            </div>
+
+            <div className="grid items-stretch gap-3 sm:grid-cols-[1fr_auto_1fr]">
+              {(["before", "after"] as const).map((side, index) => {
+                const snapshot = featherComparison[side];
+                const total = FEATHER_STATS.reduce((sum, [, key]) => sum + snapshot[key], 0);
+                return (
+                  <div key={side} className={`rounded-2xl border p-4 ${side === "after" ? "border-fuchsia-400/40 bg-fuchsia-500/10" : "border-slate-700 bg-slate-900/70"}`}>
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${side === "after" ? "text-fuchsia-300" : "text-slate-500"}`}>
+                      {side === "before" ? "Antes" : "Depois"}
+                    </p>
+                    <p className="mt-2 text-lg font-bold text-white">{snapshot.name}</p>
+                    {snapshot.name !== snapshot.pokemonName && <p className="text-[11px] text-slate-500">{snapshot.pokemonName}</p>}
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-slate-950/70 p-3">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-500">Nível</p>
+                        <p className="mt-1 text-lg font-black text-white">{snapshot.level}</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-950/70 p-3">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-500">Personalidade</p>
+                        <p className="mt-1 text-sm font-bold text-white">{PERSONALITY_LABEL[snapshot.personality] ?? snapshot.personality}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {FEATHER_STATS.map(([label, key]) => (
+                        <div key={key} className="flex items-center justify-between rounded-lg bg-slate-950/50 px-3 py-2 text-xs">
+                          <span className="text-slate-400">{label}</span>
+                          <span className="font-black text-white">{snapshot[key]}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between rounded-lg border border-[#FFCB05]/25 bg-[#FFCB05]/10 px-3 py-2 text-xs">
+                        <span className="font-bold text-[#FFCB05]">Total de atributos</span>
+                        <span className="font-black text-[#FFCB05]">{total}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }).reduce<React.ReactNode[]>((cards, card, index) => {
+                if (index > 0) cards.push(
+                  <div key="arrow" className="flex items-center justify-center text-fuchsia-300">
+                    <ArrowRight className="rotate-90 sm:rotate-0" size={24} />
+                  </div>,
+                );
+                cards.push(card);
+                return cards;
+              }, [])}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFeatherComparison(null);
+                window.location.reload();
+              }}
+              className="mt-6 w-full rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] transition hover:bg-[#FFD700]"
+            >
+              Ver mascote atualizado
+            </button>
+          </div>
         </div>
       )}
     </div>
