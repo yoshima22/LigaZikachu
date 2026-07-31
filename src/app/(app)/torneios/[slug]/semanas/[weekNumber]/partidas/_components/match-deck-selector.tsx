@@ -204,6 +204,7 @@ export function MatchDeckSelector({
                   <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
                     <label className="space-y-1 text-[10px] text-slate-400">
                       <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-emerald-300"><PawPrint size={11} /> Missão de Mascote (opcional)</span>
+                      <span className="block text-[10px] leading-4 text-slate-500">A validação acontece agora, mas a EXP da missão só é entregue quando o dia for oficialmente encerrado.</span>
                       <select
                         value={selectedMascotId}
                         onChange={(event) => { setSelectedMascotId(event.target.value); setSuccess(false); }}

@@ -9,12 +9,83 @@ import { z } from "zod";
 import { MatchStatus, ResultSource, Role, TournamentFormat, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
-import { applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
+import { addExp, applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
 import { rewardEquippedMascot } from "@/lib/mascot";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 
 const MATCH_WIN_COINS  = 180;
 const MATCH_LOSS_COINS = 120;
+const MASCOT_MISSION_PARTICIPATION_EXP = 150;
+const MASCOT_MISSION_WIN_EXP = 300;
+
+async function awardMascotMissionExpAtWeekClose(weekId: string) {
+  const [submissions, matches] = await Promise.all([
+    prisma.deckSubmission.findMany({
+      where: {
+        tournamentWeekId: weekId,
+        mascotMissionValid: true,
+        mascotMissionMascotId: { not: null },
+        mascotMissionRewardedAt: null,
+      },
+      select: {
+        id: true,
+        playerId: true,
+        mascotMissionMascotId: true,
+      },
+    }),
+    prisma.match.findMany({
+      where: { tournamentWeekId: weekId, status: MatchStatus.CONFIRMED, playerBId: { not: null } },
+      select: {
+        id: true,
+        playerAId: true,
+        playerBId: true,
+        winnerPlayerId: true,
+        playerADeckSubmissionId: true,
+        playerBDeckSubmissionId: true,
+      },
+    }),
+  ]);
+
+  let rewardedMascots = 0;
+  let totalExp = 0;
+  for (const submission of submissions) {
+    const linkedMatches = matches.filter((match) =>
+      (match.playerAId === submission.playerId && match.playerADeckSubmissionId === submission.id)
+      || (match.playerBId === submission.playerId && match.playerBDeckSubmissionId === submission.id),
+    );
+    if (linkedMatches.length === 0 || !submission.mascotMissionMascotId) continue;
+
+    const wins = linkedMatches.filter((match) => match.winnerPlayerId === submission.playerId).length;
+    const exp = linkedMatches.length * MASCOT_MISSION_PARTICIPATION_EXP
+      + wins * MASCOT_MISSION_WIN_EXP;
+    const claimed = await prisma.deckSubmission.updateMany({
+      where: { id: submission.id, mascotMissionRewardedAt: null },
+      data: { mascotMissionRewardedAt: new Date(), mascotMissionExpAwarded: exp },
+    });
+    if (claimed.count === 0) continue;
+
+    try {
+      await addExp(submission.mascotMissionMascotId, exp, { ignoreBenchPenalty: true });
+      await prisma.mascotEvent.create({
+        data: {
+          mascotId: submission.mascotMissionMascotId,
+          emoji: "🎴",
+          description: `Missão de Mascote encerrada: +${exp} EXP (${linkedMatches.length} participação(ões) e ${wins} vitória(s)).`,
+        },
+      }).catch(() => null);
+      rewardedMascots++;
+      totalExp += exp;
+    } catch (error) {
+      await prisma.deckSubmission.updateMany({
+        where: { id: submission.id, mascotMissionExpAwarded: exp },
+        data: { mascotMissionRewardedAt: null, mascotMissionExpAwarded: 0 },
+      });
+      console.error("[MascotMission:week-close]", submission.id, error);
+    }
+  }
+
+  return { rewardedMascots, totalExp };
+}
 
 /** Credita ZikaCoins ao vencedor e perdedor de uma partida confirmada */
 async function awardMatchCoins(
@@ -809,6 +880,12 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
     data: { status: "CLOSED" },
   });
 
+  // A missão é liquidada somente no encerramento oficial do dia. O marcador na
+  // inscrição evita EXP duplicada caso o admin execute o fechamento novamente.
+  const mascotMissionRewards = week.tournament.mascotMissionEnabled
+    ? await awardMascotMissionExpAtWeekClose(week.id)
+    : { rewardedMascots: 0, totalExp: 0 };
+
   // Liquidar apostas da ZikaBet deste dia
   const { settleDayBets } = await import("@/app/(app)/zikabet/actions");
   await settleDayBets(week.id, admin.id);
@@ -819,6 +896,7 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
       entityType: "tournament_week",
       entityId: week.id,
       action: "week.closed",
+      after: { mascotMissionRewards },
     },
   });
 
@@ -838,7 +916,7 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
     ]);
   });
 
-  return { success: true };
+  return { success: true, mascotMissionRewards };
 }
 
 // ── Admin: confirmar todos os resultados reportados da semana ─────────────────

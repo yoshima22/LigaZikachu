@@ -653,6 +653,8 @@ model DeckSubmission {
   mascotMissionMascotName String?
   mascotMissionValid      Boolean?
   mascotMissionValidation Json?
+  mascotMissionRewardedAt DateTime?
+  mascotMissionExpAwarded Int                  @default(0)
   season                  Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   week                    Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
   tournament              Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
