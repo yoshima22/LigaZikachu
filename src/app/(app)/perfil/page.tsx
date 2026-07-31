@@ -19,6 +19,7 @@ import { ProfileCollectionProgressPanel } from "@/components/profile/collection-
 import { getProfileCollectionProgress } from "@/lib/profile-collection-progress";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
 import { getOrderPasswordStampForUser } from "@/lib/raid-event";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 
 type ProfileMascot = {
@@ -247,7 +248,7 @@ export default async function PerfilPage() {
     );
   }
 
-  const [ranking, recentMatches, collectionProgress, equippedItems, profileMascots, wishlistRows] = await Promise.all([
+  const [ranking, recentMatches, collectionProgress, equippedItems, profileMascots, wishlistRows, itemWishlistRows, itemOptionRows] = await Promise.all([
     getCachedGlobalRanking(),
     prisma.match.findMany({
       where: {
@@ -288,7 +289,21 @@ export default async function PerfilPage() {
       where: { playerId: player.id },
       select: { pokemonId: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    }).catch(() => [] as { pokemonId: number }[])
+    }).catch(() => [] as { pokemonId: number }[]),
+    prisma.playerItemWishlist.findMany({
+      where: { playerId: player.id },
+      select: { itemId: true, item: { select: { name: true, type: true, rarity: true, imageUrl: true, description: true } } },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.shopItem.findMany({
+      where: {
+        inventoryEnabled: true,
+        id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID },
+        type: { notIn: ["SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"] as never[] },
+      },
+      select: { id: true, name: true, type: true, rarity: true, imageUrl: true, description: true },
+      orderBy: [{ active: "desc" }, { rarity: "desc" }, { name: "asc" }],
+    }),
   ]);
 
   const wishlist = wishlistRows.map((entry) => ({
@@ -296,6 +311,23 @@ export default async function PerfilPage() {
     name: getPokemonName(entry.pokemonId),
   }));
   const pokemonOptions = getWishlistPokemonOptions();
+  const itemWishlist = itemWishlistRows.map((entry) => ({
+    itemId: entry.itemId,
+    name: entry.item.name,
+    type: String(entry.item.type),
+    rarity: String(entry.item.rarity),
+    imageUrl: entry.item.imageUrl,
+    description: entry.item.description,
+  }));
+  const seenWishlistItemNames = new Set<string>();
+  const itemOptions = itemOptionRows
+    .filter((item) => {
+      const key = `${item.type}:${item.name.toLocaleLowerCase("pt-BR")}`;
+      if (seenWishlistItemNames.has(key)) return false;
+      seenWishlistItemNames.add(key);
+      return true;
+    })
+    .map((item) => ({ itemId: item.id, name: item.name, type: String(item.type), rarity: String(item.rarity), imageUrl: item.imageUrl, description: item.description }));
   const orderPasswordStamp = await getOrderPasswordStampForUser(session.user.id);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
@@ -436,6 +468,8 @@ export default async function PerfilPage() {
       <PokemonWishlist
         initialWishlist={wishlist}
         pokemonOptions={pokemonOptions}
+        initialItemWishlist={itemWishlist}
+        itemOptions={itemOptions}
         editable
         ownerName={player.displayName}
       />

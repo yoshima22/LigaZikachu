@@ -32,6 +32,7 @@ import { ProfileCollectionProgressPanel } from "@/components/profile/collection-
 import { getProfileCollectionProgress } from "@/lib/profile-collection-progress";
 import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
+import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 export default async function PlayerDetailPage({
   params
@@ -103,7 +104,7 @@ export default async function PlayerDetailPage({
     ]);
   }
 
-  const [ranking, recentMatches, codesCount, allPlayers, collectionProgress, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, wishlistRows] = await Promise.all([
+  const [ranking, recentMatches, codesCount, allPlayers, collectionProgress, equippedItems, highlightedAchievements, publicDecks, shopItems, ownedInventory, wishlistRows, itemWishlistRows, wishlistItemOptionRows] = await Promise.all([
     activeSeason ? getCachedPlayerRanking(activeSeason.seasonId) : [],
     prisma.match.findMany({
       where: {
@@ -173,12 +174,45 @@ export default async function PlayerDetailPage({
       select: { pokemonId: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     }).catch(() => [] as { pokemonId: number }[]),
+    prisma.playerItemWishlist.findMany({
+      where: { playerId },
+      select: { itemId: true, item: { select: { name: true, type: true, rarity: true, imageUrl: true, description: true } } },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+    isSelf
+      ? prisma.shopItem.findMany({
+          where: {
+            inventoryEnabled: true,
+            id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID },
+            type: { notIn: ["SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"] as never[] },
+          },
+          select: { id: true, name: true, type: true, rarity: true, imageUrl: true, description: true },
+          orderBy: [{ active: "desc" }, { rarity: "desc" }, { name: "asc" }],
+        })
+      : [],
   ]);
   const wishlist = wishlistRows.map((entry) => ({
     pokemonId: entry.pokemonId,
     name: getPokemonName(entry.pokemonId),
   }));
   const pokemonOptions = isSelf ? getWishlistPokemonOptions() : [];
+  const itemWishlist = itemWishlistRows.map((entry) => ({
+    itemId: entry.itemId,
+    name: entry.item.name,
+    type: String(entry.item.type),
+    rarity: String(entry.item.rarity),
+    imageUrl: entry.item.imageUrl,
+    description: entry.item.description,
+  }));
+  const seenWishlistItemNames = new Set<string>();
+  const itemOptions = wishlistItemOptionRows
+    .filter((item) => {
+      const key = `${item.type}:${item.name.toLocaleLowerCase("pt-BR")}`;
+      if (seenWishlistItemNames.has(key)) return false;
+      seenWishlistItemNames.add(key);
+      return true;
+    })
+    .map((item) => ({ itemId: item.id, name: item.name, type: String(item.type), rarity: String(item.rarity), imageUrl: item.imageUrl, description: item.description }));
 
   // Sync tickets (admin only) — busca em tabelas dedicadas
   const syncOwnedItems: { id: string; name: string; type: string; rarity: string; quantity: number }[] = [];
@@ -466,10 +500,12 @@ export default async function PlayerDetailPage({
 
       <ProfileCollectionProgressPanel progress={collectionProgress} ownerName={player.displayName} />
 
-      {(wishlist.length > 0 || isSelf) && (
+      {(wishlist.length > 0 || itemWishlist.length > 0 || isSelf) && (
         <PokemonWishlist
           initialWishlist={wishlist}
           pokemonOptions={pokemonOptions}
+          initialItemWishlist={itemWishlist}
+          itemOptions={itemOptions}
           editable={isSelf}
           ownerName={player.displayName}
         />

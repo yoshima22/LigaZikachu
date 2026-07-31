@@ -252,6 +252,7 @@ model Player {
   mascots                    Mascot[]
   pokemonDex                 PlayerPokemonDex[]
   pokemonWishlist            PlayerPokemonWishlist[]
+  itemWishlist               PlayerItemWishlist[]
   ownedMascotSocialEvents    MascotSocialEvent[]            @relation("MascotSocialEventOwner")
   resolvedMascotSocialEvents MascotSocialEvent[]            @relation("MascotSocialEventResolver")
   mascotSocialDecisionLogs   MascotSocialDecisionLog[]
@@ -1597,6 +1598,7 @@ model ShopItem {
   updatedAt                 DateTime             @updatedAt
   createdBy                 User?                @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   ownerships                PlayerInventory[]
+  wishlistEntries           PlayerItemWishlist[]
   syncChallengeConsumptions SyncChallengeEntry[]
 
   @@map("shop_items")
@@ -2123,6 +2125,22 @@ model PlayerPokemonWishlist {
   @@index([playerId, sortOrder])
   @@index([pokemonId])
   @@map("player_pokemon_wishlist")
+}
+
+model PlayerItemWishlist {
+  id        String   @id @default(cuid())
+  playerId  String
+  itemId    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  item      ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, itemId])
+  @@index([playerId, sortOrder])
+  @@index([itemId])
+  @@map("player_item_wishlist")
 }
 
 enum MascotRelationType {

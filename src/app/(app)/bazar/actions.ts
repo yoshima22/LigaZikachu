@@ -340,6 +340,13 @@ export async function getListing(id: string) {
             orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
             select: { pokemonId: true },
           },
+          itemWishlist: {
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            select: {
+              itemId: true,
+              item: { select: { name: true, type: true, rarity: true, imageUrl: true, description: true } },
+            },
+          },
         },
       },
       proposals: {

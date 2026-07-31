@@ -10,6 +10,7 @@ import { retireArenaTeam } from "@/lib/arena-z";
 import { uploadAvatarToStorage } from "@/lib/avatar-storage";
 
 const MAX_WISHLIST_POKEMON = 9;
+const MAX_WISHLIST_ITEMS = 12;
 
 const updateProfileSchema = z.object({
   displayName: z.string().min(1).max(60),
@@ -33,6 +34,7 @@ const updateProfileSchema = z.object({
 
 const updatePokemonWishlistSchema = z.object({
   pokemonIds: z.array(z.number().int().min(1).max(1025)).max(MAX_WISHLIST_POKEMON),
+  itemIds: z.array(z.string().min(1)).max(MAX_WISHLIST_ITEMS).default([]),
 });
 
 const updatePasswordSchema = z.object({
@@ -258,6 +260,16 @@ export async function updatePokemonWishlist(input: z.infer<typeof updatePokemonW
 
   const data = updatePokemonWishlistSchema.parse(input);
   const pokemonIds = Array.from(new Set(data.pokemonIds));
+  const requestedItemIds = Array.from(new Set(data.itemIds));
+
+  const validItems = requestedItemIds.length > 0
+    ? await prisma.shopItem.findMany({
+        where: { id: { in: requestedItemIds }, inventoryEnabled: true },
+        select: { id: true },
+      })
+    : [];
+  const validItemIds = requestedItemIds.filter((itemId) => validItems.some((item) => item.id === itemId));
+  if (validItemIds.length !== requestedItemIds.length) return { error: "Um ou mais itens da wishlist nao estao disponiveis." };
 
   await prisma.$transaction(async (tx) => {
     await tx.playerPokemonWishlist.deleteMany({
@@ -268,6 +280,18 @@ export async function updatePokemonWishlist(input: z.infer<typeof updatePokemonW
       await tx.playerPokemonWishlist.upsert({
         where: { playerId_pokemonId: { playerId: player.id, pokemonId } },
         create: { playerId: player.id, pokemonId, sortOrder: index },
+        update: { sortOrder: index },
+      });
+    }
+
+    await tx.playerItemWishlist.deleteMany({
+      where: { playerId: player.id, itemId: { notIn: validItemIds.length ? validItemIds : [""] } },
+    });
+
+    for (const [index, itemId] of validItemIds.entries()) {
+      await tx.playerItemWishlist.upsert({
+        where: { playerId_itemId: { playerId: player.id, itemId } },
+        create: { playerId: player.id, itemId, sortOrder: index },
         update: { sortOrder: index },
       });
     }
