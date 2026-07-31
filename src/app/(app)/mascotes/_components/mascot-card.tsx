@@ -373,10 +373,13 @@ const EGG_TYPE_LABEL: Record<string, string> = {
 
 function getHatchedEggLabel(type?: string | null, origin?: string | null) {
   if (!type) return null;
-  if (origin?.startsWith("GEN_CHOICE:")) {
+  if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
     const [, originalType, generationType] = origin.split(":");
     const generation = generationType?.replace("EGG_GEN", "").replace("PLUS", "+");
-    if (generation) return `${EGG_TYPE_LABEL[originalType] ?? "Ovo"} de Geração ${generation}`;
+    if (generation) {
+      const randomLabel = origin.startsWith("GEN_RANDOM:") ? " · geração sorteada" : "";
+      return `${EGG_TYPE_LABEL[originalType] ?? "Ovo"} de Geração ${generation}${randomLabel}`;
+    }
   }
   if (type.startsWith("EGG_GEN")) {
     const generation = type.replace("EGG_GEN", "").replace("PLUS", "+");
@@ -386,7 +389,8 @@ function getHatchedEggLabel(type?: string | null, origin?: string | null) {
     const generation = origin
       .replace("LAB_REGION:EGG_GEN", "")
       .split("|", 1)[0];
-    return `Ovo de Laboratorio (Geracao ${generation})`;
+    const randomLabel = origin.split("|").includes("GEN_RANDOM") ? " · geração sorteada" : "";
+    return `Ovo de Laboratório (Geração ${generation}${randomLabel})`;
   }
   return EGG_TYPE_LABEL[type] ?? type.replaceAll("_", " ");
 }

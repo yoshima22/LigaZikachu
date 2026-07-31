@@ -2061,6 +2061,8 @@ model Mascot {
   // Preserva a procedencia depois que o registro do ovo e consumido ao chocar.
   hatchedFromEggType       EggType?
   hatchedFromEggOrigin     String?
+  // Especie exata que nasceu, preservada mesmo depois de evolucoes.
+  hatchedPokemonId         Int?
   lastInteractedAt         DateTime?
   lastPlayedAt             DateTime?
   lastPettedAt             DateTime?

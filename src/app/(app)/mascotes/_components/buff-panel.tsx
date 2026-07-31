@@ -118,7 +118,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const featherTier = selectedBuffItem?.metadata?.eggTier;
   const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
   const getOriginTier = (mascot: MascotOption) => {
-    const originKey = mascot.hatchedFromEggOrigin?.startsWith("GEN_CHOICE:")
+    const originKey = mascot.hatchedFromEggOrigin?.startsWith("GEN_CHOICE:") || mascot.hatchedFromEggOrigin?.startsWith("GEN_RANDOM:")
       ? mascot.hatchedFromEggOrigin.split(":")[1]
       : mascot.hatchedFromEggType;
     return !mascot.hatchedFromEggType ? "RARE"

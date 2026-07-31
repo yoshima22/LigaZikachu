@@ -9,7 +9,6 @@ import { maybeRevealOrderClueFromExpedition } from "@/lib/raid-event";
 import { getShopItemMeta } from "@/lib/shop-cache";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
-  ALL_EVOLVED_IDS, EGG_POOLS, LEGENDARY_HATCH_BASE_OVERRIDES, LEGENDARY_POOL,
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
@@ -21,7 +20,7 @@ import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, Mascot, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
 import { ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
-import { rollPokemonIdFromEgg } from "@/lib/mascot-egg-pools";
+import { getInitialPokemonId, rollEggPokemon } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
@@ -42,59 +41,71 @@ function randomPersonality(): MascotPersonality {
 }
 
 function getEggStatTypeKey(type: string, origin?: string | null) {
-  if (origin?.startsWith("GEN_CHOICE:")) {
+  if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
     const originalType = origin.split(":")[1];
     return originalType || type;
   }
   return type === "LAB" || origin?.startsWith("LAB_REGION:") ? "LAB" : type;
 }
 
-function getEggRollType(type: string, origin?: string | null) {
-  if (origin?.startsWith("GEN_CHOICE:")) {
-    const genType = origin.split(":")[2];
-    return genType || type;
+function getEggRollContext(type: string, origin?: string | null) {
+  if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
+    const [mode, originalType, generationType] = origin.split(":");
+    return {
+      eggType: originalType || type,
+      generationType: generationType || null,
+      randomGeneration: mode === "GEN_RANDOM",
+    };
   }
-  return type;
+  if (origin?.startsWith("LAB_REGION:")) {
+    const parts = origin.split("|");
+    const generationType = parts[0].slice("LAB_REGION:".length);
+    return {
+      eggType: "LAB",
+      generationType: generationType || null,
+      randomGeneration: parts.includes("GEN_RANDOM"),
+    };
+  }
+  if (/^EGG_GEN[1-9]$/.test(type)) {
+    return { eggType: type, generationType: type, randomGeneration: false };
+  }
+  return { eggType: type, generationType: null, randomGeneration: true };
 }
 
-/** Sorteio de pokemonId a partir do tipo de ovo */
-/**
- * Rola uma opção para o ovo de laboratório.
- * Pool = SPECIAL (pokémon cobiçados) com 10% de chance lendária —
- * acima do ovo SPECIAL normal (6%), recompensando o custo em pó de criação.
- */
-export function rollLabEggChoice(): number {
-  if (Math.random() < 0.07) {
-    const hatchableLegendaryPool = Array.from(
-      new Set(LEGENDARY_POOL.map((id) => LEGENDARY_HATCH_BASE_OVERRIDES[id] ?? id)),
-    ).filter((id) => !ALL_EVOLVED_IDS.has(id));
-    return randomFrom(hatchableLegendaryPool);
+async function getOwnedBaseCounts(playerId: string) {
+  const mascots = await prisma.mascot.findMany({
+    where: { playerId },
+    select: { pokemonId: true, hatchedPokemonId: true },
+  });
+  const counts = new Map<number, number>();
+  for (const mascot of mascots) {
+    const baseId = mascot.hatchedPokemonId ?? getInitialPokemonId(mascot.pokemonId);
+    counts.set(baseId, (counts.get(baseId) ?? 0) + 1);
   }
-  const pool = EGG_POOLS.SPECIAL?.length ? EGG_POOLS.SPECIAL : EGG_POOLS.RARE;
-  return randomFrom(pool);
+  return counts;
 }
 
-export function rollPokemonFromEgg(eggType: string): number {
-  return rollPokemonIdFromEgg(eggType);
-  // Pool aleatório (COMMON sem gen específica) = todas as 9 gerações
-  const pool = eggType === "COMMON" || eggType === "EVENT"
-    ? (EGG_POOLS.RANDOM.length > 0 ? EGG_POOLS.RANDOM : EGG_POOLS.COMMON)
-    : (EGG_POOLS[eggType] ?? EGG_POOLS.RANDOM);
-
-  // Chance lendaria por raridade. SPECIAL e RARE custam mais e devem parecer especiais.
-  // SPECIAL: 4% | RARE: 2% | GEN eggs: 0.7% | COMMON: 0.7% | EVENT: 0.2%
-  const legendaryChance =
-    eggType === "SPECIAL" ? 0.02 :
-    eggType === "RARE" ? 0.02 :
-    eggType.startsWith("EGG_GEN") ? 0.007 :
-    eggType === "COMMON" ? 0.007 :
-    0.002;
-
-  if (Math.random() < legendaryChance) {
-    return randomFrom(LEGENDARY_POOL);
+export async function rollEggChoicesForPlayer(
+  playerId: string,
+  eggType: string,
+  generationType: string | null,
+  rarityBonusPct: number,
+  randomGeneration: boolean,
+  count = 3,
+) {
+  const ownedBaseCounts = await getOwnedBaseCounts(playerId);
+  const choices: number[] = [];
+  while (choices.length < count) {
+    const result = rollEggPokemon(eggType, {
+      generationType,
+      rarityBonusPct,
+      randomGenerationBonus: randomGeneration,
+      ownedBaseCounts,
+      excludedPokemonIds: choices,
+    });
+    choices.push(result.pokemonId);
   }
-
-  return randomFrom(pool);
+  return choices;
 }
 
 // ── Incubação ─────────────────────────────────────────────────────────────────
@@ -125,10 +136,15 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
   if (incubator.hatched) throw new Error("Ovo já chocado.");
   if (new Date() < incubator.finishAt) throw new Error("O ovo ainda não está pronto.");
 
-  const pokemonId = forcedPokemonId ?? rollPokemonIdFromEgg(
-    getEggRollType(incubator.egg.type, incubator.egg.origin),
-    incubator.egg.hatchRarityBonusPct,
-  );
+  const rollContext = getEggRollContext(incubator.egg.type, incubator.egg.origin);
+  const ownedBaseCounts = await getOwnedBaseCounts(playerId);
+  const rollResult = forcedPokemonId ? null : rollEggPokemon(rollContext.eggType, {
+    generationType: rollContext.generationType,
+    rarityBonusPct: incubator.egg.hatchRarityBonusPct,
+    randomGenerationBonus: rollContext.randomGeneration,
+    ownedBaseCounts,
+  });
+  const pokemonId = forcedPokemonId ?? rollResult!.pokemonId;
   const personality = randomPersonality();
 
   const mascot = await prisma.$transaction(async (tx) => {
@@ -146,6 +162,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
       data: {
         playerId,
         pokemonId,
+        hatchedPokemonId: pokemonId,
         personality,
         isShiny,
         hatchedFromEggType: incubator.egg.type,

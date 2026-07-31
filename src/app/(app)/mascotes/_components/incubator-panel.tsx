@@ -73,7 +73,7 @@ function Countdown({ finishAt }: { finishAt: Date }) {
 }
 
 const GEN_OPTIONS = [
-  { value: "",          label: "🎲 Todas as gerações (aleatório)" },
+  { value: "",          label: "🎲 Geração aleatória (+1 ponto percentual de categoria elite)" },
   { value: "EGG_GEN1", label: "1️⃣ Gen 1 — Kanto · Bulbasaur a Mew" },
   { value: "EGG_GEN2", label: "2️⃣ Gen 2 — Johto · Chikorita a Celebi" },
   { value: "EGG_GEN3", label: "3️⃣ Gen 3 — Hoenn · Treecko a Jirachi" },
@@ -171,7 +171,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
         <div className="w-full max-w-sm rounded-2xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl space-y-4"
              onClick={e => e.stopPropagation()}>
           <p className="font-semibold text-white">🥚 Escolha a Geração</p>
-          <p className="text-[11px] text-slate-400">Qual geração de Pokémon você quer que saia deste ovo? Cada ovo respeita sua própria raridade.</p>
+          <p className="text-[11px] text-slate-400">Escolha uma geração ou deixe o sorteio decidir. O tipo do ovo define as chances de raridade e os atributos; a geração define quais formas iniciais podem nascer. A opção aleatória ganha +1 ponto percentual de chance de categoria elite.</p>
           <select value={selectedGen} onChange={e => setSelectedGen(e.target.value)}
             className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
             {GEN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
