@@ -23,6 +23,7 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
     matchesPerPlayer: "4",
     requiresDeckSubmission: "true",
     mascotMissionEnabled: false,
+    enguicaContractsEnabled: false,
     registrationOpensAt: "",
     registrationClosesAt: ""
   });
@@ -59,6 +60,7 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
         matchesPerPlayer: form.matchesPerPlayer ? parseInt(form.matchesPerPlayer, 10) : null,
         requiresDeckSubmission: form.format === "ONLINE" ? form.requiresDeckSubmission === "true" : false,
         mascotMissionEnabled: canCreateOnline && form.format === "ONLINE" && form.mascotMissionEnabled,
+        enguicaContractsEnabled: canCreateOnline && form.format === "ONLINE" && form.enguicaContractsEnabled,
         registrationOpensAt: form.registrationOpensAt
           ? new Date(form.registrationOpensAt).toISOString()
           : null,
@@ -143,6 +145,7 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
       </div>
 
       {canCreateOnline && form.format === "ONLINE" && (
+        <div className="space-y-3">
         <label className="flex items-start gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/5 p-4">
           <input
             type="checkbox"
@@ -158,6 +161,22 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-3 rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-4">
+          <input
+            type="checkbox"
+            name="enguicaContractsEnabled"
+            checked={form.enguicaContractsEnabled}
+            onChange={handleChange}
+            className="mt-0.5 h-4 w-4 accent-cyan-400"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-cyan-200">Ativar Contratos do Professor Enguiça</span>
+            <span className="mt-1 block text-xs leading-5 text-slate-400">
+              Após o bloqueio dos decks, um admin sorteia um desafio geral compartilhado por todos. Apenas administradores podem habilitar este recurso.
+            </span>
+          </span>
+        </label>
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">

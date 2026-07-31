@@ -32,6 +32,7 @@ const createTournamentSchema = z.object({
   matchesPerPlayer: z.number().int().min(1).max(12).nullish(),
   requiresDeckSubmission: z.boolean().default(true),
   mascotMissionEnabled: z.boolean().default(false),
+  enguicaContractsEnabled: z.boolean().default(false),
   registrationOpensAt: z.string().datetime().nullish(),
   registrationClosesAt: z.string().datetime().nullish(),
   bannerImageUrl: z.string().url().nullish(),
@@ -249,6 +250,9 @@ export async function createTournament(
     if (data.mascotMissionEnabled && !isAdmin) {
       return { error: "Apenas admins podem ativar a Missao de Mascote." };
     }
+    if (data.enguicaContractsEnabled && !isAdmin) {
+      return { error: "Apenas admins podem ativar os Contratos do Professor Enguiça." };
+    }
 
     const existing = await prisma.tournament.findUnique({ where: { slug: data.slug } });
     if (existing) return { error: "Já existe um torneio com este slug." };
@@ -264,6 +268,7 @@ export async function createTournament(
     const requiresDeckSubmission =
       data.format === TournamentFormat.ONLINE ? data.requiresDeckSubmission : false;
     const mascotMissionEnabled = isAdmin && requiresDeckSubmission && data.mascotMissionEnabled;
+    const enguicaContractsEnabled = isAdmin && requiresDeckSubmission && data.enguicaContractsEnabled;
 
     const tournament = await prisma.tournament.create({
       data: {
@@ -279,6 +284,7 @@ export async function createTournament(
         matchesPerPlayer: data.format === TournamentFormat.IN_PERSON ? data.matchesPerPlayer ?? 4 : null,
         requiresDeckSubmission,
         mascotMissionEnabled,
+        enguicaContractsEnabled,
         registrationOpensAt: data.registrationOpensAt ? new Date(data.registrationOpensAt) : null,
         registrationClosesAt: data.registrationClosesAt
           ? new Date(data.registrationClosesAt)
@@ -365,8 +371,9 @@ export async function updateTournament(
 
     const deckSubmissionEnabled = rest.requiresDeckSubmission ?? before.requiresDeckSubmission;
     const mascotMissionEnabled = rest.mascotMissionEnabled ?? before.mascotMissionEnabled;
-    if (mascotMissionEnabled && !deckSubmissionEnabled) {
-      return { error: "A Missão de Mascote exige o registro de decks no campeonato." };
+    const enguicaContractsEnabled = rest.enguicaContractsEnabled ?? before.enguicaContractsEnabled;
+    if ((mascotMissionEnabled || enguicaContractsEnabled) && !deckSubmissionEnabled) {
+      return { error: "Missões e Contratos do Enguiça exigem o registro de decks no campeonato." };
     }
 
     await prisma.tournament.update({
@@ -383,6 +390,7 @@ export async function updateTournament(
         ...(rest.matchesPerPlayer !== undefined ? { matchesPerPlayer: rest.matchesPerPlayer ?? null } : {}),
         ...(rest.requiresDeckSubmission !== undefined ? { requiresDeckSubmission: rest.requiresDeckSubmission } : {}),
         ...(rest.mascotMissionEnabled !== undefined ? { mascotMissionEnabled: rest.mascotMissionEnabled } : {}),
+        ...(rest.enguicaContractsEnabled !== undefined ? { enguicaContractsEnabled: rest.enguicaContractsEnabled } : {}),
         ...(rest.bannerImageUrl !== undefined ? { bannerImageUrl: rest.bannerImageUrl ?? null } : {}),
         ...(rest.themeMetadata !== undefined
           ? { themeMetadata: rest.themeMetadata ?? undefined }
@@ -488,6 +496,7 @@ export async function updateTournamentInfo(raw: {
   matchesPerPlayerMin?: number;
   matchesPerPlayerMax?: number;
   mascotMissionEnabled?: boolean;
+  enguicaContractsEnabled?: boolean;
 }): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -499,8 +508,8 @@ export async function updateTournamentInfo(raw: {
       select: { slug: true, requiresDeckSubmission: true }
     });
     if (!tournament) return { error: "Torneio não encontrado." };
-    if (raw.mascotMissionEnabled && !tournament.requiresDeckSubmission) {
-      return { error: "A Missão de Mascote exige o registro de decks no campeonato." };
+    if ((raw.mascotMissionEnabled || raw.enguicaContractsEnabled) && !tournament.requiresDeckSubmission) {
+      return { error: "Missões e Contratos do Enguiça exigem o registro de decks no campeonato." };
     }
 
     const validFormats = ["ONLINE", "IN_PERSON"];
@@ -519,6 +528,7 @@ export async function updateTournamentInfo(raw: {
         ...(format        ? { format } : {}),
         ...(raw.matchesPerPlayerMax ? { matchesPerPlayer: raw.matchesPerPlayerMax } : {}),
         ...(raw.mascotMissionEnabled !== undefined ? { mascotMissionEnabled: raw.mascotMissionEnabled } : {}),
+        ...(raw.enguicaContractsEnabled !== undefined ? { enguicaContractsEnabled: raw.enguicaContractsEnabled } : {}),
       }
     });
 

@@ -228,6 +228,7 @@ model Player {
   matchesLost                Match[]                        @relation("MatchLoser")
   confirmations              MatchConfirmation[]
   deckSubmissions            DeckSubmission[]
+  enguicaContractCompletions TournamentEnguicaCompletion[]
   challengesAsChallenger     Challenge[]                    @relation("ChallengeChallenger")
   challengesAsChallenged     Challenge[]                    @relation("ChallengeChallenged")
   codeDistributions          CodeDistribution[]
@@ -396,71 +397,77 @@ model LeagueTickerView {
 
 // Torneio independente — pode existir em paralelo a seasons legadas
 model Tournament {
-  id                     String                   @id @default(cuid())
-  code                   String?
-  name                   String
-  slug                   String                   @unique
-  edition                String?
-  description            String?
-  format                 TournamentFormat         @default(ONLINE)
-  status                 TournamentStatus         @default(DRAFT)
-  startDate              DateTime
-  endDate                DateTime?
-  maxPlayers             Int?
-  matchesPerPlayer       Int?
-  requiresDeckSubmission Boolean                  @default(true)
-  mascotMissionEnabled   Boolean                  @default(false)
-  registrationOpensAt    DateTime?
-  registrationClosesAt   DateTime?
-  bannerImageUrl         String?
-  themeMetadata          Json?
-  rankingConfig          Json
-  seasonId               String?
-  announcement           String?
-  challengeConfig        Json?
-  betConfig              Json?
-  narrativeText          String?                  @db.Text // análise geral do campeonato pelo Prof. Enguiça
-  narrativeGeneratedAt   DateTime?
-  createdById            String
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  createdBy              User                     @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  weeks                  TournamentWeek[]
-  registrations          TournamentRegistration[]
-  season                 Season?                  @relation(fields: [seasonId], references: [id], onDelete: SetNull)
-  deckSubmissions        DeckSubmission[]
-  badges                 LeagueBadge[]
-  challenges             Challenge[]              @relation("TournamentChallenges")
-  coinTransactions       ZikaCoinTransaction[]    @relation("ZkTxTournament")
-  achievements           Achievement[]            @relation("TournamentAchievements")
+  id                      String                   @id @default(cuid())
+  code                    String?
+  name                    String
+  slug                    String                   @unique
+  edition                 String?
+  description             String?
+  format                  TournamentFormat         @default(ONLINE)
+  status                  TournamentStatus         @default(DRAFT)
+  startDate               DateTime
+  endDate                 DateTime?
+  maxPlayers              Int?
+  matchesPerPlayer        Int?
+  requiresDeckSubmission  Boolean                  @default(true)
+  mascotMissionEnabled    Boolean                  @default(false)
+  enguicaContractsEnabled Boolean                  @default(false)
+  registrationOpensAt     DateTime?
+  registrationClosesAt    DateTime?
+  bannerImageUrl          String?
+  themeMetadata           Json?
+  rankingConfig           Json
+  seasonId                String?
+  announcement            String?
+  challengeConfig         Json?
+  betConfig               Json?
+  narrativeText           String?                  @db.Text // análise geral do campeonato pelo Prof. Enguiça
+  narrativeGeneratedAt    DateTime?
+  createdById             String
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  createdBy               User                     @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  weeks                   TournamentWeek[]
+  registrations           TournamentRegistration[]
+  season                  Season?                  @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  deckSubmissions         DeckSubmission[]
+  badges                  LeagueBadge[]
+  challenges              Challenge[]              @relation("TournamentChallenges")
+  coinTransactions        ZikaCoinTransaction[]    @relation("ZkTxTournament")
+  achievements            Achievement[]            @relation("TournamentAchievements")
 
   @@map("tournaments")
 }
 
 // Semanas específicas de um torneio com modo
 model TournamentWeek {
-  id                   String                @id @default(cuid())
-  tournamentId         String
-  weekNumber           Int
-  label                String?
-  mode                 WeekMode              @default(PADRAO)
-  multiplier           Decimal               @default(1) @db.Decimal(6, 2)
-  bonusRule            Json?
-  status               WeekStatus            @default(PLANNED)
-  startDate            DateTime
-  endDate              DateTime
-  lockAt               DateTime?
-  deckLockAt           DateTime?
-  notes                String?
-  narrativeText        String?               @db.Text // gerado via IA ao encerrar a semana
-  narrativeGeneratedAt DateTime?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  tournament           Tournament            @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  matches              Match[]               @relation("TournamentWeekMatches")
-  deckSubmissions      DeckSubmission[]
-  challenges           Challenge[]           @relation("TournamentWeekChallenges")
-  coinTransactions     ZikaCoinTransaction[] @relation("ZkTxWeek")
+  id                         String                        @id @default(cuid())
+  tournamentId               String
+  weekNumber                 Int
+  label                      String?
+  mode                       WeekMode                      @default(PADRAO)
+  multiplier                 Decimal                       @default(1) @db.Decimal(6, 2)
+  bonusRule                  Json?
+  status                     WeekStatus                    @default(PLANNED)
+  startDate                  DateTime
+  endDate                    DateTime
+  lockAt                     DateTime?
+  deckLockAt                 DateTime?
+  enguicaContractKey         String?
+  enguicaContractTitle       String?
+  enguicaContractDescription String?                       @db.Text
+  enguicaContractRevealedAt  DateTime?
+  notes                      String?
+  narrativeText              String?                       @db.Text // gerado via IA ao encerrar a semana
+  narrativeGeneratedAt       DateTime?
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+  tournament                 Tournament                    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches                    Match[]                       @relation("TournamentWeekMatches")
+  deckSubmissions            DeckSubmission[]
+  challenges                 Challenge[]                   @relation("TournamentWeekChallenges")
+  coinTransactions           ZikaCoinTransaction[]         @relation("ZkTxWeek")
+  enguicaCompletions         TournamentEnguicaCompletion[]
 
   @@unique([tournamentId, weekNumber])
   @@map("tournament_weeks")
@@ -555,55 +562,56 @@ model Week {
 }
 
 model Match {
-  id                      String                @id @default(cuid())
+  id                      String                        @id @default(cuid())
   seasonId                String?
   weekId                  String?
   tournamentWeekId        String?
   playerAId               String
   playerBId               String?
-  isBye                   Boolean               @default(false)
+  isBye                   Boolean                       @default(false)
   scheduledAt             DateTime?
   playedAt                DateTime?
   roundLabel              String?
   tableLabel              String?
-  bestOf                  Int                   @default(3)
-  playerAWins             Int                   @default(0)
-  playerBWins             Int                   @default(0)
-  draws                   Int                   @default(0)
-  winnerDefendedPrizes    Int                   @default(0)
+  bestOf                  Int                           @default(3)
+  playerAWins             Int                           @default(0)
+  playerBWins             Int                           @default(0)
+  draws                   Int                           @default(0)
+  winnerDefendedPrizes    Int                           @default(0)
   winnerPlayerId          String?
   loserPlayerId           String?
   playerADeckSubmissionId String?
   playerBDeckSubmissionId String?
-  status                  MatchStatus           @default(PENDING_CONFIRMATION)
-  resultSource            ResultSource          @default(MANUAL)
-  rankingPointsA          Decimal               @default(0) @db.Decimal(10, 2)
-  rankingPointsB          Decimal               @default(0) @db.Decimal(10, 2)
-  topOfDayEligible        Boolean               @default(false)
+  status                  MatchStatus                   @default(PENDING_CONFIRMATION)
+  resultSource            ResultSource                  @default(MANUAL)
+  rankingPointsA          Decimal                       @default(0) @db.Decimal(10, 2)
+  rankingPointsB          Decimal                       @default(0) @db.Decimal(10, 2)
+  topOfDayEligible        Boolean                       @default(false)
   notes                   String?
   reportedById            String?
   confirmedById           String?
   reportedAt              DateTime?
   confirmedAt             DateTime?
   createdById             String
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  season                  Season?               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  week                    Week?                 @relation(fields: [weekId], references: [id], onDelete: SetNull)
-  tournamentWeek          TournamentWeek?       @relation("TournamentWeekMatches", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
-  playerA                 Player                @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
-  playerB                 Player?               @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  winnerPlayer            Player?               @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
-  loserPlayer             Player?               @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
-  reportedBy              User?                 @relation("MatchReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
-  confirmedBy             User?                 @relation("MatchConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
-  createdBy               User                  @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+  season                  Season?                       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week                    Week?                         @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  tournamentWeek          TournamentWeek?               @relation("TournamentWeekMatches", fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  playerA                 Player                        @relation("MatchPlayerA", fields: [playerAId], references: [id], onDelete: Restrict)
+  playerB                 Player?                       @relation("MatchPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  winnerPlayer            Player?                       @relation("MatchWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
+  loserPlayer             Player?                       @relation("MatchLoser", fields: [loserPlayerId], references: [id], onDelete: SetNull)
+  reportedBy              User?                         @relation("MatchReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  confirmedBy             User?                         @relation("MatchConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  createdBy               User                          @relation("MatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   confirmations           MatchConfirmation[]
+  enguicaCompletions      TournamentEnguicaCompletion[]
   challenges              Challenge[]
-  playerAOdds             Decimal?              @db.Decimal(6, 2)
-  playerBOdds             Decimal?              @db.Decimal(6, 2)
-  betsEnabled             Boolean               @default(false)
-  coinTransactions        ZikaCoinTransaction[] @relation("ZkTxMatch")
+  playerAOdds             Decimal?                      @db.Decimal(6, 2)
+  playerBOdds             Decimal?                      @db.Decimal(6, 2)
+  betsEnabled             Boolean                       @default(false)
+  coinTransactions        ZikaCoinTransaction[]         @relation("ZkTxMatch")
   bets                    ZikaBet[]
 
   @@index([seasonId, weekId, status])
@@ -627,6 +635,25 @@ model MatchConfirmation {
 
   @@unique([matchId, playerId])
   @@map("match_confirmations")
+}
+
+model TournamentEnguicaCompletion {
+  id               String         @id @default(cuid())
+  tournamentWeekId String
+  playerId         String
+  matchId          String
+  contractKey      String
+  completedAt      DateTime       @default(now())
+  rewardedAt       DateTime?
+  giftId           String?
+  tournamentWeek   TournamentWeek @relation(fields: [tournamentWeekId], references: [id], onDelete: Cascade)
+  player           Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  match            Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentWeekId, playerId])
+  @@index([matchId])
+  @@index([tournamentWeekId, rewardedAt])
+  @@map("tournament_enguica_completions")
 }
 
 model DeckSubmission {

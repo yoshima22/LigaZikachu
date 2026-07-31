@@ -12,11 +12,114 @@ import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrat
 import { addExp, applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
 import { rewardEquippedMascot } from "@/lib/mascot";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
+import { isDeckRegistrationLocked } from "@/lib/decks";
+import { drawEnguicaContract, ENGUICA_BOX_REWARD_LABEL } from "@/lib/tcg-enguica-contracts";
 
 const MATCH_WIN_COINS  = 180;
 const MATCH_LOSS_COINS = 120;
 const MASCOT_MISSION_PARTICIPATION_EXP = 150;
 const MASCOT_MISSION_WIN_EXP = 300;
+
+type EnguicaMatchContext = {
+  id: string;
+  playerAId: string;
+  playerBId: string | null;
+  tournamentWeekId: string | null;
+  tournamentWeek: {
+    id: string;
+    status: string;
+    enguicaContractKey: string | null;
+    enguicaContractTitle: string | null;
+    tournament: { enguicaContractsEnabled: boolean };
+  } | null;
+};
+
+async function recordEnguicaCompletion(
+  tx: Prisma.TransactionClient,
+  match: EnguicaMatchContext,
+  playerId: string,
+  completed: boolean,
+) {
+  if (!completed) return;
+  if (!match.playerBId || ![match.playerAId, match.playerBId].includes(playerId)) {
+    throw new Error("Apenas participantes podem declarar o Contrato do Enguiça.");
+  }
+  const week = match.tournamentWeek;
+  if (!week?.tournament.enguicaContractsEnabled || !week.enguicaContractKey) {
+    throw new Error("Nenhum Contrato do Enguiça foi revelado para esta semana.");
+  }
+  if (week.status === "CLOSED") throw new Error("Esta semana já foi encerrada.");
+
+  await tx.tournamentEnguicaCompletion.upsert({
+    where: { tournamentWeekId_playerId: { tournamentWeekId: week.id, playerId } },
+    update: {
+      matchId: match.id,
+      contractKey: week.enguicaContractKey,
+      completedAt: new Date(),
+    },
+    create: {
+      tournamentWeekId: week.id,
+      playerId,
+      matchId: match.id,
+      contractKey: week.enguicaContractKey,
+    },
+  });
+}
+
+async function awardEnguicaBoxesAtWeekClose(weekId: string) {
+  const completions = await prisma.tournamentEnguicaCompletion.findMany({
+    where: {
+      tournamentWeekId: weekId,
+      rewardedAt: null,
+      match: { status: MatchStatus.CONFIRMED },
+    },
+    include: {
+      tournamentWeek: { select: { enguicaContractTitle: true } },
+    },
+  });
+
+  let rewardedPlayers = 0;
+  let ticketWinners = 0;
+  for (const completion of completions) {
+    const ticketAwarded = Math.random() < 0.05;
+    const result = await prisma.$transaction(async (tx) => {
+      const reserved = await tx.tournamentEnguicaCompletion.updateMany({
+        where: { id: completion.id, rewardedAt: null },
+        data: { rewardedAt: new Date() },
+      });
+      if (reserved.count === 0) return false;
+
+      const gift = await tx.playerGift.create({
+        data: {
+          playerId: completion.playerId,
+          type: "CUSTOM",
+          title: `Caixa Enguiça — ${completion.tournamentWeek.enguicaContractTitle ?? "Contrato concluído"}`,
+          description: "Contrato validado no encerramento oficial do dia. Abra a caixa para receber as recompensas.",
+          payload: {
+            rewardKind: "ENGUICA_BOX",
+            rewardLabel: ENGUICA_BOX_REWARD_LABEL,
+            coins: 150,
+            food: 1,
+            sweet: 1,
+            creationDust: 3,
+            ticketAwarded,
+            contractKey: completion.contractKey,
+          },
+        },
+      });
+      await tx.tournamentEnguicaCompletion.update({
+        where: { id: completion.id },
+        data: { giftId: gift.id },
+      });
+      return true;
+    });
+    if (result) {
+      rewardedPlayers++;
+      if (ticketAwarded) ticketWinners++;
+    }
+  }
+  return { rewardedPlayers, ticketWinners };
+}
 
 async function awardMascotMissionExpAtWeekClose(weekId: string) {
   const [submissions, matches] = await Promise.all([
@@ -341,6 +444,7 @@ const reportResultSchema = z.object({
   winnerId: z.string().min(1),
   winnerDefendedPrizes: z.coerce.number().int().min(0).max(99).default(0),
   notes: z.string().optional(),
+  enguicaContractCompleted: z.boolean().default(false),
 });
 
 const deckChoiceSchema = z.object({
@@ -370,7 +474,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado");
 
-  const { matchId, winnerId, winnerDefendedPrizes, notes } = reportResultSchema.parse(input);
+  const { matchId, winnerId, winnerDefendedPrizes, notes, enguicaContractCompleted } = reportResultSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -413,24 +517,29 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   const winPoints = 3 * multiplier;
   const now = new Date();
 
-  await prisma.match.update({
-    where: { id: matchId },
-    data: {
-      winnerPlayerId: winnerId,
-      loserPlayerId: loserId,
-      playerAWins: winnerId === match.playerAId ? 1 : 0,
-      playerBWins: winnerId === match.playerBId ? 1 : 0,
-      winnerDefendedPrizes,
-      status: isInPerson ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
-      reportedById: user.id,
-      reportedAt: now,
-      confirmedById: isInPerson ? user.id : null,
-      confirmedAt: isInPerson ? now : null,
-      rankingPointsA: isInPerson && winnerId === match.playerAId ? winPoints : 0,
-      rankingPointsB: isInPerson && winnerId === match.playerBId ? winPoints : 0,
-      resultSource: isInPerson ? ResultSource.MANUAL : undefined,
-      notes: notes || null,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.match.update({
+      where: { id: matchId },
+      data: {
+        winnerPlayerId: winnerId,
+        loserPlayerId: loserId,
+        playerAWins: winnerId === match.playerAId ? 1 : 0,
+        playerBWins: winnerId === match.playerBId ? 1 : 0,
+        winnerDefendedPrizes,
+        status: isInPerson ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
+        reportedById: user.id,
+        reportedAt: now,
+        confirmedById: isInPerson ? user.id : null,
+        confirmedAt: isInPerson ? now : null,
+        rankingPointsA: isInPerson && winnerId === match.playerAId ? winPoints : 0,
+        rankingPointsB: isInPerson && winnerId === match.playerBId ? winPoints : 0,
+        resultSource: isInPerson ? ResultSource.MANUAL : undefined,
+        notes: notes || null,
+      },
+    });
+    if (isPlayer) {
+      await recordEnguicaCompletion(tx, match, player.id, enguicaContractCompleted);
+    }
   });
 
   if (isInPerson) {
@@ -650,13 +759,14 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
 }
 const confirmResultSchema = z.object({
   matchId: z.string().min(1),
+  enguicaContractCompleted: z.boolean().default(false),
 });
 
 export async function confirmMatchResult(input: z.infer<typeof confirmResultSchema>) {
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado");
 
-  const { matchId } = confirmResultSchema.parse(input);
+  const { matchId, enguicaContractCompleted } = confirmResultSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -681,6 +791,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
 
   const now = new Date();
   const confirmations = await prisma.$transaction(async (tx) => {
+    await recordEnguicaCompletion(tx, match, player.id, enguicaContractCompleted);
     await tx.matchConfirmation.upsert({
       where: { matchId_playerId: { matchId, playerId: player.id } },
       update: { status: "CONFIRMED", confirmedAt: now },
@@ -885,6 +996,9 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
   const mascotMissionRewards = week.tournament.mascotMissionEnabled
     ? await awardMascotMissionExpAtWeekClose(week.id)
     : { rewardedMascots: 0, totalExp: 0 };
+  const enguicaContractRewards = week.tournament.enguicaContractsEnabled && week.enguicaContractKey
+    ? await awardEnguicaBoxesAtWeekClose(week.id)
+    : { rewardedPlayers: 0, ticketWinners: 0 };
 
   // Liquidar apostas da ZikaBet deste dia
   const { settleDayBets } = await import("@/app/(app)/zikabet/actions");
@@ -896,7 +1010,7 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
       entityType: "tournament_week",
       entityId: week.id,
       action: "week.closed",
-      after: { mascotMissionRewards },
+      after: { mascotMissionRewards, enguicaContractRewards },
     },
   });
 
@@ -904,6 +1018,7 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
   revalidatePath(`/torneios/${week.tournament.slug}`);
   revalidatePath("/zikabet");
+  revalidatePath("/caixa-de-presentes");
 
   // Ao encerrar a semana: regenera narrativa da semana + análise geral do torneio
   const narrativeWeekId = week.id;
@@ -916,7 +1031,93 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
     ]);
   });
 
-  return { success: true, mascotMissionRewards };
+  return { success: true, mascotMissionRewards, enguicaContractRewards };
+}
+
+export async function revealEnguicaContract(tournamentId: string, weekNumber: number) {
+  const admin = await requireAdmin();
+  const week = await prisma.tournamentWeek.findUnique({
+    where: { tournamentId_weekNumber: { tournamentId, weekNumber } },
+    include: {
+      tournament: {
+        include: {
+          registrations: {
+            where: { status: "APPROVED" },
+            select: { playerId: true, player: { select: { displayName: true } } },
+          },
+        },
+      },
+      deckSubmissions: { select: { playerId: true } },
+    },
+  });
+  if (!week) throw new Error("Semana não encontrada.");
+  if (!week.tournament.enguicaContractsEnabled) {
+    throw new Error("Os Contratos do Professor Enguiça não estão habilitados neste campeonato.");
+  }
+  if (week.enguicaContractKey) return { success: true, contractKey: week.enguicaContractKey };
+  if (!isDeckRegistrationLocked(week)) {
+    throw new Error("O contrato só pode ser revelado depois do bloqueio das listas.");
+  }
+
+  const submittedPlayers = new Set(week.deckSubmissions.map((submission) => submission.playerId));
+  const missingPlayers = week.tournament.registrations
+    .filter((registration) => !submittedPlayers.has(registration.playerId))
+    .map((registration) => registration.player.displayName);
+  if (missingPlayers.length > 0) {
+    throw new Error(`Ainda faltam listas de: ${missingPlayers.join(", ")}.`);
+  }
+
+  const previousWeek = await prisma.tournamentWeek.findFirst({
+    where: { tournamentId, weekNumber: { lt: weekNumber }, enguicaContractKey: { not: null } },
+    orderBy: { weekNumber: "desc" },
+    select: { enguicaContractKey: true },
+  });
+  const contract = drawEnguicaContract(previousWeek?.enguicaContractKey);
+  const revealedAt = new Date();
+  const updated = await prisma.tournamentWeek.updateMany({
+    where: { id: week.id, enguicaContractKey: null },
+    data: {
+      enguicaContractKey: contract.key,
+      enguicaContractTitle: contract.title,
+      enguicaContractDescription: contract.description,
+      enguicaContractRevealedAt: revealedAt,
+    },
+  });
+  if (updated.count === 1) {
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: admin.id,
+        entityType: "tournament_week",
+        entityId: week.id,
+        action: "enguica_contract.revealed",
+        after: { contractKey: contract.key, title: contract.title, revealedAt: revealedAt.toISOString() },
+      },
+    });
+  }
+
+  revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
+  revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
+  return { success: true, contractKey: contract.key };
+}
+
+export async function declareEnguicaContractCompletion(matchId: string) {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Não autenticado.");
+  const player = await getSessionPlayer(user.id);
+  if (!player) throw new Error("Jogador não encontrado.");
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { tournamentWeek: { include: { tournament: true } } },
+  });
+  if (!match?.tournamentWeek) throw new Error("Partida não encontrada.");
+  if (match.status !== MatchStatus.PENDING_CONFIRMATION && match.status !== MatchStatus.CONFIRMED) {
+    throw new Error("O contrato só pode ser registrado em uma partida válida.");
+  }
+  await prisma.$transaction(async (tx) => {
+    await recordEnguicaCompletion(tx, match, player.id, true);
+  });
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
+  return { success: true };
 }
 
 // ── Admin: confirmar todos os resultados reportados da semana ─────────────────

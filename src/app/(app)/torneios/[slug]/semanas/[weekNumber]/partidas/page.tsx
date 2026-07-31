@@ -10,6 +10,8 @@ import { MatchCard } from "./_components/match-card";
 import { MatchDeckSelector } from "./_components/match-deck-selector";
 import { canSubmitTournamentWeekDeck } from "@/lib/decks";
 import { buildMascotMissionOption } from "@/lib/tcg-mascot-mission";
+import { isDeckRegistrationLocked } from "@/lib/decks";
+import { EnguicaContractPanel } from "./_components/enguica-contract-panel";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -33,6 +35,7 @@ export default async function PartidasPage({ params }: Props) {
               playerB: true,
               winnerPlayer: true,
               confirmations: true,
+              enguicaCompletions: { select: { playerId: true, matchId: true, rewardedAt: true } },
             },
             orderBy: { roundLabel: "asc" },
           },
@@ -53,6 +56,7 @@ export default async function PartidasPage({ params }: Props) {
 
   const week = tournament.weeks[0];
   const matches = week.matches;
+  const allEnguicaCompletions = matches.flatMap((match) => match.enguicaCompletions);
 
   const player = user
     ? await prisma.player.findUnique({ where: { userId: user.id } })
@@ -159,8 +163,22 @@ export default async function PartidasPage({ params }: Props) {
     confirmations: match.confirmations.map((confirmation) => ({
       playerId: confirmation.playerId,
       status: confirmation.status
-    }))
+    })),
+    enguicaCompletionPlayerIds: match.enguicaCompletions.map((completion) => completion.playerId),
   }));
+
+  const currentPlayerEnguicaCompletion = player
+    ? allEnguicaCompletions.find((completion) => completion.playerId === player.id) ?? null
+    : null;
+  const enguicaContract = tournament.enguicaContractsEnabled && week.enguicaContractKey
+    ? {
+        key: week.enguicaContractKey,
+        title: week.enguicaContractTitle ?? "Contrato do Professor Enguiça",
+        description: week.enguicaContractDescription ?? "Conclua o objetivo revelado durante uma partida oficial.",
+        myCompletionMatchId: currentPlayerEnguicaCompletion?.matchId ?? null,
+        weekClosed: week.status === "CLOSED",
+      }
+    : null;
 
   const myMatches = player
     ? matchCards.filter(
@@ -248,6 +266,21 @@ export default async function PartidasPage({ params }: Props) {
         )}
       </div>
 
+      {tournament.enguicaContractsEnabled && (
+        <EnguicaContractPanel
+          tournamentId={tournament.id}
+          weekNumber={weekNum}
+          isAdmin={isAdmin}
+          deckListsLocked={isDeckRegistrationLocked(week)}
+          contract={week.enguicaContractKey ? {
+            key: week.enguicaContractKey,
+            title: week.enguicaContractTitle ?? "Contrato do Professor Enguiça",
+            description: week.enguicaContractDescription ?? "Conclua o objetivo durante uma partida oficial.",
+            revealedAt: week.enguicaContractRevealedAt?.toISOString() ?? null,
+          } : null}
+        />
+      )}
+
       {/* Minhas Partidas */}
       {player && myMatches.length > 0 && (
         <section className="space-y-4">
@@ -263,6 +296,7 @@ export default async function PartidasPage({ params }: Props) {
                   isAdmin={isAdmin}
                   tournamentFormat={tournament.format}
                   canReportResult={canReportAnyInPersonMatch}
+                  enguicaContract={enguicaContract}
                 />
               );
             })}
@@ -348,6 +382,7 @@ export default async function PartidasPage({ params }: Props) {
               isAdmin={isAdmin}
               tournamentFormat={tournament.format}
               canReportResult={canReportAnyInPersonMatch}
+              enguicaContract={enguicaContract}
             />
           );
           })}

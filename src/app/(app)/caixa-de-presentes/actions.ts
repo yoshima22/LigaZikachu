@@ -111,6 +111,50 @@ async function applyGiftReward(
     return {};
   }
 
+  if (rewardKind === "ENGUICA_BOX") {
+    const coins = typeof payload.coins === "number" ? Math.max(0, Math.floor(payload.coins)) : 150;
+    const food = typeof payload.food === "number" ? Math.max(0, Math.floor(payload.food)) : 1;
+    const sweet = typeof payload.sweet === "number" ? Math.max(0, Math.floor(payload.sweet)) : 1;
+    const creationDust = typeof payload.creationDust === "number" ? Math.max(0, Math.floor(payload.creationDust)) : 3;
+
+    if (coins > 0) {
+      await creditCoins(tx, {
+        playerId,
+        type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
+        amount: coins,
+        description: `Caixa Enguiça: ${gift.title}`,
+      });
+    }
+    if (food > 0) {
+      await tx.mascotFoodItem.upsert({
+        where: { playerId_type: { playerId, type: FoodType.FOOD } },
+        update: { quantity: { increment: food } },
+        create: { playerId, type: FoodType.FOOD, quantity: food },
+      });
+    }
+    if (sweet > 0) {
+      await tx.mascotFoodItem.upsert({
+        where: { playerId_type: { playerId, type: FoodType.SWEET } },
+        update: { quantity: { increment: sweet } },
+        create: { playerId, type: FoodType.SWEET, quantity: sweet },
+      });
+    }
+    if (creationDust > 0) {
+      await tx.player.update({ where: { id: playerId }, data: { creationDust: { increment: creationDust } } });
+    }
+    if (payload.ticketAwarded === true) {
+      const ticket = await tx.shopItem.findFirst({ where: { type: "ZIKALOOT_TICKET" }, select: { id: true } });
+      if (ticket) {
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId, itemId: ticket.id } },
+          create: { playerId, itemId: ticket.id, quantity: 1, source: "EVENT_REWARD" },
+          update: { quantity: { increment: 1 } },
+        });
+      }
+    }
+    return {};
+  }
+
   if (rewardKind === "MASCOT_BUFF") {
     const buffType = typeof payload.buffType === "string" ? payload.buffType : null;
     const quantity = typeof payload.quantity === "number" && payload.quantity > 0

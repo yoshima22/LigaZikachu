@@ -170,6 +170,7 @@ export default async function TournamentAdminPage({ params }: Props) {
                 format:             String(formData.get("format") ?? ""),
                 matchesPerPlayerMax: Number(formData.get("matchesPerPlayerMax") || 4),
                 mascotMissionEnabled: formData.get("mascotMissionEnabled") === "on",
+                enguicaContractsEnabled: formData.get("enguicaContractsEnabled") === "on",
               });
             }}
           >
@@ -254,6 +255,18 @@ export default async function TournamentAdminPage({ params }: Props) {
               <span>
                 <span className="block text-sm font-semibold text-emerald-200">Missão de Mascote</span>
                 <span className="mt-1 block text-xs leading-5 text-slate-400">Quando ativa, cada jogador pode vincular um mascote ao deck registrado e conferir a compatibilidade da espécie ou linha evolutiva.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-4 md:col-span-2">
+              <input
+                type="checkbox"
+                name="enguicaContractsEnabled"
+                defaultChecked={tournament.enguicaContractsEnabled}
+                className="mt-0.5 h-4 w-4 accent-cyan-400"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-cyan-200">Contratos do Professor Enguiça</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-400">Permite ao admin sortear um contrato semanal aleatório somente depois do bloqueio e da revelação das listas.</span>
               </span>
             </label>
             <div className="md:col-span-2">

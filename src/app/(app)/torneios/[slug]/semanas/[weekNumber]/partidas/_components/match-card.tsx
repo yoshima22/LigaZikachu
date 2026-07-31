@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch } from "../actions";
+import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch, declareEnguicaContractCompletion } from "../actions";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
 
@@ -33,6 +33,7 @@ interface MatchCardProps {
     reportedById: string | null;
     notes: string | null;
     confirmations: Array<{ playerId: string; status: string }>;
+    enguicaCompletionPlayerIds: string[];
     playerADecks: PlayerDeckSummary[];
     playerBDecks: PlayerDeckSummary[];
     currentPlayerDecks: PlayerDeckSummary[];
@@ -41,15 +42,25 @@ interface MatchCardProps {
   isAdmin: boolean;
   tournamentFormat?: string;
   canReportResult?: boolean;
+  enguicaContract?: {
+    key: string;
+    title: string;
+    description: string;
+    myCompletionMatchId: string | null;
+    weekClosed: boolean;
+  } | null;
 }
 
-export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult }: MatchCardProps) {
+export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult, enguicaContract }: MatchCardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [showDispute, setShowDispute] = useState(false);
   const [winnerDefendedPrizes, setWinnerDefendedPrizes] = useState(
     String(match.winnerDefendedPrizes ?? 0)
+  );
+  const [enguicaContractCompleted, setEnguicaContractCompleted] = useState(
+    enguicaContract?.myCompletionMatchId === match.id,
   );
   const [selectedDeckId, setSelectedDeckId] = useState(() => {
     if (match.playerAId === currentPlayerId) return match.playerADeckSubmissionId ?? "";
@@ -92,7 +103,8 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
       await reportMatchResult({
         matchId: match.id,
         winnerId,
-        winnerDefendedPrizes: Number(winnerDefendedPrizes) || 0
+        winnerDefendedPrizes: Number(winnerDefendedPrizes) || 0,
+        enguicaContractCompleted,
       });
       router.refresh();
     } catch (e) {
@@ -105,7 +117,20 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   async function handleConfirm() {
     setLoading(true);
     try {
-      await confirmMatchResult({ matchId: match.id });
+      await confirmMatchResult({ matchId: match.id, enguicaContractCompleted });
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDeclareContract() {
+    setLoading(true);
+    try {
+      await declareEnguicaContractCompletion(match.id);
+      setEnguicaContractCompleted(true);
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
@@ -313,6 +338,41 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
                 Usar em todos do dia
               </Button>
             </div>
+          </div>
+        )}
+
+        {enguicaContract && (
+          <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300">📋 Contrato: {enguicaContract.title}</p>
+            <p className="text-[11px] leading-5 text-slate-400">{enguicaContract.description}</p>
+            {match.enguicaCompletionPlayerIds.length > 0 && (
+              <p className="text-[11px] text-emerald-300">
+                Conclusão declarada por {match.enguicaCompletionPlayerIds.map((playerId) => playerId === match.playerAId ? match.playerA.displayName : match.playerB.displayName).join(" e ")}.
+              </p>
+            )}
+            {isParticipant && !enguicaContract.weekClosed && (
+              enguicaContract.myCompletionMatchId ? (
+                <p className="text-[11px] font-semibold text-emerald-300">
+                  ✓ Você já registrou este contrato {enguicaContract.myCompletionMatchId === match.id ? "nesta partida" : "em outra partida da semana"}.
+                </p>
+              ) : (
+                <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={enguicaContractCompleted}
+                    onChange={(event) => setEnguicaContractCompleted(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-cyan-400"
+                  />
+                  <span>Completei o Contrato do Professor Enguiça nesta partida.</span>
+                </label>
+              )
+            )}
+            {isParticipant && !enguicaContract.weekClosed && match.winnerPlayerId && !enguicaContract.myCompletionMatchId && (
+              <Button size="sm" variant="outline" className="w-full border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/10" onClick={handleDeclareContract} disabled={loading || !enguicaContractCompleted}>
+                Registrar contrato nesta partida
+              </Button>
+            )}
+            <p className="text-[10px] text-slate-500">A declaração será aceita somente se o resultado terminar confirmado. O pagamento ocorre no encerramento do dia.</p>
           </div>
         )}
 
