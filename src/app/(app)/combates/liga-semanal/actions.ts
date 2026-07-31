@@ -1663,7 +1663,13 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
   try {
     const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
       where: { leagueId },
-      orderBy: [{ points: "desc" }, { wins: "desc" }, { survivorsScore: "desc" }, { damageDealt: "desc" }],
+      orderBy: [
+        { points: "desc" },
+        { wins: "desc" },
+        { damageDealt: "desc" },
+        { survivorsScore: "desc" },
+        { damageTaken: "asc" },
+      ],
     });
     if (!participants.length) return { error: "Liga sem participantes." };
 

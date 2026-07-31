@@ -152,7 +152,13 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       participants = await (prisma as any).weeklyMascotLeagueParticipant.findMany({
         where: { leagueId: (currentLeague as any).id },
         select: { id: true, playerId: true, points: true, wins: true, losses: true, draws: true, woLosses: true, byes: true, survivorsScore: true, damageDealt: true, damageTaken: true, finalRank: true, rewardGranted: true },
-        orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
+        orderBy: [
+          { points: "desc" },
+          { wins: "desc" },
+          { damageDealt: "desc" },
+          { survivorsScore: "desc" },
+          { damageTaken: "asc" },
+        ],
       });
       const playerIds = (participants as Array<{ playerId: string }>).map((entry) => entry.playerId);
       const players = await prisma.player.findMany({

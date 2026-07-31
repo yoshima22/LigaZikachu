@@ -370,7 +370,7 @@ function LeagueTab({ data }: { data: PageData }) {
         <div className="text-[10px] text-slate-500">
           <p>Combates diários: {BATTLE_TIMES_BRT.join(" · ")} BRT</p>
           <p>Pontuação: Vitória {POINTS.WIN}pts · Empate {POINTS.DRAW}pt · Derrota {POINTS.LOSS}pts</p>
-          <p>Desempate: Pontos → Vitórias → Saldo de Sobreviventes → Dano Causado → Dano Recebido (menor)</p>
+          <p>Desempate: Pontos → Vitórias → Dano Causado → Saldo de Sobreviventes → Dano Recebido (menor)</p>
         </div>
       </div>
 
