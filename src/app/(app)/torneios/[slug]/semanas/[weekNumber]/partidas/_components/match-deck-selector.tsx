@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle, PawPrint } from "lucide-react";
 import { POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../../actions";
 import { DeckActionButtons } from "@/components/ui/deck-action-buttons";
+import type { MascotMissionOption } from "@/lib/tcg-mascot-mission";
+import { validateMascotMissionDeckList } from "@/lib/tcg-mascot-mission-validation";
 
 interface SavedDeckOption {
   id: string;
@@ -18,6 +20,10 @@ interface ExistingSubmission {
   deckName: string;
   archetype: string | null;
   deckList: string;
+  mascotMissionMascotId: string | null;
+  mascotMissionPokemonId: number | null;
+  mascotMissionMascotName: string | null;
+  mascotMissionValid: boolean | null;
 }
 
 interface Props {
@@ -27,6 +33,8 @@ interface Props {
   weekOpen: boolean;
   savedDecks: SavedDeckOption[];
   existingSubmission: ExistingSubmission | null;
+  mascotMissionEnabled: boolean;
+  mascotOptions: MascotMissionOption[];
 }
 
 export function MatchDeckSelector({
@@ -36,14 +44,22 @@ export function MatchDeckSelector({
   weekOpen,
   savedDecks,
   existingSubmission,
+  mascotMissionEnabled,
+  mascotOptions,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(!existingSubmission);
   const [deckName, setDeckName] = useState(existingSubmission?.deckName ?? "");
   const [deckList, setDeckList] = useState(existingSubmission?.deckList ?? "");
   const [archetype, setArchetype] = useState(existingSubmission?.archetype ?? "");
+  const [selectedMascotId, setSelectedMascotId] = useState(existingSubmission?.mascotMissionMascotId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const selectedMascot = mascotOptions.find((mascot) => mascot.id === selectedMascotId) ?? null;
+  const missionValidation = useMemo(
+    () => selectedMascot ? validateMascotMissionDeckList(deckList, selectedMascot.acceptedCardNames) : null,
+    [deckList, selectedMascot],
+  );
 
   const loadSavedDeck = (deck: SavedDeckOption) => {
     setDeckName(deck.name);
@@ -62,6 +78,7 @@ export function MatchDeckSelector({
         deckName,
         archetype: archetype || undefined,
         deckList,
+        mascotMissionMascotId: selectedMascotId || null,
       });
       if (result.error) {
         setError(result.error);
@@ -80,7 +97,7 @@ export function MatchDeckSelector({
       if (result.error) {
         setError(result.error);
       } else {
-        setDeckName(""); setDeckList(""); setArchetype("");
+        setDeckName(""); setDeckList(""); setArchetype(""); setSelectedMascotId("");
         setSuccess(false);
         setOpen(true);
       }
@@ -104,6 +121,11 @@ export function MatchDeckSelector({
           {existingSubmission && !open && (
             <span className="shrink-0 flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[10px] text-emerald-400">
               <CheckCircle size={10} /> {existingSubmission.deckName}
+            </span>
+          )}
+          {existingSubmission?.mascotMissionMascotName && !open && (
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${existingSubmission.mascotMissionValid ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-amber-400/30 bg-amber-500/10 text-amber-300"}`}>
+              Mascote: {existingSubmission.mascotMissionMascotName}
             </span>
           )}
         </div>
@@ -178,6 +200,38 @@ export function MatchDeckSelector({
 
               {/* Campos do deck */}
               <div className="space-y-2">
+                {mascotMissionEnabled && (
+                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
+                    <label className="space-y-1 text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-emerald-300"><PawPrint size={11} /> Missão de Mascote (opcional)</span>
+                      <select
+                        value={selectedMascotId}
+                        onChange={(event) => { setSelectedMascotId(event.target.value); setSuccess(false); }}
+                        className="w-full rounded-lg border border-emerald-400/25 bg-slate-950 px-2.5 py-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
+                      >
+                        <option value="">Não participar da missão neste deck</option>
+                        {mascotOptions.map((mascot) => (
+                          <option key={mascot.id} value={mascot.id}>{mascot.displayName} · {mascot.speciesName} · Nv.{mascot.level}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedMascot && (
+                      <div className="mt-3 flex items-start gap-3 rounded-lg border border-slate-700/70 bg-slate-950/70 p-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={selectedMascot.spriteUrl} alt={selectedMascot.displayName} className="h-14 w-14 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white">{selectedMascot.displayName} <span className="font-normal text-slate-500">({selectedMascot.speciesName})</span></p>
+                          <p className="mt-1 text-[10px] leading-4 text-slate-500">Linha aceita: {selectedMascot.acceptedCardNames.join(", ")}</p>
+                          <p className={`mt-2 rounded-md border px-2 py-1.5 text-[10px] font-semibold ${missionValidation?.valid ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-red-400/30 bg-red-500/10 text-red-300"}`}>
+                            {missionValidation?.valid
+                              ? `✓ Deck válido para a missão. Encontrado: ${missionValidation.matchedCardNames.join(", ")}.`
+                              : "Deck ainda não é válido: nenhuma carta da espécie ou linha evolutiva foi encontrada."}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid gap-2 sm:grid-cols-2">
                   <label className="space-y-1 text-[10px] text-slate-400">
                     <span>Nome do deck *</span>
@@ -219,7 +273,7 @@ export function MatchDeckSelector({
               </div>
 
               {error && <p className="text-[11px] text-red-400">{error}</p>}
-              {success && <p className="text-[11px] text-emerald-400">✓ Deck registrado com sucesso!</p>}
+              {success && <p className="text-[11px] text-emerald-400">✓ Deck registrado com sucesso!{selectedMascot ? (missionValidation?.valid ? " Missão de Mascote validada." : " A missão ficou registrada como não elegível.") : ""}</p>}
 
               <button
                 type="button"

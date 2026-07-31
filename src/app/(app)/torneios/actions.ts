@@ -5,13 +5,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { DeckSubmissionStatus, MatchStatus, ResultSource, Role, SeasonStatus, TournamentFormat, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus, type Prisma } from "@prisma/client";
+import { DeckSubmissionStatus, MatchStatus, Prisma, ResultSource, Role, SeasonStatus, TournamentFormat, TournamentStatus, RegistrationStatus, WeekMode, WeekStatus } from "@prisma/client";
 import {
   canSubmitTournamentWeekDeck,
   getDeckSubmissionDeadline,
   isDeckRegistrationLocked
 } from "@/lib/decks";
 import { rewardEquippedMascot } from "@/lib/mascot";
+import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
 
 // ─── Schemas de validação ────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ const createTournamentSchema = z.object({
   maxPlayers: z.number().int().min(2).max(256).nullish(),
   matchesPerPlayer: z.number().int().min(1).max(12).nullish(),
   requiresDeckSubmission: z.boolean().default(true),
+  mascotMissionEnabled: z.boolean().default(false),
   registrationOpensAt: z.string().datetime().nullish(),
   registrationClosesAt: z.string().datetime().nullish(),
   bannerImageUrl: z.string().url().nullish(),
@@ -94,7 +96,8 @@ const submitTournamentWeekDeckSchema = z.object({
   deckNumber: z.coerce.number().int().min(1).max(3).default(1),
   deckName: z.string().trim().min(2, "Informe o nome do deck.").max(120),
   archetype: z.string().trim().max(120).nullish(),
-  deckList: z.string().trim().min(10, "Cole a lista completa do deck.").max(12000)
+  deckList: z.string().trim().min(10, "Cole a lista completa do deck.").max(12000),
+  mascotMissionMascotId: z.string().trim().min(1).nullish(),
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -206,6 +209,29 @@ async function generateUniqueTournamentCode() {
   throw new Error("Nao foi possivel gerar um codigo unico para o torneio.");
 }
 
+async function resolveMascotMissionSelection(input: {
+  enabled: boolean;
+  playerId: string;
+  mascotId?: string | null;
+  deckList: string;
+}) {
+  if (!input.enabled || !input.mascotId) return null;
+  const mascot = await prisma.mascot.findFirst({
+    where: { id: input.mascotId, playerId: input.playerId },
+    select: { id: true, pokemonId: true, nickname: true, level: true },
+  });
+  if (!mascot) throw new Error("Mascote da missao nao encontrado na sua conta.");
+  const option = buildMascotMissionOption(mascot);
+  const validation = validateMascotMissionSubmission(input.deckList, option);
+  return {
+    mascotId: mascot.id,
+    pokemonId: mascot.pokemonId,
+    mascotName: option.displayName,
+    speciesName: option.speciesName,
+    validation,
+  };
+}
+
 // ─── Create / Update ─────────────────────────────────────────────────────────
 
 export async function createTournament(
@@ -219,6 +245,9 @@ export async function createTournament(
 
     if (data.format === TournamentFormat.ONLINE && !isAdmin) {
       return { error: "Apenas admins podem criar campeonatos online." };
+    }
+    if (data.mascotMissionEnabled && !isAdmin) {
+      return { error: "Apenas admins podem ativar a Missao de Mascote." };
     }
 
     const existing = await prisma.tournament.findUnique({ where: { slug: data.slug } });
@@ -234,6 +263,7 @@ export async function createTournament(
       : null;
     const requiresDeckSubmission =
       data.format === TournamentFormat.ONLINE ? data.requiresDeckSubmission : false;
+    const mascotMissionEnabled = isAdmin && requiresDeckSubmission && data.mascotMissionEnabled;
 
     const tournament = await prisma.tournament.create({
       data: {
@@ -248,6 +278,7 @@ export async function createTournament(
         maxPlayers: data.maxPlayers ?? null,
         matchesPerPlayer: data.format === TournamentFormat.IN_PERSON ? data.matchesPerPlayer ?? 4 : null,
         requiresDeckSubmission,
+        mascotMissionEnabled,
         registrationOpensAt: data.registrationOpensAt ? new Date(data.registrationOpensAt) : null,
         registrationClosesAt: data.registrationClosesAt
           ? new Date(data.registrationClosesAt)
@@ -332,6 +363,12 @@ export async function updateTournament(
     const before = await prisma.tournament.findUnique({ where: { id } });
     if (!before) return { error: "Torneio não encontrado." };
 
+    const deckSubmissionEnabled = rest.requiresDeckSubmission ?? before.requiresDeckSubmission;
+    const mascotMissionEnabled = rest.mascotMissionEnabled ?? before.mascotMissionEnabled;
+    if (mascotMissionEnabled && !deckSubmissionEnabled) {
+      return { error: "A Missão de Mascote exige o registro de decks no campeonato." };
+    }
+
     await prisma.tournament.update({
       where: { id },
       data: {
@@ -345,6 +382,7 @@ export async function updateTournament(
         ...(rest.maxPlayers !== undefined ? { maxPlayers: rest.maxPlayers ?? null } : {}),
         ...(rest.matchesPerPlayer !== undefined ? { matchesPerPlayer: rest.matchesPerPlayer ?? null } : {}),
         ...(rest.requiresDeckSubmission !== undefined ? { requiresDeckSubmission: rest.requiresDeckSubmission } : {}),
+        ...(rest.mascotMissionEnabled !== undefined ? { mascotMissionEnabled: rest.mascotMissionEnabled } : {}),
         ...(rest.bannerImageUrl !== undefined ? { bannerImageUrl: rest.bannerImageUrl ?? null } : {}),
         ...(rest.themeMetadata !== undefined
           ? { themeMetadata: rest.themeMetadata ?? undefined }
@@ -449,6 +487,7 @@ export async function updateTournamentInfo(raw: {
   format?: string;
   matchesPerPlayerMin?: number;
   matchesPerPlayerMax?: number;
+  mascotMissionEnabled?: boolean;
 }): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -457,9 +496,12 @@ export async function updateTournamentInfo(raw: {
 
     const tournament = await prisma.tournament.findUnique({
       where: { id: raw.tournamentId },
-      select: { slug: true }
+      select: { slug: true, requiresDeckSubmission: true }
     });
     if (!tournament) return { error: "Torneio não encontrado." };
+    if (raw.mascotMissionEnabled && !tournament.requiresDeckSubmission) {
+      return { error: "A Missão de Mascote exige o registro de decks no campeonato." };
+    }
 
     const validFormats = ["ONLINE", "IN_PERSON"];
     const format = raw.format && validFormats.includes(raw.format)
@@ -476,6 +518,7 @@ export async function updateTournamentInfo(raw: {
         ...(raw.endDate   ? { endDate:   new Date(raw.endDate)   } : {}),
         ...(format        ? { format } : {}),
         ...(raw.matchesPerPlayerMax ? { matchesPerPlayer: raw.matchesPerPlayerMax } : {}),
+        ...(raw.mascotMissionEnabled !== undefined ? { mascotMissionEnabled: raw.mascotMissionEnabled } : {}),
       }
     });
 
@@ -1245,7 +1288,7 @@ export async function setTournamentWeekTeam(
 
 export async function submitTournamentWeekDeck(
   raw: z.infer<typeof submitTournamentWeekDeckSchema>
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; missionValidation?: { valid: boolean; matchedCardNames: string[]; mascotName: string } }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Nao autenticado." };
@@ -1261,7 +1304,8 @@ export async function submitTournamentWeekDeck(
           select: {
             id: true,
             slug: true,
-            seasonId: true
+            seasonId: true,
+            mascotMissionEnabled: true,
           }
         }
       }
@@ -1314,6 +1358,12 @@ export async function submitTournamentWeekDeck(
         deckNumber: data.deckNumber
       }
     });
+    const mission = await resolveMascotMissionSelection({
+      enabled: week.tournament.mascotMissionEnabled,
+      playerId: player.id,
+      mascotId: data.mascotMissionMascotId,
+      deckList: data.deckList,
+    });
 
     const payload = {
       seasonId,
@@ -1327,7 +1377,15 @@ export async function submitTournamentWeekDeck(
       deadlineAt: deadline,
       status: DeckSubmissionStatus.SUBMITTED,
       editedAt: existing ? now : null,
-      isLate: now > deadline
+      isLate: now > deadline,
+      mascotMissionMascotId: mission?.mascotId ?? null,
+      mascotMissionPokemonId: mission?.pokemonId ?? null,
+      mascotMissionMascotName: mission?.mascotName ?? null,
+      mascotMissionValid: mission?.validation.valid ?? null,
+      mascotMissionValidation: mission ? {
+        speciesName: mission.speciesName,
+        ...mission.validation,
+      } : Prisma.JsonNull,
     };
 
     const submission = existing
@@ -1362,7 +1420,13 @@ export async function submitTournamentWeekDeck(
 
     revalidatePath("/torneios/" + week.tournament.slug);
     revalidatePath("/torneios/" + week.tournament.slug + "/semanas/" + week.weekNumber);
-    return {};
+    return mission ? {
+      missionValidation: {
+        valid: mission.validation.valid,
+        matchedCardNames: mission.validation.matchedCardNames,
+        mascotName: mission.mascotName,
+      },
+    } : {};
   } catch (err) {
     if (err instanceof z.ZodError) {
       return { error: err.issues.map((i) => i.message).join(", ") };
@@ -1439,7 +1503,8 @@ export async function submitDeckForMatch(raw: {
   archetype?: string;
   deckList: string;
   savedDeckId?: string;
-}): Promise<{ error?: string }> {
+  mascotMissionMascotId?: string | null;
+}): Promise<{ error?: string; missionValidation?: { valid: boolean; matchedCardNames: string[]; mascotName: string } }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
@@ -1451,7 +1516,7 @@ export async function submitDeckForMatch(raw: {
       where: { id: raw.matchId },
       include: {
         tournamentWeek: {
-          include: { tournament: { select: { id: true, slug: true, seasonId: true } } }
+          include: { tournament: { select: { id: true, slug: true, seasonId: true, mascotMissionEnabled: true } } }
         }
       }
     });
@@ -1501,6 +1566,22 @@ export async function submitDeckForMatch(raw: {
 
     // Verifica se já existe submission vinculada a ESTA partida para este jogador
     const existingSubmissionId = isPlayerA ? match.playerADeckSubmissionId : match.playerBDeckSubmissionId;
+    const mission = await resolveMascotMissionSelection({
+      enabled: week.tournament.mascotMissionEnabled,
+      playerId: player.id,
+      mascotId: raw.mascotMissionMascotId,
+      deckList: raw.deckList,
+    });
+    const missionData = {
+      mascotMissionMascotId: mission?.mascotId ?? null,
+      mascotMissionPokemonId: mission?.pokemonId ?? null,
+      mascotMissionMascotName: mission?.mascotName ?? null,
+      mascotMissionValid: mission?.validation.valid ?? null,
+      mascotMissionValidation: mission ? {
+        speciesName: mission.speciesName,
+        ...mission.validation,
+      } : Prisma.JsonNull,
+    };
 
     await prisma.$transaction(async (tx) => {
       if (existingSubmissionId) {
@@ -1512,7 +1593,8 @@ export async function submitDeckForMatch(raw: {
             archetype: raw.archetype || null,
             deckList: raw.deckList,
             editedAt: now,
-            isLate: now > (deadline ?? new Date(0))
+            isLate: now > (deadline ?? new Date(0)),
+            ...missionData,
           }
         });
       } else {
@@ -1524,6 +1606,7 @@ export async function submitDeckForMatch(raw: {
             playerId: player.id,
             deckName: raw.deckName,
             deckList: raw.deckList,
+            mascotMissionMascotId: mission?.mascotId ?? null,
           },
           orderBy: { submittedAt: "asc" }
         });
@@ -1549,7 +1632,8 @@ export async function submitDeckForMatch(raw: {
               deckList: raw.deckList,
               deadlineAt: deadline,
               status: "SUBMITTED",
-              isLate: now > (deadline ?? new Date(0))
+              isLate: now > (deadline ?? new Date(0)),
+              ...missionData,
             }
           });
           submissionId = submission.id;
@@ -1567,7 +1651,13 @@ export async function submitDeckForMatch(raw: {
 
     revalidatePath(`/torneios/${week.tournament.slug}`);
     revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
-    return {};
+    return mission ? {
+      missionValidation: {
+        valid: mission.validation.valid,
+        matchedCardNames: mission.validation.matchedCardNames,
+        mascotName: mission.mascotName,
+      },
+    } : {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
   }

@@ -169,6 +169,7 @@ export default async function TournamentAdminPage({ params }: Props) {
                 endDate:            String(formData.get("endDate") ?? ""),
                 format:             String(formData.get("format") ?? ""),
                 matchesPerPlayerMax: Number(formData.get("matchesPerPlayerMax") || 4),
+                mascotMissionEnabled: formData.get("mascotMissionEnabled") === "on",
               });
             }}
           >
@@ -242,6 +243,18 @@ export default async function TournamentAdminPage({ params }: Props) {
                 rows={3}
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[#FFCB05]"
               />
+            </label>
+            <label className="flex items-start gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/5 p-4 md:col-span-2">
+              <input
+                type="checkbox"
+                name="mascotMissionEnabled"
+                defaultChecked={tournament.mascotMissionEnabled}
+                className="mt-0.5 h-4 w-4 accent-emerald-400"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-emerald-200">Missão de Mascote</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-400">Quando ativa, cada jogador pode vincular um mascote ao deck registrado e conferir a compatibilidade da espécie ou linha evolutiva.</span>
+              </span>
             </label>
             <div className="md:col-span-2">
               <Button type="submit" className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">

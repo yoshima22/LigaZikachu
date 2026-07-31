@@ -22,13 +22,15 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
     maxPlayers: "",
     matchesPerPlayer: "4",
     requiresDeckSubmission: "true",
+    mascotMissionEnabled: false,
     registrationOpensAt: "",
     registrationClosesAt: ""
   });
 
   function handleChange(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    const nextValue = type === "checkbox" ? (e.target as HTMLInputElement).checked : value;
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
 
     // Auto-gerar slug a partir do nome
     if (name === "name") {
@@ -56,6 +58,7 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
         maxPlayers: form.maxPlayers ? parseInt(form.maxPlayers, 10) : null,
         matchesPerPlayer: form.matchesPerPlayer ? parseInt(form.matchesPerPlayer, 10) : null,
         requiresDeckSubmission: form.format === "ONLINE" ? form.requiresDeckSubmission === "true" : false,
+        mascotMissionEnabled: canCreateOnline && form.format === "ONLINE" && form.mascotMissionEnabled,
         registrationOpensAt: form.registrationOpensAt
           ? new Date(form.registrationOpensAt).toISOString()
           : null,
@@ -138,6 +141,24 @@ export function CreateTournamentForm({ canCreateOnline }: { canCreateOnline: boo
           onChange={handleChange} rows={3} placeholder="Descrição do torneio..."
           className={inputCls + " resize-none"} />
       </div>
+
+      {canCreateOnline && form.format === "ONLINE" && (
+        <label className="flex items-start gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/5 p-4">
+          <input
+            type="checkbox"
+            name="mascotMissionEnabled"
+            checked={form.mascotMissionEnabled}
+            onChange={handleChange}
+            className="mt-0.5 h-4 w-4 accent-emerald-400"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-emerald-200">Ativar Missão de Mascote</span>
+            <span className="mt-1 block text-xs leading-5 text-slate-400">
+              Permite vincular um mascote ao deck de cada dia e validar automaticamente a espécie ou linha evolutiva. Apenas administradores podem ativar este recurso.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

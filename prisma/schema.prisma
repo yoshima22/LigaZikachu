@@ -409,6 +409,7 @@ model Tournament {
   maxPlayers             Int?
   matchesPerPlayer       Int?
   requiresDeckSubmission Boolean                  @default(true)
+  mascotMissionEnabled   Boolean                  @default(false)
   registrationOpensAt    DateTime?
   registrationClosesAt   DateTime?
   bannerImageUrl         String?
@@ -629,30 +630,35 @@ model MatchConfirmation {
 }
 
 model DeckSubmission {
-  id               String               @id @default(cuid())
-  seasonId         String
-  weekId           String?
-  tournamentId     String?
-  tournamentWeekId String?
-  playerId         String
-  deckNumber       Int                  @default(1)
-  deckName         String
-  deckList         String
-  archetype        String?
-  submittedAt      DateTime             @default(now())
-  editedAt         DateTime?
-  deadlineAt       DateTime
-  status           DeckSubmissionStatus @default(SUBMITTED)
-  approvedById     String?
-  approvedAt       DateTime?
-  rejectionReason  String?
-  isLate           Boolean              @default(false)
-  season           Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  week             Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
-  tournament       Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
-  tournamentWeek   TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
-  player           Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  approvedBy       User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  id                      String               @id @default(cuid())
+  seasonId                String
+  weekId                  String?
+  tournamentId            String?
+  tournamentWeekId        String?
+  playerId                String
+  deckNumber              Int                  @default(1)
+  deckName                String
+  deckList                String
+  archetype               String?
+  submittedAt             DateTime             @default(now())
+  editedAt                DateTime?
+  deadlineAt              DateTime
+  status                  DeckSubmissionStatus @default(SUBMITTED)
+  approvedById            String?
+  approvedAt              DateTime?
+  rejectionReason         String?
+  isLate                  Boolean              @default(false)
+  mascotMissionMascotId   String?
+  mascotMissionPokemonId  Int?
+  mascotMissionMascotName String?
+  mascotMissionValid      Boolean?
+  mascotMissionValidation Json?
+  season                  Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  week                    Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  tournament              Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  tournamentWeek          TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
+  player                  Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  approvedBy              User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@unique([seasonId, weekId, playerId])
   @@index([tournamentWeekId, playerId, deckNumber])

@@ -9,6 +9,7 @@ import { generateMatchups, closeWeek } from "./actions";
 import { MatchCard } from "./_components/match-card";
 import { MatchDeckSelector } from "./_components/match-deck-selector";
 import { canSubmitTournamentWeekDeck } from "@/lib/decks";
+import { buildMascotMissionOption } from "@/lib/tcg-mascot-mission";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -56,6 +57,14 @@ export default async function PartidasPage({ params }: Props) {
   const player = user
     ? await prisma.player.findUnique({ where: { userId: user.id } })
     : null;
+  const mascotMissionOptions = player && tournament.mascotMissionEnabled
+    ? (await prisma.mascot.findMany({
+        where: { playerId: player.id },
+        select: { id: true, pokemonId: true, nickname: true, level: true },
+        orderBy: [{ isFavorite: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
+        take: 500,
+      })).map(buildMascotMissionOption)
+    : [];
 
   const registration = player
     ? await prisma.tournamentRegistration.findUnique({
@@ -74,7 +83,11 @@ export default async function PartidasPage({ params }: Props) {
   // Monta mapa playerId → decks únicos visíveis.
   // Deduplica por deckList para que o mesmo deck enviado em múltiplas partidas
   // apareça uma única vez no seletor (evita lista poluída).
-  const visibleDecksByPlayer = new Map<string, Array<{ id: string; deckNumber: number; deckName: string; archetype: string | null; deckList: string }>>();
+  const visibleDecksByPlayer = new Map<string, Array<{
+    id: string; deckNumber: number; deckName: string; archetype: string | null; deckList: string;
+    mascotMissionMascotId: string | null; mascotMissionPokemonId: number | null;
+    mascotMissionMascotName: string | null; mascotMissionValid: boolean | null;
+  }>>();
   const seenDeckKeys = new Set<string>();
   for (const submission of week.deckSubmissions) {
     if (!user) continue;
@@ -98,7 +111,11 @@ export default async function PartidasPage({ params }: Props) {
       deckNumber: submission.deckNumber,
       deckName: submission.deckName,
       archetype: submission.archetype,
-      deckList: submission.deckList
+      deckList: submission.deckList,
+      mascotMissionMascotId: submission.mascotMissionMascotId,
+      mascotMissionPokemonId: submission.mascotMissionPokemonId,
+      mascotMissionMascotName: submission.mascotMissionMascotName,
+      mascotMissionValid: submission.mascotMissionValid,
     });
     visibleDecksByPlayer.set(submission.playerId, decks);
   }
@@ -291,11 +308,17 @@ export default async function PartidasPage({ params }: Props) {
                       opponentName={opponent?.displayName ?? "Adversário"}
                       weekOpen={weekOpen}
                       savedDecks={savedDecks ?? []}
+                      mascotMissionEnabled={tournament.mascotMissionEnabled}
+                      mascotOptions={mascotMissionOptions}
                       existingSubmission={submittedDeck && submissionId ? {
                         id: submissionId,
                         deckName: submittedDeck.deckName,
                         archetype: submittedDeck.archetype ?? null,
                         deckList: submittedDeck.deckList,
+                        mascotMissionMascotId: submittedDeck.mascotMissionMascotId,
+                        mascotMissionPokemonId: submittedDeck.mascotMissionPokemonId,
+                        mascotMissionMascotName: submittedDeck.mascotMissionMascotName,
+                        mascotMissionValid: submittedDeck.mascotMissionValid,
                       } : null}
                     />
                   );
