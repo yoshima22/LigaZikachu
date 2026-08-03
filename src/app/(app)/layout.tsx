@@ -12,7 +12,7 @@ import {
 } from "@/lib/manual-session";
 import { getGlobalNotice } from "@/lib/app-settings";
 import { Button } from "@/components/ui/button";
-import { LogOut, Megaphone, Zap } from "lucide-react";
+import { Download, Megaphone, Zap } from "lucide-react";
 import { Toaster } from "sonner";
 import { AppNav } from "./_components/app-nav";
 import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
@@ -314,6 +314,17 @@ export default async function AppLayout({
                 </span>
               )}
               <LogoutButton />
+              <Link
+                href="/downloads"
+                prefetch={false}
+                aria-label="Download agora"
+                title="Download agora"
+                className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 text-[9px] font-bold leading-none text-[#FFCB05] transition-colors hover:bg-[#FFCB05] hover:text-slate-950 sm:text-[10px]"
+              >
+                <Download size={13} className="shrink-0" />
+                <span className="hidden whitespace-nowrap lg:inline xl:hidden">Baixar</span>
+                <span className="hidden whitespace-nowrap xl:inline">Download agora</span>
+              </Link>
             </div>
           </div>
 
