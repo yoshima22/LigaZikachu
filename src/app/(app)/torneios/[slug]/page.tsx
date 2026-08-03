@@ -27,6 +27,7 @@ export default async function TorneioDetailPage({
     where: { slug },
     include: {
       weeks: { orderBy: { weekNumber: "asc" } },
+      postseasonEntries: { include: { player: true }, orderBy: [{ stage: "asc" }, { seed: "asc" }] },
       registrations: {
         select: {
           id: true, status: true, registeredAt: true,
@@ -207,6 +208,15 @@ export default async function TorneioDetailPage({
           <Megaphone size={16} className="mt-0.5 shrink-0 text-[#FFCB05]" />
           <p className="whitespace-pre-wrap text-sm text-slate-200">{tournament.announcement}</p>
         </div>
+      )}
+
+      {tournament.postseasonEnabled && tournament.postseasonEntries.length > 0 && (
+        <section className="space-y-3 rounded-2xl border border-[#FFCB05]/25 bg-gradient-to-br from-[#FFCB05]/10 to-cyan-500/5 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 font-bold text-white"><Crown size={18} className="text-[#FFCB05]" /> Fase Final de Johto</h2><p className="mt-1 text-xs text-slate-400">A classificação regular está preservada; as chaves possuem seus próprios estados.</p></div><Button variant="outline" size="sm" asChild><Link href={`/torneios/${slug}/semanas/9/partidas`}>Ver partidas finais</Link></Button></div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(["TITLE_SURVIVAL", "CUP_JOHTO"] as const).map((stage) => <div key={stage} className="rounded-xl border border-slate-700 bg-slate-950/70 p-3"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-[#FFCB05]">{stage === "TITLE_SURVIVAL" ? "Chave de Sobrevivência Z" : "Copa Johto de Recompensas"}</p><div className="grid gap-1.5 sm:grid-cols-2">{tournament.postseasonEntries.filter((entry) => entry.stage === stage).map((entry) => <div key={entry.id} className="flex items-center justify-between rounded-lg bg-slate-900 px-2.5 py-2 text-xs"><span className="text-slate-200">{entry.seed}º · {entry.player.displayName}</span><span className={entry.status === "CHAMPION" ? "text-[#FFCB05]" : entry.status === "ELIMINATED" ? "text-red-300" : "text-emerald-300"}>{stage === "TITLE_SURVIVAL" ? `${entry.lives} vida${entry.lives === 1 ? "" : "s"}` : entry.resultLabel?.replaceAll("_", " ") ?? "ATIVO"}</span></div>)}</div></div>)}
+          </div>
+        </section>
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">

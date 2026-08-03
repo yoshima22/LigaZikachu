@@ -849,11 +849,16 @@ export async function finishTournament(tournamentId: string): Promise<{ error?: 
   try {
     const actor = await getSessionUser();
     if (!actor) return { error: "Nao autenticado." };
-    const t = await prisma.tournament.findUnique({ where: { id: tournamentId } });
+    const t = await prisma.tournament.findUnique({ where: { id: tournamentId }, include: { postseasonEntries: { select: { stage: true, status: true } } } });
     if (!t) return { error: "Torneio não encontrado." };
     if (!canManageTournament(actor, t)) return { error: "Voce nao pode gerenciar este torneio." };
     if (t.status !== TournamentStatus.IN_PROGRESS)
       return { error: "Apenas torneios em andamento podem ser encerrados." };
+    if (t.postseasonEnabled) {
+      const titleFinished = t.postseasonEntries.some((entry) => entry.stage === "TITLE_SURVIVAL" && entry.status === "CHAMPION");
+      const cupFinished = t.postseasonEntries.some((entry) => entry.stage === "CUP_JOHTO" && entry.status === "CHAMPION");
+      if (!titleFinished || !cupFinished) return { error: "Conclua a Chave de Sobrevivência Z e a Copa Johto antes de encerrar o torneio." };
+    }
 
     await prisma.tournament.update({
       where: { id: tournamentId },

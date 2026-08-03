@@ -19,9 +19,9 @@ export type TournamentRewardConfig = {
   loss: { coins: number; food: number; sweet: number; creationDust: number };
   top: { coins: number; lootTickets: number; sweet: number; eventEggs: number; labEggChance: number };
   raffle: { coins: number; sweet: number; specialEggChance: number };
-  enguica: { coins: number; food: number; sweet: number; creationDust: number; lootTicketChance: number };
-  badge: { coins: number; sweet: number; creationDust: number; specialEggChance: number };
-  guardian: { coins: number; shockingVitamin: number; creationDust: number };
+  enguica: { coins: number; food: number; sweet: number; creationDust: number; rareEggChance: number };
+  badge: { coins: number; weaknessPolicy: number; creationDust: number; specialEggChance: number };
+  guardian: { coins: number; shockingVitamin: number; creationDust: number; specialEggChance: number };
 };
 
 export const JOHTO_REWARD_CONFIG: TournamentRewardConfig = {
@@ -31,16 +31,27 @@ export const JOHTO_REWARD_CONFIG: TournamentRewardConfig = {
   loss: { coins: 120, food: 1, sweet: 1, creationDust: 2 },
   top: { coins: 1_000, lootTickets: 2, sweet: 2, eventEggs: 2, labEggChance: 0.10 },
   raffle: { coins: 550, sweet: 1, specialEggChance: 0.15 },
-  enguica: { coins: 150, food: 1, sweet: 1, creationDust: 3, lootTicketChance: 0.05 },
-  badge: { coins: 450, sweet: 1, creationDust: 10, specialEggChance: 0.10 },
-  guardian: { coins: 400, shockingVitamin: 1, creationDust: 10 },
+  enguica: { coins: 450, food: 1, sweet: 1, creationDust: 3, rareEggChance: 0.50 },
+  badge: { coins: 450, weaknessPolicy: 1, creationDust: 10, specialEggChance: 0.25 },
+  guardian: { coins: 400, shockingVitamin: 1, creationDust: 10, specialEggChance: 0.50 },
 };
 
 export function parseTournamentRewardConfig(value: Prisma.JsonValue | null | undefined): TournamentRewardConfig | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Partial<TournamentRewardConfig>;
   if (raw.deferUntilDayClose !== true) return null;
-  return { ...JOHTO_REWARD_CONFIG, ...raw } as TournamentRewardConfig;
+  return {
+    ...JOHTO_REWARD_CONFIG,
+    ...raw,
+    daily: { ...JOHTO_REWARD_CONFIG.daily, ...(raw.daily ?? {}) },
+    win: { ...JOHTO_REWARD_CONFIG.win, ...(raw.win ?? {}) },
+    loss: { ...JOHTO_REWARD_CONFIG.loss, ...(raw.loss ?? {}) },
+    top: { ...JOHTO_REWARD_CONFIG.top, ...(raw.top ?? {}) },
+    raffle: { ...JOHTO_REWARD_CONFIG.raffle, ...(raw.raffle ?? {}) },
+    enguica: { ...JOHTO_REWARD_CONFIG.enguica, ...(raw.enguica ?? {}) },
+    badge: { ...JOHTO_REWARD_CONFIG.badge, ...(raw.badge ?? {}) },
+    guardian: { ...JOHTO_REWARD_CONFIG.guardian, ...(raw.guardian ?? {}) },
+  };
 }
 
 export function brtDateKey(value: Date) {

@@ -67,6 +67,17 @@ enum MatchStatus {
   CANCELED
 }
 
+enum TournamentPostseasonStage {
+  TITLE_SURVIVAL
+  CUP_JOHTO
+}
+
+enum TournamentPostseasonStatus {
+  ACTIVE
+  ELIMINATED
+  CHAMPION
+}
+
 enum ResultSource {
   MANUAL
   ADMIN_ADJUSTMENT
@@ -211,104 +222,105 @@ model UserTutorialProgress {
 }
 
 model Player {
-  id                         String                         @id @default(cuid())
-  userId                     String                         @unique
-  displayName                String
-  whatsapp                   String?
-  ptcglNick                  String?                        @unique
-  popId                      String? // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
-  avatarUrl                  String?
-  active                     Boolean                        @default(true)
-  notes                      String?
-  createdAt                  DateTime                       @default(now())
-  updatedAt                  DateTime                       @updatedAt
-  user                       User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seasonEntries              SeasonPlayer[]
-  matchesAsPlayerA           Match[]                        @relation("MatchPlayerA")
-  matchesAsPlayerB           Match[]                        @relation("MatchPlayerB")
-  matchesWon                 Match[]                        @relation("MatchWinner")
-  matchesLost                Match[]                        @relation("MatchLoser")
-  confirmations              MatchConfirmation[]
-  deckSubmissions            DeckSubmission[]
-  enguicaContractCompletions TournamentEnguicaCompletion[]
-  challengesAsChallenger     Challenge[]                    @relation("ChallengeChallenger")
-  challengesAsChallenged     Challenge[]                    @relation("ChallengeChallenged")
-  codeDistributions          CodeDistribution[]
-  playerBadges               PlayerBadge[]
-  playerAchievements         PlayerAchievement[]
-  rankingSnapshots           RankingSnapshot[]
-  tournamentRegistrations    TournamentRegistration[]
-  gifts                      PlayerGift[]
-  tournamentDayRewards       TournamentDayReward[]
-  activityLogs               PlayerActivityLog[]
-  badgeProgress              BadgeProgress[]
-  wallet                     ZikaCoinWallet?
-  inventory                  PlayerInventory[]
-  betsPlaced                 ZikaBet[]                      @relation("ZkBetByPlayer")
-  betsOn                     ZikaBet[]                      @relation("ZkBetOnPlayer")
-  weeklyLeagueBetsPlaced     WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetByPlayer")
-  weeklyLeagueBetsOn         WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetOnPlayer")
-  weeklyScoutingAggregate    WeeklyMascotScoutingAggregate?
-  stickers                   PlayerSticker[]
-  achievementEvents          AchievementEvent[]
-  zikalootWins               ZikaLoot[]                     @relation("ZikaLootWinner")
-  zikalootPicks              ZikaLootPick[]
-  savedDecks                 SavedDeck[]
-  mascots                    Mascot[]
-  pokemonDex                 PlayerPokemonDex[]
-  pokemonWishlist            PlayerPokemonWishlist[]
-  itemWishlist               PlayerItemWishlist[]
-  ownedMascotSocialEvents    MascotSocialEvent[]            @relation("MascotSocialEventOwner")
-  resolvedMascotSocialEvents MascotSocialEvent[]            @relation("MascotSocialEventResolver")
-  mascotSocialDecisionLogs   MascotSocialDecisionLog[]
-  mascotEggs                 MascotEgg[]
-  mascotIncubator            MascotIncubator?
-  mascotFoods                MascotFoodItem[]
-  arenaTeams                 ArenaTeam[]
-  arenaBattlesAsAttacker     ArenaBattle[]                  @relation("ArenaBattleAttacker")
-  arenaBattlesAsDefender     ArenaBattle[]                  @relation("ArenaBattleDefender")
-  bazarListings              BazarListing[]
-  bazarProposals             BazarProposal[]
-  bazarFavorites             BazarFavorite[]
-  bazarLoansAsLender         BazarLoan[]                    @relation("BazarLoanLender")
-  bazarLoansAsBorrower       BazarLoan[]                    @relation("BazarLoanBorrower")
-  shellGameSessions          ShellGameSession[]
-  arenaTutorialClaimed       Boolean                        @default(false)
-  arenaPveCoinsDate          String                         @default("") // "YYYY-MM-DD" BRT — data do contador diário PvE
-  arenaPveCoinsEarned        Int                            @default(0) // ZC PvE resgatados hoje
-  susShieldDate              String                         @default("") // "YYYY-MM-DD" BRT — escudo SUS usado hoje
-  mascotBondBehavior         String                         @default("FREE")
-  mascotSpritePreference     String                         @default("ANIMATED")
-  megaSpritePreference       String                         @default("ANIMATED")
-  supporterPasses            SupporterPass[]
-  sentMessages               DirectMessage[]                @relation("SentMessages")
-  receivedMessages           DirectMessage[]                @relation("ReceivedMessages")
-  generalMessages            GeneralChatMessage[]
-  syncChallengeEntries       SyncChallengeEntry[]
-  generatedSyncTicketHalves  SyncTicketHalf[]               @relation("SyncTicketHalfGeneratedBy")
-  ownedSyncTicketHalves      SyncTicketHalf[]               @relation("SyncTicketHalfOwner")
-  ownedSyncTickets           SyncTicket[]                   @relation("SyncTicketOwner")
-  syncTicketsBannedByLeft    SyncTicket[]                   @relation("SyncTicketBannedA")
-  syncTicketsBannedByRight   SyncTicket[]                   @relation("SyncTicketBannedB")
-  syncTeamsAsA               SyncEventTeam[]                @relation("SyncEventTeamPlayerA")
-  syncTeamsAsB               SyncEventTeam[]                @relation("SyncEventTeamPlayerB")
-  syncLineups                SyncEventLineup[]              @relation("SyncEventLineupPlayer")
-  syncRoundSelections        SyncRoundSelection[]           @relation("SyncRoundSelectionPlayer")
-  syncEventScores            SyncEventScore[]               @relation("SyncEventScorePlayer")
-  creationDust               Int                            @default(0)
-  labWeeklyUsage             LabWeeklyUsage[]
-  labMonthlyUsage            LabMonthlyUsage[]
-  traceRoomsAsHider          TraceRoom[]                    @relation("TraceRoomHider")
-  traceRoomsAsHunter         TraceRoom[]                    @relation("TraceRoomHunter")
-  goldenPawTransactions      GoldenPawTransaction[]
-  casualMode                 Boolean                        @default(false)
-  adminLabFeatherUsedAt      DateTime?
-  auctionBids                BazarAuctionBid[]
-  newsReads                  NewsRead[]
-  newsRewardClaims           NewsRewardClaim[]
-  raidBattleAttempts         RaidBattleAttempt[]
-  raidDamageRankings         RaidDamageRanking[]
-  discoveredRaidClues        RaidClue[]                     @relation("RaidClueDiscoverer")
+  id                          String                         @id @default(cuid())
+  userId                      String                         @unique
+  displayName                 String
+  whatsapp                    String?
+  ptcglNick                   String?                        @unique
+  popId                       String? // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
+  avatarUrl                   String?
+  active                      Boolean                        @default(true)
+  notes                       String?
+  createdAt                   DateTime                       @default(now())
+  updatedAt                   DateTime                       @updatedAt
+  user                        User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonEntries               SeasonPlayer[]
+  matchesAsPlayerA            Match[]                        @relation("MatchPlayerA")
+  matchesAsPlayerB            Match[]                        @relation("MatchPlayerB")
+  matchesWon                  Match[]                        @relation("MatchWinner")
+  matchesLost                 Match[]                        @relation("MatchLoser")
+  confirmations               MatchConfirmation[]
+  deckSubmissions             DeckSubmission[]
+  enguicaContractCompletions  TournamentEnguicaCompletion[]
+  challengesAsChallenger      Challenge[]                    @relation("ChallengeChallenger")
+  challengesAsChallenged      Challenge[]                    @relation("ChallengeChallenged")
+  codeDistributions           CodeDistribution[]
+  playerBadges                PlayerBadge[]
+  playerAchievements          PlayerAchievement[]
+  rankingSnapshots            RankingSnapshot[]
+  tournamentRegistrations     TournamentRegistration[]
+  gifts                       PlayerGift[]
+  tournamentDayRewards        TournamentDayReward[]
+  tournamentPostseasonEntries TournamentPostseasonEntry[]
+  activityLogs                PlayerActivityLog[]
+  badgeProgress               BadgeProgress[]
+  wallet                      ZikaCoinWallet?
+  inventory                   PlayerInventory[]
+  betsPlaced                  ZikaBet[]                      @relation("ZkBetByPlayer")
+  betsOn                      ZikaBet[]                      @relation("ZkBetOnPlayer")
+  weeklyLeagueBetsPlaced      WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetByPlayer")
+  weeklyLeagueBetsOn          WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetOnPlayer")
+  weeklyScoutingAggregate     WeeklyMascotScoutingAggregate?
+  stickers                    PlayerSticker[]
+  achievementEvents           AchievementEvent[]
+  zikalootWins                ZikaLoot[]                     @relation("ZikaLootWinner")
+  zikalootPicks               ZikaLootPick[]
+  savedDecks                  SavedDeck[]
+  mascots                     Mascot[]
+  pokemonDex                  PlayerPokemonDex[]
+  pokemonWishlist             PlayerPokemonWishlist[]
+  itemWishlist                PlayerItemWishlist[]
+  ownedMascotSocialEvents     MascotSocialEvent[]            @relation("MascotSocialEventOwner")
+  resolvedMascotSocialEvents  MascotSocialEvent[]            @relation("MascotSocialEventResolver")
+  mascotSocialDecisionLogs    MascotSocialDecisionLog[]
+  mascotEggs                  MascotEgg[]
+  mascotIncubator             MascotIncubator?
+  mascotFoods                 MascotFoodItem[]
+  arenaTeams                  ArenaTeam[]
+  arenaBattlesAsAttacker      ArenaBattle[]                  @relation("ArenaBattleAttacker")
+  arenaBattlesAsDefender      ArenaBattle[]                  @relation("ArenaBattleDefender")
+  bazarListings               BazarListing[]
+  bazarProposals              BazarProposal[]
+  bazarFavorites              BazarFavorite[]
+  bazarLoansAsLender          BazarLoan[]                    @relation("BazarLoanLender")
+  bazarLoansAsBorrower        BazarLoan[]                    @relation("BazarLoanBorrower")
+  shellGameSessions           ShellGameSession[]
+  arenaTutorialClaimed        Boolean                        @default(false)
+  arenaPveCoinsDate           String                         @default("") // "YYYY-MM-DD" BRT — data do contador diário PvE
+  arenaPveCoinsEarned         Int                            @default(0) // ZC PvE resgatados hoje
+  susShieldDate               String                         @default("") // "YYYY-MM-DD" BRT — escudo SUS usado hoje
+  mascotBondBehavior          String                         @default("FREE")
+  mascotSpritePreference      String                         @default("ANIMATED")
+  megaSpritePreference        String                         @default("ANIMATED")
+  supporterPasses             SupporterPass[]
+  sentMessages                DirectMessage[]                @relation("SentMessages")
+  receivedMessages            DirectMessage[]                @relation("ReceivedMessages")
+  generalMessages             GeneralChatMessage[]
+  syncChallengeEntries        SyncChallengeEntry[]
+  generatedSyncTicketHalves   SyncTicketHalf[]               @relation("SyncTicketHalfGeneratedBy")
+  ownedSyncTicketHalves       SyncTicketHalf[]               @relation("SyncTicketHalfOwner")
+  ownedSyncTickets            SyncTicket[]                   @relation("SyncTicketOwner")
+  syncTicketsBannedByLeft     SyncTicket[]                   @relation("SyncTicketBannedA")
+  syncTicketsBannedByRight    SyncTicket[]                   @relation("SyncTicketBannedB")
+  syncTeamsAsA                SyncEventTeam[]                @relation("SyncEventTeamPlayerA")
+  syncTeamsAsB                SyncEventTeam[]                @relation("SyncEventTeamPlayerB")
+  syncLineups                 SyncEventLineup[]              @relation("SyncEventLineupPlayer")
+  syncRoundSelections         SyncRoundSelection[]           @relation("SyncRoundSelectionPlayer")
+  syncEventScores             SyncEventScore[]               @relation("SyncEventScorePlayer")
+  creationDust                Int                            @default(0)
+  labWeeklyUsage              LabWeeklyUsage[]
+  labMonthlyUsage             LabMonthlyUsage[]
+  traceRoomsAsHider           TraceRoom[]                    @relation("TraceRoomHider")
+  traceRoomsAsHunter          TraceRoom[]                    @relation("TraceRoomHunter")
+  goldenPawTransactions       GoldenPawTransaction[]
+  casualMode                  Boolean                        @default(false)
+  adminLabFeatherUsedAt       DateTime?
+  auctionBids                 BazarAuctionBid[]
+  newsReads                   NewsRead[]
+  newsRewardClaims            NewsRewardClaim[]
+  raidBattleAttempts          RaidBattleAttempt[]
+  raidDamageRankings          RaidDamageRanking[]
+  discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
 
   @@map("players")
 }
@@ -401,21 +413,21 @@ model LeagueTickerView {
 
 // Torneio independente — pode existir em paralelo a seasons legadas
 model Tournament {
-  id                      String                   @id @default(cuid())
+  id                      String                      @id @default(cuid())
   code                    String?
   name                    String
-  slug                    String                   @unique
+  slug                    String                      @unique
   edition                 String?
   description             String?
-  format                  TournamentFormat         @default(ONLINE)
-  status                  TournamentStatus         @default(DRAFT)
+  format                  TournamentFormat            @default(ONLINE)
+  status                  TournamentStatus            @default(DRAFT)
   startDate               DateTime
   endDate                 DateTime?
   maxPlayers              Int?
   matchesPerPlayer        Int?
-  requiresDeckSubmission  Boolean                  @default(true)
-  mascotMissionEnabled    Boolean                  @default(false)
-  enguicaContractsEnabled Boolean                  @default(false)
+  requiresDeckSubmission  Boolean                     @default(true)
+  mascotMissionEnabled    Boolean                     @default(false)
+  enguicaContractsEnabled Boolean                     @default(false)
   registrationOpensAt     DateTime?
   registrationClosesAt    DateTime?
   bannerImageUrl          String?
@@ -426,21 +438,24 @@ model Tournament {
   challengeConfig         Json?
   betConfig               Json?
   rewardConfig            Json?
-  narrativeText           String?                  @db.Text // análise geral do campeonato pelo Prof. Enguiça
+  postseasonEnabled       Boolean                     @default(false)
+  postseasonConfig        Json?
+  narrativeText           String?                     @db.Text // análise geral do campeonato pelo Prof. Enguiça
   narrativeGeneratedAt    DateTime?
   createdById             String
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  createdBy               User                     @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  createdBy               User                        @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   weeks                   TournamentWeek[]
   registrations           TournamentRegistration[]
-  season                  Season?                  @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  season                  Season?                     @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   deckSubmissions         DeckSubmission[]
   badges                  LeagueBadge[]
-  challenges              Challenge[]              @relation("TournamentChallenges")
-  coinTransactions        ZikaCoinTransaction[]    @relation("ZkTxTournament")
-  achievements            Achievement[]            @relation("TournamentAchievements")
+  challenges              Challenge[]                 @relation("TournamentChallenges")
+  coinTransactions        ZikaCoinTransaction[]       @relation("ZkTxTournament")
+  achievements            Achievement[]               @relation("TournamentAchievements")
   dayClosures             TournamentDayClosure[]
+  postseasonEntries       TournamentPostseasonEntry[]
 
   @@map("tournaments")
 }
@@ -595,6 +610,10 @@ model Match {
   rankingPointsB          Decimal                       @default(0) @db.Decimal(10, 2)
   topOfDayEligible        Boolean                       @default(false)
   notes                   String?
+  postseasonStage         TournamentPostseasonStage?
+  postseasonRound         Int?
+  postseasonSlot          String?
+  postseasonProcessedAt   DateTime?
   reportedById            String?
   confirmedById           String?
   reportedAt              DateTime?
@@ -624,9 +643,35 @@ model Match {
   @@index([seasonId, weekId, status])
   @@index([playerAId, playerBId, playedAt])
   @@index([tournamentWeekId, scheduledAt])
+  @@index([postseasonStage, postseasonRound])
   @@index([playerADeckSubmissionId])
   @@index([playerBDeckSubmissionId])
   @@map("matches")
+}
+
+model TournamentPostseasonEntry {
+  id              String                     @id @default(cuid())
+  tournamentId    String
+  playerId        String
+  stage           TournamentPostseasonStage
+  seed            Int
+  initialLives    Int                        @default(1)
+  lives           Int                        @default(1)
+  status          TournamentPostseasonStatus @default(ACTIVE)
+  eliminatedRound Int?
+  finalPlacement  Int?
+  resultLabel     String?
+  byeCount        Int                        @default(0)
+  lastByeRound    Int?
+  rewardedAt      DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  tournament      Tournament                 @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player          Player                     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId, stage, status])
+  @@map("tournament_postseason_entries")
 }
 
 model MatchConfirmation {

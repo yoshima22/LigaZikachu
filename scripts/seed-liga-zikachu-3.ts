@@ -4,6 +4,7 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { AchievementRarity, PrismaClient, TournamentStatus, WeekMode, WeekStatus } from "@prisma/client";
 import { JOHTO_REWARD_CONFIG } from "../src/lib/tcg-tournament-rewards";
+import { JOHTO_POSTSEASON_CONFIG } from "../src/lib/tournament-postseason";
 
 const prisma = new PrismaClient();
 const TOURNAMENT_SLUG = "liga-zikachu-3-edicao-rumo-a-johto";
@@ -47,26 +48,31 @@ const weekDefs = [
 ];
 
 const achievements = [
-  ["ATAQUE_IMPECAVEL","Ataque Impecavel","Venca sem recuar e sem usar efeitos que troquem o Pokemon Ativo.","COMMON",2],
-  ["FIDELIDADE_ESTILO","Fidelidade de Estilo","Venca as duas partidas oficiais da mesma semana com a mesma lista de 60 cartas.","COMMON",2],
-  ["BANCO_COMPLETO","Banco Completo","Venca depois de manter cinco Pokemon no Banco ao mesmo tempo.","COMMON",2],
-  ["EVOLUCAO_PLANEJADA","Evolucao Planejada","Venca depois de colocar em jogo tres Pokemon evoluidos diferentes.","COMMON",2],
-  ["MESTRE_ESTADIOS","Mestre dos Estadios","Venca depois de jogar tres Estadios de nomes diferentes.","COMMON",2],
-  ["RECICLADOR_EXPERIENTE","Reciclador Experiente","Venca apos recuperar pelo menos seis cartas do descarte.","COMMON",2],
-  ["VITORIA_SEM_EX","Vitoria Sem Ex","Venca sem usar Pokemon ex no deck.","COMMON",2],
-  ["ULTIMO_RECURSO","Ultimo Recurso","Venca com cinco ou menos cartas restantes no baralho.","COMMON",2],
-  ["FINALIZADOR_AGIL","Finalizador Agil","Pegue quatro ou mais Premios em uma unica investida.","RARE",3],
-  ["VIRADA_ZIKACHU","Virada Zikachu","Venca depois que o adversario chegou a dois ou menos Premios.","RARE",3],
-  ["CACADOR_FORMAS","Cacador de Formas","Nocauteie dois Pokemon ex ou Mega Evolucoes e venca.","RARE",3],
-  ["RESERVA_ELEMENTAL","Reserva Elemental","Venca terminando com pelo menos quatro Energias Especiais no descarte.","RARE",3],
-  ["MINIMALISTA_ESTRATEGICO","Minimalista Estrategico","Venca com no maximo oito cartas de Treinador no deck.","RARE",3],
-  ["CONTROLE_MESA","Controle de Mesa","Venca defendendo cinco ou mais Premios.","RARE",3],
-  ["LINHA_PRODUCAO","Linha de Producao","Coloque em jogo uma linha completa de Basico, Estagio 1 e Estagio 2 e venca.","RARE",3],
-  ["INVENCIVEL_DIA","Invencivel do Dia","Venca as duas partidas do dia cedendo no maximo dois Premios no total.","LEGENDARY",4],
-  ["MILAGRE_FINAL","Milagre Final","Venca exatamente no turno em que comprou a ultima carta do baralho.","LEGENDARY",4],
-  ["ACHEI_FACIL","Achei Facil","Venca com menos de cinco cartas no baralho e sem Pokemon no Banco no golpe final.","LEGENDARY",4],
-  ["HABILIDADE_VITALIDADE","Habilidade e Vitalidade","Venca usando apenas Pokemon com Habilidade impressa.","LEGENDARY",4],
-  ["SENHOR_JOHTO","Senhor de Johto","Seja o primeiro jogador a possuir tres Insignias de Johto diferentes.","LEGENDARY",4],
+  ["SEM_RETORNO","Sem Retorno","Vença sem realizar recuo. Efeitos que trocam o Pokémon Ativo são permitidos; recuo gratuito ainda conta como recuo.","COMMON",2],
+  ["ESTRATEGIA_PADRAO","Estratégia Padrão","Vença as duas partidas oficiais da mesma semana com a mesma lista de 60 cartas e a mesma forma de finalização válida.","COMMON",2],
+  ["BANCO_TRANQUILO","Banco Tranquilo","Vença após ter cinco Pokémon no Banco ao mesmo tempo.","COMMON",2],
+  ["EVOLUCAO_PLANEJADA","Evolução Planejada","Vença após colocar em jogo pelo menos seis Pokémon evoluídos de Estágio 2 diferentes.","COMMON",2],
+  ["MESTRE_ESTADIOS","Mestre dos Estádios","Vença após jogar quatro Estádios de nomes diferentes.","COMMON",2],
+  ["RECICLADOR_EXPERIENTE","Reciclador Experiente","Vença após recuperar pelo menos seis cartas do descarte para a mão ou para o baralho.","COMMON",2],
+  ["EXEMPLIFICANDO","EXemplificando","Vença três partidas seguidas sem usar Pokémon ex no deck.","COMMON",2],
+  ["AINDA_NAO_FIM","Ainda não é o fim","Vença com cinco ou menos cartas restantes no baralho.","COMMON",2],
+  ["AGILIDADE_TATICA","Agilidade Tática","Pegue quatro ou mais Prêmios em uma única investida.","RARE",3],
+  ["VIRADA_ZIKACHU","Virada Zikachu","Vença depois de o adversário chegar a um Prêmio restante enquanto você ainda precisava coletar seis.","RARE",3],
+  ["MATA_CRAQUENS","Mata-Cráquens","Nocauteie dois Pokémon ex ou Mega Evoluções na mesma investida e vença.","RARE",3],
+  ["ENERGIZACAO_POTENTE","Energização Potente","Vença terminando com pelo menos cinco Energias Especiais somadas entre seus Pokémon Ativo e no Banco.","RARE",3],
+  ["SEM_SUPERVISAO","Vencendo Sem Supervisão","Vença usando um deck com no máximo seis cartas de Treinador; cópias contam individualmente.","RARE",3],
+  ["INTOCAVEL","Intocável","Complete uma sequência de três vitórias defendendo seis Prêmios em cada uma, mesmo em semanas diferentes.","RARE",3],
+  ["LINHA_PRODUCAO_7","Linha de Produção #7","Finalize o jogo no mesmo turno em que usou sete itens diferentes.","RARE",3],
+  ["CHEIO_ESCOLHAS","Cheio de Escolhas","Vença uma partida com mais de 20 cartas na mão.","RARE",3],
+  ["DORMIU_SEM_SONO","Dormiu Sem Sono","Vença após eliminar um Pokémon adversário que possuía quatro ou mais Condições Especiais válidas.","RARE",3],
+  ["VERDADEIRO_COWBOY","Verdadeiro Cowboy","Vença uma partida após puxar Pokémon adversários para a posição Ativa pelo menos cinco vezes.","RARE",3],
+  ["HEROI_ASCENSAO","Herói em Ascensão","Seja Top do Dia durante três semanas diferentes.","LEGENDARY",4],
+  ["DESAFIANTE_NATO","Desafiante Nato","Seja o primeiro a tomar três Insígnias de outros jogadores durante a Liga.","LEGENDARY",4],
+  ["ILUSIONISTA","Ilusionista","Vença uma partida sem pegar nenhum Prêmio.","LEGENDARY",4],
+  ["ULTIMA_ESPERANCA","Última Esperança","Vença exatamente no turno em que comprou a última carta do próprio baralho.","LEGENDARY",4],
+  ["APENAS_NECESSARIO","Apenas o Necessário","Vença com um Pokémon ferido no Campo Ativo e sem Pokémon no Banco no momento do golpe final.","LEGENDARY",4],
+  ["HABILIDADE_INATA","Habilidade Inata","Vença usando apenas Pokémon que possuam Habilidade impressa na carta.","LEGENDARY",4],
+  ["SENHOR_JOHTO","Senhor de Johto","Seja o primeiro jogador da temporada a se tornar dono de três Insígnias de Johto diferentes.","LEGENDARY",4],
 ] as const;
 
 const badgeDefs = [
@@ -123,6 +129,7 @@ async function main() {
       rankingConfig: { winPoints: 3, lossPoints: 0, noDraws: true, defendedPrizesTiebreaker: true, achievementPointsCap: 15 },
       challengeConfig: { badgeChallenge: true, freeChallenge: false, pointsPerBadge: 3, pointsToChallenge: 3, challengerPenalty: 2, maxChallengesReceivedPerWeek: 1 },
       betConfig: { enabled: true, maxBetPerPlayerPerMatch: 1500, settleAfterValidation: true }, rewardConfig: JOHTO_REWARD_CONFIG,
+      postseasonEnabled: true, postseasonConfig: JOHTO_POSTSEASON_CONFIG,
       themeMetadata: { theme: "Rumo a Johto", manualVersion: "0.5", fixedSchedule: true, finalStage: { top4: "Chave de Sobrevivencia Z", consolation: "Copa Johto de Recompensas" }, miauvadaoFund: 81530 },
       createdById: admin.id,
     },
@@ -133,6 +140,7 @@ async function main() {
       rankingConfig: { winPoints: 3, lossPoints: 0, noDraws: true, defendedPrizesTiebreaker: true, achievementPointsCap: 15 },
       challengeConfig: { badgeChallenge: true, freeChallenge: false, pointsPerBadge: 3, pointsToChallenge: 3, challengerPenalty: 2, maxChallengesReceivedPerWeek: 1 },
       betConfig: { enabled: true, maxBetPerPlayerPerMatch: 1500, settleAfterValidation: true }, rewardConfig: JOHTO_REWARD_CONFIG,
+      postseasonEnabled: true, postseasonConfig: JOHTO_POSTSEASON_CONFIG,
       themeMetadata: { theme: "Rumo a Johto", manualVersion: "0.5", fixedSchedule: true, finalStage: { top4: "Chave de Sobrevivencia Z", consolation: "Copa Johto de Recompensas" }, miauvadaoFund: 81530 },
       createdById: admin.id,
     },
@@ -179,6 +187,8 @@ async function main() {
     else await prisma.leagueBadge.create({ data: { tournamentId: tournament.id, name: fullName, imageUrl: badgeUrls.get(name)!, createdById: admin.id } });
   }
 
+  const achievementKeys = achievements.map(([key]) => `JOHTO3_${key}`);
+  await prisma.achievement.deleteMany({ where: { tournamentId: tournament.id, key: { notIn: achievementKeys } } });
   for (const [key, name, description, rarity, points] of achievements) {
     await prisma.achievement.upsert({
       where: { seasonId_key: { seasonId: season.id, key: `JOHTO3_${key}` } },

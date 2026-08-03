@@ -29,6 +29,7 @@ import {
 import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "../desafios/config";
 import { TournamentAchievementsPanel } from "./_components/tournament-achievements-panel";
 import { TournamentBadgeManager } from "./_components/tournament-badge-manager";
+import { PostseasonControl } from "./_components/postseason-control";
 import { closeTournamentDay } from "./daily-actions";
 import { brtDateKey, parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
 
@@ -70,6 +71,7 @@ export default async function TournamentAdminPage({ params }: Props) {
     include: {
       _count: { select: { registrations: true, challenges: true } },
       badges: { orderBy: { name: "asc" } },
+      postseasonEntries: { include: { player: true }, orderBy: [{ stage: "asc" }, { seed: "asc" }] },
       weeks: {
         orderBy: { weekNumber: "asc" },
         include: {
@@ -146,6 +148,7 @@ export default async function TournamentAdminPage({ params }: Props) {
       return { week, dateKey, matches, participants: Array.from(participantMap, ([id, displayName]) => ({ id, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR")), stats, closure: week.dayClosures.find((item) => item.dateKey === dateKey) ?? null };
     });
   });
+  const postseasonMatches = tournament.weeks.flatMap((week) => week.matches.filter((match) => match.postseasonStage !== null));
 
   const toDateTimeLocal = (value: Date | null | undefined) => {
     if (!value) return "";
@@ -511,6 +514,19 @@ export default async function TournamentAdminPage({ params }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-white"><Trophy size={18} className="text-[#FFCB05]" /> Chaves e fase final</h2>
+          <p className="mt-1 text-xs text-slate-500">Ative somente nos campeonatos que usam pós-temporada. O módulo mantém vidas, eliminações, esperas e a Copa separados da classificação regular.</p>
+        </div>
+        <PostseasonControl
+          tournamentId={tournament.id}
+          enabled={tournament.postseasonEnabled}
+          entries={tournament.postseasonEntries.map((entry) => ({ id: entry.id, playerName: entry.player.displayName, stage: entry.stage, seed: entry.seed, initialLives: entry.initialLives, lives: entry.lives, status: entry.status, resultLabel: entry.resultLabel }))}
+          matches={postseasonMatches.map((match) => ({ id: match.id, stage: match.postseasonStage!, round: match.postseasonRound ?? 1, label: match.roundLabel ?? "Partida final", playerA: match.playerA.displayName, playerB: match.playerB?.displayName ?? "Bye", status: match.status, processed: Boolean(match.postseasonProcessedAt) }))}
+        />
+      </section>
 
       {dailyRewardConfig && tournamentDays.length > 0 && (
         <section className="space-y-3">

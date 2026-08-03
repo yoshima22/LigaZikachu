@@ -171,28 +171,34 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
       payload: {
         rewardKind: "TOURNAMENT_BOX", origin, coins: config.enguica.coins, food: config.enguica.food,
         sweet: config.enguica.sweet, creationDust: config.enguica.creationDust,
-        shopItems: chance(config.enguica.lootTicketChance) ? [{ type: "ZIKALOOT_TICKET", quantity: 1 }] : [],
+        eggs: chance(config.enguica.rareEggChance) ? [{ type: EggType.RARE, quantity: 1 }] : [],
       },
     }));
   }
 
+  const rewardedChallengeCategories = new Set<string>();
   for (const challenge of week.challenges) {
     const meta = challenge.metadata && typeof challenge.metadata === "object" && !Array.isArray(challenge.metadata)
       ? challenge.metadata as Record<string, unknown> : null;
     const challengerWon = meta?.challengerWon === true;
     const playerId = challengerWon ? challenge.challengerId : challenge.challengedId;
     const kind = challengerWon ? "BADGE" : "GUARDIAN";
+    const categoryKey = `${playerId}:${kind}`;
+    if (rewardedChallengeCategories.has(categoryKey)) continue;
+    rewardedChallengeCategories.add(categoryKey);
     rewards.push(giftDraft({
       playerId, kind, dedupeKey: `${kind.toLowerCase()}:${challenge.id}`, matchId: challenge.matchId ?? undefined,
       title: challengerWon ? "Caixa de Insignia" : "Caixa de Guardiao",
       description: challengerWon ? "Insignia conquistada em Desafio Oficial." : "Insignia defendida em Desafio Oficial.",
       payload: challengerWon ? {
-        rewardKind: "TOURNAMENT_BOX", origin, coins: config.badge.coins, sweet: config.badge.sweet,
+        rewardKind: "TOURNAMENT_BOX", origin, coins: config.badge.coins,
         creationDust: config.badge.creationDust,
         eggs: chance(config.badge.specialEggChance) ? [{ type: EggType.SPECIAL, quantity: 1 }] : [],
+        shopItems: [{ type: "WEAKNESS_POLICY", quantity: config.badge.weaknessPolicy }],
       } : {
         rewardKind: "TOURNAMENT_BOX", origin, coins: config.guardian.coins,
         creationDust: config.guardian.creationDust,
+        eggs: chance(config.guardian.specialEggChance) ? [{ type: EggType.SPECIAL, quantity: 1 }] : [],
         shopItems: [{ type: "MASCOT_BUFF_EXP", quantity: config.guardian.shockingVitamin }],
       },
     }));

@@ -157,7 +157,8 @@ export async function computeTournamentRanking(
   const entries = await computeRankingFromMatches({
     matchWhere: {
       status: MatchStatus.CONFIRMED,
-      tournamentWeek: { tournamentId }
+      tournamentWeek: { tournamentId },
+      postseasonStage: null,
     },
     challengeWhere: undefined,        // tratado abaixo de forma explícita
     badgeWhere:     undefined,        // tratado abaixo de forma explícita
