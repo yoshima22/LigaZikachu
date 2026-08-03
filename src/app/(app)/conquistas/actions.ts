@@ -128,8 +128,30 @@ export async function awardAchievement(raw: z.infer<typeof awardSchema>): Promis
     const actor = await requireAdmin();
     const data = awardSchema.parse(raw);
 
-    const achievement = await prisma.achievement.findUnique({ where: { id: data.achievementId } });
+    const achievement = await prisma.achievement.findUnique({
+      where: { id: data.achievementId },
+      include: { tournament: { select: { id: true, slug: true, seasonId: true } } },
+    });
     if (!achievement) return { error: "Conquista não encontrada." };
+    const criteria = achievement.criteria && typeof achievement.criteria === "object" && !Array.isArray(achievement.criteria)
+      ? achievement.criteria as Record<string, unknown>
+      : null;
+    if (criteria?.exclusive === true) {
+      const claimed = await prisma.playerAchievement.findFirst({
+        where: { achievementId: achievement.id },
+        include: { player: { select: { displayName: true } } },
+      });
+      if (claimed) return { error: `Conquista exclusiva já obtida por ${claimed.player.displayName}.` };
+    }
+    const effectiveSeasonId = data.seasonId ?? achievement.seasonId ?? achievement.tournament?.seasonId ?? null;
+    let effectivePoints = data.pointsAwarded ?? achievement.suggestedPoints ?? 0;
+    if (achievement.tournamentId && effectivePoints > 0) {
+      const aggregate = await prisma.playerAchievement.aggregate({
+        where: { playerId: data.playerId, achievement: { tournamentId: achievement.tournamentId } },
+        _sum: { pointsAwarded: true },
+      });
+      effectivePoints = Math.min(effectivePoints, Math.max(0, 15 - (aggregate._sum.pointsAwarded ?? 0)));
+    }
 
     // Checar se já tem (para não repetíveis)
     if (!achievement.isRepeatable) {
@@ -137,7 +159,7 @@ export async function awardAchievement(raw: z.infer<typeof awardSchema>): Promis
         where: {
           achievementId: data.achievementId,
           playerId: data.playerId,
-          seasonId: data.seasonId ?? null
+          seasonId: effectiveSeasonId
         }
       });
       if (existing) return { error: "Este jogador já possui esta conquista." };
@@ -148,10 +170,10 @@ export async function awardAchievement(raw: z.infer<typeof awardSchema>): Promis
         data: {
           achievementId: data.achievementId,
           playerId: data.playerId,
-          seasonId: data.seasonId || null,
+          seasonId: effectiveSeasonId,
           awardedById: actor.id,
           notes: data.notes || null,
-          pointsAwarded: data.pointsAwarded ?? null,
+          pointsAwarded: effectivePoints || null,
           weekId: data.weekId || null,
         }
       });
@@ -181,14 +203,14 @@ export async function awardAchievement(raw: z.infer<typeof awardSchema>): Promis
       }
 
       // Se tem pontos extras, aplicar via applyTournamentWeekBonus
-      if (data.pointsAwarded && data.pointsAwarded > 0 && data.weekId) {
+      if (effectivePoints > 0) {
         await tx.auditLog.create({
           data: {
             actorUserId: actor.id,
             entityType: "playerAchievement",
             entityId: data.achievementId,
             action: "achievement.awarded_with_points",
-            after: { playerId: data.playerId, points: data.pointsAwarded, weekId: data.weekId }
+            after: { playerId: data.playerId, points: effectivePoints, weekId: data.weekId ?? null, tournamentId: achievement.tournamentId }
           }
         });
       }
@@ -196,6 +218,7 @@ export async function awardAchievement(raw: z.infer<typeof awardSchema>): Promis
 
     revalidatePath("/conquistas");
     revalidatePath("/jogadores");
+    if (achievement.tournament?.slug) revalidatePath(`/torneios/${achievement.tournament.slug}/admin`);
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) return { error: err.issues[0].message };

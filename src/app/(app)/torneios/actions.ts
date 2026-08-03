@@ -99,6 +99,7 @@ const submitTournamentWeekDeckSchema = z.object({
   archetype: z.string().trim().max(120).nullish(),
   deckList: z.string().trim().min(10, "Cole a lista completa do deck.").max(12000),
   mascotMissionMascotId: z.string().trim().min(1).nullish(),
+  gymBadgeId: z.string().trim().min(1).nullish(),
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -765,15 +766,18 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
           createdMatches = matches.length;
         }
 
-        await Promise.all(
-          tournament.weeks.map((week, index) =>
-            tx.tournamentWeek.update({
-              where: { id: week.id },
-              data: { status: index === 0 ? WeekStatus.OPEN : WeekStatus.PLANNED }
-            })
-          )
-        );
       }
+
+      // Fixed/manual schedules can already contain matches before the tournament
+      // starts. Opening the first week must not depend on automatic generation.
+      await Promise.all(
+        tournament.weeks.map((week, index) =>
+          tx.tournamentWeek.update({
+            where: { id: week.id },
+            data: { status: index === 0 ? WeekStatus.OPEN : WeekStatus.PLANNED }
+          })
+        )
+      );
 
       await tx.tournament.update({
         where: { id: tournamentId },
@@ -1318,6 +1322,7 @@ export async function submitTournamentWeekDeck(
             slug: true,
             seasonId: true,
             mascotMissionEnabled: true,
+            badges: { select: { id: true, name: true } },
           }
         }
       }
@@ -1376,6 +1381,10 @@ export async function submitTournamentWeekDeck(
       mascotId: data.mascotMissionMascotId,
       deckList: data.deckList,
     });
+    const gymBadge = data.gymBadgeId
+      ? week.tournament.badges.find((badge) => badge.id === data.gymBadgeId) ?? null
+      : null;
+    if (data.gymBadgeId && !gymBadge) return { error: "A insignia selecionada nao pertence a este campeonato." };
 
     const payload = {
       seasonId,
@@ -1397,6 +1406,13 @@ export async function submitTournamentWeekDeck(
       mascotMissionValidation: mission ? {
         speciesName: mission.speciesName,
         ...mission.validation,
+      } : Prisma.JsonNull,
+      gymBadgeId: gymBadge?.id ?? null,
+      gymBadgeValid: gymBadge ? null : null,
+      gymBadgeValidation: gymBadge ? {
+        status: "PENDING_ADMIN_REVIEW",
+        badgeName: gymBadge.name,
+        message: "Jornada declarada. A organizacao ainda precisa validar o deck monotipo.",
       } : Prisma.JsonNull,
     };
 
@@ -1507,6 +1523,58 @@ export async function deleteOwnDeckSubmission(
   }
 }
 
+export async function validateGymDeckSubmission(raw: {
+  submissionId: string;
+  valid: boolean;
+  notes?: string;
+}): Promise<{ error?: string }> {
+  try {
+    const admin = await requireAdmin();
+    const submission = await prisma.deckSubmission.findUnique({
+      where: { id: raw.submissionId },
+      include: {
+        gymBadge: { select: { id: true, name: true } },
+        tournament: { select: { slug: true } },
+        tournamentWeek: { select: { weekNumber: true } },
+      },
+    });
+    if (!submission?.gymBadgeId || !submission.gymBadge) return { error: "Este deck nao declarou uma Jornada de Ginasio." };
+
+    await prisma.$transaction([
+      prisma.deckSubmission.update({
+        where: { id: submission.id },
+        data: {
+          gymBadgeValid: raw.valid,
+          gymBadgeValidation: {
+            status: raw.valid ? "VALID" : "INVALID",
+            badgeName: submission.gymBadge.name,
+            reviewedById: admin.id,
+            reviewedAt: new Date().toISOString(),
+            notes: raw.notes?.trim() || null,
+          },
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: admin.id,
+          entityType: "deckSubmission",
+          entityId: submission.id,
+          action: "gym_deck.validated",
+          after: { gymBadgeId: submission.gymBadgeId, valid: raw.valid, notes: raw.notes?.trim() || null },
+        },
+      }),
+    ]);
+
+    if (submission.tournament?.slug && submission.tournamentWeek?.weekNumber) {
+      revalidatePath(`/torneios/${submission.tournament.slug}/semanas/${submission.tournamentWeek.weekNumber}/partidas`);
+      revalidatePath(`/torneios/${submission.tournament.slug}/admin`);
+    }
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Erro ao validar deck de ginasio." };
+  }
+}
+
 // ── Enviar deck para partida específica ──────────────────────────────────────
 
 export async function submitDeckForMatch(raw: {
@@ -1516,6 +1584,7 @@ export async function submitDeckForMatch(raw: {
   deckList: string;
   savedDeckId?: string;
   mascotMissionMascotId?: string | null;
+  gymBadgeId?: string | null;
 }): Promise<{ error?: string; missionValidation?: { valid: boolean; matchedCardNames: string[]; mascotName: string } }> {
   try {
     const user = await getSessionUser();
@@ -1528,7 +1597,7 @@ export async function submitDeckForMatch(raw: {
       where: { id: raw.matchId },
       include: {
         tournamentWeek: {
-          include: { tournament: { select: { id: true, slug: true, seasonId: true, mascotMissionEnabled: true } } }
+          include: { tournament: { select: { id: true, slug: true, seasonId: true, mascotMissionEnabled: true, badges: { select: { id: true, name: true } } } } }
         }
       }
     });
@@ -1584,6 +1653,10 @@ export async function submitDeckForMatch(raw: {
       mascotId: raw.mascotMissionMascotId,
       deckList: raw.deckList,
     });
+    const gymBadge = raw.gymBadgeId
+      ? week.tournament.badges.find((badge) => badge.id === raw.gymBadgeId) ?? null
+      : null;
+    if (raw.gymBadgeId && !gymBadge) return { error: "A insignia selecionada nao pertence a este campeonato." };
     const missionData = {
       mascotMissionMascotId: mission?.mascotId ?? null,
       mascotMissionPokemonId: mission?.pokemonId ?? null,
@@ -1592,6 +1665,13 @@ export async function submitDeckForMatch(raw: {
       mascotMissionValidation: mission ? {
         speciesName: mission.speciesName,
         ...mission.validation,
+      } : Prisma.JsonNull,
+      gymBadgeId: gymBadge?.id ?? null,
+      gymBadgeValid: gymBadge ? null : null,
+      gymBadgeValidation: gymBadge ? {
+        status: "PENDING_ADMIN_REVIEW",
+        badgeName: gymBadge.name,
+        message: "Jornada declarada. A organizacao ainda precisa validar o deck monotipo.",
       } : Prisma.JsonNull,
     };
 
@@ -1619,6 +1699,7 @@ export async function submitDeckForMatch(raw: {
             deckName: raw.deckName,
             deckList: raw.deckList,
             mascotMissionMascotId: mission?.mascotId ?? null,
+            gymBadgeId: gymBadge?.id ?? null,
           },
           orderBy: { submittedAt: "asc" }
         });

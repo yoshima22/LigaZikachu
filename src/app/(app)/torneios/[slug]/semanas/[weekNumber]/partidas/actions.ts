@@ -14,6 +14,8 @@ import { rewardEquippedMascot } from "@/lib/mascot";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { isDeckRegistrationLocked } from "@/lib/decks";
 import { drawEnguicaContract, ENGUICA_BOX_REWARD_LABEL } from "@/lib/tcg-enguica-contracts";
+import { parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
+import { computeTournamentRanking } from "@/lib/ranking";
 
 const MATCH_WIN_COINS  = 180;
 const MATCH_LOSS_COINS = 120;
@@ -199,10 +201,11 @@ async function awardMatchCoins(
     playerBId: string | null;
     winnerPlayerId: string | null;
     tournamentWeekId?: string | null;
-    tournamentWeek?: { id?: string; tournamentId: string } | null;
+    tournamentWeek?: { id?: string; tournamentId: string; tournament?: { rewardConfig: Prisma.JsonValue | null } } | null;
   }
 ) {
   if (!match.winnerPlayerId || !match.playerBId) return;
+  if (parseTournamentRewardConfig(match.tournamentWeek?.tournament?.rewardConfig)) return;
 
   const loserId = match.winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId;
   const existingRewards = await tx.zikaCoinTransaction.findMany({
@@ -308,12 +311,44 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
     roundLabel: string;
     tournamentWeekId: string;
     createdById: string;
+    scheduledAt?: Date;
   }> = [];
 
   const n = players.length;
   const maxRounds = 3;
 
-  if (week.mode === "DUPLAS_SINCRONIZADAS" && n >= 8) {
+  const bonusRule = week.bonusRule && typeof week.bonusRule === "object" && !Array.isArray(week.bonusRule)
+    ? week.bonusRule as Record<string, unknown>
+    : null;
+  const fixedMatchups = Array.isArray(bonusRule?.fixedMatchups)
+    ? bonusRule.fixedMatchups as Array<Record<string, unknown>>
+    : [];
+
+  if (fixedMatchups.length > 0) {
+    const registrationIds = new Set(registrations.map((registration) => registration.playerId));
+    const ranking = await computeTournamentRanking(tournamentId);
+    const rankToPlayerId = new Map(ranking.map((entry, index) => [index + 1, entry.playerId]));
+    const resolvePlayer = (entry: Record<string, unknown>, side: "A" | "B") => {
+      const fixedId = typeof entry[`player${side}Id`] === "string" ? String(entry[`player${side}Id`]) : null;
+      const rank = Number(entry[`player${side}Rank`] ?? 0);
+      const playerId = fixedId || rankToPlayerId.get(rank) || null;
+      if (!playerId || !registrationIds.has(playerId)) throw new Error(`Nao foi possivel resolver o participante ${side} do Jogo ${entry.game ?? "?"}.`);
+      return playerId;
+    };
+    for (const entry of fixedMatchups) {
+      const dayOffset = Math.max(0, Number(entry.dayOffset ?? 0));
+      const scheduledAt = new Date(week.startDate);
+      scheduledAt.setUTCDate(scheduledAt.getUTCDate() + dayOffset);
+      matches.push({
+        playerAId: resolvePlayer(entry, "A"),
+        playerBId: resolvePlayer(entry, "B"),
+        roundLabel: String(entry.label ?? `Jogo ${entry.game ?? matches.length + 1}`),
+        tournamentWeekId: week.id,
+        createdById: admin.id,
+        scheduledAt,
+      });
+    }
+  } else if (week.mode === "DUPLAS_SINCRONIZADAS" && n >= 8) {
     // Semana 4: Duplas Sincronizadas
     // Pareamento: 1+8, 2+7, 3+6; 4o joga solo (Dupla Espelho)
     const sorted = [...players];
@@ -413,7 +448,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
   await prisma.match.createMany({
     data: matches.map((m) => ({
       ...m,
-      scheduledAt: week.startDate,
+      scheduledAt: m.scheduledAt ?? week.startDate,
       status: "PENDING_CONFIRMATION",
       bestOf: 1,
     })),
@@ -552,7 +587,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
       winnerPlayerId: winnerId,
       tournamentWeekId: match.tournamentWeekId,
       tournamentWeek: match.tournamentWeek
-        ? { id: match.tournamentWeek.id, tournamentId: match.tournamentWeek.tournamentId }
+        ? { id: match.tournamentWeek.id, tournamentId: match.tournamentWeek.tournamentId, tournament: { rewardConfig: match.tournamentWeek.tournament.rewardConfig } }
         : null,
     };
     try {
@@ -1040,10 +1075,11 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
 
   // A missão é liquidada somente no encerramento oficial do dia. O marcador na
   // inscrição evita EXP duplicada caso o admin execute o fechamento novamente.
-  const mascotMissionRewards = week.tournament.mascotMissionEnabled
+  const usesDailyClose = Boolean(parseTournamentRewardConfig(week.tournament.rewardConfig));
+  const mascotMissionRewards = week.tournament.mascotMissionEnabled && !usesDailyClose
     ? await awardMascotMissionExpAtWeekClose(week.id)
     : { rewardedMascots: 0, totalExp: 0 };
-  const enguicaContractRewards = week.tournament.enguicaContractsEnabled && week.enguicaContractKey
+  const enguicaContractRewards = week.tournament.enguicaContractsEnabled && week.enguicaContractKey && !usesDailyClose
     ? await awardEnguicaBoxesAtWeekClose(week.id)
     : { rewardedPlayers: 0, ticketWinners: 0 };
 

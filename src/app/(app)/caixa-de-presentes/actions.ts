@@ -156,6 +156,65 @@ async function applyGiftReward(
     return {};
   }
 
+  if (rewardKind === "TOURNAMENT_BOX") {
+    const coins = typeof payload.coins === "number" ? Math.max(0, Math.floor(payload.coins)) : 0;
+    const food = typeof payload.food === "number" ? Math.max(0, Math.floor(payload.food)) : 0;
+    const sweet = typeof payload.sweet === "number" ? Math.max(0, Math.floor(payload.sweet)) : 0;
+    const creationDust = typeof payload.creationDust === "number" ? Math.max(0, Math.floor(payload.creationDust)) : 0;
+    const eggs = Array.isArray(payload.eggs) ? payload.eggs : [];
+    const shopItems = Array.isArray(payload.shopItems) ? payload.shopItems : [];
+
+    if (coins > 0) {
+      await creditCoins(tx, {
+        playerId,
+        type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
+        amount: coins,
+        description: `Recompensa de torneio: ${gift.title}`,
+      });
+    }
+    for (const [type, quantity] of [[FoodType.FOOD, food], [FoodType.SWEET, sweet]] as const) {
+      if (quantity <= 0) continue;
+      await tx.mascotFoodItem.upsert({
+        where: { playerId_type: { playerId, type } },
+        update: { quantity: { increment: quantity } },
+        create: { playerId, type, quantity },
+      });
+    }
+    if (creationDust > 0) {
+      await tx.player.update({ where: { id: playerId }, data: { creationDust: { increment: creationDust } } });
+    }
+    for (const rawEgg of eggs) {
+      if (!rawEgg || typeof rawEgg !== "object" || Array.isArray(rawEgg)) continue;
+      const egg = rawEgg as Record<string, unknown>;
+      if (!isEggType(egg.type)) continue;
+      const quantity = typeof egg.quantity === "number" ? Math.max(1, Math.floor(egg.quantity)) : 1;
+      for (let index = 0; index < quantity; index++) {
+        await tx.mascotEgg.create({
+          data: {
+            playerId,
+            type: egg.type,
+            origin: typeof payload.origin === "string" ? payload.origin : gift.title,
+          },
+        });
+      }
+    }
+    for (const rawItem of shopItems) {
+      if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) continue;
+      const item = rawItem as Record<string, unknown>;
+      const type = typeof item.type === "string" ? item.type : null;
+      if (!type) continue;
+      const quantity = typeof item.quantity === "number" ? Math.max(1, Math.floor(item.quantity)) : 1;
+      const shopItem = await tx.shopItem.findFirst({ where: { type: type as import("@prisma/client").ShopItemType }, select: { id: true } });
+      if (!shopItem) continue;
+      await tx.playerInventory.upsert({
+        where: { playerId_itemId: { playerId, itemId: shopItem.id } },
+        update: { quantity: { increment: quantity } },
+        create: { playerId, itemId: shopItem.id, quantity, equipped: false, source: "EVENT_REWARD" },
+      });
+    }
+    return {};
+  }
+
   if (rewardKind === "MASCOT_BUFF") {
     const buffType = typeof payload.buffType === "string" ? payload.buffType : null;
     const quantity = typeof payload.quantity === "number" && payload.quantity > 0

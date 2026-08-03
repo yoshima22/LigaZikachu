@@ -178,6 +178,7 @@ model User {
   tutorialProgress          UserTutorialProgress[]
   passwordResetTokens       PasswordResetToken[]
   createdNewsPosts          NewsPost[]               @relation("NewsPostAuthor")
+  closedTournamentDays      TournamentDayClosure[]   @relation("TournamentDayClosedBy")
   raidNotifications         UserRaidNotification[]
   raidPasswordStamps        RaidPasswordStamp[]
 
@@ -238,6 +239,7 @@ model Player {
   rankingSnapshots           RankingSnapshot[]
   tournamentRegistrations    TournamentRegistration[]
   gifts                      PlayerGift[]
+  tournamentDayRewards       TournamentDayReward[]
   activityLogs               PlayerActivityLog[]
   badgeProgress              BadgeProgress[]
   wallet                     ZikaCoinWallet?
@@ -423,6 +425,7 @@ model Tournament {
   announcement            String?
   challengeConfig         Json?
   betConfig               Json?
+  rewardConfig            Json?
   narrativeText           String?                  @db.Text // análise geral do campeonato pelo Prof. Enguiça
   narrativeGeneratedAt    DateTime?
   createdById             String
@@ -437,6 +440,7 @@ model Tournament {
   challenges              Challenge[]              @relation("TournamentChallenges")
   coinTransactions        ZikaCoinTransaction[]    @relation("ZkTxTournament")
   achievements            Achievement[]            @relation("TournamentAchievements")
+  dayClosures             TournamentDayClosure[]
 
   @@map("tournaments")
 }
@@ -470,6 +474,7 @@ model TournamentWeek {
   challenges                 Challenge[]                   @relation("TournamentWeekChallenges")
   coinTransactions           ZikaCoinTransaction[]         @relation("ZkTxWeek")
   enguicaCompletions         TournamentEnguicaCompletion[]
+  dayClosures                TournamentDayClosure[]
 
   @@unique([tournamentId, weekNumber])
   @@map("tournament_weeks")
@@ -685,16 +690,21 @@ model DeckSubmission {
   mascotMissionValidation Json?
   mascotMissionRewardedAt DateTime?
   mascotMissionExpAwarded Int                  @default(0)
+  gymBadgeId              String?
+  gymBadgeValid           Boolean?
+  gymBadgeValidation      Json?
   season                  Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   week                    Week?                @relation(fields: [weekId], references: [id], onDelete: SetNull)
   tournament              Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
   tournamentWeek          TournamentWeek?      @relation(fields: [tournamentWeekId], references: [id], onDelete: SetNull)
   player                  Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
   approvedBy              User?                @relation("DeckApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  gymBadge                LeagueBadge?         @relation("GymBadgeDeckSubmissions", fields: [gymBadgeId], references: [id], onDelete: SetNull)
 
   @@unique([seasonId, weekId, playerId])
   @@index([tournamentWeekId, playerId, deckNumber])
   @@index([tournamentId, tournamentWeekId, status])
+  @@index([gymBadgeId, gymBadgeValid])
   @@map("deck_submissions")
 }
 
@@ -748,21 +758,60 @@ model BadgeProgress {
 }
 
 model LeagueBadge {
-  id           String          @id @default(cuid())
-  tournamentId String
-  name         String
-  imageUrl     String          @db.Text
-  createdById  String
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  tournament   Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  createdBy    User            @relation("LeagueBadgeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  owners       PlayerBadge[]
-  challenges   Challenge[]     @relation("BadgeChallenges")
-  progress     BadgeProgress[]
+  id              String           @id @default(cuid())
+  tournamentId    String
+  name            String
+  imageUrl        String           @db.Text
+  createdById     String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  tournament      Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  createdBy       User             @relation("LeagueBadgeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  owners          PlayerBadge[]
+  challenges      Challenge[]      @relation("BadgeChallenges")
+  progress        BadgeProgress[]
+  deckSubmissions DeckSubmission[] @relation("GymBadgeDeckSubmissions")
 
   @@index([tournamentId])
   @@map("league_badges")
+}
+
+model TournamentDayClosure {
+  id               String                @id @default(cuid())
+  tournamentId     String
+  tournamentWeekId String
+  dateKey          String
+  topPlayerId      String?
+  rafflePlayerId   String?
+  closedById       String
+  summary          Json?
+  closedAt         DateTime              @default(now())
+  tournament       Tournament            @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentWeek   TournamentWeek        @relation(fields: [tournamentWeekId], references: [id], onDelete: Cascade)
+  closedBy         User                  @relation("TournamentDayClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  rewards          TournamentDayReward[]
+
+  @@unique([tournamentWeekId, dateKey])
+  @@index([tournamentId, closedAt])
+  @@map("tournament_day_closures")
+}
+
+model TournamentDayReward {
+  id        String               @id @default(cuid())
+  closureId String
+  playerId  String
+  kind      String
+  dedupeKey String
+  matchId   String?
+  giftId    String?
+  payload   Json?
+  createdAt DateTime             @default(now())
+  closure   TournamentDayClosure @relation(fields: [closureId], references: [id], onDelete: Cascade)
+  player    Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([closureId, dedupeKey])
+  @@index([playerId, createdAt])
+  @@map("tournament_day_rewards")
 }
 
 model PlayerBadge {

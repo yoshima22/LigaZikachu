@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle, PawPrint } from "lucide-react";
+import { Award, BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle, PawPrint } from "lucide-react";
 import { POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../../actions";
 import { DeckActionButtons } from "@/components/ui/deck-action-buttons";
@@ -24,7 +24,12 @@ interface ExistingSubmission {
   mascotMissionPokemonId: number | null;
   mascotMissionMascotName: string | null;
   mascotMissionValid: boolean | null;
+  gymBadgeId: string | null;
+  gymBadgeName: string | null;
+  gymBadgeValid: boolean | null;
 }
+
+interface GymBadgeOption { id: string; name: string; imageUrl: string; }
 
 interface Props {
   matchId: string;
@@ -35,6 +40,7 @@ interface Props {
   existingSubmission: ExistingSubmission | null;
   mascotMissionEnabled: boolean;
   mascotOptions: MascotMissionOption[];
+  gymBadges: GymBadgeOption[];
 }
 
 export function MatchDeckSelector({
@@ -46,6 +52,7 @@ export function MatchDeckSelector({
   existingSubmission,
   mascotMissionEnabled,
   mascotOptions,
+  gymBadges,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(!existingSubmission);
@@ -53,6 +60,7 @@ export function MatchDeckSelector({
   const [deckList, setDeckList] = useState(existingSubmission?.deckList ?? "");
   const [archetype, setArchetype] = useState(existingSubmission?.archetype ?? "");
   const [selectedMascotId, setSelectedMascotId] = useState(existingSubmission?.mascotMissionMascotId ?? "");
+  const [selectedGymBadgeId, setSelectedGymBadgeId] = useState(existingSubmission?.gymBadgeId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const selectedMascot = mascotOptions.find((mascot) => mascot.id === selectedMascotId) ?? null;
@@ -79,6 +87,7 @@ export function MatchDeckSelector({
         archetype: archetype || undefined,
         deckList,
         mascotMissionMascotId: selectedMascotId || null,
+        gymBadgeId: selectedGymBadgeId || null,
       });
       if (result.error) {
         setError(result.error);
@@ -97,7 +106,7 @@ export function MatchDeckSelector({
       if (result.error) {
         setError(result.error);
       } else {
-        setDeckName(""); setDeckList(""); setArchetype(""); setSelectedMascotId("");
+        setDeckName(""); setDeckList(""); setArchetype(""); setSelectedMascotId(""); setSelectedGymBadgeId("");
         setSuccess(false);
         setOpen(true);
       }
@@ -126,6 +135,11 @@ export function MatchDeckSelector({
           {existingSubmission?.mascotMissionMascotName && !open && (
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${existingSubmission.mascotMissionValid ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-amber-400/30 bg-amber-500/10 text-amber-300"}`}>
               Mascote: {existingSubmission.mascotMissionMascotName}
+            </span>
+          )}
+          {existingSubmission?.gymBadgeName && !open && (
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${existingSubmission.gymBadgeValid === true ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : existingSubmission.gymBadgeValid === false ? "border-red-400/30 bg-red-500/10 text-red-300" : "border-amber-400/30 bg-amber-500/10 text-amber-300"}`}>
+              Jornada: {existingSubmission.gymBadgeName} · {existingSubmission.gymBadgeValid === true ? "valida" : existingSubmission.gymBadgeValid === false ? "invalida" : "em revisao"}
             </span>
           )}
         </div>
@@ -200,6 +214,22 @@ export function MatchDeckSelector({
 
               {/* Campos do deck */}
               <div className="space-y-2">
+                {gymBadges.length > 0 && (
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-3">
+                    <label className="space-y-1 text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300"><Award size={11} /> Jornada de Ginasio (opcional)</span>
+                      <span className="block leading-4 text-slate-500">Sinalize qual insignia este deck monotipo busca. A organizacao valida a lista antes de liberar progresso.</span>
+                      <select
+                        value={selectedGymBadgeId}
+                        onChange={(event) => { setSelectedGymBadgeId(event.target.value); setSuccess(false); }}
+                        className="w-full rounded-lg border border-amber-400/25 bg-slate-950 px-2.5 py-2 text-xs text-slate-100 outline-none focus:border-amber-400"
+                      >
+                        <option value="">Nao usar este deck em uma Jornada</option>
+                        {gymBadges.map((badge) => <option key={badge.id} value={badge.id}>{badge.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                )}
                 {mascotMissionEnabled && (
                   <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
                     <label className="space-y-1 text-[10px] text-slate-400">

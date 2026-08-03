@@ -6,6 +6,7 @@ import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchRes
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
+import { validateGymDeckSubmission } from "@/app/(app)/torneios/actions";
 
 interface PlayerDeckSummary {
   id: string;
@@ -13,6 +14,9 @@ interface PlayerDeckSummary {
   deckName: string;
   archetype: string | null;
   deckList: string;
+  gymBadgeId: string | null;
+  gymBadgeName: string | null;
+  gymBadgeValid: boolean | null;
 }
 
 interface MatchCardProps {
@@ -219,6 +223,23 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-300">
               {linkedDeck.deckList}
             </pre>
+            {linkedDeck.gymBadgeName && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[#FFCB05]/20 pt-2 text-[10px]">
+                <span className={linkedDeck.gymBadgeValid === true ? "text-emerald-300" : linkedDeck.gymBadgeValid === false ? "text-red-300" : "text-amber-300"}>
+                  Jornada: {linkedDeck.gymBadgeName} · {linkedDeck.gymBadgeValid === true ? "deck valido" : linkedDeck.gymBadgeValid === false ? "deck invalido" : "aguardando revisao"}
+                </span>
+                {isAdmin && linkedDeck.gymBadgeValid !== true && (
+                  <button type="button" className="rounded border border-emerald-400/30 px-2 py-0.5 text-emerald-300" onClick={async () => { await validateGymDeckSubmission({ submissionId: linkedDeck.id, valid: true }); router.refresh(); }}>
+                    Validar
+                  </button>
+                )}
+                {isAdmin && linkedDeck.gymBadgeValid !== false && (
+                  <button type="button" className="rounded border border-red-400/30 px-2 py-0.5 text-red-300" onClick={async () => { await validateGymDeckSubmission({ submissionId: linkedDeck.id, valid: false }); router.refresh(); }}>
+                    Invalidar
+                  </button>
+                )}
+              </div>
+            )}
           </details>
         </div>
       );

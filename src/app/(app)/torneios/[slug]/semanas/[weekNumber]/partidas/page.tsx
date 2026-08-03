@@ -26,6 +26,7 @@ export default async function PartidasPage({ params }: Props) {
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
     include: {
+      badges: { orderBy: { name: "asc" } },
       weeks: {
         where: { weekNumber: weekNum },
         include: {
@@ -45,7 +46,8 @@ export default async function PartidasPage({ params }: Props) {
           },
           deckSubmissions: {
             include: {
-              player: { select: { id: true, displayName: true } }
+              player: { select: { id: true, displayName: true } },
+              gymBadge: { select: { id: true, name: true } },
             },
             orderBy: [{ player: { displayName: "asc" } }, { deckNumber: "asc" }]
           },
@@ -100,6 +102,7 @@ export default async function PartidasPage({ params }: Props) {
     id: string; deckNumber: number; deckName: string; archetype: string | null; deckList: string;
     mascotMissionMascotId: string | null; mascotMissionPokemonId: number | null;
     mascotMissionMascotName: string | null; mascotMissionValid: boolean | null;
+    gymBadgeId: string | null; gymBadgeName: string | null; gymBadgeValid: boolean | null;
   }>>();
   const seenDeckKeys = new Set<string>();
   for (const submission of week.deckSubmissions) {
@@ -129,6 +132,9 @@ export default async function PartidasPage({ params }: Props) {
       mascotMissionPokemonId: submission.mascotMissionPokemonId,
       mascotMissionMascotName: submission.mascotMissionMascotName,
       mascotMissionValid: submission.mascotMissionValid,
+      gymBadgeId: submission.gymBadgeId,
+      gymBadgeName: submission.gymBadge?.name ?? null,
+      gymBadgeValid: submission.gymBadgeValid,
     });
     visibleDecksByPlayer.set(submission.playerId, decks);
   }
@@ -356,6 +362,7 @@ export default async function PartidasPage({ params }: Props) {
                       savedDecks={savedDecks ?? []}
                       mascotMissionEnabled={tournament.mascotMissionEnabled}
                       mascotOptions={mascotMissionOptions}
+                      gymBadges={tournament.badges.map((badge) => ({ id: badge.id, name: badge.name, imageUrl: badge.imageUrl }))}
                       existingSubmission={submittedDeck && submissionId ? {
                         id: submissionId,
                         deckName: submittedDeck.deckName,
@@ -365,6 +372,9 @@ export default async function PartidasPage({ params }: Props) {
                         mascotMissionPokemonId: submittedDeck.mascotMissionPokemonId,
                         mascotMissionMascotName: submittedDeck.mascotMissionMascotName,
                         mascotMissionValid: submittedDeck.mascotMissionValid,
+                        gymBadgeId: submittedDeck.gymBadgeId,
+                        gymBadgeName: submittedDeck.gymBadgeName,
+                        gymBadgeValid: submittedDeck.gymBadgeValid,
                       } : null}
                     />
                   );
