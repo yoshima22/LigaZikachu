@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 30;
+const DEFAULT_WINDOW_DAYS = 30;
 const SOURCES = [
   { id: "activity", label: "Atividades", description: "Ledger detalhado das novas operações" },
   { id: "zc", label: "ZikaCoins", description: "Créditos, débitos e saldo" },
@@ -38,6 +39,20 @@ function dateRange(from?: string, to?: string) {
   const gte = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? new Date(`${from}T00:00:00-03:00`) : undefined;
   const lte = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? new Date(`${to}T23:59:59.999-03:00`) : undefined;
   return gte || lte ? { gte, lte } : undefined;
+}
+
+function validDateInput(value?: string) {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function defaultFromDate() {
+  const date = new Date(Date.now() - (DEFAULT_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function buildHref(input: { source: SourceId; page?: number; q?: string; from?: string; to?: string; category?: string; detail?: string }) {
@@ -74,16 +89,37 @@ async function matchingPlayerIds(query: string) {
 async function loadRows(input: { source: SourceId; page: number; q: string; from?: string; to?: string; category?: string }): Promise<{ rows: LogRow[]; total: number }> {
   const skip = (input.page - 1) * PAGE_SIZE;
   const createdAt = dateRange(input.from, input.to);
-  const playerIds = await matchingPlayerIds(input.q);
+  // O ledger consulta texto e jogador em uma unica query. As fontes legadas
+  // ainda precisam traduzir a busca do jogador para os IDs relacionados.
+  const playerIds = input.source === "activity" ? null : await matchingPlayerIds(input.q);
   const noPlayerMatch = playerIds !== null && playerIds.length === 0;
 
   if (input.source === "activity") {
     const where = {
       ...(createdAt ? { createdAt } : {}),
-      ...(playerIds ? { playerId: { in: playerIds } } : {}),
       ...(input.category ? { category: input.category.toUpperCase() } : {}),
+      ...(input.q ? {
+        OR: [
+          { summary: { contains: input.q, mode: "insensitive" as const } },
+          { action: { contains: input.q, mode: "insensitive" as const } },
+          { category: { contains: input.q, mode: "insensitive" as const } },
+          { source: { contains: input.q, mode: "insensitive" as const } },
+          { entityType: { contains: input.q, mode: "insensitive" as const } },
+          { entityId: { contains: input.q, mode: "insensitive" as const } },
+          {
+            player: {
+              is: {
+                OR: [
+                  { displayName: { contains: input.q, mode: "insensitive" as const } },
+                  { ptcglNick: { contains: input.q, mode: "insensitive" as const } },
+                  { user: { email: { contains: input.q, mode: "insensitive" as const } } },
+                ],
+              },
+            },
+          },
+        ],
+      } : {}),
     };
-    if (noPlayerMatch) return { rows: [] as LogRow[], total: 0 };
     const [total, records] = await Promise.all([
       prisma.playerActivityLog.count({ where }),
       prisma.playerActivityLog.findMany({
@@ -174,12 +210,14 @@ export default async function AdminLogsPage({ searchParams: searchParamsPromise 
   const q = params.q?.trim().slice(0, 100) ?? "";
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const category = params.category?.trim().slice(0, 40) ?? "";
+  const from = validDateInput(params.from) ? params.from : defaultFromDate();
+  const to = validDateInput(params.to) ? params.to : undefined;
   const [{ rows, total }, detail] = await Promise.all([
-    loadRows({ source, page, q, from: params.from, to: params.to, category }),
+    loadRows({ source, page, q, from, to, category }),
     loadDetail(source, params.detail),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const common = { source, q, from: params.from, to: params.to, category };
+  const common = { source, q, from, to, category };
 
   return (
     <div className="space-y-5">
@@ -189,17 +227,18 @@ export default async function AdminLogsPage({ searchParams: searchParamsPromise 
       </header>
 
       <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        {SOURCES.map((item) => <Link key={item.id} href={buildHref({ source: item.id, q, from: params.from, to: params.to })} className={`rounded-xl border p-3 transition ${source === item.id ? "border-cyan-400/50 bg-cyan-400/10" : "border-border bg-slate-950/40 hover:border-cyan-400/20"}`}><p className={`text-xs font-bold ${source === item.id ? "text-cyan-300" : "text-slate-300"}`}>{item.label}</p><p className="mt-1 text-[10px] text-slate-500">{item.description}</p></Link>)}
+        {SOURCES.map((item) => <Link key={item.id} href={buildHref({ source: item.id, q, from, to })} className={`rounded-xl border p-3 transition ${source === item.id ? "border-cyan-400/50 bg-cyan-400/10" : "border-border bg-slate-950/40 hover:border-cyan-400/20"}`}><p className={`text-xs font-bold ${source === item.id ? "text-cyan-300" : "text-slate-300"}`}>{item.label}</p><p className="mt-1 text-[10px] text-slate-500">{item.description}</p></Link>)}
       </nav>
 
       <form className="grid gap-2 rounded-2xl border border-border bg-slate-950/40 p-4 md:grid-cols-[minmax(220px,1fr)_150px_150px_150px_auto]">
         <input type="hidden" name="source" value={source} />
-        <label className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input name="q" defaultValue={q} placeholder="Jogador, nick ou e-mail..." className="h-10 w-full rounded-xl border border-border bg-slate-900 pl-9 pr-3 text-xs text-slate-200 outline-none focus:border-cyan-400/50" /></label>
-        <input type="date" name="from" defaultValue={params.from} title="Data inicial" className="h-10 rounded-xl border border-border bg-slate-900 px-3 text-xs text-slate-300" />
-        <input type="date" name="to" defaultValue={params.to} title="Data final" className="h-10 rounded-xl border border-border bg-slate-900 px-3 text-xs text-slate-300" />
+        <label className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input name="q" defaultValue={q} placeholder="Jogador, ação, item, origem..." className="h-10 w-full rounded-xl border border-border bg-slate-900 pl-9 pr-3 text-xs text-slate-200 outline-none focus:border-cyan-400/50" /></label>
+        <input type="date" name="from" defaultValue={from} title="Data inicial" className="h-10 rounded-xl border border-border bg-slate-900 px-3 text-xs text-slate-300" />
+        <input type="date" name="to" defaultValue={to} title="Data final" className="h-10 rounded-xl border border-border bg-slate-900 px-3 text-xs text-slate-300" />
         {source === "activity" ? <select name="category" defaultValue={category} className="h-10 rounded-xl border border-border bg-slate-900 px-3 text-xs text-slate-300"><option value="">Todas categorias</option>{["EXP", "EXPEDITION", "EGG", "ITEM", "GIFT", "ZC", "BAZAR"].map((value) => <option key={value}>{value}</option>)}</select> : <span className="hidden md:block" />}
         <button className="h-10 rounded-xl bg-cyan-400 px-4 text-xs font-bold text-slate-950 hover:bg-cyan-300">Consultar</button>
       </form>
+      <p className="-mt-3 text-[10px] text-slate-600">Sem período informado, a consulta usa automaticamente os últimos {DEFAULT_WINDOW_DAYS} dias. Busca, categoria, contagem e paginação são aplicadas diretamente no banco.</p>
 
       {detail && <section className="rounded-2xl border border-cyan-400/30 bg-slate-950/80 p-4"><div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-xs font-bold uppercase tracking-wider text-cyan-300">Detalhes técnicos</h2><Link href={buildHref({ ...common, page })} className="text-xs text-slate-400 hover:text-white">Fechar</Link></div><pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-all rounded-xl bg-black/30 p-3 text-[10px] leading-5 text-slate-300">{formatJson(detail)}</pre></section>}
 
