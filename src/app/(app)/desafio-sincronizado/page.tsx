@@ -155,7 +155,21 @@ export default async function DesafioSincronizadoPage() {
       playerA: { select: { id: true, displayName: true } },
       playerB: { select: { id: true, displayName: true } },
       lineups: {
-        include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true } } },
+        include: {
+          mascot: {
+            select: {
+              id: true,
+              pokemonId: true,
+              nickname: true,
+              level: true,
+              statForce: true,
+              statAgility: true,
+              statCharisma: true,
+              statInstinct: true,
+              statVitality: true,
+            },
+          },
+        },
         orderBy: { slot: "asc" },
       },
     },
@@ -163,7 +177,17 @@ export default async function DesafioSincronizadoPage() {
 
   const myMascots = activeTeam ? await prisma.mascot.findMany({
     where: { playerId: player.id },
-    select: { id: true, pokemonId: true, nickname: true, level: true },
+    select: {
+      id: true,
+      pokemonId: true,
+      nickname: true,
+      level: true,
+      statForce: true,
+      statAgility: true,
+      statCharisma: true,
+      statInstinct: true,
+      statVitality: true,
+    },
     orderBy: [{ level: "desc" }, { id: "asc" }],
     take: 200,
   }) : [];

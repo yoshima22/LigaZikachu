@@ -68,7 +68,7 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
 
 function modeText(mode: CombatMode) {
   if (mode === "RAID") return `Na Raid, a equipe age na ordem da escalação. Cada mascote ataca 1 vez; recebe 2 ataques ao superar a média de Agilidade dos companheiros em ${AGILITY_EXTRA_ACTION_GAP} e 3 ao superar em ${AGILITY_THIRD_ACTION_GAP}. O Cuidador ainda pode curar depois.`;
-  if (mode === "SYNC") return "Na Arena Sincronizada, a postura altera pesos e confrontos do cálculo do modo. A ordem visual da escalação não promete ataques extras.";
+  if (mode === "SYNC") return `No Desafio Sincronizado, o combate segue as regras padrão da Arena e da Liga Semanal. A Agilidade define a ordem, com pequena variação de até 3 pontos. Cada mascote começa com 1 ação: recebe 2 ações ao superar a média de Agilidade inimiga em ${AGILITY_EXTRA_ACTION_GAP} e 3 ações ao superar em ${AGILITY_THIRD_ACTION_GAP}. A postura, sozinha, não concede ações extras.`;
   return `Na Arena e Liga Semanal, a Agilidade define a ordem, com pequena variação de até 3 pontos. Cada mascote começa com 1 ação: recebe 2 ações ao superar a média de Agilidade inimiga em ${AGILITY_EXTRA_ACTION_GAP} e 3 ações ao superar em ${AGILITY_THIRD_ACTION_GAP}. A postura, sozinha, não concede ações extras.`;
 }
 

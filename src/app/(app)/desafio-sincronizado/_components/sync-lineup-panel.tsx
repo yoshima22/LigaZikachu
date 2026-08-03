@@ -14,7 +14,7 @@ interface LineupEntry {
   mascotId: string;
   slot: number;
   combatRole?: string | null;
-  mascot: { id: string; pokemonId: number; nickname: string | null; level: number };
+  mascot: PlayerMascot;
 }
 
 interface PlayerMascot {
@@ -22,6 +22,11 @@ interface PlayerMascot {
   pokemonId: number;
   nickname: string | null;
   level: number;
+  statForce: number;
+  statAgility: number;
+  statCharisma: number;
+  statInstinct: number;
+  statVitality: number;
 }
 
 interface Props {
@@ -55,6 +60,14 @@ export function SyncLineupPanel({
       (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase().includes(search.toLowerCase())
   );
   const sorted = [...myLineup].sort((a, b) => a.slot - b.slot);
+  const myTeamStats = sorted.map((entry) => ({
+    ...entry.mascot,
+    name: entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId),
+  }));
+  const partnerTeamStats = partnerLineup.map((entry) => ({
+    ...entry.mascot,
+    name: entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId),
+  }));
 
   const act = (fn: () => Promise<{ error?: string }>) => {
     startTransition(async () => {
@@ -112,7 +125,7 @@ export function SyncLineupPanel({
               return (
                 <div
                   key={i}
-                  className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[88px] ${slotColor(i + 1)}`}
+                  className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[138px] ${slotColor(i + 1)}`}
                 >
                   <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
                   {entry ? (
@@ -128,6 +141,7 @@ export function SyncLineupPanel({
                         {entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId)}
                       </p>
                       <p className="text-[9px] text-slate-500">Nv.{entry.mascot.level}</p>
+                      <MascotStats mascot={entry.mascot} />
                       <div className="mt-0.5 flex w-full items-center gap-1">
                         <select
                           value={normalizeCombatRole(entry.combatRole)}
@@ -140,7 +154,13 @@ export function SyncLineupPanel({
                             <option key={role.value} value={role.value}>{role.label}</option>
                           ))}
                         </select>
-                        <CombatRoleHelpButton role={entry.combatRole} mode="SYNC" className="h-5 w-5" />
+                        <CombatRoleHelpButton
+                          role={entry.combatRole}
+                          stats={{ ...entry.mascot, name: entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId) }}
+                          teamStats={myTeamStats}
+                          mode="SYNC"
+                          className="h-5 w-5"
+                        />
                       </div>
                       {!myLocked && (
                         <button
@@ -154,7 +174,7 @@ export function SyncLineupPanel({
                       )}
                     </>
                   ) : (
-                    <span className="text-[10px] text-slate-700 mt-6">vazio</span>
+                    <span className="text-[10px] text-slate-700 mt-12">vazio</span>
                   )}
                 </div>
               );
@@ -186,8 +206,13 @@ export function SyncLineupPanel({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-7 w-7 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
-                    <span className="text-xs text-slate-200 truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</span>
-                    <span className="ml-auto text-[10px] text-slate-500 shrink-0">Nv.{m.level}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-xs text-slate-200">{m.nickname ?? getPokemonName(m.pokemonId)}</span>
+                        <span className="shrink-0 text-[10px] text-slate-500">Nv.{m.level}</span>
+                      </span>
+                      <MascotStats mascot={m} className="mt-1" />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -229,7 +254,7 @@ export function SyncLineupPanel({
               return (
                 <div
                   key={i}
-                  className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[88px] ${entry ? "bg-slate-800/40 border-slate-700" : "border-dashed border-slate-800 bg-transparent"}`}
+                  className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[138px] ${entry ? "bg-slate-800/40 border-slate-700" : "border-dashed border-slate-800 bg-transparent"}`}
                 >
                   <span className="absolute top-1 left-1.5 text-[9px] text-slate-700 font-mono">{i + 1}</span>
                   {entry ? (
@@ -245,7 +270,17 @@ export function SyncLineupPanel({
                         {entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId)}
                       </p>
                       <p className="text-[9px] text-slate-600">Nv.{entry.mascot.level}</p>
-                      <p className="text-[8px] font-semibold text-slate-500">{getCombatRoleLabel(entry.combatRole)}</p>
+                      <MascotStats mascot={entry.mascot} />
+                      <div className="flex w-full items-center justify-center gap-1">
+                        <p className="text-[8px] font-semibold text-slate-500">{getCombatRoleLabel(entry.combatRole)}</p>
+                        <CombatRoleHelpButton
+                          role={entry.combatRole}
+                          stats={{ ...entry.mascot, name: entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId) }}
+                          teamStats={partnerTeamStats}
+                          mode="SYNC"
+                          className="h-5 w-5"
+                        />
+                      </div>
                       {isAdmin && (
                         <button
                           type="button"
@@ -259,7 +294,7 @@ export function SyncLineupPanel({
                       )}
                     </>
                   ) : (
-                    <span className="text-[10px] text-slate-800 mt-6">—</span>
+                    <span className="text-[10px] text-slate-800 mt-12">—</span>
                   )}
                 </div>
               );
@@ -277,6 +312,42 @@ export function SyncLineupPanel({
           )}
         </div>
       </div>
+
+      <div className="rounded-xl border border-slate-700/60 bg-slate-950/60 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]">Colinha das posturas</p>
+        <p className="mt-1 text-[9px] text-slate-500">Abra o “?” para consultar ação, prioridade e efeitos. Nos cards selecionados, os valores usam os atributos reais do mascote.</p>
+        <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+          {COMBAT_ROLE_OPTIONS.map((role) => (
+            <div key={role.value} className="rounded-lg border border-slate-800 bg-slate-900/50 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold text-slate-200">{role.label}</p>
+                <CombatRoleHelpButton role={role.value} mode="SYNC" className="h-5 w-5" />
+              </div>
+              <p className="mt-0.5 text-[9px] leading-snug text-slate-500">{role.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MascotStats({ mascot, className = "" }: { mascot: PlayerMascot; className?: string }) {
+  const stats = [
+    ["FOR", mascot.statForce],
+    ["AGI", mascot.statAgility],
+    ["CAR", mascot.statCharisma],
+    ["INS", mascot.statInstinct],
+    ["VIT", mascot.statVitality],
+  ] as const;
+
+  return (
+    <div className={`grid w-full grid-cols-5 gap-0.5 ${className}`}>
+      {stats.map(([label, value]) => (
+        <span key={label} className="rounded bg-slate-950/70 px-0.5 py-1 text-center text-[7px] leading-none text-slate-500">
+          {label}<strong className="mt-0.5 block text-[8px] text-slate-300">{value}</strong>
+        </span>
+      ))}
     </div>
   );
 }
