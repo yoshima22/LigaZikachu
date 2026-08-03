@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch, declareEnguicaContractCompletion } from "../actions";
+import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch, declareEnguicaContractCompletion, updateMatchSchedule } from "../actions";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
+import { CalendarClock } from "lucide-react";
 
 interface PlayerDeckSummary {
   id: string;
@@ -24,6 +25,9 @@ interface MatchCardProps {
     winnerPlayerId: string | null;
     winnerPlayer: { id: string; displayName: string } | null;
     status: string;
+    scheduledAt: string;
+    weekStartDate: string;
+    weekEndDate: string;
     roundLabel: string | null;
     rankingPointsA: number;
     rankingPointsB: number;
@@ -51,11 +55,38 @@ interface MatchCardProps {
   } | null;
 }
 
+function toBrtDateTimeLocal(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+function formatBrtSchedule(value: string) {
+  return new Date(value).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult, enguicaContract }: MatchCardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [showDispute, setShowDispute] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState(() => toBrtDateTimeLocal(match.scheduledAt));
   const [winnerDefendedPrizes, setWinnerDefendedPrizes] = useState(
     String(match.winnerDefendedPrizes ?? 0)
   );
@@ -73,6 +104,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   const isParticipant = isPlayerA || isPlayerB;
   const isInPerson = tournamentFormat === "IN_PERSON";
   const canReport = isParticipant || isAdmin || !!canReportResult;
+  const canEditSchedule = isParticipant || isAdmin;
 
   const myConfirmation = match.confirmations.find(
     (c) => c.playerId === currentPlayerId
@@ -121,6 +153,22 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleScheduleUpdate() {
+    if (!scheduledAt) return;
+    setLoading(true);
+    try {
+      await updateMatchSchedule({
+        matchId: match.id,
+        scheduledAt: new Date(`${scheduledAt}:00-03:00`).toISOString(),
+      });
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao atualizar horário");
     } finally {
       setLoading(false);
     }
@@ -241,6 +289,29 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
         statusColors[match.status] || "border-slate-700"
       }`}
     >
+      <div className="mb-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2">
+        <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
+          <CalendarClock size={12} /> Data e horário da partida
+        </div>
+        {canEditSchedule ? (
+          <div className="flex gap-2">
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              min={toBrtDateTimeLocal(match.weekStartDate)}
+              max={toBrtDateTimeLocal(match.weekEndDate)}
+              onChange={(event) => setScheduledAt(event.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200"
+            />
+            <Button size="sm" variant="outline" onClick={handleScheduleUpdate} disabled={loading || !scheduledAt}>
+              Salvar
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs font-semibold text-slate-200">{formatBrtSchedule(match.scheduledAt)}</p>
+        )}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-medium text-slate-400">

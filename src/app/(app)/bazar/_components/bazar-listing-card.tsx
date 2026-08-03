@@ -25,6 +25,14 @@ function auctionTimeLeft(endsAt: Date): string {
   return `${m}m`;
 }
 
+function fullMascotName(payload: Record<string, unknown>) {
+  const original = String(payload.pokemonName ?? "Mascote").trim();
+  const nickname = typeof payload.nickname === "string" ? payload.nickname.trim() : "";
+  return nickname && nickname.localeCompare(original, "pt-BR", { sensitivity: "base" }) !== 0
+    ? `${original} (${nickname})`
+    : original;
+}
+
 interface Listing {
   id: string;
   category: string;
@@ -66,7 +74,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={getSpriteUrl(payload.pokemonId as number, true)}
-              alt={(payload.nickname as string) ?? (payload.pokemonName as string)}
+              alt={fullMascotName(payload)}
               className="h-24 object-contain group-hover:scale-110 transition-transform"
               style={{ imageRendering: "pixelated" }}
               onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(payload.pokemonId as number); }}
@@ -123,12 +131,12 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         <div>
           <p className="font-semibold text-white text-sm truncate">
             {listing.category === "MASCOT"
-              ? (payload.nickname as string) ?? (payload.pokemonName as string)
-              : payload.displayName as string}
+              ? fullMascotName(payload)
+              : String(payload.displayName ?? payload.itemType ?? "Item")}
           </p>
           <p className="text-[10px] text-slate-500">
             {CATEGORY_LABEL[listing.category]}
-            {listing.category === "MASCOT" && ` · ${payload.pokemonName as string}`}
+            {listing.category === "MASCOT" && ` · #${payload.pokemonId as number}`}
           </p>
         </div>
 

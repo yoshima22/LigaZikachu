@@ -32,7 +32,7 @@ import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@p
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
-const PLAYER_TRANSACTION_VAULT_SHARE = 0.25;
+const PLAYER_TRANSACTION_VAULT_SHARE = 0.10;
 
 function revalidateBazar() {
   revalidatePath("/bazar");
@@ -69,7 +69,32 @@ const TICKER_EGG_LABELS: Record<string, string> = {
   RARE: "Ovo Raro",
   SPECIAL: "Ovo Especial",
   LAB: "Ovo de Laboratório",
+  EGG_GEN1: "Ovo de Geração 1",
+  EGG_GEN2: "Ovo de Geração 2",
+  EGG_GEN3: "Ovo de Geração 3",
+  EGG_GEN4: "Ovo de Geração 4",
+  EGG_GEN5: "Ovo de Geração 5",
+  EGG_GEN6: "Ovo de Geração 6",
+  EGG_GEN7: "Ovo de Geração 7",
+  EGG_GEN8: "Ovo de Geração 8",
+  EGG_GEN9: "Ovo de Geração 9",
+  EGG_GEN6PLUS: "Ovo de Geração 6+",
 };
+
+function canonicalBazarItemName(itemType: string) {
+  if (TICKER_EGG_LABELS[itemType]) return TICKER_EGG_LABELS[itemType];
+  if (itemType === "FOOD") return "Comida de Mascote";
+  if (itemType === "SWEET") return "Doce de Mascote";
+  return itemType.replaceAll("_", " ");
+}
+
+function fullMascotPayloadName(payload: Record<string, unknown>) {
+  const original = String(payload.pokemonName ?? "Mascote").trim();
+  const nickname = typeof payload.nickname === "string" ? payload.nickname.trim() : "";
+  return nickname && nickname.localeCompare(original, "pt-BR", { sensitivity: "base" }) !== 0
+    ? `${original} (${nickname})`
+    : original;
+}
 
 function tickerEggOrigin(payload: Record<string, unknown>) {
   const type = typeof payload.hatchedFromEggType === "string" ? payload.hatchedFromEggType : null;
@@ -585,6 +610,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         if (qty < 1) throw new Error("Quantidade inválida.");
         if (!input.itemType) throw new Error("Tipo de item não especificado.");
         if (HIDDEN_BAZAR_ITEM_TYPES.has(input.itemType)) throw new Error("Este item ainda nao pode ser anunciado no Bazar.");
+        let canonicalDisplayName = canonicalBazarItemName(input.itemType);
 
         // Deducir do inventário (escrow)
         if (input.itemType === "FOOD" || input.itemType === "SWEET") {
@@ -640,13 +666,14 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
             shopItemId: inv.itemId,
             imageUrl: sanitizePayloadImageUrl(inv.item.imageUrl ?? input.imageUrl),
           };
+          canonicalDisplayName = inv.item.name;
         }
 
         payload = {
           ...payload,
           itemType: input.itemType,
           quantity: qty,
-          displayName: input.displayName ?? `${qty}x ${input.itemType}`,
+          displayName: canonicalDisplayName,
         };
       }
 
@@ -673,7 +700,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
       if (rarity === "LEGENDARY" || rarity === "MYTHICAL") {
         await publishLeagueTicker({
           type: "BAZAR_RARE_LISTING",
-          message: `${player.displayName} anunciou ${payload.nickname ?? payload.pokemonName} no Bazar. É um mascote ${rarity === "MYTHICAL" ? "mítico" : "lendário"} — vá conferir!`,
+          message: `${player.displayName} anunciou ${fullMascotPayloadName(payload)} no Bazar. É um mascote ${rarity === "MYTHICAL" ? "mítico" : "lendário"} — vá conferir!`,
           href: "/bazar",
           priority: 6,
           ttlHours: 10,
@@ -839,7 +866,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
       // Log de transação
       const payload = listing.payload as Record<string, unknown>;
       const desc = listing.category === "MASCOT"
-        ? `${payload.nickname ?? payload.pokemonName} Nv.${payload.level} vendido por ${listing.priceCoins} ZC`
+        ? `${fullMascotPayloadName(payload)} Nv.${payload.level} vendido por ${listing.priceCoins} ZC`
         : `${payload.displayName} vendido por ${listing.priceCoins} ZC`;
 
       await tx.bazarTransaction.create({
@@ -1137,7 +1164,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
         ? ` por empréstimo de ${listing.loanAmountCoins} ZC a ${listing.loanInterestPct ?? 0}%`
         : proposal.coinsOffer > 0 ? ` por ${proposal.coinsOffer} ZC` : "";
       const desc = listing.category === "MASCOT"
-        ? `${payload.nickname ?? payload.pokemonName} Nv.${payload.level} trocado${loanDescription}`
+        ? `${fullMascotPayloadName(payload)} Nv.${payload.level} trocado${loanDescription}`
         : `${payload.displayName} trocado${loanDescription}`;
 
       await tx.bazarTransaction.create({
@@ -2522,6 +2549,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
         const qty = input.quantity ?? 1;
         if (!input.itemType) throw new Error("Tipo de item não especificado.");
         if (HIDDEN_BAZAR_ITEM_TYPES.has(input.itemType)) throw new Error("Este item não pode ser leiloado.");
+        let canonicalDisplayName = canonicalBazarItemName(input.itemType);
         if (input.itemType === "FOOD" || input.itemType === "SWEET") {
           const food = await tx.mascotFoodItem.findUnique({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } } });
           if (!food || food.quantity < qty) throw new Error("Itens insuficientes.");
@@ -2539,8 +2567,9 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           if (inv.itemId === ADMIN_LAB_RAINBOW_FEATHER_ID) throw new Error("Este item administrativo não pode ser leiloado.");
           await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: qty } } });
           payload = { ...payload, shopItemId: inv.itemId, imageUrl: sanitizePayloadImageUrl(inv.item.imageUrl ?? input.imageUrl) };
+          canonicalDisplayName = inv.item.name;
         }
-        payload = { ...payload, itemType: input.itemType, quantity: qty, displayName: input.displayName ?? `${qty}x ${input.itemType}` };
+        payload = { ...payload, itemType: input.itemType, quantity: qty, displayName: canonicalDisplayName };
       }
 
       await tx.bazarListing.create({
@@ -2555,7 +2584,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
     });
 
     if (input.category === "MASCOT") {
-      const mascotName = String(payload.nickname ?? payload.pokemonName ?? "mascote");
+      const mascotName = fullMascotPayloadName(payload);
       const eggOrigin = tickerEggOrigin(payload);
       await publishLeagueTicker({
         type: "BAZAR_MASCOT_AUCTION",
@@ -2656,7 +2685,7 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
     // Notifica o licitante anterior por mensagem privada
     if (bid.prevBidderId && bid.prevBidderId !== player.id) {
       const desc = bid.listing.category === "MASCOT"
-        ? `${(bid.listing.payload as Record<string, unknown>).nickname ?? (bid.listing.payload as Record<string, unknown>).pokemonName}`
+        ? fullMascotPayloadName(bid.listing.payload as Record<string, unknown>)
         : `${(bid.listing.payload as Record<string, unknown>).displayName}`;
       await _sendBazarSystemDM(bid.prevBidderId, `Seu lance de ${bid.prevBidAmount} ZC no leilão de "${desc}" foi superado por um lance de ${amount} ZC. Os seus ZC foram devolvidos à carteira.`);
       revalidateTag(`nav-${user.id}`);
@@ -2709,7 +2738,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     const sellerName = listing.player.displayName;
     const buyerName = winner.displayName;
     const payloadDesc = listing.category === "MASCOT"
-      ? `${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName} Nv.${(listing.payload as Record<string, unknown>).level} leiloado por ${winnerBid} ZC`
+      ? `${fullMascotPayloadName(listing.payload as Record<string, unknown>)} Nv.${(listing.payload as Record<string, unknown>).level} leiloado por ${winnerBid} ZC`
       : `${(listing.payload as Record<string, unknown>).displayName} leiloado por ${winnerBid} ZC`;
 
     const claimed = await prisma.$transaction(async (tx) => {
@@ -2760,7 +2789,9 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     if (winner.userId) revalidateTag(`nav-${winner.userId}`);
 
     // Notifica o vencedor
-    await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${(listing.payload as Record<string, unknown>).nickname ?? (listing.payload as Record<string, unknown>).pokemonName ?? (listing.payload as Record<string, unknown>).displayName}" com ${winnerBid} ZC. O item foi transferido para você.`);
+    const wonPayload = listing.payload as Record<string, unknown>;
+    const wonName = listing.category === "MASCOT" ? fullMascotPayloadName(wonPayload) : String(wonPayload.displayName ?? "Item");
+    await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${wonName}" com ${winnerBid} ZC. O item foi transferido para você.`);
 
     return { finalized: true };
   } catch (err) {

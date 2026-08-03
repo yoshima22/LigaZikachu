@@ -37,7 +37,11 @@ export default async function PartidasPage({ params }: Props) {
               confirmations: true,
               enguicaCompletions: { select: { playerId: true, matchId: true, rewardedAt: true } },
             },
-            orderBy: { roundLabel: "asc" },
+            orderBy: [
+              { scheduledAt: "asc" },
+              { roundLabel: "asc" },
+              { createdAt: "asc" },
+            ],
           },
           deckSubmissions: {
             include: {
@@ -55,7 +59,12 @@ export default async function PartidasPage({ params }: Props) {
   }
 
   const week = tournament.weeks[0];
-  const matches = week.matches;
+  const matches = [...week.matches].sort((left, right) => {
+    const timeDiff = (left.scheduledAt ?? week.startDate).getTime() - (right.scheduledAt ?? week.startDate).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    const labelDiff = (left.roundLabel ?? "").localeCompare(right.roundLabel ?? "", "pt-BR", { numeric: true });
+    return labelDiff !== 0 ? labelDiff : left.createdAt.getTime() - right.createdAt.getTime();
+  });
   const allEnguicaCompletions = matches.flatMap((match) => match.enguicaCompletions);
 
   const player = user
@@ -149,6 +158,9 @@ export default async function PartidasPage({ params }: Props) {
         }
       : null,
     status: match.status,
+    scheduledAt: (match.scheduledAt ?? week.startDate).toISOString(),
+    weekStartDate: week.startDate.toISOString(),
+    weekEndDate: week.endDate.toISOString(),
     roundLabel: match.roundLabel,
     rankingPointsA: Number(match.rankingPointsA),
     rankingPointsB: Number(match.rankingPointsB),

@@ -59,7 +59,11 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
 
   const itemTitle = (payload: Record<string, unknown>, category: string) => {
     if (category === "MASCOT") {
-      return (payload.nickname as string) ?? getPokemonName(payload.pokemonId as number);
+      const original = String(payload.pokemonName ?? getPokemonName(payload.pokemonId as number));
+      const nickname = typeof payload.nickname === "string" ? payload.nickname.trim() : "";
+      return nickname && nickname.localeCompare(original, "pt-BR", { sensitivity: "base" }) !== 0
+        ? `${original} (${nickname})`
+        : original;
     }
     return payload.displayName as string ?? "Item";
   };
@@ -191,7 +195,7 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
             </div>
           ) : (
             sentProposals.map(p => {
-              const itemTitle2 = p.listingPayload?.nickname ?? p.listingPayload?.pokemonName ?? p.listingPayload?.displayName ?? "Item";
+              const itemTitle2 = itemTitle(p.listingPayload, p.listingPayload?.pokemonId ? "MASCOT" : "ITEM");
               return (
                 <div key={p.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
                   <div className="flex items-center justify-between gap-2">

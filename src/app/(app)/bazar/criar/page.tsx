@@ -43,7 +43,7 @@ interface InventoryData {
 const TRADEABLE_TYPES = new Set<string>(CONSUMABLE_SHOP_ITEM_TYPES);
 
 const EGG_LABELS: Record<string, string> = {
-  COMMON:"Ovo Comum",RARE:"Ovo Raro",SPECIAL:"Ovo Especial",EVENT:"Ovo de Evento",
+  COMMON:"Ovo Comum",RARE:"Ovo Raro",SPECIAL:"Ovo Especial",EVENT:"Ovo de Evento",LAB:"Ovo de Laboratório",
   EGG_GEN1:"Ovo Gen 1",EGG_GEN2:"Ovo Gen 2",EGG_GEN3:"Ovo Gen 3",EGG_GEN4:"Ovo Gen 4",
   EGG_GEN5:"Ovo Gen 5",EGG_GEN6:"Ovo Gen 6",EGG_GEN7:"Ovo Gen 7",EGG_GEN8:"Ovo Gen 8",EGG_GEN9:"Ovo Gen 9",EGG_GEN6PLUS:"Ovo Gen 6+",
 };

@@ -352,6 +352,9 @@ export default function BazarListingPage(): React.JSX.Element {
   const mascotRarity = pokemonId ? getMascotRarity(pokemonId) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
   const nickname = payload.nickname as string | undefined;
+  const mascotFullName = nickname && nickname.localeCompare(pokemonName, "pt-BR", { sensitivity: "base" }) !== 0
+    ? `${pokemonName} (${nickname})`
+    : pokemonName;
   const personality = payload.personality as string | undefined;
   const level = payload.level as number | undefined;
   const stats = payload.stats as Record<string, number> | undefined;
@@ -383,7 +386,7 @@ export default function BazarListingPage(): React.JSX.Element {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={getSpriteUrl(pokemonId, true)}
-                alt={nickname ?? pokemonName}
+                alt={mascotFullName}
                 className="h-32 object-contain"
                 style={{ imageRendering: "pixelated" }}
                 onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(pokemonId); }}
@@ -405,7 +408,7 @@ export default function BazarListingPage(): React.JSX.Element {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                {isMascot ? (nickname ?? pokemonName) : (displayName ?? "Item")}
+                {isMascot ? mascotFullName : (displayName ?? itemType ?? "Item")}
                 {!isMascot && quantity && quantity > 1 && (
                   <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">×{quantity}</span>
                 )}

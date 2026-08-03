@@ -413,6 +413,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
   await prisma.match.createMany({
     data: matches.map((m) => ({
       ...m,
+      scheduledAt: week.startDate,
       status: "PENDING_CONFIRMATION",
       bestOf: 1,
     })),
@@ -761,6 +762,52 @@ const confirmResultSchema = z.object({
   matchId: z.string().min(1),
   enguicaContractCompleted: z.boolean().default(false),
 });
+
+const updateMatchScheduleSchema = z.object({
+  matchId: z.string().min(1),
+  scheduledAt: z.string().datetime(),
+});
+
+export async function updateMatchSchedule(input: z.infer<typeof updateMatchScheduleSchema>) {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Não autenticado");
+  const { matchId, scheduledAt: scheduledAtIso } = updateMatchScheduleSchema.parse(input);
+  const scheduledAt = new Date(scheduledAtIso);
+
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { tournamentWeek: { include: { tournament: { select: { slug: true } } } } },
+  });
+  if (!match?.tournamentWeek) throw new Error("Partida ou semana não encontrada");
+  if (match.status === MatchStatus.CANCELED) throw new Error("Uma partida cancelada não pode ser reagendada");
+
+  const player = await getSessionPlayer(user.id);
+  const admin = user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
+  const participant = Boolean(player && (match.playerAId === player.id || match.playerBId === player.id));
+  if (!admin && !participant) throw new Error("Apenas os participantes ou um administrador podem alterar este horário");
+
+  const { startDate, endDate } = match.tournamentWeek;
+  if (scheduledAt < startDate || scheduledAt > endDate) {
+    throw new Error("Escolha uma data e horário dentro do período desta semana");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.match.update({ where: { id: matchId }, data: { scheduledAt } });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: user.id,
+        entityType: "match",
+        entityId: matchId,
+        action: "match.schedule.updated",
+        before: { scheduledAt: match.scheduledAt?.toISOString() ?? null },
+        after: { scheduledAt: scheduledAt.toISOString() },
+      },
+    });
+  });
+
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
+  return { success: true };
+}
 
 export async function confirmMatchResult(input: z.infer<typeof confirmResultSchema>) {
   const user = await getSessionUser();

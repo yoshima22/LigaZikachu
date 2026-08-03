@@ -618,6 +618,7 @@ model Match {
 
   @@index([seasonId, weekId, status])
   @@index([playerAId, playerBId, playedAt])
+  @@index([tournamentWeekId, scheduledAt])
   @@index([playerADeckSubmissionId])
   @@index([playerBDeckSubmissionId])
   @@map("matches")
