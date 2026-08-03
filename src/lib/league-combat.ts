@@ -331,6 +331,9 @@ export function runLeagueCombat(
       const actionProfile = getCombatActionsPerRound(actor.agility, alive(enemyTeam, hp).map((m) => m.agility));
 
       for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
+      // Uma ação anterior do ciclo pode alterar o estado da luta. Nunca deixe
+      // um ator nocauteado prosseguir nem reutilize um alvo já eliminado.
+      if ((hp.get(actor.id) ?? 0) <= 0) break;
       const opponents = alive(enemyTeam, hp);
       const allies = entry.side === "A" ? a : b;
       if (opponents.length === 0) break;
@@ -379,6 +382,13 @@ export function runLeagueCombat(
         const p = provokers[0];
         const chance = Math.min(0.55, 0.2 + p.charisma / 300 + p.instinct / 400);
         if (Math.random() < chance) { target = p; provoked = true; }
+      }
+
+      // Proteção adicional para futuras posturas que redirecionem alvos.
+      if ((hp.get(target.id) ?? 0) <= 0) {
+        const refreshedOpponents = alive(enemyTeam, hp);
+        if (refreshedOpponents.length === 0) break;
+        target = selectTarget(actor, refreshedOpponents, hp);
       }
 
       const attackerType = getPokemonElement(actor.pokemonId);

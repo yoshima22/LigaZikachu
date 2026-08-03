@@ -15,7 +15,7 @@ export type TurnLog = {
   targetOwnerId?: string | null;
   targetPokemonId?: number;
   targetLevel?: number;
-  action: "ATTACK" | "DEFEND";
+  action: "ATTACK" | "DEFEND" | "HEAL";
   damage: number;
   multiplier: number;
   advantageApplied: boolean;
@@ -171,11 +171,14 @@ function HpBar({ hp, maxHp }: { hp: number; maxHp: number }) {
   );
 }
 
-function FighterRow({ f, isActor, isTarget, isAttack }: { f: Fighter; isActor: boolean; isTarget: boolean; isAttack: boolean }) {
+function FighterRow({ f, isActor, isTarget, action }: { f: Fighter; isActor: boolean; isTarget: boolean; action?: TurnLog["action"] }) {
+  const isAttack = action === "ATTACK";
+  const isHeal = action === "HEAL";
   return (
     <div className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-all duration-300 ${
       isActor ? "bg-blue-500/10 ring-1 ring-blue-500/40" :
-      isTarget && isAttack ? "bg-red-500/10 ring-1 ring-red-500/40" : ""
+      isTarget && isAttack ? "bg-red-500/10 ring-1 ring-red-500/40" :
+      isTarget && isHeal ? "bg-emerald-500/10 ring-1 ring-emerald-500/40" : ""
     }`}
     style={{ animation: isTarget && isAttack ? "leagueShake 0.4s ease" : isActor && isAttack ? "leagueAttack 0.5s ease" : "none" }}>
       {f.pokemonId ? (
@@ -252,6 +255,10 @@ export function LeagueBattleReplayModal({
       if (t.action === "ATTACK") {
         const target = state.find(f => f.id === t.targetId);
         if (target) target.hp = Math.max(0, target.hp - t.damage);
+      } else if (t.action === "HEAL") {
+        const target = state.find(f => f.id === t.targetId);
+        // A cura recompõe a barra, mas nunca ressuscita um mascote.
+        if (target && target.hp > 0) target.hp = Math.min(target.maxHp, target.hp + t.damage);
       }
       const absorption = getGuardianAbsorption(t);
       if (absorption) {
@@ -344,7 +351,7 @@ export function LeagueBattleReplayModal({
                 <FighterRow key={f.id} f={f}
                   isActor={current?.actorId === f.id}
                   isTarget={current?.targetId === f.id}
-                  isAttack={current?.action === "ATTACK"}
+                  action={current?.action}
                 />
               ))}
             </div>
@@ -353,7 +360,7 @@ export function LeagueBattleReplayModal({
                 <FighterRow key={f.id} f={f}
                   isActor={current?.actorId === f.id}
                   isTarget={current?.targetId === f.id}
-                  isAttack={current?.action === "ATTACK"}
+                  action={current?.action}
                 />
               ))}
             </div>
@@ -365,13 +372,18 @@ export function LeagueBattleReplayModal({
               <>
                 <p className="text-sm text-slate-300">
                   <span className="font-bold text-[#FFCB05]">{resolvedActorName}{current.actorLevel ? ` - Nv.${current.actorLevel}` : ""}</span>
-                  {current.action === "ATTACK" ? " atacou " : " defendeu "}
+                  {current.action === "ATTACK" ? " atacou " : current.action === "HEAL" ? " curou " : " defendeu "}
                   <span className="font-bold text-[#FFCB05]">{resolvedTargetName}{current.targetLevel ? ` - Nv.${current.targetLevel}` : ""}</span>
                 </p>
                 {current.action === "ATTACK" && (
                   <p className="text-xs mt-0.5">
                     <span className="font-bold text-red-400">-{current.damage} HP</span>
                     {current.advantageApplied && <span className="ml-1.5 text-green-400 text-[10px]">Super efetivo! ×{current.multiplier.toFixed(1)}</span>}
+                  </p>
+                )}
+                {current.action === "HEAL" && (
+                  <p className="mt-0.5 text-xs">
+                    <span className="font-bold text-emerald-400">+{current.damage} HP</span>
                   </p>
                 )}
                 {current.effect && <p className="text-[10px] text-purple-300 mt-1">{current.effect}</p>}
