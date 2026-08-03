@@ -1,17 +1,25 @@
 {
   "name": "Liga Zikachu",
   "short_name": "Liga Zikachu",
-  "description": "App web/PWA da Liga Zikachu para temporadas, partidas e ranking auditável.",
+  "description": "Aplicativo oficial da Liga Zikachu para temporadas, partidas, mascotes e rankings.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#020617",
   "icons": [
     {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

@@ -32,6 +32,7 @@ import {
   FlaskConical,
   Footprints,
   ScrollText,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -272,6 +273,17 @@ export function AppNav({
                 </Button>
               </Link>
             ))}
+          <Link href="/downloads" prefetch={false} onClick={() => setOpenMenu(null)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="border border-[#FFCB05]/25 bg-[#FFCB05]/10 text-xs font-bold text-[#FFCB05] hover:bg-[#FFCB05] hover:text-slate-950"
+            >
+              <Download size={14} className="mr-1.5" />
+              <span className="hidden xl:inline">Download agora</span>
+              <span className="xl:hidden">Baixar</span>
+            </Button>
+          </Link>
           <NavDropdown
             id="combates"
             label="Combates"
@@ -365,6 +377,15 @@ export function AppNav({
                   </Button>
                 </Link>
               ))}
+            <Link href="/downloads" prefetch={false} onClick={() => setOpenMenu(null)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 whitespace-nowrap rounded-lg border border-[#FFCB05]/25 bg-[#FFCB05]/10 px-2 text-xs font-bold text-[#FFCB05] hover:bg-[#FFCB05] hover:text-slate-950"
+              >
+                <Download size={13} className="mr-1" /> Download
+              </Button>
+            </Link>
             <MobileNavGroup
               id="mobile-combates"
               label="Combates"
