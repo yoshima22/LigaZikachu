@@ -31,6 +31,7 @@ import {
   ShoppingCart,
   FlaskConical,
   Footprints,
+  ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -193,7 +194,8 @@ function buildProfileLinks(playerId?: string) {
 }
 
 const adminLinks = [
-  { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true },
+  { href: "/admin", label: "Painel Admin", icon: ShieldCheck, adminOnly: true },
+  { href: "/admin/logs", label: "Logs e Auditoria", icon: ScrollText, adminOnly: true },
 ];
 
 type NavLink = {
@@ -323,25 +325,17 @@ export function AppNav({
             }}
             tutorialId="nav-perfil"
           />
-          {adminLinks
-            .filter((link) => !link.adminOnly || admin)
-            .map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                prefetch={false}
-                onClick={() => setOpenMenu(null)}
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
-                >
-                  <Icon size={14} className="mr-1.5" />
-                  {label}
-                </Button>
-              </Link>
-            ))}
+          {admin && (
+            <NavDropdown
+              id="admin"
+              label="Admin"
+              icon={ShieldCheck}
+              links={adminLinks}
+              admin={admin}
+              openMenu={openMenu}
+              setOpenMenu={setOpenMenu}
+            />
+          )}
         </nav>
       )}
 
@@ -421,20 +415,15 @@ export function AppNav({
               badgeHrefs={{ "/caixa-de-presentes": giftCount }}
             />
             {admin && (
-              <Link
-                href="/admin"
-                prefetch={false}
-                onClick={() => setOpenMenu(null)}
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
-                >
-                  <ShieldCheck size={13} className="mr-1" />
-                  Admin
-                </Button>
-              </Link>
+              <MobileNavGroup
+                id="mobile-admin"
+                label="Admin"
+                icon={ShieldCheck}
+                links={adminLinks}
+                admin={admin}
+                openMenu={openMenu}
+                setOpenMenu={setOpenMenu}
+              />
             )}
           </div>
         </div>

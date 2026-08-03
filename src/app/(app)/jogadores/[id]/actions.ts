@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { grantSyncTicketHalf, grantValidSyncTicketForPlayer, SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
 import { clearStandbyFromNotes, getStandbyUntilFromNotes } from "@/lib/account-standby";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 const EGG_TYPE_MAP: Record<string, EggType> = {
   EGG_COMMON: EggType.COMMON,
@@ -96,7 +97,7 @@ export async function grantItemToPlayer(
   quantity = 1
 ): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const [player, item] = await Promise.all([
       prisma.player.findUnique({ where: { id: playerId }, select: { id: true, adminLabFeatherUsedAt: true } }),
@@ -151,6 +152,11 @@ export async function grantItemToPlayer(
         create: { playerId, itemId, quantity: safeQty, equipped: false, source: "ADMIN_GRANT" },
       });
     }
+    await recordPlayerActivity(prisma, {
+      playerId, actorUserId: admin.id, category: eggType ? "EGG" : "ITEM", action: "ADMIN_ITEM_GRANTED",
+      summary: `Admin concedeu ${item.name} x${safeQty}`, source: "ADMIN_GRANT", entityType: "shopItem", entityId: item.id,
+      amount: safeQty, unit: "ITEM", after: { itemId: item.id, itemName: item.name, itemType: item.type, quantity: safeQty },
+    });
 
     revalidatePath(`/jogadores/${playerId}`);
     revalidatePath("/inventario");
@@ -226,7 +232,7 @@ export async function revokeItemFromPlayer(
 
 export async function grantEggToPlayer(playerId: string, eggType: string, quantity = 1): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const mapped = EGG_TYPE_MAP[eggType] ?? (Object.values(EggType).includes(eggType as EggType) ? eggType as EggType : null);
     if (!mapped) return { error: `Tipo de ovo inválido: ${eggType}` };
 
@@ -235,6 +241,12 @@ export async function grantEggToPlayer(playerId: string, eggType: string, quanti
         data: { playerId, type: mapped as EggType, origin: "ADMIN_GRANT" },
       });
     }
+    const granted = Math.min(quantity, 20);
+    await recordPlayerActivity(prisma, {
+      playerId, actorUserId: admin.id, category: "EGG", action: "ADMIN_EGG_GRANTED",
+      summary: `Admin concedeu ${granted} ovo(s) ${mapped}`, source: "ADMIN_GRANT", entityType: "mascotEgg",
+      amount: granted, unit: "EGG", after: { eggType: mapped, quantity: granted },
+    });
 
     revalidatePath(`/jogadores/${playerId}`);
     revalidatePath("/mascotes");
@@ -267,11 +279,16 @@ export async function revokeEggFromPlayer(playerId: string, eggId: string): Prom
 
 export async function grantFoodToPlayer(playerId: string, foodType: "FOOD" | "SWEET", quantity = 1): Promise<{ error?: string }> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     await prisma.mascotFoodItem.upsert({
       where: { playerId_type: { playerId, type: foodType as FoodType } },
       create: { playerId, type: foodType as FoodType, quantity },
       update: { quantity: { increment: quantity } },
+    });
+    await recordPlayerActivity(prisma, {
+      playerId, actorUserId: admin.id, category: "ITEM", action: "ADMIN_FOOD_GRANTED",
+      summary: `Admin concedeu ${foodType} x${quantity}`, source: "ADMIN_GRANT", entityType: "mascotFoodItem",
+      amount: quantity, unit: foodType, after: { foodType, quantity },
     });
     revalidatePath(`/jogadores/${playerId}`);
     return {};

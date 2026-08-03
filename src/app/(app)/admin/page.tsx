@@ -18,6 +18,7 @@ import {
   Gift,
   Package,
   ShieldCheck,
+  ScrollText,
   Swords,
   Trophy,
   Users
@@ -33,6 +34,12 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 
 const adminCards = [
+  {
+    href: "/admin/logs",
+    title: "Logs e auditoria",
+    description: "Consultar jogadores, EXP, itens, ovos, expedições, ZC, presentes e bazar.",
+    icon: ScrollText
+  },
   {
     href: "/torneios",
     title: "Gerenciar torneios",

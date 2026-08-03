@@ -14,6 +14,7 @@ import { isMegaStoneType } from "@/lib/mega-evolution";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
+import { recordPlayerActivity } from "@/lib/player-activity";
 import {
   MIAUVADAO_FUSION_EGG_TYPES,
   rollFusionLootBonus,
@@ -853,6 +854,19 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
           category: listing.category,
         },
       });
+      const activityMetadata = { listingId, category: listing.category, payload: listing.payload } as import("@prisma/client").Prisma.InputJsonValue;
+      await Promise.all([
+        recordPlayerActivity(tx, {
+          playerId: player.id, actorUserId: user.id, category: "BAZAR", action: "BAZAR_PURCHASE",
+          summary: `Comprou de ${sellerName}: ${desc}`, source: "DIRECT_SALE", entityType: "bazarListing", entityId: listingId,
+          amount: -listing.priceCoins!, unit: "ZC", metadata: activityMetadata,
+        }),
+        recordPlayerActivity(tx, {
+          playerId: listing.playerId, category: "BAZAR", action: "BAZAR_SALE",
+          summary: `Vendeu para ${buyerName}: ${desc}`, source: "DIRECT_SALE", entityType: "bazarListing", entityId: listingId,
+          amount: listing.priceCoins!, unit: "ZC", metadata: activityMetadata,
+        }),
+      ]);
     });
 
     revalidateBazar();
@@ -1138,6 +1152,28 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
           category: listing.category,
         },
       });
+      const activityMetadata = {
+        listingId: listing.id,
+        proposalId: proposal.id,
+        category: listing.category,
+        payload: listing.payload,
+        itemsOffer: proposal.itemsOffer,
+        loanRequested: proposal.loanRequested,
+      } as import("@prisma/client").Prisma.InputJsonValue;
+      await Promise.all([
+        recordPlayerActivity(tx, {
+          playerId: player.id, actorUserId: user.id, category: "BAZAR", action: "BAZAR_PROPOSAL_ACCEPTED",
+          summary: `Aceitou proposta de ${proposal.proposer.displayName}: ${desc}`,
+          source: proposal.loanRequested ? "LOAN" : "TRADE", entityType: "bazarProposal", entityId: proposal.id,
+          amount: proposal.loanRequested ? 0 : proposal.coinsOffer, unit: "ZC", metadata: activityMetadata,
+        }),
+        recordPlayerActivity(tx, {
+          playerId: proposal.proposerId, category: "BAZAR", action: "BAZAR_PROPOSAL_WON",
+          summary: `Proposta aceita por ${listing.player.displayName}: ${desc}`,
+          source: proposal.loanRequested ? "LOAN" : "TRADE", entityType: "bazarProposal", entityId: proposal.id,
+          amount: proposal.loanRequested ? 0 : -proposal.coinsOffer, unit: "ZC", metadata: activityMetadata,
+        }),
+      ]);
     });
 
     revalidateBazar();
@@ -2702,6 +2738,19 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
           coinsAmount: winnerBid, category: listing.category,
         },
       });
+      const activityMetadata = { listingId, category: listing.category, payload: listing.payload } as import("@prisma/client").Prisma.InputJsonValue;
+      await Promise.all([
+        recordPlayerActivity(tx, {
+          playerId: winnerId, category: "BAZAR", action: "BAZAR_AUCTION_WON",
+          summary: `Venceu leilão de ${sellerName}: ${payloadDesc}`, source: "AUCTION", entityType: "bazarListing", entityId: listingId,
+          amount: -winnerBid, unit: "ZC", metadata: activityMetadata,
+        }),
+        recordPlayerActivity(tx, {
+          playerId: listing.playerId, category: "BAZAR", action: "BAZAR_AUCTION_SOLD",
+          summary: `Leilão vencido por ${buyerName}: ${payloadDesc}`, source: "AUCTION", entityType: "bazarListing", entityId: listingId,
+          amount: winnerBid, unit: "ZC", metadata: activityMetadata,
+        }),
+      ]);
       return true;
     });
     if (!claimed) return { finalized: false };

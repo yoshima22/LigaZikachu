@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { recordPlayerActivity } from "@/lib/player-activity";
 import { ZikaCoinTxType, ZikaCoinTxStatus, type Prisma } from "@prisma/client";
 
 export type CoinTxInput = {
@@ -51,6 +52,22 @@ export async function creditCoins(
       adminId: input.adminId ?? null,
       status: input.status ?? ZikaCoinTxStatus.COMPLETED
     }
+  });
+
+  await recordPlayerActivity(tx, {
+    playerId: input.playerId,
+    actorUserId: input.adminId,
+    category: "ZC",
+    action: input.type,
+    summary: input.description ?? `${input.amount > 0 ? "Crédito" : "Débito"} de ${Math.abs(input.amount)} ZC`,
+    source: input.type,
+    entityType: input.matchId ? "match" : input.tournamentWeekId ? "tournamentWeek" : input.tournamentId ? "tournament" : "wallet",
+    entityId: input.matchId ?? input.tournamentWeekId ?? input.tournamentId ?? wallet.id,
+    amount: input.amount,
+    unit: "ZC",
+    before: { balance: wallet.balance },
+    after: { balance: newBalance },
+    metadata: { status: input.status ?? ZikaCoinTxStatus.COMPLETED },
   });
 }
 

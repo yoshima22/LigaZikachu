@@ -25,6 +25,7 @@ import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -173,6 +174,37 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
         statInstinct: randomInt(statMin, statMax),
         statVitality: randomInt(statMin, statMax),
       }
+    });
+    await recordPlayerActivity(tx, {
+      playerId,
+      category: "EGG",
+      action: "EGG_HATCHED",
+      summary: `${getPokemonName(pokemonId)} nasceu de um ovo ${incubator.egg.type}`,
+      source: incubator.egg.origin ?? incubator.egg.type,
+      entityType: "mascot",
+      entityId: m.id,
+      amount: 1,
+      unit: "MASCOT",
+      before: {
+        eggId: incubator.eggId,
+        eggType: incubator.egg.type,
+        eggOrigin: incubator.egg.origin,
+        hatchRarityBonusPct: incubator.egg.hatchRarityBonusPct,
+      },
+      after: {
+        mascotId: m.id,
+        pokemonId,
+        pokemonName: getPokemonName(pokemonId),
+        personality,
+        isShiny,
+        stats: { force: m.statForce, agility: m.statAgility, charisma: m.statCharisma, instinct: m.statInstinct, vitality: m.statVitality },
+      },
+      metadata: {
+        rolledTier: rollResult?.tier ?? null,
+        generation: rollResult?.generation ?? null,
+        generationType: rollResult?.generationType ?? rollContext.generationType,
+        randomGeneration: rollContext.randomGeneration,
+      },
     });
     await registerPokemonDiscovery({ playerId, pokemonId, source: `egg:${incubator.egg.type}` }, tx);
     // Marca incubadora como chocada
@@ -437,7 +469,14 @@ export function computeProceduralStats(
 export async function addExp(
   mascotId: string,
   amount: number,
-  options: { ignoreBenchPenalty?: boolean; ignoreExpBoost?: boolean; mascotSnapshot?: Mascot } = {}
+  options: {
+    ignoreBenchPenalty?: boolean;
+    ignoreExpBoost?: boolean;
+    mascotSnapshot?: Mascot;
+    source?: string;
+    sourceEntityType?: string;
+    sourceEntityId?: string;
+  } = {}
 ): Promise<LevelUpResult> {
   const mascot = options.mascotSnapshot ?? await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot) throw new Error("Mascote não encontrado.");
@@ -562,6 +601,21 @@ export async function addExp(
   await prisma.mascot.update({
     where: { id: mascotId },
     data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate }
+  });
+
+  await recordPlayerActivity(prisma, {
+    playerId: mascot.playerId,
+    category: "EXP",
+    action: "MASCOT_EXP_GAINED",
+    summary: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} recebeu ${amount} EXP`,
+    source: options.source ?? "SYSTEM",
+    entityType: options.sourceEntityType ?? "mascot",
+    entityId: options.sourceEntityId ?? mascotId,
+    amount,
+    unit: "EXP",
+    before: { mascotId, level: mascot.level, exp: mascot.exp, pokemonId: mascot.pokemonId },
+    after: { mascotId, level, exp, pokemonId, levelsGained, evolved },
+    metadata: { benchPenaltyIgnored: options.ignoreBenchPenalty === true, expBoostIgnored: options.ignoreExpBoost === true },
   });
 
   for (const evolvedPokemonId of new Set(evolvedPokemonIds)) {
@@ -1537,6 +1591,20 @@ export async function claimExpedition(
         }).catch(() => null);
       }
     }
+    await recordPlayerActivity(tx, {
+      playerId,
+      category: "EXPEDITION",
+      action: "EXPEDITION_CLAIMED",
+      summary: `${expeditorName} concluiu expedição ${mode} de ${dur.label}: ${expeditionExp} EXP`,
+      source: mode,
+      entityType: "mascotExpedition",
+      entityId: expeditionId,
+      amount: expeditionExp,
+      unit: "EXP",
+      before: { status: expedition.status, startedAt: expedition.startedAt.toISOString(), finishAt: expedition.finishAt.toISOString() },
+      after: { status: "CLAIMED", expGained: expeditionExp, reward: storedRewardJson },
+      metadata: { mascotId: expedition.mascotId, pokemonId: expedition.mascot.pokemonId, durationKey, mode, allyCount, rivalCount },
+    });
   }, { timeout: 20000, maxWait: 10000 });
 
   for (const rel of friends) {
@@ -1551,7 +1619,13 @@ export async function claimExpedition(
   if (expeditionExp > 0) {
     // ignoreBenchPenalty: expedição é esforço do mascote, não interação presencial
     // ignoreExpBoost: buffs já incluídos no cálculo de expeditionExp acima (para log correto)
-    await addExp(expedition.mascotId, expeditionExp, { ignoreBenchPenalty: true, ignoreExpBoost: true }).catch(() => {});
+    await addExp(expedition.mascotId, expeditionExp, {
+      ignoreBenchPenalty: true,
+      ignoreExpBoost: true,
+      source: `EXPEDITION_${mode}`,
+      sourceEntityType: "mascotExpedition",
+      sourceEntityId: expeditionId,
+    }).catch(() => {});
     if (mode === "STANDARD") {
       await logEvent(
         expedition.mascotId,

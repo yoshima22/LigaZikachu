@@ -1,4 +1,5 @@
 import { Prisma, ShopItemRarity, SyncTicketSide } from "@prisma/client";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 export const SYNC_TICKET_TYPES = {
   fireLeft: "SYNC_TICKET_FIRE_LEFT",
@@ -134,6 +135,18 @@ export async function grantSyncTicketHalf(
       after: { side, playerId, generatedByPlayerId, sourceAction },
     },
   }).catch(() => null);
+  await recordPlayerActivity(tx, {
+    playerId,
+    category: "ITEM",
+    action: "SYNC_TICKET_HALF_GENERATED",
+    summary: `Metade ${side} do Ticket Sincronizado gerada`,
+    source: sourceAction,
+    entityType: "syncTicketHalf",
+    entityId: half.id,
+    amount: 1,
+    unit: "TICKET_HALF",
+    after: { side, ownerId: playerId, generatedByPlayerId, sourceAction },
+  });
   return half;
 }
 

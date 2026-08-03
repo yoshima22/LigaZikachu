@@ -13,6 +13,7 @@ import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType, UN
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -528,6 +529,19 @@ export async function purchaseItem(
       } else {
         await tx.playerInventory.create({ data: { playerId: player.id, itemId } });
       }
+      await recordPlayerActivity(tx, {
+        playerId: player.id,
+        actorUserId: actor.id,
+        category: isEggShopItemType(item.type) ? "EGG" : "ITEM",
+        action: "SHOP_ITEM_PURCHASED",
+        summary: `Compra na ZikaShop: ${item.name}${quantity > 1 ? ` x${quantity}` : ""}`,
+        source: "ZIKASHOP",
+        entityType: "shopItem",
+        entityId: item.id,
+        amount: quantity,
+        unit: "ITEM",
+        after: { itemId: item.id, itemName: item.name, itemType: item.type, quantity, totalPrice },
+      });
     });
 
     revalidatePath("/shop");

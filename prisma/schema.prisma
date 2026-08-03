@@ -166,6 +166,7 @@ model User {
   generatedSnapshots        RankingSnapshot[]        @relation("RankingSnapshotGeneratedBy")
   awardedPlayerAchievements PlayerAchievement[]      @relation("PlayerAchievementAwardedBy")
   auditLogs                 AuditLog[]               @relation("AuditActor")
+  playerActivityLogs        PlayerActivityLog[]      @relation("PlayerActivityActor")
   createdTournaments        Tournament[]             @relation("TournamentCreatedBy")
   decidedRegistrations      TournamentRegistration[] @relation("RegistrationDecidedBy")
   createdLeagueBadges       LeagueBadge[]            @relation("LeagueBadgeCreatedBy")
@@ -237,6 +238,7 @@ model Player {
   rankingSnapshots           RankingSnapshot[]
   tournamentRegistrations    TournamentRegistration[]
   gifts                      PlayerGift[]
+  activityLogs               PlayerActivityLog[]
   badgeProgress              BadgeProgress[]
   wallet                     ZikaCoinWallet?
   inventory                  PlayerInventory[]
@@ -1027,6 +1029,35 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("audit_logs")
+}
+
+// Extrato compacto e indexado para auditorias administrativas. As tabelas
+// especializadas continuam sendo a fonte completa; este ledger registra o
+// contexto economico da operacao no momento em que ela acontece.
+model PlayerActivityLog {
+  id          String   @id @default(cuid())
+  playerId    String?
+  actorUserId String?
+  category    String
+  action      String
+  summary     String
+  source      String?
+  entityType  String?
+  entityId    String?
+  amount      Int?
+  unit        String?
+  beforeJson  Json?
+  afterJson   Json?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  player      Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  actor       User?    @relation("PlayerActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([playerId, createdAt])
+  @@index([category, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([createdAt])
+  @@map("player_activity_logs")
 }
 
 model PlayerGift {

@@ -9,6 +9,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 import { openStickerPackByName } from "@/app/(app)/passe-apoiador/pack-opener";
 import { grantSyncTicketShopItem } from "@/lib/sync-challenge";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 const claimGiftSchema = z.object({
   giftId: z.string().min(1),
@@ -300,6 +301,21 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
           after: { status: GiftStatus.CLAIMED }
         }
       });
+      await recordPlayerActivity(tx, {
+        playerId: player.id,
+        actorUserId: user.id,
+        category: "GIFT",
+        action: "GIFT_CLAIMED",
+        summary: `Presente resgatado: ${gift.title}`,
+        source: gift.type,
+        entityType: "playerGift",
+        entityId: giftId,
+        amount: 1,
+        unit: "GIFT",
+        before: { status: gift.status },
+        after: { status: GiftStatus.CLAIMED, claimedAt: now.toISOString() },
+        metadata: gift.payload === null ? undefined : gift.payload as Prisma.InputJsonValue,
+      });
     });
 
     revalidateGiftTargets(user.id, player.id);
@@ -365,6 +381,21 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
               before: { status: GiftStatus.UNCLAIMED },
               after: { status: GiftStatus.CLAIMED },
             }
+          });
+          await recordPlayerActivity(tx, {
+            playerId: player.id,
+            actorUserId: user.id,
+            category: "GIFT",
+            action: "GIFT_CLAIMED",
+            summary: `Presente resgatado: ${current.title}`,
+            source: current.type,
+            entityType: "playerGift",
+            entityId: current.id,
+            amount: 1,
+            unit: "GIFT",
+            before: { status: GiftStatus.UNCLAIMED },
+            after: { status: GiftStatus.CLAIMED, claimedAt: now.toISOString() },
+            metadata: current.payload === null ? undefined : current.payload as Prisma.InputJsonValue,
           });
         });
         claimedIds.push(gift.id);
