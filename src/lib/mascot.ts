@@ -259,25 +259,43 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
 // ── Equipar mascote ───────────────────────────────────────────────────────────
 
 export async function equipMascot(playerId: string, mascotId: string) {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
-  if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
-  if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido precisa de Atendimento SUS antes de ser equipado.");
-  if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote está em repouso e não pode ser equipado ainda.");
-  if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode ser equipado.");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const mascot = await tx.mascot.findUnique({ where: { id: mascotId } });
+        if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+        if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido precisa de Atendimento SUS antes de ser equipado.");
+        if (mascot.arenaState === "RESTING" && mascot.restingUntil && mascot.restingUntil > new Date()) throw new Error("Mascote está em repouso e não pode ser equipado ainda.");
+        if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z não pode ser equipado.");
 
-  // Verifica se o mascote atualmente equipado está em expedição
-  const equippedInExpedition = await prisma.mascot.findFirst({
-    where: { playerId, isEquipped: true, id: { not: mascotId } },
-    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
-  });
-  if (equippedInExpedition?.expeditions?.length) {
-    throw new Error("Seu mascote atual está em expedição. Aguarde o retorno ou cancele a expedição antes de trocar.");
+        if (!mascot.isFavorite) {
+          const favoriteCount = await tx.mascot.count({ where: { playerId, isFavorite: true } });
+          if (favoriteCount >= 6) {
+            throw new Error("Este mascote não é favorito e os 6 slots de favoritos já estão ocupados. Remova um favorito antes de equipá-lo.");
+          }
+        }
+
+        const equippedInExpedition = await tx.mascot.findFirst({
+          where: { playerId, isEquipped: true, id: { not: mascotId } },
+          include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } },
+        });
+        if (equippedInExpedition?.expeditions?.length) {
+          throw new Error("Seu mascote atual está em expedição. Aguarde o retorno ou cancele a expedição antes de trocar.");
+        }
+
+        await tx.mascot.updateMany({ where: { playerId }, data: { isEquipped: false } });
+        await tx.mascot.update({
+          where: { id: mascotId },
+          data: { isEquipped: true, isFavorite: true },
+        });
+        return { addedToFavorites: !mascot.isFavorite };
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      if ((error as { code?: string }).code === "P2034" && attempt < 2) continue;
+      throw error;
+    }
   }
-
-  await prisma.$transaction([
-    prisma.mascot.updateMany({ where: { playerId }, data: { isEquipped: false } }),
-    prisma.mascot.update({ where: { id: mascotId }, data: { isEquipped: true } }),
-  ]);
+  throw new Error("Não foi possível equipar o mascote. Tente novamente.");
 }
 
 export async function unequipMascot(playerId: string, mascotId: string) {

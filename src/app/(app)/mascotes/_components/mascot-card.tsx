@@ -500,6 +500,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [localExp, setLocalExp]             = useState(mascot.exp);
   const [localLevel, setLocalLevel]         = useState(mascot.level);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
+  const [localIsFavorite, setLocalIsFavorite] = useState(mascot.isFavorite);
 
   // Sincroniza com novas props quando servidor atualiza
   useEffect(() => { setLocalHappiness(mascot.happiness); }, [mascot.happiness]);
@@ -507,6 +508,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   useEffect(() => { setLocalExp(mascot.exp); },             [mascot.exp]);
   useEffect(() => { setLocalLevel(mascot.level); },         [mascot.level]);
   useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
+  useEffect(() => { setLocalIsFavorite(mascot.isFavorite); }, [mascot.isFavorite]);
   useEffect(() => { setHasFood(mascot.hasFood); },           [mascot.hasFood]);
   useEffect(() => { setHasSweet(mascot.hasSweet); },         [mascot.hasSweet]);
   useEffect(() => {
@@ -617,9 +619,28 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
       const r = await toggleFavoriteMascotAction(mascot.id);
       if (r.error) toast.error(r.error);
       else {
-        toast.success(mascot.isFavorite ? "Removido dos favoritos." : "Mascote favoritado!");
+        const nextFavorite = r.isFavorite === true;
+        setLocalIsFavorite(nextFavorite);
+        toast.success(nextFavorite ? "Mascote adicionado aos favoritos!" : "Mascote removido dos favoritos.");
+        onRefresh?.();
         router.refresh();
       }
+    });
+  };
+
+  const handleEquip = () => {
+    startTransition(async () => {
+      const r = await equipMascotAction(mascot.id);
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      setLocalIsFavorite(true);
+      toast.success(r.addedToFavorites
+        ? "Mascote equipado e adicionado aos favoritos!"
+        : "Mascote equipado!");
+      onRefresh?.();
+      router.refresh();
     });
   };
 
@@ -969,10 +990,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   type="button"
                   onClick={handleFavorite}
                   disabled={pending}
-                  className={`shrink-0 transition-colors ${mascot.isFavorite ? "text-[#FFCB05]" : "text-slate-600 hover:text-[#FFCB05]"}`}
-                  title={mascot.isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                  className={`shrink-0 transition-colors ${localIsFavorite ? "text-[#FFCB05]" : "text-slate-600 hover:text-[#FFCB05]"}`}
+                  title={localIsFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
                 >
-                  <Star size={12} fill={mascot.isFavorite ? "currentColor" : "none"} />
+                  <Star size={12} fill={localIsFavorite ? "currentColor" : "none"} />
                 </button>
                 <button onClick={() => setEditingName(true)} className="text-slate-600 hover:text-slate-400"><Edit2 size={11}/></button>
               </div>
@@ -1156,7 +1177,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
         {/* ── Ações ── */}
         <div className="grid grid-cols-2 gap-1.5">
-          <Tip text={!canPlay ? (localMood === "TIRED" ? "Está cansado demais" : localMood === "ANGRY" ? "Está bravo" : playOnCooldown ? "Brincar ainda está em cooldown" : "Indisponível agora") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP. +50% EXP bônus de mascote ativo. Cooldown: 45 min." : mascot.isFavorite ? "Brincar aumenta felicidade e dá EXP. +25% EXP bônus de favorito. Cooldown: 45 min." : "Brincar aumenta felicidade e dá EXP base. Cooldown: 45 min."}>
+          <Tip text={!canPlay ? (localMood === "TIRED" ? "Está cansado demais" : localMood === "ANGRY" ? "Está bravo" : playOnCooldown ? "Brincar ainda está em cooldown" : "Indisponível agora") : mascot.isEquipped ? "Brincar aumenta felicidade e dá EXP. +50% EXP bônus de mascote ativo. Cooldown: 45 min." : localIsFavorite ? "Brincar aumenta felicidade e dá EXP. +25% EXP bônus de favorito. Cooldown: 45 min." : "Brincar aumenta felicidade e dá EXP base. Cooldown: 45 min."}>
             <button type="button" disabled={pending || !canPlay} onClick={() => handleInteract("PLAY")}
               className="flex w-full flex-col items-center justify-center rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
               <span>⭐ Brincar</span>
@@ -1258,7 +1279,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             </div>
           )}
           {!mascot.isEquipped && (
-            <button type="button" disabled={pending || arenaLocked} onClick={() => act(() => equipMascotAction(mascot.id), "Mascote equipado!")}
+            <button type="button" disabled={pending || arenaLocked} onClick={handleEquip}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 py-2 text-xs font-medium text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
               <Swords size={12}/> Equipar
             </button>

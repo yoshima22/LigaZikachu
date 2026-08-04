@@ -478,15 +478,15 @@ export async function skipIncubationAction(): Promise<{ error?: string }> {
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function equipMascotAction(mascotId: string): Promise<{ error?: string }> {
+export async function equipMascotAction(mascotId: string): Promise<{ error?: string; addedToFavorites?: boolean }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
-    await equipMascot(player.id, mascotId);
+    const result = await equipMascot(player.id, mascotId);
     revalidate(player.id);
-    return {};
+    return result;
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
@@ -504,30 +504,46 @@ export async function renameMascotAction(mascotId: string, nickname: string): Pr
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ error?: string }> {
+export async function toggleFavoriteMascotAction(mascotId: string): Promise<{ error?: string; isFavorite?: boolean }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
 
-    const mascot = await prisma.mascot.findUnique({
-      where: { id: mascotId },
-      select: { id: true, playerId: true, isFavorite: true },
-    });
-    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote nao encontrado." };
+    let isFavorite: boolean | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        isFavorite = await prisma.$transaction(async (tx) => {
+          const mascot = await tx.mascot.findUnique({
+            where: { id: mascotId },
+            select: { id: true, playerId: true, isFavorite: true, isEquipped: true },
+          });
+          if (!mascot || mascot.playerId !== player.id) throw new Error("Mascote não encontrado.");
 
-    if (!mascot.isFavorite) {
-      const favoriteCount = await prisma.mascot.count({ where: { playerId: player.id, isFavorite: true } });
-      if (favoriteCount >= 6) return { error: "Voce ja tem 6 mascotes favoritos. Remova um favorito antes." };
+          if (mascot.isFavorite && mascot.isEquipped) {
+            throw new Error("O mascote equipado precisa permanecer entre os favoritos. Desequipe-o antes de remover a estrela.");
+          }
+          if (!mascot.isFavorite) {
+            const favoriteCount = await tx.mascot.count({ where: { playerId: player.id, isFavorite: true } });
+            if (favoriteCount >= 6) {
+              throw new Error("Não foi possível adicionar este mascote: os 6 slots de favoritos já estão ocupados. Remova um favorito antes.");
+            }
+          }
+
+          const nextFavorite = !mascot.isFavorite;
+          await tx.mascot.update({ where: { id: mascotId }, data: { isFavorite: nextFavorite } });
+          return nextFavorite;
+        }, { isolationLevel: "Serializable" });
+        break;
+      } catch (error) {
+        if ((error as { code?: string }).code === "P2034" && attempt < 2) continue;
+        throw error;
+      }
     }
-
-    await prisma.mascot.update({
-      where: { id: mascotId },
-      data: { isFavorite: !mascot.isFavorite },
-    });
+    if (typeof isFavorite !== "boolean") throw new Error("Não foi possível atualizar os favoritos. Tente novamente.");
     revalidate(player.id);
-    return {};
+    return { isFavorite };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao favoritar." };
   }
