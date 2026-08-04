@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { redirect } from "next/navigation";
+import { revalidateTag } from "next/cache";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
 
 async function requirePlayer() {
@@ -11,7 +12,7 @@ async function requirePlayer() {
   if (!user) redirect("/login");
   const player = await getSessionPlayer(user.id);
   if (!player) redirect("/dashboard");
-  return { id: player.id, displayName: player.displayName };
+  return { id: player.id, displayName: player.displayName, userId: user.id };
 }
 
 export type AttachmentData =
@@ -100,6 +101,7 @@ export async function getConversationAction(otherPlayerId: string) {
       where: { senderId: otherPlayerId, receiverId: me.id, readAt: null },
       data: { readAt: new Date() },
     });
+    revalidateTag(`nav-${me.userId}`);
   }
 
   return { ok: true as const, me, other, messages: await hydrateItemAttachments(messages) };
@@ -117,7 +119,7 @@ export async function sendMessageAction(
   const me = await requirePlayer();
   if (me.id === receiverId) return { ok: false as const, error: "Não pode enviar mensagem para si mesmo." };
 
-  const receiver = await prisma.player.findUnique({ where: { id: receiverId }, select: { id: true } });
+  const receiver = await prisma.player.findUnique({ where: { id: receiverId }, select: { id: true, userId: true } });
   if (!receiver) return { ok: false as const, error: "Destinatário não encontrado." };
 
   const msg = await prisma.directMessage.create({
@@ -135,6 +137,7 @@ export async function sendMessageAction(
   });
 
   const [message] = await hydrateItemAttachments([msg]);
+  revalidateTag(`nav-${receiver.userId}`);
   return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
 }
 
@@ -363,6 +366,7 @@ export async function pollNewMessagesAction(otherPlayerId: string, afterIso: str
       where: { id: { in: unreadIds } },
       data: { readAt: new Date() },
     });
+    revalidateTag(`nav-${me.userId}`);
   }
 
   return { ok: true as const, messages: await hydrateItemAttachments(messages) };

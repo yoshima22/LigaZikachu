@@ -31,6 +31,7 @@ import { EggType } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
+import { createPlayerNotification } from "@/lib/nav-notifications";
 
 const PLAYER_TRANSACTION_VAULT_SHARE = 0.10;
 
@@ -94,6 +95,13 @@ function fullMascotPayloadName(payload: Record<string, unknown>) {
   return nickname && nickname.localeCompare(original, "pt-BR", { sensitivity: "base" }) !== 0
     ? `${original} (${nickname})`
     : original;
+}
+
+function listingDisplayName(listing: { category: string; payload: unknown }) {
+  const payload = listing.payload as Record<string, unknown>;
+  return listing.category === "MASCOT"
+    ? fullMascotPayloadName(payload)
+    : String(payload.displayName ?? payload.name ?? "Item do Bazar");
 }
 
 function tickerEggOrigin(payload: Record<string, unknown>) {
@@ -392,6 +400,15 @@ export async function getListing(id: string) {
   // Não incrementar `views` aqui. Writes fire-and-forget em Server Actions podem
   // deixar transações abertas no runtime serverless e bloquear a oferta inteira
   // quando vários jogadores acompanham o mesmo leilão.
+  const user = await getSessionUser().catch(() => null);
+  const viewer = user ? await getSessionPlayer(user.id).catch(() => null) : null;
+  if (viewer) {
+    await prisma.playerNotification.updateMany({
+      where: { playerId: viewer.id, category: "BAZAR", entityId: id, readAt: null },
+      data: { readAt: new Date() },
+    }).catch(() => undefined);
+    revalidateTag(`nav-${user!.id}`);
+  }
   return listing;
 }
 
@@ -854,10 +871,20 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
         where: { listingId, status: "PENDING" },
-        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
+        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
       });
       for (const proposal of pendingProposals) {
         await _releaseProposalEscrow(tx, proposal);
+        await createPlayerNotification(tx, {
+          playerId: proposal.proposerId,
+          category: "BAZAR",
+          type: "PROPOSAL_REJECTED_SOLD",
+          title: `Proposta encerrada: ${listingDisplayName(listing)}`,
+          body: `O anúncio foi vendido para ${buyerName}; sua proposta foi devolvida.`,
+          href: `/bazar/${listingId}`,
+          entityId: listingId,
+          eventKey: `bazar:proposal:sold:${proposal.id}`,
+        });
       }
       await tx.bazarProposal.updateMany({
         where: { listingId, status: "PENDING" },
@@ -895,6 +922,16 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
           amount: listing.priceCoins!, unit: "ZC", metadata: activityMetadata,
         }),
       ]);
+      await createPlayerNotification(tx, {
+        playerId: listing.playerId,
+        category: "BAZAR",
+        type: "DIRECT_SALE",
+        title: `Vendido: ${listingDisplayName(listing)}`,
+        body: `${buyerName} comprou o anúncio por ${listing.priceCoins!.toLocaleString("pt-BR")} ZC.`,
+        href: `/bazar/${listingId}`,
+        entityId: listingId,
+        eventKey: `bazar:sold:${listingId}`,
+      });
     });
 
     revalidateBazar();
@@ -979,7 +1016,7 @@ export async function createProposal(
         });
       }
 
-      await tx.bazarProposal.create({
+      const proposal = await tx.bazarProposal.create({
         data: {
           listingId,
           proposerId: player.id,
@@ -991,6 +1028,22 @@ export async function createProposal(
             ? reservedItems as unknown as import("@prisma/client").Prisma.InputJsonValue
             : undefined,
         },
+      });
+      const offered = loanRequested
+        ? `solicitou o empréstimo de ${listing.loanAmountCoins?.toLocaleString("pt-BR")} ZC`
+        : [
+            reservedCoins > 0 ? `${reservedCoins.toLocaleString("pt-BR")} ZC` : "",
+            ...cleanItems.map((item) => `${item.quantity}x ${item.displayName ?? canonicalBazarItemName(item.type)}`),
+          ].filter(Boolean).join(" + ") || "enviou uma proposta";
+      await createPlayerNotification(tx, {
+        playerId: listing.playerId,
+        category: "BAZAR",
+        type: "NEW_PROPOSAL",
+        title: `Nova proposta: ${listingDisplayName(listing)}`,
+        body: `${player.displayName} ofereceu ${offered}.`,
+        href: `/bazar/${listingId}`,
+        entityId: listingId,
+        eventKey: `bazar:proposal:new:${proposal.id}`,
       });
     });
 
@@ -1047,10 +1100,20 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       // Rejeitar outras proposals e liberar mascotes que estavam reservados nelas.
       const rejectedProposals = await tx.bazarProposal.findMany({
         where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
-        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
+        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
       });
       for (const rejected of rejectedProposals) {
         await _releaseProposalEscrow(tx, rejected);
+        await createPlayerNotification(tx, {
+          playerId: rejected.proposerId,
+          category: "BAZAR",
+          type: "PROPOSAL_REJECTED_OTHER_ACCEPTED",
+          title: `Outra proposta venceu: ${listingDisplayName(listing)}`,
+          body: "O vendedor aceitou outra proposta; sua oferta foi devolvida.",
+          href: `/bazar/${listing.id}`,
+          entityId: listing.id,
+          eventKey: `bazar:proposal:other-accepted:${rejected.id}`,
+        });
       }
       await tx.bazarProposal.updateMany({
         where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
@@ -1202,6 +1265,16 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
           amount: proposal.loanRequested ? 0 : -proposal.coinsOffer, unit: "ZC", metadata: activityMetadata,
         }),
       ]);
+      await createPlayerNotification(tx, {
+        playerId: proposal.proposerId,
+        category: "BAZAR",
+        type: "PROPOSAL_ACCEPTED",
+        title: `Proposta aceita: ${listingDisplayName(listing)}`,
+        body: `${listing.player.displayName} aceitou sua proposta${proposal.loanRequested ? " de empréstimo" : ""}.`,
+        href: `/bazar/${listing.id}`,
+        entityId: listing.id,
+        eventKey: `bazar:proposal:accepted:${proposal.id}`,
+      });
     });
 
     revalidateBazar();
@@ -1225,7 +1298,7 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     const proposal = await prisma.bazarProposal.findUnique({
       where: { id: proposalId },
       include: {
-        listing: { select: { playerId: true } },
+        listing: { select: { id: true, playerId: true, category: true, payload: true, player: { select: { displayName: true } } } },
         proposer: { select: { userId: true } },
       },
     });
@@ -1245,6 +1318,18 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
         coinsEscrowed: proposal.coinsEscrowed,
       });
       await tx.bazarProposal.update({ where: { id: proposalId }, data: { status: newStatus } });
+      if (sellerIsRejecting) {
+        await createPlayerNotification(tx, {
+          playerId: proposal.proposerId,
+          category: "BAZAR",
+          type: "PROPOSAL_REJECTED",
+          title: `Proposta recusada: ${listingDisplayName(proposal.listing)}`,
+          body: `${proposal.listing.player.displayName} recusou sua proposta; a oferta foi devolvida.`,
+          href: `/bazar/${proposal.listing.id}`,
+          entityId: proposal.listing.id,
+          eventKey: `bazar:proposal:rejected:${proposal.id}`,
+        });
+      }
     });
 
     revalidateBazar();
@@ -2689,7 +2774,16 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
         ? fullMascotPayloadName(bid.listing.payload as Record<string, unknown>)
         : `${(bid.listing.payload as Record<string, unknown>).displayName}`;
       await _sendBazarSystemDM(bid.prevBidderId, `Seu lance de ${bid.prevBidAmount} ZC no leilão de "${desc}" foi superado por um lance de ${amount} ZC. Os seus ZC foram devolvidos à carteira.`);
-      revalidateTag(`nav-${user.id}`);
+      await createPlayerNotification(prisma, {
+        playerId: bid.prevBidderId,
+        category: "BAZAR",
+        type: "AUCTION_OUTBID",
+        title: `Lance superado: ${desc}`,
+        body: `Seu lance de ${bid.prevBidAmount.toLocaleString("pt-BR")} ZC foi superado por ${amount.toLocaleString("pt-BR")} ZC. O valor foi devolvido.`,
+        href: `/bazar/${listingId}`,
+        entityId: listingId,
+        eventKey: `bazar:auction:outbid:${listingId}:${bid.prevBidderId}:${amount}`,
+      });
     }
 
     revalidateBazar();
@@ -2779,6 +2873,28 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
           playerId: listing.playerId, category: "BAZAR", action: "BAZAR_AUCTION_SOLD",
           summary: `Leilão vencido por ${buyerName}: ${payloadDesc}`, source: "AUCTION", entityType: "bazarListing", entityId: listingId,
           amount: winnerBid, unit: "ZC", metadata: activityMetadata,
+        }),
+      ]);
+      await Promise.all([
+        createPlayerNotification(tx, {
+          playerId: winnerId,
+          category: "BAZAR",
+          type: "AUCTION_WON",
+          title: `Leilão vencido: ${listingDisplayName(listing)}`,
+          body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ZC; o item já foi entregue.`,
+          href: `/bazar/${listingId}`,
+          entityId: listingId,
+          eventKey: `bazar:auction:won:${listingId}`,
+        }),
+        createPlayerNotification(tx, {
+          playerId: listing.playerId,
+          category: "BAZAR",
+          type: "AUCTION_SOLD",
+          title: `Leilão encerrado: ${listingDisplayName(listing)}`,
+          body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ZC.`,
+          href: `/bazar/${listingId}`,
+          entityId: listingId,
+          eventKey: `bazar:auction:sold:${listingId}`,
         }),
       ]);
       return true;

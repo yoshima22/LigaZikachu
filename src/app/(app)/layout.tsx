@@ -38,6 +38,7 @@ import {
   canAccessLivePvp,
   getLivePvpAccessConfig,
 } from "@/lib/live-pvp-access";
+import { getNavNotificationSnapshot } from "@/lib/nav-notifications";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -55,8 +56,6 @@ const getNavData = (userId: string) =>
           player: null,
           giftCount: 0,
           wallet: null,
-          unreadDms: 0,
-          bazarAlerts: 0,
           unreadNews: 0,
         };
 
@@ -69,30 +68,6 @@ const getNavData = (userId: string) =>
           select: { balance: true },
         })
         .catch(() => null);
-      const unreadDms = await prisma.directMessage
-        .count({ where: { receiverId: player.id, readAt: null } })
-        .catch(() => 0);
-      const bazarAlerts = await prisma.bazarProposal
-        .count({
-          where: {
-            OR: [
-              {
-                listing: {
-                  playerId: player.id,
-                  status: "ACTIVE",
-                  expiresAt: { gt: new Date() },
-                },
-                status: "PENDING",
-              },
-              {
-                proposerId: player.id,
-                status: { in: ["ACCEPTED", "REJECTED"] },
-                viewedByProposerAt: null,
-              },
-            ],
-          },
-        })
-        .catch(() => 0);
       const latestNews = await prisma.newsPost
         .findMany({
           where: { published: true },
@@ -112,7 +87,7 @@ const getNavData = (userId: string) =>
           : 0;
       const unreadNews = Math.max(0, latestNewsIds.length - readNews);
 
-      return { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews };
+      return { player, giftCount, wallet, unreadNews };
     },
     [`nav-data-v2-${userId}`],
     { revalidate: 60, tags: [`nav-${userId}`] },
@@ -133,12 +108,10 @@ export default async function AppLayout({
       player: null,
       giftCount: 0,
       wallet: null,
-      unreadDms: 0,
-      bazarAlerts: 0,
       unreadNews: 0,
     };
   });
-  const [globalNotice, tickerEvents, livePvpConfig] = await Promise.all([
+  const [globalNotice, tickerEvents, livePvpConfig, notificationSnapshot] = await Promise.all([
     getGlobalNotice(),
     navData.player
       ? getPendingLeagueTickerEvents(navData.player.id).catch(() => [])
@@ -148,6 +121,14 @@ export default async function AppLayout({
       allowedPlayerIds: [],
       biomeImages: {},
     })),
+    navData.player
+      ? getNavNotificationSnapshot(navData.player.id).catch(() => ({
+          messageCount: 0,
+          bazarCount: 0,
+          messageAlerts: [],
+          bazarAlerts: [],
+        }))
+      : Promise.resolve({ messageCount: 0, bazarCount: 0, messageAlerts: [], bazarAlerts: [] }),
   ]);
   const livePvpVisible = canAccessLivePvp(
     livePvpConfig,
@@ -198,8 +179,7 @@ export default async function AppLayout({
       orderBy: { createdAt: "asc" },
     })
     .catch(() => null);
-  const { player, giftCount, wallet, unreadDms, bazarAlerts, unreadNews } =
-    navData;
+  const { player, giftCount, wallet, unreadNews } = navData;
 
   return (
     <>
@@ -259,8 +239,7 @@ export default async function AppLayout({
               admin={admin}
               variant="desktop"
               giftCount={giftCount}
-              unreadDms={unreadDms}
-              bazarAlerts={bazarAlerts}
+              initialNotifications={notificationSnapshot}
               unreadNews={unreadNews}
               playerId={player?.id}
               orderEventVisible={orderEventVisible}
@@ -333,8 +312,7 @@ export default async function AppLayout({
               admin={admin}
               variant="mobile"
               giftCount={giftCount}
-              unreadDms={unreadDms}
-              bazarAlerts={bazarAlerts}
+              initialNotifications={notificationSnapshot}
               unreadNews={unreadNews}
               playerId={player?.id}
               orderEventVisible={orderEventVisible}

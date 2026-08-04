@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -34,6 +34,13 @@ import {
   ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@supabase/supabase-js";
+import {
+  markNavAlertViewedAction,
+  refreshNavNotificationsAction,
+  type NavAlert,
+  type NavNotificationSnapshot,
+} from "./nav-notification-actions";
 
 const mainLinks = [
   {
@@ -213,8 +220,7 @@ export function AppNav({
   admin,
   variant = "desktop",
   giftCount = 0,
-  unreadDms = 0,
-  bazarAlerts = 0,
+  initialNotifications,
   unreadNews = 0,
   playerId,
   orderEventVisible = false,
@@ -223,8 +229,7 @@ export function AppNav({
   admin: boolean;
   variant?: "desktop" | "mobile";
   giftCount?: number;
-  unreadDms?: number;
-  bazarAlerts?: number;
+  initialNotifications: NavNotificationSnapshot;
   unreadNews?: number;
   playerId?: string;
   orderEventVisible?: boolean;
@@ -232,7 +237,110 @@ export function AppNav({
 }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState(initialNotifications);
+  const [, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setNotifications(initialNotifications), [initialNotifications]);
+
+  const refreshNotifications = useCallback(() => {
+    if (variant !== "desktop" || document.visibilityState !== "visible") return;
+    startTransition(async () => {
+      const next = await refreshNavNotificationsAction().catch(() => null);
+      if (next) {
+        setNotifications(next);
+        window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+      }
+    });
+  }, [variant]);
+
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<NavNotificationSnapshot>).detail;
+      if (detail) setNotifications(detail);
+    };
+    window.addEventListener("nav-notifications-updated", receive);
+    return () => window.removeEventListener("nav-notifications-updated", receive);
+  }, []);
+
+  useEffect(() => {
+    const viewed = (event: Event) => {
+      const detail = (event as CustomEvent<{ category: "MESSAGE" | "BAZAR"; entityId: string }>).detail;
+      if (!detail) return;
+      setNotifications((current) => {
+        if (detail.category === "MESSAGE") {
+          const removed = current.messageAlerts.find((item) => item.entityId === detail.entityId);
+          return {
+            ...current,
+            messageCount: Math.max(0, current.messageCount - (removed?.unreadCount ?? 0)),
+            messageAlerts: current.messageAlerts.filter((item) => item.entityId !== detail.entityId),
+          };
+        }
+        const removed = current.bazarAlerts.filter((item) => item.entityId === detail.entityId);
+        return {
+          ...current,
+          bazarCount: Math.max(0, current.bazarCount - removed.length),
+          bazarAlerts: current.bazarAlerts.filter((item) => item.entityId !== detail.entityId),
+        };
+      });
+    };
+    window.addEventListener("nav-alert-viewed", viewed);
+    return () => window.removeEventListener("nav-alert-viewed", viewed);
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(refreshNotifications, 12_000);
+    const onVisible = () => document.visibilityState === "visible" && refreshNotifications();
+    window.addEventListener("focus", refreshNotifications);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshNotifications);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refreshNotifications]);
+
+  useEffect(() => {
+    if (variant !== "desktop" || !playerId) return;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const channel = supabase
+      .channel(`nav-alerts-${playerId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "direct_messages", filter: `receiver_id=eq.${playerId}`,
+      }, refreshNotifications)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "player_notifications", filter: `playerId=eq.${playerId}`,
+      }, refreshNotifications)
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [playerId, refreshNotifications, variant]);
+
+  const dismissAlert = useCallback((alert: NavAlert) => {
+    setNotifications((current) => {
+      if (alert.category === "MESSAGE") {
+        const removed = current.messageAlerts.find((item) => item.entityId === alert.entityId);
+        const next = {
+          ...current,
+          messageCount: Math.max(0, current.messageCount - (removed?.unreadCount ?? 0)),
+          messageAlerts: current.messageAlerts.filter((item) => item.entityId !== alert.entityId),
+        };
+        window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+        return next;
+      }
+      const next = {
+        ...current,
+        bazarCount: Math.max(0, current.bazarCount - 1),
+        bazarAlerts: current.bazarAlerts.filter((item) => item.id !== alert.id),
+      };
+      window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+      return next;
+    });
+    setOpenMenu(null);
+    startTransition(() => { void markNavAlertViewedAction(alert); });
+  }, []);
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -300,7 +408,9 @@ export function AppNav({
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
-            badgeHrefs={{ "/bazar": bazarAlerts }}
+            badgeHrefs={{ "/bazar": notifications.bazarCount }}
+            alerts={notifications.bazarAlerts}
+            onAlertClick={dismissAlert}
           />
           <NavDropdown
             id="colecao"
@@ -321,8 +431,10 @@ export function AppNav({
             setOpenMenu={setOpenMenu}
             badgeHrefs={{
               "/caixa-de-presentes": giftCount,
-              "/mensagens": unreadDms,
+              "/mensagens": notifications.messageCount,
             }}
+            alerts={notifications.messageAlerts}
+            onAlertClick={dismissAlert}
             tutorialId="nav-perfil"
           />
           {admin && (
@@ -393,7 +505,9 @@ export function AppNav({
               admin={admin}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
-              badgeHrefs={{ "/bazar": bazarAlerts }}
+              badgeHrefs={{ "/bazar": notifications.bazarCount }}
+              alerts={notifications.bazarAlerts}
+              onAlertClick={dismissAlert}
             />
             <MobileNavGroup
               id="mobile-colecao"
@@ -412,7 +526,9 @@ export function AppNav({
               admin={admin}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
-              badgeHrefs={{ "/caixa-de-presentes": giftCount }}
+              badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": notifications.messageCount }}
+              alerts={notifications.messageAlerts}
+              onAlertClick={dismissAlert}
             />
             {admin && (
               <MobileNavGroup
@@ -443,6 +559,8 @@ function NavDropdown({
   openMenu,
   setOpenMenu,
   badgeHrefs = {},
+  alerts = [],
+  onAlertClick,
   tutorialId,
 }: {
   id: string;
@@ -455,6 +573,8 @@ function NavDropdown({
   openMenu: string | null;
   setOpenMenu: (v: string | null) => void;
   badgeHrefs?: Record<string, number>;
+  alerts?: NavAlert[];
+  onAlertClick?: (alert: NavAlert) => void;
   tutorialId?: string;
 }) {
   const visibleLinks = links.filter(
@@ -490,7 +610,24 @@ function NavDropdown({
         />
       </button>
       {open && (
-        <div className="absolute right-0 top-10 z-50 min-w-48 rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
+        <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
+          {alerts.length > 0 && (
+            <div className="mb-2 space-y-1 border-b border-white/10 pb-2">
+              <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
+              {alerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={alert.href}
+                  prefetch={false}
+                  onClick={() => onAlertClick?.(alert)}
+                  className="block rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 hover:bg-cyan-400/10"
+                >
+                  <span className="block text-xs font-bold text-cyan-200">{alert.title}</span>
+                  <span className="mt-0.5 block line-clamp-2 text-[10px] leading-relaxed text-slate-300">{alert.body}</span>
+                </Link>
+              ))}
+            </div>
+          )}
           {visibleLinks.map(
             ({ href, label: itemLabel, icon: ItemIcon, beta }) => (
               <Link
@@ -534,6 +671,8 @@ function MobileNavGroup({
   openMenu,
   setOpenMenu,
   badgeHrefs = {},
+  alerts = [],
+  onAlertClick,
 }: {
   id: string;
   label: string;
@@ -545,6 +684,8 @@ function MobileNavGroup({
   openMenu: string | null;
   setOpenMenu: (v: string | null) => void;
   badgeHrefs?: Record<string, number>;
+  alerts?: NavAlert[];
+  onAlertClick?: (alert: NavAlert) => void;
 }) {
   const visibleLinks = links.filter(
     (link) =>
@@ -576,7 +717,24 @@ function MobileNavGroup({
         />
       </button>
       {open && (
-        <div className="absolute left-0 top-9 z-[60] min-w-44 max-h-[60vh] overflow-y-auto rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
+        <div className="absolute left-0 top-9 z-[60] w-80 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
+          {alerts.length > 0 && (
+            <div className="mb-1 space-y-1 border-b border-white/10 pb-1">
+              <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
+              {alerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={alert.href}
+                  prefetch={false}
+                  onClick={() => onAlertClick?.(alert)}
+                  className="block rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-2 py-2"
+                >
+                  <span className="block text-xs font-bold text-cyan-200">{alert.title}</span>
+                  <span className="mt-0.5 block line-clamp-2 text-[10px] text-slate-300">{alert.body}</span>
+                </Link>
+              ))}
+            </div>
+          )}
           {visibleLinks.map(
             ({ href, label: itemLabel, icon: ItemIcon, beta }) => (
               <Link

@@ -321,6 +321,7 @@ model Player {
   raidBattleAttempts          RaidBattleAttempt[]
   raidDamageRankings          RaidDamageRanking[]
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
+  notifications               PlayerNotification[]
 
   @@map("players")
 }
@@ -358,6 +359,25 @@ model DirectMessage {
   @@index([senderId, receiverId])
   @@index([receiverId, readAt])
   @@map("direct_messages")
+}
+
+model PlayerNotification {
+  id        String    @id @default(cuid())
+  playerId  String
+  category  String
+  type      String
+  title     String
+  body      String    @db.Text
+  href      String
+  entityId  String?
+  eventKey  String?   @unique
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, category, readAt, createdAt])
+  @@map("player_notifications")
 }
 
 model GeneralChatMessage {

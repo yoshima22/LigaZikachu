@@ -100,6 +100,12 @@ export function DmChat({ me, other, initialMessages }: Props) {
   const realtimeReadyRef = useRef(false);
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent("nav-alert-viewed", {
+      detail: { category: "MESSAGE", entityId: other.id },
+    }));
+  }, [other.id]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
