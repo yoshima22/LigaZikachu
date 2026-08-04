@@ -309,7 +309,7 @@ export default async function DashboardPage() {
   const seasonLabel = activeSeason?.name ?? (allSeasons[0]?.name ?? "—");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -335,7 +335,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats rápidos */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Posição no ranking" value={myEntry ? `#${myEntry.position}` : "—"}
           icon={<Trophy size={22} />} description={myEntry ? `${myEntry.points} pts` : "Sem partidas confirmadas"}
           highlight={!!myEntry && myEntry.position === 1} />

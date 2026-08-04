@@ -4,9 +4,7 @@ import { revalidateTag } from "next/cache";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getNavNotificationSnapshot, type NavAlert, type NavNotificationSnapshot } from "@/lib/nav-notifications";
-
-export type { NavAlert, NavNotificationSnapshot };
+import { getNavNotificationSnapshot, type NavNotificationSnapshot } from "@/lib/nav-notifications";
 
 async function currentPlayer() {
   const user = await getSessionUser();

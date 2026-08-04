@@ -38,9 +38,8 @@ import { createClient } from "@supabase/supabase-js";
 import {
   markNavAlertViewedAction,
   refreshNavNotificationsAction,
-  type NavAlert,
-  type NavNotificationSnapshot,
 } from "./nav-notification-actions";
+import type { NavAlert, NavNotificationSnapshot } from "@/lib/nav-notifications";
 
 const mainLinks = [
   {
@@ -354,7 +353,7 @@ export function AppNav({
   }, []);
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="relative min-w-0">
       {variant === "desktop" && (
         <nav className="hidden items-center gap-1 md:flex">
           {mainLinks
@@ -452,8 +451,8 @@ export function AppNav({
       )}
 
       {variant === "mobile" && (
-        <div className="md:hidden px-4 pb-3">
-          <div className="flex flex-wrap items-center gap-1">
+        <div className="px-3 pb-2.5 md:hidden">
+          <div className="grid grid-cols-4 gap-1.5">
             {mainLinks
               .filter((link) => !link.adminOnly || admin)
               .map(({ href, label, icon: Icon, tutorialId }) => (
@@ -463,14 +462,15 @@ export function AppNav({
                   prefetch={false}
                   onClick={() => setOpenMenu(null)}
                   {...(tutorialId ? { "data-tutorial": tutorialId } : {})}
+                  className="min-w-0"
                 >
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="relative shrink-0 whitespace-nowrap rounded-lg px-2 text-xs text-slate-400 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+                    className="relative flex h-11 w-full min-w-0 flex-col gap-0.5 rounded-xl border border-white/5 bg-slate-950/25 px-1 text-[9px] font-semibold text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
                   >
-                    <Icon size={13} className="mr-1" />
-                    {label}
+                    <Icon size={14} />
+                    <span className="max-w-full truncate">{label}</span>
                     {href === "/noticias" && unreadNews > 0 && (
                       <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
                     )}
@@ -698,26 +698,26 @@ function MobileNavGroup({
   const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);
 
   return (
-    <div className="relative">
+    <div className="static min-w-0">
       <button
         type="button"
         onClick={() => setOpenMenu(open ? null : id)}
-        className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-xs font-semibold text-slate-400 transition-colors hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+        className={`relative flex h-11 w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[9px] font-semibold transition-colors ${open ? "border-[#FFCB05]/35 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-white/5 bg-slate-950/25 text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"}`}
       >
-        <Icon size={13} />
-        {label}
+        <Icon size={14} />
+        <span className="max-w-full truncate">{label}</span>
         {totalBadge > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white">
             {totalBadge}
           </span>
         )}
         <ChevronDown
-          size={13}
-          className={`transition ${open ? "rotate-180" : ""}`}
+          size={10}
+          className={`absolute bottom-1.5 right-1.5 transition ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (
-        <div className="absolute left-0 top-9 z-[60] w-80 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-xl border border-[#FFCB05]/15 bg-[#0b1020]/95 p-1 shadow-2xl shadow-black/40 backdrop-blur">
+        <div className="absolute inset-x-3 top-full z-[60] mt-1 max-h-[62vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/20 bg-[#0b1020]/98 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
           {alerts.length > 0 && (
             <div className="mb-1 space-y-1 border-b border-white/10 pb-1">
               <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>

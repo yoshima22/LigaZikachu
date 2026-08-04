@@ -212,24 +212,24 @@ export default async function AppLayout({
           onSeen={markOrderRewardSeenAction}
         />
       )}
-      <div className="min-h-screen bg-[#0f0f1a]">
+      <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0f0f1a]">
         {/* Header Pokemon Style */}
         <header className="sticky top-0 z-40 border-b border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#1e1e3a] to-[#1A1A2E] pt-[env(safe-area-inset-top)] backdrop-blur-md">
           {/* Top bar with glow effect */}
           <div className="h-0.5 bg-gradient-to-r from-transparent via-[#FFCB05] to-transparent opacity-60"></div>
 
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
             {/* Logo - Pokemon style */}
-            <Link href="/dashboard" className="flex items-center gap-3 group">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-[0_0_20px_#FFCB05]/40 group-hover:shadow-[0_0_30px_#FFCB05]/60 transition-all duration-300">
+            <Link href="/dashboard" className="group flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-[0_0_20px_#FFCB05]/40 transition-all duration-300 group-hover:shadow-[0_0_30px_#FFCB05]/60 sm:h-10 sm:w-10">
                 <Zap className="h-5 w-5 text-[#1A1A2E]" strokeWidth={2.5} />
                 <div className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-[#1A1A2E]"></div>
               </div>
-              <div className="flex flex-col">
-                <span className="font-pixel text-sm text-[#FFCB05] leading-tight drop-shadow-[0_0_8px_#FFCB05]/30">
+              <div className="flex min-w-0 flex-col">
+                <span className="font-pixel text-[11px] leading-tight text-[#FFCB05] drop-shadow-[0_0_8px_#FFCB05]/30 sm:text-sm">
                   Liga Zikachu
                 </span>
-                <span className="text-[9px] text-slate-500 tracking-widest uppercase">
+                <span className="hidden text-[9px] uppercase tracking-widest text-slate-500 sm:block">
                   Live Championship
                 </span>
               </div>
@@ -247,7 +247,7 @@ export default async function AppLayout({
             />
 
             {/* User + logout */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
               <RouteTutorialHelpButton />
               <Link
                 href={player ? `/jogadores/${player.id}` : "/perfil"}
@@ -349,7 +349,7 @@ export default async function AppLayout({
         {/* Main content */}
         <main
           data-tutorial="page-content"
-          className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-8"
+          className="mx-auto min-w-0 max-w-7xl px-3 py-4 sm:px-6 sm:py-8"
         >
           {children}
         </main>
