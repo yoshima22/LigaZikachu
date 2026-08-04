@@ -353,7 +353,11 @@ export function AppNav({
   }, []);
 
   return (
-    <div ref={rootRef} className={variant === "desktop" ? "relative ml-auto min-w-0" : "relative min-w-0"}>
+    <div
+      ref={rootRef}
+      data-mobile-nav-root={variant === "mobile" ? "true" : undefined}
+      className={variant === "desktop" ? "relative ml-auto min-w-0" : "relative min-w-0"}
+    >
       {variant === "desktop" && (
         <nav className="hidden items-center gap-1 min-[1450px]:flex">
           {mainLinks
@@ -687,6 +691,8 @@ function MobileNavGroup({
   alerts?: NavAlert[];
   onAlertClick?: (alert: NavAlert) => void;
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [popupGeometry, setPopupGeometry] = useState({ left: 12, width: 240 });
   const visibleLinks = links.filter(
     (link) =>
       (!link.adminOnly || admin) &&
@@ -697,11 +703,30 @@ function MobileNavGroup({
   const open = openMenu === id;
   const totalBadge = Object.values(badgeHrefs).reduce((s, v) => s + v, 0);
 
+  const toggleMenu = () => {
+    if (open) {
+      setOpenMenu(null);
+      return;
+    }
+    const button = buttonRef.current;
+    const root = button?.closest<HTMLElement>("[data-mobile-nav-root='true']");
+    if (button && root) {
+      const buttonRect = button.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+      const width = Math.min(alerts.length > 0 ? 320 : 240, Math.max(240, rootRect.width - 24));
+      const centered = buttonRect.left - rootRect.left + (buttonRect.width - width) / 2;
+      const left = Math.max(12, Math.min(centered, rootRect.width - width - 12));
+      setPopupGeometry({ left, width });
+    }
+    setOpenMenu(id);
+  };
+
   return (
     <div className="static min-w-0">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpenMenu(open ? null : id)}
+        onClick={toggleMenu}
         className={`relative flex h-11 w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[9px] font-semibold transition-colors md:h-9 md:flex-row md:gap-1 md:text-[10px] ${open ? "border-[#FFCB05]/35 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-white/5 bg-slate-950/25 text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"}`}
       >
         <Icon size={14} />
@@ -717,7 +742,10 @@ function MobileNavGroup({
         />
       </button>
       {open && (
-        <div className="absolute inset-x-3 top-full z-[60] mt-1 max-h-[62vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/20 bg-[#0b1020]/98 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <div
+          className="absolute top-full z-[60] mt-1 max-h-[62vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/25 bg-[#050914] p-2 shadow-2xl shadow-black/70"
+          style={{ left: popupGeometry.left, width: popupGeometry.width }}
+        >
           {alerts.length > 0 && (
             <div className="mb-1 space-y-1 border-b border-white/10 pb-1">
               <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
