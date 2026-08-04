@@ -7,7 +7,7 @@ import { EggType, ZikaCoinTxType } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
-import { computeMascotAnalysis } from "@/lib/mascot-analysis";
+import { computeMascotAnalysis, MASCOT_ANALYSIS_VERSION } from "@/lib/mascot-analysis";
 import type { MascotAnalysis } from "@/lib/mascot-analysis";
 import { getMascotRarity } from "./rarity";
 import { calculateLabDust } from "./dust";
@@ -117,7 +117,7 @@ export async function getLabDataAction() {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         isFavorite: true, arenaState: true, bazarListed: true,
         operationsLocked: true,
-        analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
+        analyzedAt: true, ivRating: true, ivScore: true, analysisJson: true, performanceTag: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -138,6 +138,8 @@ export async function getLabDataAction() {
     const inWeeklyLeague = weeklyLeagueLockedIds.has(m.id);
     const recyclable = !m.operationsLocked && !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
 
+    const savedAnalysis = m.analysisJson as { analysisVersion?: number } | null;
+    const currentAnalysis = savedAnalysis?.analysisVersion === MASCOT_ANALYSIS_VERSION;
     return {
       id: m.id,
       pokemonId: m.pokemonId,
@@ -154,8 +156,8 @@ export async function getLabDataAction() {
       bazarListed: m.bazarListed ?? false,
       operationsLocked: m.operationsLocked ?? false,
       analyzed: !!m.analyzedAt,
-      ivRating: m.ivRating,
-      ivScore: m.ivScore,
+      ivRating: currentAnalysis ? m.ivRating : null,
+      ivScore: currentAnalysis ? m.ivScore : null,
       performanceTag: m.performanceTag,
     };
   });
@@ -457,7 +459,7 @@ export async function analyzeMascotAction(
   const previousAnalysis = mascot.analysisJson as unknown as Partial<MascotAnalysis> | null;
   // O ranking representa o potencial intrínseco desbloqueado na primeira análise.
   // Simulações posteriores atualizam projeções, mas nunca reclassificam o mascote.
-  const hasStableAnalysis = previousAnalysis?.analysisVersion === 2;
+  const hasStableAnalysis = previousAnalysis?.analysisVersion === MASCOT_ANALYSIS_VERSION;
   const analysis: MascotAnalysis = !firstAnalysis && hasStableAnalysis && mascot.ivScore != null && mascot.ivRating
     ? {
         ...computedAnalysis,
@@ -509,11 +511,31 @@ export async function getStoredAnalysisAction(
   if (lockReason) return { ok: false as const, error: lockReason };
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
-    select: { analysisJson: true, analyzedAt: true },
+    select: {
+      id: true, pokemonId: true, level: true, personality: true, evolutionLocked: true,
+      statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+      analysisJson: true, analyzedAt: true,
+    },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
   if (!mascot.analyzedAt || !mascot.analysisJson) {
     return { ok: false as const, error: "Este mascote ainda não foi analisado." };
   }
-  return { ok: true as const, analysis: mascot.analysisJson as unknown as MascotAnalysis };
+  const saved = mascot.analysisJson as unknown as MascotAnalysis;
+  if (saved.analysisVersion === MASCOT_ANALYSIS_VERSION) {
+    return { ok: true as const, analysis: saved };
+  }
+
+  const analysis = computeMascotAnalysis(mascot, saved.targetLevel);
+  await prisma.mascot.update({
+    where: { id: mascot.id },
+    data: {
+      analyzedAt: new Date(),
+      ivScore: analysis.ivScore,
+      ivRating: analysis.ivRating,
+      analysisJson: analysis as unknown as import("@prisma/client").Prisma.InputJsonValue,
+    },
+  });
+  revalidateTag(`player-mascots-${me.id}`);
+  return { ok: true as const, analysis };
 }

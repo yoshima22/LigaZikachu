@@ -17,6 +17,10 @@ export type MascotStats = Record<StatKey, number>;
 
 export type MascotRating = "SSS" | "SS" | "S" | "A" | "B" | "C" | "D" | "E";
 
+// Incremente quando a formula permanente de classificacao mudar. Analises de
+// versoes anteriores sao recalculadas gratuitamente na proxima consulta.
+export const MASCOT_ANALYSIS_VERSION = 3;
+
 export interface AnalysisInput {
   pokemonId: number;
   level: number;
@@ -527,7 +531,7 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
   else if (input.personality === "DRAMATIC") personalityNote = "Personalidade Dramática: crescimento levemente menor e Vitalidade reduzida.";
 
   return {
-    analysisVersion: 2,
+    analysisVersion: MASCOT_ANALYSIS_VERSION,
     currentLevel,
     targetLevel,
     currentStats,

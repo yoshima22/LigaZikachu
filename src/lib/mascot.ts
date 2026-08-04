@@ -17,8 +17,8 @@ import {
   getMegaStoneExpeditionChance, rollExpeditionAgilityReduction,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
-import type { EggType, Mascot, MascotMood, MascotPersonality, Prisma } from "@prisma/client";
-import { ZikaCoinTxType } from "@prisma/client";
+import type { EggType, Mascot, MascotMood, MascotPersonality } from "@prisma/client";
+import { Prisma, ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getInitialPokemonId, rollEggPokemon } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
@@ -3135,6 +3135,11 @@ export async function applyRainbowFeather(
       personality,
       ...resetStats,
       happiness: 50, mood: "NEUTRAL",
+      // A Pena cria um novo roll intrinseco. Mantemos analyzedAt como direito
+      // a simulacoes gratuitas, mas descartamos a nota e o snapshot antigos.
+      ivScore: null,
+      ivRating: null,
+      analysisJson: Prisma.DbNull,
       ...(adminLabOriginOverride
         ? {
             hatchedFromEggType: "LAB" as const,
