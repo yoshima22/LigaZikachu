@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles } from "lucide-react";
+import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles, Pause, Play } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import {
   adminRepairArenaAction,
@@ -89,7 +89,7 @@ type AnimTurn = {
 type MascotInfo = { id: string; pokemonId: number; name: string; level: number; maxHp: number };
 
 // ── Animação de combate ───────────────────────────────────────────────────────
-function HpBar({ current, max }: { current: number; max: number }) {
+function HpBar({ current, max, playbackRate = 1 }: { current: number; max: number; playbackRate?: number }) {
   const safeMax = Math.max(1, Math.round(max));
   const safeCurrent = Math.max(0, Math.min(safeMax, Math.round(current)));
   const pct = Math.max(0, Math.min(100, (safeCurrent / safeMax) * 100));
@@ -104,8 +104,8 @@ function HpBar({ current, max }: { current: number; max: number }) {
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-700">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
-          style={{ width: `${pct}%` }}
+          className={`h-full rounded-full transition-all ${color}`}
+          style={{ width: `${pct}%`, transitionDuration: `${500 / playbackRate}ms` }}
         />
       </div>
     </div>
@@ -119,6 +119,8 @@ function MascotPanel({
   isAttacking,
   isHit,
   isPlayer,
+  playbackRate,
+  isPaused,
 }: {
   mascot: MascotInfo;
   currentHp: number;
@@ -126,6 +128,8 @@ function MascotPanel({
   isAttacking: boolean;
   isHit: boolean;
   isPlayer: boolean;
+  playbackRate: number;
+  isPaused: boolean;
 }) {
   const dead = currentHp <= 0;
   return (
@@ -144,7 +148,12 @@ function MascotPanel({
         className="mx-auto h-11 w-11 object-contain sm:h-14 sm:w-14 lg:h-16 lg:w-16 xl:h-[4.5rem] xl:w-[4.5rem]"
         style={{
           imageRendering: "pixelated",
-          animation: isHit ? "mascotShake 0.35s ease-in-out" : isAttacking ? "mascotLunge 0.3s ease-in-out" : "none",
+          animation: isHit
+            ? `mascotShake ${0.35 / playbackRate}s ease-in-out`
+            : isAttacking
+              ? `mascotLunge ${0.3 / playbackRate}s ease-in-out`
+              : "none",
+          animationPlayState: isPaused ? "paused" : "running",
           filter: isHit ? "brightness(2) saturate(0)" : "none",
           transition: "filter 0.1s",
         }}
@@ -153,7 +162,7 @@ function MascotPanel({
         {mascot.name} - Nv.{mascot.level}
       </span>
       <div className="mt-1 w-full">
-        <HpBar current={currentHp} max={mascot.maxHp} />
+        <HpBar current={currentHp} max={mascot.maxHp} playbackRate={playbackRate} />
       </div>
     </div>
   );
@@ -175,7 +184,9 @@ function BattleAnimationModal({
   onFinish: () => void;
 }) {
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [phase, setPhase] = useState<"wait" | "attack" | "hit">("wait");
+  const [phase, setPhase] = useState<"wait" | "attack" | "hit" | "recover">("wait");
+  const [playbackRate, setPlaybackRate] = useState<1 | 2 | 4>(1);
+  const [isPaused, setIsPaused] = useState(false);
 
   // HP tracking keyed by stable mascot id; names can repeat.
   const [hpMap, setHpMap] = useState<Record<string, number>>(() => {
@@ -190,40 +201,51 @@ function BattleAnimationModal({
   useEffect(() => { onFinishRef.current = onFinish; });
 
   useEffect(() => {
+    if (isPaused) return;
+
     if (currentIdx >= turns.length) {
-      const t = setTimeout(() => onFinishRef.current(), 700);
+      const t = setTimeout(() => onFinishRef.current(), 700 / playbackRate);
       return () => clearTimeout(t);
     }
 
     const turn = turns[currentIdx];
-    setPhase("wait");
-
-    // t1: attacker lunges
-    const t1 = setTimeout(() => setPhase("attack"), 300);
-    // t2: hit flash + damage
-    const t2 = setTimeout(() => {
-      setPhase("hit");
-      if ((turn.action ?? "ATTACK") === "ATTACK") {
-        setHpMap(prev => ({
-          ...prev,
-          [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
-        }));
-      } else if (turn.action === "HEAL") {
-        const allMascots = [...playerMascots, ...botMascots];
-        const healed = allMascots.find(m => m.id === turn.defenderId);
-        setHpMap(prev => ({
-          ...prev,
-          [turn.defenderId]: Math.min(healed?.maxHp ?? Infinity, (prev[turn.defenderId] ?? 0) + turn.damage),
-        }));
+    const phaseDuration = phase === "wait" || phase === "attack"
+      ? 300
+      : phase === "hit"
+        ? 350
+        : 650;
+    const timer = setTimeout(() => {
+      if (phase === "wait") {
+        setPhase("attack");
+        return;
       }
-    }, 600);
-    // t3: back to idle
-    const t3 = setTimeout(() => setPhase("wait"), 950);
-    // t4: advance
-    const t4 = setTimeout(() => setCurrentIdx(i => i + 1), 1600);
+      if (phase === "attack") {
+        if ((turn.action ?? "ATTACK") === "ATTACK") {
+          setHpMap(prev => ({
+            ...prev,
+            [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
+          }));
+        } else if (turn.action === "HEAL") {
+          const allMascots = [...playerMascots, ...botMascots];
+          const healed = allMascots.find(m => m.id === turn.defenderId);
+          setHpMap(prev => ({
+            ...prev,
+            [turn.defenderId]: Math.min(healed?.maxHp ?? Infinity, (prev[turn.defenderId] ?? 0) + turn.damage),
+          }));
+        }
+        setPhase("hit");
+        return;
+      }
+      if (phase === "hit") {
+        setPhase("recover");
+        return;
+      }
+      setCurrentIdx(i => i + 1);
+      setPhase("wait");
+    }, phaseDuration / playbackRate);
 
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
-  }, [currentIdx, turns.length]); // intentionally omit onFinish — use ref
+    return () => clearTimeout(timer);
+  }, [currentIdx, isPaused, phase, playbackRate, turns, playerMascots, botMascots]);
 
   const turn = turns[currentIdx] ?? null;
   const allReplayMascots = [...playerMascots, ...botMascots];
@@ -252,17 +274,52 @@ function BattleAnimationModal({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4">
         <div className="max-h-[96vh] w-full max-w-7xl overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl">
           {/* Header */}
-          <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-2 sm:px-5 sm:pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-3 pb-2 sm:px-5 sm:pt-4">
             <p className="text-[11px] uppercase tracking-widest text-[#FFCB05] font-semibold">⚔️ Combate em andamento…</p>
-            <button type="button" onClick={() => onFinishRef.current()}
-              className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] text-slate-400 hover:text-white">
-              Pular →
-            </button>
+            <div className="flex items-center gap-1" aria-label="Controles do replay">
+              <button
+                type="button"
+                onClick={() => setIsPaused(paused => !paused)}
+                aria-label={isPaused ? "Continuar replay" : "Pausar replay"}
+                aria-pressed={isPaused}
+                className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-bold transition-colors ${
+                  isPaused
+                    ? "border-[#FFCB05]/60 bg-[#FFCB05]/15 text-[#FFCB05]"
+                    : "border-border text-slate-300 hover:border-slate-600 hover:text-white"
+                }`}
+              >
+                {isPaused ? <Play size={11} fill="currentColor" /> : <Pause size={11} fill="currentColor" />}
+                {isPaused ? "Continuar" : "Pausar"}
+              </button>
+              {([1, 2, 4] as const).map(rate => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => setPlaybackRate(rate)}
+                  aria-label={`Reproduzir em ${rate} vezes`}
+                  aria-pressed={playbackRate === rate}
+                  className={`h-7 min-w-8 rounded-lg border px-1.5 text-[10px] font-black transition-colors ${
+                    playbackRate === rate
+                      ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
+                      : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-200"
+                  }`}
+                >
+                  {rate}×
+                </button>
+              ))}
+              <button type="button" onClick={() => onFinishRef.current()}
+                className="ml-1 h-7 shrink-0 rounded-lg border border-border px-2 text-[10px] text-slate-400 hover:text-white">
+                Pular →
+              </button>
+            </div>
           </div>
 
           {/* Progress bar */}
           <div className="mx-3 h-1 rounded-full bg-slate-800 mb-3 sm:mx-5">
-            <div className="h-1 rounded-full bg-[#FFCB05] transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div
+              className="h-1 rounded-full bg-[#FFCB05] transition-all"
+              style={{ width: `${progress}%`, transitionDuration: `${500 / playbackRate}ms` }}
+            />
           </div>
 
           {/* Sprites */}
@@ -280,6 +337,8 @@ function BattleAnimationModal({
                     isAttacking={phase === "attack" && turn?.isPlayerAttacker === true && turn.attackerId === m.id}
                     isHit={phase === "hit" && turn?.isPlayerAttacker === false && turn.defenderId === m.id}
                     isPlayer
+                    playbackRate={playbackRate}
+                    isPaused={isPaused}
                   />
                 ))}
               </div>
@@ -318,6 +377,8 @@ function BattleAnimationModal({
                     isAttacking={phase === "attack" && turn?.isPlayerAttacker === false && turn.attackerId === m.id}
                     isHit={phase === "hit" && turn?.isPlayerAttacker === true && turn.defenderId === m.id}
                     isPlayer={false}
+                    playbackRate={playbackRate}
+                    isPaused={isPaused}
                   />
                 ))}
               </div>
