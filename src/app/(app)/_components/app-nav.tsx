@@ -353,7 +353,7 @@ export function AppNav({
   }, []);
 
   return (
-    <div ref={rootRef} className="relative min-w-0">
+    <div ref={rootRef} className={variant === "desktop" ? "relative ml-auto min-w-0" : "relative min-w-0"}>
       {variant === "desktop" && (
         <nav className="hidden items-center gap-1 min-[1450px]:flex">
           {mainLinks
@@ -610,7 +610,7 @@ function NavDropdown({
         />
       </button>
       {open && (
-        <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-slate-950/95 p-2 shadow-2xl">
+        <div className={`absolute right-0 top-10 z-50 max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-slate-950/95 p-1.5 shadow-2xl ${alerts.length > 0 ? "w-80" : "w-56"}`}>
           {alerts.length > 0 && (
             <div className="mb-2 space-y-1 border-b border-white/10 pb-2">
               <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
@@ -635,7 +635,7 @@ function NavDropdown({
                 href={href}
                 prefetch={false}
                 onClick={() => setOpenMenu(null)}
-                className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]"
+                className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 hover:bg-white/5 hover:text-[#FFCB05]"
               >
                 <span className="flex items-center gap-2">
                   <ItemIcon size={14} />

@@ -247,11 +247,11 @@ export default async function AppLayout({
             />
 
             {/* User + logout */}
-            <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <RouteTutorialHelpButton />
               <Link
                 href={player ? `/jogadores/${player.id}` : "/perfil"}
-                className="hidden items-center gap-2.5 hover:opacity-80 transition-opacity sm:flex"
+                className="hidden items-center gap-1.5 transition-opacity hover:opacity-80 sm:flex"
               >
                 {/* Texto à esquerda */}
                 <div className="text-right">
