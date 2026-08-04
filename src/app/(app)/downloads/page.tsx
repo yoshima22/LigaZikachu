@@ -18,6 +18,11 @@ const APK_HASH = "645BFCB9266580688D3AEEF6A5A684CE8557514E670A76DA82CD5D7E77C6DA
 export default function DownloadsPage() {
   return (
     <div className="space-y-6 pb-8">
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.addEventListener("beforeinstallprompt",function(event){event.preventDefault();window.__ligaInstallPrompt=event;});`,
+        }}
+      />
       <section className="relative isolate overflow-hidden rounded-[2rem] border border-[#FFCB05]/25 bg-[#06152c] shadow-2xl shadow-blue-950/40">
         <div
           aria-hidden="true"
@@ -55,7 +60,7 @@ export default function DownloadsPage() {
           <article className="relative overflow-hidden rounded-3xl border border-lime-400/35 bg-gradient-to-br from-lime-950/80 via-emerald-950/75 to-slate-950 p-5 shadow-xl sm:p-7">
             <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-lime-400/10 blur-3xl" />
             <div className="relative flex h-full flex-col">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 lg:min-h-[148px]">
                 <div>
                   <span className="text-xs font-black uppercase tracking-[0.2em] text-lime-300">Android</span>
                   <h3 className="mt-1 text-3xl font-black text-white">Aplicativo APK</h3>
@@ -90,12 +95,12 @@ export default function DownloadsPage() {
           <article className="relative overflow-hidden rounded-3xl border border-cyan-400/35 bg-gradient-to-br from-cyan-950/75 via-blue-950/75 to-slate-950 p-5 shadow-xl sm:p-7">
             <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-cyan-400/10 blur-3xl" />
             <div className="relative flex h-full flex-col">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 lg:min-h-[148px]">
                 <div>
                   <span className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">Windows</span>
                   <h3 className="mt-1 text-3xl font-black text-white">Aplicativo do site</h3>
                   <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-300">
-                    Instale a Liga pelo Chrome ou Edge. Ela ganha atalho próprio, abre em uma janela separada e continua sempre ligada à versão atual do site.
+                    Instale a Liga por um navegador compatível. Ela ganha atalho próprio, abre em uma janela separada e continua sempre ligada à versão atual do site.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-cyan-300/30 bg-cyan-400/15 p-4 text-cyan-300">
@@ -106,7 +111,7 @@ export default function DownloadsPage() {
               <div className="my-6 grid grid-cols-3 gap-2 text-center text-xs">
                 <InfoPill label="Tipo" value="PWA" />
                 <InfoPill label="Atualização" value="Automática" />
-                <InfoPill label="Navegador" value="Chrome/Edge" />
+                <InfoPill label="Navegador" value="Chrome/Edge/Opera*" />
               </div>
 
               <div className="mt-auto">

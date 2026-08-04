@@ -8,6 +8,12 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+declare global {
+  interface Window {
+    __ligaInstallPrompt?: InstallPromptEvent;
+  }
+}
+
 export function WindowsInstallButton() {
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -15,14 +21,18 @@ export function WindowsInstallButton() {
 
   useEffect(() => {
     setInstalled(window.matchMedia("(display-mode: standalone)").matches);
+    if (window.__ligaInstallPrompt) setPromptEvent(window.__ligaInstallPrompt);
 
     const onPrompt = (event: Event) => {
       event.preventDefault();
-      setPromptEvent(event as InstallPromptEvent);
+      const installEvent = event as InstallPromptEvent;
+      window.__ligaInstallPrompt = installEvent;
+      setPromptEvent(installEvent);
     };
     const onInstalled = () => {
       setInstalled(true);
       setPromptEvent(null);
+      delete window.__ligaInstallPrompt;
       setShowInstructions(false);
     };
 
@@ -41,7 +51,10 @@ export function WindowsInstallButton() {
     }
     await promptEvent.prompt();
     const choice = await promptEvent.userChoice;
-    if (choice.outcome === "accepted") setPromptEvent(null);
+    if (choice.outcome === "accepted") {
+      setPromptEvent(null);
+      delete window.__ligaInstallPrompt;
+    }
   }
 
   if (installed) {
@@ -66,7 +79,7 @@ export function WindowsInstallButton() {
         <div className="mt-3 rounded-xl border border-cyan-300/20 bg-slate-950/60 p-3 text-left text-xs leading-relaxed text-slate-300">
           <p className="font-bold text-cyan-200">Instalação pelo navegador</p>
           <p className="mt-1">
-            No Chrome ou Edge, abra o menu do navegador e escolha <strong>Instalar Liga Zikachu</strong> ou <strong>Aplicativos → Instalar este site como aplicativo</strong>.
+            O navegador ainda não liberou a confirmação automática. No Chrome ou Edge, use <strong>Aplicativos → Instalar este site como aplicativo</strong>. No Opera, o botão abre a confirmação automaticamente quando a versão instalada oferece suporte; algumas versões do Opera e do Opera GX ainda não disponibilizam essa instalação.
           </p>
         </div>
       )}
