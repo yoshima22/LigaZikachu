@@ -355,7 +355,7 @@ export function AppNav({
   return (
     <div ref={rootRef} className="relative min-w-0">
       {variant === "desktop" && (
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 min-[1450px]:flex">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
             .map(({ href, label, icon: Icon, tutorialId }) => (
@@ -451,8 +451,8 @@ export function AppNav({
       )}
 
       {variant === "mobile" && (
-        <div className="px-3 pb-2.5 md:hidden">
-          <div className="grid grid-cols-4 gap-1.5">
+        <div className="px-3 pb-2.5 min-[1450px]:hidden">
+          <div className={`grid grid-cols-4 gap-1.5 md:gap-2 ${admin ? "md:grid-cols-9" : "md:grid-cols-8"}`}>
             {mainLinks
               .filter((link) => !link.adminOnly || admin)
               .map(({ href, label, icon: Icon, tutorialId }) => (
@@ -467,7 +467,7 @@ export function AppNav({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="relative flex h-11 w-full min-w-0 flex-col gap-0.5 rounded-xl border border-white/5 bg-slate-950/25 px-1 text-[9px] font-semibold text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"
+                    className="relative flex h-11 w-full min-w-0 flex-col gap-0.5 rounded-xl border border-white/5 bg-slate-950/25 px-1 text-[9px] font-semibold text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05] md:h-9 md:flex-row md:gap-1 md:text-[10px]"
                   >
                     <Icon size={14} />
                     <span className="max-w-full truncate">{label}</span>
@@ -702,7 +702,7 @@ function MobileNavGroup({
       <button
         type="button"
         onClick={() => setOpenMenu(open ? null : id)}
-        className={`relative flex h-11 w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[9px] font-semibold transition-colors ${open ? "border-[#FFCB05]/35 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-white/5 bg-slate-950/25 text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"}`}
+        className={`relative flex h-11 w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[9px] font-semibold transition-colors md:h-9 md:flex-row md:gap-1 md:text-[10px] ${open ? "border-[#FFCB05]/35 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-white/5 bg-slate-950/25 text-slate-400 hover:border-[#FFCB05]/20 hover:bg-[#FFCB05]/10 hover:text-[#FFCB05]"}`}
       >
         <Icon size={14} />
         <span className="max-w-full truncate">{label}</span>
@@ -713,7 +713,7 @@ function MobileNavGroup({
         )}
         <ChevronDown
           size={10}
-          className={`absolute bottom-1.5 right-1.5 transition ${open ? "rotate-180" : ""}`}
+          className={`absolute bottom-1.5 right-1.5 transition md:static ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (

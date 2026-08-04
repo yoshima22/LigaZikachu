@@ -218,7 +218,7 @@ export default async function AppLayout({
           {/* Top bar with glow effect */}
           <div className="h-0.5 bg-gradient-to-r from-transparent via-[#FFCB05] to-transparent opacity-60"></div>
 
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
+          <div className="mx-auto flex max-w-[1536px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
             {/* Logo - Pokemon style */}
             <Link href="/dashboard" className="group flex min-w-0 items-center gap-2 sm:gap-3">
               <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-[0_0_20px_#FFCB05]/40 transition-all duration-300 group-hover:shadow-[0_0_30px_#FFCB05]/60 sm:h-10 sm:w-10">
@@ -307,7 +307,7 @@ export default async function AppLayout({
             </div>
           </div>
 
-          <div className="mx-auto max-w-7xl">
+          <div className="mx-auto max-w-[1536px]">
             <AppNav
               admin={admin}
               variant="mobile"
