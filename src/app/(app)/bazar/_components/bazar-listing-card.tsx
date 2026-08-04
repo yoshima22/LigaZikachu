@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Coins, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
-import { getMascotRarity, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
+import { getMascotRarity, getShinySprite, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -62,6 +62,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
   const auctionEnd = listing.auctionEndsAt ? new Date(listing.auctionEndsAt) : null;
   const mascotRarity = listing.category === "MASCOT" ? getMascotRarity(Number(payload.pokemonId)) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
+  const isShiny = listing.category === "MASCOT" && payload.isShiny === true;
 
   return (
     <Link href={`/bazar/${listing.id}`}
@@ -73,11 +74,17 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={getSpriteUrl(payload.pokemonId as number, true)}
+              src={isShiny ? getShinySprite(payload.pokemonId as number, true) : getSpriteUrl(payload.pokemonId as number, true)}
               alt={fullMascotName(payload)}
               className="h-24 object-contain group-hover:scale-110 transition-transform"
               style={{ imageRendering: "pixelated" }}
-              onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(payload.pokemonId as number); }}
+              onError={e => {
+                const image = e.currentTarget as HTMLImageElement;
+                image.onerror = null;
+                image.src = isShiny
+                  ? getShinySprite(payload.pokemonId as number, false)
+                  : getSpriteUrl(payload.pokemonId as number);
+              }}
             />
             <div className="absolute bottom-1 right-1 rounded-full bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">
               Nv.{payload.level as number}
@@ -85,6 +92,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             {mascotRarity && mascotRarityLabel && (
               <div className={`absolute top-1.5 right-1.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
                 {mascotRarityLabel}
+              </div>
+            )}
+            {isShiny && (
+              <div className="absolute left-1.5 top-8 rounded-full border border-yellow-300/60 bg-gradient-to-r from-yellow-400/25 via-purple-400/20 to-cyan-400/20 px-2 py-0.5 text-[9px] font-black tracking-wide text-yellow-100 shadow-[0_0_14px_rgba(250,204,21,0.28)]">
+                ✨ SHINY
               </div>
             )}
           </>

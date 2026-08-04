@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
 import { Clock, Egg } from "lucide-react";
-import { getSpriteUrl } from "@/lib/mascot-data";
+import { getShinySprite, getSpriteUrl } from "@/lib/mascot-data";
 import { putEggInIncubator, hatchEggAction, confirmLabChoiceAction, skipIncubationAction } from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import { getPokemonName } from "@/lib/mascot-data";
@@ -99,7 +99,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
     statRange?: [number, number];
   } | null>(null);
-  const [labChoices, setLabChoices] = useState<number[] | null>(null);
+  const [labChoices, setLabChoices] = useState<Array<{ pokemonId: number; isShiny: boolean }> | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
   // Modal de seleção de geração
   const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
@@ -199,13 +199,30 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             <p className="text-xs text-slate-400">Escolha um dos 3 Pokémon para nascer do ovo:</p>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {labChoices.map(id => (
-              <button key={id} type="button" disabled={pending} onClick={() => handleLabChoice(id)}
-                className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-slate-900 p-3 hover:border-[#FFCB05]/60 hover:bg-slate-800 transition-colors disabled:opacity-50">
+            {labChoices.map(choice => (
+              <button key={choice.pokemonId} type="button" disabled={pending} onClick={() => handleLabChoice(choice.pokemonId)}
+                className={`relative flex flex-col items-center gap-1.5 rounded-xl border bg-slate-900 p-3 transition-colors disabled:opacity-50 ${choice.isShiny ? "border-yellow-400/70 shadow-[0_0_20px_rgba(250,204,21,0.16)] hover:border-yellow-300" : "border-border hover:border-[#FFCB05]/60 hover:bg-slate-800"}`}>
+                {choice.isShiny && (
+                  <span className="absolute right-1 top-1 rounded-full border border-yellow-300/50 bg-yellow-400/15 px-1.5 py-0.5 text-[8px] font-black text-yellow-200">
+                    ✨ SHINY
+                  </span>
+                )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getSpriteUrl(id)} alt={getPokemonName(id)} width={64} height={64}
-                  className="object-contain" style={{ imageRendering: "pixelated" }} />
-                <span className="text-[10px] text-slate-300 text-center leading-tight">{getPokemonName(id)}</span>
+                <img
+                  src={choice.isShiny ? getShinySprite(choice.pokemonId, true) : getSpriteUrl(choice.pokemonId)}
+                  alt={getPokemonName(choice.pokemonId)} width={64} height={64}
+                  className="object-contain" style={{ imageRendering: "pixelated" }}
+                  onError={event => {
+                    const image = event.currentTarget as HTMLImageElement;
+                    image.onerror = null;
+                    image.src = choice.isShiny
+                      ? getShinySprite(choice.pokemonId, false)
+                      : getSpriteUrl(choice.pokemonId);
+                  }}
+                />
+                <span className={`text-center text-[10px] leading-tight ${choice.isShiny ? "font-bold text-yellow-200" : "text-slate-300"}`}>
+                  {getPokemonName(choice.pokemonId)}
+                </span>
               </button>
             ))}
           </div>

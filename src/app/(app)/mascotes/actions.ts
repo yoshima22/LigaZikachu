@@ -16,7 +16,7 @@ import {
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
-import { getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
@@ -202,6 +202,9 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
 }
 
 const LAB_CHOICES_MARKER = "LAB_CHOICES:";
+const LAB_SHINY_MARKER = "LAB_SHINY:";
+
+type LabEggChoice = { pokemonId: number; isShiny: boolean };
 
 function getStoredLabChoices(origin?: string | null): number[] | null {
   const marker = origin?.split("|").find((part) => part.startsWith(LAB_CHOICES_MARKER));
@@ -221,6 +224,65 @@ function storeLabChoices(origin: string | null, choices: number[]) {
     .split("|")
     .filter((part) => part && !part.startsWith(LAB_CHOICES_MARKER));
   return [...preservedParts, `${LAB_CHOICES_MARKER}${choices.join(",")}`].join("|");
+}
+
+function getStoredLabShinyFlags(origin?: string | null): boolean[] | null {
+  const marker = origin?.split("|").find((part) => part.startsWith(LAB_SHINY_MARKER));
+  if (!marker) return null;
+  const flags = marker
+    .slice(LAB_SHINY_MARKER.length)
+    .split(",")
+    .map((value) => value === "1");
+  return flags.length === 3 ? flags : null;
+}
+
+function storeLabShinyFlags(origin: string | null, flags: boolean[]) {
+  const preservedParts = (origin ?? "")
+    .split("|")
+    .filter((part) => part && !part.startsWith(LAB_SHINY_MARKER));
+  return [...preservedParts, `${LAB_SHINY_MARKER}${flags.map((flag) => flag ? "1" : "0").join(",")}`].join("|");
+}
+
+function labChoiceDetails(choices: number[], flags: boolean[]): LabEggChoice[] {
+  return choices.map((pokemonId, index) => ({ pokemonId, isShiny: flags[index] === true }));
+}
+
+function rollLabShinyFlags(count: number) {
+  const shinyChance = EGG_SHINY_CHANCE.LAB ?? (1 / 500);
+  const flags = Array.from({ length: count }, () => false);
+  // O ovo de laboratório já tinha uma única rolagem de shiny ao chocar.
+  // Sorteamos antes e vinculamos o resultado a uma das opções sem triplicar a chance.
+  if (count > 0 && Math.random() < shinyChance) {
+    flags[Math.floor(Math.random() * count)] = true;
+  }
+  return flags;
+}
+
+async function ensureLabChoiceDetails(params: {
+  eggId: string;
+  playerId: string;
+  origin: string | null;
+  choices: number[];
+}): Promise<LabEggChoice[] | null> {
+  const storedFlags = getStoredLabShinyFlags(params.origin);
+  if (storedFlags) return labChoiceDetails(params.choices, storedFlags);
+
+  const rolledFlags = rollLabShinyFlags(params.choices.length);
+  const nextOrigin = storeLabShinyFlags(params.origin, rolledFlags);
+  const saved = await prisma.mascotEgg.updateMany({
+    where: { id: params.eggId, playerId: params.playerId, origin: params.origin },
+    data: { origin: nextOrigin },
+  });
+  if (saved.count === 1) return labChoiceDetails(params.choices, rolledFlags);
+
+  const currentEgg = await prisma.mascotEgg.findUnique({
+    where: { id: params.eggId },
+    select: { playerId: true, origin: true },
+  });
+  const concurrentFlags = currentEgg?.playerId === params.playerId
+    ? getStoredLabShinyFlags(currentEgg.origin)
+    : null;
+  return concurrentFlags ? labChoiceDetails(params.choices, concurrentFlags) : null;
 }
 
 function findPokemonIdsBySearch(search: string) {
@@ -278,7 +340,7 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
 export async function hatchEggAction(): Promise<{
   error?: string;
   result?: Awaited<ReturnType<typeof hatchEgg>>;
-  labChoices?: number[];
+  labChoices?: LabEggChoice[];
 }> {
   try {
     const user = await getSessionUser();
@@ -296,7 +358,17 @@ export async function hatchEggAction(): Promise<{
       if (new Date() < incubator.finishAt) return { error: "O ovo ainda não está pronto." };
 
       const storedChoices = getStoredLabChoices(incubator.egg.origin);
-      if (storedChoices) return { labChoices: storedChoices };
+      if (storedChoices) {
+        const details = await ensureLabChoiceDetails({
+          eggId: incubator.eggId,
+          playerId: player.id,
+          origin: incubator.egg.origin,
+          choices: storedChoices,
+        });
+        return details
+          ? { labChoices: details }
+          : { error: "Não foi possível fixar a variante das opções deste ovo. Tente novamente." };
+      }
 
       let labGeneration = getLabEggGeneration(incubator.egg.origin);
       let choiceOrigin = incubator.egg.origin;
@@ -317,11 +389,13 @@ export async function hatchEggAction(): Promise<{
       );
 
       // A atualização condicional impede que duas abas gravem trios diferentes.
+      const shinyFlags = rollLabShinyFlags(choices.length);
+      const storedChoiceOrigin = storeLabShinyFlags(storeLabChoices(choiceOrigin, choices), shinyFlags);
       const saved = await prisma.mascotEgg.updateMany({
         where: { id: incubator.eggId, playerId: player.id, origin: choiceOrigin },
-        data: { origin: storeLabChoices(choiceOrigin, choices) },
+        data: { origin: storedChoiceOrigin },
       });
-      if (saved.count === 1) return { labChoices: choices };
+      if (saved.count === 1) return { labChoices: labChoiceDetails(choices, shinyFlags) };
 
       const currentEgg = await prisma.mascotEgg.findUnique({
         where: { id: incubator.eggId },
@@ -330,7 +404,12 @@ export async function hatchEggAction(): Promise<{
       const concurrentChoices = currentEgg?.playerId === player.id
         ? getStoredLabChoices(currentEgg.origin)
         : null;
-      if (concurrentChoices) return { labChoices: concurrentChoices };
+      const concurrentFlags = currentEgg?.playerId === player.id
+        ? getStoredLabShinyFlags(currentEgg.origin)
+        : null;
+      if (concurrentChoices && concurrentFlags) {
+        return { labChoices: labChoiceDetails(concurrentChoices, concurrentFlags) };
+      }
       return { error: "Não foi possível fixar as opções deste ovo. Tente novamente." };
     }
 
@@ -361,7 +440,17 @@ export async function confirmLabChoiceAction(chosenPokemonId: number): Promise<{
       return { error: "Esta opção não pertence ao resultado deste ovo." };
     }
 
-    const result = await hatchEgg(player.id, chosenPokemonId);
+    const details = await ensureLabChoiceDetails({
+      eggId: incubator.eggId,
+      playerId: player.id,
+      origin: incubator.egg.origin,
+      choices: storedChoices,
+    });
+    if (!details) return { error: "Não foi possível confirmar a variante desta opção. Abra o ovo novamente." };
+    const chosen = details.find((choice) => choice.pokemonId === chosenPokemonId);
+    if (!chosen) return { error: "Esta opção não pertence ao resultado deste ovo." };
+
+    const result = await hatchEgg(player.id, chosenPokemonId, chosen.isShiny);
     revalidate(player.id);
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }

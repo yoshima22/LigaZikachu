@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { getMascotRarity, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
+import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import {
   getListing, buyListing, createProposal, acceptProposal,
@@ -348,6 +348,7 @@ export default function BazarListingPage(): React.JSX.Element {
     ? (listing.currentBidCoins ? listing.currentBidCoins + 100 : (listing.minBidCoins ?? 1))
     : 0;
   const pokemonId = payload.pokemonId as number | undefined;
+  const isShiny = payload.isShiny === true;
   const pokemonName = pokemonId ? getPokemonName(pokemonId) : "";
   const mascotRarity = pokemonId ? getMascotRarity(pokemonId) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
@@ -385,12 +386,21 @@ export default function BazarListingPage(): React.JSX.Element {
             <div className="flex flex-col items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={getSpriteUrl(pokemonId, true)}
+                src={isShiny ? getShinySprite(pokemonId, true) : getSpriteUrl(pokemonId, true)}
                 alt={mascotFullName}
                 className="h-32 object-contain"
                 style={{ imageRendering: "pixelated" }}
-                onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(pokemonId); }}
+                onError={e => {
+                  const image = e.currentTarget;
+                  image.onerror = null;
+                  image.src = isShiny ? getShinySprite(pokemonId, false) : getSpriteUrl(pokemonId);
+                }}
               />
+              {isShiny && (
+                <span className="rounded-full border border-amber-300/70 bg-amber-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.3)]">
+                  ✨ SHINY
+                </span>
+              )}
               <p className="text-[#FFCB05] font-semibold">Nível {level}</p>
               {mascotRarity && mascotRarityLabel && (
                 <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>

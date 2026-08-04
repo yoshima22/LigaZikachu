@@ -124,7 +124,7 @@ export async function startIncubation(playerId: string, eggId: string) {
   });
 }
 
-export async function hatchEgg(playerId: string, forcedPokemonId?: number): Promise<{
+export async function hatchEgg(playerId: string, forcedPokemonId?: number, forcedShiny?: boolean): Promise<{
   mascotId: string; pokemonId: number; name: string; isNew: boolean; isShiny: boolean; isStatBuffed: boolean;
   stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
   statRange: [number, number];
@@ -156,7 +156,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number): Prom
 
     // Chance de shiny (brilhante)
     const shinyChance = EGG_SHINY_CHANCE[eggTypeKey] ?? (1 / 500);
-    const isShiny = Math.random() < shinyChance;
+    const isShiny = forcedShiny ?? (Math.random() < shinyChance);
 
     // Cria o mascote com stats escalados por raridade do ovo
     const m = await tx.mascot.create({

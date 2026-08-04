@@ -595,6 +595,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           nickname: mascot.nickname,
           level: mascot.level,
           personality: mascot.personality,
+          isShiny: mascot.isShiny,
           stats: {
             force: mascot.statForce, agility: mascot.statAgility,
             charisma: mascot.statCharisma, instinct: mascot.statInstinct,
@@ -2539,7 +2540,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
         payload = {
           mascotId: mascot.id, pokemonId: mascot.pokemonId,
           pokemonName: getPokemonName(mascot.pokemonId), nickname: mascot.nickname,
-          level: mascot.level, personality: mascot.personality,
+          level: mascot.level, personality: mascot.personality, isShiny: mascot.isShiny,
           stats: { force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality },
           battleWins: mascot.battleWins,
           hatchedFromEggType: mascot.hatchedFromEggType,
