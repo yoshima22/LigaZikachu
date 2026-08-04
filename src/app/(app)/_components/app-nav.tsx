@@ -239,19 +239,38 @@ export function AppNav({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(Date.now());
+  const refreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => setNotifications(initialNotifications), [initialNotifications]);
 
   const refreshNotifications = useCallback(() => {
     if (variant !== "desktop" || document.visibilityState !== "visible") return;
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     startTransition(async () => {
-      const next = await refreshNavNotificationsAction().catch(() => null);
-      if (next) {
-        setNotifications(next);
-        window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+      try {
+        const next = await refreshNavNotificationsAction().catch(() => null);
+        if (next) {
+          lastRefreshAtRef.current = Date.now();
+          setNotifications(next);
+          window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+        }
+      } finally {
+        refreshInFlightRef.current = false;
       }
     });
   }, [variant]);
+
+  const scheduleNotificationRefresh = useCallback(() => {
+    if (variant !== "desktop" || document.visibilityState !== "visible") return;
+    if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      refreshNotifications();
+    }, 500);
+  }, [refreshNotifications, variant]);
 
   useEffect(() => {
     const receive = (event: Event) => {
@@ -288,16 +307,22 @@ export function AppNav({
   }, []);
 
   useEffect(() => {
-    const interval = window.setInterval(refreshNotifications, 12_000);
-    const onVisible = () => document.visibilityState === "visible" && refreshNotifications();
-    window.addEventListener("focus", refreshNotifications);
-    document.addEventListener("visibilitychange", onVisible);
+    if (variant !== "desktop") return;
+    const refreshIfStale = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastRefreshAtRef.current >= 60_000) {
+        refreshNotifications();
+      }
+    };
+    const interval = window.setInterval(refreshNotifications, 5 * 60_000);
+    window.addEventListener("focus", refreshIfStale);
+    document.addEventListener("visibilitychange", refreshIfStale);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("focus", refreshNotifications);
-      document.removeEventListener("visibilitychange", onVisible);
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
+      window.removeEventListener("focus", refreshIfStale);
+      document.removeEventListener("visibilitychange", refreshIfStale);
     };
-  }, [refreshNotifications]);
+  }, [refreshNotifications, variant]);
 
   useEffect(() => {
     if (variant !== "desktop" || !playerId) return;
@@ -309,13 +334,13 @@ export function AppNav({
       .channel(`nav-alerts-${playerId}`)
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "direct_messages", filter: `receiver_id=eq.${playerId}`,
-      }, refreshNotifications)
+      }, scheduleNotificationRefresh)
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "player_notifications", filter: `playerId=eq.${playerId}`,
-      }, refreshNotifications)
+      }, scheduleNotificationRefresh)
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [playerId, refreshNotifications, variant]);
+  }, [playerId, scheduleNotificationRefresh, variant]);
 
   const dismissAlert = useCallback((alert: NavAlert) => {
     setNotifications((current) => {

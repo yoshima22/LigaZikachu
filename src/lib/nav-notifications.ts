@@ -48,7 +48,8 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
     prisma.directMessage.findMany({
       where: { receiverId: playerId, readAt: null },
       orderBy: { createdAt: "desc" },
-      take: 25,
+      distinct: ["senderId"],
+      take: 5,
       select: {
         id: true,
         senderId: true,
@@ -66,7 +67,7 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
     prisma.playerNotification.findMany({
       where: { playerId, category: "BAZAR", readAt: null },
       orderBy: { createdAt: "desc" },
-      take: 25,
+      take: 5,
       select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
     }),
     prisma.playerNotification.count({
