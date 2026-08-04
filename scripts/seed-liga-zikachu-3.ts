@@ -8,7 +8,7 @@ import { JOHTO_POSTSEASON_CONFIG } from "../src/lib/tournament-postseason";
 
 const prisma = new PrismaClient();
 const TOURNAMENT_SLUG = "liga-zikachu-3-edicao-rumo-a-johto";
-const SEASON_SLUG = "liga-zikachu-3-edicao";
+const SEASON_SLUG = "liga-zikachu-temporada-1";
 const ADMIN_EMAIL = "admin@ligazikachu.com";
 const START = new Date("2026-08-05T20:00:00-03:00");
 const END = new Date("2026-09-25T23:59:59-03:00");
@@ -114,11 +114,8 @@ async function main() {
   if (missing.length) throw new Error(`Jogadores nao encontrados: ${missing.join(", ")}`);
   const badgeUrls = await uploadBadges();
 
-  const season = await prisma.season.upsert({
-    where: { slug: SEASON_SLUG },
-    update: { name: "Liga Zikachu - 3ª Edição", startDate: START, endDate: END, status: "DRAFT" },
-    create: { name: "Liga Zikachu - 3ª Edição", slug: SEASON_SLUG, description: "Rumo a Johto", startDate: START, endDate: END, status: "DRAFT", rankingConfig: { win: 3, loss: 0, draw: 0 }, createdById: admin.id },
-  });
+  const season = await prisma.season.findUnique({ where: { slug: SEASON_SLUG } });
+  if (!season) throw new Error("Temporada 1 nao encontrada. O torneio nao pode criar uma temporada substituta.");
 
   const tournament = await prisma.tournament.upsert({
     where: { slug: TOURNAMENT_SLUG },

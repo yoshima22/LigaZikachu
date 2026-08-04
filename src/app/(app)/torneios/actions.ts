@@ -586,6 +586,27 @@ export async function updateTournamentSeason(
           data: { seasonId }
         });
 
+        await tx.challenge.updateMany({
+          where: { tournamentId: data.tournamentId },
+          data: { seasonId }
+        });
+
+        await tx.achievement.updateMany({
+          where: { tournamentId: data.tournamentId },
+          data: { seasonId }
+        });
+
+        const tournamentAchievements = await tx.achievement.findMany({
+          where: { tournamentId: data.tournamentId },
+          select: { id: true }
+        });
+        if (tournamentAchievements.length > 0) {
+          await tx.playerAchievement.updateMany({
+            where: { achievementId: { in: tournamentAchievements.map((achievement) => achievement.id) } },
+            data: { seasonId }
+          });
+        }
+
         const registrations = await tx.tournamentRegistration.findMany({
           where: {
             tournamentId: data.tournamentId,
