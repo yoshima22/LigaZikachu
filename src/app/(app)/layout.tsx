@@ -251,11 +251,14 @@ export default async function AppLayout({
               <RouteTutorialHelpButton />
               <Link
                 href={player ? `/jogadores/${player.id}` : "/perfil"}
-                className="hidden items-center gap-1.5 transition-opacity hover:opacity-80 sm:flex"
+                className="hidden min-w-0 max-w-[9.5rem] items-center gap-1.5 transition-opacity hover:opacity-80 sm:flex xl:max-w-[11.5rem]"
               >
                 {/* Texto à esquerda */}
-                <div className="text-right">
-                  <p className="text-xs font-medium text-slate-200 leading-tight">
+                <div className="min-w-0 flex-1 text-right">
+                  <p
+                    className="truncate text-xs font-medium leading-tight text-slate-200"
+                    title={user.name ?? user.email ?? undefined}
+                  >
                     {user.name ?? user.email}
                   </p>
                   {wallet != null && (
@@ -264,7 +267,10 @@ export default async function AppLayout({
                     </span>
                   )}
                   {player?.ptcglNick && (
-                    <span className="block text-[10px] text-slate-500 leading-tight">
+                    <span
+                      className="block truncate text-[10px] leading-tight text-slate-500"
+                      title={`@${player.ptcglNick}`}
+                    >
                       @{player.ptcglNick}
                     </span>
                   )}
