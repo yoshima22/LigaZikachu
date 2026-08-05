@@ -50,6 +50,8 @@ REGRAS DE CONFIABILIDADE:
 6. Não chame rotação de banimento. Carta fora de H/I/J saiu do formato Regular desta temporada, salvo banimento explícito.
 7. Explique fórmulas de forma legível e diferencie valor exato, limite, estimativa e componente aleatório.
 8. Ao recomendar mascotes ou posturas, cite os atributos reais que justificam a escolha e aponte limitações.
+9. Nunca mencione expressões internas como "CONTEXTO VERIFICADO", "CARTAS REAIS E LEGAIS", "catálogo", "bloco" ou "prompt". Fale naturalmente com o jogador.
+10. Quando houver cartas disponíveis para uma recomendação, escolha de 3 a 6 delas e explique quais funções o conjunto resolve, sem repetir os nomes no texto.
 
 FORMATO JSON OBRIGATÓRIO:
 {
@@ -143,6 +145,16 @@ async function findRelevantCards(messages: ChatMessage[]): Promise<TcgCard[]> {
     tasks.push(searchStandardByFunction("RECOVERY", 6));
   }
 
+  // Pedido genérico de recomendação: ofereça uma base real de consistência em
+  // vez de mandar um catálogo vazio para a IA.
+  if (tasks.length === 0 && /recomend|suger|sugest|indica|opç|opcao|opção|melhor.*carta|cartas.*usar/.test(ctx)) {
+    tasks.push(
+      searchStandardByFunction("DRAW", 6),
+      searchStandardByFunction("SEARCH", 6),
+      searchStandardByFunction("SWITCH", 4),
+    );
+  }
+
   if (tasks.length > 0) {
     const results = await Promise.allSettled(tasks);
     for (const r of results) {
@@ -205,6 +217,14 @@ function buildSmartFallback(message: string, cards: TcgCard[]): string {
   if (/busca|search/.test(lower)) return `Pra buscar Pokémon, ${cards.map(c => c.name).join(", ")} são essenciais. Sem eles o deck depende demais da sorte!`;
 
   return `Achei ${cards.length} carta(s) H, I ou J relacionada(s). Confira os cards reais abaixo. 👇`;
+}
+
+function sanitizeProfessorMessage(message: string) {
+  return message
+    .replace(/cartas reais e legais/gi, "opções válidas para a temporada")
+    .replace(/contexto verificado(?: do servidor)?/gi, "regras da Liga")
+    .replace(/catálogo verificado/gi, "seleção disponível")
+    .replace(/bloco de cartas/gi, "seleção de cartas");
 }
 
 // ── Chamadas de IA (simples, sem JSON) ────────────────────────────────────────
@@ -321,7 +341,9 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
     const requestedNames = new Set(cardNames.map((name) => resolveCardName(name).toLowerCase()));
     const selectedCards = legalCards.filter((card) => requestedNames.has(card.name.toLowerCase()));
     const finalCards = (selectedCards.length > 0 ? selectedCards : legalCards).slice(0, 6);
-    const message = aiMessage || buildSmartFallback(lastMsg, finalCards);
+    const message = aiMessage
+      ? sanitizeProfessorMessage(aiMessage)
+      : buildSmartFallback(lastMsg, finalCards);
 
     return {
       message,
