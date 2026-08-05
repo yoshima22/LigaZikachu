@@ -242,12 +242,12 @@ export function MascotList({
     expeditionFilter === "ALL" || expedition.mode === expeditionFilter
   );
 
-  const isVacationBankMascot = (m: MascotData) =>
+  const isExpeditionBankMascot = (m: MascotData) =>
     !m.isEquipped && !m.isFavorite &&
-    m.expeditions.some(e => e.status === "ACTIVE" && e.mode === "VACATION");
+    m.expeditions.some(e => e.status === "ACTIVE");
 
   const filtered = mascots.filter(m => {
-    if (isVacationBankMascot(m)) return false;
+    if (isExpeditionBankMascot(m)) return false;
     const displayName = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
     const query = search.toLowerCase();
     const matchSearch = !query || displayName.includes(query) || String(m.pokemonId).includes(query) || getPokemonName(m.pokemonId).toLowerCase().includes(query);

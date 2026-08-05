@@ -80,8 +80,8 @@ async function fetchMascotPageData(playerId: string) {
         OR: [
           { isFavorite: true },
           { isEquipped: true },
-          // Mascotes em férias aparecem nos atalhos mesmo que estejam no banco
-          { expeditions: { some: { status: "ACTIVE", rewardJson: { path: ["mode"], equals: "VACATION" } } } },
+          // Toda expedição ativa aparece nos atalhos, mesmo com o mascote no banco.
+          { expeditions: { some: { status: "ACTIVE" } } },
         ],
       },
       select: {
@@ -161,7 +161,11 @@ async function fetchMascotPageData(playerId: string) {
     }),
   ]));
 
-  const featuredIds = featuredMascots.map(m => m.id);
+  // Mascotes trazidos apenas para atalhos de expedição não precisam carregar
+  // relações, buffs e proteínas da visualização completa.
+  const featuredIds = featuredMascots
+    .filter(m => m.isFavorite || m.isEquipped)
+    .map(m => m.id);
 
   const featuredRelationsAll = featuredIds.length > 0 ? await retryMascotLoad(() =>
     prisma.mascotRelation.findMany({
@@ -345,7 +349,7 @@ export default async function MascotesPage() {
     }),
   ]);
 
-  // mascotData: apenas para a Equipe Favorita (renderizada com card completo)
+  // Inclui favoritos/companheiro e os dados mínimos dos atalhos de expedição.
   const mascotData = featuredMascots.map(m => ({
     id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
     level: m.level, exp: m.exp, happiness: m.happiness,
@@ -394,7 +398,7 @@ export default async function MascotesPage() {
     events: [],
     hasFood, hasSweet,
     // Admin: lista de outros mascotes para trigger de batalha/amizade
-    otherMascots: admin ? featuredMascots.filter(o => o.id !== m.id).map(o => ({
+    otherMascots: admin ? featuredMascots.filter(o => o.id !== m.id && (o.isFavorite || o.isEquipped)).map(o => ({
       id: o.id,
       name: o.nickname ?? getPokemonName(o.pokemonId),
     })) : undefined,
