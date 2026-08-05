@@ -1826,7 +1826,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   226:"water/flying",227:"steel/flying",
   228:"dark/fire",229:"dark/fire",230:"water/dragon",
   231:"ground",232:"ground",233:"normal",234:"normal",235:"normal",
-  236:"fighting",237:"fighting/psychic",238:"ice/psychic",
+  236:"fighting",237:"fighting",238:"ice/psychic",
   239:"electric",240:"fire",241:"normal",242:"normal",
   243:"electric",244:"fire",245:"water",
   246:"rock/ground",247:"rock/ground",248:"rock/dark",
