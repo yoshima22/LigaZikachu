@@ -68,6 +68,11 @@ export function getFusionHatchBonusRange(
   result: MiauvadaoFusionResult,
 ): readonly [number, number] {
   if (result === "BROKEN") return [0, 0];
+  const sameTierReturn = eggTypes.length === 3
+    && eggTypes.every((type) => type === eggTypes[0])
+    && result === eggTypes[0];
+  if (sameTierReturn) return [5, 10];
+
   const ingredientAverage = eggTypes.reduce((sum, type) => sum + TIER_SCORE[type], 0) / eggTypes.length;
   const resultScore = result === "LAB" ? 4 : TIER_SCORE[result];
   const downgrade = ingredientAverage - resultScore;

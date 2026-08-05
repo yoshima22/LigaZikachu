@@ -187,6 +187,7 @@ function EggFusionGame({
         ) : <p className="mt-1 text-[11px] text-slate-500">Selecione os três ingredientes para revelar as probabilidades exatas.</p>}
         <p className="mt-2 text-[10px] text-slate-500">
           O ovo gerado sorteia um bônus para aumentar a chance de nascer um mascote de raridade elevada.
+          Ao fundir três ovos do mesmo nível e receber outro desse mesmo nível, o ovo volta aperfeiçoado com bônus garantido de +5 a +10 pontos percentuais.
           Se o resultado for inferior à qualidade média dos ingredientes, a compensação sobe para até +20 pontos percentuais.
           Esse bônus não altera os atributos do mascote.
         </p>
