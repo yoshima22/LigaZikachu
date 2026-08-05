@@ -3,6 +3,7 @@ import { WEEKLY_MODIFIERS } from "./constants";
 import { getActiveWeeklyLeagueSabotage, getOrderStepUnlockState } from "@/lib/raid-event";
 import { getPokemonName } from "@/lib/mascot-data";
 import { getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
+import { getWeeklyTeamEditWindow } from "./team-edit-window";
 
 function formatPlayerLabel(p: { displayName: string; ptcglNick?: string | null; user?: { email?: string | null } | null }): string {
   const base = p.displayName;
@@ -48,6 +49,7 @@ async function ensureCurrentLeague() {
 }
 
 export async function getLeaguePageData(playerId: string, displayName: string, admin = false) {
+  const teamSelection = getWeeklyTeamEditWindow();
   // Current active league (if any)
   let currentLeague = null;
   let participants: unknown[] = [];
@@ -177,21 +179,26 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
 
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     try {
-      const todayTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
-        where: { leagueId: (currentLeague as any).id, playerId, battleDate: today },
+      const selectedTeams = await (prisma as any).weeklyMascotLeagueDailyTeam.findMany({
+        where: { leagueId: (currentLeague as any).id, playerId, battleDate: teamSelection.battleDate },
         orderBy: { battleSlot: "asc" },
       });
-      const todaySlots = new Set((todayTeams as any[]).map((t: any) => t.battleSlot));
-      const result = [...todayTeams] as any[];
+      const selectedSlots = new Set((selectedTeams as any[]).map((t: any) => t.battleSlot));
+      const result = [...selectedTeams] as any[];
 
       // Herdar slots faltantes do último dia registrado
       for (const slot of [1, 2, 3]) {
-        if (todaySlots.has(slot)) continue;
+        if (selectedSlots.has(slot)) continue;
         const lastTeam = await (prisma as any).weeklyMascotLeagueDailyTeam.findFirst({
-          where: { leagueId: (currentLeague as any).id, playerId, battleSlot: slot },
+          where: {
+            leagueId: (currentLeague as any).id,
+            playerId,
+            battleSlot: slot,
+            battleDate: { lt: teamSelection.battleDate },
+          },
           orderBy: { battleDate: "desc" },
         });
-        if (lastTeam) result.push({ ...lastTeam, battleDate: today, inherited: true });
+        if (lastTeam) result.push({ ...lastTeam, battleDate: teamSelection.battleDate, inherited: true });
       }
       myTeams = result.sort((a: any, b: any) => a.battleSlot - b.battleSlot);
     } catch { /* table may not exist yet */ }
@@ -442,6 +449,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     currentLeague,
     participants,
     myTeams,
+    teamSelection,
     todayMatches,
     availableMascots: allMascots,
     leagueInventory,

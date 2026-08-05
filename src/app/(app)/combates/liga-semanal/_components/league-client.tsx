@@ -57,6 +57,13 @@ type PageData = {
   currentLeague: any;
   participants: any[];
   myTeams: any[];
+  teamSelection: {
+    battleDate: string;
+    locked: boolean;
+    preparingNextDay: boolean;
+    lockStartsAt: string;
+    unlocksAt: string;
+  };
   todayMatches: any[];
   availableMascots: any[];
   leagueInventory: { type: string; quantity: number }[];
@@ -568,6 +575,8 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [year, month, day] = data.teamSelection.battleDate.split("-");
+  const selectionDateLabel = `${day}/${month}/${year}`;
 
   const usedInOtherSlots = (slot: number) => {
     const otherTeams = data.myTeams.filter((t: any) => t.battleSlot !== slot);
@@ -819,6 +828,20 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-400">Monte até 3 times por dia (6 mascotes cada, sem repetição entre times).</p>
+
+      <div className={`rounded-xl border px-3 py-2 text-xs ${
+        data.teamSelection.locked
+          ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : data.teamSelection.preparingNextDay
+            ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-200"
+            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+      }`}>
+        {data.teamSelection.locked
+          ? `Equipes travadas durante os combates das 20:00, 20:10 e 20:20. A edição volta às ${data.teamSelection.unlocksAt}.`
+          : data.teamSelection.preparingNextDay
+            ? `Preparando as equipes de ${selectionDateLabel}. As partidas de hoje continuam preservadas no histórico.`
+            : `Equipes de hoje (${selectionDateLabel}). A edição trava às ${data.teamSelection.lockStartsAt} e volta às ${data.teamSelection.unlocksAt} para preparar o próximo dia.`}
+      </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400">
         {movingMascot ? (

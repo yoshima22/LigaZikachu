@@ -14,6 +14,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { isStandbyActive } from "@/lib/account-standby";
 import { getActiveWeeklyLeagueSabotage } from "@/lib/raid-event";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { getWeeklyTeamEditWindow, WEEKLY_TEAM_LOCK_MESSAGE } from "./team-edit-window";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -46,24 +47,6 @@ function getTodayBrt() {
     day: "2-digit",
   }).format(new Date());
 }
-
-function getBrtMinuteOfDay(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
-  return hour * 60 + minute;
-}
-
-function isWeeklyTeamEditLocked(now = new Date()) {
-  return getBrtMinuteOfDay(now) >= 20 * 60;
-}
-
-const WEEKLY_TEAM_LOCK_MESSAGE = "Atualizacoes de time da Liga Semanal ficam travadas apos 20:00 (BRT).";
 
 const PATH = "/combates/liga-semanal";
 const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
@@ -639,18 +622,19 @@ export async function saveDailyTeamAction(
   if (battleSlot < 1 || battleSlot > 3) return { error: "Slot inválido." };
 
   try {
-    const today = getTodayBrt();
-    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const editWindow = getWeeklyTeamEditWindow();
+    if (editWindow.locked) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const battleDate = editWindow.battleDate;
 
     const resolvedMatch = await prisma.weeklyMascotLeagueMatch.findFirst({
-      where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
+      where: { leagueId, battleDate, battleSlot, status: { in: ["RESOLVED", "WO"] } },
       select: { id: true },
     });
     if (resolvedMatch) return { error: "Este combate ja aconteceu e o time esta travado." };
 
     // Check no mascot is used in other slots today
     const otherTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
-      where: { leagueId, playerId: player.id, battleDate: today, battleSlot: { not: battleSlot } },
+      where: { leagueId, playerId: player.id, battleDate, battleSlot: { not: battleSlot } },
     });
     const usedIds = new Set(otherTeams.flatMap(t => (t.mascotIdsJson as string[]) ?? []));
     const conflict = mascotIds.find(id => usedIds.has(id));
@@ -666,14 +650,14 @@ export async function saveDailyTeamAction(
     await prisma.weeklyMascotLeagueDailyTeam.upsert({
       where: {
         leagueId_playerId_battleDate_battleSlot: {
-          leagueId, playerId: player.id, battleDate: today, battleSlot,
+          leagueId, playerId: player.id, battleDate, battleSlot,
         },
       },
       create: {
         id: createId(),
         leagueId,
         playerId: player.id,
-        battleDate: today,
+        battleDate,
         battleSlot,
         mascotIdsJson: mascotIds,
         rolesJson: roles,
@@ -705,18 +689,19 @@ export async function clearTeamSlotAction(leagueId: string, battleSlot: number) 
   if (battleSlot < 1 || battleSlot > 3) return { error: "Slot inválido" };
 
   try {
-    const today = getTodayBrt();
-    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const editWindow = getWeeklyTeamEditWindow();
+    if (editWindow.locked) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const battleDate = editWindow.battleDate;
 
     const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
-      where: { leagueId, battleDate: today, battleSlot, status: { in: ["RESOLVED", "WO"] } },
+      where: { leagueId, battleDate, battleSlot, status: { in: ["RESOLVED", "WO"] } },
     });
     if (resolved) return { error: "Este combate já aconteceu. Não é possível limpar." };
 
     // Save empty array to mark as intentionally cleared (prevents inheritance)
     await prisma.weeklyMascotLeagueDailyTeam.upsert({
-      where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate: today, battleSlot } },
-      create: { id: createId(), leagueId, playerId: player.id, battleDate: today, battleSlot, source: "CLEARED", mascotIdsJson: [], rolesJson: {}, updatedAt: new Date() },
+      where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate, battleSlot } },
+      create: { id: createId(), leagueId, playerId: player.id, battleDate, battleSlot, source: "CLEARED", mascotIdsJson: [], rolesJson: {}, updatedAt: new Date() },
       update: { mascotIdsJson: [], rolesJson: {}, source: "CLEARED", updatedAt: new Date() },
     });
 
@@ -738,23 +723,24 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
   if (slotA === slotB || slotA < 1 || slotA > 3 || slotB < 1 || slotB > 3) return { error: "Slots inválidos" };
 
   try {
-    const today = getTodayBrt();
-    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const editWindow = getWeeklyTeamEditWindow();
+    if (editWindow.locked) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const battleDate = editWindow.battleDate;
 
     // Check no resolved matches for these slots
     const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
-      where: { leagueId, battleDate: today, battleSlot: { in: [slotA, slotB] }, status: { in: ["RESOLVED", "WO"] } },
+      where: { leagueId, battleDate, battleSlot: { in: [slotA, slotB] }, status: { in: ["RESOLVED", "WO"] } },
     });
     if (resolved) return { error: "Um dos combates já aconteceu. Não é possível trocar." };
 
     // Load both teams (today or inherited)
     async function getTeam(slot: number) {
       let team = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
-        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slot } },
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate, battleSlot: slot } },
       });
       if (!team) {
         team = await prisma.weeklyMascotLeagueDailyTeam.findFirst({
-          where: { leagueId, playerId: player!.id, battleSlot: slot },
+          where: { leagueId, playerId: player!.id, battleSlot: slot, battleDate: { lt: battleDate } },
           orderBy: { battleDate: "desc" },
         });
       }
@@ -770,23 +756,23 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
       // Upsert slot A with team B's data (or clear if B is empty)
       if (teamB) {
         await tx.weeklyMascotLeagueDailyTeam.upsert({
-          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotA } },
-          create: { id: createId(), leagueId, playerId: player!.id, battleDate: today, battleSlot: slotA, mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate, battleSlot: slotA } },
+          create: { id: createId(), leagueId, playerId: player!.id, battleDate, battleSlot: slotA, mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
           update: { mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, updatedAt: new Date() },
         });
       } else {
-        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotA } });
+        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate, battleSlot: slotA } });
       }
 
       // Upsert slot B with team A's data (or clear if A is empty)
       if (teamA) {
         await tx.weeklyMascotLeagueDailyTeam.upsert({
-          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotB } },
-          create: { id: createId(), leagueId, playerId: player!.id, battleDate: today, battleSlot: slotB, mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate, battleSlot: slotB } },
+          create: { id: createId(), leagueId, playerId: player!.id, battleDate, battleSlot: slotB, mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
           update: { mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, updatedAt: new Date() },
         });
       } else {
-        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slotB } });
+        await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate, battleSlot: slotB } });
       }
     });
 
@@ -817,22 +803,23 @@ export async function swapTeamMascotPositionsAction(
   if (fromSlot === toSlot && fromIndex === toIndex) return { error: "Escolha duas posiÃ§Ãµes diferentes." };
 
   try {
-    const today = getTodayBrt();
-    if (isWeeklyTeamEditLocked()) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const editWindow = getWeeklyTeamEditWindow();
+    if (editWindow.locked) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+    const battleDate = editWindow.battleDate;
 
     const slots = Array.from(new Set([fromSlot, toSlot]));
     const resolved = await prisma.weeklyMascotLeagueMatch.findFirst({
-      where: { leagueId, battleDate: today, battleSlot: { in: slots }, status: { in: ["RESOLVED", "WO"] } },
+      where: { leagueId, battleDate, battleSlot: { in: slots }, status: { in: ["RESOLVED", "WO"] } },
     });
     if (resolved) return { error: "Um dos combates jÃ¡ aconteceu. NÃ£o Ã© possÃ­vel reposicionar." };
 
     async function getTeam(slot: number) {
       let team = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
-        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate: today, battleSlot: slot } },
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate, battleSlot: slot } },
       });
       if (!team) {
         team = await prisma.weeklyMascotLeagueDailyTeam.findFirst({
-          where: { leagueId, playerId: player!.id, battleSlot: slot },
+          where: { leagueId, playerId: player!.id, battleSlot: slot, battleDate: { lt: battleDate } },
           orderBy: { battleDate: "desc" },
         });
       }
@@ -864,12 +851,12 @@ export async function swapTeamMascotPositionsAction(
 
     await prisma.$transaction(async (tx) => {
       await tx.weeklyMascotLeagueDailyTeam.upsert({
-        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate: today, battleSlot: fromSlot } },
+        where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate, battleSlot: fromSlot } },
         create: {
           id: createId(),
           leagueId,
           playerId: player.id,
-          battleDate: today,
+          battleDate,
           battleSlot: fromSlot,
           mascotIdsJson: sourceIds,
           rolesJson: sourceRoles,
@@ -881,12 +868,12 @@ export async function swapTeamMascotPositionsAction(
 
       if (toSlot !== fromSlot) {
         await tx.weeklyMascotLeagueDailyTeam.upsert({
-          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate: today, battleSlot: toSlot } },
+          where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate, battleSlot: toSlot } },
           create: {
             id: createId(),
             leagueId,
             playerId: player.id,
-            battleDate: today,
+            battleDate,
             battleSlot: toSlot,
             mascotIdsJson: targetIds,
             rolesJson: targetRoles,
