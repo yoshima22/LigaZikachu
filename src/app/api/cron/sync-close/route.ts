@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { toBrtDateString } from "@/lib/date-utils";
+import { autoLockCompleteSyncLineups } from "@/lib/sync-event-automation";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -42,6 +43,10 @@ export async function GET(req: NextRequest) {
     if (config.registrationClosesAt && new Date() < config.registrationClosesAt) {
       return NextResponse.json({ ok: true, skipped: true, reason: "Janela de inscrição ainda não fechou." });
     }
+
+    // Trava automaticamente apenas duplas em que os dois jogadores ja
+    // enviaram exatamente 9 mascotes. Escalacoes incompletas nao sao inventadas.
+    const { autoLocked } = await autoLockCompleteSyncLineups(new Date());
 
     // Busca duplas com lineups travados (LINEUP_READY) e sem sala atribuída
     const readyTeams = await prisma.syncEventTeam.findMany({
@@ -89,6 +94,7 @@ export async function GET(req: NextRequest) {
         skipped: true,
         reason: `Apenas ${validTeams.length} dupla(s) valida(s). Minimo de 2 necessario para formar a Arena Sincronizada.`,
         invalidRemoved: invalidCount,
+        autoLocked,
       });
     }
 
@@ -134,6 +140,7 @@ export async function GET(req: NextRequest) {
       ok: true,
       roomsFormed: formed.length,
       invalidRemoved: invalidCount,
+      autoLocked,
       roomIds: formed,
     });
   } catch (err) {

@@ -8,6 +8,40 @@ import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
 
 const SELECTION_WINDOW_MS = 10 * 60 * 1000;
 
+export async function autoLockCompleteSyncLineups(now = new Date()) {
+  const pendingTeams = await prisma.syncEventTeam.findMany({
+    where: { status: "LINEUP_PENDING", roomId: null, playerBId: { not: null } },
+    select: {
+      id: true,
+      playerAId: true,
+      playerBId: true,
+      lineups: { select: { playerId: true } },
+    },
+  });
+
+  const completeTeams = pendingTeams.filter((team) => {
+    const countA = team.lineups.filter((lineup) => lineup.playerId === team.playerAId).length;
+    const countB = team.lineups.filter((lineup) => lineup.playerId === team.playerBId).length;
+    return countA === 9 && countB === 9;
+  });
+
+  if (completeTeams.length > 0) {
+    await prisma.$transaction(
+      completeTeams.map((team) => prisma.syncEventTeam.update({
+        where: { id: team.id },
+        data: {
+          lineupStatusA: "LOCKED",
+          lineupStatusB: "LOCKED",
+          status: "LINEUP_READY",
+          lineupReadyAt: now,
+        },
+      })),
+    );
+  }
+
+  return { autoLocked: completeTeams.length };
+}
+
 function pokemonGen(id: number): number {
   if (id <= 151) return 1;
   if (id <= 251) return 2;
@@ -246,6 +280,8 @@ export async function formSyncArenaForTodayIfDue(now = new Date()) {
   if (!config?.ticketsEnabled) return { formed: 0, skipped: "disabled" };
   if (config.registrationClosesAt && now < config.registrationClosesAt) return { formed: 0, skipped: "window-open" };
 
+  const { autoLocked } = await autoLockCompleteSyncLineups(now);
+
   const readyTeams = await prisma.syncEventTeam.findMany({
     where: { status: "LINEUP_READY", roomId: null },
     select: { id: true, playerAId: true, playerBId: true, lineups: { select: { playerId: true } } },
@@ -278,7 +314,7 @@ export async function formSyncArenaForTodayIfDue(now = new Date()) {
     }
   }
 
-  if (validTeams.length < 2) return { formed: 0, skipped: "not-enough-teams", invalidRemoved: invalidTeams.length };
+  if (validTeams.length < 2) return { formed: 0, skipped: "not-enough-teams", invalidRemoved: invalidTeams.length, autoLocked };
 
   const roundTimes = [config.round1At, config.round2At, config.round3At];
   await prisma.$transaction(async (tx) => {
@@ -306,7 +342,7 @@ export async function formSyncArenaForTodayIfDue(now = new Date()) {
     }
   });
 
-  return { formed: 1, invalidRemoved: invalidTeams.length };
+  return { formed: 1, invalidRemoved: invalidTeams.length, autoLocked };
 }
 
 export async function openDueSyncRounds(now = new Date()) {
@@ -385,7 +421,9 @@ export async function executeDueSyncRounds(now = new Date()) {
             select: { mascotIds: true },
           });
           const used = new Set(prevSelections.flatMap((selection) => selection.mascotIds));
-          const available = team.lineups.filter((lineup) => lineup.playerId === playerId && !used.has(lineup.mascotId));
+          const available = team.lineups
+            .filter((lineup) => lineup.playerId === playerId && !used.has(lineup.mascotId))
+            .sort((a, b) => a.slot - b.slot);
           const auto = available.slice(0, 3).map((lineup) => lineup.mascotId);
           if (auto.length > 0) {
             await tx.syncRoundSelection.create({

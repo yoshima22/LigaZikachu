@@ -510,7 +510,9 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
               select: { mascotIds: true },
             });
             const used = new Set(prevSelections.flatMap((s) => s.mascotIds));
-            const available = team.lineups.filter((l) => l.playerId === pid && !used.has(l.mascotId));
+            const available = team.lineups
+              .filter((l) => l.playerId === pid && !used.has(l.mascotId))
+              .sort((a, b) => a.slot - b.slot);
             const auto = available.slice(0, 3).map((l) => l.mascotId);
             if (auto.length > 0) {
               await tx.syncRoundSelection.create({
