@@ -284,7 +284,7 @@ export async function adminRunFullSimulationAction(): Promise<{
 
         await prisma.syncRoundSelection.createMany({ data: createdSelections });
 
-        const result = await runSyncBattle({ teamA, teamB, selections: allSelections, modifierId, modEffect });
+        const result = await runSyncBattle({ teamA, teamB, selections: allSelections, modifierId, modEffect, roundId: round.id });
 
         await prisma.syncRoundMatch.create({
           data: {
@@ -631,7 +631,7 @@ export async function adminSimRoundAction(roomId: string, roundNumber: number): 
 
       await prisma.syncRoundSelection.createMany({ data: createdSelections });
 
-      const result = await runSyncBattle({ teamA, teamB, selections: allSelections, modifierId, modEffect });
+      const result = await runSyncBattle({ teamA, teamB, selections: allSelections, modifierId, modEffect, roundId: round.id });
 
       const matchRow = await prisma.syncRoundMatch.create({
         data: {

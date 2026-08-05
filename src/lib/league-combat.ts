@@ -38,6 +38,11 @@ export type LeagueBattleResult = {
 
 export type LeagueCombatOptions = {
   weeklySabotage?: WeeklyLeagueSabotageConfig | null;
+  initiativeTeam?: "A" | "B" | null;
+  initiativeMascotIds?: string[];
+  instinctChaos?: boolean;
+  midBattleReroll?: boolean;
+  lastMascotVitalityBonus?: number;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -46,7 +51,7 @@ function rand(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function pick<T>(items: T[]) {
+function pick<T>(items: readonly T[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
@@ -309,6 +314,8 @@ export function runLeagueCombat(
   const debuffs = new Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>();
   const healCount = new Map<string, number>();
   const survivorUsed = new Set<string>();
+  const lastMascotBoostUsed = new Set<"A" | "B">();
+  let midBattleRerolled = false;
   const duelistLock = new Map<string, string>();
   let round = 1;
   let actionNum = 1;
@@ -316,13 +323,56 @@ export function runLeagueCombat(
   let totalDmgB = 0;
 
   while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= 150) {
+    if (options.lastMascotVitalityBonus) {
+      for (const [side, team] of [["A", a], ["B", b]] as const) {
+        const standing = alive(team, hp);
+        if (standing.length === 1 && !lastMascotBoostUsed.has(side)) {
+          const mascot = standing[0];
+          const bonus = options.lastMascotVitalityBonus;
+          mascot.vitality += bonus;
+          mascot.hp += bonus * 4;
+          hp.set(mascot.id, (hp.get(mascot.id) ?? 0) + bonus * 4);
+          lastMascotBoostUsed.add(side);
+          log.push({
+            turn: actionNum++, actorId: mascot.id, actorName: mascot.name, actorOwnerId: mascot.ownerId, actorPokemonId: mascot.pokemonId, actorLevel: mascot.level,
+            targetId: mascot.id, targetName: mascot.name, targetOwnerId: mascot.ownerId, targetPokemonId: mascot.pokemonId, targetLevel: mascot.level,
+            action: "DEFEND", damage: 0, attackerType: getPokemonElement(mascot.pokemonId), defenderType: getPokemonElement(mascot.pokemonId),
+            multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(mascot.combatRole), targetRole: getCombatRoleLabel(mascot.combatRole),
+            effect: `Virada Final: ${mascot.name} recebeu +${bonus} de Vitalidade e ${bonus * 4} HP por ser o último mascote da equipe.`,
+          });
+        }
+      }
+    }
+
+    if (options.midBattleReroll && !midBattleRerolled && round >= 4) {
+      const statKeys = ["force", "agility", "instinct", "vitality", "charisma"] as const;
+      for (const mascot of [...alive(a, hp), ...alive(b, hp)]) {
+        const stat = pick(statKeys);
+        const delta = rand(-20, 20);
+        mascot[stat] = Math.max(1, mascot[stat] + delta);
+        log.push({
+          turn: actionNum++, actorId: mascot.id, actorName: mascot.name, actorOwnerId: mascot.ownerId, actorPokemonId: mascot.pokemonId, actorLevel: mascot.level,
+          targetId: mascot.id, targetName: mascot.name, targetOwnerId: mascot.ownerId, targetPokemonId: mascot.pokemonId, targetLevel: mascot.level,
+          action: "DEFEND", damage: 0, attackerType: getPokemonElement(mascot.pokemonId), defenderType: getPokemonElement(mascot.pokemonId),
+          multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(mascot.combatRole), targetRole: getCombatRoleLabel(mascot.combatRole),
+          effect: `Pane na Arena: ${mascot.name} teve ${stat} ${delta >= 0 ? `aumentado em ${delta}` : `reduzido em ${Math.abs(delta)}`}.`,
+        });
+      }
+      midBattleRerolled = true;
+    }
+
     const aAlive = alive(a, hp);
     const bAlive = alive(b, hp);
     const all = [
       ...aAlive.map(m => ({ mascot: m, side: "A" as const })),
       ...bAlive.map(m => ({ mascot: m, side: "B" as const })),
     ];
-    all.sort((x, y) => y.mascot.agility - x.mascot.agility + rand(-3, 3));
+    const priorityIds = new Set(options.initiativeMascotIds ?? []);
+    all.sort((x, y) => {
+      const xPriority = priorityIds.has(x.mascot.id) ? 2 : options.initiativeTeam === x.side ? 1 : 0;
+      const yPriority = priorityIds.has(y.mascot.id) ? 2 : options.initiativeTeam === y.side ? 1 : 0;
+      return yPriority - xPriority || y.mascot.agility - x.mascot.agility + rand(-3, 3);
+    });
 
     for (const entry of all) {
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
@@ -399,6 +449,22 @@ export function runLeagueCombat(
       const instinct = getStat(actor, debuffs, "instinct");
       const vitality = getStat(target, debuffs, "vitality");
 
+      let chaosCritical = false;
+      if (options.instinctChaos) {
+        const missChance = Math.min(0.24, 0.04 + instinct / 700);
+        if (Math.random() < missChance) {
+          log.push({
+            turn: actionNum++, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
+            targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
+            action: "ATTACK", damage: 0, attackerType, defenderType, multiplier, advantageApplied: multiplier > 1,
+            actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
+            effect: `Instinto Confuso: ${actor.name} errou o ataque (${Math.round(missChance * 100)}% de risco).`,
+          });
+          continue;
+        }
+        chaosCritical = Math.random() < Math.min(0.38, 0.08 + instinct / 500);
+      }
+
       const encourage = aliveEncourageBonus(allies, hp, opponents);
       const scoutBonus = aliveScoutBonus(allies, hp);
       const duelistMult = actor.combatRole === "DUELIST" && duelistLock.get(actor.id) === target.id ? 1.12 : 1;
@@ -410,6 +476,7 @@ export function runLeagueCombat(
         * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef));
+      if (chaosCritical) damage = Math.max(1, Math.round(damage * 1.5));
       if (provoked) damage = Math.round(damage * 0.92);
 
       // GUARDIAN intercept
@@ -459,6 +526,7 @@ export function runLeagueCombat(
         scoutBonus > 0 ? `Batedor: +${Math.round(scoutBonus * 100)}%.` : null,
         debuffEffect, guardianEffect, survivorEffect,
         provoked ? `Provocador desviou o ataque!` : null,
+        chaosCritical ? "Instinto Confuso: acerto crítico de +50% de dano!" : null,
       ].filter(Boolean).join(" ") || undefined;
 
       log.push({

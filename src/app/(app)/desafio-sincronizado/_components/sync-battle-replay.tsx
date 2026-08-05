@@ -34,6 +34,8 @@ export interface StandardSyncReplayJson {
   log: TurnLog[];
   lineupA: ReplayLineupFighter[];
   lineupB: ReplayLineupFighter[];
+  modifierApplications?: Array<{ mascotId: string; name: string; side: "A" | "B"; changes: Array<{ stat: string; delta: number }> }>;
+  modifierRule?: string | null;
 }
 
 export type AnySyncReplayJson = SyncReplayJson | StandardSyncReplayJson;
@@ -81,6 +83,11 @@ export function SyncCombatReplayModal({
         playerBSurvivors={survivingB}
         lineupA={replay.lineupA}
         lineupB={replay.lineupB}
+        specialRule={modifierName ? { name: modifierName, description: modifierEffect } : null}
+        specialRuleDetails={(replay.modifierApplications ?? []).map((application) => {
+          const stats: Record<string, string> = { statForce: "FOR", statAgility: "AGI", statVitality: "VIT", statCharisma: "CAR", statInstinct: "INS" };
+          return `${application.name}: ${application.changes.map((change) => `${stats[change.stat] ?? change.stat} ${change.delta > 0 ? "+" : ""}${change.delta}`).join(", ")}`;
+        })}
         onFinish={onFinish}
       />
     );

@@ -46,14 +46,14 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "CARISMA_DE_PALCO",
     name: "Carisma de Palco",
-    description: "A dupla com maior soma de Carisma começa com escudo inicial.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "A dupla com maior soma de Carisma começa com um escudo equivalente a +20% de Vitalidade.",
+    effectJson: { type: "TEAM_CHARISMA_SHIELD", value: 0.2 },
   },
   {
     key: "FRAQUEZA_EXPOSTA",
     name: "Fraqueza Exposta",
-    description: "O mascote com menor Vitalidade de cada dupla recebe +60 de Defesa temporária.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "O mascote com menor Vitalidade de cada dupla recebe +60 de Vitalidade defensiva nesta partida.",
+    effectJson: { type: "LOWEST_VITALITY_DEFENSE", value: 60 },
   },
   {
     key: "EQUILIBRIO_FORCADO",
@@ -64,14 +64,14 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "VIRADA_DOS_FRACOS",
     name: "Virada dos Fracos",
-    description: "A dupla com menor soma de níveis recebe +20 em todos os status.",
+    description: "A dupla com menor soma de níveis recebe +20 em todos os status. Empates usam a menor soma total de status.",
     effectJson: { type: "LOWEST_TEAM_LEVEL_BOOST", value: 20 },
   },
   {
     key: "TREINO_RELAMPAGO",
     name: "Treino Relâmpago",
     description: "Todos os mascotes usados pela primeira vez no evento recebem +15 em todos os status.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    effectJson: { type: "FIRST_EVENT_USE_BOOST", value: 15 },
   },
   // 18.2 Regra
   {
@@ -90,19 +90,19 @@ const MODIFIERS: ModifierSeed[] = [
     key: "CORRIDA_DE_AGILIDADE",
     name: "Corrida de Agilidade",
     description: "A dupla com maior soma de Agilidade ataca primeiro em todos os turnos.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    effectJson: { type: "TEAM_AGILITY_PRIORITY" },
   },
   {
     key: "UNIAO_PERFEITA",
     name: "União Perfeita",
-    description: "Se os dois jogadores da dupla escolherem mascotes de tipos diferentes entre si, ganham bônus de sinergia.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "Se os 6 mascotes da dupla tiverem tipos primários diferentes, recebem +10 em todos os status.",
+    effectJson: { type: "TEAM_TYPE_UNIQUE_BOOST", value: 10 },
   },
   {
     key: "TIME_DESAJUSTADO",
     name: "Time Desajustado",
-    description: "Se a dupla repetir muitos tipos, perde 10% dos status.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "Se a dupla tiver 3 ou mais mascotes com o mesmo tipo primário, perde 10% de todos os status.",
+    effectJson: { type: "TEAM_TYPE_REPEAT_PENALTY", value: 0.1, repeatThreshold: 3 },
   },
   {
     key: "DUELO_LIMPO",
@@ -114,7 +114,7 @@ const MODIFIERS: ModifierSeed[] = [
     key: "VIRADA_FINAL",
     name: "Virada Final",
     description: "Ao ficar com o último mascote de pé, esse mascote garante +20 em Vitalidade.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    effectJson: { type: "LAST_MASCOT_VITALITY", value: 20 },
   },
   // 18.3 Recompensa
   {
@@ -132,7 +132,7 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "DOCE_VITORIA",
     name: "Doce Vitória",
-    description: "A dupla vencedora recebe 1 Bala de Mel extra.",
+    description: "Cada jogador da dupla vencedora recebe 1 Bala de Mel extra.",
     effectJson: { type: "REWARD_WINNER", item: "Bala de Mel" },
   },
   {
@@ -145,7 +145,7 @@ const MODIFIERS: ModifierSeed[] = [
     key: "ENERGIA_SINCRONIZADA",
     name: "Energia Sincronizada",
     description: "A dupla vencedora recebe 1 Vitamina Chocante para dividir aleatoriamente entre os dois.",
-    effectJson: { type: "REWARD_WINNER", item: "Vitamina Chocante" },
+    effectJson: { type: "REWARD_WINNER", item: "Vitamina Chocante", recipient: "RANDOM_WINNER" },
   },
   {
     key: "SORTE_COMPARTILHADA",
@@ -156,7 +156,7 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "PREMIO_DO_AZARAO",
     name: "Prêmio do Azarão",
-    description: "Se a dupla com menor soma de níveis vencer, recebe +500 ZC.",
+    description: "Se a dupla com menor soma de níveis vencer, recebe +500 ZC por jogador. Empates usam a menor soma total de status.",
     effectJson: { type: "REWARD_UNDERDOG_WIN", reward: "ZC", value: 500 },
   },
   {
@@ -187,14 +187,14 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "INSTINTO_CONFUSO",
     name: "Instinto Confuso",
-    description: "Instinto alto reduz precisão, mas aumenta chance de crítico.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "Instinto alto aumenta o risco de erro até 24%, mas também aumenta a chance de crítico de +50% de dano.",
+    effectJson: { type: "INSTINCT_CHAOS" },
   },
   {
     key: "TATICA_INVERTIDA",
     name: "Tática Invertida",
-    description: "O menor nível de cada equipe recebe prioridade de ataque.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "O menor nível de cada equipe recebe prioridade de ataque. Empates usam a menor soma total de status.",
+    effectJson: { type: "LOWEST_LEVEL_PRIORITY", tieBreak: "LOWEST_TOTAL_STATS" },
   },
   {
     key: "AULA_DO_ENGUICA",
@@ -205,8 +205,8 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "PANE_NA_ARENA",
     name: "Pane na Arena",
-    description: "Todos os bônus são sorteados novamente no meio da luta.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "No meio da luta, cada mascote vivo tem um status alterado aleatoriamente entre -20 e +20.",
+    effectJson: { type: "MID_BATTLE_REROLL" },
   },
   {
     key: "CLIMA_ESQUISITO",
@@ -217,14 +217,14 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "DUPLA_DESAFINADA",
     name: "Dupla Desafinada",
-    description: "Se os dois jogadores escolherem mascotes do mesmo tipo, perdem 15% de status.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "Se os dois jogadores da dupla compartilharem algum tipo entre suas escolhas, a dupla perde 15% dos status.",
+    effectJson: { type: "SAME_TYPE_PLAYERS_PENALTY", value: 0.15 },
   },
   {
     key: "HARMONIA_TOTAL",
     name: "Harmonia Total",
     description: "Se os 6 mascotes da dupla forem de tipos diferentes, recebem +15 em todos os status.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    effectJson: { type: "TEAM_TYPE_UNIQUE_BOOST", value: 15 },
   },
   {
     key: "MEDO_DO_FAVORITO",
@@ -236,8 +236,8 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "BAIXA_ROTACAO",
     name: "Baixa Rotação",
-    description: "Cada jogador só pode usar no máximo 1 mascote acima do nível 30.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "Cada jogador pode usar 1 mascote acima do nível 30 normalmente. Outros entram com status reduzidos proporcionalmente ao equivalente do nível 30, sem bloquear a partida.",
+    effectJson: { type: "HIGH_LEVEL_LIMIT_SOFT", maxAboveLevel: 1, level: 30 },
   },
   {
     key: "PROIBIDAO_DOS_FORTES",
@@ -248,8 +248,8 @@ const MODIFIERS: ModifierSeed[] = [
   {
     key: "SEM_MASCOTE_PRINCIPAL",
     name: "Sem Mascote Principal",
-    description: "O mascote companheiro não pode ser usado nesta rodada.",
-    effectJson: { type: "DISPLAY_ONLY" },
+    description: "O mascote companheiro não deve ser usado. Se for escalado automaticamente ou por falta de opção, entra com todos os status em 20, sem bloquear a partida.",
+    effectJson: { type: "EQUIPPED_MASCOT_NERF", value: 20 },
   },
   {
     key: "GERACAO_SORTEADA",

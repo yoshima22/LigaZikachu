@@ -11,6 +11,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { toBrtDateString } from "@/lib/date-utils";
 import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
 import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
+import { applySyncRoundRewardModifier } from "@/lib/sync-modifier-rewards";
 
 // ── Pokémon generation helper ─────────────────────────────────────────────────
 
@@ -562,6 +563,7 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
           modifierId,
           modEffect,
           syntheticMascotsB,
+          roundId,
         });
 
         await tx.syncRoundMatch.create({
@@ -582,7 +584,7 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
 
         // Entrega recompensas de modificadores do tipo REWARD_*
         if (teamB) {
-          await applyRoundRewardModifier(tx, modEffect, teamA, teamB, result, allSelections, round.roomId);
+          await applySyncRoundRewardModifier(tx, modEffect, teamA, teamB, result, allSelections, round.roomId);
         }
 
         // Atualiza pontuações dos jogadores

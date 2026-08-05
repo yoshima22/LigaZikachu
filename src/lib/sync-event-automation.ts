@@ -5,6 +5,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { loadModEffect, runSyncBattle, type ModEffect, type SyntheticSyncMascot } from "@/lib/sync-battle";
 import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
 import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
+import { applySyncRoundRewardModifier } from "@/lib/sync-modifier-rewards";
 
 const SELECTION_WINDOW_MS = 10 * 60 * 1000;
 
@@ -466,6 +467,7 @@ export async function executeDueSyncRounds(now = new Date()) {
           modifierId,
           modEffect,
           syntheticMascotsB,
+          roundId: round.id,
         });
 
         await tx.syncRoundMatch.create({
@@ -485,7 +487,7 @@ export async function executeDueSyncRounds(now = new Date()) {
         });
 
         if (teamB) {
-          await applyRoundRewardModifier(tx, modEffect, teamA, teamB, result, selections, round.roomId);
+          await applySyncRoundRewardModifier(tx, modEffect, teamA, teamB, result, selections, round.roomId);
         }
 
         const updateScore = async (playerId: string, won: boolean, lost: boolean, damage: number, surviving: number, damageTaken: number) => {

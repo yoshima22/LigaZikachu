@@ -217,6 +217,8 @@ export function LeagueBattleReplayModal({
   playerASurvivors = 0,
   playerBSurvivors = 0,
   orderSabotage,
+  specialRule,
+  specialRuleDetails = [],
   lineupA = EMPTY_LINEUP,
   lineupB = EMPTY_LINEUP,
   onFinish,
@@ -230,6 +232,8 @@ export function LeagueBattleReplayModal({
   playerASurvivors?: number;
   playerBSurvivors?: number;
   orderSabotage?: { affectedSlots: number[]; statMultiplier: number } | null;
+  specialRule?: { name: string; description?: string | null } | null;
+  specialRuleDetails?: string[];
   lineupA?: ReplayLineupFighter[];
   lineupB?: ReplayLineupFighter[];
   onFinish: () => void;
@@ -322,6 +326,18 @@ export function LeagueBattleReplayModal({
               <button onClick={onFinish} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">✕</button>
             </div>
           </div>
+
+          {specialRule && (
+            <div className="mx-5 mb-3 rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-2 text-xs text-purple-100">
+              <p className="font-black uppercase tracking-wide text-purple-200">⚡ {specialRule.name} ativo</p>
+              {specialRule.description && <p className="mt-0.5 text-purple-300">{specialRule.description}</p>}
+              {specialRuleDetails.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {specialRuleDetails.map((detail, index) => <span key={`${detail}-${index}`} className="rounded-lg border border-purple-400/20 bg-slate-950/50 px-2 py-1 text-[10px]">{detail}</span>)}
+                </div>
+              )}
+            </div>
+          )}
 
           {orderSabotage && (
             <div className="mx-5 mb-3 rounded-xl border border-red-500/45 bg-red-500/10 px-4 py-2 text-xs text-red-100">

@@ -260,7 +260,7 @@ const STAT_LABELS: Record<string, string> = {
   statInstinct: "Instinto",
 };
 
-function parseModifierEffect(effectJson: unknown): string | null {
+function parseModifierEffect(effectJson: unknown, modifierName?: string): string | null {
   if (!effectJson || typeof effectJson !== "object" || Array.isArray(effectJson)) return null;
   const ej = effectJson as Record<string, unknown>;
   if (ej.type === "GENERATION_STAT_BOOST") {
@@ -275,11 +275,49 @@ function parseModifierEffect(effectJson: unknown): string | null {
     if (stat) return `+${pct}% em ${stat} para todos os mascotes desta rodada`;
     return `+${pct}% em todos os atributos`;
   }
+  const messages: Record<string, string> = {
+    TEAM_CHARISMA_SHIELD: "A maior soma de Carisma concede +20% de Vitalidade à dupla.",
+    LOWEST_VITALITY_DEFENSE: "O menor valor de Vitalidade de cada dupla recebe +60 de Vitalidade.",
+    FIRST_EVENT_USE_BOOST: "Mascotes em sua primeira participação recebem +15 em todos os status.",
+    TEAM_AGILITY_PRIORITY: "A dupla com maior Agilidade total ganha prioridade de ação.",
+    TEAM_TYPE_UNIQUE_BOOST: "A diversidade exigida de tipos concede bônus em todos os status.",
+    TEAM_TYPE_REPEAT_PENALTY: "Repetir 3 ou mais tipos primários reduz todos os status em 10%.",
+    LAST_MASCOT_VITALITY: "O último sobrevivente recebe Vitalidade e HP adicionais imediatamente.",
+    INSTINCT_CHAOS: "Instinto aumenta simultaneamente o risco de erro e a chance de crítico.",
+    LOWEST_LEVEL_PRIORITY: "O mascote de menor nível age primeiro; empate: menor status total.",
+    MID_BATTLE_REROLL: "No meio da luta, um status de cada sobrevivente varia de -20 a +20.",
+    SAME_TYPE_PLAYERS_PENALTY: "Tipos compartilhados entre os parceiros reduzem os status da dupla em 15%.",
+    HIGH_LEVEL_LIMIT_SOFT: "Um mascote acima do Nv.30 por jogador atua normalmente; os excedentes são ajustados ao equivalente do Nv.30.",
+    EQUIPPED_MASCOT_NERF: "O mascote companheiro pode entrar, mas luta com todos os status em 20.",
+    LOWEST_TEAM_LEVEL_BOOST: "A menor soma de níveis recebe o bônus; empate: menor soma total de status.",
+    REWARD_UNDERDOG_WIN: "O azarão é definido pela menor soma de níveis; empate: menor soma total de status.",
+    REWARD_LOWEST_SCORE: "Apenas o menor placar individual recebe o item; empate: menor dano acumulado.",
+  };
+  if (typeof ej.type === "string" && messages[ej.type]) return messages[ej.type];
+  if (ej.type === "DISPLAY_ONLY" && modifierName) {
+    const legacyMessages: Record<string, string> = {
+      "Carisma de Palco": messages.TEAM_CHARISMA_SHIELD,
+      "Fraqueza Exposta": messages.LOWEST_VITALITY_DEFENSE,
+      "Treino Relâmpago": messages.FIRST_EVENT_USE_BOOST,
+      "Corrida de Agilidade": messages.TEAM_AGILITY_PRIORITY,
+      "União Perfeita": messages.TEAM_TYPE_UNIQUE_BOOST,
+      "Time Desajustado": messages.TEAM_TYPE_REPEAT_PENALTY,
+      "Virada Final": messages.LAST_MASCOT_VITALITY,
+      "Instinto Confuso": messages.INSTINCT_CHAOS,
+      "Tática Invertida": messages.LOWEST_LEVEL_PRIORITY,
+      "Pane na Arena": messages.MID_BATTLE_REROLL,
+      "Dupla Desafinada": messages.SAME_TYPE_PLAYERS_PENALTY,
+      "Harmonia Total": "Se os 6 tipos primários forem diferentes, a dupla recebe +15 em todos os status.",
+      "Baixa Rotação": messages.HIGH_LEVEL_LIMIT_SOFT,
+      "Sem Mascote Principal": messages.EQUIPPED_MASCOT_NERF,
+    };
+    return legacyMessages[modifierName] ?? null;
+  }
   return null;
 }
 
 function ModifierBanner({ modifier }: { modifier: { name: string; description: string; effectJson: unknown } }) {
-  const parsedEffect = parseModifierEffect(modifier.effectJson);
+  const parsedEffect = parseModifierEffect(modifier.effectJson, modifier.name);
   return (
     <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-xs space-y-1.5">
       <p className="font-bold text-purple-200">⚡ Modificador ativo: {modifier.name}</p>
@@ -372,6 +410,8 @@ function RoundCard({
           usedInPrevRounds={getUsedMascots(round, room, playerId)}
           onAct={onAct}
           pending={pending}
+          modifierEffect={round.modifier?.effectJson}
+          modifierName={round.modifier?.name}
         />
       )}
 
@@ -438,13 +478,15 @@ function getUsedMascots(currentRound: Round, room: Room, playerId: string): Set<
 // ── Seletor de mascotes ────────────────────────────────────────────────────────
 
 function MascotSelector({
-  roundId, myTeamLineup, usedInPrevRounds, onAct, pending,
+  roundId, myTeamLineup, usedInPrevRounds, onAct, pending, modifierEffect, modifierName,
 }: {
   roundId: string;
   myTeamLineup: Team["lineups"];
   usedInPrevRounds: Set<string>;
   onAct: (fn: () => Promise<{ error?: string }>) => void;
   pending: boolean;
+  modifierEffect?: unknown;
+  modifierName?: string;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -455,12 +497,21 @@ function MascotSelector({
   };
 
   const available = myTeamLineup.filter((l) => !usedInPrevRounds.has(l.mascotId));
+  const effect = modifierEffect && typeof modifierEffect === "object" && !Array.isArray(modifierEffect)
+    ? modifierEffect as Record<string, unknown>
+    : null;
+  const selectedAbove30 = myTeamLineup.filter(({ mascot }) => selected.includes(mascot.id) && mascot.level > 30).length;
 
   return (
     <div className="rounded-lg border border-amber-400/30 bg-amber-500/5 p-3 space-y-3">
       <p className="text-xs font-semibold text-amber-200">
         Escolha 3 mascotes para esta rodada ({selected.length}/3)
       </p>
+      {(effect?.type === "HIGH_LEVEL_LIMIT_SOFT" || (effect?.type === "DISPLAY_ONLY" && modifierName === "Baixa Rotação")) && (
+        <p className="rounded-md border border-blue-400/30 bg-blue-500/10 px-2 py-1.5 text-[11px] text-blue-200">
+          Baixa Rotação não bloqueia sua escalação: 1 mascote acima do Nv.30 atua normalmente; {Math.max(0, selectedAbove30 - 1)} excedente(s) selecionado(s) terá(ão) os status ajustados ao equivalente do Nv.30.
+        </p>
+      )}
       {available.length === 0 && (
         <p className="text-xs text-slate-500">Todos os seus mascotes já foram usados. O sistema auto-selecionará.</p>
       )}
@@ -523,7 +574,7 @@ function MatchResult({ match, room, modifier }: { match: RoundMatch; room: Room;
   const replay = match.replayJson as AnySyncReplayJson | null;
   const hasReplay = Boolean(replay && (isStandardSyncReplay(replay) ? replay.log.length > 0 : (replay as SyncReplayJson).rounds?.length > 0));
 
-  const modifierLabel = modifier ? parseModifierEffect(modifier.effectJson) : null;
+  const modifierLabel = modifier ? parseModifierEffect(modifier.effectJson, modifier.name) : null;
 
   return (
     <>
