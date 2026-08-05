@@ -12,6 +12,7 @@ export function PlayerSearchInput({
   placeholder = "Digite o nome ou nick...",
   excludeIds = [],
   disabled = false,
+  required = false,
   className = "",
 }: {
   value?: string;
@@ -20,6 +21,7 @@ export function PlayerSearchInput({
   placeholder?: string;
   excludeIds?: string[];
   disabled?: boolean;
+  required?: boolean;
   className?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -39,7 +41,20 @@ export function PlayerSearchInput({
   }, [value, selected]);
 
   useEffect(() => {
-    if (query.trim().length < 2 || selected) {
+    if (!value || selected?.id === value) return;
+    const controller = new AbortController();
+    fetch(`/api/players/search?id=${encodeURIComponent(value)}`, { signal: controller.signal })
+      .then((response) => response.json())
+      .then((data: { players?: PlayerSearchOption[] }) => {
+        const player = data.players?.[0];
+        if (player) setSelected(player);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [value, selected?.id]);
+
+  useEffect(() => {
+    if (query.trim().length < 1 || selected) {
       setResults([]);
       setLoading(false);
       return;
@@ -60,7 +75,7 @@ export function PlayerSearchInput({
       } finally {
         if (current === requestId.current) setLoading(false);
       }
-    }, 250);
+    }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query, selected, excludedKey]);
 
@@ -78,6 +93,7 @@ export function PlayerSearchInput({
       <input
         value={selected ? `${selected.displayName}${selected.ptcglNick ? ` (${selected.ptcglNick})` : ""}` : query}
         disabled={disabled}
+        required={required}
         onChange={(event) => {
           if (selected) onChange?.("", null);
           setSelected(null);
@@ -92,11 +108,13 @@ export function PlayerSearchInput({
           <X size={14} />
         </button>
       )}
-      {!selected && query.trim().length >= 2 && (
+      {!selected && query.trim().length >= 1 && (
         <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-border bg-slate-950 p-1 shadow-2xl">
           {loading ? (
             <p className="px-3 py-2 text-xs text-slate-500">Buscando...</p>
-          ) : results.length ? results.map((player) => (
+          ) : results.length ? <>
+            <p className="px-3 pb-1 pt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-600">Sugestões</p>
+            {results.map((player) => (
             <button
               key={player.id}
               type="button"
@@ -106,13 +124,11 @@ export function PlayerSearchInput({
               <span className="font-semibold">{player.displayName}</span>
               {player.ptcglNick && <span className="ml-1.5 text-slate-500">@{player.ptcglNick}</span>}
             </button>
-          )) : (
+            ))}
+          </> : (
             <p className="px-3 py-2 text-xs text-slate-500">Nenhum jogador encontrado.</p>
           )}
         </div>
-      )}
-      {!selected && query.length > 0 && query.trim().length < 2 && (
-        <p className="mt-1 text-[10px] text-slate-600">Digite pelo menos 2 caracteres.</p>
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import { Download, Send, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PlayerSearchInput } from "@/components/player-search-input";
 import {
   importBoosterCodesAction,
   reserveCodesForPlayerAction
@@ -18,14 +19,8 @@ interface SeasonOption {
   status: SeasonStatus;
 }
 
-interface PlayerOption {
-  id: string;
-  displayName: string;
-}
-
 interface CodeAdminPanelProps {
   seasons: SeasonOption[];
-  players: PlayerOption[];
   defaultSeasonId: string;
   availableCount: number;
 }
@@ -45,7 +40,6 @@ const reasonLabels: Record<DistributionReason, string> = {
 
 export function CodeAdminPanel({
   seasons,
-  players,
   defaultSeasonId,
   availableCount
 }: CodeAdminPanelProps) {
@@ -56,7 +50,7 @@ export function CodeAdminPanel({
   const [notes, setNotes] = useState("");
   const [importSeasonId, setImportSeasonId] = useState(defaultSeasonId);
   const [distributionSeasonId, setDistributionSeasonId] = useState(defaultSeasonId);
-  const [playerId, setPlayerId] = useState(players[0]?.id ?? "");
+  const [playerId, setPlayerId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [reason, setReason] = useState<DistributionReason>(DistributionReason.MANUAL_ADJUSTMENT);
   const [reasonDetail, setReasonDetail] = useState("");
@@ -306,23 +300,11 @@ export function CodeAdminPanel({
             <label htmlFor="playerId" className={labelClass}>
               Jogador
             </label>
-            <select
-              id="playerId"
+            <PlayerSearchInput
               value={playerId}
-              onChange={(event) => setPlayerId(event.target.value)}
-              required
-              className={inputClass}
-            >
-              {players.length === 0 ? (
-                <option value="">Nenhum jogador ativo</option>
-              ) : (
-                players.map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.displayName}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={(id) => setPlayerId(id)}
+              placeholder="Digite o nome ou nick..."
+            />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -393,7 +375,7 @@ export function CodeAdminPanel({
             />
           </div>
 
-          <Button type="submit" disabled={isDistributing || players.length === 0}>
+          <Button type="submit" disabled={isDistributing || !playerId}>
             <Send size={16} className="mr-2" />
             {isDistributing ? "Distribuindo..." : "Distribuir codigos"}
           </Button>

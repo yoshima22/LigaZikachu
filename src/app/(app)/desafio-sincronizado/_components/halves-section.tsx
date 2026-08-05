@@ -99,7 +99,7 @@ export function HalvesSection({
                     {/* Transfer */}
                     <form action={transfer} className="flex gap-1.5 flex-1 min-w-0">
                       <input type="hidden" name="halfId" value={half.id} />
-                      <PlayerSearchInput name="targetPlayerId" excludeIds={[myPlayerId]} className="min-w-48 flex-1" />
+                      <PlayerSearchInput name="targetPlayerId" required excludeIds={[myPlayerId]} className="min-w-48 flex-1" />
                       <button disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 px-2.5 py-1.5 text-xs font-bold text-cyan-100 disabled:opacity-40">
                         <Send size={12} /> Enviar
                       </button>

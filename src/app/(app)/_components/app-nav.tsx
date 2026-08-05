@@ -384,7 +384,7 @@ export function AppNav({
       className={variant === "desktop" ? "relative ml-auto min-w-0" : "relative min-w-0"}
     >
       {variant === "desktop" && (
-        <nav className="hidden items-center gap-1 min-[1450px]:flex">
+        <nav className="hidden items-center gap-1 min-[1536px]:flex">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
             .map(({ href, label, icon: Icon, tutorialId }) => (
@@ -480,7 +480,7 @@ export function AppNav({
       )}
 
       {variant === "mobile" && (
-        <div className="px-3 pb-2.5 min-[1450px]:hidden">
+        <div className="px-3 pb-2.5 min-[1536px]:hidden">
           <div className={`grid grid-cols-4 gap-1.5 md:gap-2 ${admin ? "md:grid-cols-9" : "md:grid-cols-8"}`}>
             {mainLinks
               .filter((link) => !link.adminOnly || admin)

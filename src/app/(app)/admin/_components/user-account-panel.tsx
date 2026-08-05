@@ -19,7 +19,7 @@ export function UserAccountPanel() {
   const requestId = useRef(0);
 
   useEffect(() => {
-    if (search.trim().length < 2 || selectedUser) {
+    if (search.trim().length < 1 || selectedUser) {
       setResults([]);
       setSearching(false);
       return;
@@ -37,7 +37,7 @@ export function UserAccountPanel() {
       } finally {
         if (current === requestId.current) setSearching(false);
       }
-    }, 250);
+    }, 180);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [search, selectedUser]);
 
@@ -86,9 +86,11 @@ export function UserAccountPanel() {
           placeholder="Buscar usuário por nome ou email…"
           className="w-full rounded-xl border border-border bg-slate-900 pl-8 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600"
         />
-        {showDropdown && search.trim().length >= 2 && !selectedUser && (
+        {showDropdown && search.trim().length >= 1 && !selectedUser && (
           <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-slate-900 shadow-xl overflow-hidden">
-            {searching ? <p className="px-3 py-2 text-xs text-slate-500">Buscando...</p> : results.length ? results.map(u => (
+            {searching ? <p className="px-3 py-2 text-xs text-slate-500">Buscando...</p> : results.length ? <>
+              <p className="px-3 pb-1 pt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-600">Sugestões</p>
+              {results.map(u => (
               <button key={u.id} type="button"
                 className="flex w-full items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-800"
                 onClick={() => { setSelectedUser(u); setSearch(u.name ?? u.email); setShowDropdown(false); }}>
@@ -100,7 +102,8 @@ export function UserAccountPanel() {
                   {u.status}
                 </span>
               </button>
-            )) : <p className="px-3 py-2 text-xs text-slate-500">Nenhum usuário encontrado.</p>}
+              ))}
+            </> : <p className="px-3 py-2 text-xs text-slate-500">Nenhum usuário encontrado.</p>}
           </div>
         )}
       </div>

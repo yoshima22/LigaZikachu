@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   }
 
   const query = request.nextUrl.searchParams.get("q")?.trim().slice(0, 80) ?? "";
-  if (query.length < 2) return NextResponse.json({ users: [] });
+  if (query.length < 1) return NextResponse.json({ users: [] });
 
   const users = await prisma.user.findMany({
     where: {

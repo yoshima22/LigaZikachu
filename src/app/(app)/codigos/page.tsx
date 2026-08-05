@@ -20,6 +20,7 @@ import { CodeAdminPanel } from "./_components/code-admin-panel";
 import { CodeRowActions } from "./_components/code-row-actions";
 import { CodeFilters } from "./_components/code-filters";
 import { PlayerCodeFilters } from "./_components/player-code-filters";
+import { PlayerSearchInput } from "@/components/player-search-input";
 import { assignSpecificCodesToPlayerAction, listBoosterCodesAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -286,7 +287,7 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
   const statusFilter = sp.status as BoosterCodeStatus | undefined;
   const playerFilter = sp.playerId;
 
-  const [codesResult, totals, seasons, players, availableCount] = await Promise.all([
+  const [codesResult, totals, seasons, availableCount] = await Promise.all([
     listBoosterCodesAction({
       search,
       status: statusFilter,
@@ -301,14 +302,6 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
     prisma.season.findMany({
       select: { id: true, name: true, status: true },
       orderBy: [{ status: "asc" }, { startDate: "desc" }]
-    }),
-    prisma.player.findMany({
-      where: {
-        active: true,
-        user: { status: "ACTIVE" }
-      },
-      select: { id: true, displayName: true },
-      orderBy: { displayName: "asc" }
     }),
     prisma.boosterCode.count({
       where: {
@@ -333,7 +326,6 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
 
       <CodeAdminPanel
         seasons={seasons}
-        players={players}
         defaultSeasonId={defaultSeasonId}
         availableCount={availableCount}
       />
@@ -353,7 +345,6 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
       </div>
 
       <CodeFilters
-        players={players}
         totalPages={codesResult.totalPages}
         currentPage={codesResult.page}
       />
@@ -389,15 +380,11 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
                 Enviar selecionados para
               </label>
-              <select
+              <PlayerSearchInput
                 name="bulkPlayerId"
-                className="w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-sm text-slate-100"
                 required
-              >
-                {players.map((player) => (
-                  <option key={player.id} value={player.id}>{player.displayName}</option>
-                ))}
-              </select>
+                placeholder="Digite o nome ou nick..."
+              />
             </div>
             <div className="min-w-56 flex-1">
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500">
@@ -409,7 +396,7 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
                 className="w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600"
               />
             </div>
-            <Button type="submit" disabled={players.length === 0}>
+            <Button type="submit">
               Enviar codigos selecionados
             </Button>
           </Card>
@@ -470,7 +457,6 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
                             codeStatus={code.status}
                             distributionId={activeDistribution?.id}
                             distributionStatus={activeDistribution?.status}
-                            players={players}
                           />
                         </td>
                       </tr>

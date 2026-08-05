@@ -6,9 +6,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { PlayerSearchInput } from "@/components/player-search-input";
 
 interface CodeFiltersProps {
-  players: Array<{ id: string; displayName: string }>;
   totalPages: number;
   currentPage: number;
 }
@@ -19,7 +19,6 @@ const inputClass =
 const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-widest text-slate-500";
 
 export function CodeFilters({
-  players,
   totalPages,
   currentPage,
 }: CodeFiltersProps) {
@@ -90,20 +89,18 @@ export function CodeFilters({
           </select>
         </div>
 
-        <div className="w-[200px]">
+        <div className="min-w-[240px] flex-1">
           <label className={labelClass}>Jogador</label>
-          <select
-            name="playerId"
-            value={playerId}
-            onChange={(e) => setPlayerId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="ALL">Todos os jogadores</option>
-            <option value="NONE">Sem dono</option>
-            {players.map((p) => (
-              <option key={p.id} value={p.id}>{p.displayName}</option>
-            ))}
-          </select>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => setPlayerId("ALL")} className={`rounded-lg border px-2 py-2 text-[10px] ${playerId === "ALL" ? "border-[#FFCB05]/40 text-[#FFCB05]" : "border-border text-slate-500"}`}>Todos</button>
+            <button type="button" onClick={() => setPlayerId("NONE")} className={`rounded-lg border px-2 py-2 text-[10px] ${playerId === "NONE" ? "border-[#FFCB05]/40 text-[#FFCB05]" : "border-border text-slate-500"}`}>Sem dono</button>
+            <PlayerSearchInput
+              value={playerId !== "ALL" && playerId !== "NONE" ? playerId : ""}
+              onChange={(id) => setPlayerId(id || "ALL")}
+              placeholder="Nome ou nick..."
+              className="min-w-0 flex-1"
+            />
+          </div>
         </div>
 
         <Button type="submit" className="mb-0.5">Filtrar</Button>

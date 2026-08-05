@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { BoosterCodeStatus, DistributionReason, DistributionStatus } from "@prisma/client";
 import { Ban, CheckCircle2, RotateCcw, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { PlayerSearchInput } from "@/components/player-search-input";
 import {
   assignSpecificCodesToPlayerAction,
   deleteBoosterCodeAction,
@@ -12,17 +13,11 @@ import {
   revokeCodeDistributionAction
 } from "../actions";
 
-interface PlayerOption {
-  id: string;
-  displayName: string;
-}
-
 interface CodeRowActionsProps {
   codeId?: string;
   codeStatus?: BoosterCodeStatus;
   distributionId?: string;
   distributionStatus?: DistributionStatus;
-  players?: PlayerOption[];
   admin?: boolean;
 }
 
@@ -33,12 +28,11 @@ export function CodeRowActions({
   codeStatus,
   distributionId,
   distributionStatus,
-  players = [],
   admin = false
 }: CodeRowActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [showSend, setShowSend] = useState(false);
-  const [playerId, setPlayerId] = useState(players[0]?.id ?? "");
+  const [playerId, setPlayerId] = useState("");
   const [reasonDetail, setReasonDetail] = useState("");
 
   const canMarkRedeemed =
@@ -53,7 +47,7 @@ export function CodeRowActions({
     distributionId &&
     codeStatus !== BoosterCodeStatus.INVALIDATED &&
     (distributionStatus === DistributionStatus.ASSIGNED || distributionStatus === DistributionStatus.REDEEMED);
-  const canSend = admin && codeId && codeStatus === BoosterCodeStatus.AVAILABLE && players.length > 0;
+  const canSend = admin && codeId && codeStatus === BoosterCodeStatus.AVAILABLE;
   const canDelete = admin && codeId;
 
   if (!canMarkRedeemed && !canRevoke && !canInvalidate && !canPlayerInvalidate && !canSend && !canDelete) return null;
@@ -195,15 +189,11 @@ export function CodeRowActions({
           <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             Jogador
           </label>
-          <select
+          <PlayerSearchInput
             value={playerId}
-            onChange={(event) => setPlayerId(event.target.value)}
-            className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
-          >
-            {players.map((player) => (
-              <option key={player.id} value={player.id}>{player.displayName}</option>
-            ))}
-          </select>
+            onChange={(id) => setPlayerId(id)}
+            placeholder="Digite o nome ou nick..."
+          />
           <input
             value={reasonDetail}
             onChange={(event) => setReasonDetail(event.target.value)}
