@@ -13,14 +13,13 @@ export const dynamic = "force-dynamic";
 export default async function AlbumAdminPage() {
   await requireAdmin();
 
-  const [packs, cardStats, players] = await Promise.all([
+  const [packs, cardStats] = await Promise.all([
     prisma.stickerPack.findMany({ orderBy: { price: "asc" } }),
     prisma.pokemonCard.groupBy({
       by: ["rarity", "generation"],
       _count: { id: true },
       orderBy: [{ generation: "asc" }, { rarity: "asc" }]
-    }),
-    prisma.player.findMany({ select: { id: true, displayName: true }, orderBy: { displayName: "asc" } })
+    })
   ]);
 
   const totalCards = cardStats.reduce((s, g) => s + g._count.id, 0);
@@ -62,7 +61,7 @@ export default async function AlbumAdminPage() {
       <Card>
         <p className="mb-3 font-semibold text-slate-200">Gerenciar Álbum por Jogador</p>
         <p className="mb-3 text-xs text-slate-500">Adicione/remova figurinhas ou resete o álbum completo de um jogador específico.</p>
-        <PlayerAlbumManager players={players} />
+        <PlayerAlbumManager />
       </Card>
     </div>
   );

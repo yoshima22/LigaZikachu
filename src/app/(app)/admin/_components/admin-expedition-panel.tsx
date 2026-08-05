@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { MapPin, RefreshCw, CheckCircle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PlayerSearchInput } from "@/components/player-search-input";
 import { getPokemonName } from "@/lib/mascot-data";
 import { getPlayerMascotsAdmin, startAdminExpeditionAction, completeAdminExpeditionAction, resetStuckMascotAction } from "../actions";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -29,14 +30,11 @@ type Mascot = {
   bazarListed: boolean; activeExpedition: boolean;
 };
 
-interface Props {
-  players: { id: string; displayName: string }[];
-}
-
-export function AdminExpeditionPanel({ players }: Props) {
+export function AdminExpeditionPanel() {
   const [pending, startTransition] = useTransition();
 
   const [playerId,   setPlayerId]   = useState("");
+  const [playerName, setPlayerName] = useState("");
   const [mascots,    setMascots]    = useState<Mascot[]>([]);
   const [mascotId,   setMascotId]   = useState("");
   const [duration,   setDuration]   = useState<ExpeditionDuration>("1h");
@@ -62,12 +60,11 @@ export function AdminExpeditionPanel({ players }: Props) {
 
   const handleStart = () => {
     if (!playerId || !mascotId) { toast.error("Selecione jogador e mascote."); return; }
-    const player  = players.find(p => p.id === playerId);
     const mascot  = mascots.find(m => m.id === mascotId);
     const durLabel = DURATIONS.find(d => d.value === duration)?.label;
     const modeLabel = MODES.find(m => m.value === mode)?.label;
 
-    if (!confirm(`Iniciar expedição para ${mascot?.nickname ?? getPokemonName(mascot?.pokemonId ?? 0)} de ${player?.displayName}?\n\n${durLabel} · ${modeLabel}`)) return;
+    if (!confirm(`Iniciar expedição para ${mascot?.nickname ?? getPokemonName(mascot?.pokemonId ?? 0)} de ${playerName}?\n\n${durLabel} · ${modeLabel}`)) return;
 
     startTransition(async () => {
       const res = await startAdminExpeditionAction(playerId, mascotId, duration, mode);
@@ -170,14 +167,14 @@ export function AdminExpeditionPanel({ players }: Props) {
         {/* Jogador */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-400">Jogador</label>
-          <select
+          <PlayerSearchInput
             value={playerId}
-            onChange={e => handlePlayerChange(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]"
-          >
-            <option value="">Selecione o jogador</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+            placeholder="Digite o nick do jogador..."
+            onChange={(id, player) => {
+              setPlayerName(player?.displayName ?? "");
+              handlePlayerChange(id);
+            }}
+          />
         </div>
 
         {/* Mascote */}

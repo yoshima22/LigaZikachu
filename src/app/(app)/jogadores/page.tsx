@@ -4,11 +4,15 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { getCachedPlayerRanking } from "@/lib/ranking-cache";
 import { PlayerFilters } from "./_components/player-filters";
 import { PlayersTable, type PlayerRow } from "./_components/players-table";
-import { SeasonStatus, UserStatus } from "@prisma/client";
+import { Prisma, SeasonStatus, UserStatus } from "@prisma/client";
+import Link from "next/link";
+
+const PAGE_SIZE = 40;
 
 interface SearchParams {
   q?: string;
   status?: string;
+  page?: string;
 }
 
 export default async function PlayersPage({
@@ -16,7 +20,7 @@ export default async function PlayersPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const [session, { q = "", status: statusFilter = "" }] = await Promise.all([
+  const [session, { q = "", status: statusFilter = "", page: pageParam = "1" }] = await Promise.all([
     getAppSession(),
     searchParams
   ]);
@@ -28,8 +32,8 @@ export default async function PlayersPage({
       ? ({ status: statusFilter as UserStatus } as const)
       : {};
 
-  const users = await prisma.user.findMany({
-    where: {
+  const page = Math.max(1, Number.parseInt(pageParam, 10) || 1);
+  const where: Prisma.UserWhereInput = {
       player: { isNot: null },
       ...statusWhere,
       ...(q
@@ -42,7 +46,11 @@ export default async function PlayersPage({
             ]
           }
         : {})
-    },
+  };
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+    where,
     select: {
       id: true,
       name: true,
@@ -60,8 +68,11 @@ export default async function PlayersPage({
         }
       }
     },
-    orderBy: { createdAt: "asc" }
-  });
+    orderBy: { createdAt: "asc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+  })]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Ranking da temporada ativa para V/D
   const activeSeason = await prisma.season.findFirst({
@@ -100,7 +111,7 @@ export default async function PlayersPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Jogadores</h1>
-          <p className="mt-1 text-sm text-slate-400">{rows.length} jogador(es) encontrado(s)</p>
+          <p className="mt-1 text-sm text-slate-400">{total} jogador(es) encontrado(s)</p>
         </div>
       </div>
 
@@ -112,6 +123,18 @@ export default async function PlayersPage({
         currentUserId={session.user.id}
         currentUserRole={session.user.role}
       />
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          {page > 1 ? (
+            <Link href={`/jogadores?${new URLSearchParams({ ...(q ? { q } : {}), ...(statusFilter ? { status: statusFilter } : {}), page: String(page - 1) })}`} className="rounded-lg border border-border bg-slate-900 px-4 py-2 text-xs text-slate-300 hover:text-white">← Anterior</Link>
+          ) : <span className="rounded-lg border border-border px-4 py-2 text-xs text-slate-600">← Anterior</span>}
+          <span className="text-xs text-slate-500">Página {Math.min(page, totalPages)} de {totalPages}</span>
+          {page < totalPages ? (
+            <Link href={`/jogadores?${new URLSearchParams({ ...(q ? { q } : {}), ...(statusFilter ? { status: statusFilter } : {}), page: String(page + 1) })}`} className="rounded-lg border border-border bg-slate-900 px-4 py-2 text-xs text-slate-300 hover:text-white">Próxima →</Link>
+          ) : <span className="rounded-lg border border-border px-4 py-2 text-xs text-slate-600">Próxima →</span>}
+        </div>
+      )}
 
       {!admin && (
         <p className="text-center text-xs text-slate-600">

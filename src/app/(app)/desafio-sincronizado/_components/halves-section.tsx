@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Send, Trash2, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { transferSyncTicketHalfAction, discardSyncTicketHalfAction, swapSyncTicketHalfSideAction } from "../actions";
+import { PlayerSearchInput } from "@/components/player-search-input";
 
 type HalfData = {
   id: string;
@@ -16,12 +17,6 @@ type HalfData = {
   sourceAction: string;
 };
 
-type PlayerOption = {
-  id: string;
-  displayName: string;
-  ptcglNick: string | null;
-};
-
 const ITEMS_PER_PAGE = 4;
 
 function getSideLabel(side: string) { return side === "LEFT" ? "Metade Esquerda (Fogo)" : "Metade Direita (Água)"; }
@@ -29,11 +24,9 @@ function getSideImage(side: string) { return side === "LEFT" ? "/events/desafio-
 
 export function HalvesSection({
   halves,
-  players,
   myPlayerId,
 }: {
   halves: HalfData[];
-  players: PlayerOption[];
   myPlayerId: string;
 }) {
   const router = useRouter();
@@ -106,13 +99,7 @@ export function HalvesSection({
                     {/* Transfer */}
                     <form action={transfer} className="flex gap-1.5 flex-1 min-w-0">
                       <input type="hidden" name="halfId" value={half.id} />
-                      <select name="targetPlayerId" className="min-w-0 flex-1 rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-100">
-                        {players.map((target) => (
-                          <option key={target.id} value={target.id}>
-                            {target.displayName}{target.ptcglNick ? ` (${target.ptcglNick})` : ""}
-                          </option>
-                        ))}
-                      </select>
+                      <PlayerSearchInput name="targetPlayerId" excludeIds={[myPlayerId]} className="min-w-48 flex-1" />
                       <button disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 px-2.5 py-1.5 text-xs font-bold text-cyan-100 disabled:opacity-40">
                         <Send size={12} /> Enviar
                       </button>

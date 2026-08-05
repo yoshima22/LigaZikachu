@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { KeyRound, UserCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,17 +8,38 @@ import { adminResetUserPassword, adminReactivateUser } from "../actions";
 
 interface User { id: string; name: string | null; email: string; status: string }
 
-export function UserAccountPanel({ users }: { users: User[] }) {
+export function UserAccountPanel() {
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [results, setResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  const requestId = useRef(0);
 
-  const filtered = users.filter(u =>
-    (u.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 8);
+  useEffect(() => {
+    if (search.trim().length < 2 || selectedUser) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    const current = ++requestId.current;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const response = await fetch(`/api/admin/users/search?q=${encodeURIComponent(search.trim())}`, { signal: controller.signal });
+        const data = await response.json() as { users?: User[] };
+        if (current === requestId.current) setResults(data.users ?? []);
+      } catch {
+        if (!controller.signal.aborted && current === requestId.current) setResults([]);
+      } finally {
+        if (current === requestId.current) setSearching(false);
+      }
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [search, selectedUser]);
 
   const STATUS_COLOR: Record<string, string> = {
     ACTIVE: "text-green-400", SUSPENDED: "text-red-400",
@@ -65,9 +86,9 @@ export function UserAccountPanel({ users }: { users: User[] }) {
           placeholder="Buscar usuário por nome ou email…"
           className="w-full rounded-xl border border-border bg-slate-900 pl-8 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600"
         />
-        {showDropdown && search.length > 0 && !selectedUser && filtered.length > 0 && (
+        {showDropdown && search.trim().length >= 2 && !selectedUser && (
           <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-slate-900 shadow-xl overflow-hidden">
-            {filtered.map(u => (
+            {searching ? <p className="px-3 py-2 text-xs text-slate-500">Buscando...</p> : results.length ? results.map(u => (
               <button key={u.id} type="button"
                 className="flex w-full items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-800"
                 onClick={() => { setSelectedUser(u); setSearch(u.name ?? u.email); setShowDropdown(false); }}>
@@ -79,7 +100,7 @@ export function UserAccountPanel({ users }: { users: User[] }) {
                   {u.status}
                 </span>
               </button>
-            ))}
+            )) : <p className="px-3 py-2 text-xs text-slate-500">Nenhum usuário encontrado.</p>}
           </div>
         )}
       </div>

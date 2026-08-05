@@ -92,7 +92,6 @@ export default async function AdminPage() {
     invalidCodes,
     pendingDecks,
     recentAuditLogs,
-    allPlayers,
     globalNotice,
   ] = await Promise.all([
     prisma.user.count({ where: { status: UserStatus.PENDING_APPROVAL } }),
@@ -107,11 +106,6 @@ export default async function AdminPage() {
       orderBy: { createdAt: "desc" },
       take: 8,
       include: { actor: { select: { name: true, email: true } } }
-    }),
-    prisma.player.findMany({
-      where: { user: { status: UserStatus.ACTIVE } },
-      select: { id: true, displayName: true, user: { select: { email: true } } },
-      orderBy: { displayName: "asc" },
     }),
     getGlobalNotice(),
   ]);
@@ -130,11 +124,6 @@ export default async function AdminPage() {
       flavorText: r.flavorText,
     })))
   );
-
-  const allUsers = await prisma.user.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, email: true, status: true }
-  });
 
   const allShopItems = await prisma.shopItem.findMany({
     orderBy: [{ type: "asc" }, { active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
@@ -259,17 +248,16 @@ export default async function AdminPage() {
         )}
       </Card>
 
-      <UserAccountPanel users={allUsers} />
+      <UserAccountPanel />
       <AdminCommunicationPanel initialNotice={globalNotice.message} />
       <RunawayRevertPanel />
-      <MascotSocialPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
-      <AdminExpeditionPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
-      <AdminMascotPanel players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))} />
+      <MascotSocialPanel />
+      <AdminExpeditionPanel />
+      <AdminMascotPanel />
       <BulkSendPanel items={allShopItems} />
-      <DeckReminderPanel players={allPlayers.map((p) => ({ id: p.id, displayName: p.displayName, email: p.user.email ?? null }))} />
+      <DeckReminderPanel />
       <VipSchedulePanel
         allSchedules={allSchedules}
-        players={allPlayers.map(p => ({ id: p.id, displayName: p.displayName }))}
         activeVips={(vipsResult.passes ?? []).map(p => ({
           passId: p.id,
           displayName: p.player.displayName,

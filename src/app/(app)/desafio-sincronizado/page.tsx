@@ -98,7 +98,7 @@ export default async function DesafioSincronizadoPage() {
     })
     .filter((p) => p.missingLeft || p.missingRight);
 
-  const [halves, tickets, players, entries, config, openTeams] = await Promise.all([
+  const [halves, tickets, entries, config, openTeams] = await Promise.all([
     prisma.syncTicketHalf.findMany({
       where: { ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
       include: { generatedByPlayer: { select: { id: true, displayName: true, ptcglNick: true } } },
@@ -114,12 +114,6 @@ export default async function DesafioSincronizadoPage() {
       },
       orderBy: { createdAt: "desc" },
       take: 20,
-    }),
-    prisma.player.findMany({
-      where: { id: { not: player.id }, active: true, user: { status: "ACTIVE" } },
-      select: { id: true, displayName: true, ptcglNick: true },
-      orderBy: { displayName: "asc" },
-      take: 80,
     }),
     prisma.syncChallengeEntry.findMany({
       where: { playerId: player.id },
@@ -465,7 +459,6 @@ export default async function DesafioSincronizadoPage() {
         </div>
         <HalvesSection
           halves={halves.map(h => ({ ...h, side: h.side as "LEFT" | "RIGHT" }))}
-          players={players}
           myPlayerId={player.id}
         />
       </section>
@@ -854,7 +847,7 @@ export default async function DesafioSincronizadoPage() {
           <h2 className="font-semibold text-[#FFCB05]">Ferramentas admin de teste</h2>
           <p className="mt-1 text-xs text-slate-400">Gera metade com voce como criador. Pela regra oficial, voce precisara enviar essa metade para outro jogador.</p>
 
-          <AdminTicketPanel players={players} />
+          <AdminTicketPanel />
 
           <div className="mt-4 flex flex-wrap gap-2">
             <form action={async () => {

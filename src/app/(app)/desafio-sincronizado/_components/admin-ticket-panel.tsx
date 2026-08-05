@@ -3,18 +3,9 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Gift, Minus, Search } from "lucide-react";
+import { Gift, Minus } from "lucide-react";
 import { adminGrantSyncTicketAction, adminRevokeSyncTicketAction } from "../actions";
-
-interface Player {
-  id: string;
-  displayName: string;
-  ptcglNick: string | null;
-}
-
-interface Props {
-  players: Player[];
-}
+import { PlayerSearchInput, type PlayerSearchOption } from "@/components/player-search-input";
 
 type TicketType = "LEFT" | "RIGHT" | "COMPLETE";
 
@@ -24,19 +15,13 @@ const TYPE_OPTS: { value: TicketType; label: string }[] = [
   { value: "COMPLETE", label: "🎫 Ticket Completo" },
 ];
 
-export function AdminTicketPanel({ players }: Props) {
+export function AdminTicketPanel() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [mode, setMode] = useState<"grant" | "revoke">("grant");
-  const [search, setSearch] = useState("");
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerSearchOption | null>(null);
   const [ticketType, setTicketType] = useState<TicketType>("LEFT");
   const [qty, setQty] = useState(1);
-
-  const filtered = players.filter((p) =>
-    p.displayName.toLowerCase().includes(search.toLowerCase()) ||
-    (p.ptcglNick ?? "").toLowerCase().includes(search.toLowerCase())
-  );
 
   const handleSubmit = () => {
     if (!selectedPlayer) { toast.error("Selecione um jogador."); return; }
@@ -77,30 +62,7 @@ export function AdminTicketPanel({ players }: Props) {
       {/* Busca de jogador */}
       <div className="space-y-1">
         <label className="text-[10px] text-slate-500">Jogador</label>
-        <div className="relative">
-          <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setSelectedPlayer(null); }}
-            placeholder="Buscar por nome ou nick..."
-            className="w-full rounded-lg border border-border bg-slate-950 pl-7 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600"
-          />
-        </div>
-        {search && !selectedPlayer && filtered.length > 0 && (
-          <div className="rounded-lg border border-border bg-slate-950 max-h-36 overflow-y-auto">
-            {filtered.slice(0, 10).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => { setSelectedPlayer(p); setSearch(p.displayName); }}
-                className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors border-b border-border/40 last:border-0"
-              >
-                {p.displayName}
-                {p.ptcglNick && <span className="ml-1.5 text-slate-500">({p.ptcglNick})</span>}
-              </button>
-            ))}
-          </div>
-        )}
+        <PlayerSearchInput onChange={(_, player) => setSelectedPlayer(player)} placeholder="Buscar por nome ou nick..." />
         {selectedPlayer && (
           <p className="text-[10px] text-green-400">✓ {selectedPlayer.displayName} selecionado</p>
         )}

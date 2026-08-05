@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { PlayerSearchInput } from "@/components/player-search-input";
 import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
 import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
@@ -147,15 +148,12 @@ interface ActiveVip {
   allowRetroactiveClaims: boolean;
 }
 
-interface Player { id: string; displayName: string; }
-
 interface Props {
   allSchedules: ScheduleEntry[];
-  players: Player[];
   activeVips: ActiveVip[];
 }
 
-export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
+export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
   const [open, setOpen] = useState(false);
   const [activeLabel, setActiveLabel] = useState(allSchedules[0]?.label ?? "Passe Apoiador");
   const [scheduleMap, setScheduleMap] = useState<Record<string, DayReward[]>>(
@@ -641,16 +639,12 @@ export function VipSchedulePanel({ allSchedules, players, activeVips }: Props) {
             {showGrantForm && (
               <div className="space-y-3 pt-2 border-t border-purple-500/10">
                 <div className="flex flex-wrap gap-3">
-                  <select
+                  <PlayerSearchInput
                     value={selectedPlayerId}
-                    onChange={e => setSelectedPlayerId(e.target.value)}
-                    className="rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50 flex-1 min-w-48"
-                  >
-                    <option value="">Selecionar jogador...</option>
-                    {players.map(p => (
-                      <option key={p.id} value={p.id}>{p.displayName}</option>
-                    ))}
-                  </select>
+                    onChange={(id) => setSelectedPlayerId(id)}
+                    placeholder="Digite o nick do jogador..."
+                    className="flex-1 min-w-48"
+                  />
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-slate-400 whitespace-nowrap">Dias:</label>
                     <input type="number" min={1} max={365} value={durationDays}

@@ -4,14 +4,14 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Swords, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PlayerSearchInput } from "@/components/player-search-input";
 import { triggerMascotSocialEvents, clearPlayerExpeditions, cleanAdminMascotEvents } from "../actions";
 
-interface Props { players: { id: string; displayName: string }[] }
-
-export function MascotSocialPanel({ players }: Props) {
+export function MascotSocialPanel() {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ battles: number; friendships: number; pairs: number } | null>(null);
   const [clearTarget, setClearTarget] = useState("");
+  const [clearTargetName, setClearTargetName] = useState("");
   const [clearResult, setClearResult] = useState<number | null>(null);
   const [cleanResult, setCleanResult] = useState<number | null>(null);
 
@@ -36,8 +36,7 @@ export function MascotSocialPanel({ players }: Props) {
 
   const handleClearExpeditions = () => {
     if (!clearTarget) { toast.error("Selecione um jogador."); return; }
-    const player = players.find(p => p.id === clearTarget);
-    if (!confirm(`Limpar todas as expedições ativas de ${player?.displayName}?`)) return;
+    if (!confirm(`Limpar todas as expedições ativas de ${clearTargetName}?`)) return;
     startTransition(async () => {
       const r = await clearPlayerExpeditions(clearTarget);
       if (r.error) { toast.error(r.error); return; }
@@ -94,11 +93,17 @@ export function MascotSocialPanel({ players }: Props) {
           Remove expedições presas (ativas mas sem possibilidade de coletar). O mascote volta ao normal sem recompensa.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={clearTarget} onChange={e => { setClearTarget(e.target.value); setClearResult(null); }}
-            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
-            <option value="">Selecione o jogador</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+          <div className="min-w-[240px] flex-1">
+            <PlayerSearchInput
+              value={clearTarget}
+              placeholder="Digite o nick do jogador..."
+              onChange={(id, player) => {
+                setClearTarget(id);
+                setClearTargetName(player?.displayName ?? "");
+                setClearResult(null);
+              }}
+            />
+          </div>
           <Button type="button" disabled={pending || !clearTarget} onClick={handleClearExpeditions}
             className="gap-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20">
             <Trash2 size={13} /> Limpar expedições

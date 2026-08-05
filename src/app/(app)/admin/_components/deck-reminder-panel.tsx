@@ -2,11 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Mail, Send, Eye, FlaskConical, Search } from "lucide-react";
+import { Mail, Send, Eye, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PlayerSearchInput, type PlayerSearchOption } from "@/components/player-search-input";
 import { triggerDeckReminder, sendTestDeckReminder } from "../actions";
-
-interface Player { id: string; displayName: string; email: string | null; }
 
 interface ReminderResult {
   weeksChecked: number;
@@ -26,21 +25,14 @@ const STATUS_ICON: Record<string, string> = {
   simulado: "👁",
 };
 
-export function DeckReminderPanel({ players }: { players: Player[] }) {
+export function DeckReminderPanel() {
   const [pending, startTransition]   = useTransition();
   const [testPending, startTest]     = useTransition();
   const [result, setResult]          = useState<ReminderResult | null>(null);
   const [dryRun, setDryRun]          = useState(false);
 
   // Test target
-  const [playerSearch, setPlayerSearch] = useState("");
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [showDropdown, setShowDropdown]    = useState(false);
-
-  const filteredPlayers = players.filter((p) =>
-    p.displayName.toLowerCase().includes(playerSearch.toLowerCase()) ||
-    (p.email ?? "").toLowerCase().includes(playerSearch.toLowerCase())
-  ).slice(0, 8);
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerSearchOption | null>(null);
 
   const run = (dry: boolean) => {
     const label = dry ? "simular (nenhum e-mail será enviado)" : "enviar os e-mails de verdade";
@@ -58,8 +50,7 @@ export function DeckReminderPanel({ players }: { players: Player[] }) {
 
   const runTest = () => {
     if (!selectedPlayer) { toast.error("Selecione um jogador primeiro."); return; }
-    if (!selectedPlayer.email) { toast.error(`${selectedPlayer.displayName} não tem e-mail cadastrado.`); return; }
-    if (!confirm(`Enviar e-mail de teste para ${selectedPlayer.displayName} (${selectedPlayer.email})?`)) return;
+    if (!confirm(`Enviar e-mail de teste para ${selectedPlayer.displayName}?`)) return;
 
     startTest(async () => {
       try {
@@ -95,46 +86,22 @@ export function DeckReminderPanel({ players }: { players: Player[] }) {
           Envia o e-mail de verdade para um único jogador. Usa dados reais de partida se existir — caso contrário, usa dados de exemplo para testar o template.
         </p>
 
-        <div className="relative">
-          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-          <input
-            value={playerSearch}
-            onChange={(e) => { setPlayerSearch(e.target.value); setShowDropdown(true); setSelectedPlayer(null); }}
-            onFocus={() => setShowDropdown(true)}
-            placeholder="Buscar jogador por nome ou e-mail…"
-            className="w-full rounded-lg border border-border bg-slate-900 pl-8 pr-3 py-2 text-xs text-slate-100 outline-none focus:border-[#FFCB05] placeholder:text-slate-600"
-          />
-
-          {/* Dropdown */}
-          {showDropdown && playerSearch.length > 0 && filteredPlayers.length > 0 && !selectedPlayer && (
-            <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-slate-900 shadow-xl overflow-hidden">
-              {filteredPlayers.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-800 transition-colors"
-                  onClick={() => { setSelectedPlayer(p); setPlayerSearch(p.displayName); setShowDropdown(false); }}
-                >
-                  <span className="text-xs font-medium text-slate-200 truncate">{p.displayName}</span>
-                  <span className="text-[10px] text-slate-500 shrink-0 truncate max-w-[140px]">
-                    {p.email ?? "sem e-mail"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <PlayerSearchInput
+          value={selectedPlayer?.id ?? ""}
+          placeholder="Buscar jogador por nick..."
+          onChange={(_id, player) => setSelectedPlayer(player)}
+        />
 
         {/* Selected player chip */}
         {selectedPlayer && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/8 px-3 py-2">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-[#FFCB05] truncate">{selectedPlayer.displayName}</p>
-              <p className="text-[10px] text-slate-500 truncate">{selectedPlayer.email ?? "sem e-mail"}</p>
+              {selectedPlayer.ptcglNick && <p className="text-[10px] text-slate-500 truncate">@{selectedPlayer.ptcglNick}</p>}
             </div>
             <button
               type="button"
-              onClick={() => { setSelectedPlayer(null); setPlayerSearch(""); }}
+              onClick={() => setSelectedPlayer(null)}
               className="shrink-0 text-slate-500 hover:text-slate-300 text-xs px-1"
             >✕</button>
           </div>

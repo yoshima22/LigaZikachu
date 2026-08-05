@@ -3,20 +3,18 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { resetPlayerAlbum, removePlayerSticker, addCardToPlayer } from "../actions";
+import { PlayerSearchInput } from "@/components/player-search-input";
 
-interface Props {
-  players: { id: string; displayName: string }[];
-}
-
-export function PlayerAlbumManager({ players }: Props) {
+export function PlayerAlbumManager() {
   const [pending, startTransition] = useTransition();
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [selectedPlayerName, setSelectedPlayerName] = useState("");
   const [nationalId, setNationalId] = useState(1);
   const [removeCardId, setRemoveCardId] = useState("");
 
   const handleReset = () => {
     if (!selectedPlayerId) { toast.error("Selecione um jogador."); return; }
-    const name = players.find((p) => p.id === selectedPlayerId)?.displayName;
+    const name = selectedPlayerName || "este jogador";
     if (!confirm(`Resetar TODO o álbum de ${name}? Esta ação é irreversível.`)) return;
     startTransition(async () => {
       try {
@@ -52,13 +50,12 @@ export function PlayerAlbumManager({ players }: Props) {
 
   return (
     <div className="space-y-4">
-      <label className="space-y-1 text-xs text-slate-400 block">
+      <label className="space-y-1 text-xs text-slate-400 block max-w-sm">
         <span>Jogador</span>
-        <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
-          className="w-full max-w-xs rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]">
-          <option value="">Selecione</option>
-          {players.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-        </select>
+        <PlayerSearchInput
+          value={selectedPlayerId}
+          onChange={(id, player) => { setSelectedPlayerId(id); setSelectedPlayerName(player?.displayName ?? ""); }}
+        />
       </label>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

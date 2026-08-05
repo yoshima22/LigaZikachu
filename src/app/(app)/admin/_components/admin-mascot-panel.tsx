@@ -15,6 +15,7 @@ import {
   transferMascotAction,
 } from "../actions";
 import { grantEggToPlayer } from "@/app/(app)/mascotes/actions";
+import { PlayerSearchInput } from "@/components/player-search-input";
 
 type Mascot = {
   id: string; pokemonId: number; nickname: string | null; level: number;
@@ -35,12 +36,8 @@ const PERSONALITIES: { value: MascotPersonality; label: string }[] = [
   { value: "CHAOTIC",     label: "Caótico" },
 ];
 
-interface Props {
-  players: { id: string; displayName: string }[];
-}
-
 // ── Seção Clonar ──────────────────────────────────────────────────────────────
-function CloneSection({ players }: Props) {
+function CloneSection() {
   const [pending, start] = useTransition();
   const [playerId, setPlayerId] = useState("");
   const [mascots,  setMascots]  = useState<Mascot[]>([]);
@@ -91,11 +88,7 @@ function CloneSection({ players }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">Jogador</label>
-          <select value={playerId} onChange={e => loadMascots(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
-            <option value="">Selecione o jogador</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+          <PlayerSearchInput value={playerId} onChange={(id) => loadMascots(id)} />
         </div>
 
         <div className="space-y-1">
@@ -143,12 +136,13 @@ function CloneSection({ players }: Props) {
 }
 
 // ── Seção Criar Mascote ───────────────────────────────────────────────────────
-function CreateSection({ players }: Props) {
+function CreateSection() {
   const [pending,      start]          = useTransition();
   const [calcPending,  startCalc]      = useTransition();
   const DEFAULT_STAT = 10;
 
   const [playerId,    setPlayerId]    = useState("");
+  const [playerName,  setPlayerName]  = useState("");
   const [pokemonId,   setPokemonId]   = useState("");
   const [personality, setPersonality] = useState<MascotPersonality>("LOYAL");
   const [isShiny,     setIsShiny]     = useState(false);
@@ -227,10 +221,9 @@ function CreateSection({ players }: Props) {
     const finalV = clampStat(statInt(statV), statInt(bonusV, 0));
     const extraPts = Math.max(0, statInt(extraRandom, 0));
 
-    const player = players.find(p => p.id === playerId);
     const name = nickname.trim() || (previewName ?? `#${pokeIdNum}`);
     const summaryLine = [
-      `Criar ${name} (Nv.${lvl}${isShiny ? " ✦ Shiny" : ""}) para ${player?.displayName}`,
+      `Criar ${name} (Nv.${lvl}${isShiny ? " ✦ Shiny" : ""}) para ${playerName || "jogador selecionado"}`,
       `Stats: F${finalF} A${finalA} C${finalC} I${finalI} V${finalV}`,
       extraPts > 0 ? `+${extraPts} pts aleatórios extras` : null,
     ].filter(Boolean).join("\n");
@@ -280,11 +273,7 @@ function CreateSection({ players }: Props) {
         {/* Jogador */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">Jogador</label>
-          <select value={playerId} onChange={e => setPlayerId(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
-            <option value="">Selecione</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+          <PlayerSearchInput value={playerId} onChange={(id, player) => { setPlayerId(id); setPlayerName(player?.displayName ?? ""); }} />
         </div>
 
         {/* Pokémon ID */}
@@ -454,10 +443,12 @@ function CreateSection({ players }: Props) {
 }
 
 // ── Seção Transferir Mascote ──────────────────────────────────────────────────
-function TransferSection({ players }: Props) {
+function TransferSection() {
   const [pending, start] = useTransition();
   const [fromPlayerId,   setFromPlayerId]   = useState("");
   const [toPlayerId,     setToPlayerId]     = useState("");
+  const [fromPlayerName, setFromPlayerName] = useState("");
+  const [toPlayerName,   setToPlayerName]   = useState("");
   const [mascots,        setMascots]        = useState<Mascot[]>([]);
   const [mascotId,       setMascotId]       = useState("");
   const [result,         setResult]         = useState<string | null>(null);
@@ -477,8 +468,8 @@ function TransferSection({ players }: Props) {
     if (!m) { toast.error("Selecione um mascote."); return; }
     if (!toPlayerId) { toast.error("Selecione o jogador de destino."); return; }
     if (fromPlayerId === toPlayerId) { toast.error("Origem e destino são o mesmo jogador."); return; }
-    const fromName = players.find(p => p.id === fromPlayerId)?.displayName;
-    const toName   = players.find(p => p.id === toPlayerId)?.displayName;
+    const fromName = fromPlayerName || "jogador de origem";
+    const toName = toPlayerName || "jogador de destino";
     const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
     if (!confirm(
       `Transferir ${mascotName} (Nv.${m.level}) de ${fromName} para ${toName}?\n\n` +
@@ -512,22 +503,12 @@ function TransferSection({ players }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">De (origem)</label>
-          <select value={fromPlayerId} onChange={e => loadMascots(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500">
-            <option value="">Selecione o jogador de origem</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+          <PlayerSearchInput value={fromPlayerId} onChange={(id, player) => { setFromPlayerName(player?.displayName ?? ""); loadMascots(id); }} placeholder="Buscar origem..." />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">Para (destino)</label>
-          <select value={toPlayerId} onChange={e => setToPlayerId(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500">
-            <option value="">Selecione o jogador de destino</option>
-            {players.filter(p => p.id !== fromPlayerId).map(p => (
-              <option key={p.id} value={p.id}>{p.displayName}</option>
-            ))}
-          </select>
+          <PlayerSearchInput value={toPlayerId} excludeIds={fromPlayerId ? [fromPlayerId] : []} onChange={(id, player) => { setToPlayerId(id); setToPlayerName(player?.displayName ?? ""); }} placeholder="Buscar destino..." />
         </div>
       </div>
 
@@ -580,9 +561,10 @@ function TransferSection({ players }: Props) {
 }
 
 // ── Seção Remover Mascote ─────────────────────────────────────────────────────
-function DeleteSection({ players }: Props) {
+function DeleteSection() {
   const [pending, start] = useTransition();
   const [playerId, setPlayerId] = useState("");
+  const [playerName, setPlayerName] = useState("");
   const [mascots,  setMascots]  = useState<Mascot[]>([]);
   const [mascotId, setMascotId] = useState("");
   const [result,   setResult]   = useState<string | null>(null);
@@ -601,10 +583,9 @@ function DeleteSection({ players }: Props) {
     const m = mascots.find(x => x.id === mascotId);
     if (!m) { toast.error("Selecione um mascote."); return; }
     const name = m.nickname ?? getPokemonName(m.pokemonId);
-    const player = players.find(p => p.id === playerId);
     if (!confirm(
       `⚠️ ATENÇÃO — Esta ação é PERMANENTE.\n\n` +
-      `Remover ${name} (Nv.${m.level}) da conta de ${player?.displayName}?\n\n` +
+      `Remover ${name} (Nv.${m.level}) da conta de ${playerName || "jogador selecionado"}?\n\n` +
       `Todos os dados (expedições, relações, eventos, buffs) serão deletados.`
     )) return;
 
@@ -632,11 +613,7 @@ function DeleteSection({ players }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">Jogador</label>
-          <select value={playerId} onChange={e => loadMascots(e.target.value)}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-red-500">
-            <option value="">Selecione o jogador</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+          <PlayerSearchInput value={playerId} onChange={(id, player) => { setPlayerName(player?.displayName ?? ""); loadMascots(id); }} />
         </div>
 
         <div className="space-y-1">
@@ -694,9 +671,10 @@ const EGG_OPTIONS = [
   { value: "EGG_EVENT",   label: "Ovo de Evento" },
 ];
 
-function GrantEggSection({ players }: Props) {
+function GrantEggSection() {
   const [pending, start] = useTransition();
   const [playerId, setPlayerId] = useState("");
+  const [playerName, setPlayerName] = useState("");
   const [eggType, setEggType]   = useState("EGG_LAB");
   const [result, setResult]     = useState<string | null>(null);
 
@@ -707,7 +685,7 @@ function GrantEggSection({ players }: Props) {
       if (r.error) { toast.error(r.error); return; }
       const label = EGG_OPTIONS.find(o => o.value === eggType)?.label ?? eggType;
       toast.success(`${label} adicionado ao inventário!`);
-      setResult(`✅ ${label} adicionado para ${players.find(p => p.id === playerId)?.displayName ?? playerId}`);
+      setResult(`✅ ${label} adicionado para ${playerName || playerId}`);
     });
   };
 
@@ -720,11 +698,7 @@ function GrantEggSection({ players }: Props) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">Jogador</label>
-          <select value={playerId} onChange={e => { setPlayerId(e.target.value); setResult(null); }}
-            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
-            <option value="">Selecione o jogador</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
-          </select>
+          <PlayerSearchInput value={playerId} onChange={(id, player) => { setPlayerId(id); setPlayerName(player?.displayName ?? ""); setResult(null); }} />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">Tipo de Ovo</label>
@@ -747,18 +721,18 @@ function GrantEggSection({ players }: Props) {
 }
 
 // ── Export principal ──────────────────────────────────────────────────────────
-export function AdminMascotPanel({ players }: Props) {
+export function AdminMascotPanel() {
   return (
     <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-5">
       <div className="flex items-center gap-2">
         <RefreshCw size={16} className="text-[#FFCB05]" />
         <h3 className="font-semibold text-slate-200">Gerenciamento de Mascotes</h3>
       </div>
-      <TransferSection players={players} />
-      <GrantEggSection players={players} />
-      <CloneSection players={players} />
-      <CreateSection players={players} />
-      <DeleteSection players={players} />
+      <TransferSection />
+      <GrantEggSection />
+      <CloneSection />
+      <CreateSection />
+      <DeleteSection />
     </div>
   );
 }
