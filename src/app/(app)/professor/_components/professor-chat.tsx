@@ -8,11 +8,12 @@ import type { TcgCard } from "@/lib/card-service";
 
 const WELCOME: ChatMessage = {
   role: "professor",
-  content: "Salve, parceiro! Sou o Professor Enguiça, seu assistente da Liga Zikachu. 🔥\n\nPosso consultar seus mascotes e análises, explicar regras e cálculos ou pesquisar cartas H, I e J reais para o seu deck."
+  content: "Salve, parceiro! Sou o Professor Enguiça, seu assistente da Liga Zikachu. 🔥\n\nPosso consultar seus mascotes, análises e combates recentes, explicar regras e cálculos ou pesquisar cartas H, I e J reais para o seu deck."
 };
 
 const QUICK_PROMPTS = [
   { label: "Analisar meus mascotes", icon: FlaskConical, text: "Quais são meus melhores mascotes analisados e quais posturas combinam com eles?" },
+  { label: "Analisar última batalha", icon: Trophy, text: "Analise minha última batalha, compare as equipes e sugira mudanças de mascotes ou posturas com base no replay." },
   { label: "Explicar dano", icon: Swords, text: "Como o dano é calculado na Arena e na Liga Semanal?" },
   { label: "Cartas H, I e J", icon: BookOpen, text: "Quais cartas legais H, I ou J podem melhorar a compra e a consistência do meu deck?" }
 ];

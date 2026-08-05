@@ -8,6 +8,7 @@ import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
 import { buildSuggestions, detectMatchIssues, fetchMatchSuggestions } from "@/lib/deck-recommender";
 import type { DeckSuggestion } from "@/lib/deck-recommender";
 import { buildProfessorGameKnowledge, buildProfessorPlayerContext } from "@/lib/professor-game-knowledge";
+import { buildProfessorBattleContext } from "@/lib/professor-battle-context";
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ REGRAS DE CONFIABILIDADE:
 8. Ao recomendar mascotes ou posturas, cite os atributos reais que justificam a escolha e aponte limitações.
 9. Nunca mencione expressões internas como "CONTEXTO VERIFICADO", "CARTAS REAIS E LEGAIS", "catálogo", "bloco" ou "prompt". Fale naturalmente com o jogador.
 10. Quando houver cartas disponíveis para uma recomendação, escolha de 3 a 6 delas e explique quais funções o conjunto resolve, sem repetir os nomes no texto.
+11. Ao analisar batalhas, diferencie fatos registrados de inferências. Cite o combate, a equipe, a postura, o dano ou o atributo que sustenta cada recomendação; uma única derrota não prova que uma escolha é sempre ruim.
 
 FORMATO JSON OBRIGATÓRIO:
 {
@@ -326,16 +328,17 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
     // Primeiro reúne fontes reais. A IA recebe apenas regras, dados privados da
     // conta logada, meta e cartas que o servidor já validou.
     const gameKnowledge = buildProfessorGameKnowledge(lastMsg);
-    const [metaCtx, playerCtx, verifiedCards] = await Promise.all([
+    const [metaCtx, playerCtx, battleCtx, verifiedCards] = await Promise.all([
       buildMetaContext(lastMsg),
       buildProfessorPlayerContext(lastMsg),
+      buildProfessorBattleContext(lastMsg),
       findRelevantCards(messages),
     ]);
     const legalCards = deduplicateCards(verifiedCards).filter(isStandardLegal).slice(0, 8);
     const cardCatalog = legalCards.length > 0
       ? `CARTAS REAIS E LEGAIS (marcas H/I/J; copie somente nomes desta lista):\n${legalCards.map((card) => `- ${card.name} [${card.regulationMark}] — ${card.set.name}: ${card.text ?? "efeito disponível na carta"}`).join("\n")}`
       : "CARTAS REAIS E LEGAIS: nenhuma carta foi validada para esta pergunta; responda sem recomendar nomes.";
-    const context = [gameKnowledge, playerCtx, metaCtx, cardCatalog].filter(Boolean).join("\n\n");
+    const context = [gameKnowledge, playerCtx, battleCtx, metaCtx, cardCatalog].filter(Boolean).join("\n\n");
 
     const { message: aiMessage, cardNames } = await callAI(messages, context);
     const requestedNames = new Set(cardNames.map((name) => resolveCardName(name).toLowerCase()));
