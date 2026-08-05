@@ -33,13 +33,10 @@ export interface TcgCard {
   legalities?: { standard?: string; expanded?: string; unlimited?: string };
 }
 
-/** Regra oficial: carta é Standard-legal se tiver Regulation Mark H, I, J (ou futura) */
+/** Regra da temporada da Liga: somente Regulation Mark H, I ou J. */
 export function isStandardLegal(card: TcgCard): boolean {
-  if (card.regulationMark) {
-    return (CURRENT_STANDARD_MARKS as readonly string[]).includes(card.regulationMark);
-  }
-  // Cartas sem regulation mark (Energy básica, muito antigas) — usar campo legalities
-  return card.legalities?.standard === "Legal";
+  return !!card.regulationMark &&
+    (CURRENT_STANDARD_MARKS as readonly string[]).includes(card.regulationMark);
 }
 
 function mapCard(raw: Record<string, unknown>): TcgCard {
@@ -109,7 +106,9 @@ export async function fetchCardsByNames(names: string[], preferLegal = true): Pr
     names.map(async (rawName) => {
       const resolved = resolveCardName(rawName);
       // Buscar múltiplas versões para poder filtrar pela regulation mark
-      const cards = await searchCards(resolved, 12);
+      const cards = (await searchCards(resolved, 20)).filter(
+        (card) => card.name.trim().toLowerCase() === resolved.trim().toLowerCase(),
+      );
       if (cards.length === 0) return [];
 
       if (!preferLegal) return cards.slice(0, 1);
@@ -131,38 +130,46 @@ export async function fetchCardsByNames(names: string[], preferLegal = true): Pr
 // ── Buscar por função/categoria no Standard atual ─────────────────────────────
 // Usa a TCG API diretamente — sem hardcode de nomes
 
-// Standard 2026: H, I, J — filtro aplicado na query E no código
-const STD_MARKS = `(regulationMark:H OR regulationMark:I OR regulationMark:J)`;
-
 export async function searchStandardByFunction(
   fn: "DRAW" | "SEARCH" | "SWITCH" | "DISRUPTION" | "RECOVERY" | "ACCELERATION",
   limit = 8
 ): Promise<TcgCard[]> {
   const queries: Record<string, string> = {
-    DRAW:         `subtypes:Supporter ${STD_MARKS}`,
-    SEARCH:       `(subtypes:Item OR subtypes:Supporter) text:"search your deck" ${STD_MARKS}`,
-    SWITCH:       `subtypes:Item text:"Switch" ${STD_MARKS}`,
-    DISRUPTION:   `subtypes:Supporter ${STD_MARKS}`,
-    RECOVERY:     `subtypes:Item (text:"recover" OR text:"from your discard") ${STD_MARKS}`,
-    ACCELERATION: `(subtypes:Item OR subtypes:Supporter) text:"attach" text:"Energy" ${STD_MARKS}`
+    DRAW:         `subtypes:Supporter rules:"draw"`,
+    SEARCH:       `rules:"search"`,
+    SWITCH:       `rules:"Switch"`,
+    DISRUPTION:   `subtypes:Supporter rules:"opponent"`,
+    RECOVERY:     `rules:"from your discard"`,
+    ACCELERATION: `rules:"attach Energy"`,
   };
 
   const q = encodeURIComponent(queries[fn]);
-  const url = `${TCG_BASE}/cards?q=${q}&pageSize=${limit}&orderBy=-set.releaseDate`;
+  const url = `${TCG_BASE}/cards?q=${q}&pageSize=${Math.max(20, limit * 4)}&orderBy=-set.releaseDate`;
 
   try {
     const res = await fetch(url, { headers: headers(), next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    const json = await res.json() as { data: Record<string, unknown>[] };
-    // Duplo filtro: query por mark + verificação no código
-    return (json.data ?? []).map(mapCard).filter(isStandardLegal);
-  } catch { return []; }
+    if (res.ok) {
+      const json = await res.json() as { data: Record<string, unknown>[] };
+      const cards = (json.data ?? []).map(mapCard).filter(isStandardLegal).slice(0, limit);
+      if (cards.length > 0) return cards;
+    }
+  } catch { /* usa o catálogo verificado abaixo */ }
+
+  const fallbackNames: Record<typeof fn, string[]> = {
+    DRAW: ["Judge", "Iono", "Professor's Research"],
+    SEARCH: ["Ultra Ball", "Buddy-Buddy Poffin", "Arven"],
+    SWITCH: ["Switch", "Switch Cart", "Rescue Board"],
+    DISRUPTION: ["Judge", "Iono", "Boss's Orders"],
+    RECOVERY: ["Night Stretcher", "Energy Retrieval", "Super Rod"],
+    ACCELERATION: ["Energy Retrieval", "Earthen Vessel", "Dark Patch"],
+  };
+  return (await fetchCardsByNames(fallbackNames[fn], true)).slice(0, limit);
 }
 
 // ── Buscar cartas similares por efeito de texto (Standard apenas) ─────────────
 
 export async function searchSimilarEffect(textKeyword: string, subtype?: string, limit = 6): Promise<TcgCard[]> {
-  const parts = [STD_MARKS, `text:"${textKeyword}"`];
+  const parts = [`rules:"${textKeyword}"`];
   if (subtype) parts.push(`subtypes:${subtype}`);
   const q = encodeURIComponent(parts.join(" "));
   const url = `${TCG_BASE}/cards?q=${q}&pageSize=${limit}&orderBy=-set.releaseDate`;

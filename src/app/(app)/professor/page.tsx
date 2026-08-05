@@ -32,7 +32,7 @@ export default async function ProfessorPage() {
             <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
             <h1 className="font-pixel text-base text-[#FFCB05]">Professor Enguiça</h1>
             <p className="text-sm text-slate-400">
-              O Treinador da Favela — analisa decks, sugere cartas e evolui seu game.
+              Regras, cálculos, mascotes, laboratório e cartas válidas sem conversa fiada.
             </p>
           </div>
         </div>

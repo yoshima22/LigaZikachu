@@ -65,10 +65,11 @@ export async function buildSuggestions(analysis: DeckAnalysis): Promise<DeckSugg
   // Buscar cartas reais na TCG API
   const cards = await fetchCardsByNames(cardNames.map((c) => c.name));
 
-  return cards.map((card, i) => ({
+  const suggestionByName = new Map(cardNames.map((entry) => [entry.name.toLowerCase(), entry]));
+  return cards.map((card) => ({
     card,
-    reason: cardNames[i]?.reason ?? card.name,
-    priority: cardNames[i]?.priority ?? "LOW"
+    reason: suggestionByName.get(card.name.toLowerCase())?.reason ?? "Carta legal de consistência para a temporada atual",
+    priority: suggestionByName.get(card.name.toLowerCase())?.priority ?? "LOW"
   }));
 }
 

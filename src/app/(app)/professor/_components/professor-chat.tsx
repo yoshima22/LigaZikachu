@@ -8,13 +8,13 @@ import type { TcgCard } from "@/lib/card-service";
 
 const WELCOME: ChatMessage = {
   role: "professor",
-  content: "Salve, parceiro! Sou o Professor Enguiça, o treinador de decks da Liga Zikachu. 🔥\n\nManda teu deck ou fala o que quer melhorar que eu te ajudo a evoluir!"
+  content: "Salve, parceiro! Sou o Professor Enguiça, seu assistente da Liga Zikachu. 🔥\n\nPosso consultar seus mascotes e análises, explicar regras e cálculos ou pesquisar cartas H, I e J reais para o seu deck."
 };
 
 const QUICK_PROMPTS = [
-  { label: "Melhorar consistência", icon: BookOpen, text: "Como posso melhorar a consistência do meu deck?" },
-  { label: "Mais compra de cartas", icon: BookOpen, text: "Quais cartas de compra são mais eficientes no TCG atual?" },
-  { label: "Contra meta agressivo", icon: Swords, text: "Quais cartas me ajudam contra decks agressivos rápidos?" }
+  { label: "Analisar meus mascotes", icon: FlaskConical, text: "Quais são meus melhores mascotes analisados e quais posturas combinam com eles?" },
+  { label: "Explicar dano", icon: Swords, text: "Como o dano é calculado na Arena e na Liga Semanal?" },
+  { label: "Cartas H, I e J", icon: BookOpen, text: "Quais cartas legais H, I ou J podem melhorar a compra e a consistência do meu deck?" }
 ];
 
 const rarityColors: Record<string, string> = {
@@ -49,6 +49,9 @@ function CardSuggestion({ card }: { card: TcgCard & { reason: string } }) {
           <p className="text-[10px] text-slate-600">{card.set.name}</p>
           {card.legalities?.standard === "Legal" && (
             <span className="inline-block rounded px-1 py-0.5 text-[9px] font-bold bg-[#7AC74C]/20 text-[#7AC74C]">✅ Standard</span>
+          )}
+          {card.regulationMark && (
+            <span className="ml-1 inline-block rounded bg-cyan-500/15 px-1 py-0.5 text-[9px] font-bold text-cyan-300">Marca {card.regulationMark}</span>
           )}
           {card.legalities?.standard === "Banned" && (
             <span className="inline-block rounded px-1 py-0.5 text-[9px] font-bold bg-red-500/20 text-red-400">🚫 Banida</span>
@@ -443,7 +446,7 @@ export function ProfessorChat() {
           onKeyDown={handleKeyDown}
           disabled={pending}
           rows={2}
-          placeholder="Pergunte algo sobre seu deck, estratégias ou peça sugestões de cartas... (Enter para enviar)"
+          placeholder="Pergunte sobre seus mascotes, regras, cálculos, expedições ou cartas H/I/J... (Enter para enviar)"
           className="flex-1 resize-none bg-transparent text-sm text-slate-200 placeholder:text-slate-600 outline-none"
         />
         <button
@@ -457,7 +460,7 @@ export function ProfessorChat() {
       </div>
 
       <p className="text-center text-[10px] text-slate-600">
-        As cartas sugeridas são buscadas em tempo real na <a href="https://pokemontcg.io" target="_blank" rel="noreferrer" className="underline hover:text-slate-500">Pokemon TCG API</a>.
+        Mascotes e análises vêm da sua conta. Cartas são verificadas na <a href="https://pokemontcg.io" target="_blank" rel="noreferrer" className="underline hover:text-slate-500">Pokemon TCG API</a> e filtradas para H, I e J.
         Clique em uma carta para ampliar.
       </p>
       </>}

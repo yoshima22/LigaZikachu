@@ -7,6 +7,7 @@ import { resolveCardName, PT_TO_EN } from "@/lib/card-names-ptbr";
 import { parseDeckList, analyzeDeck } from "@/lib/deck-parser";
 import { buildSuggestions, detectMatchIssues, fetchMatchSuggestions } from "@/lib/deck-recommender";
 import type { DeckSuggestion } from "@/lib/deck-recommender";
+import { buildProfessorGameKnowledge, buildProfessorPlayerContext } from "@/lib/professor-game-knowledge";
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -35,29 +36,27 @@ export interface MatchAnalysisResult {
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Você é o Professor Enguiça, treinador de decks da Liga Zikachu.
-Personalidade: engraçado, esperto, provocador leve, fala simples, útil, sem humilhar.
-Frases curtas. Humor de campeonato. Português brasileiro informal.
+const ENHANCED_SYSTEM_PROMPT = `Você é o Professor Enguiça, assistente oficial da Liga Zikachu.
+Personalidade: engraçado, esperto, provocador leve, acolhedor e direto. Responda em português brasileiro.
 
-REGRAS:
-1. Só fala de Pokémon TCG. Para outros assuntos: "Parceiro, isso tá fora do meu quadrado! 🃏"
-2. Nunca invente nome ou efeito de carta — use apenas cartas que você conhece do TCG.
-3. Lembre do contexto anterior da conversa.
-4. Quando sugerir cartas, priorize cartas legais no Standard atual (2025).
-5. IMPORTANTE sobre legalidade:
-   - Se uma carta saiu do Standard por ROTAÇÃO, diga "saiu do Standard por rotação" — NÃO diga "está banida"
-   - Banimento é quando a Pokémon Company proíbe explicitamente — muito raro no Standard
-   - Rotação é normal e acontece todo ano — a carta ainda pode ser usada em Expanded
-6. Quando sugerir cartas específicas, liste os nomes em inglês no campo "cards".
+Você ajuda com TODO o ecossistema da Liga: mascotes, atributos, análises do laboratório, Arena, Liga Semanal, posturas, dano, expedições, ovos, itens, laços, bazar, torneios e Pokémon TCG.
 
-FORMATO DE RESPOSTA (JSON obrigatório):
+REGRAS DE CONFIABILIDADE:
+1. O CONTEXTO VERIFICADO enviado pelo servidor é a única fonte de verdade para regras, números, conta, meta e cartas. Ele prevalece sobre sua memória.
+2. Nunca invente regra, cálculo, item, estado do mascote, carta ou efeito. Se o contexto não confirmar algo, admita a limitação.
+3. Dados da conta são privados e pertencem somente ao jogador logado. Compare mascotes apenas com os dados recebidos.
+4. Em recomendações de TCG, use SOMENTE nomes presentes no bloco CARTAS REAIS E LEGAIS. Todas possuem marca H, I ou J. Se o bloco estiver vazio, não recomende nomes.
+5. Nunca escreva nomes de cartas sugeridas dentro de "message"; coloque-os somente em "cards". Assim o sistema consegue validar e exibir a edição real.
+6. Não chame rotação de banimento. Carta fora de H/I/J saiu do formato Regular desta temporada, salvo banimento explícito.
+7. Explique fórmulas de forma legível e diferencie valor exato, limite, estimativa e componente aleatório.
+8. Ao recomendar mascotes ou posturas, cite os atributos reais que justificam a escolha e aponte limitações.
+
+FORMATO JSON OBRIGATÓRIO:
 {
-  "message": "sua resposta aqui (2-4 frases no máximo)",
-  "cards": ["Professor's Research", "Iono"]
+  "message": "resposta útil em 2 a 7 frases; pode usar linhas curtas quando houver comparação",
+  "cards": ["Nome exato copiado do catálogo verificado"]
 }
-
-Use "cards": [] quando não precisar sugerir cartas.
-Os cards serão buscados na TCG API e mostrados como imagens reais — não repita o nome deles na mensagem.`;
+Use "cards": [] quando não for uma recomendação de TCG.`;
 
 // ── Extrair nomes de cartas da mensagem do usuário ────────────────────────────
 
@@ -106,6 +105,10 @@ async function findRelevantCards(messages: ChatMessage[]): Promise<TcgCard[]> {
   const lastMsg = messages[messages.length - 1]?.content ?? "";
   const fullContext = buildConversationContext(messages);
   const allCards: TcgCard[] = [];
+
+  if (!/carta|card|tcg|deck|baralho|standard|apoiador|energia.{0,20}(deck|baralho|carta)|pokemon ex|pokémon ex|meta.{0,20}(tcg|deck)/i.test(fullContext)) {
+    return [];
+  }
 
   // 1. Cartas mencionadas explicitamente (com filtro Standard automático)
   const mentioned = extractCardNames(lastMsg);
@@ -170,10 +173,19 @@ function buildSmartFallback(message: string, cards: TcgCard[]): string {
   const lower = message.toLowerCase();
 
   if (cards.length === 0) {
-    if (/o que|como|explica|fala sobre|me conta/.test(lower)) {
-      return "Parceiro, não achei essa carta no banco agora. Tenta buscar na Pokédex ou me diz o nome em inglês! 🔍";
+    if (/dano|combate|arena|postura|agilidade/.test(lower)) {
+      return "No combate convencional, Força, nível e Instinto formam o dano bruto; Vitalidade e nível do alvo fazem a mitigação. Agilidade define a ordem e pode liberar até 3 ações por rodada, enquanto postura e vantagem de tipo ajustam o resultado. Me diga o mascote ou a postura para eu abrir os números certinhos.";
     }
-    return "Parceiro, configura a GROQ_API_KEY na Vercel e eu te respondo direitinho. Por enquanto, usa as abas de 'Analisar Deck' ou 'Analisar Combate' que funcionam sem IA! 💪";
+    if (/laborat|análise|analise|sss|potencial|rank/.test(lower)) {
+      return "A nota do Laboratório mede potencial, não apenas a soma atual. Ela combina 55% da qualidade estimada do nascimento com 45% do teto da espécie e evolução; SSS começa em 92 pontos. Diga o nome exato do mascote para eu consultar a ficha dele.";
+    }
+    if (/expedi|loot|treino/.test(lower)) {
+      return "Expedição de Treinamento entrega EXP, Itens foca loot e Padrão mistura os dois. Agilidade acelera somente a segunda metade do tempo e Instinto melhora as chances relevantes; me diga duração, modo e mascote para eu calcular a melhor opção.";
+    }
+    if (/o que|como|explica|fala sobre|me conta/.test(lower)) {
+      return "Não encontrei uma carta H, I ou J que eu possa confirmar para essa pergunta. Prefiro não inventar moda: diga o efeito desejado ou envie a lista do deck para eu pesquisar novamente. 🔍";
+    }
+    return "Não consegui fechar uma resposta confiável agora. Tente citar o sistema, mascote ou carta exata — aí eu consulto os dados reais antes de opinar. 💪";
   }
 
   const card = cards[0];
@@ -189,10 +201,10 @@ function buildSmartFallback(message: string, cards: TcgCard[]): string {
   }
 
   // Sugestão por categoria
-  if (/compra|draw/.test(lower)) return `Pra comprar mais cartas, ${cards.map(c => c.name).join(", ")} são os melhores do momento. Professor's Research é o mais forte! 🃏`;
+  if (/compra|draw/.test(lower)) return `Encontrei ${cards.length} opção(ões) de compra com marca H, I ou J. Confira os cards abaixo e escolha conforme o ritmo e o descarte do seu deck. 🃏`;
   if (/busca|search/.test(lower)) return `Pra buscar Pokémon, ${cards.map(c => c.name).join(", ")} são essenciais. Sem eles o deck depende demais da sorte!`;
 
-  return `Achei ${cards.length} carta(s) relacionada(s). Olha os cards abaixo — configura a IA na Vercel pra eu explicar melhor cada uma! 👇`;
+  return `Achei ${cards.length} carta(s) H, I ou J relacionada(s). Confira os cards reais abaixo. 👇`;
 }
 
 // ── Chamadas de IA (simples, sem JSON) ────────────────────────────────────────
@@ -222,8 +234,8 @@ async function callAI(
 
   // Injetar contexto extra como mensagem de sistema adicional
   const systemFull = extraContext
-    ? `${SYSTEM_PROMPT}\n\nCONTEXTO ADICIONAL:\n${extraContext}`
-    : SYSTEM_PROMPT;
+    ? `${ENHANCED_SYSTEM_PROMPT}\n\nCONTEXTO VERIFICADO DO SERVIDOR:\n${extraContext}`
+    : ENHANCED_SYSTEM_PROMPT;
 
   for (const model of GROQ_MODELS) {
     try {
@@ -232,8 +244,8 @@ async function callAI(
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
           model,
-          max_tokens: 500,
-          temperature: 0.85,
+          max_tokens: 700,
+          temperature: 0.25,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemFull },
@@ -280,43 +292,35 @@ export async function askProfessor(messages: ChatMessage[]): Promise<ProfessorRe
 
     // Off-topic
     if (/receita|culinária|política|futebol|música|filme|série|novela|notícia|matemática/.test(lower)) {
-      return { message: "Parceiro, isso tá fora do meu quadrado! 🃏 Só falo de Pokémon TCG aqui!", suggestedCards: [] };
+      return { message: "Parceiro, isso está fora do meu laboratório! Eu ajudo com toda a Liga Zikachu e com Pokémon TCG. 🧪", suggestedCards: [] };
     }
 
     // Saudação
     if (lower.length < 15 || /^(oi|olá|salve|hey|test|online|tudo)/.test(lower.trim())) {
       return {
-        message: "Salve, parceiro! 🔥 Sou o Professor Enguiça!\n\nMe pergunta sobre cartas, manda seu deck pra análise ou conta como foi seu último combate. Tô aqui pra te evoluir! ⚡",
+        message: "Salve, parceiro! 🔥 Sou o Professor Enguiça!\n\nPosso ler seus mascotes e análises, explicar cálculos e posturas, ajudar com expedições ou recomendar somente cartas H, I e J verificadas. Manda a dúvida! ⚡",
         suggestedCards: []
       };
     }
 
-    // 0. Buscar contexto real do meta no Limitless TCG (se disponível)
-    const metaCtx = await buildMetaContext(lastMsg);
+    // Primeiro reúne fontes reais. A IA recebe apenas regras, dados privados da
+    // conta logada, meta e cartas que o servidor já validou.
+    const gameKnowledge = buildProfessorGameKnowledge(lastMsg);
+    const [metaCtx, playerCtx, verifiedCards] = await Promise.all([
+      buildMetaContext(lastMsg),
+      buildProfessorPlayerContext(lastMsg),
+      findRelevantCards(messages),
+    ]);
+    const legalCards = deduplicateCards(verifiedCards).filter(isStandardLegal).slice(0, 8);
+    const cardCatalog = legalCards.length > 0
+      ? `CARTAS REAIS E LEGAIS (marcas H/I/J; copie somente nomes desta lista):\n${legalCards.map((card) => `- ${card.name} [${card.regulationMark}] — ${card.set.name}: ${card.text ?? "efeito disponível na carta"}`).join("\n")}`
+      : "CARTAS REAIS E LEGAIS: nenhuma carta foi validada para esta pergunta; responda sem recomendar nomes.";
+    const context = [gameKnowledge, playerCtx, metaCtx, cardCatalog].filter(Boolean).join("\n\n");
 
-    // 1. Chamar IA com histórico completo + dados reais do meta
-    const { message: aiMessage, cardNames } = await callAI(messages, metaCtx || undefined);
-
-    // 2. Resolver nomes PT→EN e buscar cartas reais na TCG API
-    const resolvedNames = cardNames.map(resolveCardName);
-    const rawAiCards = resolvedNames.length > 0
-      ? await fetchCardsByNames(resolvedNames, true)
-      : [];
-
-    // 3. Filtrar apenas cartas Standard legais pela Regulation Mark
-    const aiCards = rawAiCards.filter(isStandardLegal);
-
-    // 4. Se a IA não sugeriu cards válidos, busca contextual com histórico completo
-    const contextCards = aiCards.length < 3
-      ? await findRelevantCards(messages)
-      : [];
-
-    // Mesclar: cartas da IA + contexto, sem repetir
-    const finalCards = deduplicateCards([...aiCards, ...contextCards])
-      .filter(isStandardLegal)
-      .slice(0, 6); // sempre pelo menos 5-6 cartas
-
-    // 4. Fallback de mensagem se a IA falhou
+    const { message: aiMessage, cardNames } = await callAI(messages, context);
+    const requestedNames = new Set(cardNames.map((name) => resolveCardName(name).toLowerCase()));
+    const selectedCards = legalCards.filter((card) => requestedNames.has(card.name.toLowerCase()));
+    const finalCards = (selectedCards.length > 0 ? selectedCards : legalCards).slice(0, 6);
     const message = aiMessage || buildSmartFallback(lastMsg, finalCards);
 
     return {
