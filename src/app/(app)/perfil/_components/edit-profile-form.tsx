@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activateAccountStandby, setCasualModeAction, updateOwnPassword, updatePlayerProfile } from "../actions";
+import { readDesktopChatPreference, writeDesktopChatPreference } from "@/lib/desktop-chat-preference";
 
 interface EditProfileFormProps {
   player: {
@@ -37,6 +38,17 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [desktopChatEnabled, setDesktopChatEnabled] = useState(true);
+
+  useEffect(() => {
+    setDesktopChatEnabled(readDesktopChatPreference());
+  }, []);
+
+  function handleDesktopChatToggle(enabled: boolean) {
+    setDesktopChatEnabled(enabled);
+    writeDesktopChatPreference(enabled);
+    toast.success(enabled ? "Chat lateral ativado neste computador." : "Chat lateral desativado neste computador.");
+  }
 
   function handleAvatarFile(file?: File) {
     if (!file) return;
@@ -261,6 +273,29 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
           value={megaSpritePreference}
           onChange={setMegaSpritePreference}
         />
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Mensagens durante a navegação</h3>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            No computador, exibe uma janela retrátil para conversas privadas e para o Chat Geral enquanto você navega pelo site. No celular, as mensagens continuam somente nas páginas atuais.
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-300">{desktopChatEnabled ? "Chat lateral ativo" : "Mensagens apenas na página central"}</span>
+          <button
+            type="button"
+            onClick={() => handleDesktopChatToggle(!desktopChatEnabled)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${desktopChatEnabled ? "bg-cyan-500" : "bg-slate-700"}`}
+            aria-checked={desktopChatEnabled}
+            aria-label="Ativar chat lateral no computador"
+            role="switch"
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${desktopChatEnabled ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-500">Esta preferência é salva somente neste navegador para não aumentar o consumo de dados da conta.</p>
       </div>
 
       <Button type="submit" disabled={loading}>

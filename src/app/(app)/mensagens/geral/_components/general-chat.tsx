@@ -28,9 +28,11 @@ const GENERAL_POLL_MS = 30000;
 interface Props {
   me: { id: string; displayName: string };
   initialMessages: Message[];
+  compact?: boolean;
+  onBack?: () => void;
 }
 
-export function GeneralChat({ me, initialMessages }: Props) {
+export function GeneralChat({ me, initialMessages, compact = false, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [text, setText] = useState("");
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
@@ -148,13 +150,22 @@ export function GeneralChat({ me, initialMessages }: Props) {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col" style={{ height: "calc(100vh - 80px)" }}>
+    <div
+      className={compact ? "flex h-full min-h-0 flex-col" : "mx-auto flex max-w-3xl flex-col"}
+      style={compact ? undefined : { height: "calc(100vh - 80px)" }}
+    >
       <div className="flex items-center gap-3 border-b border-border px-4 py-3 shrink-0">
+        {onBack ? (
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onBack} aria-label="Voltar para conversas">
+            <ArrowLeft size={16} />
+          </Button>
+        ) : (
         <Link href="/mensagens">
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <ArrowLeft size={16} />
           </Button>
         </Link>
+        )}
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFCB05]/10">
           <Users size={16} className="text-[#FFCB05]" />
         </div>

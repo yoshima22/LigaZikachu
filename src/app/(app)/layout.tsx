@@ -39,6 +39,7 @@ import {
   getLivePvpAccessConfig,
 } from "@/lib/live-pvp-access";
 import { getNavNotificationSnapshot } from "@/lib/nav-notifications";
+import { DesktopChatDockLoader } from "./_components/desktop-chat-dock-loader";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -361,6 +362,7 @@ export default async function AppLayout({
         </main>
         <FcmTokenRegistrar />
         <AchievementNotifier />
+        {player && <DesktopChatDockLoader initialUnreadCount={notificationSnapshot.messageCount} />}
         {!admin && <WelcomeTutorial />}
       </div>
     </>

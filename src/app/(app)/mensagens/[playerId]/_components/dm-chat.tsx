@@ -27,6 +27,8 @@ interface Props {
   me: { id: string; displayName: string };
   other: { id: string; displayName: string; avatarUrl: string | null };
   initialMessages: Message[];
+  compact?: boolean;
+  onBack?: () => void;
 }
 
 const RARITY_COLOR: Record<string, string> = {
@@ -90,7 +92,7 @@ export function AttachmentCard({ data, mine }: { data: AttachmentData; mine: boo
   return null;
 }
 
-export function DmChat({ me, other, initialMessages }: Props) {
+export function DmChat({ me, other, initialMessages, compact = false, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
@@ -239,14 +241,23 @@ export function DmChat({ me, other, initialMessages }: Props) {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col" style={{ height: "calc(100vh - 80px)" }}>
+    <div
+      className={compact ? "flex h-full min-h-0 flex-col" : "mx-auto flex max-w-2xl flex-col"}
+      style={compact ? undefined : { height: "calc(100vh - 80px)" }}
+    >
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border px-4 py-3 shrink-0">
+        {onBack ? (
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onBack} aria-label="Voltar para conversas">
+            <ArrowLeft size={16} />
+          </Button>
+        ) : (
         <Link href="/mensagens">
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <ArrowLeft size={16} />
           </Button>
         </Link>
+        )}
         {other.avatarUrl ? (
           <img src={other.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
         ) : (
