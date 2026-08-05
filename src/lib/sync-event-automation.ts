@@ -279,7 +279,7 @@ export async function formSyncArenaForTodayIfDue(now = new Date()) {
 
   const config = await prisma.syncChallengeConfig.findUnique({ where: { id: "singleton" } });
   if (!config?.ticketsEnabled) return { formed: 0, skipped: "disabled" };
-  if (config.registrationClosesAt && now < config.registrationClosesAt) return { formed: 0, skipped: "window-open" };
+  if (config.registrationClosesAt && now <= config.registrationClosesAt) return { formed: 0, skipped: "window-open" };
 
   const { autoLocked } = await autoLockCompleteSyncLineups(now);
 

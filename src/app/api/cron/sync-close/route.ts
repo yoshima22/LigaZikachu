@@ -1,7 +1,7 @@
 /**
  * Cron job — fechamento de inscrições do Desafio Sincronizado
  *
- * Roda às 17:01 BRT (20:01 UTC) nos dias em que o evento está agendado.
+ * Roda às 17:51 BRT (20:51 UTC) nos dias em que o evento está agendado.
  * Executa a validação de duplas, remove incompletas e forma as salas.
  */
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Valida janela — só fecha se registrationClosesAt passou
-    if (config.registrationClosesAt && new Date() < config.registrationClosesAt) {
+    if (config.registrationClosesAt && new Date() <= config.registrationClosesAt) {
       return NextResponse.json({ ok: true, skipped: true, reason: "Janela de inscrição ainda não fechou." });
     }
 

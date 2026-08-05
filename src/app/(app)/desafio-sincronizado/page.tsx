@@ -1074,7 +1074,7 @@ function describeRegistrationWindow(config: { registrationOpensAt?: Date | strin
   if (opens && closes) return `${opens} ate ${closes} BRT`;
   if (opens) return `a partir de ${opens} BRT`;
   if (closes) return `ate ${closes} BRT`;
-  return "14:00 ate 17:00 BRT";
+  return "14:00 ate 17:50 BRT";
 }
 
 function DateTimeInput({ name, label, value }: { name: string; label: string; value?: Date | string | null }) {

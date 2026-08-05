@@ -6,6 +6,8 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { normalizeCombatRole, recommendCombatRole } from "@/lib/combat-roles";
+import { getSyncWindowState } from "@/lib/sync-challenge";
+import type { Role } from "@prisma/client";
 
 const LINEUP_SLOTS = 9;
 
@@ -27,11 +29,23 @@ async function getActiveTeamForPlayer(playerId: string) {
   });
 }
 
+async function assertLineupWindowOpen(role: Role): Promise<string | null> {
+  if (isAdmin(role)) return null;
+  const config = await prisma.syncChallengeConfig.findUnique({
+    where: { id: "singleton" },
+    select: { registrationOpensAt: true, registrationClosesAt: true },
+  });
+  const state = getSyncWindowState(config ?? undefined);
+  return state.isOpen ? null : `O prazo para montar e travar a equipe encerrou às 17:50 BRT. ${state.label}`;
+}
+
 export async function addLineupMascotAction(
   mascotId: string,
 ): Promise<{ error?: string }> {
   try {
-    const { player } = await requirePlayer();
+    const { user, player } = await requirePlayer();
+    const windowError = await assertLineupWindowOpen(user.role);
+    if (windowError) return { error: windowError };
 
     const team = await getActiveTeamForPlayer(player.id);
     if (!team) return { error: "Você não está em uma dupla ativa." };
@@ -84,7 +98,9 @@ export async function setLineupCombatRoleAction(
   combatRole: string,
 ): Promise<{ error?: string }> {
   try {
-    const { player } = await requirePlayer();
+    const { user, player } = await requirePlayer();
+    const windowError = await assertLineupWindowOpen(user.role);
+    if (windowError) return { error: windowError };
     const team = await getActiveTeamForPlayer(player.id);
     if (!team) return { error: "VocÃª nÃ£o estÃ¡ em uma dupla ativa." };
 
@@ -107,7 +123,9 @@ export async function removeLineupMascotAction(
   mascotId: string,
 ): Promise<{ error?: string }> {
   try {
-    const { player } = await requirePlayer();
+    const { user, player } = await requirePlayer();
+    const windowError = await assertLineupWindowOpen(user.role);
+    if (windowError) return { error: windowError };
 
     const team = await getActiveTeamForPlayer(player.id);
     if (!team) return { error: "Você não está em uma dupla ativa." };
@@ -141,7 +159,9 @@ export async function removeLineupMascotAction(
 
 export async function lockLineupAction(): Promise<{ error?: string }> {
   try {
-    const { player } = await requirePlayer();
+    const { user, player } = await requirePlayer();
+    const windowError = await assertLineupWindowOpen(user.role);
+    if (windowError) return { error: windowError };
 
     const team = await getActiveTeamForPlayer(player.id);
     if (!team) return { error: "Você não está em uma dupla ativa." };

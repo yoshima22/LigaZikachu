@@ -388,10 +388,10 @@ export function getSyncWindowState(
   const [hour, minute] = time.split(":").map(Number);
   const total = hour * 60 + minute;
   const opens = 14 * 60;
-  const closes = 17 * 60;
+  const closes = 17 * 60 + 50;
   return {
     isOpen: total >= opens && total <= closes,
-    label: total < opens ? "Abre hoje as 14:00 BRT" : total <= closes ? "Aberta ate 17:00 BRT" : "Fechada por hoje",
+    label: total < opens ? "Abre hoje as 14:00 BRT" : total <= closes ? "Aberta ate 17:50 BRT" : "Fechada por hoje",
     currentTime: time,
     simulation: false,
   };
