@@ -32,6 +32,7 @@ import {
   FlaskConical,
   Footprints,
   ScrollText,
+  Dna,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@supabase/supabase-js";
@@ -201,6 +202,7 @@ function buildProfileLinks(playerId?: string) {
 
 const adminLinks = [
   { href: "/admin", label: "Painel Admin", icon: ShieldCheck, adminOnly: true },
+  { href: "/admin/mascotes", label: "Admin de Mascotes", icon: Dna, adminOnly: true },
   { href: "/admin/logs", label: "Logs e Auditoria", icon: ScrollText, adminOnly: true },
 ];
 

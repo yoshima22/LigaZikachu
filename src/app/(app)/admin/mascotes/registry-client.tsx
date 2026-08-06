@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Dna, Search, Sparkles, UserRoundSearch } from "lucide-react";
 import { PlayerSearchInput } from "@/components/player-search-input";
 import { createCustomSpeciesAdminAction, getPlayerMascotEditorData, searchSpeciesAdminAction, updateMascotAdminAction, updateSpeciesTypesAdminAction } from "./actions";
+import { SpeciesTypeEditor as SpeciesSection } from "./species-type-editor";
 
 type Mascot = Awaited<ReturnType<typeof getPlayerMascotEditorData>>[number];
 type Species = Awaited<ReturnType<typeof searchSpeciesAdminAction>>[number];
@@ -31,7 +32,7 @@ function PlayerMascotsSection() {
   </div>;
 }
 
-function SpeciesSection() {
+function LegacySpeciesSection() {
   const [query,setQuery]=useState("");const [items,setItems]=useState<Species[]>([]);const [selected,setSelected]=useState<Species|null>(null);const [pending,start]=useTransition();const [message,setMessage]=useState("");
   useEffect(()=>{if(!query.trim()){setItems([]);return;}const timer=setTimeout(()=>start(async()=>setItems(await searchSpeciesAdminAction(query))),220);return()=>clearTimeout(timer);},[query]);
   const set=(key:keyof Species,value:unknown)=>selected&&setSelected({...selected,[key]:value});

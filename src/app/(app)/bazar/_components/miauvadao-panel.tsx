@@ -246,6 +246,12 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
   }, []);
   const availablePurchases = purchaseStatus.rechargeAt.filter((date) => new Date(date).getTime() > now).length;
   const purchaseCount = Math.max(purchaseStatus.available, 2 - availablePurchases);
+  const nextPurchaseAt = purchaseStatus.rechargeAt
+    .map((date) => new Date(date).getTime())
+    .filter((time) => time > now)
+    .sort((a, b) => a - b)[0] ?? null;
+  const nextPurchaseSeconds = nextPurchaseAt ? Math.max(0, Math.ceil((nextPurchaseAt - now) / 1000)) : 0;
+  const nextPurchaseLabel = `${Math.floor(nextPurchaseSeconds / 60)}:${String(nextPurchaseSeconds % 60).padStart(2, "0")}`;
 
   // Ao expirar o timer, recarrega a página para o servidor re-gerar as ofertas
   // (autoRefreshMiauvadaoIfNeeded roda no load). Throttle de 4s cobre a
@@ -416,6 +422,9 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
               </span>
               <span><RefreshCountdown validUntil={rotationEndsAt} /></span>
               {playerId && <span>Compras disponíveis: <strong style={{ color: "#FFCB05" }}>{purchaseCount}/2</strong></span>}
+              {playerId && purchaseCount < 2 && nextPurchaseAt && (
+                <span className="font-semibold text-cyan-300">Próxima compra em {nextPurchaseLabel}</span>
+              )}
             </div>
           </div>
 

@@ -7,6 +7,7 @@ import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, 
 import Link from "next/link";
 import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
+import { getHatchedEggLabel } from "@/lib/egg-origin";
 import {
   getListing, buyListing, createProposal, acceptProposal,
   rejectProposal, toggleFavorite, editListing, placeBid, finalizeAuction,
@@ -349,7 +350,10 @@ export default function BazarListingPage(): React.JSX.Element {
     : 0;
   const pokemonId = payload.pokemonId as number | undefined;
   const isShiny = payload.isShiny === true;
-  const pokemonName = pokemonId ? getPokemonName(pokemonId) : "";
+  const pokemonName = (payload.pokemonName as string | undefined) || (pokemonId ? getPokemonName(pokemonId) : "");
+  const eggOriginLabel = isMascot
+    ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
+    : null;
   const mascotRarity = pokemonId ? getMascotRarity(pokemonId) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
   const nickname = payload.nickname as string | undefined;
@@ -549,6 +553,11 @@ export default function BazarListingPage(): React.JSX.Element {
               ) : (
                 <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-slate-500">
                   Este jogador ainda não publicou uma wishlist.
+                </p>
+              )}
+              {eggOriginLabel && (
+                <p className="mt-1 inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/5 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+                  🥚 Origem: {eggOriginLabel}
                 </p>
               )}
             </div>
