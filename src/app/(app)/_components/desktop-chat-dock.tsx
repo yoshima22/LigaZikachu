@@ -10,6 +10,7 @@ import {
   getConversationAction,
   getGeneralChatAction,
   getInboxAction,
+  searchMessageRecipientsAction,
   type AttachmentData,
 } from "../mensagens/actions";
 import { DmChat } from "../mensagens/[playerId]/_components/dm-chat";
@@ -94,7 +95,6 @@ export function DesktopChatDock({
       const result = await getInboxAction();
       if (!result.ok) return;
       setConversations(result.conversations);
-      setPlayers(result.allPlayers);
       onUnreadChange(result.totalUnread);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível carregar as mensagens.");
@@ -108,6 +108,29 @@ export function DesktopChatDock({
     loadedRef.current = true;
     void loadInbox();
   }, []);
+
+  useEffect(() => {
+    const normalized = query.trim();
+    if (!normalized) {
+      setPlayers([]);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await searchMessageRecipientsAction(normalized);
+        if (!cancelled) setPlayers(result.ok ? result.players : []);
+      } catch {
+        if (!cancelled) setPlayers([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
 
   const openDirect = async (playerId: string) => {
     const unread = conversations.find((item) => item.partnerId === playerId)?.unread ?? 0;

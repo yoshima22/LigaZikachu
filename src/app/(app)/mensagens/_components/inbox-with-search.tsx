@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MessageSquare, Search, User, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { searchMessageRecipientsAction } from "../actions";
 
 type Conversation = {
   partnerId: string; partnerName: string; partnerAvatar: string | null;
@@ -15,7 +16,6 @@ type Player = { id: string; displayName: string; avatarUrl: string | null };
 
 interface Props {
   conversations: Conversation[];
-  allPlayers: Player[];
 }
 
 function Avatar({ url, name, size = 9 }: { url: string | null; name: string; size?: number }) {
@@ -34,15 +34,39 @@ function lastMessageLabel(content: string, attachmentType: string | null) {
   return content || "…";
 }
 
-export function InboxWithSearch({ conversations, allPlayers }: Props) {
+export function InboxWithSearch({ conversations }: Props) {
   const [query, setQuery] = useState("");
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [searching, setSearching] = useState(false);
 
-  const convPartnerIds = new Set(conversations.map((c) => c.partnerId));
+  useEffect(() => {
+    const normalized = query.trim();
+    if (!normalized) {
+      setPlayers([]);
+      setSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const result = await searchMessageRecipientsAction(normalized);
+        if (!cancelled) setPlayers(result.ok ? result.players : []);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  const convPartnerIds = useMemo(() => new Set(conversations.map((c) => c.partnerId)), [conversations]);
   const filtered = query.trim().length > 0
-    ? allPlayers.filter((p) =>
-        p.displayName.toLowerCase().includes(query.toLowerCase()) &&
-        !convPartnerIds.has(p.id)
-      )
+    ? players.filter((p) => !convPartnerIds.has(p.id))
     : [];
 
   const filteredConversations = query.trim().length > 0
@@ -78,6 +102,10 @@ export function InboxWithSearch({ conversations, allPlayers }: Props) {
           className="w-full rounded-xl border border-border bg-slate-900 py-2.5 pl-9 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-[#FFCB05]/40"
         />
       </div>
+
+      {searching && query.trim() && (
+        <p className="text-center text-xs text-slate-500">Buscando jogadores...</p>
+      )}
 
       {/* Resultados de busca — jogadores sem conversa ainda */}
       {filtered.length > 0 && (

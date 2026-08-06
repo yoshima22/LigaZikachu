@@ -267,14 +267,45 @@ export async function getInboxAction() {
   const totalUnread = unreadCounts.reduce((s, u) => s + u._count.id, 0);
   const conversations = Array.from(map.values()).sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
 
-  // Todos os jogadores ativos para a busca
-  const allPlayers = await prisma.player.findMany({
-    where: { user: { status: "ACTIVE" }, id: { not: me.id } },
-    select: { id: true, displayName: true, avatarUrl: true },
-    orderBy: { displayName: "asc" },
+  return { ok: true as const, me, conversations, totalUnread };
+}
+
+/** Busca destinatarios sem exigir que ja exista uma conversa entre as contas. */
+export async function searchMessageRecipientsAction(rawQuery: string) {
+  const me = await requirePlayer();
+  const query = rawQuery.trim().slice(0, 80);
+  if (!query) return { ok: true as const, players: [] };
+
+  const players = await prisma.player.findMany({
+    where: {
+      id: { not: me.id },
+      active: true,
+      // Contas novas podem receber a primeira mensagem antes da aprovacao e
+      // encontra-la assim que entrarem. Suspensos e rejeitados ficam ocultos.
+      user: { status: { in: ["ACTIVE", "PENDING_APPROVAL"] } },
+      OR: [
+        { displayName: { contains: query, mode: "insensitive" } },
+        { ptcglNick: { contains: query, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, displayName: true, avatarUrl: true, ptcglNick: true },
+    orderBy: [{ displayName: "asc" }, { id: "asc" }],
+    take: 24,
   });
 
-  return { ok: true as const, me, conversations, totalUnread, allPlayers };
+  const normalized = query.toLocaleLowerCase("pt-BR");
+  const ordered = players
+    .sort((a, b) => {
+      const aStarts = a.displayName.toLocaleLowerCase("pt-BR").startsWith(normalized)
+        || a.ptcglNick?.toLocaleLowerCase("pt-BR").startsWith(normalized) ? 0 : 1;
+      const bStarts = b.displayName.toLocaleLowerCase("pt-BR").startsWith(normalized)
+        || b.ptcglNick?.toLocaleLowerCase("pt-BR").startsWith(normalized) ? 0 : 1;
+      return aStarts - bStarts || a.displayName.localeCompare(b.displayName, "pt-BR");
+    })
+    .slice(0, 12)
+    .map(({ id, displayName, avatarUrl }) => ({ id, displayName, avatarUrl }));
+
+  return { ok: true as const, players: ordered };
 }
 
 export async function getMyAttachablesAction() {

@@ -6,9 +6,6 @@ export default async function MensagensPage() {
   if (!result.ok) return null;
 
   return (
-    <InboxWithSearch
-      conversations={result.conversations}
-      allPlayers={result.allPlayers}
-    />
+    <InboxWithSearch conversations={result.conversations} />
   );
 }
