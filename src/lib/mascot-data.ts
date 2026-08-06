@@ -2013,7 +2013,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   793:"water/rock",794:"rock/steel",795:"electric/poison",796:"electric/flying",
   797:"bug/fighting",798:"electric/flying",799:"poison/steel",
   800:"psychic",801:"steel/fairy",802:"dark/fighting",
-  803:"poison/dragon",804:"poison/dragon",805:"bug/fighting",806:"bug/fire",
+  803:"poison/dragon",804:"poison/dragon",805:"rock/steel",806:"bug/fire",
   807:"electric",808:"steel",809:"steel",
   // ── Gen 8 ──────────────────────────────────────────────────────────────────
   810:"grass",811:"grass",812:"grass",
