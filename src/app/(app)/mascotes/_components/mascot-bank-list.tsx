@@ -4,8 +4,9 @@ import { useState, useTransition, useCallback } from "react";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getPokemonElement, getPokemonTypes, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
-import { getMascotDetailAction, interactAction } from "../actions";
-import { MascotCard } from "./mascot-card";
+import { getMascotDetailAction } from "../actions";
+import { MascotCard, markPetted, markPlayed } from "./mascot-card";
+import { queueMascotInteraction } from "./interaction-request-queue";
 
 export type BankMascot = {
   id: string;
@@ -155,15 +156,18 @@ function QuickInteractButton({
   label: string;
 }) {
   const [pending, startTransition] = useTransition();
+  const [accepted, setAccepted] = useState(false);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setAccepted(true);
+    type === "PLAY" ? markPlayed(mascotId) : markPetted(mascotId);
     startTransition(async () => {
-      const res = await interactAction(mascotId, type);
-      if (res.error) { toast.error(res.error); return; }
-      if (res.result?.message) {
-        if (res.result.success) toast.success(res.result.message);
-        else toast.error(res.result.message);
+      try {
+        await queueMascotInteraction(mascotId, type);
+      } catch (error) {
+        setAccepted(false);
+        toast.error(error instanceof Error ? error.message : "Falha ao registrar a interacao.");
       }
     });
   };
@@ -171,7 +175,7 @@ function QuickInteractButton({
   return (
     <button
       type="button"
-      disabled={pending}
+      disabled={pending || accepted}
       onClick={handleClick}
       className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
       title={label}

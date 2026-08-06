@@ -8,7 +8,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type RequestBody = { interactionType?: unknown; scope?: unknown; idempotencyKey?: unknown };
+type RequestBody = {
+  interactionType?: unknown;
+  scope?: unknown;
+  idempotencyKey?: unknown;
+  mascotIds?: unknown;
+};
 
 export async function POST(request: Request) {
   const session = await getAppSession();
@@ -18,8 +23,14 @@ export async function POST(request: Request) {
   if (!body || (body.interactionType !== "PLAY" && body.interactionType !== "PET")) {
     return NextResponse.json({ error: "Interacao invalida." }, { status: 400 });
   }
-  if (body.scope !== "ALL" && body.scope !== "FAVORITES") {
+  if (body.scope !== "ALL" && body.scope !== "FAVORITES" && body.scope !== "SELECTION") {
     return NextResponse.json({ error: "Escopo invalido." }, { status: 400 });
+  }
+  const mascotIds = body.scope === "SELECTION"
+    ? Array.from(new Set(Array.isArray(body.mascotIds) ? body.mascotIds.filter((id): id is string => typeof id === "string") : [])).slice(0, 100)
+    : [];
+  if (body.scope === "SELECTION" && mascotIds.length === 0) {
+    return NextResponse.json({ error: "Nenhum mascote selecionado." }, { status: 400 });
   }
   if (typeof body.idempotencyKey !== "string" || body.idempotencyKey.length < 16 || body.idempotencyKey.length > 100) {
     return NextResponse.json({ error: "Identificador do pedido invalido." }, { status: 400 });
@@ -39,6 +50,7 @@ export async function POST(request: Request) {
         idempotencyKey: body.idempotencyKey,
         interactionType: body.interactionType,
         scope: body.scope,
+        targetMascotIds: body.scope === "SELECTION" ? mascotIds : undefined,
       },
       select: { id: true, status: true },
     });

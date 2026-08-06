@@ -6,7 +6,7 @@ const STALE_LOCK_MS = 90_000;
 const MAX_ATTEMPTS = 3;
 
 type BulkInteractionType = Extract<InteractionType, "PLAY" | "PET">;
-type BulkInteractionScope = "ALL" | "FAVORITES";
+type BulkInteractionScope = "ALL" | "FAVORITES" | "SELECTION";
 
 export type MascotInteractionJobResult = {
   total: number;
@@ -21,7 +21,7 @@ function isBulkInteractionType(value: string): value is BulkInteractionType {
 }
 
 function isBulkInteractionScope(value: string): value is BulkInteractionScope {
-  return value === "ALL" || value === "FAVORITES";
+  return value === "ALL" || value === "FAVORITES" || value === "SELECTION";
 }
 
 /**
@@ -62,12 +62,17 @@ export async function processMascotInteractionJob(jobId: string): Promise<boolea
   }
   const interactionType = job.interactionType;
   const interactionScope = job.scope;
+  const targetMascotIds = Array.isArray(job.targetMascotIds)
+    ? job.targetMascotIds.filter((id): id is string => typeof id === "string")
+    : [];
 
   try {
     const mascots = await prisma.mascot.findMany({
       where: interactionScope === "FAVORITES"
         ? { playerId: job.playerId, isFavorite: true }
-        : { playerId: job.playerId },
+        : interactionScope === "SELECTION"
+          ? { playerId: job.playerId, id: { in: targetMascotIds } }
+          : { playerId: job.playerId },
       select: { id: true, nickname: true, pokemonId: true, isFavorite: true },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
       take: interactionScope === "FAVORITES" ? 6 : 100,

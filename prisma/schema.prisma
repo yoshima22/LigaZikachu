@@ -336,6 +336,7 @@ model MascotInteractionJob {
   idempotencyKey String    @unique
   interactionType String
   scope          String
+  targetMascotIds Json?
   status         String    @default("PENDING")
   attempts       Int       @default(0)
   resultJson     Json?

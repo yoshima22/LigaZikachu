@@ -5,8 +5,9 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Ch
 import { toast } from "sonner";
 import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
-import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
+import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
 import { MascotCard, markPetted, markPlayed } from "./mascot-card";
+import { queueMascotInteraction } from "./interaction-request-queue";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import type { BankMascot } from "./mascot-bank-list";
 
@@ -168,18 +169,17 @@ function QuickInteractButton({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const optimisticUntil = Date.now() + (type === "PLAY" ? PLAY_COOLDOWN_MS : PET_COOLDOWN_MS);
+    if (type === "PLAY") setPlayCooldownUntil(optimisticUntil);
+    else setPetCooldownUntil(optimisticUntil);
     startTransition(async () => {
-      const res = await interactAction(mascotId, type);
-      if (res.error) { toast.error(res.error); return; }
-      if (res.result?.message) {
-        if (res.result.success) {
-          toast.success(res.result.message);
-          if (type === "PLAY") setPlayCooldownUntil(Date.now() + PLAY_COOLDOWN_MS);
-          if (type === "PET") setPetCooldownUntil(Date.now() + PET_COOLDOWN_MS);
-          onSuccess?.(type, res.result);
-        } else {
-          toast.error(res.result.message);
-        }
+      try {
+        await queueMascotInteraction(mascotId, type);
+        onSuccess?.(type, { happinessChange: 0, expGained: 0 });
+      } catch (error) {
+        if (type === "PLAY") setPlayCooldownUntil(null);
+        else setPetCooldownUntil(null);
+        toast.error(error instanceof Error ? error.message : "Falha ao registrar a interacao.");
       }
     });
   };

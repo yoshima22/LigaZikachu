@@ -111,7 +111,6 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
 
     for (const id of optimisticIds) type === "PLAY" ? markPlayed(id) : markPetted(id);
     setNowMs(Date.now());
-    toast.success("Acao registrada. Voce ja pode sair desta pagina; o processamento continuara.");
     void monitorJob(payload.jobId, type, optimisticIds);
   };
 
