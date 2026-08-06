@@ -5,7 +5,6 @@ import { RankingTable } from "@/components/ranking/ranking-table";
 import { prisma } from "@/lib/prisma";
 import { Trophy } from "lucide-react";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
-import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { unstable_cache } from "next/cache";
 
 // Ranking cacheado por 5 minutos por seasonId.
@@ -42,7 +41,6 @@ export default async function RankingPage({
             Historico acumulado de partidas validadas. Use o filtro para ver todas as temporadas ou uma temporada especifica.
           </p>
         </div>
-        <TutorialHelpButton pageId="ranking" />
       </div>
 
       <Card className="p-4" data-tutorial="ranking-season">

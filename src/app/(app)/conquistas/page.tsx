@@ -5,7 +5,6 @@ import { getAppSession } from "@/lib/session";
 import Link from "next/link";
 import { Award, Lock, Plus, Star, Trophy, Zap, Filter } from "lucide-react";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
-import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { Card } from "@/components/ui/card";
 import { AchievementsAdminPanel } from "./_components/achievements-admin-panel";
 import { RewardManager } from "./_components/reward-manager";
@@ -108,7 +107,6 @@ export default async function ConquistasPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {!adminUser && <TutorialHelpButton pageId="conquistas" />}
             {myAchievements.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {myAchievements.slice(0, 5).map(a => (

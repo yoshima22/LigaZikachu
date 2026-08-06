@@ -101,6 +101,7 @@ export default async function AdminPage() {
     pendingDecks,
     recentAuditLogs,
     globalNotice,
+    gamemasters,
   ] = await Promise.all([
     prisma.user.count({ where: { status: UserStatus.PENDING_APPROVAL } }),
     prisma.tournament.count({ where: { status: { in: [TournamentStatus.REGISTRATION_OPEN, TournamentStatus.IN_PROGRESS] } } }),
@@ -116,6 +117,13 @@ export default async function AdminPage() {
       include: { actor: { select: { name: true, email: true } } }
     }),
     getGlobalNotice(),
+    isAdmin(currentUser.role)
+      ? prisma.player.findMany({
+          where: { user: { role: "GAMEMASTER" } },
+          orderBy: { displayName: "asc" },
+          select: { id: true, displayName: true, ptcglNick: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const vipsResult = await adminListActiveVips();
@@ -258,7 +266,7 @@ export default async function AdminPage() {
 
       <UserAccountPanel />
       <AdminCommunicationPanel initialNotice={globalNotice.message} />
-      {isAdmin(currentUser.role) && <GamemasterPanel />}
+      {isAdmin(currentUser.role) && <GamemasterPanel initialGamemasters={gamemasters} />}
       <RunawayRevertPanel />
       <MascotSocialPanel />
       <AdminExpeditionPanel />

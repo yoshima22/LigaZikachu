@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Plus, Trophy } from "lucide-react";
 import type { TournamentStatus } from "@prisma/client";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
-import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 
 const STATUS_FILTER_LABELS: Record<string, string> = {
   ALL:               "Todos",
@@ -76,7 +75,6 @@ export default async function TourneiosPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {!admin && <TutorialHelpButton pageId="torneios" />}
           <Button asChild>
             <Link href="/torneios/novo">
               <Plus size={16} className="mr-1" />

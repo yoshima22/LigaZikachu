@@ -249,7 +249,6 @@ export default async function AppLayout({
 
             {/* User + logout */}
             <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-              <RouteTutorialHelpButton />
               <Link
                 href={player ? `/jogadores/${player.id}` : "/perfil"}
                 className="hidden min-w-0 max-w-[9.5rem] items-center gap-1.5 transition-opacity hover:opacity-80 sm:flex xl:max-w-[11.5rem]"
@@ -300,16 +299,16 @@ export default async function AppLayout({
                 </span>
               )}
               <LogoutButton />
+              <RouteTutorialHelpButton />
               <Link
                 href="/downloads"
                 prefetch={false}
-                aria-label="Download agora"
-                title="Download agora"
+                aria-label="Download"
+                title="Download"
                 className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 text-[9px] font-bold leading-none text-[#FFCB05] transition-colors hover:bg-[#FFCB05] hover:text-slate-950 sm:text-[10px]"
               >
                 <Download size={13} className="shrink-0" />
-                <span className="hidden whitespace-nowrap lg:inline xl:hidden">Baixar</span>
-                <span className="hidden whitespace-nowrap xl:inline">Download agora</span>
+                <span className="hidden whitespace-nowrap lg:inline">Download</span>
               </Link>
             </div>
           </div>

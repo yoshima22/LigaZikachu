@@ -12,7 +12,6 @@ import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
-import { TutorialHelpButton } from "@/components/tutorial/tutorial-help-button";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 import { ProfileCollectionProgressPanel } from "@/components/profile/collection-progress";
@@ -350,11 +349,6 @@ export default async function PerfilPage() {
   return (
     <div className="space-y-6">
       <TutorialManager pageId="perfil" isAdmin={adminUser} />
-      {!adminUser && (
-        <div className="flex justify-end">
-          <TutorialHelpButton pageId="perfil" />
-        </div>
-      )}
       <div data-tutorial="profile-avatar" className="overflow-hidden rounded-2xl border border-border bg-slate-950">
         {equippedBanner?.item.imageUrl ? (
           <div className="relative h-32 w-full overflow-hidden">
