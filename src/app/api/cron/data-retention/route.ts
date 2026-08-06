@@ -86,6 +86,16 @@ export async function GET(req: NextRequest) {
   }).catch(() => ({ count: 0 }));
   results.claimedGifts = giftsResult.count;
 
+  // 7. Jobs concluidos sao apenas recibos temporarios para feedback da UI.
+  // Mantem uma semana para diagnostico e evita crescimento indefinido da fila.
+  const interactionJobsResult = await prisma.mascotInteractionJob.deleteMany({
+    where: {
+      status: { in: ["COMPLETED", "FAILED"] },
+      completedAt: { lt: daysAgo(7) },
+    },
+  }).catch(() => ({ count: 0 }));
+  results.mascotInteractionJobs = interactionJobsResult.count;
+
   console.log("[data-retention] Deleted:", results);
   return NextResponse.json({ ok: true, deleted: results });
 }

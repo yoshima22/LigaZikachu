@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Gamepad2, Hand, Loader2, Users, Utensils } from "lucide-react";
-import { interactAllAction, feedAllAction } from "../actions";
-import { markPlayed, markPetted, isPlayOnCooldown, isPetOnCooldown } from "./mascot-card";
+import { feedAllAction } from "../actions";
+import { clearPlayed, clearPetted, markPlayed, markPetted, isPlayOnCooldown, isPetOnCooldown } from "./mascot-card";
 import { formatRemaining } from "@/hooks/use-timer-expiry";
 
 interface Props {
@@ -30,6 +30,7 @@ const HUNGER_OPTIONS: { value: HungerLevel; label: string }[] = [
 
 export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const router = useRouter();
+  const mountedRef = useRef(true);
   const [pendingPlay, startPlay] = useTransition();
   const [pendingPet, startPet] = useTransition();
   const [pendingFeedAll, startFeedAll] = useTransition();
@@ -40,8 +41,12 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   // Tick de 1s — atualiza cooldowns em tempo real
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
+    mountedRef.current = true;
     const iv = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(iv);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(iv);
+    };
   }, []);
 
   // Contagem de mascotes que PODEM brincar/receber carinho agora
@@ -53,27 +58,69 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const petDisabled     = pendingPlay || pendingPet || pendingFeedAll || availableForPet  === 0;
   const feedAllDisabled = pendingPlay || pendingPet || pendingFeedAll;
 
+  const monitorJob = async (jobId: string, type: "PLAY" | "PET", optimisticIds: string[]) => {
+    // Este monitor serve apenas para feedback. O job nao depende da pagina aberta.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise(resolve => window.setTimeout(resolve, 2_000));
+      if (!mountedRef.current) return;
+      try {
+        const response = await fetch(`/api/mascotes/interactions/bulk/${jobId}`, { cache: "no-store" });
+        if (!response.ok) continue;
+        const payload = await response.json() as {
+          status: string;
+          lastError?: string | null;
+          resultJson?: { succeeded?: number; failed?: number; succeededIds?: string[] } | null;
+        };
+        if (payload.status === "COMPLETED") {
+          const succeeded = new Set(payload.resultJson?.succeededIds ?? []);
+          for (const id of optimisticIds) {
+            if (!succeeded.has(id)) type === "PLAY" ? clearPlayed(id) : clearPetted(id);
+          }
+          setNowMs(Date.now());
+          const ok = payload.resultJson?.succeeded ?? 0;
+          const failed = payload.resultJson?.failed ?? 0;
+          if (ok > 0) toast.success(`${type === "PLAY" ? "Brincadeira" : "Carinho"} concluido em ${ok} ${pluralMascot(ok)}.`);
+          if (failed > 0) toast.info(`${failed} ${pluralMascot(failed)} estavam em cooldown, Arena, expedicao ou indisponiveis.`);
+          return;
+        }
+        if (payload.status === "FAILED") {
+          for (const id of optimisticIds) type === "PLAY" ? clearPlayed(id) : clearPetted(id);
+          setNowMs(Date.now());
+          toast.error(payload.lastError || "Nao foi possivel concluir a interacao em massa.");
+          return;
+        }
+      } catch {
+        // O cron ainda retomara o pedido persistido se a pagina desaparecer.
+        return;
+      }
+    }
+  };
+
+  const enqueueBulkInteraction = async (type: "PLAY" | "PET") => {
+    const optimisticIds = mascotIds.filter(id => type === "PLAY"
+      ? !isPlayOnCooldown(id, Date.now())
+      : !isPetOnCooldown(id, Date.now()));
+    const response = await fetch("/api/mascotes/interactions/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interactionType: type, scope, idempotencyKey: crypto.randomUUID() }),
+      keepalive: true,
+    });
+    const payload = await response.json().catch(() => ({})) as { error?: string; jobId?: string };
+    if (!response.ok || !payload.jobId) throw new Error(payload.error || "Nao foi possivel registrar a acao.");
+
+    for (const id of optimisticIds) type === "PLAY" ? markPlayed(id) : markPetted(id);
+    setNowMs(Date.now());
+    toast.success("Acao registrada. Voce ja pode sair desta pagina; o processamento continuara.");
+    void monitorJob(payload.jobId, type, optimisticIds);
+  };
+
   const handlePlayAll = () => {
     startPlay(async () => {
-      const res = await interactAllAction("PLAY", scope);
-      if (res.error) { toast.error(res.error); return; }
-
-      const ok   = res.results.filter(r => r.success).map(r => r.mascotId);
-      const fail = res.results.filter(r => !r.success).length;
-
-      if (ok.length > 0) {
-        // Registra cooldown nos Maps individuais de cada mascote que teve sucesso
-        const now = Date.now();
-        ok.forEach(id => { markPlayed(id); });
-        setNowMs(now); // força re-render imediato com novos cooldowns
-        toast.success(`Brincadeira aplicada em ${ok.length} ${pluralMascot(ok.length)}.`);
-        router.refresh();
-      } else {
-        toast.info("Nenhum mascote da equipe pôde brincar agora.");
-      }
-
-      if (fail > 0) {
-        toast.info(`${fail} ${pluralMascot(fail)} estavam em cooldown, Arena, expedição ou indisponíveis.`);
+      try {
+        await enqueueBulkInteraction("PLAY");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Erro ao registrar brincadeira.");
       }
     });
   };
@@ -102,24 +149,10 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
 
   const handlePetAll = () => {
     startPet(async () => {
-      const res = await interactAllAction("PET", scope);
-      if (res.error) { toast.error(res.error); return; }
-
-      const ok   = res.results.filter(r => r.success).map(r => r.mascotId);
-      const fail = res.results.filter(r => !r.success).length;
-
-      if (ok.length > 0) {
-        const now = Date.now();
-        ok.forEach(id => { markPetted(id); });
-        setNowMs(now);
-        toast.success(`Carinho aplicado em ${ok.length} ${pluralMascot(ok.length)}.`);
-        router.refresh();
-      } else {
-        toast.info("Nenhum mascote da equipe pôde receber carinho agora.");
-      }
-
-      if (fail > 0) {
-        toast.info(`${fail} ${pluralMascot(fail)} estavam em cooldown, Arena, expedição ou indisponíveis.`);
+      try {
+        await enqueueBulkInteraction("PET");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Erro ao registrar carinho.");
       }
     });
   };

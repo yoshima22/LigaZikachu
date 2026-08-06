@@ -153,11 +153,16 @@ const PET_CD_MS  = 25 * 60 * 1000;
 
 /** Marca que o mascote acabou de brincar */
 export function markPlayed(mascotId: string) { _playedAt.set(mascotId, Date.now()); }
+export function clearPlayed(mascotId: string) { _playedAt.delete(mascotId); }
 /** Marca que o mascote acabou de receber carinho (persiste no localStorage) */
 export function markPetted(mascotId: string) {
   const now = Date.now();
   _pettedAt.set(mascotId, now);
   lsPetSet(mascotId, now);
+}
+export function clearPetted(mascotId: string) {
+  _pettedAt.delete(mascotId);
+  try { localStorage.removeItem(LS_PET_PREFIX + mascotId); } catch { /* ignorado */ }
 }
 /** Verifica se brincar está em cooldown agora */
 export function isPlayOnCooldown(mascotId: string, nowMs: number): boolean {
@@ -285,7 +290,6 @@ export interface ExpeditionRewardDisplay {
     relatedStepKey?: string | null;
   };
 }
-
 const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
   EXP_BOOST:       { emoji: "⚡",    label: "Boost de EXP" },
   LUCK_BOOST:      { emoji: "🍀",   label: "Boost de Sorte" },

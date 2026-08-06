@@ -323,8 +323,33 @@ model Player {
   raidDamageRankings          RaidDamageRanking[]
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
   notifications               PlayerNotification[]
+  mascotInteractionJobs       MascotInteractionJob[]
 
   @@map("players")
+}
+
+/// Fila duravel das interacoes em massa. O pedido sobrevive ao fechamento da
+/// pagina e pode ser retomado pelo cron sem conceder a mesma interacao duas vezes.
+model MascotInteractionJob {
+  id             String    @id @default(cuid())
+  playerId       String
+  idempotencyKey String    @unique
+  interactionType String
+  scope          String
+  status         String    @default("PENDING")
+  attempts       Int       @default(0)
+  resultJson     Json?
+  lastError      String?   @db.Text
+  lockedAt       DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  player         Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([playerId, createdAt])
+  @@map("mascot_interaction_jobs")
 }
 
 model LabWeeklyUsage {
