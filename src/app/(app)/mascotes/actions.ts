@@ -1284,6 +1284,11 @@ export async function getBankMascotsPageAction(input?: {
     mascots: {
       id: string;
       pokemonId: number;
+      speciesNameOverride: string | null;
+      primaryTypeOverride: string | null;
+      secondaryTypeOverride: string | null;
+      staticSpriteUrlOverride: string | null;
+      animatedSpriteUrlOverride: string | null;
       nickname: string | null;
       level: number;
       mood: string;
@@ -1416,6 +1421,8 @@ export async function getBankMascotsPageAction(input?: {
         where,
         select: {
           id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
+          speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
+          staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
           arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
           lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
           ivRating: true, ivScore: true, performanceTag: true,
@@ -1447,6 +1454,8 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
   error?: string;
   data?: {
     id: string; pokemonId: number; nickname: string | null;
+    speciesNameOverride: string | null; primaryTypeOverride: string | null; secondaryTypeOverride: string | null;
+    staticSpriteUrlOverride: string | null; animatedSpriteUrlOverride: string | null;
     level: number; exp: number; happiness: number; mood: string; personality: string;
     isEquipped: boolean; isFavorite: boolean;
     statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number;
@@ -1490,6 +1499,9 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     return {
       data: {
         id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+        speciesNameOverride: m.speciesNameOverride, primaryTypeOverride: m.primaryTypeOverride,
+        secondaryTypeOverride: m.secondaryTypeOverride, staticSpriteUrlOverride: m.staticSpriteUrlOverride,
+        animatedSpriteUrlOverride: m.animatedSpriteUrlOverride,
         level: m.level, exp: m.exp, happiness: m.happiness,
         mood: m.mood, personality: m.personality, isEquipped: m.isEquipped, isFavorite: m.isFavorite,
         statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma,

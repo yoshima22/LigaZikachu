@@ -241,8 +241,8 @@ function BankRow({
     if (!fullData) fetchFull();
   }, [fetchFull, fullData, open]);
 
-  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
-  const types = getPokemonTypes(mascot.pokemonId);
+  const name = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
+  const types = mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId);
   const rarity = getMascotRarity(mascot.pokemonId);
   const chips = getOccupationChips(mascot);
 
@@ -253,7 +253,7 @@ function BankRow({
         <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
+            src={mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
             alt=""
             className={`h-9 w-9 shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
             style={{ imageRendering: "pixelated" }}

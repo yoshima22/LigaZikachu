@@ -48,6 +48,11 @@ interface MascotData {
   id: string;
   pokemonId: number;
   nickname: string | null;
+  speciesNameOverride?: string | null;
+  primaryTypeOverride?: string | null;
+  secondaryTypeOverride?: string | null;
+  staticSpriteUrlOverride?: string | null;
+  animatedSpriteUrlOverride?: string | null;
   level: number;
   exp: number;
   happiness: number;
@@ -525,7 +530,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const events = Array.isArray(mascot.events) ? mascot.events : [];
   const expeditions = Array.isArray(mascot.expeditions) ? mascot.expeditions : [];
   const otherMascots = Array.isArray(mascot.otherMascots) ? mascot.otherMascots : [];
-  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const name = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
   const permanentItemCounts = mascot.activeBuffs.reduce<Record<string, number>>((counts, buff) => {
     if (new Date(buff.expiresAt).getFullYear() >= 2090 || BUFF_DISPLAY[buff.type]?.permanent) {
       counts[buff.type] = (counts[buff.type] ?? 0) + 1;
@@ -696,9 +701,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     });
   };
 
-  const spriteUrl = imgFailed
+  const spriteUrl = mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || (imgFailed
     ? (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId))
-    : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny });
+    : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny }));
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
@@ -1006,7 +1011,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 </span>
               </Tip>
               {" "}· Nv. {localLevel}
-              {getPokemonTypes(mascot.pokemonId).map(t => (
+              {(mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId)).map(t => (
                 <span key={t} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[t] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
                   {TYPE_LABELS[t] ?? t}
                 </span>

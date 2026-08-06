@@ -939,7 +939,8 @@ export async function createMascotForPlayerAction(opts: {
     if (!player) return { ok: false, error: "Jogador não encontrado." };
 
     const SPECIAL_FORM_IDS2 = new Set([10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012]);
-    if (!((opts.pokemonId >= 1 && opts.pokemonId <= 1025) || SPECIAL_FORM_IDS2.has(opts.pokemonId)))
+    const customSpecies = opts.pokemonId >= 200000 ? await prisma.pokemonSpeciesDefinition.findUnique({ where: { pokemonId: opts.pokemonId }, select: { id: true } }) : null;
+    if (!((opts.pokemonId >= 1 && opts.pokemonId <= 1025) || SPECIAL_FORM_IDS2.has(opts.pokemonId) || customSpecies))
       return { ok: false, error: "pokemonId inválido." };
     if (opts.level < 1 || opts.level > 100)
       return { ok: false, error: "Nível inválido (1–100)." };
@@ -963,6 +964,7 @@ export async function createMascotForPlayerAction(opts: {
       data: {
         playerId:    opts.playerId,
         pokemonId:   opts.pokemonId,
+        ...(await (await import("@/lib/species-registry")).getSpeciesSnapshot(opts.pokemonId)),
         personality: opts.personality,
         isShiny:     opts.isShiny,
         isFavorite:  opts.isFavorite,

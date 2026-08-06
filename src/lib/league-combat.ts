@@ -10,6 +10,7 @@ export type LeagueMascot = {
   id: string;
   ownerId: string;
   pokemonId: number;
+  types: string[];
   name: string;
   level: number;
   force: number;
@@ -72,13 +73,17 @@ export function toLeagueMascot(m: {
   statInstinct: number;
   statVitality: number;
   statCharisma: number;
+  speciesNameOverride?: string | null;
+  primaryTypeOverride?: string | null;
+  secondaryTypeOverride?: string | null;
 }, slot: number, role?: string | null): LeagueMascot {
   const combatRole = normalizeCombatRole(role);
   return {
     id: m.id,
     ownerId: m.playerId,
     pokemonId: m.pokemonId,
-    name: m.nickname || getPokemonName(m.pokemonId),
+    name: m.nickname || m.speciesNameOverride || getPokemonName(m.pokemonId),
+    types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(m.pokemonId),
     level: m.level,
     force: m.statForce,
     agility: m.statAgility,
@@ -91,12 +96,15 @@ export function toLeagueMascot(m: {
   };
 }
 
+function typesOf(m: LeagueMascot) { return m.types?.length ? m.types : getPokemonTypes(m.pokemonId); }
+function elementOf(m: LeagueMascot) { return typesOf(m)[0] ?? getPokemonElement(m.pokemonId); }
+
 // ── Apply modifier ─────────────────────────────────────────────────────────
 
 export function applyModifier(team: LeagueMascot[], mod: WeeklyModifier | null): LeagueMascot[] {
   if (!mod || mod.effectType === "CLEAN_FIGHT") return team;
   return team.map(m => {
-    const types = getPokemonElement(m.pokemonId).split("/");
+    const types = typesOf(m);
     const copy = { ...m };
 
     const statMap: Record<string, keyof LeagueMascot> = {
@@ -441,9 +449,9 @@ export function runLeagueCombat(
         target = selectTarget(actor, refreshedOpponents, hp);
       }
 
-      const attackerType = getPokemonElement(actor.pokemonId);
-      const defenderType = getPokemonElement(target.pokemonId);
-      const multiplier = getTypeAdvantageMultiplier(getPokemonTypes(actor.pokemonId), getPokemonTypes(target.pokemonId));
+      const attackerType = elementOf(actor);
+      const defenderType = elementOf(target);
+      const multiplier = getTypeAdvantageMultiplier(typesOf(actor), typesOf(target));
 
       const force = getStat(actor, debuffs, "force");
       const instinct = getStat(actor, debuffs, "instinct");

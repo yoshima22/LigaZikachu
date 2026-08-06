@@ -11,6 +11,11 @@ export type BankMascot = {
   id: string;
   pokemonId: number;
   nickname: string | null;
+  speciesNameOverride: string | null;
+  primaryTypeOverride: string | null;
+  secondaryTypeOverride: string | null;
+  staticSpriteUrlOverride: string | null;
+  animatedSpriteUrlOverride: string | null;
   level: number;
   mood: string;
   isShiny: boolean;
@@ -208,8 +213,8 @@ function BankRow({
     fetchFull();
   }, [open, fullData, fetchFull]);
 
-  const name  = mascot.nickname ?? getPokemonName(mascot.pokemonId);
-  const types = getPokemonTypes(mascot.pokemonId);
+  const name  = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
+  const types = mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId);
   const chips     = getOccupationChips(mascot);
   const nameColor = statNameColor(mascot);
 
@@ -220,7 +225,7 @@ function BankRow({
         <button type="button" onClick={handleExpand} className="flex-1 min-w-0 flex items-center gap-3 text-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={getStaticSpriteUrl(mascot.pokemonId)}
+            src={mascot.staticSpriteUrlOverride || mascot.animatedSpriteUrlOverride || getStaticSpriteUrl(mascot.pokemonId)}
             alt=""
             className={`h-9 w-9 object-contain shrink-0 ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
             style={{ imageRendering: "pixelated" }}

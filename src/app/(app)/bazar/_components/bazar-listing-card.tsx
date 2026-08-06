@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Coins, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
 import { getMascotRarity, getShinySprite, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
+import { getHatchedEggLabel } from "@/lib/egg-origin";
 
 const CATEGORY_LABEL: Record<string, string> = {
   MASCOT: "Mascote", ITEM: "Item", COSMETIC: "Cosmético",
@@ -63,6 +64,9 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
   const mascotRarity = listing.category === "MASCOT" ? getMascotRarity(Number(payload.pokemonId)) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
   const isShiny = listing.category === "MASCOT" && payload.isShiny === true;
+  const eggOriginLabel = listing.category === "MASCOT"
+    ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
+    : null;
 
   return (
     <Link href={`/bazar/${listing.id}`}
@@ -74,21 +78,26 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={isShiny ? getShinySprite(payload.pokemonId as number, true) : getSpriteUrl(payload.pokemonId as number, true)}
+              src={(payload.animatedSpriteUrlOverride || payload.staticSpriteUrlOverride) as string || (isShiny ? getShinySprite(payload.pokemonId as number, true) : getSpriteUrl(payload.pokemonId as number, true))}
               alt={fullMascotName(payload)}
               className="h-24 object-contain group-hover:scale-110 transition-transform"
               style={{ imageRendering: "pixelated" }}
               onError={e => {
                 const image = e.currentTarget as HTMLImageElement;
                 image.onerror = null;
-                image.src = isShiny
+                image.src = payload.staticSpriteUrlOverride as string || (isShiny
                   ? getShinySprite(payload.pokemonId as number, false)
-                  : getSpriteUrl(payload.pokemonId as number);
+                  : getSpriteUrl(payload.pokemonId as number));
               }}
             />
             <div className="absolute bottom-1 right-1 rounded-full bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">
               Nv.{payload.level as number}
             </div>
+            {eggOriginLabel && (
+              <div className="absolute bottom-1 left-1 max-w-[72%] truncate rounded-full border border-cyan-400/30 bg-slate-950/90 px-2 py-0.5 text-[9px] font-semibold text-cyan-200" title={eggOriginLabel}>
+                🥚 {eggOriginLabel}
+              </div>
+            )}
             {mascotRarity && mascotRarityLabel && (
               <div className={`absolute top-1.5 right-1.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
                 {mascotRarityLabel}

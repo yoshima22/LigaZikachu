@@ -2213,6 +2213,12 @@ model Mascot {
   playerId                 String
   pokemonId                Int // ID da PokéAPI
   nickname                 String?
+  speciesNameOverride      String?
+  primaryTypeOverride      String?
+  secondaryTypeOverride    String?
+  staticSpriteUrlOverride  String?                   @db.Text
+  animatedSpriteUrlOverride String?                  @db.Text
+  generationOverride       Int?
   level                    Int                       @default(1)
   exp                      Int                       @default(0)
   happiness                Int                       @default(50) // 0-100
@@ -2278,6 +2284,26 @@ model Mascot {
 
   @@index([playerId])
   @@map("mascots")
+}
+
+model PokemonSpeciesDefinition {
+  id                String   @id @default(cuid())
+  pokemonId         Int      @unique
+  name              String
+  generation        Int
+  primaryType       String
+  secondaryType     String?
+  staticSpriteUrl   String?  @db.Text
+  animatedSpriteUrl String?  @db.Text
+  custom            Boolean  @default(false)
+  eggEligible       Boolean  @default(true)
+  rarity            String   @default("COMMON")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([name])
+  @@index([generation, eggEligible])
+  @@map("pokemon_species_definitions")
 }
 
 model PlayerPokemonDex {

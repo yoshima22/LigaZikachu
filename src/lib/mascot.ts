@@ -20,12 +20,13 @@ import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, Mascot, MascotMood, MascotPersonality } from "@prisma/client";
 import { Prisma, ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
-import { getInitialPokemonId, rollEggPokemon } from "@/lib/mascot-egg-pools";
+import { getEggCandidatesForGeneration, getInitialPokemonId, rollEggPokemon, type EggRollResult } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { getSpeciesSnapshot } from "@/lib/species-registry";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,25 @@ async function getOwnedBaseCounts(playerId: string) {
   return counts;
 }
 
+function registryTier(rarity: string) {
+  if (["LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "ELITE"].includes(rarity)) return "ELITE";
+  if (["PSEUDO", "PSEUDO_LEGENDARY"].includes(rarity)) return "PSEUDO_LEGENDARY";
+  if (rarity === "PARADOX") return "PARADOX";
+  return "COMMON";
+}
+
+async function includeCustomSpeciesInRoll(result: EggRollResult, excludedPokemonIds: number[] = []) {
+  const custom = await prisma.pokemonSpeciesDefinition.findMany({
+    where: { custom: true, eggEligible: true, generation: result.generation, pokemonId: { notIn: excludedPokemonIds } },
+    select: { pokemonId: true, rarity: true },
+  });
+  const eligible = custom.filter((item) => registryTier(item.rarity) === result.tier);
+  if (!eligible.length) return result;
+  const officialCount = getEggCandidatesForGeneration(result.generation, result.tier).length;
+  if (Math.random() * (officialCount + eligible.length) >= eligible.length) return result;
+  return { ...result, pokemonId: randomFrom(eligible).pokemonId };
+}
+
 export async function rollEggChoicesForPlayer(
   playerId: string,
   eggType: string,
@@ -97,13 +117,13 @@ export async function rollEggChoicesForPlayer(
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
   const choices: number[] = [];
   while (choices.length < count) {
-    const result = rollEggPokemon(eggType, {
+    const result = await includeCustomSpeciesInRoll(rollEggPokemon(eggType, {
       generationType,
       rarityBonusPct,
       randomGenerationBonus: randomGeneration,
       ownedBaseCounts,
       excludedPokemonIds: choices,
-    });
+    }), choices);
     choices.push(result.pokemonId);
   }
   return choices;
@@ -139,12 +159,12 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
 
   const rollContext = getEggRollContext(incubator.egg.type, incubator.egg.origin);
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
-  const rollResult = forcedPokemonId ? null : rollEggPokemon(rollContext.eggType, {
+  const rollResult = forcedPokemonId ? null : await includeCustomSpeciesInRoll(rollEggPokemon(rollContext.eggType, {
     generationType: rollContext.generationType,
     rarityBonusPct: incubator.egg.hatchRarityBonusPct,
     randomGenerationBonus: rollContext.randomGeneration,
     ownedBaseCounts,
-  });
+  }));
   const pokemonId = forcedPokemonId ?? rollResult!.pokemonId;
   const personality = randomPersonality();
 
@@ -163,6 +183,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
       data: {
         playerId,
         pokemonId,
+        ...(await getSpeciesSnapshot(pokemonId, tx)),
         hatchedPokemonId: pokemonId,
         personality,
         isShiny,

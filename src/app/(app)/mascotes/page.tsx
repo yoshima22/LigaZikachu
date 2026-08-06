@@ -86,6 +86,8 @@ async function fetchMascotPageData(playerId: string) {
       },
       select: {
         id: true, pokemonId: true, nickname: true, level: true, exp: true,
+        speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
+        staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
         happiness: true, mood: true, personality: true,
         isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true, operationsLocked: true,
         ivRating: true, ivScore: true, performanceTag: true,

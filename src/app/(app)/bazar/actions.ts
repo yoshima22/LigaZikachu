@@ -608,7 +608,11 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         payload = {
           mascotId: mascot.id,
           pokemonId: mascot.pokemonId,
-          pokemonName: getPokemonName(mascot.pokemonId),
+          pokemonName: mascot.speciesNameOverride || getPokemonName(mascot.pokemonId),
+          primaryTypeOverride: mascot.primaryTypeOverride,
+          secondaryTypeOverride: mascot.secondaryTypeOverride,
+          staticSpriteUrlOverride: mascot.staticSpriteUrlOverride,
+          animatedSpriteUrlOverride: mascot.animatedSpriteUrlOverride,
           nickname: mascot.nickname,
           level: mascot.level,
           personality: mascot.personality,
@@ -2624,7 +2628,11 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
         await tx.mascot.update({ where: { id: input.mascotId }, data: { bazarListed: true } });
         payload = {
           mascotId: mascot.id, pokemonId: mascot.pokemonId,
-          pokemonName: getPokemonName(mascot.pokemonId), nickname: mascot.nickname,
+          pokemonName: mascot.speciesNameOverride || getPokemonName(mascot.pokemonId), nickname: mascot.nickname,
+          primaryTypeOverride: mascot.primaryTypeOverride,
+          secondaryTypeOverride: mascot.secondaryTypeOverride,
+          staticSpriteUrlOverride: mascot.staticSpriteUrlOverride,
+          animatedSpriteUrlOverride: mascot.animatedSpriteUrlOverride,
           level: mascot.level, personality: mascot.personality, isShiny: mascot.isShiny,
           stats: { force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality },
           battleWins: mascot.battleWins,

@@ -21,6 +21,7 @@ import {
   ScrollText,
   Swords,
   Trophy,
+  Dna,
   Users
 } from "lucide-react";
 import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
@@ -34,6 +35,12 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 
 const adminCards = [
+  {
+    href: "/admin/mascotes",
+    title: "Catálogo de mascotes",
+    description: "Editar mascotes por jogador, corrigir tipos e cadastrar espécies customizadas.",
+    icon: Dna
+  },
   {
     href: "/admin/logs",
     title: "Logs e auditoria",
