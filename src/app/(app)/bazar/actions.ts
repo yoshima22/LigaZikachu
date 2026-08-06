@@ -2828,7 +2828,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
         if (update.count !== 1) return false;
         await _returnEscrow(tx, listing, listing.playerId);
         return true;
-      });
+      }, { maxWait: 10_000, timeout: 20_000 });
       if (!claimed) return { finalized: false };
       revalidateBazar();
       return { finalized: true };
@@ -2906,7 +2906,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
         }),
       ]);
       return true;
-    });
+    }, { maxWait: 10_000, timeout: 20_000 });
     if (!claimed) return { finalized: false };
 
     revalidateBazar();
@@ -2922,6 +2922,39 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao finalizar leilão." };
   }
+}
+
+/**
+ * Encerra leilões vencidos sem depender de alguém manter a página do anúncio
+ * aberta. O processamento é limitado por execução para preservar o banco no
+ * ambiente serverless; o cron seguinte continua de onde esta rodada parou.
+ */
+export async function finalizeExpiredAuctions(limit = 25) {
+  const now = new Date();
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)));
+  const listings = await prisma.bazarListing.findMany({
+    where: {
+      listingType: "AUCTION",
+      status: "ACTIVE",
+      OR: [
+        { auctionEndsAt: { lte: now } },
+        { auctionEndsAt: null, expiresAt: { lte: now } },
+      ],
+    },
+    orderBy: { expiresAt: "asc" },
+    take: safeLimit,
+    select: { id: true },
+  });
+
+  let finalized = 0;
+  const errors: Array<{ listingId: string; error: string }> = [];
+  for (const listing of listings) {
+    const result = await finalizeAuction(listing.id);
+    if (result.finalized) finalized += 1;
+    else if (result.error) errors.push({ listingId: listing.id, error: result.error });
+  }
+
+  return { checked: listings.length, finalized, errors };
 }
 
 export async function markBazarProposalsViewed(): Promise<void> {

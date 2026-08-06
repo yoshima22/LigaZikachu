@@ -25,6 +25,10 @@
       "schedule": "0,5 1,7,13,19 * * *"
     },
     {
+      "path": "/api/cron/bazar-auctions",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/sync-close",
       "schedule": "51 20 * * *"
     },
