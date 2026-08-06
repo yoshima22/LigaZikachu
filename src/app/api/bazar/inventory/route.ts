@@ -116,6 +116,8 @@ export async function GET() {
       })),
       balance: wallet.balance,
       listingFee: config?.listingFee ?? 10,
+    }, {
+      headers: { "Cache-Control": "private, no-store, max-age=0" },
     });
   } catch (err) {
     console.error(err);

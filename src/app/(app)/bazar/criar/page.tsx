@@ -72,11 +72,11 @@ function CreateListingForm() {
   const [mascotPage, setMascotPage] = useState(0);
   const [itemSearch, setItemSearch] = useState("");
 
-  const loadInventory = async () => {
-    if (inventory) return;
+  const loadInventory = async (force = false) => {
+    if (inventory && !force) return;
     setLoadingInventory(true);
     try {
-      const res = await fetch("/api/bazar/inventory");
+      const res = await fetch("/api/bazar/inventory", { cache: "no-store" });
       if (res.ok) setInventory(await res.json());
     } catch { /* ignore */ }
     setLoadingInventory(false);
@@ -176,7 +176,7 @@ function CreateListingForm() {
               { value: "ITEM",   emoji: "📦", label: "Item",    desc: "Ovos, buffs, tickets, comida..." },
             ] as const).map(opt => (
               <button key={opt.value} type="button"
-                onClick={() => { setCategory(opt.value); setSelectedItem(null); loadInventory(); }}
+                onClick={() => { setCategory(opt.value); setSelectedItem(null); loadInventory(true); }}
                 className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
                   category === opt.value ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white" : "border-border text-slate-400 hover:border-slate-600"
                 }`}>
@@ -230,7 +230,7 @@ function CreateListingForm() {
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Escolha o mascote</label>
             {loadingInventory ? <p className="text-xs text-slate-500">Carregando…</p>
-             : !inventory ? <button onClick={loadInventory} className="text-xs text-[#FFCB05] underline">Carregar meus mascotes</button>
+             : !inventory ? <button onClick={() => loadInventory()} className="text-xs text-[#FFCB05] underline">Carregar meus mascotes</button>
              : (() => {
                  const available = inventory.mascots.filter(m => !m.bazarListed && !m.isEquipped && m.arenaState === "FREE");
                  if (available.length === 0) {
@@ -318,7 +318,7 @@ function CreateListingForm() {
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200">Escolha o item</label>
             {!inventory ? (
-              <button onClick={loadInventory} className="text-xs text-[#FFCB05] underline">Carregar meus itens</button>
+              <button onClick={() => loadInventory()} className="text-xs text-[#FFCB05] underline">Carregar meus itens</button>
             ) : (() => {
               const q = itemSearch.trim().toLowerCase();
               const match = (s: string) => !q || s.toLowerCase().includes(q);
