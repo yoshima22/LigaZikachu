@@ -170,6 +170,7 @@ type ArenaMascot = {
   id: string;
   ownerId: string | null;
   pokemonId: number;
+  types: string[];
   name: string;
   level: number;
   force: number;
@@ -181,6 +182,9 @@ type ArenaMascot = {
   hp: number;
   combatRole: CombatRole;
 };
+
+function arenaTypes(m: ArenaMascot) { return m.types?.length ? m.types : getPokemonTypes(m.pokemonId); }
+function arenaElement(m: ArenaMascot) { return arenaTypes(m)[0] ?? getPokemonElement(m.pokemonId); }
 
 export type ArenaLoot = {
   coins: number;
@@ -246,6 +250,9 @@ function toArenaMascot(m: {
   id: string; playerId: string; pokemonId: number; nickname: string | null; level: number;
   statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma?: number | null; happiness: number;
   combatRole?: string | null;
+  speciesNameOverride?: string | null;
+  primaryTypeOverride?: string | null;
+  secondaryTypeOverride?: string | null;
 }, debuffPct = 0): ArenaMascot {
   const mult = 1 - debuffPct;
   const charisma = m.statCharisma ?? 10;
@@ -253,7 +260,8 @@ function toArenaMascot(m: {
     id: m.id,
     ownerId: m.playerId,
     pokemonId: m.pokemonId,
-    name: m.nickname ?? getPokemonName(m.pokemonId),
+    name: m.nickname ?? m.speciesNameOverride ?? getPokemonName(m.pokemonId),
+    types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(m.pokemonId),
     level: m.level,
     force: Math.max(1, Math.round(m.statForce * mult)),
     agility: Math.max(1, Math.round(m.statAgility * mult)),
@@ -294,6 +302,7 @@ function makeBotMascot(index: number, levelMin: number, levelMax: number, rng: (
     id: `bot-${index}-${pokemonId}-${level}`,
     ownerId: null,
     pokemonId,
+    types: getPokemonTypes(pokemonId),
     name: `${getPokemonName(pokemonId)} Bot`,
     level,
     force: stats.force,
@@ -526,9 +535,9 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const provoked = tryProvokerRedirect(actor, target, opponents, hp);
       if (provoked) target = provoked;
 
-      const attackerType = getPokemonElement(actor.pokemonId);
-      const defenderType = getPokemonElement(target.pokemonId);
-      const multiplier = getTypeAdvantageMultiplier(getPokemonTypes(actor.pokemonId), getPokemonTypes(target.pokemonId));
+      const attackerType = arenaElement(actor);
+      const defenderType = arenaElement(target);
+      const multiplier = getTypeAdvantageMultiplier(arenaTypes(actor), arenaTypes(target));
       const defendChance = actor.combatRole === "DEFENDER" ? 0.2 : actor.combatRole === "GUARDIAN" ? 0.15 : 0.1;
       const defend = Math.random() < defendChance;
 
