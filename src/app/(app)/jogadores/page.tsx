@@ -1,6 +1,6 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isStaff } from "@/lib/auth/permissions";
 import { getCachedPlayerRanking } from "@/lib/ranking-cache";
 import { PlayerFilters } from "./_components/player-filters";
 import { PlayersTable, type PlayerRow } from "./_components/players-table";
@@ -104,7 +104,7 @@ export default async function PlayersPage({
       };
     });
 
-  const admin = isAdmin(session.user.role);
+  const admin = isStaff(session.user.role);
 
   return (
     <div className="space-y-6">

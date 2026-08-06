@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isAdmin, isStaff } from "@/lib/auth/permissions";
 import { hashPassword } from "@/lib/auth/password";
 import { Role, UserStatus } from "@prisma/client";
 
@@ -20,7 +20,7 @@ const editSchema = z.object({
 async function getAdminActor() {
   const session = await getAppSession();
   if (!session?.user) throw new Error("Nao autenticado");
-  if (!isAdmin(session.user.role)) throw new Error("Sem permissao");
+  if (!isStaff(session.user.role)) throw new Error("Sem permissao");
   return session.user;
 }
 
@@ -57,9 +57,10 @@ export async function toggleSuspendPlayerAction(userId: string) {
   const actor = await getAdminActor();
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, status: true }
+    select: { id: true, status: true, role: true }
   });
   if (!user) throw new Error("Usuario nao encontrado");
+  if (!isAdmin(actor.role) && user.role !== Role.PLAYER) throw new Error("Gamemasters não podem alterar contas da equipe administrativa.");
 
   const newStatus =
     user.status === UserStatus.SUSPENDED ? UserStatus.ACTIVE : UserStatus.SUSPENDED;
@@ -94,10 +95,11 @@ export async function editPlayerAction(
     const { playerId, displayName, ptcglNick, whatsapp, notes, newPassword } = parsed.data;
     const player = await prisma.player.findUnique({
       where: { id: playerId },
-      select: { id: true, userId: true, displayName: true, ptcglNick: true, whatsapp: true, notes: true }
+      select: { id: true, userId: true, displayName: true, ptcglNick: true, whatsapp: true, notes: true, user: { select: { role: true } } }
     });
 
     if (!player) return { error: "Jogador nao encontrado" };
+    if (!isAdmin(actor.role) && player.user.role !== Role.PLAYER) return { error: "Gamemasters não podem editar contas da equipe administrativa." };
 
     const passwordHash = newPassword ? await hashPassword(newPassword) : null;
 
@@ -215,6 +217,7 @@ export async function updateUserEmailAction(
 export async function deletePlayerAction(userId: string): Promise<{ error?: string }> {
   try {
     const actor = await getAdminActor();
+    if (!isAdmin(actor.role)) return { error: "Gamemasters não podem excluir contas." };
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -398,4 +401,3 @@ export async function saveDeckToMyList(raw: {
   revalidatePath("/perfil/meus-decks");
   return { id: saved.id };
 }
-

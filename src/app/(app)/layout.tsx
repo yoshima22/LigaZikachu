@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { signOut } from "@/auth";
 import { getAppSession } from "@/lib/session";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isStaff } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   getManualSessionUser,
@@ -101,7 +101,7 @@ export default async function AppLayout({
   const user = session?.user ?? (await getManualSessionUser());
   if (!user) redirect("/login");
 
-  const admin = isAdmin(user.role);
+  const admin = isStaff(user.role);
 
   const navData = await getNavData(user.id).catch((error) => {
     console.error("[Layout] nav data failed", { userId: user.id, error });

@@ -6,6 +6,14 @@ export function isAdmin(role: Role) {
   return role === Role.ADMIN || role === Role.SUPER_ADMIN;
 }
 
+export function isGameMaster(role: Role) {
+  return role === Role.GAMEMASTER;
+}
+
+export function isStaff(role: Role) {
+  return isAdmin(role) || isGameMaster(role);
+}
+
 export function isApproved(status: UserStatus) {
   return status === UserStatus.ACTIVE;
 }
@@ -18,6 +26,12 @@ export async function getSessionUser() {
 }
 
 export async function requireAdmin() {
+  const user = await getSessionUser();
+  if (!user || !isStaff(user.role)) redirect("/dashboard");
+  return user;
+}
+
+export async function requirePlatformAdmin() {
   const user = await getSessionUser();
   if (!user || !isAdmin(user.role)) redirect("/dashboard");
   return user;

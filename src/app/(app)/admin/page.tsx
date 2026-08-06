@@ -10,6 +10,7 @@ import { MigrateImagesPanel } from "./_components/migrate-images-panel";
 import { VipSchedulePanel } from "./_components/vip-schedule-panel";
 import { AdminCommunicationPanel } from "./_components/admin-communication-panel";
 import { RunawayRevertPanel } from "./_components/runaway-revert-panel";
+import { GamemasterPanel } from "./_components/gamemaster-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -25,7 +26,7 @@ import {
   Users
 } from "lucide-react";
 import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/permissions";
+import { isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getGlobalNotice } from "@/lib/app-settings";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
@@ -86,7 +87,7 @@ const adminCards = [
 ];
 
 export default async function AdminPage() {
-  await requireAdmin();
+  const currentUser = await requireAdmin();
   await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
   const [
@@ -257,6 +258,7 @@ export default async function AdminPage() {
 
       <UserAccountPanel />
       <AdminCommunicationPanel initialNotice={globalNotice.message} />
+      {isAdmin(currentUser.role) && <GamemasterPanel />}
       <RunawayRevertPanel />
       <MascotSocialPanel />
       <AdminExpeditionPanel />

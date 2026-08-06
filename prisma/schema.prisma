@@ -10,6 +10,7 @@ datasource db {
 
 enum Role {
   PLAYER
+  GAMEMASTER
   ADMIN
   SUPER_ADMIN
 }

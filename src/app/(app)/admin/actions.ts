@@ -1,12 +1,12 @@
 "use server";
 
-import { requireAdmin } from "@/lib/auth/permissions";
+import { requireAdmin, requirePlatformAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { sendDeckReminderEmail } from "@/lib/email";
 import { creditCoins } from "@/lib/zikacoins";
 import { GLOBAL_NOTICE_KEY, revalidateGlobalNotice } from "@/lib/app-settings";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { EggType, FoodType, Prisma } from "@prisma/client";
 import {
   grantSyncTicketHalf,
@@ -568,6 +568,43 @@ export async function adminReactivateUser(userId: string): Promise<{ error?: str
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function setGamemasterRoleAction(playerId: string, enabled: boolean): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const actor = await requirePlatformAdmin();
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { id: true, displayName: true, user: { select: { id: true, role: true } } },
+    });
+    if (!player) return { error: "Jogador não encontrado." };
+    if (player.user.id === actor.id) return { error: "Você não pode alterar sua própria função por esta ferramenta." };
+    if (player.user.role === "ADMIN" || player.user.role === "SUPER_ADMIN") {
+      return { error: "Contas administrativas não podem ser alteradas por esta ferramenta." };
+    }
+    if (!enabled && player.user.role !== "GAMEMASTER") return { error: "Esta conta não é Gamemaster." };
+    if (enabled && player.user.role !== "PLAYER") return { error: "Somente contas de jogador podem receber a função Gamemaster." };
+
+    const nextRole = enabled ? "GAMEMASTER" : "PLAYER";
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: player.user.id }, data: { role: nextRole } }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: actor.id,
+          entityType: "user",
+          entityId: player.user.id,
+          action: enabled ? "user.gamemaster_granted" : "user.gamemaster_revoked",
+          before: { role: player.user.role, player: player.displayName },
+          after: { role: nextRole, player: player.displayName },
+        },
+      }),
+    ]);
+    revalidatePath("/admin");
+    revalidatePath("/jogadores");
+    return { ok: true };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível alterar a função." };
   }
 }
 

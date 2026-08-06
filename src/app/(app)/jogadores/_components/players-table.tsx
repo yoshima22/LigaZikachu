@@ -176,7 +176,8 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
   const [editingPlayer, setEditingPlayer] = useState<PlayerRow | null>(null);
   const [, startTransition] = useTransition();
 
-  const canAdmin = currentUserRole === Role.ADMIN || currentUserRole === Role.SUPER_ADMIN;
+  const canAdmin = currentUserRole === Role.GAMEMASTER || currentUserRole === Role.ADMIN || currentUserRole === Role.SUPER_ADMIN;
+  const canDeleteAccounts = currentUserRole === Role.ADMIN || currentUserRole === Role.SUPER_ADMIN;
   const isSuperAdmin = currentUserRole === Role.SUPER_ADMIN;
 
   if (players.length === 0) {
@@ -267,7 +268,7 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                       >
                         <Pencil size={16} />
                       </button>
-                      {canAdmin && p.userId !== currentUserId && (
+                      {canDeleteAccounts && p.userId !== currentUserId && (
                         <button
                           title="Excluir conta"
                           onClick={() => {
@@ -347,7 +348,7 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                   >
                     <Pencil size={15} />
                   </button>
-                  {canAdmin && p.userId !== currentUserId && (
+                  {canDeleteAccounts && p.userId !== currentUserId && (
                     <button
                       onClick={() => {
                         const warn = isSuperAdmin
