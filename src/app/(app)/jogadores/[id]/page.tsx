@@ -29,6 +29,7 @@ import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { ensureAdminLabRainbowFeather } from "@/lib/admin-lab-feather";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 import { ProfileCollectionProgressPanel } from "@/components/profile/collection-progress";
+import { ProfileHero } from "@/components/profile/profile-hero";
 import { getProfileCollectionProgress } from "@/lib/profile-collection-progress";
 import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
@@ -287,7 +288,21 @@ export default async function PlayerDetailPage({
            2. Banner: overflow-hidden apenas para a imagem de fundo
            3. Avatar+Frame: absolutamente posicionado NO CARD EXTERNO (fora do overflow-hidden)
       */}
-      {(() => {
+      <ProfileHero
+        player={{ displayName: player.displayName, ptcglNick: player.ptcglNick, avatarUrl: player.user.image }}
+        banner={equippedBanner?.item}
+        frame={equippedFrame?.item}
+        title={equippedTitle?.item}
+        status={badge}
+        role={player.user.role}
+        seasonName={activeSeason?.season.name}
+        orderStamp={orderPasswordStamp}
+        graffiti={Boolean(profileGraffiti)}
+        actionHref={isSelf ? "/perfil" : `/mensagens/${player.id}`}
+        actionLabel={isSelf ? "Configurações" : "Enviar mensagem"}
+      />
+      {process.env.NEXT_PUBLIC_SHOW_LEGACY_PROFILE_HERO === "1" && (
+      (() => {
         const AVATAR = 80;
         const frameMeta = equippedFrame?.item.metadata as
           | { frameScale?: number; frameOffsetX?: number; frameOffsetY?: number }
@@ -494,7 +509,8 @@ export default async function PlayerDetailPage({
             </div>
           </div>
         );
-      })()}
+      })()
+      )}
 
       {/* Conquistas removidas daqui — exibidas abaixo (seção única) */}
 

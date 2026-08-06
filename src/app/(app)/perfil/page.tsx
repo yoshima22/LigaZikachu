@@ -15,9 +15,10 @@ import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
 import { ProfileCollectionProgressPanel } from "@/components/profile/collection-progress";
+import { ProfileHero } from "@/components/profile/profile-hero";
 import { getProfileCollectionProgress } from "@/lib/profile-collection-progress";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
-import { getOrderPasswordStampForUser } from "@/lib/raid-event";
+import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 
 
@@ -197,6 +198,11 @@ export default async function PerfilPage() {
       casualMode: true,
       mascotSpritePreference: true,
       megaSpritePreference: true,
+      user: { select: { image: true, status: true, role: true } },
+      seasonEntries: {
+        where: { isActive: true },
+        include: { season: { select: { name: true, status: true } } },
+      },
       deckSubmissions: {
         orderBy: { submittedAt: "desc" },
         take: 20,
@@ -272,7 +278,7 @@ export default async function PerfilPage() {
     getProfileCollectionProgress(player.id),
     prisma.playerInventory.findMany({
       where: { playerId: player.id, equipped: true },
-      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true } } }
+      include: { item: { select: { type: true, name: true, imageUrl: true, metadata: true, rarity: true, theme: true, flavorText: true, entranceEffect: true } } }
     }),
     prisma.mascot.findMany({
       where: { playerId: player.id },
@@ -327,11 +333,21 @@ export default async function PerfilPage() {
       return true;
     })
     .map((item) => ({ itemId: item.id, name: item.name, type: String(item.type), rarity: String(item.rarity), imageUrl: item.imageUrl, description: item.description }));
-  const orderPasswordStamp = await getOrderPasswordStampForUser(session.user.id);
+  const [orderPasswordStamp, profileGraffiti] = await Promise.all([
+    getOrderPasswordStampForUser(session.user.id),
+    getActiveRaidSabotages("PROFILE").then((entries) => entries.some((entry) => entry.sabotageType === "PROFILE_GRAFFITI")),
+  ]);
 
   const equippedBanner = equippedItems.find((i) => i.item.type === "BANNER");
   const equippedFrame  = equippedItems.find((i) => i.item.type === "FRAME");
   const equippedTitle  = equippedItems.find((i) => i.item.type === "TITLE");
+  const activeSeason = player.seasonEntries.find((entry) => entry.season.status === "ACTIVE");
+  const profileStatus = ({
+    ACTIVE: { variant: "active" as const, label: "Ativo" },
+    PENDING_APPROVAL: { variant: "pending" as const, label: "Pendente" },
+    SUSPENDED: { variant: "suspended" as const, label: "Suspenso" },
+    REJECTED: { variant: "rejected" as const, label: "Rejeitado" },
+  } as const)[player.user.status] ?? { variant: "draft" as const, label: player.user.status };
 
   const myRanking = ranking.find((entry) => entry.playerId === player.id);
   const totalGames = (myRanking?.wins ?? 0) + (myRanking?.draws ?? 0) + (myRanking?.losses ?? 0);
@@ -349,6 +365,24 @@ export default async function PerfilPage() {
   return (
     <div className="space-y-6">
       <TutorialManager pageId="perfil" isAdmin={adminUser} />
+      <ProfileHero
+        player={{
+          displayName: player.displayName,
+          ptcglNick: player.ptcglNick,
+          avatarUrl: player.user.image ?? player.avatarUrl,
+        }}
+        banner={equippedBanner?.item}
+        frame={equippedFrame?.item}
+        title={equippedTitle?.item}
+        status={profileStatus}
+        role={player.user.role}
+        seasonName={activeSeason?.season.name}
+        orderStamp={orderPasswordStamp}
+        graffiti={profileGraffiti}
+        actionHref={`/jogadores/${player.id}`}
+        actionLabel="Ver perfil público"
+      />
+      {process.env.NEXT_PUBLIC_SHOW_LEGACY_PROFILE_HERO === "1" && (
       <div data-tutorial="profile-avatar" className="overflow-hidden rounded-2xl border border-border bg-slate-950">
         {equippedBanner?.item.imageUrl ? (
           <div className="relative h-32 w-full overflow-hidden">
@@ -415,8 +449,9 @@ export default async function PerfilPage() {
           </div>
         </div>
       </div>
+      )}
 
-      {orderPasswordStamp && (
+      {process.env.NEXT_PUBLIC_SHOW_LEGACY_PROFILE_HERO === "1" && orderPasswordStamp && (
         <Card className="border-[#FFCB05]/30 bg-[#FFCB05]/5 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
