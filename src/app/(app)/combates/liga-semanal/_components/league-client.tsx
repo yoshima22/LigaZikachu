@@ -286,57 +286,66 @@ function LeagueTab({ data }: { data: PageData }) {
             <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, transparent, transparent 20px, #FFCB05 20px, #FFCB05 21px)" }} />
           </div>
           <div className="relative space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="relative shrink-0">
-                {data.lastChampion.avatarUrl ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={data.lastChampion.avatarUrl} alt="" className="h-16 w-16 rounded-full border-2 border-[#FFCB05]/50 object-cover" />
-                    <span className="absolute -top-2 -right-1 text-xl drop-shadow-lg">👑</span>
-                  </>
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#FFCB05]/20 border-2 border-[#FFCB05]/50 text-3xl">
-                    👑
-                  </div>
-                )}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              {/* Campeão — destaque principal */}
+              <div className="flex items-center gap-4">
+                <div className="relative shrink-0">
+                  {data.lastChampion.avatarUrl ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={data.lastChampion.avatarUrl} alt="" className="h-16 w-16 rounded-full border-2 border-[#FFCB05]/50 object-cover" />
+                      <span className="absolute -top-2 -right-1 text-xl drop-shadow-lg">👑</span>
+                    </>
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#FFCB05]/20 border-2 border-[#FFCB05]/50 text-3xl">
+                      👑
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-[#FFCB05]/60">Campeão da Semana</p>
+                  <p className="text-lg font-black text-[#FFCB05] drop-shadow-[0_0_12px_rgba(255,203,5,0.3)]">
+                    {data.lastChampion.playerName}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {data.lastChampion.weekKey} · {data.lastChampion.wins}V {data.lastChampion.losses}D · {data.lastChampion.points} pts
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-[#FFCB05]/60">Campeão da Semana</p>
-                <p className="text-lg font-black text-[#FFCB05] drop-shadow-[0_0_12px_rgba(255,203,5,0.3)]">
-                  {data.lastChampion.playerName}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {data.lastChampion.weekKey} · {data.lastChampion.wins}V {data.lastChampion.losses}D · {data.lastChampion.points} pts
-                </p>
-              </div>
-            </div>
 
-            {data.lastChampion.runnersUp.length > 0 && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {data.lastChampion.runnersUp.map((r) => (
-                  <div key={r.playerId} className="flex items-center gap-3 rounded-xl border border-slate-500/30 bg-slate-800/40 p-2.5">
-                    <div className="relative shrink-0">
-                      {r.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={r.avatarUrl} alt="" className="h-11 w-11 rounded-full border-2 border-slate-400/40 object-cover" />
-                      ) : (
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-slate-400/40 bg-slate-700/50 text-lg">
-                          {r.position === 2 ? "🥈" : "🥉"}
-                        </div>
-                      )}
-                      <span className="absolute -top-2 -right-1 text-base drop-shadow-lg">{r.position === 2 ? "🥈" : "🥉"}</span>
+              {/* Vice-campeão e 3º lugar — ao lado do destaque principal */}
+              {data.lastChampion.runnersUp.length > 0 && (
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  {data.lastChampion.runnersUp.map((r) => (
+                    <div
+                      key={r.playerId}
+                      className={`flex min-w-[9.5rem] flex-1 items-center gap-2.5 rounded-xl border px-3 py-2 lg:flex-none ${
+                        r.position === 2 ? "border-slate-300/25 bg-slate-300/10" : "border-amber-600/25 bg-amber-600/10"
+                      }`}
+                    >
+                      <div className="relative shrink-0">
+                        {r.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={r.avatarUrl} alt="" className="h-10 w-10 rounded-full border-2 border-slate-400/40 object-cover" />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-400/40 bg-slate-700/50 text-base">
+                            {r.position === 2 ? "🥈" : "🥉"}
+                          </div>
+                        )}
+                        <span className="absolute -top-2 -right-1 text-sm drop-shadow-lg">{r.position === 2 ? "🥈" : "🥉"}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] uppercase tracking-widest text-slate-400">
+                          {r.position === 2 ? "Vice-campeão" : "3º lugar"}
+                        </p>
+                        <p className="truncate text-sm font-bold text-slate-100">{r.playerName}</p>
+                        <p className="text-[10px] text-slate-400">{r.wins}V {r.losses}D · {r.points} pts</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[9px] uppercase tracking-widest text-slate-400">
-                        {r.position === 2 ? "Vice-campeão" : "3º lugar"}
-                      </p>
-                      <p className="truncate text-sm font-bold text-slate-100">{r.playerName}</p>
-                      <p className="text-[10px] text-slate-400">{r.wins}V {r.losses}D · {r.points} pts</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
 
             {(data.lastChampion.topAttacker || data.lastChampion.topDefender || data.lastChampion.topSupport) && (
               <div className="grid grid-cols-3 gap-2">

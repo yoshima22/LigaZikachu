@@ -136,8 +136,12 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
           if (standingsLeague) {
             const parts = await (prisma as any).weeklyMascotLeagueParticipant.findMany({
               where: { leagueId: standingsLeague.id },
-              select: { playerId: true, points: true, wins: true, losses: true, damageDealt: true, survivorsScore: true, damageTaken: true },
+              select: { playerId: true, points: true, wins: true, losses: true, finalRank: true, damageDealt: true, survivorsScore: true, damageTaken: true },
+              // finalRank é a classificação oficial gravada na finalização — usar como
+              // fonte da verdade (mesma ordem do campeão). As métricas ficam como
+              // desempate para ligas antigas sem finalRank.
               orderBy: [
+                { finalRank: { sort: "asc", nulls: "last" } },
                 { points: "desc" },
                 { wins: "desc" },
                 { damageDealt: "desc" },
