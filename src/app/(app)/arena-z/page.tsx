@@ -301,29 +301,31 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   ]);
 
   // Mascotes feridos de jogadores aliados (amizade entre mascotes)
-  const friendPlayerIds = needsSusData ? await Promise.all([
-    prisma.mascotRelation.findMany({
-      where: { type: "FRIEND", mascotA: { playerId: player.id } },
-      select: { mascotB: { select: { playerId: true } } },
-      take: 50,
-    }),
-    prisma.mascotRelation.findMany({
-      where: { type: "FRIEND", mascotB: { playerId: player.id } },
-      select: { mascotA: { select: { playerId: true } } },
-      take: 50,
-    }),
-  ]).then(([asA, asB]) => {
-    const ids = new Set<string>();
-    for (const r of asA) if (r.mascotB.playerId !== player.id) ids.add(r.mascotB.playerId);
-    for (const r of asB) if (r.mascotA.playerId !== player.id) ids.add(r.mascotA.playerId);
-    return [...ids];
-  }).catch(() => [] as string[]) : [];
+  const friendPlayerIds = needsSusData
+    ? await prisma.$queryRaw<Array<{ playerId: string }>>`
+        SELECT DISTINCT
+          CASE WHEN ma."playerId" = ${player.id} THEN mb."playerId" ELSE ma."playerId" END AS "playerId"
+        FROM mascot_relations relation
+        INNER JOIN mascots ma ON ma.id = relation."mascotAId"
+        INNER JOIN mascots mb ON mb.id = relation."mascotBId"
+        WHERE relation.type = 'FRIEND'
+          AND (ma."playerId" = ${player.id} OR mb."playerId" = ${player.id})
+          AND ma."playerId" <> mb."playerId"
+      `.then(rows => rows.map(row => row.playerId)).catch(() => [] as string[])
+    : [];
 
   const injuredFriends = friendPlayerIds.length > 0
     ? await prisma.mascot.findMany({
-        where: { arenaState: "INJURED", playerId: { in: friendPlayerIds } },
+        where: {
+          playerId: { in: friendPlayerIds },
+          OR: [
+            { arenaState: "INJURED" },
+            { arenaState: "RESTING", restingUntil: { gt: new Date() } },
+          ],
+        },
         include: { player: { select: { displayName: true } } },
-        take: 15,
+        orderBy: [{ arenaState: "asc" }, { restingUntil: "asc" }],
+        take: 50,
       }).catch(() => [] as never[])
     : [] as { id: string; pokemonId: number; nickname: string | null; level: number; restingUntil: Date | null; player: { displayName: string } }[];
 
@@ -1175,9 +1177,9 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           {/* Aliados feridos — usar escudo */}
           {injuredFriends.length > 0 && (
             <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
-              <h2 className="font-semibold text-blue-200 mb-1">🛡️ Aliados Feridos</h2>
+              <h2 className="font-semibold text-blue-200 mb-1">🛡️ Aliados no SUS ou em Repouso</h2>
               <p className="text-xs text-slate-500 mb-3">
-                Use seu escudo diário para recuperar totalmente um aliado e remover todo o repouso.
+                Use seu escudo diário em qualquer mascote aliado ferido ou em repouso para recuperá-lo totalmente e liberá-lo na hora.
                 {shieldUsedToday && <span className="ml-1 text-slate-600">(Escudo já usado hoje — reseta à meia-noite BRT)</span>}
               </p>
               <div className="space-y-2">
@@ -1190,7 +1192,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                       <span className="text-[10px] text-slate-500">
                         de {m.player.displayName}
                         {m.restingUntil && m.restingUntil > new Date()
-                          ? ` · em repouso até ${m.restingUntil.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`
+                          ? ` · repouso restante: ${Math.max(1, Math.ceil((m.restingUntil.getTime() - Date.now()) / 60_000))} min · até ${m.restingUntil.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`
                           : " · ferido"}
                       </span>
                     </span>

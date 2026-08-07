@@ -1367,36 +1367,47 @@ export function LockBotButton({ teamId, difficulty }: { teamId: string; difficul
 // ── Ataque oportunista contra rival ferido ────────────────────────────────────
 
 export function OpportunisticAttackButton({ mascotId, mascotName, ownerName }: { mascotId: string; mascotName: string; ownerName: string }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ stolenExp: number; stolenFood: number; extraRestMinutes: number } | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<{ stolenExp: number; stolenFood: number; extraRestMinutes: number; attackerTeamName: string } | null>(null);
 
   return (
     <>
       <button
         type="button"
-        disabled={pending}
+        disabled={pending || completed}
         onClick={() => {
           if (!confirm(`Atacar ${mascotName} de ${ownerName} enquanto está ferido? Você vai roubar EXP e aumentar o tempo de repouso.`)) return;
+          setErrorMessage(null);
           startTransition(async () => {
             const r = await runOpportunisticAttackAction(mascotId);
-            if (r.error) { toast.error(r.error); return; }
+            if (r.error) {
+              if (r.error.includes("ja atacou")) setCompleted(true);
+              setErrorMessage(r.error);
+              toast.error(r.error);
+              return;
+            }
             if (r.result) {
+              setCompleted(true);
               setResult(r.result);
-              toast.success(`Ataque oportunista bem-sucedido! +${r.result.stolenExp} EXP roubados.`);
             }
           });
         }}
         className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
       >
-        😈 Atacar enquanto ferido
+        {completed ? "Ataque já realizado" : "😈 Atacar enquanto ferido"}
       </button>
+      {errorMessage && <p className="mt-1 max-w-56 text-right text-[10px] leading-snug text-red-300">{errorMessage}</p>}
       {result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setResult(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => { setResult(null); router.refresh(); }}>
           <div className="max-w-sm rounded-2xl border border-red-500/30 bg-slate-950 p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-bold text-red-200">😈 Ataque Oportunista!</p>
             <p className="text-xs text-slate-300">Você roubou <strong className="text-[#FFCB05]">{result.stolenExp} EXP</strong>{result.stolenFood > 0 ? " e 1 petisco" : ""}.</p>
+            <p className="text-xs text-emerald-300">A EXP foi enviada ao cofre de <strong>{result.attackerTeamName}</strong>.</p>
             <p className="text-xs text-slate-400">Repouso de {mascotName} aumentado em {result.extraRestMinutes} min.</p>
-            <button type="button" onClick={() => setResult(null)} className="w-full rounded-lg bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
+            <button type="button" onClick={() => { setResult(null); router.refresh(); }} className="w-full rounded-lg bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
           </div>
         </div>
       )}

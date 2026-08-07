@@ -2253,10 +2253,19 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
 
   const attackerPlayer = await prisma.player.findUnique({
     where: { id: attackerPlayerId },
-    include: { mascots: { where: { arenaState: "FREE" }, take: 1 } }
+    select: {
+      displayName: true,
+      arenaTeams: {
+        where: { status: "ACTIVE" },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        select: { id: true, name: true },
+      },
+    },
   });
   if (!attackerPlayer) throw new Error("Atacante nao encontrado.");
-  if (attackerPlayer.mascots.length === 0) throw new Error("Voce nao tem mascotes livres para atacar.");
+  const attackerTeam = attackerPlayer.arenaTeams[0];
+  if (!attackerTeam) throw new Error("Voce precisa ter uma equipe ativa na Arena Z para receber a EXP roubada.");
 
   // Verifica se já atacou este mascote neste período de ferimento
   const recentOpportunistic = await prisma.arenaBattle.findFirst({
@@ -2270,13 +2279,12 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   if (recentOpportunistic) throw new Error("Voce ja atacou este mascote neste periodo de ferimento.");
 
   // Pequeno roubo: 5-15 EXP + chance de 1 petisco
-  const stolenExp   = rand(5, 15);
+  // Roubo real: nunca remove mais EXP do que o alvo possui. O valor vai para
+  // o cofre da equipe ativa, ficando visivel e sem se perder em um mascote
+  // aleatorio do banco.
+  const stolenExp   = Math.min(rand(5, 15), Math.max(0, targetMascot.exp));
   const stolenFood  = Math.random() < 0.3 ? 1 : 0;
   const extraRestMs = rand(15, 45) * 60 * 1000; // 15-45 min a mais de repouso
-
-  const attackerMascotName = attackerPlayer.mascots[0]
-    ? (attackerPlayer.mascots[0].nickname ?? getPokemonName(attackerPlayer.mascots[0].pokemonId))
-    : "mascote";
 
   await prisma.$transaction(async (tx) => {
     // Registra a batalha oportunista
@@ -2288,16 +2296,30 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
         defenderPlayerId: targetMascot.playerId,
         rounds: 1,
         turnLog: [{ turn: 1, actorName: `${attackerPlayer.displayName} (oportunista)`, damage: stolenExp, action: "ATTACK" }] as unknown as import("@prisma/client").Prisma.InputJsonValue,
-        lootResult: { stolen: { exp: stolenExp, food: stolenFood } } as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        lootResult: {
+          stolen: { exp: stolenExp, food: stolenFood },
+          targetMascotId,
+          creditedTeamId: attackerTeam.id,
+          creditedTeamName: attackerTeam.name,
+        } as unknown as import("@prisma/client").Prisma.InputJsonValue,
         winnerPlayerId: attackerPlayerId,
         loserPlayerId: targetMascot.playerId,
       }
     });
-    // Aplica EXP extra ao atacante
-    if (stolenExp > 0 && attackerPlayer.mascots[0]) {
+    // Transfere a EXP do alvo para o cofre da equipe do atacante.
+    if (stolenExp > 0) {
       await tx.mascot.update({
-        where: { id: attackerPlayer.mascots[0].id },
-        data: { exp: { increment: stolenExp } }
+        where: { id: targetMascotId },
+        data: { exp: { decrement: stolenExp } },
+      });
+    }
+    if (stolenExp > 0 || stolenFood > 0) {
+      await tx.arenaTeam.update({
+        where: { id: attackerTeam.id },
+        data: {
+          ...(stolenExp > 0 ? { vaultExp: { increment: stolenExp } } : {}),
+          ...(stolenFood > 0 ? { vaultSweet: { increment: stolenFood } } : {}),
+        },
       });
     }
     // Aumenta tempo de repouso do alvo
@@ -2317,7 +2339,12 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
     });
   });
 
-  return { stolenExp, stolenFood, extraRestMinutes: Math.floor(extraRestMs / 60000), attackerMascotName };
+  return {
+    stolenExp,
+    stolenFood,
+    extraRestMinutes: Math.floor(extraRestMs / 60000),
+    attackerTeamName: attackerTeam.name,
+  };
 }
 
 // ── Formata turno de combate para exibição legível ────────────────────────────
@@ -2873,7 +2900,9 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
     include: { player: { select: { displayName: true } } },
   });
   if (!targetMascot) throw new Error("Mascote nao encontrado.");
-  if (targetMascot.arenaState !== "INJURED") throw new Error("Mascote nao esta ferido.");
+  if (targetMascot.arenaState !== "INJURED" && targetMascot.arenaState !== "RESTING") {
+    throw new Error("Mascote nao esta ferido nem em repouso.");
+  }
   if (targetMascot.playerId === shieldOwnerPlayerId) throw new Error("Nao pode usar o escudo em si mesmo.");
 
   // Verifica amizade entre os dois jogadores
