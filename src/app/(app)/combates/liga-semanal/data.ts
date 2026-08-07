@@ -64,6 +64,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     topAttacker: { name: string; pokemonId: number; damageDealt: number } | null;
     topDefender: { name: string; pokemonId: number; damageTaken: number } | null;
     topSupport: { name: string; pokemonId: number; heals: number } | null;
+    runnersUp: { position: number; playerName: string; avatarUrl: string | null; points: number; wins: number; losses: number; playerId: string }[];
   } | null = null;
 
   // Load last finished league champion
@@ -125,6 +126,53 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
           }
         } catch {}
 
+        // 2º e 3º colocados (pódio) da mesma liga finalizada
+        let runnersUp: { position: number; playerName: string; avatarUrl: string | null; points: number; wins: number; losses: number; playerId: string }[] = [];
+        try {
+          const standingsLeague = await (prisma as any).weeklyMascotLeague.findFirst({
+            where: { weekKey: lastFinished.weekKey },
+            select: { id: true },
+          });
+          if (standingsLeague) {
+            const parts = await (prisma as any).weeklyMascotLeagueParticipant.findMany({
+              where: { leagueId: standingsLeague.id },
+              select: { playerId: true, points: true, wins: true, losses: true, damageDealt: true, survivorsScore: true, damageTaken: true },
+              orderBy: [
+                { points: "desc" },
+                { wins: "desc" },
+                { damageDealt: "desc" },
+                { survivorsScore: "desc" },
+                { damageTaken: "asc" },
+              ],
+            });
+            const ids = (parts as Array<{ playerId: string }>).map((p) => p.playerId);
+            const pls = await prisma.player.findMany({
+              where: { id: { in: ids } },
+              select: { id: true, displayName: true, ptcglNick: true, avatarUrl: true, active: true, user: { select: { role: true, status: true } } },
+            });
+            const validMap = new Map(
+              pls
+                .filter((p) => p.active && p.user.status === "ACTIVE" && !["ADMIN", "SUPER_ADMIN"].includes(p.user.role))
+                .map((p) => [p.id, p] as const),
+            );
+            runnersUp = (parts as Array<{ playerId: string; points: number; wins: number; losses: number }>)
+              .filter((p) => validMap.has(p.playerId) && p.playerId !== lastFinished.championPlayerId)
+              .slice(0, 2)
+              .map((p, i) => {
+                const pl = validMap.get(p.playerId)!;
+                return {
+                  position: i + 2,
+                  playerName: pl.ptcglNick ? `${pl.displayName} (${pl.ptcglNick})` : pl.displayName,
+                  avatarUrl: pl.avatarUrl ?? null,
+                  points: p.points,
+                  wins: p.wins,
+                  losses: p.losses,
+                  playerId: p.playerId,
+                };
+              });
+          }
+        } catch {}
+
         lastChampion = {
           playerName: champ.ptcglNick ? `${champ.displayName} (${champ.ptcglNick})` : champ.displayName,
           weekKey: lastFinished.weekKey,
@@ -136,6 +184,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
           topAttacker,
           topDefender,
           topSupport,
+          runnersUp,
         };
       }
     }

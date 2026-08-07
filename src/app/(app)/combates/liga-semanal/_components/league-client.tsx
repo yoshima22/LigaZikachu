@@ -92,6 +92,7 @@ type PageData = {
     topAttacker: { name: string; pokemonId: number; damageDealt: number } | null;
     topDefender: { name: string; pokemonId: number; damageTaken: number } | null;
     topSupport: { name: string; pokemonId: number; heals: number } | null;
+    runnersUp: { position: number; playerName: string; avatarUrl: string | null; points: number; wins: number; losses: number; playerId: string }[];
   } | null;
 };
 
@@ -309,6 +310,33 @@ function LeagueTab({ data }: { data: PageData }) {
                 </p>
               </div>
             </div>
+
+            {data.lastChampion.runnersUp.length > 0 && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {data.lastChampion.runnersUp.map((r) => (
+                  <div key={r.playerId} className="flex items-center gap-3 rounded-xl border border-slate-500/30 bg-slate-800/40 p-2.5">
+                    <div className="relative shrink-0">
+                      {r.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.avatarUrl} alt="" className="h-11 w-11 rounded-full border-2 border-slate-400/40 object-cover" />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-slate-400/40 bg-slate-700/50 text-lg">
+                          {r.position === 2 ? "🥈" : "🥉"}
+                        </div>
+                      )}
+                      <span className="absolute -top-2 -right-1 text-base drop-shadow-lg">{r.position === 2 ? "🥈" : "🥉"}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[9px] uppercase tracking-widest text-slate-400">
+                        {r.position === 2 ? "Vice-campeão" : "3º lugar"}
+                      </p>
+                      <p className="truncate text-sm font-bold text-slate-100">{r.playerName}</p>
+                      <p className="text-[10px] text-slate-400">{r.wins}V {r.losses}D · {r.points} pts</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {(data.lastChampion.topAttacker || data.lastChampion.topDefender || data.lastChampion.topSupport) && (
               <div className="grid grid-cols-3 gap-2">
