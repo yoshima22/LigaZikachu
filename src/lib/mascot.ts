@@ -114,12 +114,14 @@ export async function rollEggChoicesForPlayer(
   randomGeneration: boolean,
   count = 3,
 ) {
+  const { getActiveEggRarityBonusPct } = await import("@/lib/timed-game-bonuses");
+  const eventRarityBonusPct = await getActiveEggRarityBonusPct();
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
   const choices: number[] = [];
   while (choices.length < count) {
     const result = await includeCustomSpeciesInRoll(rollEggPokemon(eggType, {
       generationType,
-      rarityBonusPct,
+      rarityBonusPct: rarityBonusPct + eventRarityBonusPct,
       randomGenerationBonus: randomGeneration,
       ownedBaseCounts,
       excludedPokemonIds: choices,
@@ -158,10 +160,12 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   if (new Date() < incubator.finishAt) throw new Error("O ovo ainda não está pronto.");
 
   const rollContext = getEggRollContext(incubator.egg.type, incubator.egg.origin);
+  const { getActiveEggRarityBonusPct } = await import("@/lib/timed-game-bonuses");
+  const eventRarityBonusPct = await getActiveEggRarityBonusPct();
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
   const rollResult = forcedPokemonId ? null : await includeCustomSpeciesInRoll(rollEggPokemon(rollContext.eggType, {
     generationType: rollContext.generationType,
-    rarityBonusPct: incubator.egg.hatchRarityBonusPct,
+    rarityBonusPct: incubator.egg.hatchRarityBonusPct + eventRarityBonusPct,
     randomGenerationBonus: rollContext.randomGeneration,
     ownedBaseCounts,
   }));
@@ -211,6 +215,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
         eggType: incubator.egg.type,
         eggOrigin: incubator.egg.origin,
         hatchRarityBonusPct: incubator.egg.hatchRarityBonusPct,
+        eventRarityBonusPct,
       },
       after: {
         mascotId: m.id,
@@ -1312,7 +1317,8 @@ export async function startExpedition(
   if (durationKey === "7d") throw new Error("Para enviar o mascote de férias, use o Ticket de Férias do Prof. Carvalho no seu inventário.");
 
   const dur = EXPEDITION_DURATIONS[durationKey];
-  const [picnicSpeedBuff, picnicRewardBuff] = await Promise.all([
+  const { getExpeditionEventBonusPct } = await import("@/lib/timed-game-bonuses");
+  const [picnicSpeedBuff, picnicRewardBuff, eventExpBonusPct] = await Promise.all([
     prisma.mascotBuff.findFirst({
       where: { type: "PICNIC_SPEED", mascot: { playerId }, expiresAt: { gt: new Date() } },
       select: { id: true },
@@ -1321,6 +1327,7 @@ export async function startExpedition(
       where: { type: "PICNIC_BASKET", mascot: { playerId }, expiresAt: { gt: new Date() } },
       select: { id: true },
     }),
+    getExpeditionEventBonusPct(mode, durationKey),
   ]);
   // O resultado fica estável por mascote/modo/duração durante 24h. Cancelar e
   // reiniciar a expedição, portanto, não permite rerrolar até obter um valor maior.
@@ -1356,6 +1363,7 @@ export async function startExpedition(
           effectiveDurationMs,
           agilityRollBucket: rollBucket,
           picnicActive: !!picnicRewardBuff,
+          eventExpBonusPct,
         },
       },
     });
@@ -1451,6 +1459,7 @@ export async function claimExpedition(
   const durationKey: ExpeditionDuration = (stored.durationKey as ExpeditionDuration) ?? "1h";
   const mode: ExpeditionMode = (stored.mode as ExpeditionMode) ?? "STANDARD";
   const picnicActive = stored.picnicActive === true;
+  const eventExpBonusPct = Math.max(0, Math.min(500, Number(stored.eventExpBonusPct) || 0));
   const picnicLootBonusPct = picnicActive ? (mode === "ITEMS" ? 3 : mode === "STANDARD" ? 1.5 : 0) : 0;
   const dur = EXPEDITION_DURATIONS[durationKey];
 
@@ -1519,7 +1528,8 @@ export async function claimExpedition(
     ? mode === "TRAINING" ? 1.25 : mode === "STANDARD" ? 1.12 : 1
     : 1;
 
-  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult);
+  const eventExpMult = 1 + eventExpBonusPct / 100;
+  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult);
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
@@ -1533,6 +1543,7 @@ export async function claimExpedition(
     ...reward,
     mode,
     durationKey,
+    eventExpBonusPct,
   };
   if (reward.type === "MEGA_STONE") {
     storedRewardJson.megaStoneDropChance = getMegaStoneExpeditionChance(expedition.mascot.statInstinct) / 100;
@@ -1548,6 +1559,7 @@ export async function claimExpedition(
       const bonuses: string[] = [];
       if (allyCount > 0) bonuses.push(`${allyCount} aliado${allyCount > 1 ? "s" : ""} apoiou`);
       if (rivalBonus > 1) bonuses.push("motivação de rivalidade");
+      if (eventExpBonusPct > 0) bonuses.push(`evento +${eventExpBonusPct}% EXP`);
       const note = bonuses.length > 0 ? ` (${bonuses.join(", ")})` : "";
       await tx.mascotEvent.create({
         data: {

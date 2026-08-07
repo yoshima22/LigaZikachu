@@ -6,7 +6,7 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import {
-  ARENA_Z_CONFIG, ARENA_ROOMS, ARENA_MAX_TEAMS, PVE_DAILY_COINS_CAP,
+  ARENA_Z_CONFIG, ARENA_ROOMS, ARENA_MAX_TEAMS,
   PASSIVE_COINS_PER_MASCOT_PER_H, PASSIVE_EXP_PER_MASCOT_PER_H,
   RETIRE_COOLDOWN_MS, getArenaBotPreview, getArenaRanking, formatTurnLog,
   getTeamTimeMultiplier, applyMultiplierToVault, estimateVaultClaim,
@@ -30,6 +30,7 @@ import {
   COMBAT_ROLE_DESCRIPTIONS,
   normalizeCombatRole,
 } from "@/lib/combat-roles";
+import { getActiveArenaDailyZcLimit } from "@/lib/timed-game-bonuses";
 
 export const dynamic = "force-dynamic";
 
@@ -140,7 +141,8 @@ export default async function ArenaZPage({
 
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const pveEarnedToday = playerArenaData?.arenaPveCoinsDate === todayBRT ? (playerArenaData.arenaPveCoinsEarned ?? 0) : 0;
-  const pveCapRemaining = Math.max(0, PVE_DAILY_COINS_CAP - pveEarnedToday);
+  const pveDailyCoinsCap = await getActiveArenaDailyZcLimit();
+  const pveCapRemaining = Math.max(0, pveDailyCoinsCap - pveEarnedToday);
   const shieldUsedToday = playerArenaData?.susShieldDate === todayBRT;
 
   // Verifica se colunas da reformulação Jun/2026 já existem no DB (cacheado 5 min)
@@ -448,7 +450,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
         {/* PvE cap indicator */}
         <div className="mt-3 flex flex-wrap gap-3 text-[10px]">
           <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-1 text-green-300">
-            PvE hoje: {pveEarnedToday}/{PVE_DAILY_COINS_CAP} ZC ({pveCapRemaining} restantes)
+            PvE hoje: {pveEarnedToday}/{pveDailyCoinsCap} ZC ({pveCapRemaining} restantes)
           </span>
           <span className={`rounded-full border px-2.5 py-1 ${shieldUsedToday ? "border-slate-700 text-slate-500" : "border-blue-500/30 bg-blue-500/10 text-blue-300"}`}>
             🛡️ Escudo SUS: {shieldUsedToday ? "usado hoje" : "disponível"}
@@ -931,7 +933,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             const multPct = Math.round((mult - 1) * 100);
             const vaultNow = estimateVaultClaim(
               { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
-              team.enteredAt, team.members.length,
+              team.enteredAt, team.members.length, pveEarnedToday, pveDailyCoinsCap,
             );
             return (
               <div key={team.id} className="rounded-2xl border border-border bg-slate-950/60 p-4">
@@ -1384,7 +1386,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-slate-200">🤖 Combate PvE (Bots)</p>
-              <p>Escolha dificuldade (Fácil/Normal/Difícil). Cooldown: {ARENA_Z_CONFIG.botCooldownMinutes} min por equipe após cada batalha. Cap diário: {PVE_DAILY_COINS_CAP} ZC por jogador (reseta meia-noite BRT).</p>
+              <p>Escolha dificuldade (Fácil/Normal/Difícil). Cooldown: {ARENA_Z_CONFIG.botCooldownMinutes} min por equipe após cada batalha. Cap diário: {pveDailyCoinsCap} ZC por jogador (reseta meia-noite BRT).</p>
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-slate-200">⚔️ PvP entre Jogadores</p>

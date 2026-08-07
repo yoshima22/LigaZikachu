@@ -11,6 +11,7 @@ import { VipSchedulePanel } from "./_components/vip-schedule-panel";
 import { AdminCommunicationPanel } from "./_components/admin-communication-panel";
 import { RunawayRevertPanel } from "./_components/runaway-revert-panel";
 import { GamemasterPanel } from "./_components/gamemaster-panel";
+import { TimedGameBonusPanel } from "./_components/timed-game-bonus-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -34,6 +35,7 @@ import { adminListActiveVips, adminGetSchedule, adminListScheduleLabels } from "
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
+import { getTimedGameBonusEvents } from "@/lib/timed-game-bonuses";
 
 const adminCards = [
   {
@@ -102,6 +104,7 @@ export default async function AdminPage() {
     recentAuditLogs,
     globalNotice,
     gamemasters,
+    timedGameBonusEvents,
   ] = await Promise.all([
     prisma.user.count({ where: { status: UserStatus.PENDING_APPROVAL } }),
     prisma.tournament.count({ where: { status: { in: [TournamentStatus.REGISTRATION_OPEN, TournamentStatus.IN_PROGRESS] } } }),
@@ -124,6 +127,7 @@ export default async function AdminPage() {
           select: { id: true, displayName: true, ptcglNick: true },
         })
       : Promise.resolve([]),
+    getTimedGameBonusEvents(),
   ]);
 
   const vipsResult = await adminListActiveVips();
@@ -265,6 +269,7 @@ export default async function AdminPage() {
       </Card>
 
       <UserAccountPanel />
+      <TimedGameBonusPanel initialEvents={timedGameBonusEvents} />
       <AdminCommunicationPanel initialNotice={globalNotice.message} />
       {isAdmin(currentUser.role) && <GamemasterPanel initialGamemasters={gamemasters} />}
       <RunawayRevertPanel />

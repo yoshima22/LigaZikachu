@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_ARENA_DAILY_ZC_LIMIT, getActiveArenaDailyZcLimit } from "@/lib/timed-game-bonuses";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
@@ -30,7 +31,7 @@ export const ARENA_Z_CONFIG = {
 };
 
 export const ARENA_MAX_TEAMS = 3;
-export const PVE_DAILY_COINS_CAP = 2000; // ZC PvE por jogador por dia (meia-noite BRT)
+export const PVE_DAILY_COINS_CAP = DEFAULT_ARENA_DAILY_ZC_LIMIT; // fallback sem evento
 export const ARENA_ROOMS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 export type ArenaRoom = typeof ARENA_ROOMS[number];
 
@@ -120,6 +121,7 @@ export function estimateVaultClaim(
   enteredAt: Date | string,
   memberCount: number,
   pveEarnedToday = 0,
+  pveDailyCoinsCap = PVE_DAILY_COINS_CAP,
 ): { coins: number; exp: number; food: number; sweet: number } {
   const mult = getTeamTimeMultiplier(new Date(enteredAt));
   const hoursActive = (Date.now() - new Date(enteredAt).getTime()) / 3_600_000;
@@ -132,7 +134,7 @@ export function estimateVaultClaim(
   const pveExp   = Math.max(0, vault.exp - pvpExp);
   const pvpCoinsFinal = Math.floor(pvpCoins * mult);
   const pvpExpFinal   = Math.floor(pvpExp * mult);
-  const pveAvailable = Math.max(0, PVE_DAILY_COINS_CAP - pveEarnedToday);
+  const pveAvailable = Math.max(0, pveDailyCoinsCap - pveEarnedToday);
   const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
   return {
     coins: pveCoinsCapped + pvpCoinsFinal,
@@ -970,7 +972,8 @@ async function creditArenaLoot(
   tx: Prisma.TransactionClient,
   playerId: string,
   loot: ArenaLoot,
-  description: string
+  description: string,
+  pveDailyCoinsCap = PVE_DAILY_COINS_CAP,
 ) {
   let payableCoins = loot.coins;
   if (payableCoins > 0) {
@@ -980,7 +983,7 @@ async function creditArenaLoot(
       select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true },
     });
     const earnedToday = player?.arenaPveCoinsDate === todayBRT ? (player.arenaPveCoinsEarned ?? 0) : 0;
-    const available = Math.max(0, PVE_DAILY_COINS_CAP - earnedToday);
+    const available = Math.max(0, pveDailyCoinsCap - earnedToday);
     payableCoins = Math.min(payableCoins, available);
     if (payableCoins > 0) {
       await tx.player.update({
@@ -1501,7 +1504,8 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   });
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const earnedToday = player?.arenaPveCoinsDate === todayBRT ? (player.arenaPveCoinsEarned ?? 0) : 0;
-  const pveAvailable = Math.max(0, PVE_DAILY_COINS_CAP - earnedToday);
+  const pveDailyCoinsCap = await getActiveArenaDailyZcLimit();
+  const pveAvailable = Math.max(0, pveDailyCoinsCap - earnedToday);
   const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
 
   const vaultFinal = {
@@ -1806,8 +1810,9 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   });
   const pveTodayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const pveEarnedToday = pvePlayerData?.arenaPveCoinsDate === pveTodayBRT ? (pvePlayerData.arenaPveCoinsEarned ?? 0) : 0;
-  if (pveEarnedToday >= PVE_DAILY_COINS_CAP) {
-    throw new Error(`Você atingiu o limite diário de ${PVE_DAILY_COINS_CAP} ZC PvE. O limite reseta à meia-noite (horário de Brasília).`);
+  const pveDailyCoinsCap = await getActiveArenaDailyZcLimit();
+  if (pveEarnedToday >= pveDailyCoinsCap) {
+    throw new Error(`Você atingiu o limite diário de ${pveDailyCoinsCap} ZC PvE. O limite reseta à meia-noite (horário de Brasília).`);
   }
 
   const teamDebuffPct = getArenaDebuffPct(team.enteredAt);
@@ -1903,7 +1908,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       },
     });
     if (teamDefeated && defeatPreserved) {
-      await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`);
+      await creditArenaLoot(tx, playerId, defeatPreserved, `Cofre restante Arena Z apos K.O. total contra ${botName}`, pveDailyCoinsCap);
       await dropArenaGroundSpoils(tx, defeatSplit?.burned, playerId, battle.id);
       // Deleta o time: cascata remove os ArenaTeamMember automaticamente
       await tx.arenaTeam.delete({ where: { id: team.id } });
@@ -2612,6 +2617,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
     ? await getArenaExpMascotIds(loserTeam.id, loserTeam.playerId, loserTeam.enteredAt)
     : [];
   let foundGroundSpoils: ArenaLoot | null = null;
+  const pveDailyCoinsCap = await getActiveArenaDailyZcLimit();
 
   await prisma.$transaction(async (tx) => {
     const battle = await tx.arenaBattle.create({
@@ -2697,7 +2703,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
 
     if (!isTrainingBattle && !isCasualBattle && loserTeam && preserved) {
       if (loserTeamDefeated) {
-        await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP");
+        await creditArenaLoot(tx, loserTeam.playerId, preserved, "Cofre restante Arena Z apos K.O. total em PvP", pveDailyCoinsCap);
         await tx.arenaTeam.delete({ where: { id: loserTeam.id } });
       } else {
         await tx.arenaTeam.update({
