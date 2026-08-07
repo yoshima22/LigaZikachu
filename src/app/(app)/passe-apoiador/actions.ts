@@ -7,7 +7,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { creditCoins } from "@/lib/zikacoins";
 import { ZikaCoinTxType } from "@prisma/client";
 import { deactivateExpiredSupporterPasses } from "@/lib/supporter-pass";
-import type { DayReward } from "./schedule";
+import { expandDayReward, type DayReward } from "./schedule";
 export type { DayReward } from "./schedule";
 import { PASS_SCHEDULE, PASS_SCHEDULE_DEFAULTS } from "./schedule";
 
@@ -349,6 +349,8 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     const activeSchedule = await getActiveSchedule(pass.passLabel ?? undefined);
     const reward = activeSchedule.find(r => r.day === dayNumber);
     if (!reward) return { ok: false, error: "Recompensa não configurada." };
+    const rewardItems = expandDayReward(reward);
+    if (rewardItems.length === 0) return { ok: false, error: "Este dia não possui recompensas configuradas." };
 
     let stickerResult: ClaimResult["stickerResult"] | undefined;
 
@@ -358,53 +360,60 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
         data: { passId, playerId: player.id, dayNumber, rewardType: reward.type, rewardPayload: reward as object },
       });
 
-      // 2. ZikaCoins
-      if (reward.coins && reward.coins > 0) {
+      // 2. ZikaCoins (soma entradas repetidas)
+      const coins = rewardItems
+        .filter((item) => item.type === "COINS")
+        .reduce((total, item) => total + Math.max(0, Math.floor(item.coins ?? 0)), 0);
+      if (coins > 0) {
         await creditCoins(tx, {
           playerId: player.id,
           type: ZikaCoinTxType.VIP_PASS_REWARD,
-          amount: reward.coins,
+          amount: coins,
           description: `Passe Apoiador — Dia ${dayNumber}`,
         });
       }
 
-      // 3. Ovo
-      if (reward.type === "EGG" || (reward.eggType)) {
-        const qty = reward.foodQty ?? 1;
-        for (let i = 0; i < qty; i++) {
-          await tx.mascotEgg.create({
-            data: { playerId: player.id, type: (reward.eggType ?? "COMMON") as import("@prisma/client").EggType, origin: "VIP_PASS" },
-          });
-        }
+      // 3. Ovos — cada slot mantem tipo e quantidade independentes.
+      const eggs = rewardItems.flatMap((item) => item.type === "EGG"
+        ? Array.from({ length: Math.max(1, Math.min(10, Math.floor(item.quantity ?? 1))) }, () => ({
+            playerId: player.id,
+            type: (item.eggType ?? "COMMON") as import("@prisma/client").EggType,
+            origin: "VIP_PASS",
+          }))
+        : []);
+      if (eggs.length > 0) {
+        await tx.mascotEgg.createMany({ data: eggs });
       }
 
-      // 4. Comida
-      if (reward.foodType === "FOOD" && reward.type !== "SWEET") {
-        const qty = reward.foodQty ?? 1;
-        const food = await tx.mascotFoodItem.findFirst({ where: { playerId: player.id, type: "FOOD" } });
-        if (food) {
-          await tx.mascotFoodItem.update({ where: { id: food.id }, data: { quantity: { increment: qty } } });
-        } else {
-          await tx.mascotFoodItem.create({ data: { playerId: player.id, type: "FOOD", quantity: qty } });
-        }
+      // 4. Comidas
+      const foodQty = rewardItems
+        .filter((item) => item.type === "FOOD")
+        .reduce((total, item) => total + Math.max(1, Math.floor(item.quantity ?? 1)), 0);
+      if (foodQty > 0) {
+        await tx.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: player.id, type: "FOOD" } },
+          create: { playerId: player.id, type: "FOOD", quantity: foodQty },
+          update: { quantity: { increment: foodQty } },
+        });
       }
 
-      // 5. Doce
-      if (reward.foodType === "SWEET" || reward.type === "SWEET") {
-        const qty = reward.foodQty ?? 1;
-        const sweet = await tx.mascotFoodItem.findFirst({ where: { playerId: player.id, type: "SWEET" } });
-        if (sweet) {
-          await tx.mascotFoodItem.update({ where: { id: sweet.id }, data: { quantity: { increment: qty } } });
-        } else {
-          await tx.mascotFoodItem.create({ data: { playerId: player.id, type: "SWEET", quantity: qty } });
-        }
+      // 5. Doces
+      const sweetQty = rewardItems
+        .filter((item) => item.type === "SWEET")
+        .reduce((total, item) => total + Math.max(1, Math.floor(item.quantity ?? 1)), 0);
+      if (sweetQty > 0) {
+        await tx.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: player.id, type: "SWEET" } },
+          create: { playerId: player.id, type: "SWEET", quantity: sweetQty },
+          update: { quantity: { increment: sweetQty } },
+        });
       }
 
-      // 6. Shop item (por nome — lookup)
-      if (reward.shopItemName) {
+      // 6. Itens da ZikaShop — permite repetir inclusive o mesmo item.
+      for (const itemReward of rewardItems.filter((item) => item.type === "SHOP_ITEM" && item.shopItemName)) {
         const shopItem = await tx.shopItem.findFirst({
           where: {
-            name: { contains: reward.shopItemName, mode: "insensitive" },
+            name: { contains: itemReward.shopItemName!, mode: "insensitive" },
             inventoryEnabled: true,
           },
           orderBy: [
@@ -429,17 +438,17 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
         }
       }
 
-      // 7. ZikaLoot — via PlayerGift
-      if (reward.type === "ZIKALOOT") {
+      // 7. ZikaLoot — uma entrega para cada slot configurado.
+      for (const loot of rewardItems.filter((item) => item.type === "ZIKALOOT")) {
         await tx.playerGift.create({
           data: {
             playerId: player.id,
             type: "CUSTOM",
-            title: reward.zikalootSpecial ? "🎟️ Ticket ZikaLoot Especial" : "🎟️ Ticket ZikaLoot",
+            title: loot.zikalootSpecial ? "🎟️ Ticket ZikaLoot Especial" : "🎟️ Ticket ZikaLoot",
             description: `Recompensa do Passe Apoiador — Dia ${dayNumber}`,
             payload: {
               rewardKind: "ZIKALOOT_TICKET",
-              special: reward.zikalootSpecial ?? false,
+              special: loot.zikalootSpecial ?? false,
               origin: "VIP_PASS",
             },
           },
@@ -447,10 +456,17 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
       }
     });
 
-    // 8. Sticker pack — abre fora da transação (usa lógica existente)
-    if (reward.type === "STICKER_PACK" && reward.packName) {
+    // 8. Pacotes repetidos abrem em sequencia e aparecem juntos no feedback.
+    const stickerPacks = rewardItems.filter((item) => item.type === "STICKER_PACK" && item.packName);
+    for (const pack of stickerPacks) {
       const { openStickerPackByName } = await import("./pack-opener");
-      stickerResult = await openStickerPackByName(player.id, reward.packName);
+      const opened = await openStickerPackByName(player.id, pack.packName!);
+      stickerResult = stickerResult
+        ? {
+            cards: [...stickerResult.cards, ...opened.cards],
+            totalCoinsEarned: stickerResult.totalCoinsEarned + opened.totalCoinsEarned,
+          }
+        : opened;
     }
 
     revalidatePath("/passe-apoiador");

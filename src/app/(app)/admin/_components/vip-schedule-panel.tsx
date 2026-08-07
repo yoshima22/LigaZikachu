@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PlayerSearchInput } from "@/components/player-search-input";
-import type { DayReward } from "@/app/(app)/passe-apoiador/schedule";
+import { expandDayReward, type DayReward, type DayRewardItem } from "@/app/(app)/passe-apoiador/schedule";
 import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
   adminGrantVip, adminGrantVipToAll, adminSetRetroactiveClaims, adminRevokeVip,
@@ -45,6 +45,19 @@ function uid() { return `slot-${++_slotCounter}-${Math.random().toString(36).sli
 // ── Conversão DayReward ↔ Slots ───────────────────────────────────────────────
 
 function rewardToSlots(reward: DayReward): Slot[] {
+  if (Array.isArray(reward.rewards) && reward.rewards.length > 0) {
+    return expandDayReward(reward).map((item): Slot => {
+      switch (item.type) {
+        case "COINS": return { id: uid(), kind: "COINS", amount: item.coins ?? 0 };
+        case "EGG": return { id: uid(), kind: "EGG", eggType: (item.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: item.quantity ?? 1 };
+        case "FOOD": return { id: uid(), kind: "FOOD", qty: item.quantity ?? 1 };
+        case "SWEET": return { id: uid(), kind: "SWEET", qty: item.quantity ?? 1 };
+        case "STICKER_PACK": return { id: uid(), kind: "STICKER_PACK", packName: item.packName ?? "Pacote Comum" };
+        case "SHOP_ITEM": return { id: uid(), kind: "SHOP_ITEM", itemName: item.shopItemName ?? "" };
+        case "ZIKALOOT": return { id: uid(), kind: "ZIKALOOT", special: item.zikalootSpecial ?? false };
+      }
+    });
+  }
   const slots: Slot[] = [];
 
   if (reward.coins && reward.coins > 0)
@@ -89,8 +102,17 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     food  ? "FOOD" :
     sweet ? "SWEET" : "COINS";
 
-  const foodQty = egg?.qty ?? food?.qty ?? sweet?.qty;
-  const foodType = food ? "FOOD" : sweet ? "SWEET" : undefined;
+  const rewards: DayRewardItem[] = slots.map((slot): DayRewardItem => {
+    switch (slot.kind) {
+      case "COINS": return { type: "COINS", coins: slot.amount };
+      case "EGG": return { type: "EGG", eggType: slot.eggType, quantity: slot.qty };
+      case "FOOD": return { type: "FOOD", quantity: slot.qty };
+      case "SWEET": return { type: "SWEET", quantity: slot.qty };
+      case "STICKER_PACK": return { type: "STICKER_PACK", packName: slot.packName };
+      case "SHOP_ITEM": return { type: "SHOP_ITEM", shopItemName: slot.itemName };
+      case "ZIKALOOT": return { type: "ZIKALOOT", zikalootSpecial: slot.special };
+    }
+  });
 
   return {
     day,
@@ -98,13 +120,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     label,
     isMilestone: isMilestone || undefined,
     type,
-    coins: coins?.amount || undefined,
-    eggType: egg?.eggType,
-    foodQty: foodQty ?? undefined,
-    foodType: foodType ?? (egg && (food || sweet) ? (food ? "FOOD" : "SWEET") : undefined),
-    packName: pack?.packName,
-    shopItemName: shop?.itemName,
-    zikalootSpecial: loot?.special || undefined,
+    rewards,
   };
 }
 
@@ -854,9 +870,6 @@ function DayEditor({ reward, onChange, onClose }: {
     onChange(next);
   };
 
-  // Kinds já presentes (para desabilitar duplicatas onde faz sentido)
-  const presentKinds = new Set(state.slots.map(s => s.kind));
-
   return (
     <div className="relative z-20 rounded-2xl border border-purple-400/20 bg-purple-950/10 p-5 space-y-5">
       {/* Header */}
@@ -927,18 +940,10 @@ function DayEditor({ reward, onChange, onClose }: {
         {showAdd && (
           <div className="absolute top-10 left-0 z-50 rounded-xl border border-border bg-slate-900 shadow-2xl p-2 grid grid-cols-2 gap-1 w-64">
             {(Object.entries(SLOT_META) as [SlotKind, typeof SLOT_META[SlotKind]][]).map(([kind, meta]) => {
-              const alreadyHas = presentKinds.has(kind);
-              const blockedByEgg = kind === "FOOD" && (presentKinds.has("EGG"));
-              const blockedByFood = kind === "EGG" && (presentKinds.has("FOOD") || presentKinds.has("SWEET"));
-              const disabled = (alreadyHas && !["SHOP_ITEM"].includes(kind)) || blockedByEgg || blockedByFood;
               return (
-                <button key={kind} disabled={disabled} onClick={() => addSlot(kind)}
-                  className={`rounded-lg px-3 py-2 text-left text-xs transition-colors
-                    ${disabled
-                      ? "opacity-30 cursor-not-allowed text-slate-500"
-                      : "hover:bg-slate-800 text-slate-200"}`}>
+                <button key={kind} onClick={() => addSlot(kind)}
+                  className="rounded-lg px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-slate-800">
                   <span className="mr-1">{meta.emoji}</span>{meta.label}
-                  {alreadyHas && <span className="ml-1 text-slate-600">✓</span>}
                 </button>
               );
             })}

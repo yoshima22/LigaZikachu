@@ -1,5 +1,15 @@
 // Calendário de recompensas do Passe Apoiador (sem "use server" — apenas dados)
 
+export type DayRewardItem = {
+  type: "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  coins?: number;
+  eggType?: string;
+  quantity?: number;
+  packName?: string;
+  shopItemName?: string;
+  zikalootSpecial?: boolean;
+};
+
 export type DayReward = {
   day: number;
   label: string;
@@ -14,7 +24,39 @@ export type DayReward = {
   zikalootSpecial?: boolean;
   emoji: string;
   isMilestone?: boolean;
+  /** Formato novo: preserva recompensas repetidas no mesmo dia. */
+  rewards?: DayRewardItem[];
 };
+
+/**
+ * Converte tanto calendarios antigos (campos achatados) quanto os novos em uma
+ * lista uniforme. Isso mantem todos os passes existentes compativeis.
+ */
+export function expandDayReward(reward: DayReward): DayRewardItem[] {
+  if (Array.isArray(reward.rewards) && reward.rewards.length > 0) {
+    return reward.rewards.filter((item): item is DayRewardItem => Boolean(item?.type));
+  }
+
+  const items: DayRewardItem[] = [];
+  if (reward.coins && reward.coins > 0) items.push({ type: "COINS", coins: reward.coins });
+  if (reward.eggType || reward.type === "EGG") {
+    items.push({ type: "EGG", eggType: reward.eggType ?? "COMMON", quantity: reward.foodQty ?? 1 });
+  }
+  if ((reward.foodType === "FOOD" || reward.type === "FOOD") && !reward.eggType) {
+    items.push({ type: "FOOD", quantity: reward.foodQty ?? 1 });
+  }
+  if (reward.foodType === "SWEET" || reward.type === "SWEET") {
+    items.push({ type: "SWEET", quantity: reward.foodQty ?? 1 });
+  }
+  if (reward.type === "STICKER_PACK" && reward.packName) {
+    items.push({ type: "STICKER_PACK", packName: reward.packName });
+  }
+  if (reward.shopItemName) items.push({ type: "SHOP_ITEM", shopItemName: reward.shopItemName });
+  if (reward.type === "ZIKALOOT") {
+    items.push({ type: "ZIKALOOT", zikalootSpecial: reward.zikalootSpecial ?? false });
+  }
+  return items;
+}
 
 // Schedules padrão por label. Cada label pode ser sobrescrito via PassScheduleConfig no DB.
 export const PASS_SCHEDULE_DEFAULTS: Record<string, DayReward[]> = {};
