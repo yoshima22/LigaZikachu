@@ -160,11 +160,11 @@ function QuickInteractButton({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setAccepted(true);
     type === "PLAY" ? markPlayed(mascotId) : markPetted(mascotId);
     startTransition(async () => {
       try {
         await queueMascotInteraction(mascotId, type);
+        setAccepted(true);
       } catch (error) {
         setAccepted(false);
         toast.error(error instanceof Error ? error.message : "Falha ao registrar a interacao.");
@@ -178,7 +178,8 @@ function QuickInteractButton({
       disabled={pending || accepted}
       onClick={handleClick}
       className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-      title={label}
+      title={pending ? "Enviando para a fila segura do servidor..." : label}
+      aria-label={pending ? `${label}: enviando para a fila do servidor` : label}
     >
       {pending ? <Loader2 size={10} className="animate-spin inline" /> : label}
     </button>

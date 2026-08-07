@@ -2,10 +2,13 @@
 
 type InteractionType = "PLAY" | "PET";
 type OutboxEntry = { id: string; mascotId: string; type: InteractionType; createdAt: number; batchId?: string };
+type OutboxWaiter = { resolve: () => void; reject: (error: Error) => void };
 
 const STORAGE_KEY = "liga-mascot-interaction-outbox-v1";
 const timers: Partial<Record<InteractionType, number>> = {};
 const sending: Partial<Record<InteractionType, boolean>> = {};
+const waiters = new Map<string, OutboxWaiter>();
+const ENQUEUE_WINDOW_MS = 40;
 
 function readOutbox(): OutboxEntry[] {
   try {
@@ -66,10 +69,31 @@ async function flush(type: InteractionType) {
       }),
       keepalive: true,
     });
-    if (!response.ok) throw new Error("Falha ao persistir lote de interacoes.");
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      const error = new Error(payload?.error || "Falha ao colocar a interacao na fila do servidor.");
+
+      // Erros 4xx nao serao resolvidos por uma tentativa futura. Remove apenas
+      // esse lote e devolve o erro ao botao; falhas transitorias continuam no
+      // outbox para reenvio idempotente.
+      if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+        const sentIds = new Set(entries.map(entry => entry.id));
+        writeOutbox(readOutbox().filter(entry => !sentIds.has(entry.id)));
+        for (const entry of entries) {
+          waiters.get(entry.id)?.reject(error);
+          waiters.delete(entry.id);
+        }
+        return;
+      }
+      throw error;
+    }
 
     const sentIds = new Set(entries.map(entry => entry.id));
     writeOutbox(readOutbox().filter(entry => !sentIds.has(entry.id)));
+    for (const entry of entries) {
+      waiters.get(entry.id)?.resolve();
+      waiters.delete(entry.id);
+    }
   } catch {
     // O lote continua no dispositivo e sera reenviado nesta pagina, ao voltar
     // ao site ou pelo pagehide. Nada e descartado por falha de rede.
@@ -82,18 +106,24 @@ async function flush(type: InteractionType) {
 }
 
 /**
- * Primeiro grava o clique de forma sincrona no dispositivo; so depois agenda
- * o envio agrupado. Assim paginacao, refresh e fechamento nao apagam a acao.
+ * Primeiro grava o clique de forma sincrona no dispositivo e imediatamente
+ * inicia o envio. A Promise so conclui depois do 202 do servidor: enquanto ela
+ * estiver pendente, a UI mostra o spinner correto. A janela curta agrupa
+ * cliques quase simultaneos sem atrasar perceptivelmente a confirmacao.
  */
 export function queueMascotInteraction(mascotId: string, type: InteractionType) {
+  const id = crypto.randomUUID();
   const entries = readOutbox();
-  entries.push({ id: crypto.randomUUID(), mascotId, type, createdAt: Date.now() });
+  entries.push({ id, mascotId, type, createdAt: Date.now() });
   writeOutbox(entries);
 
   const currentTimer = timers[type];
   if (typeof currentTimer === "number") window.clearTimeout(currentTimer);
-  timers[type] = window.setTimeout(() => void flush(type), 120);
-  return Promise.resolve();
+  timers[type] = window.setTimeout(() => void flush(type), ENQUEUE_WINDOW_MS);
+
+  return new Promise<void>((resolve, reject) => {
+    waiters.set(id, { resolve, reject });
+  });
 }
 
 if (typeof window !== "undefined") {

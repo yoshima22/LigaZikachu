@@ -189,7 +189,8 @@ function QuickInteractButton({
       type="button"
       disabled={isDisabled}
       onClick={handleClick}
-      title={getTitle()}
+      title={pending ? "Enviando para a fila segura do servidor..." : getTitle()}
+      aria-label={pending ? `${label}: enviando para a fila do servidor` : label}
       className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
     >
       {pending ? <Loader2 size={10} className="animate-spin inline" /> : label}
