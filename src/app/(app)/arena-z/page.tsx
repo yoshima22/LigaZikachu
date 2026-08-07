@@ -34,6 +34,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const TABS = ["salas", "equipes", "montar", "sus", "historico", "guia"] as const;
+const SUS_PAGE_SIZE = 6;
 type Tab = typeof TABS[number];
 
 function stateLabel(state: string, restingUntil?: Date | null) {
@@ -106,7 +107,7 @@ function getTeamBlockedReason(team: TeamReadiness): string | null {
 export default async function ArenaZPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; viewAs?: string; history?: string }>;
+  searchParams: Promise<{ tab?: string; viewAs?: string; history?: string; allyPage?: string; rivalPage?: string }>;
 }) {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
@@ -114,6 +115,8 @@ export default async function ArenaZPage({
   const params = await searchParams;
   const activeTab: Tab = (TABS.includes(params.tab as Tab) ? params.tab : "salas") as Tab;
   const historyView = params.history === "pvp" ? "pvp" : "mine";
+  const allyPage = Math.max(1, Number.parseInt(params.allyPage ?? "1", 10) || 1);
+  const rivalPage = Math.max(1, Number.parseInt(params.rivalPage ?? "1", 10) || 1);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },
@@ -166,7 +169,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   // buscar esses dados (alguns não cacheados) nas outras 5 tabs.
   const needsRoomsData = activeTab === "salas";
 
-  const [wallet, mascots, injuredMascotCount, teams, allActiveTeams, battles, recentIncomingBattle, arenaRankingData, lastRetiredTeam, injuredRivals, roomsData, topPlayers] = await Promise.all([
+  const [wallet, mascots, injuredMascotCount, teams, allActiveTeams, battles, recentIncomingBattle, arenaRankingData, lastRetiredTeam, injuredRivalData, roomsData, topPlayers] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
     needsMascotRoster
       ? prisma.mascot.findMany({
@@ -284,21 +287,40 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       select: { retiredAt: true },
     }),
     needsSusData
-      ? prisma.mascot.findMany({
-          where: {
-            arenaState: "INJURED",
-            playerId: { not: player.id },
-            relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } },
-          },
-          include: { player: { select: { displayName: true } } },
-          take: 10,
-        })
-      : Promise.resolve([]),
+      ? Promise.all([
+          prisma.mascot.findMany({
+            where: {
+              arenaState: "INJURED",
+              playerId: { not: player.id },
+              OR: [
+                { relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } } },
+                { relationsAsA: { some: { mascotB: { playerId: player.id }, type: "RIVAL" } } },
+              ],
+            },
+            include: { player: { select: { displayName: true } } },
+            orderBy: [{ injuredAt: "desc" }, { id: "asc" }],
+            skip: (rivalPage - 1) * SUS_PAGE_SIZE,
+            take: SUS_PAGE_SIZE,
+          }),
+          prisma.mascot.count({
+            where: {
+              arenaState: "INJURED",
+              playerId: { not: player.id },
+              OR: [
+                { relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } } },
+                { relationsAsA: { some: { mascotB: { playerId: player.id }, type: "RIVAL" } } },
+              ],
+            },
+          }),
+        ]).then(([items, total]) => ({ items, total }))
+      : Promise.resolve({ items: [], total: 0 }),
     needsRoomsData
       ? getRoomsData(player.id).catch(() => ({ rooms: ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] })), trainingRoom: { roomLevel: 0, isTraining: true, teamCount: 0, teams: [] as never[] } }))
       : Promise.resolve({ rooms: ARENA_ROOMS.map(r => ({ roomLevel: r, teamCount: 0, teams: [] as never[] })), trainingRoom: { roomLevel: 0, isTraining: true, teamCount: 0, teams: [] as never[] } }),
     getTopArenaPlayers().catch(() => [] as never[]),
   ]);
+  const injuredRivals = injuredRivalData.items;
+  const injuredRivalTotal = injuredRivalData.total;
 
   // Mascotes feridos de jogadores aliados (amizade entre mascotes)
   const friendPlayerIds = needsSusData
@@ -314,20 +336,27 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       `.then(rows => rows.map(row => row.playerId)).catch(() => [] as string[])
     : [];
 
-  const injuredFriends = friendPlayerIds.length > 0
-    ? await prisma.mascot.findMany({
-        where: {
-          playerId: { in: friendPlayerIds },
-          OR: [
-            { arenaState: "INJURED" },
-            { arenaState: "RESTING", restingUntil: { gt: new Date() } },
-          ],
-        },
-        include: { player: { select: { displayName: true } } },
-        orderBy: [{ arenaState: "asc" }, { restingUntil: "asc" }],
-        take: 50,
-      }).catch(() => [] as never[])
-    : [] as { id: string; pokemonId: number; nickname: string | null; level: number; restingUntil: Date | null; player: { displayName: string } }[];
+  const allyWhere = {
+    playerId: { in: friendPlayerIds },
+    OR: [
+      { arenaState: "INJURED" as const },
+      { arenaState: "RESTING" as const, restingUntil: { gt: new Date() } },
+    ],
+  };
+  const [injuredFriends, injuredFriendTotal] = friendPlayerIds.length > 0
+    ? await Promise.all([
+        prisma.mascot.findMany({
+          where: allyWhere,
+          include: { player: { select: { displayName: true } } },
+          orderBy: [{ arenaState: "asc" }, { restingUntil: "asc" }],
+          skip: (allyPage - 1) * SUS_PAGE_SIZE,
+          take: SUS_PAGE_SIZE,
+        }),
+        prisma.mascot.count({ where: allyWhere }),
+      ]).catch(() => [[], 0] as const)
+    : [[], 0] as const;
+  const allyPageCount = Math.max(1, Math.ceil(injuredFriendTotal / SUS_PAGE_SIZE));
+  const rivalPageCount = Math.max(1, Math.ceil(injuredRivalTotal / SUS_PAGE_SIZE));
 
   const opponentTeams = allActiveTeams.filter(t => t.playerId !== player.id);
 
@@ -1175,7 +1204,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
 
           {/* Rivais feridos */}
           {/* Aliados feridos — usar escudo */}
-          {injuredFriends.length > 0 && (
+          {injuredFriendTotal > 0 && (
             <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
               <h2 className="font-semibold text-blue-200 mb-1">🛡️ Aliados no SUS ou em Repouso</h2>
               <p className="text-xs text-slate-500 mb-3">
@@ -1200,10 +1229,25 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                   </div>
                 ))}
               </div>
+              {allyPageCount > 1 && (
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-blue-500/15 pt-3 text-xs">
+                  <Link
+                    href={`/arena-z?tab=sus&allyPage=${Math.max(1, allyPage - 1)}&rivalPage=${rivalPage}`}
+                    aria-disabled={allyPage <= 1}
+                    className={`rounded-lg border px-3 py-1.5 ${allyPage <= 1 ? "pointer-events-none border-slate-800 text-slate-600" : "border-blue-500/30 text-blue-300 hover:bg-blue-500/10"}`}
+                  >Anterior</Link>
+                  <span className="text-slate-500">Aliados · página {Math.min(allyPage, allyPageCount)} de {allyPageCount}</span>
+                  <Link
+                    href={`/arena-z?tab=sus&allyPage=${Math.min(allyPageCount, allyPage + 1)}&rivalPage=${rivalPage}`}
+                    aria-disabled={allyPage >= allyPageCount}
+                    className={`rounded-lg border px-3 py-1.5 ${allyPage >= allyPageCount ? "pointer-events-none border-slate-800 text-slate-600" : "border-blue-500/30 text-blue-300 hover:bg-blue-500/10"}`}
+                  >Próxima</Link>
+                </div>
+              )}
             </div>
           )}
 
-          {injuredRivals.length > 0 && (
+          {injuredRivalTotal > 0 && (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
               <h2 className="font-semibold text-red-200 mb-1">😈 Rivais Feridos</h2>
               <p className="text-xs text-slate-500 mb-3">Apenas rivais podem ser atacados oportunistamente. 1 ataque por período de ferimento.</p>
@@ -1229,6 +1273,21 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                   );
                 })}
               </div>
+              {rivalPageCount > 1 && (
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-red-500/15 pt-3 text-xs">
+                  <Link
+                    href={`/arena-z?tab=sus&allyPage=${allyPage}&rivalPage=${Math.max(1, rivalPage - 1)}`}
+                    aria-disabled={rivalPage <= 1}
+                    className={`rounded-lg border px-3 py-1.5 ${rivalPage <= 1 ? "pointer-events-none border-slate-800 text-slate-600" : "border-red-500/30 text-red-300 hover:bg-red-500/10"}`}
+                  >Anterior</Link>
+                  <span className="text-slate-500">Rivais · página {Math.min(rivalPage, rivalPageCount)} de {rivalPageCount}</span>
+                  <Link
+                    href={`/arena-z?tab=sus&allyPage=${allyPage}&rivalPage=${Math.min(rivalPageCount, rivalPage + 1)}`}
+                    aria-disabled={rivalPage >= rivalPageCount}
+                    className={`rounded-lg border px-3 py-1.5 ${rivalPage >= rivalPageCount ? "pointer-events-none border-slate-800 text-slate-600" : "border-red-500/30 text-red-300 hover:bg-red-500/10"}`}
+                  >Próxima</Link>
+                </div>
+              )}
             </div>
           )}
         </div>
