@@ -5,7 +5,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Gamepad2, Hand, Loader2, Users, Utensils } from "lucide-react";
 import { feedAllAction } from "../actions";
-import { clearPlayed, clearPetted, markPlayed, markPetted, isPlayOnCooldown, isPetOnCooldown } from "./mascot-card";
+import { clearPlayed, clearPetted, hydrateInteractionCooldown, markPlayed, markPetted, isPlayOnCooldown, isPetOnCooldown } from "./mascot-card";
 import { formatRemaining } from "@/hooks/use-timer-expiry";
 
 interface Props {
@@ -42,12 +42,14 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     mountedRef.current = true;
+    for (const mascotId of mascotIds) hydrateInteractionCooldown(mascotId);
+    setNowMs(Date.now());
     const iv = setInterval(() => setNowMs(Date.now()), 1000);
     return () => {
       mountedRef.current = false;
       clearInterval(iv);
     };
-  }, []);
+  }, [mascotIds]);
 
   // Contagem de mascotes que PODEM brincar/receber carinho agora
   const availableForPlay = mascotIds.filter(id => !isPlayOnCooldown(id, nowMs)).length;

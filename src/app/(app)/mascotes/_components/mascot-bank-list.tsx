@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, Search } fr
 import { toast } from "sonner";
 import { getPokemonElement, getPokemonTypes, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
 import { getMascotDetailAction } from "../actions";
-import { MascotCard, markPetted, markPlayed } from "./mascot-card";
+import { MascotCard, clearPetted, clearPlayed, markPetted, markPlayed } from "./mascot-card";
 import { queueMascotInteraction } from "./interaction-request-queue";
 
 export type BankMascot = {
@@ -167,6 +167,7 @@ function QuickInteractButton({
         setAccepted(true);
       } catch (error) {
         setAccepted(false);
+        type === "PLAY" ? clearPlayed(mascotId) : clearPetted(mascotId);
         toast.error(error instanceof Error ? error.message : "Falha ao registrar a interacao.");
       }
     });

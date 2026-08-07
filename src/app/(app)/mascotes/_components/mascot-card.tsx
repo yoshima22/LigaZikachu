@@ -138,7 +138,14 @@ const TYPE_LABELS: Record<string, string> = {
 const _playedAt = new Map<string, number>(); // mascotId → timestamp ms
 const _pettedAt = new Map<string, number>();
 
+const LS_PLAY_PREFIX = "playCd_";
 const LS_PET_PREFIX = "petCd_";
+function lsPlayGet(mascotId: string): number {
+  try { return parseInt(localStorage.getItem(LS_PLAY_PREFIX + mascotId) ?? "0", 10) || 0; } catch { return 0; }
+}
+function lsPlaySet(mascotId: string, ts: number) {
+  try { localStorage.setItem(LS_PLAY_PREFIX + mascotId, String(ts)); } catch { /* ignorado */ }
+}
 /** Lê o timestamp de carinho do localStorage (sobrevive a page refresh) */
 function lsPetGet(mascotId: string): number {
   try { return parseInt(localStorage.getItem(LS_PET_PREFIX + mascotId) ?? "0", 10) || 0; } catch { return 0; }
@@ -152,8 +159,15 @@ const PLAY_CD_MS = 45 * 60 * 1000;
 const PET_CD_MS  = 25 * 60 * 1000;
 
 /** Marca que o mascote acabou de brincar */
-export function markPlayed(mascotId: string) { _playedAt.set(mascotId, Date.now()); }
-export function clearPlayed(mascotId: string) { _playedAt.delete(mascotId); }
+export function markPlayed(mascotId: string) {
+  const now = Date.now();
+  _playedAt.set(mascotId, now);
+  lsPlaySet(mascotId, now);
+}
+export function clearPlayed(mascotId: string) {
+  _playedAt.delete(mascotId);
+  try { localStorage.removeItem(LS_PLAY_PREFIX + mascotId); } catch { /* ignorado */ }
+}
 /** Marca que o mascote acabou de receber carinho (persiste no localStorage) */
 export function markPetted(mascotId: string) {
   const now = Date.now();
@@ -163,6 +177,13 @@ export function markPetted(mascotId: string) {
 export function clearPetted(mascotId: string) {
   _pettedAt.delete(mascotId);
   try { localStorage.removeItem(LS_PET_PREFIX + mascotId); } catch { /* ignorado */ }
+}
+/** Restaura os marcadores locais depois que o componente monta no navegador. */
+export function hydrateInteractionCooldown(mascotId: string) {
+  const playedAt = lsPlayGet(mascotId);
+  const pettedAt = lsPetGet(mascotId);
+  if (playedAt > (_playedAt.get(mascotId) ?? 0)) _playedAt.set(mascotId, playedAt);
+  if (pettedAt > (_pettedAt.get(mascotId) ?? 0)) _pettedAt.set(mascotId, pettedAt);
 }
 /** Verifica se brincar está em cooldown agora */
 export function isPlayOnCooldown(mascotId: string, nowMs: number): boolean {
@@ -575,21 +596,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   // Semeia o Map de cooldown a partir do servidor (sobrevive a refresh de pagina).
   // Brincar e carinho possuem cooldowns independentes.
   useEffect(() => {
-    const ts = mascot.lastPlayedAt ? new Date(mascot.lastPlayedAt).getTime() : 0;
+    const serverTs = mascot.lastPlayedAt ? new Date(mascot.lastPlayedAt).getTime() : 0;
+    const ts = Math.max(serverTs, lsPlayGet(mascot.id));
     if (ts > 0 && ts > (_playedAt.get(mascot.id) ?? 0)) {
       _playedAt.set(mascot.id, ts);
       setNowMs(Date.now());
     }
   }, [mascot.id, mascot.lastPlayedAt]);
-  // Semeia cooldown de carinho a partir do localStorage (persiste entre refreshes)
+  // Semeia carinho a partir do servidor e do localStorage.
   useEffect(() => {
-    const ts = lsPetGet(mascot.id);
+    const serverTs = mascot.lastPettedAt ? new Date(mascot.lastPettedAt).getTime() : 0;
+    const ts = Math.max(serverTs, lsPetGet(mascot.id));
     if (ts > 0 && ts > (_pettedAt.get(mascot.id) ?? 0)) {
       _pettedAt.set(mascot.id, ts);
       setNowMs(Date.now());
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mascot.id]); // roda só na montagem — localStorage é lido uma vez por componente
+  }, [mascot.id, mascot.lastPettedAt]);
 
   // Cooldowns independentes — lidos do Map de módulo (sobrevive a remounts)
   const playEndMs = (_playedAt.get(mascot.id) ?? 0) + PLAY_CD_MS;
