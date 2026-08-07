@@ -50,7 +50,7 @@ export async function getActiveSchedule(scheduleKey?: string): Promise<DayReward
       : ["singleton"];
     for (const id of ids) {
       const cfg = await prisma.passScheduleConfig.findUnique({ where: { id } });
-      if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30)
+      if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length > 0)
         return cfg.schedule as DayReward[];
     }
   } catch { /* tabela ainda não existe — usa fallback */ }
@@ -68,7 +68,7 @@ export async function adminGetSchedule(
   const display = await getPassDisplayConfig(label);
   try {
     const cfg = await prisma.passScheduleConfig.findUnique({ where: { id: label === "Passe Apoiador" ? "singleton" : label } });
-    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length === 30)
+    if (cfg && Array.isArray(cfg.schedule) && (cfg.schedule as DayReward[]).length > 0)
       return {
         schedule: cfg.schedule as DayReward[],
         isCustom: true,
@@ -100,7 +100,12 @@ export async function adminSaveSchedule(
   try {
     await requireAdmin();
     const user = await getSessionUser();
-    if (schedule.length !== 30) return { ok: false, error: "O calendário precisa ter exatamente 30 dias." };
+    if (schedule.length < 1 || schedule.length > 365) {
+      return { ok: false, error: "O calendário precisa ter entre 1 e 365 dias." };
+    }
+    if (schedule.some((reward, index) => reward.day !== index + 1)) {
+      return { ok: false, error: "Os dias do calendário precisam ser sequenciais, começando no dia 1." };
+    }
     // "Passe Apoiador" usa id="singleton" para compatibilidade com passes antigos
     const id = (!scheduleKey || scheduleKey === "Passe Apoiador") ? "singleton" : scheduleKey;
     const current = await prisma.passScheduleConfig.findUnique({
@@ -169,6 +174,37 @@ export async function adminResetSchedule(scheduleKey?: string): Promise<{ ok: bo
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro ao resetar." };
+  }
+}
+
+export async function adminDeletePassSchedule(
+  scheduleKey: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const label = scheduleKey.trim();
+    if (!label || label === "Passe Apoiador") {
+      return { ok: false, error: "O Passe Apoiador padrão não pode ser excluído." };
+    }
+
+    const activePasses = await prisma.supporterPass.count({
+      where: { passLabel: label, active: true, expiresAt: { gt: new Date() } },
+    });
+    if (activePasses > 0) {
+      return {
+        ok: false,
+        error: `Este passe ainda está ativo para ${activePasses} jogador(es). Revogue ou aguarde o encerramento antes de excluí-lo.`,
+      };
+    }
+
+    const deleted = await prisma.passScheduleConfig.deleteMany({ where: { id: label } });
+    if (deleted.count === 0) return { ok: false, error: "Tipo de passe não encontrado ou não removível." };
+
+    revalidatePath("/admin");
+    revalidatePath("/passe-apoiador");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro ao excluir passe." };
   }
 }
 
@@ -252,7 +288,7 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
       startsAt: p.startsAt,
       expiresAt: p.expiresAt,
       passLabel: p.passLabel ?? "Passe Apoiador",
-      totalDays: Math.max(1, Math.min(30, Math.ceil((p.expiresAt.getTime() - p.startsAt.getTime()) / 86400000))),
+      totalDays: Math.max(1, Math.min(365, Math.ceil((p.expiresAt.getTime() - p.startsAt.getTime()) / 86400000))),
       daysRemaining: Math.max(0, Math.ceil((p.expiresAt.getTime() - now.getTime()) / 86400000)),
       claimsCount: p.claims.filter((claim) => claim.rewardType !== "DEBUG_SKIP").length,
     }));
@@ -279,7 +315,7 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     // independente do horário em que o passe foi criado.
     const daysElapsed = calendarDaysBRT(pass.startsAt, now);
     const daysRemaining = Math.max(0, Math.ceil((pass.expiresAt.getTime() - now.getTime()) / 86400000));
-    const totalDays = Math.max(1, Math.min(30, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
+    const totalDays = Math.max(1, Math.min(365, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
     const todayDay = Math.min(totalDays, daysElapsed + 1);
     const alreadyClaimed = pass.claims.some(c => c.dayNumber === todayDay);
     const canClaimToday = !isExpired && !alreadyClaimed && todayDay >= 1 && todayDay <= totalDays;
@@ -341,7 +377,7 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (pass.claims.length > 0) return { ok: false, error: "Dia já resgatado." };
 
     // Verificar que o dia já chegou (calendário BRT, não 24h corridas)
-    const passTotalDays = Math.max(1, Math.min(30, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
+    const passTotalDays = Math.max(1, Math.min(365, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
     const currentDay = Math.min(passTotalDays, calendarDaysBRT(pass.startsAt, new Date()) + 1);
     if (!pass.allowRetroactiveClaims && dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
     if (dayNumber < 1 || dayNumber > passTotalDays) return { ok: false, error: "Dia inválido para este passe." };
@@ -481,7 +517,7 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
 export async function adminGrantVip(opts: {
   playerId: string;
   days: number;
-  /** Iniciar o passe a partir deste dia (1–30). Dias anteriores serão marcados como resgatados sem entregar recompensas. */
+  /** Iniciar o passe a partir deste dia. Dias anteriores serão marcados como resgatados sem entregar recompensas. */
   startDay?: number;
   /** Rótulo/tier do passe (ex: "Passe Gold"). Default: "Passe Apoiador". */
   passLabel?: string;
@@ -493,7 +529,10 @@ export async function adminGrantVip(opts: {
     const player = await prisma.player.findUnique({ where: { id: opts.playerId }, select: { id: true, displayName: true } });
     if (!player) return { ok: false, error: "Jogador não encontrado." };
 
-    const startDay = Math.max(1, Math.min(30, opts.startDay ?? 1));
+    const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
+    const activeSchedule = await getActiveSchedule(passLabel);
+    const days = Math.max(1, Math.min(activeSchedule.length, Math.floor(opts.days)));
+    const startDay = Math.max(1, Math.min(activeSchedule.length, opts.startDay ?? 1));
 
     // Se startDay > 1, rewind startsAt para que "hoje" seja o dia startDay.
     // Usamos meia-noite BRT do dia de criação menos (startDay-1) dias, para que
@@ -506,7 +545,7 @@ export async function adminGrantVip(opts: {
     const startsAt = startDay > 1
       ? new Date(todayBRTMidnight.getTime() - (startDay - 1) * 86400000)
       : now;
-    const expiresAt = new Date(startsAt.getTime() + opts.days * 86400000);
+    const expiresAt = new Date(startsAt.getTime() + days * 86400000);
 
     // Encontrar ou criar o título "Pilar da Comunidade"
     let titleItem = await prisma.shopItem.findFirst({
@@ -541,7 +580,6 @@ export async function adminGrantVip(opts: {
       });
     }
 
-    const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
     const passSchedule = await prisma.passScheduleConfig.findUnique({
       where: { id: passLabel === "Passe Apoiador" ? "singleton" : passLabel },
       select: { allowRetroactiveClaims: true },
@@ -561,7 +599,6 @@ export async function adminGrantVip(opts: {
 
     // Pré-criar claims para dias anteriores ao startDay (sem entregar recompensas)
     if (startDay > 1) {
-      const activeSchedule = await getActiveSchedule(passLabel);
       await prisma.supporterPassClaim.createMany({
         data: Array.from({ length: startDay - 1 }, (_, i) => {
           const day = i + 1;
@@ -587,7 +624,7 @@ export async function adminGrantVip(opts: {
         action: "VIP_GRANTED",
         entityType: "SupporterPass",
         entityId: pass.id,
-        metadata: { playerId: opts.playerId, playerName: player.displayName, days: opts.days, startDay, expiresAt },
+        metadata: { playerId: opts.playerId, playerName: player.displayName, days, startDay, expiresAt },
       },
     });
 
@@ -609,9 +646,10 @@ export async function adminGrantVipToAll(opts: {
 }): Promise<{ ok: boolean; granted: number; skipped: number; total: number; error?: string }> {
   try {
     await requireAdmin();
-    const days = Math.max(1, Math.min(365, Math.floor(opts.days)));
     const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
-    const startDay = Math.max(1, Math.min(30, opts.startDay ?? 1));
+    const activeSchedule = await getActiveSchedule(passLabel);
+    const days = Math.max(1, Math.min(activeSchedule.length, Math.floor(opts.days)));
+    const startDay = Math.max(1, Math.min(activeSchedule.length, opts.startDay ?? 1));
     const skipExisting = opts.skipExisting ?? true;
 
     const players = await prisma.player.findMany({

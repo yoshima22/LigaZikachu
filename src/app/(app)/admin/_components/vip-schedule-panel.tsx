@@ -14,6 +14,7 @@ import {
   adminSaveSchedule, adminResetSchedule, adminGetSchedule,
   adminGrantVip, adminGrantVipToAll, adminSetRetroactiveClaims, adminRevokeVip,
   adminSetPassScheduleRetroactive, adminCreatePassSchedule, adminSavePassDisplayConfig,
+  adminDeletePassSchedule,
 } from "@/app/(app)/passe-apoiador/actions";
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
@@ -207,6 +208,7 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
     () => Object.fromEntries(activeVips.map(v => [v.passId, v.allowRetroactiveClaims]))
   );
   const [createTypePending, startCreateType] = useTransition();
+  const [deleteTypePending, startDeleteType] = useTransition();
   const dirtyRef = useRef(dirtyMap);
   dirtyRef.current = dirtyMap;
 
@@ -217,6 +219,7 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [durationDays, setDurationDays] = useState(30);
   const [startDay, setStartDay] = useState(1);
+  const [passSizeInput, setPassSizeInput] = useState(allSchedules[0]?.schedule.length ?? 30);
   const [skipExistingPasses, setSkipExistingPasses] = useState(true);
   const [showGrantForm, setShowGrantForm] = useState(false);
 
@@ -268,6 +271,12 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
   };
   const dirty = dirtyMap[activeLabel] ?? false;
 
+  useEffect(() => {
+    setPassSizeInput(schedule.length || 1);
+    setDurationDays(schedule.length || 1);
+    setStartDay(current => Math.min(current, schedule.length || 1));
+  }, [activeLabel, schedule.length]);
+
   const switchLabel = (label: string) => {
     setEditingDay(null);
     setActiveLabel(label);
@@ -288,6 +297,40 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
         }));
       });
     }
+  };
+
+  const handleResizeSchedule = () => {
+    const nextSize = Math.max(1, Math.min(365, Math.floor(passSizeInput || 1)));
+    if (nextSize === schedule.length) return;
+    if (nextSize < schedule.length && !confirm(
+      `Reduzir "${activeLabel}" de ${schedule.length} para ${nextSize} dias? As recompensas dos dias removidos serão apagadas ao salvar.`
+    )) return;
+
+    setScheduleMap(prev => {
+      const current = prev[activeLabel] ?? [];
+      const resized = nextSize < current.length
+        ? current.slice(0, nextSize)
+        : [
+            ...current,
+            ...Array.from({ length: nextSize - current.length }, (_, index): DayReward => {
+              const day = current.length + index + 1;
+              return {
+                day,
+                label: `Recompensa do Dia ${day}`,
+                type: "COINS",
+                coins: 100,
+                emoji: "🎁",
+                rewards: [{ type: "COINS", coins: 100 }],
+              };
+            }),
+          ];
+      return { ...prev, [activeLabel]: resized };
+    });
+    if (editingDay !== null && editingDay > nextSize) setEditingDay(null);
+    setDirtyMap(prev => ({ ...prev, [activeLabel]: true }));
+    setDurationDays(nextSize);
+    setStartDay(current => Math.min(current, nextSize));
+    toast.success(`Tamanho ajustado para ${nextSize} dias. Salve as alterações para confirmar.`);
   };
 
   const updateDisplayField = (field: "displayTitle" | "description" | "flavorText", value: string) => {
@@ -353,12 +396,38 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
           },
         }));
         setActiveLabel(result.label);
+        setDurationDays(result.schedule.length);
+        setPassSizeInput(result.schedule.length);
         setNewPassLabel("");
         setShowCreateTypeForm(false);
         toast.success(`Tipo de passe "${result.label}" criado.`);
       } else {
         toast.error(result.error ?? "Erro ao criar tipo de passe.");
       }
+    });
+  };
+
+  const handleDeletePassType = () => {
+    if (activeLabel === "Passe Apoiador") return;
+    if (!confirm(`Excluir definitivamente o tipo de passe "${activeLabel}"? O calendário e os textos configurados serão removidos.`)) return;
+    const labelToDelete = activeLabel;
+    startDeleteType(async () => {
+      const result = await adminDeletePassSchedule(labelToDelete);
+      if (!result.ok) {
+        toast.error(result.error ?? "Erro ao excluir passe.");
+        return;
+      }
+
+      const remainingLabels = Object.keys(scheduleMap).filter(label => label !== labelToDelete);
+      const nextLabel = remainingLabels[0] ?? "Passe Apoiador";
+      setScheduleMap(prev => Object.fromEntries(Object.entries(prev).filter(([label]) => label !== labelToDelete)));
+      setCustomMap(prev => Object.fromEntries(Object.entries(prev).filter(([label]) => label !== labelToDelete)));
+      setRetroConfigMap(prev => Object.fromEntries(Object.entries(prev).filter(([label]) => label !== labelToDelete)));
+      setDisplayMap(prev => Object.fromEntries(Object.entries(prev).filter(([label]) => label !== labelToDelete)));
+      setDirtyMap(prev => Object.fromEntries(Object.entries(prev).filter(([label]) => label !== labelToDelete)));
+      setEditingDay(null);
+      setActiveLabel(nextLabel);
+      toast.success(`Passe "${labelToDelete}" excluído.`);
     });
   };
 
@@ -535,6 +604,19 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
               <Plus size={11} />
               Novo tipo
             </Button>
+            {activeLabel !== "Passe Apoiador" && isCustom && (
+              <Button
+                onClick={handleDeletePassType}
+                disabled={deleteTypePending || labelVips.length > 0}
+                variant="ghost"
+                size="sm"
+                title={labelVips.length > 0 ? "Revogue ou aguarde o fim dos passes ativos antes de excluir este tipo." : "Excluir este tipo de passe"}
+                className="h-7 gap-1.5 rounded-full border border-red-500/30 px-3 text-xs text-red-400 hover:bg-red-500/10"
+              >
+                <Trash2 size={11} />
+                {deleteTypePending ? "Excluindo..." : "Excluir passe"}
+              </Button>
+            )}
           </div>
 
           {showCreateTypeForm && (
@@ -662,15 +744,16 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
                     className="flex-1 min-w-48"
                   />
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-slate-400 whitespace-nowrap">Dias:</label>
-                    <input type="number" min={1} max={365} value={durationDays}
-                      onChange={e => setDurationDays(Number(e.target.value))}
+                    <label className="text-xs text-slate-400 whitespace-nowrap">Duração:</label>
+                    <input type="number" min={1} max={schedule.length} value={durationDays}
+                      onChange={e => setDurationDays(Math.max(1, Math.min(schedule.length, Number(e.target.value))))}
                       className="w-20 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
+                    <span className="text-[10px] text-slate-600">de {schedule.length} dias</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-slate-400 whitespace-nowrap">Iniciar dia:</label>
-                    <input type="number" min={1} max={30} value={startDay}
-                      onChange={e => setStartDay(Math.max(1, Math.min(30, Number(e.target.value))))}
+                    <input type="number" min={1} max={schedule.length} value={startDay}
+                      onChange={e => setStartDay(Math.max(1, Math.min(schedule.length, Number(e.target.value))))}
                       className="w-16 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
                   </div>
                   <Button onClick={handleGrantForLabel} disabled={grantPending || !selectedPlayerId}
@@ -757,6 +840,30 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
 
           {/* Toolbar */}
           <div className="space-y-2">
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3">
+              <label className="space-y-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-widest text-cyan-300">Tamanho do passe completo</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={passSizeInput}
+                  onChange={event => setPassSizeInput(Math.max(1, Math.min(365, Number(event.target.value))))}
+                  className="w-28 rounded-lg border border-cyan-500/30 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
+                />
+              </label>
+              <Button
+                onClick={handleResizeSchedule}
+                disabled={passSizeInput === schedule.length}
+                variant="outline"
+                className="h-9 border-cyan-500/30 bg-cyan-500/10 text-xs text-cyan-200 hover:bg-cyan-500/20"
+              >
+                Aplicar tamanho
+              </Button>
+              <p className="max-w-xl text-[11px] text-slate-500">
+                Aumentar cria novos dias editáveis com uma recompensa inicial. Reduzir remove os dias excedentes depois que você salvar.
+              </p>
+            </div>
             <div className="flex items-center justify-between flex-wrap gap-3">
               <p className="text-xs text-slate-400">
                 Editando: <strong className="text-purple-300">{activeLabel}</strong>. Clique em um dia para editar os slots. Salve para ativar.

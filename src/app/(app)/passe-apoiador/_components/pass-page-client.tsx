@@ -69,7 +69,7 @@ export function PassPageClient({ status, schedule }: Props) {
         </div>
         <div className="rounded-2xl border border-border bg-slate-950/40 p-6 max-w-sm w-full space-y-3 text-left">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">O que você ganha</p>
-          {["30 dias de recompensas diárias", "ZikaCoins, Ovos, Itens do Shop", "Título exclusivo Pilar da Comunidade", "Efeito de entrada único no perfil", "Pacotes de figurinhas que abrem na hora"].map(b => (
+          {[`${schedule.length} dias de recompensas diárias`, "ZikaCoins, Ovos, Itens do Shop", "Título exclusivo Pilar da Comunidade", "Efeito de entrada único no perfil", "Pacotes de figurinhas que abrem na hora"].map(b => (
             <div key={b} className="flex items-center gap-2 text-sm text-slate-300">
               <Sparkles size={12} className="text-yellow-400 shrink-0" />
               {b}
