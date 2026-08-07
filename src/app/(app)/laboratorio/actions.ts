@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
-import { EggType, ZikaCoinTxType } from "@prisma/client";
+import { EggType, FoodType, ShopItemType, ZikaCoinTxType } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
@@ -13,6 +13,7 @@ import { getMascotRarity } from "./rarity";
 import { calculateLabDust } from "./dust";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MEGA_STONES } from "@/lib/mega-evolution";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 // A primeira análise desbloqueia simulações gratuitas permanentes para o mascote.
 const ANALYSIS_COST = 100;
@@ -46,6 +47,8 @@ const WEEKLY_LIMITS = { coinsTraded: 5, commonEggs: 10, rareEggs: 4, specialEggs
 const SHOP_COSTS = { coins: 10, commonEgg: 15, rareEgg: 25, specialEgg: 40 } as const;
 const MONTHLY_SHOP_COSTS = { labEgg: 250, evolutionStone: 300 } as const;
 const SHOP_REWARDS = { coins: 400 } as const;
+const FOOD_TRADE_COSTS = { SWEET: 10, HONEY_CANDY: 150, FRESH_WATER: 100 } as const;
+const FOOD_TRADE_LIMITS = { honeyCandies: 3, freshWaters: 3 } as const;
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 async function requirePlayer() {
@@ -106,7 +109,7 @@ async function getWeeklyLeagueLockedMascotIds(playerId: string) {
 export async function getLabDataAction() {
   const me = await requirePlayer();
 
-  const [player, mascots, weeklyUsage, monthlyUsage] = await Promise.all([
+  const [player, mascots, weeklyUsage, monthlyUsage, foodItems] = await Promise.all([
     prisma.player.findUnique({
       where: { id: me.id },
       select: { creationDust: true },
@@ -123,6 +126,10 @@ export async function getLabDataAction() {
     }),
     getOrCreateWeeklyUsage(me.id),
     getOrCreateMonthlyUsage(me.id),
+    prisma.mascotFoodItem.findMany({
+      where: { playerId: me.id, type: { in: [FoodType.FOOD, FoodType.SWEET] } },
+      select: { type: true, quantity: true },
+    }),
   ]);
 
   const [wallet, weeklyLeagueLockedIds] = await Promise.all([
@@ -173,6 +180,8 @@ export async function getLabDataAction() {
       commonEggs: weeklyUsage.commonEggs,
       rareEggs: weeklyUsage.rareEggs,
       specialEggs: weeklyUsage.specialEggs,
+      honeyCandies: weeklyUsage.honeyCandies,
+      freshWaters: weeklyUsage.freshWaters,
     },
     monthlyUsage: {
       labEggs: monthlyUsage.labEggs,
@@ -185,7 +194,101 @@ export async function getLabDataAction() {
     limits: WEEKLY_LIMITS,
     costs: SHOP_COSTS,
     monthlyCosts: MONTHLY_SHOP_COSTS,
+    foodTrades: {
+      food: foodItems.find((item) => item.type === FoodType.FOOD)?.quantity ?? 0,
+      sweets: foodItems.find((item) => item.type === FoodType.SWEET)?.quantity ?? 0,
+      costs: FOOD_TRADE_COSTS,
+      limits: FOOD_TRADE_LIMITS,
+    },
   };
+}
+
+// ── Trocas de comida ────────────────────────────────────────────────────────
+export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER") {
+  const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
+
+  const cost = FOOD_TRADE_COSTS[kind];
+  const weekKey = getWeekKey();
+  const usageField = kind === "HONEY_CANDY"
+    ? "honeyCandies" as const
+    : kind === "FRESH_WATER"
+      ? "freshWaters" as const
+      : null;
+  const itemType = kind === "HONEY_CANDY"
+    ? ShopItemType.MASCOT_BUFF_HAPPY
+    : ShopItemType.MASCOT_BUFF_MOOD;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const usage = await tx.labWeeklyUsage.upsert({
+        where: { playerId_weekKey: { playerId: me.id, weekKey } },
+        create: { playerId: me.id, weekKey },
+        update: {},
+      });
+
+      if (usageField && usage[usageField] >= FOOD_TRADE_LIMITS[usageField]) {
+        throw new Error(`Limite semanal atingido (${FOOD_TRADE_LIMITS[usageField]}x/semana).`);
+      }
+
+      const consumed = await tx.mascotFoodItem.updateMany({
+        where: { playerId: me.id, type: FoodType.FOOD, quantity: { gte: cost } },
+        data: { quantity: { decrement: cost } },
+      });
+      if (consumed.count !== 1) throw new Error(`Comida insuficiente. Necessário: ${cost} comidas.`);
+
+      if (kind === "SWEET") {
+        await tx.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: me.id, type: FoodType.SWEET } },
+          create: { playerId: me.id, type: FoodType.SWEET, quantity: 1 },
+          update: { quantity: { increment: 1 } },
+        });
+      } else {
+        const shopItem = await tx.shopItem.findFirst({
+          where: { type: itemType },
+          orderBy: [{ active: "desc" }, { createdAt: "asc" }],
+          select: { id: true, name: true },
+        });
+        if (!shopItem) throw new Error("O item desta troca ainda não está cadastrado na ZikaShop.");
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: me.id, itemId: shopItem.id } },
+          create: { playerId: me.id, itemId: shopItem.id, quantity: 1, source: "LAB_FOOD_TRADE" },
+          update: { quantity: { increment: 1 } },
+        });
+      }
+
+      if (usageField) {
+        await tx.labWeeklyUsage.update({
+          where: { id: usage.id },
+          data: { [usageField]: { increment: 1 } },
+        });
+      }
+
+      const rewardLabel = kind === "SWEET" ? "1 Doce" : kind === "HONEY_CANDY" ? "1 Bala de Mel" : "1 Água Fresca";
+      await recordPlayerActivity(tx, {
+        playerId: me.id,
+        category: "ITEM",
+        action: "LAB_FOOD_TRADE",
+        summary: `Laboratório: ${cost} comidas trocadas por ${rewardLabel}`,
+        source: "LABORATORY",
+        entityType: "labFoodTrade",
+        entityId: kind,
+        amount: cost,
+        unit: "FOOD",
+        after: { kind, foodSpent: cost, rewardLabel, rewardQuantity: 1 },
+      });
+
+      return {
+        foodSpent: cost,
+        rewardLabel,
+      };
+    }, { isolationLevel: "Serializable" });
+
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível concluir a troca." };
+  }
 }
 
 // ── Recycle mascot ────────────────────────────────────────────────────────────

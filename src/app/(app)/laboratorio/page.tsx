@@ -115,6 +115,7 @@ export default async function LaboratorioPage() {
       limits={data.limits}
       costs={data.costs}
       monthlyCosts={data.monthlyCosts}
+      initialFoodTrades={data.foodTrades}
       initialCoinBalance={data.coinBalance}
       analysisCost={data.analysisCost}
     />

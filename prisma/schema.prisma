@@ -361,6 +361,8 @@ model LabWeeklyUsage {
   commonEggs  Int      @default(0)
   rareEggs    Int      @default(0)
   specialEggs Int      @default(0)
+  honeyCandies Int     @default(0)
+  freshWaters  Int     @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)

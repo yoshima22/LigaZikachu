@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
-import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction } from "../actions";
+import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction, tradeFoodInLabAction } from "../actions";
 import type { MascotRarity } from "../rarity";
 import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
@@ -28,11 +28,24 @@ type LabMascot = {
   performanceTag?: string | null;
 };
 
-type WeeklyUsage = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
+type WeeklyUsage = {
+  coinsTraded: number;
+  commonEggs: number;
+  rareEggs: number;
+  specialEggs: number;
+  honeyCandies: number;
+  freshWaters: number;
+};
 type Limits = { coinsTraded: number; commonEggs: number; rareEggs: number; specialEggs: number };
 type Costs = { coins: number; commonEgg: number; rareEgg: number; specialEgg: number };
 type MonthlyUsage = { labEggs: number; evolutionStones: number };
 type MonthlyCosts = { labEgg: number; evolutionStone: number };
+type FoodTrades = {
+  food: number;
+  sweets: number;
+  costs: { SWEET: number; HONEY_CANDY: number; FRESH_WATER: number };
+  limits: { honeyCandies: number; freshWaters: number };
+};
 
 const RARITY_LABEL: Record<MascotRarity, string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial" };
 const RARITY_COLOR: Record<MascotRarity, string> = {
@@ -52,6 +65,7 @@ interface Props {
   limits: Limits;
   costs: Costs;
   monthlyCosts: MonthlyCosts;
+  initialFoodTrades: FoodTrades;
   initialCoinBalance: number;
   analysisCost: number;
 }
@@ -94,13 +108,14 @@ function calcSlotDust(slots: LabMascot[]): { total: number; breakdown: { mascot:
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, initialMonthlyUsage, weeklyEvolutionStone, limits, costs, monthlyCosts, initialCoinBalance, analysisCost }: Props) {
+export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, initialMonthlyUsage, weeklyEvolutionStone, limits, costs, monthlyCosts, initialFoodTrades, initialCoinBalance, analysisCost }: Props) {
   const [tab, setTab] = useState<"recycle" | "shop" | "analyze">("recycle");
   const [dust, setDust] = useState(initialDust);
   const [coinBalance, setCoinBalance] = useState(initialCoinBalance);
   const [mascots, setMascots] = useState(initialMascots);
   const [weeklyUsage, setWeeklyUsage] = useState(initialWeeklyUsage);
   const [monthlyUsage, setMonthlyUsage] = useState(initialMonthlyUsage);
+  const [foodTrades, setFoodTrades] = useState(initialFoodTrades);
   const [search, setSearch] = useState("");
   const [perfFilter, setPerfFilter] = useState("");
   const [page, setPage] = useState(0);
@@ -198,6 +213,24 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
     });
   };
 
+  const handleFoodTrade = (kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER") => {
+    start(async () => {
+      const res = await tradeFoodInLabAction(kind);
+      if (!res.ok) { showFeedback(false, res.error); return; }
+      setFoodTrades((current) => ({
+        ...current,
+        food: current.food - res.foodSpent,
+        sweets: kind === "SWEET" ? current.sweets + 1 : current.sweets,
+      }));
+      if (kind === "HONEY_CANDY") {
+        setWeeklyUsage((usage) => ({ ...usage, honeyCandies: usage.honeyCandies + 1 }));
+      } else if (kind === "FRESH_WATER") {
+        setWeeklyUsage((usage) => ({ ...usage, freshWaters: usage.freshWaters + 1 }));
+      }
+      showFeedback(true, `${res.rewardLabel} adicionado ao seu inventário!`);
+    });
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       {/* Header */}
@@ -205,7 +238,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFCB05]/10 text-2xl">🧪</div>
         <div>
           <h1 className="text-xl font-bold text-white">Laboratório do Prof. Enguiça</h1>
-          <p className="text-sm text-slate-400">Recicle mascotes e troque Pó de Criação por recompensas.</p>
+          <p className="text-sm text-slate-400">Recicle mascotes e troque Pó de Criação ou comida por recompensas.</p>
         </div>
         <div className="ml-auto flex items-center gap-2 rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-4 py-2">
           <span className="text-lg">🧫</span>
@@ -252,6 +285,15 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             <p>💎 <strong className="text-cyan-300">Pedra de Evolução semanal</strong> — 300 Pó de Criação · limite 1×/mês</p>
           </div>
           <p>Os limites reiniciam toda segunda-feira.</p>
+        </GuideSection>
+
+        <GuideSection icon="🍖" title="O que posso trocar usando comida?">
+          <div className="rounded-lg border border-border/40 bg-slate-900/60 p-3 space-y-1">
+            <p>🍬 <strong className="text-slate-200">1 Doce</strong> — 10 comidas · sem limite</p>
+            <p>🍯 <strong className="text-amber-300">1 Bala de Mel</strong> — 150 comidas · limite 3×/semana</p>
+            <p>💧 <strong className="text-cyan-300">1 Água Fresca</strong> — 100 comidas · limite 3×/semana</p>
+          </div>
+          <p>Os limites da Bala de Mel e da Água Fresca reiniciam toda segunda-feira e são contados separadamente.</p>
         </GuideSection>
       </div>
 
@@ -488,6 +530,49 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
           <p className="mb-4 text-xs text-slate-500">
             Troque Pó de Criação por recompensas. Os limites semanais reiniciam na segunda-feira; os mensais, no dia 01.
           </p>
+          <div className="pt-1">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300">Trocas de comida</p>
+              <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                <span>🍖 <strong className="text-slate-200">{foodTrades.food}</strong> comidas</span>
+                <span>🍬 <strong className="text-slate-200">{foodTrades.sweets}</strong> doces</span>
+              </div>
+            </div>
+          </div>
+          <FoodTradeItem
+            title="1 Doce"
+            description="Converta 10 comidas padrão em um doce. Esta troca não possui limite."
+            emoji="🍬"
+            cost={foodTrades.costs.SWEET}
+            food={foodTrades.food}
+            isPending={isPending}
+            onBuy={() => handleFoodTrade("SWEET")}
+          />
+          <FoodTradeItem
+            title="1 Bala de Mel"
+            description="Leva a felicidade a 100 e tem 40% de chance de criar amizade ou gerar um evento social."
+            emoji="🍯"
+            cost={foodTrades.costs.HONEY_CANDY}
+            food={foodTrades.food}
+            used={weeklyUsage.honeyCandies}
+            limit={foodTrades.limits.honeyCandies}
+            isPending={isPending}
+            onBuy={() => handleFoodTrade("HONEY_CANDY")}
+          />
+          <FoodTradeItem
+            title="1 Água Fresca"
+            description="Remove imediatamente o humor negativo de um mascote."
+            emoji="💧"
+            cost={foodTrades.costs.FRESH_WATER}
+            food={foodTrades.food}
+            used={weeklyUsage.freshWaters}
+            limit={foodTrades.limits.freshWaters}
+            isPending={isPending}
+            onBuy={() => handleFoodTrade("FRESH_WATER")}
+          />
+          <div className="pt-2">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]">Trocas de Pó de Criação</p>
+          </div>
           <ShopItem title="400 ZikaCoins" description="Adicionados diretamente à sua carteira."
             cost={costs.coins} dust={dust} used={weeklyUsage.coinsTraded} limit={limits.coinsTraded}
             isPending={isPending} onBuy={handleTradeCoins} />
@@ -554,6 +639,46 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FoodTradeItem({ title, description, emoji, cost, food, used, limit, isPending, onBuy }: {
+  title: string;
+  description: string;
+  emoji: string;
+  cost: number;
+  food: number;
+  used?: number;
+  limit?: number;
+  isPending: boolean;
+  onBuy: () => void;
+}) {
+  const atLimit = typeof limit === "number" && (used ?? 0) >= limit;
+  const canAfford = food >= cost;
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-amber-500/20 bg-slate-900 px-4 py-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-xl">{emoji}</div>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-white">{title}</p>
+        <p className="text-xs text-slate-400">{description}</p>
+        <div className="mt-1 flex items-center gap-3">
+          <span className="text-xs font-bold text-amber-300">🍖 {cost} comidas</span>
+          {typeof limit === "number" ? (
+            <span className={`text-[10px] ${atLimit ? "text-red-400" : "text-slate-500"}`}>{used ?? 0}/{limit} esta semana</span>
+          ) : (
+            <span className="text-[10px] text-emerald-400">Trocas ilimitadas</span>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onBuy}
+        disabled={atLimit || !canAfford || isPending}
+        className="shrink-0 rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {isPending ? <Loader2 size={14} className="animate-spin" /> : "Trocar"}
+      </button>
     </div>
   );
 }
