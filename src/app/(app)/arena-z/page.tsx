@@ -295,8 +295,10 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               arenaState: "INJURED",
               playerId: { not: player.id },
               OR: [
-                { relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } } },
-                { relationsAsA: { some: { mascotB: { playerId: player.id }, type: "RIVAL" } } },
+                // Só rivais atacáveis: mesmo critério do ataque oportunista (score <= -15),
+                // evitando listar conhecidos neutros (type "RIVAL" cobre qualquer score < 15).
+                { relationsAsB: { some: { mascotA: { playerId: player.id }, relationshipScore: { lte: -15 } } } },
+                { relationsAsA: { some: { mascotB: { playerId: player.id }, relationshipScore: { lte: -15 } } } },
               ],
             },
             include: { player: { select: { displayName: true } } },
@@ -309,8 +311,10 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               arenaState: "INJURED",
               playerId: { not: player.id },
               OR: [
-                { relationsAsB: { some: { mascotA: { playerId: player.id }, type: "RIVAL" } } },
-                { relationsAsA: { some: { mascotB: { playerId: player.id }, type: "RIVAL" } } },
+                // Só rivais atacáveis: mesmo critério do ataque oportunista (score <= -15),
+                // evitando listar conhecidos neutros (type "RIVAL" cobre qualquer score < 15).
+                { relationsAsB: { some: { mascotA: { playerId: player.id }, relationshipScore: { lte: -15 } } } },
+                { relationsAsA: { some: { mascotB: { playerId: player.id }, relationshipScore: { lte: -15 } } } },
               ],
             },
           }),
