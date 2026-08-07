@@ -1529,7 +1529,9 @@ export async function claimExpedition(
     : 1;
 
   const eventExpMult = 1 + eventExpBonusPct / 100;
-  const expeditionExp = Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult);
+  const expeditionExp = mode === "ITEMS"
+    ? Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoostMult * (eventExpBonusPct / 100))
+    : Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult);
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
