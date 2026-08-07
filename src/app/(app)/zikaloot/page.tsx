@@ -1,6 +1,6 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isStaff } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ShopItemType } from "@prisma/client";
 import { AlertTriangle, LockKeyhole, Search, Ticket, Trophy } from "lucide-react";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
@@ -26,7 +26,8 @@ export default async function ZikaLootPage() {
   const session = await getAppSession();
   if (!session?.user) return null;
 
-  const admin = isAdmin(session.user.role);
+  // Staff (admin ou gamemaster) pode criar e gerenciar ZikaLoots.
+  const admin = isStaff(session.user.role);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },

@@ -1,7 +1,7 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isStaff } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
@@ -30,7 +30,8 @@ export default async function ShopPage() {
   const session = await getAppSession();
   if (!session?.user) return null;
 
-  const admin = isAdmin(session.user.role);
+  // Staff (admin ou gamemaster) pode gerenciar a loja e ver todos os itens.
+  const admin = isStaff(session.user.role);
   await ensureWeeklyLeagueItems();
 
   const player = await prisma.player.findUnique({
