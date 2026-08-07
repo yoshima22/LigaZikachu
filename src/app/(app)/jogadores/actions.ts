@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin, isStaff } from "@/lib/auth/permissions";
 import { hashPassword } from "@/lib/auth/password";
 import { Role, UserStatus } from "@prisma/client";
+import { ensureBeginnerOnboarding } from "@/lib/beginner-onboarding";
 
 const editSchema = z.object({
   playerId: z.string().min(1),
@@ -49,6 +50,9 @@ export async function approvePlayerAction(userId: string) {
       }
     })
   ]);
+
+  const player = await prisma.player.findUnique({ where: { userId }, select: { id: true } });
+  if (player) await ensureBeginnerOnboarding(player.id);
 
   revalidatePath("/jogadores");
 }

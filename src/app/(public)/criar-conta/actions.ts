@@ -5,6 +5,7 @@ import { z } from "zod";
 import { signIn } from "@/auth";
 import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
+import { ensureBeginnerOnboarding } from "@/lib/beginner-onboarding";
 
 type FormState = { error?: string };
 
@@ -99,6 +100,8 @@ export async function registerWithCredentials(
         { playerId, type: "SWEET", quantity: 3 },
       ]
     });
+
+    await ensureBeginnerOnboarding(playerId, tx);
   });
 
   try {

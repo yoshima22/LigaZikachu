@@ -5,6 +5,7 @@ import { Role, UserStatus } from "@prisma/client";
 import { z } from "zod";
 import authConfig from "@/auth.config";
 import { prisma } from "@/lib/prisma";
+import { ensureBeginnerOnboarding } from "@/lib/beginner-onboarding";
 import { verifyPassword } from "@/lib/auth/password";
 import { getMaintenanceState } from "@/lib/maintenance";
 
@@ -173,6 +174,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             { playerId: player.id, type: "SWEET", quantity: 3 },
           ]
         });
+
+        await ensureBeginnerOnboarding(player.id, tx);
       });
     }
   }
