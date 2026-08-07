@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isStaff } from "@/lib/auth/permissions";
 import { ZikaLootStatus, ShopItemType } from "@prisma/client";
 import { AlertTriangle, LockKeyhole, Search, Ticket, Trophy } from "lucide-react";
-import type { PrizeConfig } from "@/lib/zikaloot-types";
+import type { PrizeConfig, PrizeItem } from "@/lib/zikaloot-types";
 import { Card } from "@/components/ui/card";
 import { LootBoard } from "./_components/loot-board";
 import { AdminLootPanel } from "./_components/admin-loot-panel";
@@ -21,6 +21,33 @@ const statusLabel: Record<ZikaLootStatus, string> = {
   NO_WINNER: "Sem vencedor — novo sorteio agendado",
   CANCELLED: "Cancelada"
 };
+
+// Rótulo curto de uma recompensa (usado no histórico). Retorna null p/ tipos desconhecidos.
+function prizeItemLabel(item: PrizeItem): string | null {
+  switch (item.type) {
+    case "COINS":        return `🪙 ${item.amount} ZikaCoins`;
+    case "STICKER":      return `🃏 ${item.cardName}`;
+    case "TICKET":       return "🎟️ Ticket ZikaLoot";
+    case "COSMETIC":     return `🎨 ${item.itemName}`;
+    case "CUSTOM":       return `🎁 ${item.description}`;
+    case "EGG":          return `🥚 Ovo${item.qty && item.qty > 1 ? ` x${item.qty}` : ""}`;
+    case "FOOD":         return `🍖 Comida x${item.qty}`;
+    case "SWEET":        return `🍬 Doce x${item.qty}`;
+    case "SHOP_ITEM":    return `🛒 ${item.shopItemName}`;
+    case "STICKER_PACK": return `📦 ${item.packName}`;
+    default:             return null;
+  }
+}
+
+// Extrai a lista de recompensas de uma loteria (prizeConfig estruturado ou prize legado).
+function lootRewardLabels(prizeConfig: unknown, legacyPrize: string | null): string[] {
+  const cfg = prizeConfig as PrizeConfig | null | undefined;
+  const items = cfg?.prizes ?? [];
+  if (items.length > 0) {
+    return items.map(prizeItemLabel).filter((l): l is string => !!l);
+  }
+  return legacyPrize ? [legacyPrize] : [];
+}
 
 export default async function ZikaLootPage() {
   const session = await getAppSession();
@@ -387,6 +414,20 @@ export default async function ZikaLootPage() {
                 <div>
                   <p className="font-semibold text-slate-200">{l.name}</p>
                   <p className="text-xs text-slate-500">{statusLabel[l.status]} · {l.picks.length} participantes</p>
+                  {(() => {
+                    const rewards = lootRewardLabels(l.prizeConfig, l.prize);
+                    if (rewards.length === 0) return null;
+                    return (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500">Recompensas:</span>
+                        {rewards.map((label, i) => (
+                          <span key={i} className="flex items-center gap-1 rounded-full border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-2 py-0.5 text-[11px] font-semibold text-[#7AC74C]">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {l.drawnNumber && (
                     <p className="text-sm mt-1">
                       Número sorteado: <strong className="text-[#FFCB05]">{l.drawnNumber}</strong>
