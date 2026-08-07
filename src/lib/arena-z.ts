@@ -694,7 +694,8 @@ function buildBotOpponent(attackers: ArenaMascot[], difficulty: ArenaDifficulty 
   const diff = DIFFICULTY_CONFIG[difficulty];
   const adjustedLevel = Math.max(1, avgLevel + diff.levelOffset);
   const band = levelBand(adjustedLevel);
-  const botSize = Math.min(6, Math.max(2, attackers.length + seededRand(rng, 0, 2)));
+  // A dificuldade altera niveis e recompensas, nunca o tamanho do time.
+  const botSize = Math.min(6, Math.max(1, attackers.length));
   // Seed determinístico: usa seed se fornecido, caso contrário gera aleatório
   const nameSeed = seed !== undefined ? seed % BOT_NAMES.length : Math.floor(rng() * BOT_NAMES.length);
   const botName = BOT_NAMES[nameSeed];
@@ -1825,7 +1826,14 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     const locked = team.pendingBotJson as { botName: string; band: { min: number; max: number }; defenders: ArenaMascot[] };
     band = locked.band;
     botName = locked.botName;
-    defenders = locked.defenders;
+    // Corrige também bots travados antes desta regra entrar em vigor.
+    defenders = locked.defenders.slice(0, attackers.length);
+    if (defenders.length < attackers.length) {
+      const rebuilt = buildBotOpponent(attackers, useDifficulty);
+      defenders = rebuilt.defenders;
+      band = rebuilt.band;
+      botName = rebuilt.botName;
+    }
   } else {
     const bot = buildBotOpponent(attackers, useDifficulty);
     band = bot.band;
@@ -2261,11 +2269,19 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
         take: 1,
         select: { id: true, name: true },
       },
+      mascots: {
+        where: { isEquipped: true },
+        take: 1,
+        select: { id: true, nickname: true, pokemonId: true },
+      },
     },
   });
   if (!attackerPlayer) throw new Error("Atacante nao encontrado.");
   const attackerTeam = attackerPlayer.arenaTeams[0];
   if (!attackerTeam) throw new Error("Voce precisa ter uma equipe ativa na Arena Z para receber a EXP roubada.");
+  const equippedMascot = attackerPlayer.mascots[0];
+  if (!equippedMascot) throw new Error("Equipe um mascote antes de atacar para que ele receba a EXP roubada.");
+  const equippedMascotName = equippedMascot.nickname ?? getPokemonName(equippedMascot.pokemonId);
 
   // Verifica se já atacou este mascote neste período de ferimento
   const recentOpportunistic = await prisma.arenaBattle.findFirst({
@@ -2299,27 +2315,28 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
         lootResult: {
           stolen: { exp: stolenExp, food: stolenFood },
           targetMascotId,
-          creditedTeamId: attackerTeam.id,
-          creditedTeamName: attackerTeam.name,
+          creditedMascotId: equippedMascot.id,
+          creditedMascotName: equippedMascotName,
         } as unknown as import("@prisma/client").Prisma.InputJsonValue,
         winnerPlayerId: attackerPlayerId,
         loserPlayerId: targetMascot.playerId,
       }
     });
-    // Transfere a EXP do alvo para o cofre da equipe do atacante.
+    // Transfere a EXP do alvo diretamente ao mascote equipado do atacante.
     if (stolenExp > 0) {
       await tx.mascot.update({
         where: { id: targetMascotId },
         data: { exp: { decrement: stolenExp } },
       });
+      await tx.mascot.update({
+        where: { id: equippedMascot.id },
+        data: { exp: { increment: stolenExp } },
+      });
     }
-    if (stolenExp > 0 || stolenFood > 0) {
+    if (stolenFood > 0) {
       await tx.arenaTeam.update({
         where: { id: attackerTeam.id },
-        data: {
-          ...(stolenExp > 0 ? { vaultExp: { increment: stolenExp } } : {}),
-          ...(stolenFood > 0 ? { vaultSweet: { increment: stolenFood } } : {}),
-        },
+        data: { vaultSweet: { increment: stolenFood } },
       });
     }
     // Aumenta tempo de repouso do alvo
@@ -2343,7 +2360,7 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
     stolenExp,
     stolenFood,
     extraRestMinutes: Math.floor(extraRestMs / 60000),
-    attackerTeamName: attackerTeam.name,
+    equippedMascotName,
   };
 }
 

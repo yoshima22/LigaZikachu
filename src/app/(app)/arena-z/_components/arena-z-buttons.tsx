@@ -1371,7 +1371,7 @@ export function OpportunisticAttackButton({ mascotId, mascotName, ownerName }: {
   const [pending, startTransition] = useTransition();
   const [completed, setCompleted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<{ stolenExp: number; stolenFood: number; extraRestMinutes: number; attackerTeamName: string } | null>(null);
+  const [result, setResult] = useState<{ stolenExp: number; stolenFood: number; extraRestMinutes: number; equippedMascotName: string } | null>(null);
 
   return (
     <>
@@ -1405,7 +1405,7 @@ export function OpportunisticAttackButton({ mascotId, mascotName, ownerName }: {
           <div className="max-w-sm rounded-2xl border border-red-500/30 bg-slate-950 p-5 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-bold text-red-200">😈 Ataque Oportunista!</p>
             <p className="text-xs text-slate-300">Você roubou <strong className="text-[#FFCB05]">{result.stolenExp} EXP</strong>{result.stolenFood > 0 ? " e 1 petisco" : ""}.</p>
-            <p className="text-xs text-emerald-300">A EXP foi enviada ao cofre de <strong>{result.attackerTeamName}</strong>.</p>
+            <p className="text-xs text-emerald-300">A EXP foi enviada ao mascote equipado <strong>{result.equippedMascotName}</strong>.</p>
             <p className="text-xs text-slate-400">Repouso de {mascotName} aumentado em {result.extraRestMinutes} min.</p>
             <button type="button" onClick={() => { setResult(null); router.refresh(); }} className="w-full rounded-lg bg-slate-800 py-2 text-xs text-slate-300">Fechar</button>
           </div>
