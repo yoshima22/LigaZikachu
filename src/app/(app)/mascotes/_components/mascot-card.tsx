@@ -25,7 +25,7 @@ import {
   toggleMascotOperationsLockAction,
   removeXpShareAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getExpeditionEggTiers, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
@@ -818,7 +818,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const standard = getExpeditionOdds({ duration: key, mode: "STANDARD", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
               const items = getExpeditionOdds({ duration: key, mode: "ITEMS", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
               const pct = (value: number) => value.toFixed(1).replace(".0", "");
-              const eggQuality = standard.eggType === "SPECIAL" ? "Especial" : standard.eggType === "RARE" ? "Raro" : "Comum";
+              const eggTiers = getExpeditionEggTiers(key, standard.luck);
               const agility = getExpeditionAgilityReduction(mascot.statAgility);
               const baseMinutes = dur.ms / 60_000;
               const fastestMinutes = Math.round(baseMinutes * (1 - agility.max / 200));
@@ -839,6 +839,36 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const picnicActive = mascot.activeBuffs.some(buff => buff.type === "PICNIC_BASKET" && new Date(buff.expiresAt) > new Date());
               const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * (picnicActive ? 1.25 : 1));
               const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * (picnicActive ? 1.12 : 1));
+
+              // Linha do ovo: o percentual é a chance de CAIR UM OVO; a raridade
+              // é determinística pela sorte. Mostramos a escada de raridades da
+              // duração destacando a que a sorte atual entrega.
+              const renderEggLine = (eggPct: number) => (
+                <span className="col-span-2 flex flex-col gap-0.5">
+                  <span>
+                    🥚 Ovo <strong className="text-slate-200">{pct(eggPct)}%</strong>
+                    <span className="text-slate-500"> de chance de cair um ovo</span>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1 text-[9px]">
+                    <span className="text-slate-600">Raridade ao cair:</span>
+                    {eggTiers.map(tier => (
+                      <span
+                        key={tier.rarity}
+                        className={tier.current
+                          ? "rounded bg-slate-700 px-1 font-bold text-slate-100"
+                          : "rounded px-1 text-slate-600"}
+                      >
+                        {tier.current ? "➜ " : ""}{tier.label}
+                        {!tier.current && tier.minLuck > standard.luck ? ` (sorte ${tier.minLuck}+)` : ""}
+                      </span>
+                    ))}
+                    <span className="text-slate-600">· sua sorte: {standard.luck}</span>
+                  </span>
+                  {luckBuff && (
+                    <span className="text-[9px] text-amber-400/80">⚠ Buff de Sorte ativo (×2). Se expirar antes do fim da expedição, a raridade cai.</span>
+                  )}
+                </span>
+              );
 
               return (
                 <div key={key} className="rounded-xl border border-border/50 bg-slate-900/60 p-3 space-y-2">
@@ -866,7 +896,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       <span className="ml-1 text-slate-500">(valor atual com relações e bônus ativos)</span>
                     </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
-                      <span>🥚 Ovo <span className="text-slate-600">({eggQuality})</span> <strong className="text-slate-200">{pct(standard.egg)}%</strong></span>
+                      {renderEggLine(standard.egg)}
                       <span>🍬 Doce <strong className="text-slate-200">{pct(standard.sweet)}%</strong></span>
                       <span>🍖 Comida <strong className="text-slate-200">{pct(standard.food)}%</strong></span>
                       <span>🪙 Moedas <strong className="text-slate-200">{pct(standard.coins)}% · {standard.coinMin}–{standard.coinMax} ZC</strong></span>
@@ -881,7 +911,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   {expeditionMode === "ITEMS" && <div>
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">📦 Itens</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
-                      <span>🥚 Ovo <span className="text-slate-600">({items.eggType === "SPECIAL" ? "Especial" : items.eggType === "RARE" ? "Raro" : "Comum"})</span> <strong className="text-slate-200">{pct(items.egg)}%</strong></span>
+                      {renderEggLine(items.egg)}
                       <span>🍬 Doce <strong className="text-slate-200">{pct(items.sweet)}%</strong></span>
                       <span>🍖 Comida <strong className="text-slate-200">{pct(items.food)}%</strong></span>
                       <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">{pct(items.specialItem)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto, Piquenique…)</span></span>

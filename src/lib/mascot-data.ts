@@ -1121,6 +1121,33 @@ export function getExpeditionOdds(params: {
   };
 }
 
+export type ExpeditionEggTier = {
+  rarity: "COMMON" | "RARE" | "SPECIAL";
+  label: string;
+  /** Sorte mínima para atingir esta raridade nesta duração. */
+  minLuck: number;
+  /** Verdadeiro apenas para a raridade que a sorte atual entrega. */
+  current: boolean;
+};
+
+/**
+ * Raridades possíveis do ovo de expedição para uma duração e a raridade que a
+ * sorte atual entrega. A raridade é DETERMINÍSTICA (não sorteada): depende só da
+ * sorte (instinto + nível/5, ×2 com buff de Sorte) e da duração — mesmos limiares
+ * usados em getExpeditionOdds e no sorteio real. Serve para deixar claro no preview
+ * que o percentual do ovo é a chance de "cair um ovo", e a raridade vem da sorte.
+ */
+export function getExpeditionEggTiers(duration: ExpeditionDuration, luck: number): ExpeditionEggTier[] {
+  const labels: Record<ExpeditionEggTier["rarity"], string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial" };
+  let defs: { rarity: ExpeditionEggTier["rarity"]; minLuck: number }[];
+  if (duration === "6h") defs = [{ rarity: "RARE", minLuck: 0 }, { rarity: "SPECIAL", minLuck: 91 }];
+  else if (duration === "3h") defs = [{ rarity: "COMMON", minLuck: 0 }, { rarity: "RARE", minLuck: 61 }];
+  else defs = [{ rarity: "COMMON", minLuck: 0 }, { rarity: "RARE", minLuck: 86 }]; // 30min e 1h
+  // A raridade entregue é a de maior tier cuja sorte mínima é atingida.
+  const currentIndex = defs.reduce((acc, def, index) => (luck >= def.minLuck ? index : acc), 0);
+  return defs.map((def, index) => ({ rarity: def.rarity, label: labels[def.rarity], minLuck: def.minLuck, current: index === currentIndex }));
+}
+
 // Expedição de treinamento (foco em EXP — sem itens/coins)
 // Multiplicadores de EXP muito maiores que o padrão
 export const TRAINING_EXP_MULT: Record<ExpeditionDuration, number> = {
