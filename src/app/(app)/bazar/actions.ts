@@ -2957,6 +2957,92 @@ export async function finalizeExpiredAuctions(limit = 25) {
   return { checked: listings.length, finalized, errors };
 }
 
+/**
+ * Expira anúncios de venda (não-leilão) cujo prazo passou: marca como EXPIRED,
+ * devolve o item ao anunciante, rejeita/estorna propostas pendentes e avisa o
+ * vendedor (notificação + DM). Sem isso, o anúncio ficava "0 dias" preso como
+ * ativo e o item nunca voltava. Roda no mesmo cron dos leilões.
+ */
+export async function finalizeExpiredListings(limit = 25) {
+  const now = new Date();
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)));
+  const listings = await prisma.bazarListing.findMany({
+    where: {
+      listingType: { not: "AUCTION" },
+      status: "ACTIVE",
+      expiresAt: { lte: now },
+    },
+    orderBy: { expiresAt: "asc" },
+    take: safeLimit,
+    include: { player: { select: { id: true, displayName: true, userId: true } } },
+  });
+
+  let expired = 0;
+  const errors: Array<{ listingId: string; error: string }> = [];
+  const userIdsToRevalidate = new Set<string>();
+
+  for (const listing of listings) {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listing.id}))`;
+        const update = await tx.bazarListing.updateMany({
+          where: { id: listing.id, status: "ACTIVE", expiresAt: { lte: now } },
+          data: { status: "EXPIRED" },
+        });
+        if (update.count !== 1) return { changed: false, proposerUserIds: [] as string[] };
+
+        // Devolve o item ao anunciante
+        await _returnEscrow(tx, listing, listing.playerId);
+
+        // Rejeita propostas pendentes e estorna seus escrows
+        const pendingProposals = await tx.bazarProposal.findMany({
+          where: { listingId: listing.id, status: "PENDING" },
+          select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, proposer: { select: { userId: true } } },
+        });
+        for (const proposal of pendingProposals) {
+          await _releaseProposalEscrow(tx, proposal);
+        }
+        await tx.bazarProposal.updateMany({
+          where: { listingId: listing.id, status: "PENDING" },
+          data: { status: "REJECTED" },
+        });
+
+        // Notifica o vendedor (sino)
+        await createPlayerNotification(tx, {
+          playerId: listing.playerId,
+          category: "BAZAR",
+          type: "LISTING_EXPIRED",
+          title: `Anúncio expirado: ${listingDisplayName(listing)}`,
+          body: "Seu anúncio expirou sem venda e o item voltou para o seu inventário.",
+          href: "/bazar",
+          entityId: listing.id,
+          eventKey: `bazar:listing:expired:${listing.id}`,
+        });
+
+        return { changed: true, proposerUserIds: pendingProposals.map((proposal) => proposal.proposer.userId) };
+      }, { maxWait: 10_000, timeout: 20_000 });
+
+      if (!result.changed) continue;
+      expired += 1;
+
+      // DM ao vendedor
+      await _sendBazarSystemDM(
+        listing.playerId,
+        `Seu anúncio de "${listingDisplayName(listing)}" expirou sem venda. O item foi devolvido ao seu inventário.`,
+      );
+
+      if (listing.player.userId) userIdsToRevalidate.add(listing.player.userId);
+      for (const proposerUserId of result.proposerUserIds) if (proposerUserId) userIdsToRevalidate.add(proposerUserId);
+    } catch (err) {
+      errors.push({ listingId: listing.id, error: err instanceof Error ? err.message : "Erro" });
+    }
+  }
+
+  if (expired > 0) revalidateBazar();
+  for (const userId of userIdsToRevalidate) revalidateTag(`nav-${userId}`);
+  return { checked: listings.length, expired, errors };
+}
+
 export async function markBazarProposalsViewed(): Promise<void> {
   try {
     const user = await getSessionUser();

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { finalizeExpiredAuctions } from "@/app/(app)/bazar/actions";
+import { finalizeExpiredAuctions, finalizeExpiredListings } from "@/app/(app)/bazar/actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,8 +11,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await finalizeExpiredAuctions(25);
-    return NextResponse.json({ ok: result.errors.length === 0, ...result, checkedAt: new Date().toISOString() });
+    const [auctions, listings] = await Promise.all([
+      finalizeExpiredAuctions(25),
+      finalizeExpiredListings(25),
+    ]);
+    return NextResponse.json({
+      ok: auctions.errors.length === 0 && listings.errors.length === 0,
+      auctions,
+      listings,
+      checkedAt: new Date().toISOString(),
+    });
   } catch (error) {
     console.error("[Cron Bazar] Falha ao encerrar leilões.", error);
     return NextResponse.json(
