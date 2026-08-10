@@ -25,7 +25,7 @@ import {
   toggleMascotOperationsLockAction,
   removeXpShareAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getExpeditionEggTiers, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getExpeditionEggRarityChances, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
@@ -818,7 +818,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const standard = getExpeditionOdds({ duration: key, mode: "STANDARD", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
               const items = getExpeditionOdds({ duration: key, mode: "ITEMS", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff });
               const pct = (value: number) => value.toFixed(1).replace(".0", "");
-              const eggTiers = getExpeditionEggTiers(key, standard.luck);
+              const eggChances = getExpeditionEggRarityChances(key, standard.luck);
               const agility = getExpeditionAgilityReduction(mascot.statAgility);
               const baseMinutes = dur.ms / 60_000;
               const fastestMinutes = Math.round(baseMinutes * (1 - agility.max / 200));
@@ -840,32 +840,25 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * (picnicActive ? 1.25 : 1));
               const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * (picnicActive ? 1.12 : 1));
 
-              // Linha do ovo: o percentual é a chance de CAIR UM OVO; a raridade
-              // é determinística pela sorte. Mostramos a escada de raridades da
-              // duração destacando a que a sorte atual entrega.
+              // Linha do ovo: o percentual do "Ovo" é a chance de CAIR UM OVO. Se cair,
+              // a raridade é sorteada — mostramos a % de cada raridade (somam 100%).
               const renderEggLine = (eggPct: number) => (
                 <span className="col-span-2 flex flex-col gap-0.5">
                   <span>
                     🥚 Ovo <strong className="text-slate-200">{pct(eggPct)}%</strong>
                     <span className="text-slate-500"> de chance de cair um ovo</span>
                   </span>
-                  <span className="flex flex-wrap items-center gap-1 text-[9px]">
-                    <span className="text-slate-600">Raridade ao cair:</span>
-                    {eggTiers.map(tier => (
-                      <span
-                        key={tier.rarity}
-                        className={tier.current
-                          ? "rounded bg-slate-700 px-1 font-bold text-slate-100"
-                          : "rounded px-1 text-slate-600"}
-                      >
-                        {tier.current ? "➜ " : ""}{tier.label}
-                        {!tier.current && tier.minLuck > standard.luck ? ` (sorte ${tier.minLuck}+)` : ""}
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-slate-400">
+                    <span className="text-slate-600">Se cair, a raridade:</span>
+                    {eggChances.map(chance => (
+                      <span key={chance.rarity}>
+                        {chance.label}: <strong className={chance.pct > 0 ? "text-slate-200" : "text-slate-600"}>{pct(chance.pct)}%</strong>
                       </span>
                     ))}
                     <span className="text-slate-600">· sua sorte: {standard.luck}</span>
                   </span>
                   {luckBuff && (
-                    <span className="text-[9px] text-amber-400/80">⚠ Buff de Sorte ativo (×2). Se expirar antes do fim da expedição, a raridade cai.</span>
+                    <span className="text-[9px] text-amber-400/80">⚠ Buff de Sorte ativo (×2 na sorte). Se expirar antes do fim, as chances de raridade caem.</span>
                   )}
                 </span>
               );

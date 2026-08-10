@@ -14,7 +14,7 @@ import {
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
-  getMegaStoneExpeditionChance, rollExpeditionAgilityReduction,
+  getMegaStoneExpeditionChance, rollExpeditionAgilityReduction, rollExpeditionEggRarity,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, Mascot, MascotMood, MascotPersonality } from "@prisma/client";
@@ -1130,12 +1130,10 @@ async function rollExpeditionReward(
   const luck = odds.luck;
   const roll = Math.random() * 100;
 
-  // Ovo: qualidade requer instinto significativo com stat max=250
-  // 6h SPECIAL: luck>90, 3h RARE: luck>60, 1h/30min RARE: luck>85
-  let eggType = "COMMON";
-  if (durationKey === "6h")                            eggType = luck > 90 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h" && luck > 60)          eggType = "RARE";
-  else if ((durationKey === "1h" || durationKey === "30min") && luck > 85) eggType = "RARE";
+  // Ovo: a raridade é SORTEADA com pesos que crescem com a sorte (ver
+  // getExpeditionEggRarityChances). Mais instinto → mais chance de raridade melhor,
+  // mas raridades menores ainda podem cair.
+  const eggType = rollExpeditionEggRarity(durationKey, luck);
 
   // Quantidade de comida melhora com duração
   const foodQtyMin =
@@ -1180,10 +1178,7 @@ async function rollItemExpeditionReward(
 
   const roll = Math.random() * 100;
 
-  let eggType = "COMMON";
-  if (durationKey === "6h")       eggType = luck > 90 ? "SPECIAL" : "RARE";
-  else if (durationKey === "3h")  eggType = luck > 60 ? "RARE" : "COMMON";
-  else if (luck > 85)             eggType = "RARE";
+  const eggType = rollExpeditionEggRarity(durationKey, luck);
 
   const quantityBase =
     durationKey === "6h" ? 4 :

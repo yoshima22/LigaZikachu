@@ -1121,31 +1121,60 @@ export function getExpeditionOdds(params: {
   };
 }
 
-export type ExpeditionEggTier = {
-  rarity: "COMMON" | "RARE" | "SPECIAL";
-  label: string;
-  /** Sorte mínima para atingir esta raridade nesta duração. */
-  minLuck: number;
-  /** Verdadeiro apenas para a raridade que a sorte atual entrega. */
-  current: boolean;
-};
+export type ExpeditionEggRarity = "LAB" | "SPECIAL" | "RARE" | "COMMON";
+export type ExpeditionEggChance = { rarity: ExpeditionEggRarity; label: string; pct: number };
+
+const clamp01 = (value: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, value));
 
 /**
- * Raridades possíveis do ovo de expedição para uma duração e a raridade que a
- * sorte atual entrega. A raridade é DETERMINÍSTICA (não sorteada): depende só da
- * sorte (instinto + nível/5, ×2 com buff de Sorte) e da duração — mesmos limiares
- * usados em getExpeditionOdds e no sorteio real. Serve para deixar claro no preview
- * que o percentual do ovo é a chance de "cair um ovo", e a raridade vem da sorte.
+ * Distribuição de raridade do ovo de expedição: quando um ovo cai, a raridade é
+ * SORTEADA com pesos que dependem da sorte (instinto + nível/5, ×2 com buff de
+ * Sorte) e da duração. Mais instinto/sorte → mais chance de raridade melhor, mas
+ * raridades menores ainda podem cair. Fonte única usada pelo sorteio real e pelo
+ * preview, para que as porcentagens exibidas batam com o que realmente acontece.
+ *
+ * Regras (limiares antigos viram o ponto de ~50%):
+ *  - 6h: nunca dá Comum — divide entre Raro e Especial (Especial cresce com a sorte).
+ *  - 3h e 1h/30min: divide entre Comum e Raro (Raro cresce com a sorte).
+ *  - Lab nunca cai em expedição (sempre 0%; só vem de eventos/máquina de ovos).
+ * Retorna sempre na ordem Lab → Especial → Raro → Comum, em % somando 100.
  */
-export function getExpeditionEggTiers(duration: ExpeditionDuration, luck: number): ExpeditionEggTier[] {
-  const labels: Record<ExpeditionEggTier["rarity"], string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial" };
-  let defs: { rarity: ExpeditionEggTier["rarity"]; minLuck: number }[];
-  if (duration === "6h") defs = [{ rarity: "RARE", minLuck: 0 }, { rarity: "SPECIAL", minLuck: 91 }];
-  else if (duration === "3h") defs = [{ rarity: "COMMON", minLuck: 0 }, { rarity: "RARE", minLuck: 61 }];
-  else defs = [{ rarity: "COMMON", minLuck: 0 }, { rarity: "RARE", minLuck: 86 }]; // 30min e 1h
-  // A raridade entregue é a de maior tier cuja sorte mínima é atingida.
-  const currentIndex = defs.reduce((acc, def, index) => (luck >= def.minLuck ? index : acc), 0);
-  return defs.map((def, index) => ({ rarity: def.rarity, label: labels[def.rarity], minLuck: def.minLuck, current: index === currentIndex }));
+export function getExpeditionEggRarityChances(duration: ExpeditionDuration, luck: number): ExpeditionEggChance[] {
+  let common = 0;
+  let rare = 0;
+  let special = 0;
+  if (duration === "6h") {
+    special = clamp01((luck - 60) / 60, 0, 0.9); // ~50% em sorte 90 (limiar antigo), teto 90%
+    rare = 1 - special;
+  } else if (duration === "3h") {
+    rare = clamp01((luck - 40) / 50, 0.05, 0.95); // ~50% em sorte 65 (limiar antigo ~60)
+    common = 1 - rare;
+  } else {
+    rare = clamp01((luck - 65) / 50, 0.05, 0.95); // 30min/1h — ~50% em sorte 90 (limiar antigo 85)
+    common = 1 - rare;
+  }
+  return [
+    { rarity: "LAB", label: "Lab", pct: 0 },
+    { rarity: "SPECIAL", label: "Especial", pct: special * 100 },
+    { rarity: "RARE", label: "Raro", pct: rare * 100 },
+    { rarity: "COMMON", label: "Comum", pct: common * 100 },
+  ];
+}
+
+/** Sorteia a raridade do ovo usando a distribuição de getExpeditionEggRarityChances. */
+export function rollExpeditionEggRarity(
+  duration: ExpeditionDuration,
+  luck: number,
+  random: () => number = Math.random,
+): Exclude<ExpeditionEggRarity, "LAB"> {
+  const chances = getExpeditionEggRarityChances(duration, luck).filter((c) => c.pct > 0 && c.rarity !== "LAB");
+  const total = chances.reduce((sum, c) => sum + c.pct, 0);
+  let roll = random() * total;
+  for (const chance of chances) {
+    if (roll < chance.pct) return chance.rarity as Exclude<ExpeditionEggRarity, "LAB">;
+    roll -= chance.pct;
+  }
+  return (chances[chances.length - 1]?.rarity as Exclude<ExpeditionEggRarity, "LAB">) ?? "RARE";
 }
 
 // Expedição de treinamento (foco em EXP — sem itens/coins)
