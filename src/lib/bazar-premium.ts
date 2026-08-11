@@ -31,6 +31,66 @@ const STAT_LABELS: Array<[string, string]> = [
   ["vitality", "Vitalidade"],
 ];
 
+export async function addPremiumListingHighlights<T extends {
+  id: string;
+  category: string;
+  payload: unknown;
+  priceCoins: number | null;
+}>(listings: T[]): Promise<Array<T & { premiumHighlights: string[] }>> {
+  if (!listings.length) return [];
+  const active = await prisma.bazarListing.findMany({
+    where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
+    select: { id: true, category: true, payload: true, priceCoins: true },
+  });
+  const activeMascotPayloads = active
+    .filter((listing) => listing.category === "MASCOT")
+    .map((listing) => ({ id: listing.id, payload: listing.payload as Payload }));
+
+  return listings.map((listing) => {
+    const payload = (listing.payload ?? {}) as Payload;
+    const facts: string[] = [];
+    const same = active.filter((candidate) => candidate.id !== listing.id && sameProduct(payload, candidate.payload as Payload, listing.category));
+
+    if (listing.category === "MASCOT") {
+      const pokemonId = Number(payload.pokemonId);
+      const rarity = getMascotRarity(pokemonId);
+      const rarityLabel = RARITY_LABEL[rarity] ?? "Comum";
+      const stats = (payload.stats ?? {}) as Record<string, unknown>;
+      const statTotal = STAT_LABELS.reduce((sum, [key]) => sum + Number(stats[key] ?? 0), 0);
+      const otherStats = activeMascotPayloads
+        .filter((candidate) => candidate.id !== listing.id)
+        .map((candidate) => (candidate.payload.stats ?? {}) as Record<string, unknown>);
+      const leadingStat = STAT_LABELS
+        .map(([key, label]) => ({ key, label, value: Number(stats[key] ?? 0) }))
+        .filter((stat) => stat.value > 0 && otherStats.length > 0 && otherStats.every((candidate) => stat.value >= Number(candidate[stat.key] ?? 0)))
+        .sort((a, b) => b.value - a.value)[0];
+
+      if (payload.isShiny === true) facts.push("Versão shiny, muito mais difícil de encontrar.");
+      if (leadingStat) facts.push(`Maior ${leadingStat.label} entre os mascotes anunciados: ${leadingStat.value}.`);
+      if (rarity !== "COMMON") facts.push(`Classificação ${rarityLabel.toLowerCase()}, com aparição menos comum em ovos.`);
+      if (same.length > 0 && listing.priceCoins && same.every((candidate) => !candidate.priceCoins || listing.priceCoins! <= candidate.priceCoins)) {
+        facts.push("Menor preço entre os anúncios ativos desta espécie.");
+      } else if (same.length === 0) {
+        facts.push("Único anúncio ativo desta espécie no momento.");
+      }
+      const origin = getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null);
+      if (origin) facts.push(`Origem confirmada: ${origin}.`);
+      const wins = Number(payload.battleWins ?? 0);
+      if (wins > 0) facts.push(`${wins} vitória${wins === 1 ? "" : "s"} registrada${wins === 1 ? "" : "s"} em combate.`);
+      if (facts.length < 2 && statTotal > 0) facts.push(`${statTotal} pontos somados nos cinco atributos.`);
+    } else {
+      const quantity = Math.max(1, Number(payload.quantity ?? 1));
+      if (same.length > 0 && listing.priceCoins && same.every((candidate) => !candidate.priceCoins || listing.priceCoins! <= candidate.priceCoins)) {
+        facts.push("Menor preço entre as ofertas ativas deste item.");
+      }
+      if (quantity > 1) facts.push(`Pacote com ${quantity} unidades no mesmo anúncio.`);
+      if (listing.priceCoins && quantity > 1) facts.push(`Custo equivalente a ${Math.ceil(listing.priceCoins / quantity).toLocaleString("pt-BR")} ZC por unidade.`);
+    }
+
+    return { ...listing, premiumHighlights: facts.slice(0, 2) };
+  });
+}
+
 async function buildPremiumMessage(listing: {
   id: string;
   category: string;

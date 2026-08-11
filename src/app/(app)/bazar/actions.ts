@@ -36,6 +36,7 @@ import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
   PREMIUM_LISTING_HOURS,
+  addPremiumListingHighlights,
   publishDuePremiumBazarTicker,
 } from "@/lib/bazar-premium";
 
@@ -364,10 +365,13 @@ export async function getListings(filters?: {
     _count: { select: { proposals: true, favorites: true } },
   };
 
-  const [listings, total] = await Promise.all([
+  const [rawListings, total] = await Promise.all([
     prisma.bazarListing.findMany({ where, orderBy, select, skip, take: LISTINGS_PAGE_SIZE }),
     prisma.bazarListing.count({ where }),
   ]);
+  const listings = filters?.premiumMode === "only"
+    ? await addPremiumListingHighlights(rawListings)
+    : rawListings.map((listing) => ({ ...listing, premiumHighlights: [] as string[] }));
 
   return {
     listings,

@@ -49,6 +49,7 @@ interface Listing {
   expiresAt: Date;
   createdAt: Date;
   premiumUntil?: Date | null;
+  premiumHighlights?: string[];
   player: { id: string; displayName: string };
   _count: { proposals: number; favorites: number };
   // Auction fields
@@ -153,6 +154,18 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
               <Crown size={10} /> Destaque premium
             </span>
             <PremiumCountdown until={listing.premiumUntil!} className="rounded-full border border-amber-300/25 bg-slate-900/80 px-2 py-1 text-[9px] font-semibold text-amber-100/80" />
+          </div>
+        )}
+        {isPremium && listing.premiumHighlights && listing.premiumHighlights.length > 0 && (
+          <div className="rounded-xl border border-amber-300/25 bg-gradient-to-br from-amber-400/10 to-purple-500/5 px-2.5 py-2">
+            <p className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-amber-300">
+              🐾 Dica do Miauvadão
+            </p>
+            <ul className="space-y-0.5 text-[10px] leading-snug text-amber-50/80">
+              {listing.premiumHighlights.map((highlight) => (
+                <li key={highlight} className="flex gap-1.5"><span className="text-amber-400">•</span><span>{highlight}</span></li>
+              ))}
+            </ul>
           </div>
         )}
         {listing.loanEnabled && listing.loanAmountCoins && (
