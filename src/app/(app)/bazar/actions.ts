@@ -1489,20 +1489,22 @@ export async function getMiauvadaoPurchaseStatus(playerId: string | null): Promi
 const MIAUVADAO_EGG_FUSION_VAULT_COST = 250;
 const MIAUVADAO_EGG_FUSION_PLAYER_COST = 250;
 
-export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]): Promise<{
+export async function fuseMiauvadaoEggsAction(eggIds: string[]): Promise<{
   error?: string;
   result?: "BROKEN" | MiauvadaoFusionEggType | "LAB";
   lootBonusPct?: number;
   newVaultBalance?: number;
   newPlayerBalance?: number;
+  newEgg?: { id: string; type: MiauvadaoFusionEggType; hatchRarityBonusPct: number };
 }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
-    if (eggTypes.length !== 3 || eggTypes.some((type) => !MIAUVADAO_FUSION_EGG_TYPES.includes(type))) {
-      return { error: "Selecione exatamente 3 ovos válidos." };
+    const uniqueEggIds = [...new Set(eggIds)];
+    if (eggIds.length !== 3 || uniqueEggIds.length !== 3) {
+      return { error: "Selecione exatamente 3 ovos diferentes." };
     }
 
     const outcome = await prisma.$transaction(async (tx) => {
@@ -1515,26 +1517,23 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
         throw new Error(`Saldo insuficiente: você precisa de ${MIAUVADAO_EGG_FUSION_PLAYER_COST} ZC para usar a máquina.`);
       }
 
-      const required = eggTypes.reduce((map, type) => {
-        map.set(type, (map.get(type) ?? 0) + 1);
-        return map;
-      }, new Map<MiauvadaoFusionEggType, number>());
-      const consumedIds: string[] = [];
-      for (const [type, quantity] of required) {
-        const eggs = await tx.mascotEgg.findMany({
-          where: {
-            playerId: player.id,
-            type: type as EggType,
-            incubation: null,
-            NOT: { origin: { startsWith: "bazar:" } },
-          },
-          orderBy: { obtainedAt: "asc" },
-          take: quantity,
-          select: { id: true },
-        });
-        if (eggs.length !== quantity) throw new Error(`Você não possui ${quantity} Ovo(s) ${type} disponível(is).`);
-        consumedIds.push(...eggs.map((egg) => egg.id));
+      // Carrega os ovos ESPECÍFICOS escolhidos pelo jogador e valida elegibilidade,
+      // para nunca consumir um ovo diferente do selecionado (ex.: um com bônus de raridade).
+      const eggs = await tx.mascotEgg.findMany({
+        where: {
+          id: { in: uniqueEggIds },
+          playerId: player.id,
+          type: { in: MIAUVADAO_FUSION_EGG_TYPES as unknown as EggType[] },
+          incubation: null,
+          NOT: { origin: { startsWith: "bazar:" } },
+        },
+        select: { id: true, type: true },
+      });
+      if (eggs.length !== 3) {
+        throw new Error("Um ou mais ovos selecionados não estão mais disponíveis. Atualize a página e tente novamente.");
       }
+      const eggTypes = eggs.map((egg) => egg.type as MiauvadaoFusionEggType);
+      const consumedIds = eggs.map((egg) => egg.id);
 
       const result = rollMiauvadaoFusion(eggTypes);
       const lootBonusPct = rollFusionLootBonus(eggTypes, result);
@@ -1548,15 +1547,21 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
         amount: -MIAUVADAO_EGG_FUSION_PLAYER_COST,
         description: "Uso da Máquina de Fusão de Ovos do Miauvadão",
       });
+      let newEgg: { id: string; type: MiauvadaoFusionEggType; hatchRarityBonusPct: number } | undefined;
       if (result !== "BROKEN") {
-        await tx.mascotEgg.create({
+        const created = await tx.mascotEgg.create({
           data: {
             playerId: player.id,
             type: result as EggType,
             origin: "Miauvadão: Fusão de Ovos",
             hatchRarityBonusPct: lootBonusPct,
           },
+          select: { id: true, type: true, hatchRarityBonusPct: true },
         });
+        // Só devolvemos para a UI da máquina os ovos que ela lista (LAB não entra).
+        if ((MIAUVADAO_FUSION_EGG_TYPES as readonly string[]).includes(created.type)) {
+          newEgg = { id: created.id, type: created.type as MiauvadaoFusionEggType, hatchRarityBonusPct: created.hatchRarityBonusPct };
+        }
       }
       const updatedConfig = await tx.miauvadaoConfig.update({
         where: { id: "singleton" },
@@ -1573,6 +1578,7 @@ export async function fuseMiauvadaoEggsAction(eggTypes: MiauvadaoFusionEggType[]
         lootBonusPct,
         newVaultBalance: updatedConfig.vaultBalance,
         newPlayerBalance: wallet.balance - MIAUVADAO_EGG_FUSION_PLAYER_COST,
+        newEgg,
       };
     }, { isolationLevel: "Serializable" });
 

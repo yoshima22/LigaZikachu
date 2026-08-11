@@ -18,7 +18,7 @@ import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-butt
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import type { MascotRarity } from "@/lib/mascot-data";
-import type { MiauvadaoFusionEggType } from "@/lib/miauvadao-egg-fusion";
+import type { MiauvadaoFusionEggType, MiauvadaoFusionEgg } from "@/lib/miauvadao-egg-fusion";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -35,23 +35,28 @@ export default async function BazarPage({
   const currentPlayer = session?.user ? await getSessionPlayer(session.user.id) : null;
   const playerId = currentPlayer?.id ?? null;
 
-  const [wallet, fusionEggGroups] = playerId ? await Promise.all([
+  const [wallet, fusionEggRows] = playerId ? await Promise.all([
     getOrCreateWallet(playerId),
-    prisma.mascotEgg.groupBy({
-      by: ["type"],
+    prisma.mascotEgg.findMany({
       where: {
         playerId,
         type: { in: ["COMMON", "EVENT", "RARE", "SPECIAL"] },
         incubation: null,
         NOT: { origin: { startsWith: "bazar:" } },
       },
-      _count: { _all: true },
+      // Bônus maior primeiro dentro de cada raridade, para o jogador ver logo os
+      // ovos "aumentados" e evitar consumi-los sem querer.
+      orderBy: [{ type: "asc" }, { hatchRarityBonusPct: "desc" }, { obtainedAt: "asc" }],
+      select: { id: true, type: true, hatchRarityBonusPct: true, obtainedAt: true, origin: true },
     }),
   ]) : [null, []];
-  const fusionEggCounts = { COMMON: 0, EVENT: 0, RARE: 0, SPECIAL: 0 } as Record<MiauvadaoFusionEggType, number>;
-  for (const group of fusionEggGroups) {
-    if (group.type in fusionEggCounts) fusionEggCounts[group.type as MiauvadaoFusionEggType] = group._count._all;
-  }
+  const fusionEggs: MiauvadaoFusionEgg[] = fusionEggRows.map((egg) => ({
+    id: egg.id,
+    type: egg.type as MiauvadaoFusionEggType,
+    hatchRarityBonusPct: egg.hatchRarityBonusPct,
+    obtainedAt: egg.obtainedAt.toISOString(),
+    origin: egg.origin,
+  }));
 
   // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
   // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
@@ -252,7 +257,7 @@ export default async function BazarPage({
         vaultBalance={freshMiauvadao.vaultBalance}
         lastWinnerMessage={freshMiauvadao.lastWinnerMessage ?? null}
         isAdmin={admin}
-        eggCounts={fusionEggCounts}
+        eggs={fusionEggs}
       />
 
       {/* Filters */}

@@ -1,6 +1,15 @@
 export const MIAUVADAO_FUSION_EGG_TYPES = ["COMMON", "EVENT", "RARE", "SPECIAL"] as const;
 export type MiauvadaoFusionEggType = typeof MIAUVADAO_FUSION_EGG_TYPES[number];
 export type MiauvadaoFusionResult = "BROKEN" | MiauvadaoFusionEggType | "LAB";
+
+/** Um ovo individual elegível para a Máquina de Fusão (seleção por ovo específico). */
+export type MiauvadaoFusionEgg = {
+  id: string;
+  type: MiauvadaoFusionEggType;
+  hatchRarityBonusPct: number;
+  obtainedAt: string;
+  origin: string | null;
+};
 export const MIAUVADAO_FUSION_HATCH_BONUS_CHANCES = [
   { bonusPct: 0, chancePct: 62 },
   { bonusPct: 1, chancePct: 23 },
