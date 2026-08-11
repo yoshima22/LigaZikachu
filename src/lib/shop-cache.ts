@@ -62,6 +62,7 @@ export const getEnabledShopPromotions = unstable_cache(
         name: true,
         scope: true,
         itemId: true,
+        items: { select: { itemId: true } },
         discountPct: true,
         startsAt: true,
         endsAt: true,

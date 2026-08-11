@@ -8,6 +8,7 @@ export type ShopPromotionPriceInput = {
   name: string;
   scope: ShopPromotionScope;
   itemId: string | null;
+  items?: ReadonlyArray<{ itemId: string }>;
   discountPct: number;
   startsAt: Date;
   endsAt: Date;
@@ -34,7 +35,7 @@ export function resolveShopPromotionPrice(
       promotion.active
       && promotion.startsAt <= now
       && promotion.endsAt > now
-      && (promotion.scope === "GLOBAL" || promotion.itemId === itemId),
+      && (promotion.scope === "GLOBAL" || promotion.itemId === itemId || promotion.items?.some((entry) => entry.itemId === itemId)),
     )
     .sort((left, right) =>
       right.discountPct - left.discountPct
@@ -75,7 +76,7 @@ export async function getCurrentShopPromotionPrice(
       active: true,
       startsAt: { lte: now },
       endsAt: { gt: now },
-      OR: [{ scope: "GLOBAL" }, { scope: "ITEM", itemId }],
+      OR: [{ scope: "GLOBAL" }, { scope: "ITEM", itemId }, { scope: "ITEM", items: { some: { itemId } } }],
     },
     select: {
       id: true,
@@ -86,6 +87,7 @@ export async function getCurrentShopPromotionPrice(
       startsAt: true,
       endsAt: true,
       active: true,
+      items: { select: { itemId: true } },
     },
   });
   return resolveShopPromotionPrice(originalPrice, itemId, promotions, now);

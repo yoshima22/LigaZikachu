@@ -1818,6 +1818,7 @@ model ShopItem {
   wishlistEntries           PlayerItemWishlist[]
   syncChallengeConsumptions SyncChallengeEntry[]
   promotions                ShopPromotion[]
+  promotionEntries          ShopPromotionItem[]
 
   @@map("shop_items")
 }
@@ -1840,11 +1841,23 @@ model ShopPromotion {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   item        ShopItem?          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  items       ShopPromotionItem[]
   createdBy   User?              @relation("ShopPromotionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([active, startsAt, endsAt])
   @@index([itemId, active])
   @@map("shop_promotions")
+}
+
+model ShopPromotionItem {
+  promotionId String
+  itemId      String
+  promotion   ShopPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  item        ShopItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, itemId])
+  @@index([itemId])
+  @@map("shop_promotion_items")
 }
 
 model PlayerInventory {

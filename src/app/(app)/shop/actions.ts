@@ -407,6 +407,7 @@ const shopPromotionSchema = z.object({
   name: z.string().trim().min(2).max(100),
   scope: z.nativeEnum(ShopPromotionScope),
   itemId: z.string().trim().optional().nullable(),
+  itemIds: z.array(z.string().trim().min(1)).max(200).optional().default([]),
   discountPct: z.number().int().min(1).max(99),
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date(),
@@ -414,32 +415,44 @@ const shopPromotionSchema = z.object({
   if (data.endsAt <= data.startsAt) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["endsAt"], message: "O fim da promoção deve ser posterior ao início." });
   }
-  if (data.scope === ShopPromotionScope.ITEM && !data.itemId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["itemId"], message: "Escolha o item que receberá o desconto." });
+  if (data.scope === ShopPromotionScope.ITEM && !data.itemId && data.itemIds.length === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["itemIds"], message: "Escolha pelo menos um item que receberá o desconto." });
   }
 });
 
-export async function createShopPromotion(raw: {
+type ShopPromotionInput = {
   name: string;
   scope: ShopPromotionScope;
   itemId?: string | null;
+  itemIds?: string[];
   discountPct: number;
   startsAt: string | Date;
   endsAt: string | Date;
-}): Promise<{ error?: string }> {
+};
+
+function promotionItemIds(data: z.infer<typeof shopPromotionSchema>) {
+  if (data.scope !== ShopPromotionScope.ITEM) return [];
+  return [...new Set([data.itemId, ...data.itemIds].filter((id): id is string => Boolean(id)))];
+}
+
+async function validatePromotionItems(itemIds: string[]) {
+  if (!itemIds.length) return false;
+  const found = await prisma.shopItem.count({ where: { id: { in: itemIds } } });
+  return found === itemIds.length;
+}
+
+export async function createShopPromotion(raw: ShopPromotionInput): Promise<{ error?: string }> {
   try {
     const actor = await requireAdmin();
     const data = shopPromotionSchema.parse(raw);
-    const itemId = data.scope === ShopPromotionScope.ITEM ? data.itemId : null;
-    if (itemId) {
-      const exists = await prisma.shopItem.findUnique({ where: { id: itemId }, select: { id: true } });
-      if (!exists) return { error: "Item da promoção não encontrado." };
-    }
+    const itemIds = promotionItemIds(data);
+    if (data.scope === ShopPromotionScope.ITEM && !await validatePromotionItems(itemIds)) return { error: "Um ou mais itens da promoção não foram encontrados." };
     await prisma.shopPromotion.create({
       data: {
         name: data.name,
         scope: data.scope,
-        itemId,
+        itemId: itemIds[0] ?? null,
+        items: itemIds.length ? { createMany: { data: itemIds.map((itemId) => ({ itemId })) } } : undefined,
         discountPct: data.discountPct,
         startsAt: data.startsAt,
         endsAt: data.endsAt,
@@ -453,6 +466,39 @@ export async function createShopPromotion(raw: {
   } catch (error) {
     if (error instanceof z.ZodError) return { error: error.issues[0]?.message ?? "Dados inválidos." };
     return { error: error instanceof Error ? error.message : "Não foi possível criar a promoção." };
+  }
+}
+
+export async function updateShopPromotion(promotionId: string, raw: ShopPromotionInput): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const data = shopPromotionSchema.parse(raw);
+    const itemIds = promotionItemIds(data);
+    if (data.scope === ShopPromotionScope.ITEM && !await validatePromotionItems(itemIds)) return { error: "Um ou mais itens da promoção não foram encontrados." };
+    await prisma.$transaction(async (tx) => {
+      const exists = await tx.shopPromotion.findUnique({ where: { id: promotionId }, select: { id: true } });
+      if (!exists) throw new Error("Promoção não encontrada.");
+      await tx.shopPromotionItem.deleteMany({ where: { promotionId } });
+      await tx.shopPromotion.update({
+        where: { id: promotionId },
+        data: {
+          name: data.name,
+          scope: data.scope,
+          itemId: itemIds[0] ?? null,
+          discountPct: data.discountPct,
+          startsAt: data.startsAt,
+          endsAt: data.endsAt,
+          items: itemIds.length ? { createMany: { data: itemIds.map((itemId) => ({ itemId })) } } : undefined,
+        },
+      });
+    });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    void invalidateShopCache();
+    return {};
+  } catch (error) {
+    if (error instanceof z.ZodError) return { error: error.issues[0]?.message ?? "Dados inválidos." };
+    return { error: error instanceof Error ? error.message : "Não foi possível editar a promoção." };
   }
 }
 

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, Eye, EyeOff, Percent, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Eye, EyeOff, Pencil, Percent, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createShopPromotion, deleteShopPromotion, toggleShopPromotion } from "../../actions";
+import { createShopPromotion, deleteShopPromotion, toggleShopPromotion, updateShopPromotion } from "../../actions";
 
 type PromotionItem = { id: string; name: string; type: string; price: number };
 type Promotion = {
@@ -12,11 +12,12 @@ type Promotion = {
   name: string;
   scope: "GLOBAL" | "ITEM";
   itemId: string | null;
+  items: Array<{ id: string; name: string }>;
   discountPct: number;
   startsAt: Date | string;
   endsAt: Date | string;
   active: boolean;
-  item: { name: string } | null;
+  item: { id: string; name: string } | null;
 };
 
 function localDateTimeValue(date: Date) {
@@ -31,7 +32,7 @@ function initialForm() {
   return {
     name: "",
     scope: "GLOBAL" as "GLOBAL" | "ITEM",
-    itemId: "",
+    itemIds: [] as string[],
     discountPct: 10,
     startsAt: localDateTimeValue(startsAt),
     endsAt: localDateTimeValue(endsAt),
@@ -53,29 +54,56 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [itemSearch, setItemSearch] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const filteredItems = items.filter((item) =>
     !itemSearch.trim() || item.name.toLocaleLowerCase("pt-BR").includes(itemSearch.trim().toLocaleLowerCase("pt-BR")),
   );
 
-  const handleCreate = () => startTransition(async () => {
+  const closeForm = () => {
+    setForm(initialForm());
+    setItemSearch("");
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSave = () => startTransition(async () => {
     const startsAt = new Date(form.startsAt);
     const endsAt = new Date(form.endsAt);
     if (!form.name.trim()) { toast.error("Informe um nome para a promoção."); return; }
-    if (form.scope === "ITEM" && !form.itemId) { toast.error("Escolha o item da promoção."); return; }
+    if (form.scope === "ITEM" && form.itemIds.length === 0) { toast.error("Escolha pelo menos um item da promoção."); return; }
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) { toast.error("Informe datas válidas."); return; }
-    const result = await createShopPromotion({
+    const payload = {
       name: form.name,
       scope: form.scope,
-      itemId: form.scope === "ITEM" ? form.itemId : null,
+      itemIds: form.scope === "ITEM" ? form.itemIds : [],
       discountPct: form.discountPct,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
-    });
+    };
+    const result = editingId
+      ? await updateShopPromotion(editingId, payload)
+      : await createShopPromotion(payload);
     if (result.error) { toast.error(result.error); return; }
-    toast.success("Promoção programada.");
-    setForm(initialForm());
-    setShowForm(false);
+    toast.success(editingId ? "Promoção atualizada." : "Promoção programada.");
+    closeForm();
   });
+
+  const handleEdit = (promotion: Promotion) => {
+    const selectedIds = promotion.items.length
+      ? promotion.items.map((item) => item.id)
+      : promotion.itemId ? [promotion.itemId] : [];
+    setForm({
+      name: promotion.name,
+      scope: promotion.scope,
+      itemIds: selectedIds,
+      discountPct: promotion.discountPct,
+      startsAt: localDateTimeValue(new Date(promotion.startsAt)),
+      endsAt: localDateTimeValue(new Date(promotion.endsAt)),
+    });
+    setEditingId(promotion.id);
+    setItemSearch("");
+    setShowForm(true);
+  };
 
   const handleToggle = (promotion: Promotion) => startTransition(async () => {
     const result = await toggleShopPromotion(promotion.id, !promotion.active);
@@ -104,7 +132,7 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
             Programe descontos na loja inteira ou em um item. Promoções simultâneas não acumulam: o jogador sempre recebe o maior desconto aplicável.
           </p>
         </div>
-        <Button type="button" size="sm" onClick={() => setShowForm((value) => !value)} className="gap-1 bg-emerald-400 text-slate-950 hover:bg-emerald-300">
+        <Button type="button" size="sm" onClick={() => { if (showForm) closeForm(); else { setForm(initialForm()); setEditingId(null); setShowForm(true); } }} className="gap-1 bg-emerald-400 text-slate-950 hover:bg-emerald-300">
           <Plus size={14} /> Nova promoção
         </Button>
       </div>
@@ -118,10 +146,10 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
           </label>
           <label className="space-y-1 text-xs text-slate-400">
             <span>Aplicar em</span>
-            <select value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value as "GLOBAL" | "ITEM", itemId: "" })}
+            <select value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value as "GLOBAL" | "ITEM", itemIds: [] })}
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/60">
               <option value="GLOBAL">Toda a ZikaShop</option>
-              <option value="ITEM">Um item específico</option>
+              <option value="ITEM">Uma lista de itens específicos</option>
             </select>
           </label>
           <label className="space-y-1 text-xs text-slate-400">
@@ -136,11 +164,31 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
             <div className="space-y-2 md:col-span-2 lg:col-span-3">
               <input value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Filtrar itens pelo nome..."
                 className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-emerald-400/60" />
-              <select value={form.itemId} onChange={(event) => setForm({ ...form, itemId: event.target.value })}
-                className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/60">
-                <option value="">Selecione o item</option>
-                {filteredItems.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.price.toLocaleString("pt-BR")} ZC</option>)}
-              </select>
+              {form.itemIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.itemIds.map((itemId) => {
+                    const item = items.find((candidate) => candidate.id === itemId);
+                    return item ? (
+                      <button key={itemId} type="button" onClick={() => setForm({ ...form, itemIds: form.itemIds.filter((id) => id !== itemId) })}
+                        className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200">
+                        {item.name} <X size={10} />
+                      </button>
+                    ) : null;
+                  })}
+                </div>
+              )}
+              <div className="grid max-h-56 gap-1 overflow-y-auto rounded-xl border border-border bg-slate-950/70 p-2 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredItems.map((item) => {
+                  const selected = form.itemIds.includes(item.id);
+                  return (
+                    <label key={item.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-[11px] ${selected ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-100" : "border-transparent text-slate-400 hover:bg-slate-900"}`}>
+                      <input type="checkbox" checked={selected} onChange={() => setForm({ ...form, itemIds: selected ? form.itemIds.filter((id) => id !== item.id) : [...form.itemIds, item.id] })} className="mt-0.5 accent-emerald-400" />
+                      <span><strong className="block font-semibold">{item.name}</strong><span className="text-[9px] text-slate-500">{item.price.toLocaleString("pt-BR")} ZC</span></span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-emerald-300/70">{form.itemIds.length} item(ns) selecionado(s)</p>
             </div>
           )}
           <label className="space-y-1 text-xs text-slate-400">
@@ -154,8 +202,8 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/60" />
           </label>
           <div className="flex items-end gap-2">
-            <Button type="button" disabled={pending} onClick={handleCreate} className="bg-emerald-400 text-slate-950 hover:bg-emerald-300">Programar</Button>
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button type="button" disabled={pending} onClick={handleSave} className="bg-emerald-400 text-slate-950 hover:bg-emerald-300">{editingId ? "Salvar alterações" : "Programar"}</Button>
+            <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
           </div>
         </div>
       )}
@@ -172,7 +220,11 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-400/25 bg-emerald-500/10 font-black text-emerald-300">-{promotion.discountPct}%</div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-slate-100">{promotion.name}</p>
-                    <p className="text-[10px] text-slate-500">{promotion.scope === "GLOBAL" ? "Toda a loja" : promotion.item?.name ?? "Item removido"}</p>
+                    <p className="text-[10px] text-slate-500">
+                      {promotion.scope === "GLOBAL"
+                        ? "Toda a loja"
+                        : `${promotion.items.length || (promotion.item ? 1 : 0)} item(ns): ${(promotion.items.length ? promotion.items : promotion.item ? [promotion.item] : []).map((item) => item.name).join(", ") || "itens removidos"}`}
+                    </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
                       <CalendarClock size={10} />
                       {new Date(promotion.startsAt).toLocaleString("pt-BR")} até {new Date(promotion.endsAt).toLocaleString("pt-BR")}
@@ -181,6 +233,9 @@ export function ShopPromotionManager({ items, promotions }: { items: PromotionIt
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button type="button" disabled={pending} onClick={() => handleEdit(promotion)} className="rounded-lg p-2 text-cyan-300 hover:bg-cyan-500/10" title="Editar promoção">
+                    <Pencil size={15} />
+                  </button>
                   <button type="button" disabled={pending} onClick={() => handleToggle(promotion)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white" title={promotion.active ? "Desativar" : "Ativar"}>
                     {promotion.active ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>

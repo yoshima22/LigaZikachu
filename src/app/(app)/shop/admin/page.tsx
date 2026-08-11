@@ -20,7 +20,10 @@ export default async function ShopAdminPage() {
     }),
     prisma.shopPromotion.findMany({
       orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }],
-      include: { item: { select: { name: true } } },
+      include: {
+        item: { select: { id: true, name: true } },
+        items: { include: { item: { select: { id: true, name: true } } }, orderBy: { item: { name: "asc" } } },
+      },
     }),
   ]);
 
@@ -69,6 +72,7 @@ export default async function ShopAdminPage() {
             endsAt: promotion.endsAt,
             active: promotion.active,
             item: promotion.item,
+            items: promotion.items.map((entry) => entry.item),
           }))}
         />
       </Card>
