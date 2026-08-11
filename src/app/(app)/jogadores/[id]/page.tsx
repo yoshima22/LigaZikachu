@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isStaff } from "@/lib/auth/permissions";
 import { getCachedPlayerRanking } from "@/lib/ranking-cache";
 import type { computePlayerRanking } from "@/lib/ranking";
 import { StatCard } from "@/components/ui/stat-card";
@@ -102,7 +102,8 @@ export default async function PlayerDetailPage({
 
   const activeSeason = player.seasonEntries.find((sp) => sp.season.status === SeasonStatus.ACTIVE);
   const isSelf = session.user.id === player.userId;
-  const isAdminUser = isAdmin(session.user.role);
+  // Staff (admin ou gamemaster) tem os poderes de perfil (enviar/remover itens, etc.).
+  const isAdminUser = isStaff(session.user.role);
   if (isAdminUser) {
     await Promise.all([
       prisma.$transaction((tx) => ensureSyncChallengeItems(tx)),

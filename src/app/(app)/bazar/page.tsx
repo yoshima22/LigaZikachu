@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-react";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isAdmin, isStaff } from "@/lib/auth/permissions";
 import { MiauvadaoPanel } from "./_components/miauvadao-panel";
 import { MiauvadaoGames } from "./_components/miauvadao-games";
 import { BazarListingCard } from "./_components/bazar-listing-card";
@@ -31,7 +31,10 @@ export default async function BazarPage({
   const searchParams = await searchParamsPromise;
 
   const session = await getAppSession();
-  const admin = session?.user ? isAdmin(session.user.role) : false;
+  const staff = session?.user ? isStaff(session.user.role) : false;
+  // Gamemasters enxergam as ferramentas de gestão, mas continuam sujeitos
+  // aos mesmos cooldowns e regras de jogo de qualquer jogador.
+  const platformAdmin = session?.user ? isAdmin(session.user.role) : false;
   const currentPlayer = session?.user ? await getSessionPlayer(session.user.id) : null;
   const playerId = currentPlayer?.id ?? null;
 
@@ -125,7 +128,7 @@ export default async function BazarPage({
                 className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors">
                 <Plus size={13}/> Anunciar
               </Link>
-              {admin && (
+              {staff && (
                 <Link href="/bazar/admin"
                   className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-colors">
                   ⚙️ Admin
@@ -136,7 +139,7 @@ export default async function BazarPage({
         </div>
       </div>
 
-      {admin && (
+      {staff && (
         <div className="rounded-2xl border border-red-500/25 bg-red-500/5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
@@ -145,7 +148,8 @@ export default async function BazarPage({
                 Controles admin do Bazar
               </p>
               <p className="text-xs text-slate-500">
-                Ajuste ZC do cofre, publique ofertas manuais ou gere novas ofertas do Miauvadão. O modo debug do copos aparece no Jogo do Miauvadão para contas admin.
+                Ajuste ZC do cofre, publique ofertas manuais ou gere novas ofertas do Miauvadão.
+                {platformAdmin ? " O modo debug do jogo dos copos permanece exclusivo das contas admin." : " Sua conta continua usando jogos, compras e cooldowns como um jogador comum."}
               </p>
             </div>
             <Link href="/bazar/admin"
@@ -256,7 +260,7 @@ export default async function BazarPage({
         playerId={playerId}
         vaultBalance={freshMiauvadao.vaultBalance}
         lastWinnerMessage={freshMiauvadao.lastWinnerMessage ?? null}
-        isAdmin={admin}
+        isAdmin={platformAdmin}
         eggs={fusionEggs}
       />
 

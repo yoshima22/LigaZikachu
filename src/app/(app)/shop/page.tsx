@@ -1,7 +1,7 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { isStaff } from "@/lib/auth/permissions";
+import { isAdmin, isStaff } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
@@ -31,7 +31,8 @@ export default async function ShopPage() {
   if (!session?.user) return null;
 
   // Staff (admin ou gamemaster) pode gerenciar a loja e ver todos os itens.
-  const admin = isStaff(session.user.role);
+  const staff = isStaff(session.user.role);
+  const platformAdmin = isAdmin(session.user.role);
   await ensureWeeklyLeagueItems();
 
   const player = await prisma.player.findUnique({
@@ -67,7 +68,7 @@ export default async function ShopPage() {
   const priceIncreasePct = priceSabotage ? readSabotageNumber(priceSabotage.effectJson, "priceIncreasePct", 10) : 0;
   const megaUnlocked = await isMegaStoneShopUnlocked();
   const safeRawItems = rawItems.filter((item) =>
-    admin ||
+    platformAdmin ||
     megaUnlocked ||
     !MEGA_STONE_SHOP_ITEM_TYPES.includes(item.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number])
   );
@@ -127,7 +128,7 @@ export default async function ShopPage() {
               {wallet.balance.toLocaleString("pt-BR")} ZC
             </Link>
           )}
-          {admin && (
+          {staff && (
             <Link href="/shop/admin" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-slate-200">
               <Settings size={14} /> Gerenciar
             </Link>
@@ -187,7 +188,7 @@ export default async function ShopPage() {
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
             ) : null,
           },
-          ...((megaItems.length > 0 && (megaUnlocked || admin)) ? [{
+          ...((megaItems.length > 0 && (megaUnlocked || platformAdmin)) ? [{
             id: "mega", label: "Mega Evolução", icon: TAB_ICONS.buffs,
             count: megaItems.length,
             content: (

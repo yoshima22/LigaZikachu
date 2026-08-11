@@ -2710,31 +2710,35 @@ export async function applyLuckyEgg(playerId: string, mascotId: string) {
 }
 
 /** Política de Fraqueza: recupera um mascote ferido/em repouso e bloqueia 1 ataque oportunista. */
-export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+type WeaknessPolicyDb = Pick<Prisma.TransactionClient, "mascot" | "mascotEvent">;
+
+export async function applyWeaknessPolicy(
+  playerId: string,
+  mascotId: string,
+  db: WeaknessPolicyDb = prisma,
+) {
+  const mascot = await db.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   const isResting = mascot.arenaState === "RESTING"
     || Boolean(mascot.restingUntil && mascot.restingUntil > new Date());
   if (mascot.arenaState !== "INJURED" && !isResting) {
     throw new Error("A Política de Fraqueza só pode ser usada em mascotes feridos ou em repouso.");
   }
-  await prisma.$transaction(async (tx) => {
-    await tx.mascot.update({
-      where: { id: mascotId },
-      data: {
-        arenaState: "FREE",
-        injuredAt: null,
-        restingUntil: null,
-        susRestBonusMinutes: 0,
-      },
-    });
-    await tx.mascotEvent.create({
-      data: {
-        mascotId,
-        emoji: "🛡️",
-        description: "Política de Fraqueza usada! O mascote se recuperou e voltou para o combate.",
-      },
-    });
+  await db.mascot.update({
+    where: { id: mascotId },
+    data: {
+      arenaState: "FREE",
+      injuredAt: null,
+      restingUntil: null,
+      susRestBonusMinutes: 0,
+    },
+  });
+  await db.mascotEvent.create({
+    data: {
+      mascotId,
+      emoji: "🛡️",
+      description: "Política de Fraqueza usada! O mascote se recuperou e voltou para o combate.",
+    },
   });
 }
 

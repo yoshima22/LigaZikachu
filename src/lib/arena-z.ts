@@ -12,6 +12,7 @@ import type { ArenaBattleResult } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { recordPlayerActivity } from "@/lib/player-activity";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -2257,9 +2258,25 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
     where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
   });
   if (weaknessPolicy) {
-    await prisma.mascotBuff.delete({ where: { id: weaknessPolicy.id } });
-    await prisma.mascotEvent.create({
-      data: { mascotId: targetMascotId, emoji: "🛡️", description: "Escudo ativado! Ataque oportunista bloqueado. (proteção consumida)" }
+    await prisma.$transaction(async (tx) => {
+      await tx.mascotBuff.delete({ where: { id: weaknessPolicy.id } });
+      await tx.mascotEvent.create({
+        data: { mascotId: targetMascotId, emoji: "🛡️", description: "Escudo ativado! Ataque oportunista bloqueado. (proteção consumida)" },
+      });
+      await recordPlayerActivity(tx, {
+        playerId: targetMascot.playerId,
+        category: "ARENA",
+        action: "ARENA_SHIELD_CONSUMED",
+        summary: `Escudo de ${targetMascot.nickname ?? getPokemonName(targetMascot.pokemonId)} bloqueou um ataque oportunista`,
+        source: "ARENA_Z_OPPORTUNISTIC_ATTACK",
+        entityType: "mascot",
+        entityId: targetMascotId,
+        amount: -1,
+        unit: "SHIELD",
+        before: { protected: true, attackerPlayerId },
+        after: { protected: false, attackBlocked: true },
+        metadata: { buffId: weaknessPolicy.id, buffType: "WEAKNESS_POLICY" },
+      });
     });
     throw new Error("Este mascote está protegido por um escudo! A proteção foi consumida ao bloquear o ataque.");
   }
@@ -2985,6 +3002,24 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
         emoji: "🛡️",
         description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Recuperação completa, repouso removido e proteção contra o próximo ataque oportunista.`,
       },
+    });
+    await recordPlayerActivity(tx, {
+      playerId: shieldOwnerPlayerId,
+      category: "ARENA",
+      action: "ARENA_DAILY_SHIELD_USED",
+      summary: `Escudo diário usado em ${targetMascot.nickname ?? getPokemonName(targetMascot.pokemonId)} de ${targetMascot.player.displayName}`,
+      source: "ARENA_Z_SUS_SHIELD",
+      entityType: "mascot",
+      entityId: targetMascotId,
+      amount: -1,
+      unit: "DAILY_SHIELD",
+      before: {
+        arenaState: targetMascot.arenaState,
+        restingUntil: targetMascot.restingUntil?.toISOString() ?? null,
+        existingProtection: Boolean(existingShield),
+      },
+      after: { arenaState: "FREE", restingUntil: null, protected: true },
+      metadata: { targetPlayerId: targetMascot.playerId, targetPlayerName: targetMascot.player.displayName },
     });
   });
 

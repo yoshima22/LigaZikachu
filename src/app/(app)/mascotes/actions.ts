@@ -20,6 +20,7 @@ import { EGG_SHINY_CHANCE, getPokemonName, getPokemonTypes, POKEMON_ELEMENT } fr
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
+import { recordPlayerActivity } from "@/lib/player-activity";
 import type { Prisma } from "@prisma/client";
 
 function revalidate(playerId?: string) {
@@ -1047,12 +1048,45 @@ export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
-    const shopItem = await prisma.shopItem.findFirst({ where: { type: "WEAKNESS_POLICY", active: true }, select: { id: true } });
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: "WEAKNESS_POLICY", active: true }, select: { id: true, name: true } });
     if (!shopItem) return { error: "Item nao encontrado na loja." };
-    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    const [inv, mascot] = await Promise.all([
+      prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } }),
+      prisma.mascot.findFirst({
+        where: { id: mascotId, playerId: player.id },
+        select: { id: true, pokemonId: true, nickname: true, arenaState: true, restingUntil: true },
+      }),
+    ]);
     if (!inv || inv.quantity < 1) return { error: "Você não tem Política de Fraqueza no inventário." };
-    await applyWeaknessPolicy(player.id, mascotId);
-    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    if (!mascot) return { error: "Mascote não encontrado." };
+    const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+    await prisma.$transaction(async (tx) => {
+      const consumed = await tx.playerInventory.updateMany({
+        where: { id: inv.id, quantity: { gt: 0 } },
+        data: { quantity: { decrement: 1 } },
+      });
+      if (consumed.count !== 1) throw new Error("A Política de Fraqueza já foi consumida em outra ação.");
+      await applyWeaknessPolicy(player.id, mascotId, tx);
+      await recordPlayerActivity(tx, {
+        playerId: player.id,
+        actorUserId: user.id,
+        category: "ARENA",
+        action: "ARENA_ITEM_USED",
+        summary: `${shopItem.name} usada em ${mascotName}: recuperação imediata da Arena Z`,
+        source: "ARENA_Z_WEAKNESS_POLICY",
+        entityType: "mascot",
+        entityId: mascot.id,
+        amount: -1,
+        unit: "ITEM",
+        before: {
+          inventoryQuantity: inv.quantity,
+          arenaState: mascot.arenaState,
+          restingUntil: mascot.restingUntil?.toISOString() ?? null,
+        },
+        after: { inventoryQuantity: inv.quantity - 1, arenaState: "FREE", restingUntil: null },
+        metadata: { itemId: shopItem.id, itemName: shopItem.name, itemType: "WEAKNESS_POLICY" },
+      });
+    });
     revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
