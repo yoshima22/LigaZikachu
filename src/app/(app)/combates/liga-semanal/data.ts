@@ -58,6 +58,13 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   let allMascots: unknown[] = [];
   let weekHighlights: any[] = [];
   let opponentAnalyses: Record<string, any> = {};
+  // Preferência de esconder resultados (spoiler) e partidas já reveladas pelo jogador.
+  let hideResults = false;
+  let revealedMatchIds: string[] = [];
+  try {
+    const prefRow = await prisma.player.findUnique({ where: { id: playerId }, select: { hideLeagueResults: true } });
+    hideResults = prefRow?.hideLeagueResults ?? false;
+  } catch {}
   let lastChampion: {
     playerName: string; weekKey: string; points: number; wins: number; losses: number;
     avatarUrl: string | null; playerId: string;
@@ -289,7 +296,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       }
       const rawMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
         where: { leagueId: (currentLeague as any).id, battleDate: matchDate },
-        select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true, resultJson: true, replayJson: true },
+        select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, loserId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true, resultJson: true, replayJson: true },
         orderBy: [{ battleSlot: "asc" }, { createdAt: "asc" }],
       });
       // Enrich with player names
@@ -369,6 +376,18 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         playerBName: m.playerBId ? (mpNames.get(m.playerBId) ?? "Jogador") : null,
       }));
     } catch { /* table may not exist yet */ }
+
+    // Partidas de hoje já reveladas por este jogador (para a preferência de spoiler).
+    try {
+      const todayMatchIds = (todayMatches as Array<{ id: string }>).map((m) => m.id);
+      if (todayMatchIds.length > 0) {
+        const reveals = await prisma.weeklyMascotLeagueResultReveal.findMany({
+          where: { playerId, matchId: { in: todayMatchIds } },
+          select: { matchId: true },
+        });
+        revealedMatchIds = reveals.map((r) => r.matchId);
+      }
+    } catch {}
 
     // Load ALL resolved matches this week for highlights
     try {
@@ -512,5 +531,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     weekHighlights,
     opponentAnalyses,
     lastChampion,
+    hideResults,
+    revealedMatchIds,
   };
 }

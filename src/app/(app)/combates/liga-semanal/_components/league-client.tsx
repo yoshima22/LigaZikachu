@@ -30,6 +30,8 @@ import {
   fullLeagueResetAction,
   regenerateReplaysAction,
   getWeeklyScoutingAnalysisAction,
+  setHideLeagueResultsAction,
+  revealLeagueMatchResultAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
@@ -94,6 +96,8 @@ type PageData = {
     topSupport: { name: string; pokemonId: number; heals: number } | null;
     runnersUp: { position: number; playerName: string; avatarUrl: string | null; points: number; wins: number; losses: number; playerId: string }[];
   } | null;
+  hideResults: boolean;
+  revealedMatchIds: string[];
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -1157,6 +1161,42 @@ function ResultsTab({ data }: { data: PageData }) {
   const [analysisError, setAnalysisError] = useState<{ matchId: string; message: string } | null>(null);
   const [analysisPending, startAnalysis] = useTransition();
 
+  // Preferência de esconder resultados (spoiler) + partidas já reveladas.
+  const [hideResults, setHideResults] = useState(data.hideResults);
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set(data.revealedMatchIds));
+  const [savingPref, startSavingPref] = useTransition();
+
+  const toggleHideResults = () => {
+    const next = !hideResults;
+    setHideResults(next); // otimista
+    startSavingPref(async () => {
+      const res = await setHideLeagueResultsAction(next);
+      if (!res.ok) {
+        setHideResults(!next); // reverte
+        toast.error(res.error ?? "Não foi possível salvar a preferência.");
+      }
+    });
+  };
+
+  // Revela permanentemente o resultado de uma partida (clique ou ao assistir replay).
+  const revealMatch = (matchId: string) => {
+    setRevealed((current) => {
+      if (current.has(matchId)) return current;
+      const next = new Set(current);
+      next.add(matchId);
+      return next;
+    });
+    void revealLeagueMatchResultAction(matchId);
+  };
+
+  const openReplay = (match: any) => {
+    revealMatch(match.id);
+    setReplayMatch(match);
+  };
+
+  // Um resultado está visível se a opção está desligada ou se a partida foi revelada.
+  const isSpoiled = (matchId: string) => !hideResults || revealed.has(matchId);
+
   const loadOpponentAnalysis = (playerId: string, matchId: string) => {
     setAnalysisTargetId(playerId);
     setAnalysisError(null);
@@ -1211,6 +1251,32 @@ function ResultsTab({ data }: { data: PageData }) {
       {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} myMascots={data.availableMascots} onClose={() => setOpponentAnalysis(null)} />}
 
       <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
+
+      {/* Preferência de esconder resultados (spoiler) */}
+      <div className="rounded-xl border border-border bg-slate-900/60 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{hideResults ? "🙈" : "👁️"}</span>
+            <span className="text-xs font-bold text-slate-100">Esconder resultados</span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleHideResults}
+            disabled={savingPref}
+            role="switch"
+            aria-checked={hideResults}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${hideResults ? "bg-[#FFCB05]" : "bg-slate-600"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${hideResults ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
+          Com a opção ligada, os resultados (vencedor, dano e sobreviventes) ficam ocultos para você assistir aos replays sem spoiler.
+          Assistir a um combate revela o resultado dele permanentemente. Você também pode revelar uma partida específica sem assistir, no botão ao lado de cada confronto.
+          Desligar a opção revela todos os resultados na hora. A preferência fica salva na sua conta.
+        </p>
+      </div>
+
       <OrderSabotageBanner sabotage={data.orderSabotage} stepState={data.orderLeagueStepState} compact />
 
       {slotGroups.map(({ slot, time, matches }) => (
@@ -1226,7 +1292,12 @@ function ResultsTab({ data }: { data: PageData }) {
             const odds = match.resultJson as any;
             const isScheduled = match.status === "SCHEDULED";
             const isResolved = match.status === "RESOLVED";
+            const isWO = match.status === "WO";
             const isBye = match.status === "BYE";
+            const hasResult = isResolved || isWO;
+            // Resultado visível só se a opção está desligada ou a partida foi revelada.
+            const spoiled = isSpoiled(match.id);
+            const showResult = hasResult && spoiled;
             const winnerIsA = match.winnerId === match.playerAId;
             const winnerIsB = match.winnerId === match.playerBId;
             const involvesMe = match.playerAId === data.player.id || match.playerBId === data.player.id;
@@ -1240,37 +1311,64 @@ function ResultsTab({ data }: { data: PageData }) {
               );
             }
 
+            // Motivo do W/O (jogador sem mascotes disponíveis).
+            const woInfo = isWO ? (match.resultJson as any) : null;
+            const woLoserId = woInfo?.loserId ?? match.loserId ?? null;
+            const woLoserName = woLoserId === match.playerAId ? match.playerAName : woLoserId === match.playerBId ? (match.playerBName ?? "o jogador") : "o jogador";
+            const woReasonText = (woInfo?.reason === "NO_MASCOTS" || woInfo?.availableMascots === 0)
+              ? `Não há mascotes disponíveis para uso do jogador "${woLoserName}".`
+              : `O jogador "${woLoserName}" não tinha 6 mascotes disponíveis${typeof woInfo?.availableMascots === "number" ? ` (tinha ${woInfo.availableMascots})` : ""}.`;
+
             return (
               <div key={match.id} className={`rounded-xl border p-3 space-y-1 ${
                 involvesMe ? "ring-1 ring-[#FFCB05]/45 " : ""
               }${
                 isScheduled ? "border-yellow-500/20 bg-yellow-500/5" :
-                isResolved ? "border-green-500/20 bg-green-500/5" :
+                isWO && showResult ? "border-orange-500/25 bg-orange-500/5" :
+                isResolved && showResult ? "border-green-500/20 bg-green-500/5" :
                 "border-border bg-slate-900/60"
               }`}>
                 <div className="flex items-center justify-between">
                   {isScheduled && <span className="text-[10px] font-semibold text-yellow-400">⏳ Agendado</span>}
-                  {isResolved && <span className="text-[10px] font-semibold text-green-400">✓ Resolvido</span>}
+                  {hasResult && !spoiled && <span className="text-[10px] font-semibold text-slate-500">🙈 Resultado oculto</span>}
+                  {isResolved && showResult && <span className="text-[10px] font-semibold text-green-400">✓ Resolvido</span>}
+                  {isWO && showResult && <span className="text-[10px] font-semibold text-orange-400">⚠ W/O (vitória sem combate)</span>}
                 </div>
 
                 {/* Matchup card */}
                 <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
-                  <div className={`text-right ${match.playerAId === data.player.id ? "text-[#FFCB05]" : isResolved && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
+                  <div className={`text-right ${match.playerAId === data.player.id ? "text-[#FFCB05]" : showResult && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
                     <p className="text-xs font-bold">{match.playerAName}</p>
                     {odds?.oddsA && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsA).toFixed(2)}×</p>}
-                    {isResolved && <p className="text-[9px] text-slate-500">Dano: {match.playerADamageDealt} | Sobr: {match.playerASurvivors}</p>}
+                    {isResolved && showResult && <p className="text-[9px] text-slate-500">Dano: {match.playerADamageDealt} | Sobr: {match.playerASurvivors}</p>}
                   </div>
 
                   <span className="text-xs font-bold text-slate-500 px-2">vs</span>
 
-                  <div className={`text-left ${match.playerBId === data.player.id ? "text-[#FFCB05]" : isResolved && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
+                  <div className={`text-left ${match.playerBId === data.player.id ? "text-[#FFCB05]" : showResult && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
                     <p className="text-xs font-bold">{match.playerBName ?? "—"}</p>
                     {odds?.oddsB && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsB).toFixed(2)}×</p>}
-                    {isResolved && <p className="text-[9px] text-slate-500">Dano: {match.playerBDamageDealt} | Sobr: {match.playerBSurvivors}</p>}
+                    {isResolved && showResult && <p className="text-[9px] text-slate-500">Dano: {match.playerBDamageDealt} | Sobr: {match.playerBSurvivors}</p>}
                   </div>
                 </div>
 
-                {isResolved && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
+                {isResolved && showResult && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
+                {isWO && showResult && (
+                  <p className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-2 py-1 text-[10px] text-orange-200">
+                    <strong>Vitória por W/O.</strong> {woReasonText}
+                  </p>
+                )}
+
+                {/* Revelar resultado sem assistir (só quando a opção de esconder está ativa) */}
+                {hasResult && !spoiled && (
+                  <button
+                    onClick={() => revealMatch(match.id)}
+                    className="mt-1 w-full rounded-lg border border-slate-500/30 bg-slate-500/10 py-1 text-[10px] font-semibold text-slate-300 hover:bg-slate-500/20 transition-colors"
+                  >
+                    Revelar resultado
+                  </button>
+                )}
+
                 {opponentId && involvesMe && (
                   <>
                     <button disabled={analysisPending && analysisTargetId === opponentId} onClick={() => loadOpponentAnalysis(opponentId, match.id)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-50 transition-colors">
@@ -1281,10 +1379,10 @@ function ResultsTab({ data }: { data: PageData }) {
                 )}
                 {isResolved && match.replayJson && (
                   <button
-                    onClick={() => setReplayMatch(match)}
+                    onClick={() => openReplay(match)}
                     className="mt-1 w-full rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 py-1 text-[10px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10 transition-colors"
                   >
-                    Ver Replay
+                    {hasResult && !spoiled ? "Assistir replay (revela o resultado)" : "Ver Replay"}
                   </button>
                 )}
               </div>

@@ -293,6 +293,7 @@ model Player {
   mascotBondBehavior          String                         @default("FREE")
   mascotSpritePreference      String                         @default("ANIMATED")
   megaSpritePreference        String                         @default("ANIMATED")
+  hideLeagueResults           Boolean                        @default(false)
   supporterPasses             SupporterPass[]
   sentMessages                DirectMessage[]                @relation("SentMessages")
   receivedMessages            DirectMessage[]                @relation("ReceivedMessages")
@@ -3114,6 +3115,20 @@ model WeeklyMascotLeagueMatch {
   @@index([playerAId])
   @@index([playerBId])
   @@map("weekly_mascot_league_matches")
+}
+
+// Marca quais resultados de partidas cada jogador já revelou/assistiu, para a
+// preferência de "esconder resultados" (spoiler) da Liga Semanal. Sem FK direto
+// para manter o isolamento do modo, seguindo o padrão dos demais modelos da liga.
+model WeeklyMascotLeagueResultReveal {
+  id         String   @id @default(cuid())
+  playerId   String
+  matchId    String
+  revealedAt DateTime @default(now())
+
+  @@unique([playerId, matchId])
+  @@index([playerId])
+  @@map("weekly_mascot_league_result_reveals")
 }
 
 model WeeklyMascotLeagueBattleItem {

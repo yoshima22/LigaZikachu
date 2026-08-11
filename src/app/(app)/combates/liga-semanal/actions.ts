@@ -1131,11 +1131,19 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
     if (teamAMascots.length < 6 || teamBMascots.length < 6) {
       const woPlayer = teamAMascots.length < 6 ? pair.aId : pair.bId!;
       const winPlayer = woPlayer === pair.aId ? pair.bId! : pair.aId;
+      const woAvailable = woPlayer === pair.aId ? teamAMascots.length : teamBMascots.length;
       await prisma.weeklyMascotLeagueMatch.create({
         data: {
           id: createId(), leagueId, roundNumber, battleDate: today, battleSlot,
           scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId,
           winnerId: winPlayer, loserId: woPlayer, status: "WO", resolvedAt: new Date(),
+          // Guarda o motivo do W/O para exibir na tela de resultados.
+          resultJson: {
+            wo: true,
+            loserId: woPlayer,
+            availableMascots: woAvailable,
+            reason: woAvailable === 0 ? "NO_MASCOTS" : "INSUFFICIENT_MASCOTS",
+          },
         },
       });
       await prisma.weeklyMascotLeagueParticipant.updateMany({
@@ -1956,4 +1964,40 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
   let finalized: unknown = null;
   if (weekday === "Fri" && minuteOfDay >= 20 * 60 + 30) finalized = await finalizeLeagueAction(league.id, automationSecret);
   return { success: true, leagueId: league.id, battleDate, modifier: (league.modifierJson as Record<string, unknown>)?.id, results, finalized };
+}
+
+// ── Preferência de esconder resultados (spoiler) ──────────────────────────────
+
+export async function setHideLeagueResultsAction(hide: boolean): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const session = await getAppSession();
+    if (!session?.user) return { ok: false, error: "Não autenticado." };
+    const player = await getSessionPlayer(session.user.id);
+    if (!player) return { ok: false, error: "Jogador não encontrado." };
+    await prisma.player.update({ where: { id: player.id }, data: { hideLeagueResults: hide } });
+    revalidatePath("/combates/liga-semanal");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
+}
+
+// Marca o resultado de uma partida como revelado permanentemente para o jogador
+// (ao clicar em "revelar" ou ao assistir o replay).
+export async function revealLeagueMatchResultAction(matchId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (!matchId) return { ok: false, error: "Partida inválida." };
+    const session = await getAppSession();
+    if (!session?.user) return { ok: false, error: "Não autenticado." };
+    const player = await getSessionPlayer(session.user.id);
+    if (!player) return { ok: false, error: "Jogador não encontrado." };
+    await prisma.weeklyMascotLeagueResultReveal.upsert({
+      where: { playerId_matchId: { playerId: player.id, matchId } },
+      update: {},
+      create: { playerId: player.id, matchId },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro" };
+  }
 }
