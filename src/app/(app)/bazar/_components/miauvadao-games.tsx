@@ -251,7 +251,7 @@ function EggFusionGame({
         <p className="text-xs font-bold text-purple-200">Chances desta mistura</p>
         {selectedTypes.length === 3 ? (
           <div className="mt-2 grid grid-cols-1 gap-x-5 gap-y-1 text-[11px] sm:grid-cols-2">
-            {(["BROKEN", "COMMON", "EVENT", "RARE", "SPECIAL", "LAB"] as const).map((outcome) => (
+            {(["BROKEN", "COMMON", "RARE", "EVENT", "SPECIAL", "LAB"] as const).map((outcome) => (
               <div key={outcome} className="flex justify-between gap-2">
                 <span className="text-slate-400">{LABELS[outcome]}</span>
                 <span className="text-right">

@@ -1,4 +1,6 @@
-export const MIAUVADAO_FUSION_EGG_TYPES = ["COMMON", "EVENT", "RARE", "SPECIAL"] as const;
+// Ordem oficial de raridade (menor → maior): Comum < Raro < Evento < Especial < Laboratório.
+// A ordem deste array É a escala de tiers (índice = tier), então precisa respeitar a sequência.
+export const MIAUVADAO_FUSION_EGG_TYPES = ["COMMON", "RARE", "EVENT", "SPECIAL"] as const;
 export type MiauvadaoFusionEggType = typeof MIAUVADAO_FUSION_EGG_TYPES[number];
 export type MiauvadaoFusionResult = "BROKEN" | MiauvadaoFusionEggType | "LAB";
 
@@ -20,16 +22,20 @@ export const MIAUVADAO_FUSION_HATCH_BONUS_CHANCES = [
 
 const TIER_SCORE: Record<MiauvadaoFusionEggType, number> = {
   COMMON: 0,
-  EVENT: 1,
-  RARE: 2,
+  RARE: 1,
+  EVENT: 2,
   SPECIAL: 3,
 };
 
+// ANCHORS[i] = distribuição de resultado quando a média dos ingredientes é o tier i
+// (0=Comum, 1=Raro, 2=Evento, 3=Especial). Em cada faixa, raridades mais altas são
+// menos prováveis, e o pico acompanha a qualidade dos ingredientes — respeitando
+// Comum < Raro < Evento < Especial < Laboratório.
 const ANCHORS: Array<Record<MiauvadaoFusionResult, number>> = [
-  { BROKEN: 50, COMMON: 30, EVENT: 10, RARE: 7, SPECIAL: 2.8, LAB: 0.2 },
-  { BROKEN: 42, COMMON: 18, EVENT: 20, RARE: 14, SPECIAL: 5, LAB: 1 },
-  { BROKEN: 35, COMMON: 8, EVENT: 12, RARE: 25, SPECIAL: 15, LAB: 5 },
-  { BROKEN: 25, COMMON: 3, EVENT: 5, RARE: 10, SPECIAL: 42, LAB: 15 },
+  { BROKEN: 50, COMMON: 30, RARE: 10, EVENT: 7, SPECIAL: 2.8, LAB: 0.2 },
+  { BROKEN: 42, COMMON: 18, RARE: 20, EVENT: 14, SPECIAL: 5, LAB: 1 },
+  { BROKEN: 35, COMMON: 8, RARE: 12, EVENT: 25, SPECIAL: 15, LAB: 5 },
+  { BROKEN: 25, COMMON: 3, RARE: 5, EVENT: 10, SPECIAL: 42, LAB: 15 },
 ];
 
 const BREAK_CHANCE_MULTIPLIER = 0.35;
@@ -42,7 +48,7 @@ export function getMiauvadaoFusionChances(eggTypes: MiauvadaoFusionEggType[]) {
   const high = Math.min(3, Math.ceil(average));
   const fraction = average - low;
   const results = {} as Record<MiauvadaoFusionResult, number>;
-  for (const result of ["BROKEN", "COMMON", "EVENT", "RARE", "SPECIAL", "LAB"] as const) {
+  for (const result of ["BROKEN", "COMMON", "RARE", "EVENT", "SPECIAL", "LAB"] as const) {
     results[result] = ANCHORS[low][result] + (ANCHORS[high][result] - ANCHORS[low][result]) * fraction;
   }
 
@@ -65,7 +71,7 @@ export function rollMiauvadaoFusion(
 ): MiauvadaoFusionResult {
   const chances = getMiauvadaoFusionChances(eggTypes);
   let roll = random() * 100;
-  for (const result of ["BROKEN", "COMMON", "EVENT", "RARE", "SPECIAL", "LAB"] as const) {
+  for (const result of ["BROKEN", "COMMON", "RARE", "EVENT", "SPECIAL", "LAB"] as const) {
     roll -= chances[result];
     if (roll < 0) return result;
   }
