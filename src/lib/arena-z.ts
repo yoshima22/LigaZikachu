@@ -2252,7 +2252,7 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   });
   if (!rivalRelation) throw new Error("Seu time nao tem rivais com este mascote. Apenas rivais podem atacar mascotes feridos.");
 
-  // Política de Fraqueza: bloqueia o ataque e consome o buff
+  // Escudo contra ataque oportunista (concedido pelo Escudo Diário): bloqueia e consome.
   const weaknessPolicy = await prisma.mascotBuff.findFirst({
     where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
   });

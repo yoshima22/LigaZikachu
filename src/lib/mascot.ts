@@ -2718,9 +2718,6 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
   if (mascot.arenaState !== "INJURED" && !isResting) {
     throw new Error("A Política de Fraqueza só pode ser usada em mascotes feridos ou em repouso.");
   }
-  const existing = await prisma.mascotBuff.findFirst({
-    where: { mascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
-  });
   await prisma.$transaction(async (tx) => {
     await tx.mascot.update({
       where: { id: mascotId },
@@ -2731,16 +2728,11 @@ export async function applyWeaknessPolicy(playerId: string, mascotId: string) {
         susRestBonusMinutes: 0,
       },
     });
-    if (!existing) {
-      await tx.mascotBuff.create({
-        data: { mascotId, type: "WEAKNESS_POLICY", expiresAt: new Date("2099-12-31T23:59:59Z") },
-      });
-    }
     await tx.mascotEvent.create({
       data: {
         mascotId,
         emoji: "🛡️",
-        description: "Política de Fraqueza usada! Recuperação completa, repouso removido e proteção contra o próximo ataque oportunista.",
+        description: "Política de Fraqueza usada! O mascote se recuperou e voltou para o combate.",
       },
     });
   });

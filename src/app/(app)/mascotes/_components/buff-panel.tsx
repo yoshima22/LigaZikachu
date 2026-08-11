@@ -235,7 +235,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else if (t === "LUCKY_EGG") {
           toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
         } else if (t === "WEAKNESS_POLICY") {
-          toast.success(`${mascotName} foi totalmente recuperado, saiu do repouso e está protegido! 🛡️`);
+          toast.success(`${mascotName} se recuperou, saiu do repouso e voltou para o combate! 🛡️`);
         } else if (t === "MASCOT_BUFF_HAPPY" && r.honeyOutcome) {
           toast.success(r.honeyOutcome.message, { duration: 8000 });
         } else if (t === "MASCOT_BUFF_HAPPY") {

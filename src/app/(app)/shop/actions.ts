@@ -127,7 +127,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.WEAKNESS_POLICY,
     name: "Política de Fraqueza",
-    description: "Recupera completamente um mascote ferido ou em repouso, remove todo o tempo de repouso e o protege do próximo ataque oportunista. A proteção é consumida ao bloquear o ataque.",
+    description: "Consumível. Use em um mascote ferido (SUS) ou em repouso para recuperá-lo na hora e colocá-lo de volta em combate. Não é equipável.",
     imageUrl: null,
     rarity: ShopItemRarity.UNCOMMON,
     price: 300,
