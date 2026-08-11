@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { getListings, getRecentTransactions } from "./actions";
+import { prisma } from "@/lib/prisma";
 
 /** Listagens do bazar — 45s de cache por combinação de filtros. Invalidado por tag. */
 export function getCachedListings(filters?: Parameters<typeof getListings>[0]) {
@@ -21,6 +22,20 @@ export function getCachedPremiumListings(filters?: Parameters<typeof getListings
     { revalidate: 45, tags: ["bazar-listings"] },
   )();
 }
+
+export const getCachedPremiumAvailability = unstable_cache(
+  async () => {
+    const active = await prisma.bazarListing.findMany({
+      where: { status: { in: ["ACTIVE", "RESERVED"] }, expiresAt: { gt: new Date() }, premiumUntil: { gt: new Date() } },
+      orderBy: { premiumUntil: "asc" },
+      select: { premiumUntil: true },
+      take: 6,
+    });
+    return { activeCount: active.length, nextVacancyAt: active[0]?.premiumUntil ?? null };
+  },
+  ["bazar-premium-availability"],
+  { revalidate: 30, tags: ["bazar-listings"] },
+);
 
 /** Transações recentes — 60s de cache global. Invalidado por tag. */
 export const getCachedRecentTransactions = unstable_cache(

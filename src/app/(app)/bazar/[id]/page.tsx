@@ -12,6 +12,7 @@ import {
   getListing, buyListing, createProposal, acceptProposal,
   rejectProposal, toggleFavorite, editListing, placeBid, finalizeAuction,
 } from "../actions";
+import { PremiumCountdown } from "../_components/premium-countdown";
 
 // ── Tipos explícitos para evitar inferência unknown do Prisma ─────────────────
 
@@ -391,6 +392,7 @@ export default function BazarListingPage(): React.JSX.Element {
           <div>
             <p className="text-xs font-black uppercase tracking-wider">Oferta premium do Miauvadão</p>
             <p className="text-[10px] text-amber-100/65">Este anúncio está na vitrine especial e pode aparecer nos avisos do Professor Enguiça.</p>
+            <PremiumCountdown until={listing.premiumUntil!} className="mt-1 text-[10px] font-semibold text-amber-200" />
           </div>
         </div>
       )}

@@ -12,7 +12,7 @@ import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
 import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, getMiauvadaoPurchaseStatus } from "./actions";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
-import { getCachedListings, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
+import { getCachedListings, getCachedPremiumAvailability, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
@@ -20,6 +20,7 @@ import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_compon
 import type { MascotRarity } from "@/lib/mascot-data";
 import type { MiauvadaoFusionEggType, MiauvadaoFusionEgg } from "@/lib/miauvadao-egg-fusion";
 import { prisma } from "@/lib/prisma";
+import { PremiumCountdown } from "./_components/premium-countdown";
 
 export const dynamic = "force-dynamic";
 
@@ -72,9 +73,10 @@ export default async function BazarPage({
     rarity: searchParams.rarity as MascotRarity | undefined,
     page: searchParams.page ? parseInt(searchParams.page) : 1,
   };
-  const [listingsResult, premiumResult, transactions, miauvadao, raidSabotages, bazarStepState] = await Promise.all([
+  const [listingsResult, premiumResult, premiumAvailability, transactions, miauvadao, raidSabotages, bazarStepState] = await Promise.all([
     getCachedListings(listingFilters),
     getCachedPremiumListings(listingFilters),
+    getCachedPremiumAvailability(),
     getCachedRecentTransactions(6),
     getMiauvadaoConfig(),
     getActiveRaidSabotages("BAZAR"),
@@ -91,6 +93,7 @@ export default async function BazarPage({
   const { listings, total, page, totalPages } = listingsResult;
   const premiumListings = premiumResult.listings;
   const visibleTotal = total + premiumResult.total;
+  const nextPremiumVacancyAt = premiumAvailability.activeCount >= 6 ? premiumAvailability.nextVacancyAt : null;
 
   const dailyOffers = (freshMiauvadao.dailyOffers as unknown[]) ?? [];
 
@@ -283,7 +286,15 @@ export default async function BazarPage({
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">👑 Vitrine do Miauvadão</p>
                   <h2 className="mt-0.5 text-sm font-bold text-amber-50">Ofertas premium em destaque</h2>
                 </div>
-                <span className="text-[10px] text-amber-200/60">{premiumListings.length}/6 vitrines</span>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] text-amber-200/70">
+                  <span>{premiumAvailability.activeCount}/6 vitrines</span>
+                  <span className="text-amber-200/30">•</span>
+                  {nextPremiumVacancyAt ? (
+                    <PremiumCountdown until={nextPremiumVacancyAt} prefix="Próxima vaga em" className="font-semibold text-amber-100" />
+                  ) : (
+                    <span className="font-semibold text-emerald-300">Vaga disponível agora</span>
+                  )}
+                </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {premiumListings.map((listing) => (

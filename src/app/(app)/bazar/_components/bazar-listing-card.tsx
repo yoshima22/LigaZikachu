@@ -5,6 +5,7 @@ import { Coins, Crown, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
 import { getMascotRarity, getShinySprite, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
+import { PremiumCountdown } from "./premium-countdown";
 
 const CATEGORY_LABEL: Record<string, string> = {
   MASCOT: "Mascote", ITEM: "Item", COSMETIC: "Cosmético",
@@ -147,8 +148,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
       {/* Info */}
       <div className="p-3 space-y-2 flex-1">
         {isPremium && (
-          <div className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">
-            <Crown size={10} /> Destaque premium
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">
+              <Crown size={10} /> Destaque premium
+            </span>
+            <PremiumCountdown until={listing.premiumUntil!} className="rounded-full border border-amber-300/25 bg-slate-900/80 px-2 py-1 text-[9px] font-semibold text-amber-100/80" />
           </div>
         )}
         {listing.loanEnabled && listing.loanAmountCoins && (
