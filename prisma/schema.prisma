@@ -338,22 +338,22 @@ model Player {
 /// Fila duravel das interacoes em massa. O pedido sobrevive ao fechamento da
 /// pagina e pode ser retomado pelo cron sem conceder a mesma interacao duas vezes.
 model MascotInteractionJob {
-  id             String    @id @default(cuid())
-  playerId       String
-  idempotencyKey String    @unique
+  id              String    @id @default(cuid())
+  playerId        String
+  idempotencyKey  String    @unique
   interactionType String
-  scope          String
+  scope           String
   targetMascotIds Json?
-  status         String    @default("PENDING")
-  attempts       Int       @default(0)
-  resultJson     Json?
-  lastError      String?   @db.Text
-  lockedAt       DateTime?
-  startedAt      DateTime?
-  completedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  player         Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  status          String    @default("PENDING")
+  attempts        Int       @default(0)
+  resultJson      Json?
+  lastError       String?   @db.Text
+  lockedAt        DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  player          Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([playerId, createdAt])
@@ -361,18 +361,18 @@ model MascotInteractionJob {
 }
 
 model LabWeeklyUsage {
-  id          String   @id @default(cuid())
-  playerId    String
-  weekKey     String // e.g. "2026-W24"
-  coinsTraded Int      @default(0)
-  commonEggs  Int      @default(0)
-  rareEggs    Int      @default(0)
-  specialEggs Int      @default(0)
-  honeyCandies Int     @default(0)
-  freshWaters  Int     @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  playerId     String
+  weekKey      String // e.g. "2026-W24"
+  coinsTraded  Int      @default(0)
+  commonEggs   Int      @default(0)
+  rareEggs     Int      @default(0)
+  specialEggs  Int      @default(0)
+  honeyCandies Int      @default(0)
+  freshWaters  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, weekKey])
   @@map("lab_weekly_usage")
@@ -2271,78 +2271,78 @@ model MascotIncubator {
 }
 
 model Mascot {
-  id                       String                    @id @default(cuid())
-  playerId                 String
-  pokemonId                Int // ID da PokéAPI
-  nickname                 String?
-  speciesNameOverride      String?
-  primaryTypeOverride      String?
-  secondaryTypeOverride    String?
-  staticSpriteUrlOverride  String?                   @db.Text
-  animatedSpriteUrlOverride String?                  @db.Text
-  generationOverride       Int?
-  level                    Int                       @default(1)
-  exp                      Int                       @default(0)
-  happiness                Int                       @default(50) // 0-100
-  mood                     MascotMood                @default(NEUTRAL)
-  personality              MascotPersonality
-  isEquipped               Boolean                   @default(false)
-  isFavorite               Boolean                   @default(false)
+  id                        String                    @id @default(cuid())
+  playerId                  String
+  pokemonId                 Int // ID da PokéAPI
+  nickname                  String?
+  speciesNameOverride       String?
+  primaryTypeOverride       String?
+  secondaryTypeOverride     String?
+  staticSpriteUrlOverride   String?                   @db.Text
+  animatedSpriteUrlOverride String?                   @db.Text
+  generationOverride        Int?
+  level                     Int                       @default(1)
+  exp                       Int                       @default(0)
+  happiness                 Int                       @default(50) // 0-100
+  mood                      MascotMood                @default(NEUTRAL)
+  personality               MascotPersonality
+  isEquipped                Boolean                   @default(false)
+  isFavorite                Boolean                   @default(false)
   // Stats
-  statForce                Int                       @default(10)
-  statAgility              Int                       @default(10)
-  statCharisma             Int                       @default(10)
-  statInstinct             Int                       @default(10)
-  statVitality             Int                       @default(10)
+  statForce                 Int                       @default(10)
+  statAgility               Int                       @default(10)
+  statCharisma              Int                       @default(10)
+  statInstinct              Int                       @default(10)
+  statVitality              Int                       @default(10)
   // Batalhas
-  battleWins               Int                       @default(0)
-  battleLosses             Int                       @default(0)
+  battleWins                Int                       @default(0)
+  battleLosses              Int                       @default(0)
   // Timestamps
-  hatchedAt                DateTime                  @default(now())
+  hatchedAt                 DateTime                  @default(now())
   // Preserva a procedencia depois que o registro do ovo e consumido ao chocar.
-  hatchedFromEggType       EggType?
-  hatchedFromEggOrigin     String?
+  hatchedFromEggType        EggType?
+  hatchedFromEggOrigin      String?
   // Especie exata que nasceu, preservada mesmo depois de evolucoes.
-  hatchedPokemonId         Int?
-  lastInteractedAt         DateTime?
-  lastPlayedAt             DateTime?
-  lastPettedAt             DateTime?
-  lastFedAt                DateTime?
-  bazarListed              Boolean                   @default(false)
-  socialCooldownUntil      DateTime? // rival travou interações temporariamente
-  susRestBonusMinutes      Int                       @default(0)
-  evolutionLocked          Boolean                   @default(false)
-  expLocked                Boolean                   @default(false)
-  operationsLocked         Boolean                   @default(false) // impede envio ao Bazar e uso no Laboratório
-  isShiny                  Boolean                   @default(false) // variante shiny — sprite diferente e marcador visual
-  megaEvolvedFromPokemonId Int?
-  megaStoneItemId          String?
-  megaEvolvedAt            DateTime?
-  arenaState               MascotArenaState          @default(FREE)
-  injuredAt                DateTime?
-  restingUntil             DateTime? // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
+  hatchedPokemonId          Int?
+  lastInteractedAt          DateTime?
+  lastPlayedAt              DateTime?
+  lastPettedAt              DateTime?
+  lastFedAt                 DateTime?
+  bazarListed               Boolean                   @default(false)
+  socialCooldownUntil       DateTime? // rival travou interações temporariamente
+  susRestBonusMinutes       Int                       @default(0)
+  evolutionLocked           Boolean                   @default(false)
+  expLocked                 Boolean                   @default(false)
+  operationsLocked          Boolean                   @default(false) // impede envio ao Bazar e uso no Laboratório
+  isShiny                   Boolean                   @default(false) // variante shiny — sprite diferente e marcador visual
+  megaEvolvedFromPokemonId  Int?
+  megaStoneItemId           String?
+  megaEvolvedAt             DateTime?
+  arenaState                MascotArenaState          @default(FREE)
+  injuredAt                 DateTime?
+  restingUntil              DateTime? // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
   // A primeira análise de IV/potencial custa 100 ZC; simulações seguintes são gratuitas.
-  analyzedAt               DateTime? // última vez que foi analisado no Lab
-  ivScore                  Int? // 0-100 (potencial futuro)
-  ivRating                 String? // SSS, SS, S, A, B, C, D ou E
-  analysisJson             Json? // snapshot completo da última análise
+  analyzedAt                DateTime? // última vez que foi analisado no Lab
+  ivScore                   Int? // 0-100 (potencial futuro)
+  ivRating                  String? // SSS, SS, S, A, B, C, D ou E
+  analysisJson              Json? // snapshot completo da última análise
   // Marcador pessoal de desempenho definido pelo jogador: FORTE, NEUTRO, RUIM, PESSIMO
-  performanceTag           String                    @default("NEUTRO")
-  player                   Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  expeditions              MascotExpedition[]
-  arenaTeamMembers         ArenaTeamMember[]
-  relationsAsA             MascotRelation[]          @relation("MascotRelationA")
-  relationsAsB             MascotRelation[]          @relation("MascotRelationB")
-  socialEventsAsA          MascotSocialEvent[]       @relation("MascotSocialEventMascotA")
-  socialEventsAsB          MascotSocialEvent[]       @relation("MascotSocialEventMascotB")
-  socialDecisionLogsAsA    MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
-  socialDecisionLogsAsB    MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
-  events                   MascotEvent[]
-  progressMilestones       MascotProgressMilestone[]
-  buffs                    MascotBuff[]
-  syncLineups              SyncEventLineup[]         @relation("SyncEventLineupMascot")
-  traceRoomsAsHider        TraceRoom[]               @relation("TraceRoomHiderMascot")
-  traceRoomsAsHunter       TraceRoom[]               @relation("TraceRoomHunterMascot")
+  performanceTag            String                    @default("NEUTRO")
+  player                    Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  expeditions               MascotExpedition[]
+  arenaTeamMembers          ArenaTeamMember[]
+  relationsAsA              MascotRelation[]          @relation("MascotRelationA")
+  relationsAsB              MascotRelation[]          @relation("MascotRelationB")
+  socialEventsAsA           MascotSocialEvent[]       @relation("MascotSocialEventMascotA")
+  socialEventsAsB           MascotSocialEvent[]       @relation("MascotSocialEventMascotB")
+  socialDecisionLogsAsA     MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
+  socialDecisionLogsAsB     MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
+  events                    MascotEvent[]
+  progressMilestones        MascotProgressMilestone[]
+  buffs                     MascotBuff[]
+  syncLineups               SyncEventLineup[]         @relation("SyncEventLineupMascot")
+  traceRoomsAsHider         TraceRoom[]               @relation("TraceRoomHiderMascot")
+  traceRoomsAsHunter        TraceRoom[]               @relation("TraceRoomHunterMascot")
 
   @@index([playerId])
   @@map("mascots")
@@ -2778,9 +2778,11 @@ model BazarListing {
   loanAmountCoins Int?
   loanInterestPct Int?
 
-  feeCharged Int      @default(0)
-  views      Int      @default(0)
-  expiresAt  DateTime
+  feeCharged   Int       @default(0)
+  views        Int       @default(0)
+  expiresAt    DateTime
+  // Destaque pago do Miauvadão. Depois deste horário o anúncio continua normal.
+  premiumUntil DateTime?
 
   // Campos de leilão (null para anúncios normais)
   minBidCoins        Int?
@@ -2798,6 +2800,7 @@ model BazarListing {
   loan        BazarLoan?
 
   @@index([category, status, createdAt])
+  @@index([status, premiumUntil])
   @@index([playerId])
   @@map("bazar_listings")
 }
@@ -2938,19 +2941,21 @@ model BazarPlayerTradeBan {
 }
 
 model MiauvadaoConfig {
-  id                   String    @id @default("singleton")
-  vaultBalance         Int       @default(0)
-  listingFee           Int       @default(10)
-  dailyOffers          Json      @default("[]")
-  offersRefreshedAt    DateTime?
-  playerRefreshData    Json      @default("{}") // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
-  slotRefreshUsedCycle DateTime?
+  id                         String    @id @default("singleton")
+  vaultBalance               Int       @default(0)
+  listingFee                 Int       @default(10)
+  dailyOffers                Json      @default("[]")
+  offersRefreshedAt          DateTime?
+  playerRefreshData          Json      @default("{}") // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
+  slotRefreshUsedCycle       DateTime?
   // Shell Game — última mensagem do NPC
-  lastWinnerMessage    String?
-  lastWinnerAt         DateTime?
-  lastNpcMessage       String?
-  lastNpcMessageAt     DateTime?
-  updatedAt            DateTime  @updatedAt
+  lastWinnerMessage          String?
+  lastWinnerAt               DateTime?
+  lastNpcMessage             String?
+  lastNpcMessageAt           DateTime?
+  premiumTickerNextAt        DateTime?
+  premiumTickerLastListingId String?
+  updatedAt                  DateTime  @updatedAt
 
   @@map("miauvadao_config")
 }

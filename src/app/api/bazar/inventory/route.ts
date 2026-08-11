@@ -6,6 +6,7 @@ import { getMiauvadaoConfig } from "@/app/(app)/bazar/actions";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { getWeeklyLeagueLockedMascotIds } from "@/lib/weekly-league-locks";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
+import { MAX_ACTIVE_PREMIUM_LISTINGS, PREMIUM_LISTING_FEE } from "@/lib/bazar-premium";
 
 const HIDDEN_BAZAR_ITEM_TYPES = [
   "SYNC_TICKET_FIRE_LEFT",
@@ -41,7 +42,7 @@ export async function GET() {
 
     const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(prisma, player.id);
 
-    const [mascots, eggs, foods, inventoryItems, wallet, config] = await Promise.all([
+    const [mascots, eggs, foods, inventoryItems, wallet, config, premiumCounts] = await Promise.all([
       // Mascotes disponíveis (não feridos, não em expedição, não no bazar, não em equipe de arena)
       prisma.mascot.findMany({
         where: {
@@ -95,6 +96,10 @@ export async function GET() {
       }),
       getOrCreateWallet(player.id),
       getMiauvadaoConfig(),
+      Promise.all([
+        prisma.bazarListing.count({ where: { status: { in: ["ACTIVE", "RESERVED"] }, premiumUntil: { gt: new Date() } } }),
+        prisma.bazarListing.count({ where: { playerId: player.id, status: { in: ["ACTIVE", "RESERVED"] }, premiumUntil: { gt: new Date() } } }),
+      ]),
     ]);
 
     return NextResponse.json({
@@ -116,6 +121,10 @@ export async function GET() {
       })),
       balance: wallet.balance,
       listingFee: config?.listingFee ?? 10,
+      premiumFee: PREMIUM_LISTING_FEE,
+      premiumActiveCount: premiumCounts[0],
+      premiumSlots: MAX_ACTIVE_PREMIUM_LISTINGS,
+      hasActivePremium: premiumCounts[1] > 0,
     }, {
       headers: { "Cache-Control": "private, no-store, max-age=0" },
     });

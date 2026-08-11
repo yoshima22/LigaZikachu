@@ -11,6 +11,17 @@ export function getCachedListings(filters?: Parameters<typeof getListings>[0]) {
   )();
 }
 
+/** Vitrine premium: no máximo seis registros e cacheada junto dos anúncios. */
+export function getCachedPremiumListings(filters?: Parameters<typeof getListings>[0]) {
+  const premiumFilters = { ...(filters ?? {}), page: 1, premiumMode: "only" as const };
+  const key = JSON.stringify(premiumFilters);
+  return unstable_cache(
+    () => getListings(premiumFilters),
+    ["bazar-premium-listings", key],
+    { revalidate: 45, tags: ["bazar-listings"] },
+  )();
+}
+
 /** Transações recentes — 60s de cache global. Invalidado por tag. */
 export const getCachedRecentTransactions = unstable_cache(
   (take = 6) => getRecentTransactions(take),

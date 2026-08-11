@@ -12,7 +12,7 @@ import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
 import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, getMiauvadaoPurchaseStatus } from "./actions";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
-import { getCachedListings, getCachedRecentTransactions } from "./queries";
+import { getCachedListings, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
@@ -63,16 +63,18 @@ export default async function BazarPage({
 
   // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
   // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
-  const [listingsResult, transactions, miauvadao, raidSabotages, bazarStepState] = await Promise.all([
-    getCachedListings({
-      category: searchParams.cat as BazarItemCategory | undefined,
-      type: searchParams.type as BazarListingType | undefined,
-      maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
-      sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
-      search: searchParams.q || undefined,
-      rarity: searchParams.rarity as MascotRarity | undefined,
-      page: searchParams.page ? parseInt(searchParams.page) : 1,
-    }),
+  const listingFilters = {
+    category: searchParams.cat as BazarItemCategory | undefined,
+    type: searchParams.type as BazarListingType | undefined,
+    maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
+    sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
+    search: searchParams.q || undefined,
+    rarity: searchParams.rarity as MascotRarity | undefined,
+    page: searchParams.page ? parseInt(searchParams.page) : 1,
+  };
+  const [listingsResult, premiumResult, transactions, miauvadao, raidSabotages, bazarStepState] = await Promise.all([
+    getCachedListings(listingFilters),
+    getCachedPremiumListings(listingFilters),
     getCachedRecentTransactions(6),
     getMiauvadaoConfig(),
     getActiveRaidSabotages("BAZAR"),
@@ -87,6 +89,8 @@ export default async function BazarPage({
   const freshMiauvadao = refreshResult?.freshConfig ?? miauvadao;
 
   const { listings, total, page, totalPages } = listingsResult;
+  const premiumListings = premiumResult.listings;
+  const visibleTotal = total + premiumResult.total;
 
   const dailyOffers = (freshMiauvadao.dailyOffers as unknown[]) ?? [];
 
@@ -174,7 +178,7 @@ export default async function BazarPage({
 
           <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🏪 Como anunciar no Bazar</p>
-            <p>Clique em <strong style={{ color: "#c9a800" }}>Anunciar</strong> e escolha mascotes ou itens do seu inventário. Defina preço de venda, troca ou ambos. Itens ficam bloqueados enquanto anunciados. Taxa: <strong style={{ color: "#FFCB05" }}>10 ZC por anúncio</strong> (vai ao cofre do Miauvadão). Limite: <strong style={{ color: "#FFCB05" }}>8 anúncios ativos</strong> por jogador.</p>
+            <p>Clique em <strong style={{ color: "#c9a800" }}>Anunciar</strong> e escolha mascotes ou itens do seu inventário. O anúncio normal custa <strong style={{ color: "#FFCB05" }}>10 ZC</strong>. A vitrine premium custa <strong style={{ color: "#FFCB05" }}>100 ZC</strong> e destaca a oferta por 6 horas. Limite: <strong style={{ color: "#FFCB05" }}>8 anúncios ativos</strong> por jogador.</p>
           </div>
 
           <div className="space-y-1">
@@ -272,11 +276,27 @@ export default async function BazarPage({
       {/* Listings + Feed */}
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <div className="space-y-4">
+          {premiumListings.length > 0 && (
+            <section className="rounded-2xl border border-amber-300/35 bg-gradient-to-br from-amber-400/10 via-slate-950/80 to-purple-500/10 p-4 shadow-[0_0_32px_rgba(250,204,21,0.08)]">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">👑 Vitrine do Miauvadão</p>
+                  <h2 className="mt-0.5 text-sm font-bold text-amber-50">Ofertas premium em destaque</h2>
+                </div>
+                <span className="text-[10px] text-amber-200/60">{premiumListings.length}/6 vitrines</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {premiumListings.map((listing) => (
+                  <BazarListingCard key={listing.id} listing={{ ...listing, payload: listing.payload as Record<string, unknown>, player: listing.player, _count: listing._count }} />
+                ))}
+              </div>
+            </section>
+          )}
           {/* Cabeçalho com contador e label de busca ativa */}
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-semibold text-slate-200">Anúncios ativos</h2>
             <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
-              {total} {total === 1 ? "resultado" : "resultados"}
+              {visibleTotal} {visibleTotal === 1 ? "resultado" : "resultados"}
             </span>
             {searchParams.q && (
               <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">
@@ -290,7 +310,7 @@ export default async function BazarPage({
             )}
           </div>
 
-          {listings.length === 0 ? (
+          {listings.length === 0 && premiumListings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
               <p className="text-3xl">{searchParams.q ? "🔍" : "🏪"}</p>
               <p className="text-sm text-slate-500">

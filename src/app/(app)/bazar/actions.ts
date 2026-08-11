@@ -32,6 +32,12 @@ import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@p
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { createPlayerNotification } from "@/lib/nav-notifications";
+import {
+  MAX_ACTIVE_PREMIUM_LISTINGS,
+  PREMIUM_LISTING_FEE,
+  PREMIUM_LISTING_HOURS,
+  publishDuePremiumBazarTicker,
+} from "@/lib/bazar-premium";
 
 const PLAYER_TRANSACTION_VAULT_SHARE = 0.10;
 
@@ -303,6 +309,7 @@ export async function getListings(filters?: {
   rarity?: MascotRarity;
   sortBy?: "newest" | "cheapest" | "expensive";
   page?: number;
+  premiumMode?: "exclude" | "only" | "all";
 }) {
   const page     = Math.max(1, filters?.page ?? 1);
   const skip     = (page - 1) * LISTINGS_PAGE_SIZE;
@@ -322,14 +329,24 @@ export async function getListings(filters?: {
       }
     : {};
 
+  const now = new Date();
+  const premiumFilter = filters?.premiumMode === "only"
+    ? { premiumUntil: { gt: now } }
+    : filters?.premiumMode === "all"
+      ? {}
+      : { OR: [{ premiumUntil: null }, { premiumUntil: { lte: now } }] };
+  // AND explícito evita que filtros com OR (busca, raridade e premium) se
+  // sobrescrevam quando usados ao mesmo tempo.
   const where = {
-    status: "ACTIVE" as BazarListingStatus,
-    expiresAt: { gt: new Date() },
-    ...(filters?.category ? { category: filters.category } : {}),
-    ...(filters?.type     ? { listingType: filters.type }  : {}),
-    ...(filters?.maxPrice !== undefined ? { priceCoins: { lte: filters.maxPrice } } : {}),
-    ...mascotRarityListingFilter(filters?.rarity),
-    ...searchFilter,
+    AND: [
+      { status: "ACTIVE" as BazarListingStatus, expiresAt: { gt: now } },
+      premiumFilter,
+      filters?.category ? { category: filters.category } : {},
+      filters?.type ? { listingType: filters.type } : {},
+      filters?.maxPrice !== undefined ? { priceCoins: { lte: filters.maxPrice } } : {},
+      mascotRarityListingFilter(filters?.rarity),
+      searchFilter,
+    ],
   };
 
   const orderBy =
@@ -341,7 +358,7 @@ export async function getListings(filters?: {
     id: true, category: true, listingType: true, status: true,
     payload: true, priceCoins: true, description: true, wantedDesc: true,
     loanEnabled: true, loanAmountCoins: true, loanInterestPct: true,
-    expiresAt: true, createdAt: true, views: true,
+    expiresAt: true, premiumUntil: true, createdAt: true, views: true,
     minBidCoins: true, currentBidCoins: true, auctionEndsAt: true,
     player: { select: { id: true, displayName: true, avatarUrl: true } },
     _count: { select: { proposals: true, favorites: true } },
@@ -539,6 +556,7 @@ export interface CreateListingInput {
   imageUrl?: string;     // Imagem real do shop
   quantity?: number;
   displayName?: string;
+  premium?: boolean;
 }
 
 export async function createListing(input: CreateListingInput): Promise<{ error?: string; id?: string }> {
@@ -574,7 +592,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
 
     // Buscar config do Miauvadão (taxa)
     const config = await getMiauvadaoConfig();
-    const fee = config.listingFee;
+    const premium = Boolean(input.premium);
+    const fee = premium ? PREMIUM_LISTING_FEE : config.listingFee;
 
     // Verificar saldo para pagar taxa
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
@@ -585,16 +604,29 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     let payload: Record<string, unknown> = {};
     const expiresAt = new Date(Date.now() + input.durationDays * 86400000);
 
+    const premiumUntil = premium ? new Date(Date.now() + PREMIUM_LISTING_HOURS * 3_600_000) : null;
+    let listingId = "";
     await prisma.$transaction(async (tx) => {
+      if (premium) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('bazar-premium-listings'))`;
+        const premiumWhere = { status: { in: ["ACTIVE", "RESERVED"] as BazarListingStatus[] }, premiumUntil: { gt: new Date() } };
+        const [globalPremiumCount, ownPremiumCount] = await Promise.all([
+          tx.bazarListing.count({ where: premiumWhere }),
+          tx.bazarListing.count({ where: { ...premiumWhere, playerId: player.id } }),
+        ]);
+        if (ownPremiumCount > 0) throw new Error("Você já possui um anúncio premium ativo. Aguarde o destaque terminar ou encerre o anúncio atual.");
+        if (globalPremiumCount >= MAX_ACTIVE_PREMIUM_LISTINGS) throw new Error("As 6 vitrines premium do Miauvadão estão ocupadas no momento. Tente novamente mais tarde.");
+      }
       // Cobrar taxa
       await tx.zikaCoinWallet.update({
         where: { playerId: player.id },
         data: { balance: { decrement: fee } },
       });
       // Taxa vai para o cofre do Miauvadão
-      await tx.miauvadaoConfig.update({
+      await tx.miauvadaoConfig.upsert({
         where: { id: "singleton" },
-        data: { vaultBalance: { increment: fee } },
+        create: { id: "singleton", vaultBalance: fee },
+        update: { vaultBalance: { increment: fee } },
       });
 
       if (input.category === "MASCOT" && input.mascotId) {
@@ -699,7 +731,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         };
       }
 
-      await tx.bazarListing.create({
+      const created = await tx.bazarListing.create({
         data: {
           playerId: player.id,
           category: input.category,
@@ -713,11 +745,15 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           loanInterestPct: loanEnabled ? loanInterestPct : null,
           feeCharged: fee,
           expiresAt,
+          premiumUntil,
         },
       });
+      listingId = created.id;
     });
 
-    if (input.category === "MASCOT" && typeof payload.pokemonId === "number") {
+    if (premium) {
+      await publishDuePremiumBazarTicker().catch((error) => console.error("[Bazar Premium] Falha no chamariz inicial", error));
+    } else if (input.category === "MASCOT" && typeof payload.pokemonId === "number") {
       const rarity = getMascotRarity(payload.pokemonId);
       if (rarity === "LEGENDARY" || rarity === "MYTHICAL") {
         await publishLeagueTicker({
@@ -731,7 +767,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     }
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
-    return {};
+    return { id: listingId };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao criar anúncio." };
   }

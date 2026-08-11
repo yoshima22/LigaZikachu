@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Coins, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
+import { Coins, Crown, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
 import { getMascotRarity, getShinySprite, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
@@ -47,6 +47,7 @@ interface Listing {
   loanInterestPct?: number | null;
   expiresAt: Date;
   createdAt: Date;
+  premiumUntil?: Date | null;
   player: { id: string; displayName: string };
   _count: { proposals: number; favorites: number };
   // Auction fields
@@ -67,10 +68,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
   const eggOriginLabel = listing.category === "MASCOT"
     ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
     : null;
+  const isPremium = Boolean(listing.premiumUntil && new Date(listing.premiumUntil).getTime() > Date.now());
 
   return (
     <Link href={`/bazar/${listing.id}`}
-      className={`flex flex-col rounded-xl border bg-slate-950/60 hover:border-slate-600 transition-all overflow-hidden group ${isAuction ? "border-amber-500/30 hover:border-amber-400/50" : "border-border"}`}>
+      className={`relative flex flex-col rounded-xl border bg-slate-950/60 transition-all overflow-hidden group ${isPremium ? "border-amber-300/70 ring-1 ring-amber-300/20 shadow-[0_0_24px_rgba(250,204,21,0.16)] hover:border-amber-200" : isAuction ? "border-amber-500/30 hover:border-amber-400/50" : "border-border hover:border-slate-600"}`}>
 
       {/* Preview */}
       <div className="flex items-center justify-center bg-slate-900/80 h-32 relative">
@@ -144,6 +146,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
 
       {/* Info */}
       <div className="p-3 space-y-2 flex-1">
+        {isPremium && (
+          <div className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-amber-200">
+            <Crown size={10} /> Destaque premium
+          </div>
+        )}
         {listing.loanEnabled && listing.loanAmountCoins && (
           <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2 py-1.5 text-[10px] text-cyan-100">
             Empréstimo: {listing.loanAmountCoins.toLocaleString("pt-BR")} ZC · {listing.loanInterestPct ?? 0}% juros

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Info, Search } from "lucide-react";
+import { ArrowLeft, Coins, Crown, Info, Search } from "lucide-react";
 import Link from "next/link";
 import { createListing, createAuctionListing } from "../actions";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
@@ -37,6 +37,10 @@ interface InventoryData {
   inventoryItems: InventoryItem[];
   listingFee: number;
   balance: number;
+  premiumFee: number;
+  premiumActiveCount: number;
+  premiumSlots: number;
+  hasActivePremium: boolean;
 }
 
 // Tipos que podem ser listados no Bazar (excluindo cosméticos únicos de perfil que não são trocáveis)
@@ -71,6 +75,7 @@ function CreateListingForm() {
   const [mascotSearch, setMascotSearch] = useState("");
   const [mascotPage, setMascotPage] = useState(0);
   const [itemSearch, setItemSearch] = useState("");
+  const [premium, setPremium] = useState(false);
 
   const loadInventory = async (force = false) => {
     if (inventory && !force) return;
@@ -118,6 +123,7 @@ function CreateListingForm() {
             imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
             quantity: category === "ITEM" ? itemQuantity : undefined,
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
+            premium,
           });
           if (r.error) { toast.error(r.error); return; }
         }
@@ -201,7 +207,7 @@ function CreateListingForm() {
                 { value: "SALE_OR_TRADE",label: "Venda/Troca", color: "purple" },
                 { value: "AUCTION",      label: "🔨 Leilão",   color: "amber" },
               ] as const).map(t => (
-                <button key={t.value} type="button" onClick={() => setListingType(t.value as BazarListingType)}
+                <button key={t.value} type="button" onClick={() => { setListingType(t.value as BazarListingType); if (t.value === "AUCTION") setPremium(false); }}
                   className={`rounded-xl border py-2 text-xs font-semibold transition-colors ${
                     listingType === t.value
                       ? t.color === "green"  ? "border-green-500/50 bg-green-500/10 text-green-400"
@@ -505,6 +511,32 @@ function CreateListingForm() {
           </div>
         )}
 
+        {category && !isAuction && inventory && (
+          <div className={`rounded-2xl border p-4 transition-all ${premium ? "border-amber-300/70 bg-gradient-to-br from-amber-400/15 via-yellow-500/5 to-purple-500/10 shadow-[0_0_28px_rgba(250,204,21,0.12)]" : "border-amber-500/25 bg-amber-500/5"}`}>
+            <label className={`flex items-start gap-3 ${(inventory.hasActivePremium || inventory.premiumActiveCount >= inventory.premiumSlots) ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+              <input
+                type="checkbox"
+                checked={premium}
+                disabled={inventory.hasActivePremium || inventory.premiumActiveCount >= inventory.premiumSlots}
+                onChange={(event) => setPremium(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-amber-400"
+              />
+              <Crown size={20} className="mt-0.5 shrink-0 text-amber-300" />
+              <span className="min-w-0">
+                <strong className="block text-sm text-amber-100">Vitrine premium do Miauvadão</strong>
+                <span className="mt-1 block text-[11px] leading-relaxed text-slate-400">
+                  Por <strong className="text-amber-300">{inventory.premiumFee} ZC</strong>, a oferta ganha destaque por 6 horas e pode ser anunciada pelo Professor Enguiça a cada janela global de 30–55 minutos. Depois disso, ela continua como anúncio normal pelo prazo escolhido.
+                </span>
+                <span className="mt-2 block text-[10px] font-semibold text-amber-300/80">
+                  {inventory.premiumActiveCount}/{inventory.premiumSlots} vitrines ocupadas · máximo de 1 por jogador
+                </span>
+                {inventory.hasActivePremium && <span className="mt-1 block text-[10px] text-red-300">Você já possui uma vitrine premium ativa.</span>}
+                {!inventory.hasActivePremium && inventory.premiumActiveCount >= inventory.premiumSlots && <span className="mt-1 block text-[10px] text-red-300">As vitrines estão lotadas no momento.</span>}
+              </span>
+            </label>
+          </div>
+        )}
+
         {/* O que quer em troca */}
         {category && !isAuction && listingType !== "SALE" && (
           <div className="space-y-2">
@@ -547,7 +579,7 @@ function CreateListingForm() {
           <div className="flex items-start gap-2 rounded-xl border border-border/40 bg-slate-900/50 px-3 py-2.5 text-[11px] text-slate-400">
             <Info size={12} className="shrink-0 mt-0.5 text-slate-500"/>
             <span>
-              Taxa do Bazar: <strong className="text-[#FFCB05]">{inventory.listingFee} ZC</strong>
+              Taxa do Bazar: <strong className="text-[#FFCB05]">{premium ? inventory.premiumFee : inventory.listingFee} ZC</strong>
               {" "}(vai para o cofre do Miauvadão). Seu saldo: <strong className="text-slate-200">{inventory.balance.toLocaleString("pt-BR")} ZC</strong>
             </span>
           </div>

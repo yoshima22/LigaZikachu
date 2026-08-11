@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown } from "lucide-react";
+import { ArrowLeft, Coins, Crown, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
@@ -59,6 +59,7 @@ interface ListingDetail {
   loanAmountCoins: number | null;
   loanInterestPct: number | null;
   expiresAt: Date;
+  premiumUntil: Date | null;
   player: {
     id: string;
     displayName: string;
@@ -156,6 +157,7 @@ export default function BazarListingPage(): React.JSX.Element {
         loanAmountCoins: raw.loanAmountCoins,
         loanInterestPct: raw.loanInterestPct,
         expiresAt: raw.expiresAt,
+        premiumUntil: raw.premiumUntil,
         player: raw.player,
         proposals: (raw.proposals ?? []).map(p => ({
           id: p.id,
@@ -340,6 +342,7 @@ export default function BazarListingPage(): React.JSX.Element {
 
   const payload = listing.payload;
   const isOwner = listing.playerId === currentPlayerId;
+  const isPremium = Boolean(listing.premiumUntil && new Date(listing.premiumUntil).getTime() > Date.now());
   const isAuction = listing.listingType === "AUCTION";
   const isMascot = listing.category === "MASCOT";
   const isSale = !isAuction && (listing.listingType === "SALE" || listing.listingType === "SALE_OR_TRADE");
@@ -382,8 +385,18 @@ export default function BazarListingPage(): React.JSX.Element {
         <h1 className="font-semibold text-slate-200">Detalhes do Anúncio</h1>
       </div>
 
+      {isPremium && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-300/50 bg-gradient-to-r from-amber-400/15 via-yellow-500/5 to-purple-500/10 px-4 py-3 text-amber-100 shadow-[0_0_28px_rgba(250,204,21,0.12)]">
+          <Crown size={20} className="shrink-0 text-amber-300" />
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider">Oferta premium do Miauvadão</p>
+            <p className="text-[10px] text-amber-100/65">Este anúncio está na vitrine especial e pode aparecer nos avisos do Professor Enguiça.</p>
+          </div>
+        </div>
+      )}
+
       {/* Main card */}
-      <div className="rounded-2xl border border-border bg-slate-950/60 overflow-hidden">
+      <div className={`rounded-2xl border bg-slate-950/60 overflow-hidden ${isPremium ? "border-amber-300/60 shadow-[0_0_30px_rgba(250,204,21,0.10)]" : "border-border"}`}>
         {/* Preview */}
         <div className="flex items-center justify-center bg-slate-900/80 h-48">
           {isMascot && pokemonId ? (
