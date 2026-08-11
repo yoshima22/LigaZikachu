@@ -7,11 +7,12 @@ import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
 import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
-import { getActiveShopItems, invalidateShopCache } from "@/lib/shop-cache";
+import { getActiveShopItems, getEnabledShopPromotions, invalidateShopCache } from "@/lib/shop-cache";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
 import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
+import { resolveShopPromotionPrice } from "@/lib/shop-promotions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function ShopPage() {
     select: { id: true }
   });
 
-  const [wallet, rawItems, inventoryRows, eggCounts, foodItems, raidSabotages] = await Promise.all([
+  const [wallet, rawItems, inventoryRows, eggCounts, foodItems, raidSabotages, promotions] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
     getActiveShopItems(),
     player
@@ -63,6 +64,7 @@ export default async function ShopPage() {
         })
       : [],
     getActiveRaidSabotages("ZIKASHOP"),
+    getEnabledShopPromotions(),
   ]);
   const priceSabotage = raidSabotages.find((s) => s.sabotageType === "INCREASE_PRICE");
   const priceIncreasePct = priceSabotage ? readSabotageNumber(priceSabotage.effectJson, "priceIncreasePct", 10) : 0;
@@ -72,13 +74,24 @@ export default async function ShopPage() {
     megaUnlocked ||
     !MEGA_STONE_SHOP_ITEM_TYPES.includes(item.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number])
   );
+  const now = new Date();
+  const promotedItems = safeRawItems.map((item) => ({
+    ...item,
+    ...resolveShopPromotionPrice(item.price, item.id, promotions, now),
+  }));
   const items = priceIncreasePct > 0
-    ? safeRawItems.map((item) => ({
+    ? promotedItems.map((item) => ({
         ...item,
         price: Math.max(1, Math.ceil(item.price * (1 + priceIncreasePct / 100))),
         description: `${item.description ?? ""}${item.description ? " " : ""}[Ordem da Trapaça: preço adulterado +${priceIncreasePct}%]`,
       }))
-    : safeRawItems;
+    : promotedItems;
+  const activeGlobalPromotions = promotions.filter((promotion) =>
+    promotion.scope === "GLOBAL"
+    && promotion.active
+    && promotion.startsAt <= now
+    && promotion.endsAt > now,
+  ).sort((left, right) => right.discountPct - left.discountPct).slice(0, 1);
 
   const ownedIds = new Set(inventoryRows.map((r) => r.itemId));
   const countByItemId = new Map(inventoryRows.map((r) => [r.itemId, r.quantity]));
@@ -143,6 +156,18 @@ export default async function ShopPage() {
           <p className="mt-1 text-xs text-slate-400">
             {priceSabotage.description ?? `Os preços foram adulterados em +${priceIncreasePct}%.`}
           </p>
+        </div>
+      )}
+
+      {activeGlobalPromotions.length > 0 && (
+        <div className="rounded-2xl border border-emerald-400/35 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 p-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">Promoção ativa em toda a ZikaShop</p>
+          {activeGlobalPromotions.map((promotion) => (
+            <div key={promotion.id} className="mt-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-bold text-white">{promotion.name}: {promotion.discountPct}% de desconto</p>
+              <p className="text-[10px] text-slate-400">Até {promotion.endsAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
+            </div>
+          ))}
         </div>
       )}
 

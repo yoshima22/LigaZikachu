@@ -186,6 +186,7 @@ model User {
   coinAdjustments           ZikaCoinTransaction[]    @relation("ZkTxAdmin")
   fcmTokens                 UserFcmToken[]
   createdShopItems          ShopItem[]               @relation("ShopItemCreatedBy")
+  createdShopPromotions     ShopPromotion[]          @relation("ShopPromotionCreatedBy")
   createdZikaLoots          ZikaLoot[]               @relation("ZikaLootCreatedBy")
   tutorialProgress          UserTutorialProgress[]
   passwordResetTokens       PasswordResetToken[]
@@ -1816,8 +1817,34 @@ model ShopItem {
   ownerships                PlayerInventory[]
   wishlistEntries           PlayerItemWishlist[]
   syncChallengeConsumptions SyncChallengeEntry[]
+  promotions                ShopPromotion[]
 
   @@map("shop_items")
+}
+
+enum ShopPromotionScope {
+  GLOBAL
+  ITEM
+}
+
+model ShopPromotion {
+  id          String             @id @default(cuid())
+  name        String
+  scope       ShopPromotionScope
+  itemId      String?
+  discountPct Int
+  startsAt    DateTime
+  endsAt      DateTime
+  active      Boolean            @default(true)
+  createdById String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  item        ShopItem?          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation("ShopPromotionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([active, startsAt, endsAt])
+  @@index([itemId, active])
+  @@map("shop_promotions")
 }
 
 model PlayerInventory {

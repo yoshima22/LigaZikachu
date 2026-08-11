@@ -48,6 +48,32 @@ export const getActiveShopItems = unstable_cache(
   { revalidate: 300, tags: ["shop-items-active"] },
 );
 
+/**
+ * Promoções habilitadas, inclusive as agendadas. O filtro exato de início/fim
+ * é feito a cada renderização para uma promoção começar e terminar no horário
+ * programado mesmo que este payload ainda esteja em cache.
+ */
+export const getEnabledShopPromotions = unstable_cache(
+  async () => {
+    return prisma.shopPromotion.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        itemId: true,
+        discountPct: true,
+        startsAt: true,
+        endsAt: true,
+        active: true,
+      },
+      orderBy: [{ startsAt: "asc" }, { discountPct: "desc" }],
+    });
+  },
+  ["shop-promotions-enabled"],
+  { revalidate: 300, tags: ["shop-promotions"] },
+);
+
 /** Lista os pacotes de figurinhas ativos. Cache de 10 min — invalidado quando admin edita. */
 export const getActiveStickerPacks = unstable_cache(
   async () => {
@@ -82,4 +108,5 @@ export async function invalidateShopCache() {
   revalidateTag("shop-item-images");
   revalidateTag("sticker-packs-active");
   revalidateTag("shop-item-meta");
+  revalidateTag("shop-promotions");
 }

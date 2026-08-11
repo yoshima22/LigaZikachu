@@ -32,6 +32,10 @@ interface Item {
   imageUrl: string | null;
   rarity: string;
   price: number;
+  originalPrice?: number;
+  discountPct?: number;
+  promotionName?: string | null;
+  promotionEndsAt?: Date | string | null;
   metadata?: unknown;
   theme?: string;
   flavorText?: string | null;
@@ -119,7 +123,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
     setBuyingId(itemId);
     startTransition(async () => {
       try {
-        const result = await purchaseItem({ itemId, quantity });
+        const result = await purchaseItem({ itemId, quantity, expectedUnitPrice: price });
         if (result.error) { toast.error(result.error); return; }
         if (result.autoSold) {
           toast.info(
@@ -184,6 +188,8 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
           const isConsumable = isConsumableShopItemType(item.type);
           const quantity = isConsumable ? getQuantity(item.id) : 1;
           const totalPrice = item.price * quantity;
+          const originalTotalPrice = (item.originalPrice ?? item.price) * quantity;
+          const hasPromotion = (item.discountPct ?? 0) > 0 && originalTotalPrice > totalPrice;
           const canAfford = balance >= totalPrice;
           const isBuying = buyingId === item.id && pending;
           const ownedCount = inventoryCounts[item.id] ?? 0;
@@ -196,6 +202,11 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                 owned ? "border-[#7AC74C]/40" : rarityColors[item.rarity]?.split(" ")[0] ?? "border-border"
               }`}
             >
+              {hasPromotion && (
+                <div className="absolute left-2 top-2 z-10 rounded-full border border-emerald-300/50 bg-emerald-500 px-2 py-1 text-[10px] font-black text-slate-950 shadow-lg">
+                  -{item.discountPct}%
+                </div>
+              )}
               {/* Preview image / banner — clicável para ampliar */}
               {displayImageUrl ? (
                 item.type === "BANNER" ? (
@@ -276,10 +287,23 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     Inventário: <span className="text-[#FFCB05]">{ownedCount}</span>
                   </div>
                 )}
+                {hasPromotion && (
+                  <div className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-2">
+                    <p className="text-[10px] font-bold text-emerald-300">{item.promotionName ?? "Oferta especial"}</p>
+                    {item.promotionEndsAt && (
+                      <p className="mt-0.5 text-[9px] text-slate-500">
+                        Termina em {new Date(item.promotionEndsAt).toLocaleString("pt-BR")}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-1">
-                  <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
-                    <Coins size={14} /> {totalPrice.toLocaleString("pt-BR")} ZC
-                  </span>
+                  <div>
+                    {hasPromotion && <p className="text-[10px] text-slate-500 line-through">{originalTotalPrice.toLocaleString("pt-BR")} ZC</p>}
+                    <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
+                      <Coins size={14} /> {totalPrice.toLocaleString("pt-BR")} ZC
+                    </span>
+                  </div>
                   {owned ? (
                     <span className="flex items-center gap-1 rounded-lg bg-[#7AC74C]/10 px-2 py-1 text-xs font-semibold text-[#7AC74C]">
                       <CheckCircle size={12} /> Possuído

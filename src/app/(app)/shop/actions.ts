@@ -6,7 +6,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { ShopItemType, ShopItemRarity, TitleTheme, TitleEntranceEffect, ZikaCoinTxType, EggType, FoodType } from "@prisma/client";
+import { ShopItemType, ShopItemRarity, ShopPromotionScope, TitleTheme, TitleEntranceEffect, ZikaCoinTxType, EggType, FoodType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType, UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
@@ -14,6 +14,8 @@ import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { getCurrentShopPromotionPrice } from "@/lib/shop-promotions";
+import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -399,11 +401,93 @@ export async function createDefaultMascotShopItems(): Promise<{ error?: string; 
   }
 }
 
+// ── Admin: promoções programadas ────────────────────────────────────────────
+
+const shopPromotionSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  scope: z.nativeEnum(ShopPromotionScope),
+  itemId: z.string().trim().optional().nullable(),
+  discountPct: z.number().int().min(1).max(99),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+}).superRefine((data, context) => {
+  if (data.endsAt <= data.startsAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["endsAt"], message: "O fim da promoção deve ser posterior ao início." });
+  }
+  if (data.scope === ShopPromotionScope.ITEM && !data.itemId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["itemId"], message: "Escolha o item que receberá o desconto." });
+  }
+});
+
+export async function createShopPromotion(raw: {
+  name: string;
+  scope: ShopPromotionScope;
+  itemId?: string | null;
+  discountPct: number;
+  startsAt: string | Date;
+  endsAt: string | Date;
+}): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = shopPromotionSchema.parse(raw);
+    const itemId = data.scope === ShopPromotionScope.ITEM ? data.itemId : null;
+    if (itemId) {
+      const exists = await prisma.shopItem.findUnique({ where: { id: itemId }, select: { id: true } });
+      if (!exists) return { error: "Item da promoção não encontrado." };
+    }
+    await prisma.shopPromotion.create({
+      data: {
+        name: data.name,
+        scope: data.scope,
+        itemId,
+        discountPct: data.discountPct,
+        startsAt: data.startsAt,
+        endsAt: data.endsAt,
+        createdById: actor.id,
+      },
+    });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    void invalidateShopCache();
+    return {};
+  } catch (error) {
+    if (error instanceof z.ZodError) return { error: error.issues[0]?.message ?? "Dados inválidos." };
+    return { error: error instanceof Error ? error.message : "Não foi possível criar a promoção." };
+  }
+}
+
+export async function toggleShopPromotion(promotionId: string, active: boolean): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.shopPromotion.update({ where: { id: promotionId }, data: { active } });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    void invalidateShopCache();
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível alterar a promoção." };
+  }
+}
+
+export async function deleteShopPromotion(promotionId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.shopPromotion.delete({ where: { id: promotionId } });
+    revalidatePath("/shop");
+    revalidatePath("/shop/admin");
+    void invalidateShopCache();
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível excluir a promoção." };
+  }
+}
+
 // ── Comprar item ──────────────────────────────────────────────────────────────
 
 const purchaseItemSchema = z.object({
   itemId: z.string().min(1),
   quantity: z.coerce.number().int().min(1).max(99).default(1),
+  expectedUnitPrice: z.coerce.number().int().min(1).optional(),
 });
 
 const CONSUMABLE_TYPES = CONSUMABLE_SHOP_ITEM_TYPES as readonly string[];
@@ -412,7 +496,7 @@ export async function purchaseItem(
   itemIdOrInput: string | z.infer<typeof purchaseItemSchema>
 ): Promise<{ error?: string; purchased?: number; autoSold?: { itemName: string; coins: number } }> {
   try {
-    const { itemId, quantity } = purchaseItemSchema.parse(
+    const { itemId, quantity, expectedUnitPrice } = purchaseItemSchema.parse(
       typeof itemIdOrInput === "string"
         ? { itemId: itemIdOrInput, quantity: 1 }
         : itemIdOrInput
@@ -427,6 +511,19 @@ export async function purchaseItem(
     const item = await prisma.shopItem.findUnique({ where: { id: itemId } });
     if (!item) return { error: "Item não encontrado." };
     if (!item.active) return { error: "Este item não está disponível." };
+
+    const promotionPrice = await getCurrentShopPromotionPrice(item.id, item.price);
+    const raidSabotages = await getActiveRaidSabotages("ZIKASHOP");
+    const priceSabotage = raidSabotages.find((sabotage) => sabotage.sabotageType === "INCREASE_PRICE");
+    const priceIncreasePct = priceSabotage
+      ? readSabotageNumber(priceSabotage.effectJson, "priceIncreasePct", 10)
+      : 0;
+    const effectiveUnitPrice = priceIncreasePct > 0
+      ? Math.max(1, Math.ceil(promotionPrice.price * (1 + priceIncreasePct / 100)))
+      : promotionPrice.price;
+    if (expectedUnitPrice !== undefined && expectedUnitPrice !== effectiveUnitPrice) {
+      return { error: `O preço de ${item.name} mudou para ${effectiveUnitPrice.toLocaleString("pt-BR")} ZC. Revise o valor antes de confirmar novamente.` };
+    }
 
     // Itens consumíveis (ovos, comida) podem ser comprados várias vezes
     if (isMegaStoneType(item.type) && !(await isMegaStoneShopUnlocked())) {
@@ -445,7 +542,7 @@ export async function purchaseItem(
       if (alreadyOwns) {
         if (UNIQUE_ITEM_TYPES.has(item.type)) {
           // Item único: reembolsa metade do preço em vez de bloquear
-          const halfPrice = Math.floor(item.price / 2);
+          const halfPrice = Math.floor(effectiveUnitPrice / 2);
           await prisma.$transaction(async (tx) => {
             await creditCoins(tx, {
               playerId: player.id,
@@ -463,7 +560,7 @@ export async function purchaseItem(
     }
 
     const wallet = await getOrCreateWallet(player.id);
-    const totalPrice = item.price * quantity;
+    const totalPrice = effectiveUnitPrice * quantity;
     if (wallet.balance < totalPrice)
       return { error: `Saldo insuficiente. Você tem ${wallet.balance} ZC, a compra custa ${totalPrice} ZC.` };
 
@@ -540,7 +637,19 @@ export async function purchaseItem(
         entityId: item.id,
         amount: quantity,
         unit: "ITEM",
-        after: { itemId: item.id, itemName: item.name, itemType: item.type, quantity, totalPrice },
+        after: {
+          itemId: item.id,
+          itemName: item.name,
+          itemType: item.type,
+          quantity,
+          originalUnitPrice: item.price,
+          effectiveUnitPrice,
+          discountPct: promotionPrice.discountPct,
+          promotionId: promotionPrice.promotionId,
+          promotionName: promotionPrice.promotionName,
+          priceIncreasePct,
+          totalPrice,
+        },
       });
     });
 

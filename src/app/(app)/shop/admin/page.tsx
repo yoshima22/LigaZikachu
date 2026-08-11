@@ -5,17 +5,24 @@ import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ShopAdminPanel } from "./_components/shop-admin-panel";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
+import { ShopPromotionManager } from "./_components/shop-promotion-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShopAdminPage() {
   await requireAdmin();
 
-  const items = await prisma.shopItem.findMany({
-    where: { id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID } },
-    orderBy: [{ type: "asc" }, { rarity: "asc" }, { name: "asc" }],
-    include: { _count: { select: { ownerships: true } } }
-  });
+  const [items, promotions] = await Promise.all([
+    prisma.shopItem.findMany({
+      where: { id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID } },
+      orderBy: [{ type: "asc" }, { rarity: "asc" }, { name: "asc" }],
+      include: { _count: { select: { ownerships: true } } },
+    }),
+    prisma.shopPromotion.findMany({
+      orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }],
+      include: { item: { select: { name: true } } },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -47,6 +54,23 @@ export default async function ShopAdminPage() {
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <ShopPromotionManager
+          items={items.map((item) => ({ id: item.id, name: item.name, type: item.type, price: item.price }))}
+          promotions={promotions.map((promotion) => ({
+            id: promotion.id,
+            name: promotion.name,
+            scope: promotion.scope,
+            itemId: promotion.itemId,
+            discountPct: promotion.discountPct,
+            startsAt: promotion.startsAt,
+            endsAt: promotion.endsAt,
+            active: promotion.active,
+            item: promotion.item,
+          }))}
+        />
       </Card>
 
       <Card>
