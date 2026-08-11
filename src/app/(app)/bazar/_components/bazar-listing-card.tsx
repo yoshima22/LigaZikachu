@@ -71,6 +71,20 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
     ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
     : null;
   const isPremium = Boolean(listing.premiumUntil && new Date(listing.premiumUntil).getTime() > Date.now());
+  const stats = (payload.stats ?? {}) as Record<string, unknown>;
+  const statTotal = ["force", "agility", "charisma", "instinct", "vitality"]
+    .reduce((sum, key) => sum + Number(stats[key] ?? 0), 0);
+  const fallbackPremiumHighlights = isPremium ? [
+    ...(isShiny ? ["Versão shiny, muito mais difícil de encontrar."] : []),
+    ...(mascotRarity && mascotRarity !== "COMMON" && mascotRarityLabel
+      ? [`Classificação ${mascotRarityLabel.toLowerCase()}, com aparição menos comum em ovos.`]
+      : []),
+    ...(eggOriginLabel ? [`Origem confirmada: ${eggOriginLabel}.`] : []),
+    ...(statTotal > 0 ? [`${statTotal} pontos somados nos cinco atributos.`] : []),
+  ].slice(0, 2) : [];
+  const premiumHighlights = listing.premiumHighlights?.length
+    ? listing.premiumHighlights
+    : fallbackPremiumHighlights;
 
   return (
     <Link href={`/bazar/${listing.id}`}
@@ -156,13 +170,13 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             <PremiumCountdown until={listing.premiumUntil!} className="rounded-full border border-amber-300/25 bg-slate-900/80 px-2 py-1 text-[9px] font-semibold text-amber-100/80" />
           </div>
         )}
-        {isPremium && listing.premiumHighlights && listing.premiumHighlights.length > 0 && (
+        {isPremium && premiumHighlights.length > 0 && (
           <div className="rounded-xl border border-amber-300/25 bg-gradient-to-br from-amber-400/10 to-purple-500/5 px-2.5 py-2">
             <p className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-amber-300">
               🐾 Dica do Miauvadão
             </p>
             <ul className="space-y-0.5 text-[10px] leading-snug text-amber-50/80">
-              {listing.premiumHighlights.map((highlight) => (
+              {premiumHighlights.map((highlight) => (
                 <li key={highlight} className="flex gap-1.5"><span className="text-amber-400">•</span><span>{highlight}</span></li>
               ))}
             </ul>

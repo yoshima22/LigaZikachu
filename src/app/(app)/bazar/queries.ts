@@ -18,7 +18,7 @@ export function getCachedPremiumListings(filters?: Parameters<typeof getListings
   const key = JSON.stringify(premiumFilters);
   return unstable_cache(
     () => getListings(premiumFilters),
-    ["bazar-premium-listings", key],
+    ["bazar-premium-listings-v2", key],
     { revalidate: 45, tags: ["bazar-listings"] },
   )();
 }
