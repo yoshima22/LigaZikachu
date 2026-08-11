@@ -11,12 +11,19 @@ import {
   skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
   applyLuckyEgg, applyWeaknessPolicy, applyPicnicBasket, applyVacationTicket,
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
-  rollEggChoicesForPlayer,
+  rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts,
 } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
-import { EGG_SHINY_CHANCE, getPokemonName, getPokemonTypes, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonName, getPokemonTypes, getSpriteUrl, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import {
+  eggDuplicateWeight,
+  getEggCandidatesForGeneration,
+  getEggTierWeightsForGeneration,
+  type EggPokemonTier,
+} from "@/lib/mascot-egg-pools";
+import { getActiveEggRarityBonusPct } from "@/lib/timed-game-bonuses";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
@@ -336,6 +343,196 @@ export async function putEggInIncubator(eggId: string, genOverride?: string): Pr
     revalidate(player.id);
     return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export type IncubatorDropPreview = {
+  eggType: string;
+  generation: number;
+  generationWasRandom: boolean;
+  eggBonusPct: number;
+  eventBonusPct: number;
+  randomGenerationBonusPct: number;
+  labChoices: boolean;
+  categories: Array<{ id: string; label: string; chancePct: number; count: number }>;
+  drops: Array<{
+    pokemonId: number;
+    name: string;
+    category: string;
+    categoryLabel: string;
+    types: string[];
+    spriteUrl: string;
+    chancePct: number;
+    ownedCopies: number;
+    custom: boolean;
+  }>;
+};
+
+function previewCategory(rarity: string) {
+  const normalized = rarity.toUpperCase();
+  if (["LEGENDARY", "LENDARIO", "LENDÁRIO", "ELITE"].includes(normalized)) return { id: "LEGENDARY", label: "Lendários" };
+  if (["MYTHICAL", "MITICO", "MÍTICO"].includes(normalized)) return { id: "MYTHICAL", label: "Míticos" };
+  if (["ULTRA_BEAST", "ULTRA BEAST", "ULTRA_BESTA"].includes(normalized)) return { id: "ULTRA_BEAST", label: "Ultra Bestas" };
+  if (["PSEUDO", "PSEUDO_LEGENDARY", "PSEUDO-LENDARIO", "PSEUDO-LENDÁRIO"].includes(normalized)) return { id: "PSEUDO_LEGENDARY", label: "Pseudo-lendários" };
+  if (["PARADOX", "PARADOXAL"].includes(normalized)) return { id: "PARADOX", label: "Paradoxais" };
+  return { id: "COMMON", label: "Normais" };
+}
+
+function previewCategorySingular(category: ReturnType<typeof previewCategory>) {
+  return ({
+    LEGENDARY: "Lendário",
+    MYTHICAL: "Mítico",
+    ULTRA_BEAST: "Ultra Besta",
+    PSEUDO_LEGENDARY: "Pseudo-lendário",
+    PARADOX: "Paradoxal",
+    COMMON: "Normal",
+  } as Record<string, string>)[category.id] ?? category.label;
+}
+
+function previewRegistryTier(rarity: string): EggPokemonTier {
+  const category = previewCategory(rarity).id;
+  if (["LEGENDARY", "MYTHICAL", "ULTRA_BEAST"].includes(category)) return "ELITE";
+  if (category === "PSEUDO_LEGENDARY") return "PSEUDO_LEGENDARY";
+  if (category === "PARADOX") return "PARADOX";
+  return "COMMON";
+}
+
+/** Calculado sob demanda: nenhuma leitura é feita enquanto a janela está fechada. */
+export async function getIncubatorDropPreviewAction(): Promise<{ error?: string; preview?: IncubatorDropPreview }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const incubator = await prisma.mascotIncubator.findUnique({
+      where: { playerId: player.id },
+      include: { egg: { select: { type: true, origin: true, hatchRarityBonusPct: true } } },
+    });
+    if (!incubator) return { error: "Não há ovo na incubadora." };
+
+    const context = getEggRollContext(incubator.egg.type, incubator.egg.origin);
+    const generationMatch = /^EGG_GEN([1-9])$/.exec(context.generationType ?? "");
+    if (!generationMatch) return { error: "A geração deste ovo ainda não foi definida." };
+    const generation = Number(generationMatch[1]);
+    const eventBonusPct = await getActiveEggRarityBonusPct();
+    const ownedCounts = await getOwnedBaseCounts(player.id);
+    const bonusPct = incubator.egg.hatchRarityBonusPct + eventBonusPct;
+    const { effective } = getEggTierWeightsForGeneration(
+      context.eggType,
+      generation,
+      bonusPct,
+      context.randomGeneration,
+    );
+
+    const speciesDefinitions = await prisma.pokemonSpeciesDefinition.findMany({
+      where: { generation },
+      select: {
+        pokemonId: true,
+        name: true,
+        custom: true,
+        eggEligible: true,
+        rarity: true,
+        primaryType: true,
+        secondaryType: true,
+        staticSpriteUrl: true,
+        animatedSpriteUrl: true,
+      },
+      orderBy: { name: "asc" },
+    });
+    const customSpecies = speciesDefinitions.filter((species) => species.custom && species.eggEligible);
+    const speciesOverrides = new Map(speciesDefinitions.map((species) => [species.pokemonId, species]));
+
+    const drops: IncubatorDropPreview["drops"] = [];
+    const tiers: EggPokemonTier[] = ["COMMON", "PSEUDO_LEGENDARY", "PARADOX", "ELITE"];
+    for (const tier of tiers) {
+      const tierChance = effective[tier] / 100;
+      if (tierChance <= 0) continue;
+      const official = getEggCandidatesForGeneration(generation, tier);
+      const custom = customSpecies.filter((species) => previewRegistryTier(species.rarity) === tier);
+      if (!official.length) continue;
+
+      // É a mesma divisão usada no hatch real: primeiro divide a presença entre
+      // espécies oficiais/customizadas e depois aplica a proteção de repetidos.
+      const population = official.length + custom.length;
+      const officialWeights = official.map((pokemonId) => ({
+        pokemonId,
+        copies: ownedCounts.get(pokemonId) ?? 0,
+        weight: eggDuplicateWeight(ownedCounts.get(pokemonId) ?? 0),
+      }));
+      const officialWeightTotal = officialWeights.reduce((sum, item) => sum + item.weight, 0);
+      const officialShare = official.length / population;
+
+      for (const item of officialWeights) {
+        const rarity = getMascotRarity(item.pokemonId);
+        const category = previewCategory(rarity);
+        const override = speciesOverrides.get(item.pokemonId);
+        drops.push({
+          pokemonId: item.pokemonId,
+          name: override?.name ?? getPokemonName(item.pokemonId),
+          category: category.id,
+          categoryLabel: previewCategorySingular(category),
+          types: override?.primaryType
+            ? [override.primaryType, override.secondaryType].filter(Boolean) as string[]
+            : getPokemonTypes(item.pokemonId),
+          spriteUrl: override?.animatedSpriteUrl ?? override?.staticSpriteUrl ?? getSpriteUrl(item.pokemonId),
+          chancePct: tierChance * officialShare * (item.weight / officialWeightTotal) * 100,
+          ownedCopies: item.copies,
+          custom: false,
+        });
+      }
+      for (const species of custom) {
+        const category = previewCategory(species.rarity);
+        drops.push({
+          pokemonId: species.pokemonId,
+          name: species.name,
+          category: category.id,
+          categoryLabel: previewCategorySingular(category),
+          types: [species.primaryType, species.secondaryType].filter(Boolean) as string[],
+          spriteUrl: species.animatedSpriteUrl ?? species.staticSpriteUrl ?? getSpriteUrl(species.pokemonId),
+          chancePct: tierChance * (1 / population) * 100,
+          ownedCopies: ownedCounts.get(species.pokemonId) ?? 0,
+          custom: true,
+        });
+      }
+    }
+
+    drops.sort((a, b) => b.chancePct - a.chancePct || a.name.localeCompare(b.name, "pt-BR"));
+    const categoryDefinitions = [
+      { id: "ALL", label: "Todos" },
+      { id: "COMMON", label: "Normais" },
+      { id: "PSEUDO_LEGENDARY", label: "Pseudo-lendários" },
+      { id: "LEGENDARY", label: "Lendários" },
+      { id: "MYTHICAL", label: "Míticos" },
+      { id: "ULTRA_BEAST", label: "Ultra Bestas" },
+      { id: "PARADOX", label: "Paradoxais" },
+    ];
+    const categories = categoryDefinitions
+      .map((category) => {
+        const categoryDrops = category.id === "ALL" ? drops : drops.filter((drop) => drop.category === category.id);
+        return {
+          ...category,
+          chancePct: categoryDrops.reduce((sum, drop) => sum + drop.chancePct, 0),
+          count: categoryDrops.length,
+        };
+      })
+      .filter((category) => category.id === "ALL" || category.count > 0);
+
+    return {
+      preview: {
+        eggType: context.eggType,
+        generation,
+        generationWasRandom: context.randomGeneration,
+        eggBonusPct: incubator.egg.hatchRarityBonusPct,
+        eventBonusPct,
+        randomGenerationBonusPct: context.randomGeneration ? 1 : 0,
+        labChoices: isLabChoiceEgg(incubator.egg.type, incubator.egg.origin),
+        categories,
+        drops,
+      },
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível calcular os drops deste ovo." };
+  }
 }
 
 export async function hatchEggAction(): Promise<{

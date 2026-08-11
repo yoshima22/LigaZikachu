@@ -50,7 +50,7 @@ function getEggStatTypeKey(type: string, origin?: string | null) {
   return type === "LAB" || origin?.startsWith("LAB_REGION:") ? "LAB" : type;
 }
 
-function getEggRollContext(type: string, origin?: string | null) {
+export function getEggRollContext(type: string, origin?: string | null) {
   if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
     const [mode, originalType, generationType] = origin.split(":");
     return {
@@ -74,7 +74,7 @@ function getEggRollContext(type: string, origin?: string | null) {
   return { eggType: type, generationType: null, randomGeneration: true };
 }
 
-async function getOwnedBaseCounts(playerId: string) {
+export async function getOwnedBaseCounts(playerId: string) {
   const mascots = await prisma.mascot.findMany({
     where: { playerId },
     select: { pokemonId: true, hatchedPokemonId: true },

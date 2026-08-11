@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
-import { Clock, Egg } from "lucide-react";
+import { Clock, Egg, Search, Sparkles, X } from "lucide-react";
 import { getShinySprite, getSpriteUrl } from "@/lib/mascot-data";
-import { putEggInIncubator, hatchEggAction, confirmLabChoiceAction, skipIncubationAction } from "../actions";
+import {
+  putEggInIncubator,
+  hatchEggAction,
+  confirmLabChoiceAction,
+  getIncubatorDropPreviewAction,
+  skipIncubationAction,
+  type IncubatorDropPreview,
+} from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import { getPokemonName } from "@/lib/mascot-data";
 
@@ -40,6 +47,19 @@ const EGG_COLORS: Record<string, string> = {
 const EGG_LABEL: Record<string, string> = {
   COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "🧪 Ovo de Laboratório", EVENT: "Ovo de Evento"
 };
+const TYPE_LABEL: Record<string, string> = {
+  normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico", grass: "Planta",
+  ice: "Gelo", fighting: "Lutador", poison: "Veneno", ground: "Terra", flying: "Voador",
+  psychic: "Psíquico", bug: "Inseto", rock: "Pedra", ghost: "Fantasma", dragon: "Dragão",
+  dark: "Sombrio", steel: "Aço", fairy: "Fada",
+};
+
+function formatDropChance(value: number) {
+  if (value >= 10) return `${value.toFixed(1)}%`;
+  if (value >= 1) return `${value.toFixed(2)}%`;
+  if (value >= 0.01) return `${value.toFixed(3)}%`;
+  return `${value.toFixed(5)}%`;
+}
 function getEggLabel(type: string, origin?: string) {
   return EGG_LABEL[type] ?? (origin === "LAB" ? "🧪 Ovo de Laboratório" : "Ovo");
 }
@@ -101,11 +121,32 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   } | null>(null);
   const [labChoices, setLabChoices] = useState<Array<{ pokemonId: number; isShiny: boolean }> | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
+  const [dropPreview, setDropPreview] = useState<IncubatorDropPreview | null>(null);
+  const [dropPreviewOpen, setDropPreviewOpen] = useState(false);
+  const [dropPreviewLoading, setDropPreviewLoading] = useState(false);
+  const [dropCategory, setDropCategory] = useState("ALL");
+  const [dropSearch, setDropSearch] = useState("");
+  const [dropPage, setDropPage] = useState(1);
   // Modal de seleção de geração
   const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
   // useTimerExpiry: atualiza automaticamente — botão "Chocar" aparece quando o tempo acaba
   const incubatorExpiry = useTimerExpiry(incubator?.finishAt ?? null);
   const isReady = !!incubator && incubatorExpiry.expired;
+  const filteredDrops = useMemo(() => {
+    if (!dropPreview) return [];
+    const normalizedSearch = dropSearch.trim().toLocaleLowerCase("pt-BR");
+    return dropPreview.drops.filter((drop) =>
+      (dropCategory === "ALL" || drop.category === dropCategory)
+      && (!normalizedSearch || drop.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)),
+    );
+  }, [dropCategory, dropPreview, dropSearch]);
+  const dropPageSize = 12;
+  const dropPageCount = Math.max(1, Math.ceil(filteredDrops.length / dropPageSize));
+  const visibleDrops = filteredDrops.slice((dropPage - 1) * dropPageSize, dropPage * dropPageSize);
+
+  useEffect(() => {
+    setDropPage((current) => Math.min(current, dropPageCount));
+  }, [dropPageCount]);
 
   const handlePutEgg = (eggId: string, genOverride?: string) => {
     startTransition(async () => {
@@ -162,8 +203,125 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     });
   };
 
+  const handleOpenDropPreview = async () => {
+    setDropPreviewOpen(true);
+    setDropPreviewLoading(true);
+    setDropCategory("ALL");
+    setDropSearch("");
+    setDropPage(1);
+    const result = await getIncubatorDropPreviewAction();
+    setDropPreviewLoading(false);
+    if (result.error || !result.preview) {
+      setDropPreviewOpen(false);
+      toast.error(result.error ?? "Não foi possível calcular os possíveis drops.");
+      return;
+    }
+    setDropPreview(result.preview);
+  };
+
   return (
     <>
+    {/* Modal calculado sob demanda com a pool real do ovo incubado */}
+    {dropPreviewOpen && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 sm:p-5" onClick={() => setDropPreviewOpen(false)}>
+        <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-cyan-400/30 bg-slate-950 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-start gap-3 border-b border-border bg-gradient-to-r from-cyan-500/10 to-purple-500/10 p-4 sm:p-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-300">
+              <Sparkles size={21} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-bold text-white sm:text-lg">Possíveis drops deste ovo</h3>
+              {dropPreview ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  {getEggLabel(dropPreview.eggType)} · Geração {dropPreview.generation} · probabilidades da sua conta agora
+                </p>
+              ) : <p className="mt-1 text-xs text-slate-500">Calculando a pool real...</p>}
+            </div>
+            <button type="button" onClick={() => setDropPreviewOpen(false)} className="rounded-lg border border-border p-2 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Fechar">
+              <X size={17} />
+            </button>
+          </div>
+
+          {dropPreviewLoading ? (
+            <div className="flex min-h-72 flex-col items-center justify-center gap-3 p-8 text-sm text-slate-400">
+              <span className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
+              Conferindo geração, bônus e proteção de repetidos...
+            </div>
+          ) : dropPreview && (
+            <>
+              <div className="space-y-3 border-b border-border p-4 sm:p-5">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border bg-slate-900/70 p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Bônus do ovo</p>
+                    <p className="mt-1 text-sm font-bold text-purple-300">+{dropPreview.eggBonusPct} ponto(s) percentuais</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-slate-900/70 p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Escolha de geração</p>
+                    <p className="mt-1 text-sm font-bold text-cyan-300">{dropPreview.generationWasRandom ? "+1 ponto percentual (aleatória)" : "Geração escolhida"}</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-slate-900/70 p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Evento ativo</p>
+                    <p className="mt-1 text-sm font-bold text-emerald-300">+{dropPreview.eventBonusPct} ponto(s) percentuais</p>
+                  </div>
+                </div>
+                <p className="text-[10px] leading-relaxed text-slate-500">
+                  A chance considera a pool atual, somente formas iniciais e a proteção contra espécies que você já possui. Se seu inventário ou um bônus de evento mudar antes do ovo chocar, os valores podem mudar também.
+                  {dropPreview.labChoices && " No Ovo de Laboratório, o percentual exibido é a chance real na primeira opção. As duas opções seguintes excluem as anteriores e recalculam a pool; por isso, a chance de o mascote aparecer no trio é maior."}
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {dropPreview.categories.map((category) => (
+                    <button key={category.id} type="button" onClick={() => { setDropCategory(category.id); setDropPage(1); }}
+                      className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-colors ${dropCategory === category.id ? "border-[#FFCB05]/60 bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border bg-slate-900 text-slate-400 hover:text-slate-200"}`}>
+                      <span className="block text-[11px] font-bold">{category.label}</span>
+                      <span className="block text-[9px] opacity-75">{formatDropChance(category.chancePct)} · {category.count}</span>
+                    </button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 rounded-xl border border-border bg-slate-900 px-3 py-2 focus-within:border-cyan-400/50">
+                  <Search size={15} className="shrink-0 text-slate-500" />
+                  <input value={dropSearch} onChange={(event) => { setDropSearch(event.target.value); setDropPage(1); }} placeholder="Buscar um mascote pelo nome..."
+                    className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600" />
+                  <span className="text-[10px] text-slate-600">{filteredDrops.length} resultado(s)</span>
+                </label>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                {visibleDrops.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {visibleDrops.map((drop) => (
+                      <div key={drop.pokemonId} className="flex items-center gap-3 rounded-xl border border-border bg-slate-900/65 p-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={drop.spriteUrl} alt={drop.name} className="h-14 w-14 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-xs font-bold text-white">{drop.name}</p>
+                            <span className="shrink-0 text-[11px] font-black text-[#FFCB05]">{formatDropChance(drop.chancePct)}</span>
+                          </div>
+                          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-purple-300">{drop.categoryLabel}</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {drop.types.map((type) => <span key={type} className="rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[8px] text-slate-400">{TYPE_LABEL[type.toLowerCase()] ?? type}</span>)}
+                            {drop.custom && <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[8px] text-cyan-300">Customizado</span>}
+                          </div>
+                          <p className="mt-1 text-[9px] text-slate-600">Você possui {drop.ownedCopies} desta forma inicial</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-border text-xs text-slate-500">Nenhum mascote encontrado nesta categoria.</div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-border bg-slate-950 p-4">
+                <button type="button" disabled={dropPage <= 1} onClick={() => setDropPage((page) => page - 1)} className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30">Anterior</button>
+                <span className="text-[10px] text-slate-500">Página {dropPage} de {dropPageCount}</span>
+                <button type="button" disabled={dropPage >= dropPageCount} onClick={() => setDropPage((page) => page + 1)} className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30">Próxima</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
     {/* Modal de seleção de geração */}
     {genPickEggId && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -329,6 +487,10 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 <Countdown finishAt={new Date(incubator.finishAt)} />
               </div>
             </div>
+            <button type="button" disabled={dropPreviewLoading} onClick={handleOpenDropPreview}
+              className="rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-400/15 disabled:opacity-50">
+              ✨ Ver possíveis drops
+            </button>
             {isReady && (
               <button type="button" disabled={pending} onClick={handleHatch}
                 className="rounded-xl bg-[#FFCB05] px-6 py-2.5 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50 animate-pulse">

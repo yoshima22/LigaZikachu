@@ -96,7 +96,7 @@ export function getInitialPokemonId(pokemonId: number) {
   return current;
 }
 
-function tierForPokemon(pokemonId: number): EggPokemonTier {
+export function tierForPokemon(pokemonId: number): EggPokemonTier {
   const rarity = getMascotRarity(pokemonId);
   if (ELITE_RARITIES.has(rarity)) return "ELITE";
   if (rarity === "PSEUDO_LEGENDARY") return "PSEUDO_LEGENDARY";
@@ -173,6 +173,31 @@ function weightsWithBonus(profile: Record<EggPokemonTier, number>, bonusPct: num
     COMMON: Math.max(0, profile.COMMON - bonus),
     ELITE: Math.min(100, profile.ELITE + bonus),
   };
+}
+
+/**
+ * Distribuição efetiva usada por uma geração já definida.
+ * Categorias inexistentes naquela geração retornam para COMMON, exatamente
+ * como acontece no sorteio real de `rollEggPokemon`.
+ */
+export function getEggTierWeightsForGeneration(
+  eggType: string,
+  generation: number,
+  rarityBonusPct = 0,
+  randomGenerationBonus = false,
+) {
+  const profile = PROFILE_WEIGHTS[profileKeyForEgg(eggType)];
+  const adjusted = weightsWithBonus(profile, rarityBonusPct + (randomGenerationBonus ? 1 : 0));
+  const effective = { ...adjusted };
+
+  for (const tier of ["PSEUDO_LEGENDARY", "PARADOX", "ELITE"] as EggPokemonTier[]) {
+    if (getEggCandidatesForGeneration(generation, tier).length === 0) {
+      effective.COMMON += effective[tier];
+      effective[tier] = 0;
+    }
+  }
+
+  return { adjusted, effective };
 }
 
 function rollTier(weights: Record<EggPokemonTier, number>, random: () => number): EggPokemonTier {
