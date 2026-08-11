@@ -76,6 +76,7 @@ function CreateListingForm() {
   const [mascotPage, setMascotPage] = useState(0);
   const [itemSearch, setItemSearch] = useState("");
   const [premium, setPremium] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const loadInventory = async (force = false) => {
     if (inventory && !force) return;
@@ -90,6 +91,7 @@ function CreateListingForm() {
   const isAuction = listingType === ("AUCTION" as BazarListingType);
 
   const handleSubmit = () => {
+    setSubmitError(null);
     startTransition(async () => {
       try {
         if (isAuction) {
@@ -105,7 +107,7 @@ function CreateListingForm() {
             quantity: category === "ITEM" ? itemQuantity : undefined,
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
           });
-          if (r.error) { toast.error(r.error); return; }
+          if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
         } else {
           const r = await createListing({
             category: category as BazarItemCategory,
@@ -125,12 +127,14 @@ function CreateListingForm() {
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
             premium,
           });
-          if (r.error) { toast.error(r.error); return; }
+          if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
         }
         toast.success("Anúncio criado com sucesso!");
         router.push("/bazar/meu-bazar");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro inesperado ao criar anúncio.");
+        const message = err instanceof Error ? err.message : "Erro inesperado ao criar anúncio.";
+        setSubmitError(message);
+        toast.error(message);
       }
     });
   };
@@ -586,6 +590,11 @@ function CreateListingForm() {
         )}
 
         {/* Submit */}
+        {submitError && (
+          <div role="alert" className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-xs font-semibold text-red-200">
+            Não foi possível publicar: {submitError}
+          </div>
+        )}
         <button type="button" disabled={pending || !canProceed()} onClick={handleSubmit}
           className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
           {pending ? "Criando anúncio…" : "Publicar anúncio"}

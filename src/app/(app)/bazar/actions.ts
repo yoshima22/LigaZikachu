@@ -608,7 +608,10 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     let listingId = "";
     await prisma.$transaction(async (tx) => {
       if (premium) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('bazar-premium-listings'))`;
+        // A função retorna `void`, que o Prisma não desserializa quando ela é
+        // selecionada diretamente. Selecionar um inteiro a partir dela mantém
+        // o lock transacional e devolve um tipo suportado.
+        await tx.$queryRaw`SELECT 1 AS acquired FROM pg_advisory_xact_lock(hashtext('bazar-premium-listings'))`;
         const premiumWhere = { status: { in: ["ACTIVE", "RESERVED"] as BazarListingStatus[] }, premiumUntil: { gt: new Date() } };
         const [globalPremiumCount, ownPremiumCount] = await Promise.all([
           tx.bazarListing.count({ where: premiumWhere }),
