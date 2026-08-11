@@ -79,6 +79,11 @@ export default async function PlayerDetailPage({
           }
         },
         orderBy: { awardedAt: "desc" }
+      },
+      invitedPlayers: {
+        select: { id: true, displayName: true },
+        orderBy: { createdAt: "asc" },
+        take: 200,
       }
     }
   });
@@ -863,6 +868,25 @@ export default async function PlayerDetailPage({
             })}
           </div>
         </Card>
+      )}
+
+      {player.invitedPlayers.length > 0 && (
+        <details className="rounded-xl border border-border/50 bg-slate-950/40 px-4 py-2 text-slate-400">
+          <summary className="cursor-pointer list-none text-[11px] text-slate-500 hover:text-slate-300">
+            Convidados por {player.displayName} ({player.invitedPlayers.length})
+          </summary>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {player.invitedPlayers.map((invited) => (
+              <Link
+                key={invited.id}
+                href={`/jogadores/${invited.id}`}
+                className="rounded-md border border-border/60 bg-slate-900/50 px-2 py-0.5 text-[11px] text-slate-300 hover:text-white"
+              >
+                {invited.displayName}
+              </Link>
+            ))}
+          </div>
+        </details>
       )}
 
       {isAdminUser && (

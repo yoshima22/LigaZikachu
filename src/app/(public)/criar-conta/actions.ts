@@ -6,14 +6,16 @@ import { signIn } from "@/auth";
 import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { ensureBeginnerOnboarding } from "@/lib/beginner-onboarding";
+import { generateUniqueInviteCode } from "@/lib/invite-code";
 
 type FormState = { error?: string };
 
 const registerSchema = z.object({
-  name:      z.string().trim().min(2).max(80),
-  email:     z.string().trim().toLowerCase().email(),
-  ptcglNick: z.string().trim().min(2, "Nick do PTCG Live deve ter ao menos 2 caracteres.").max(60),
-  password:  z.string().min(8).max(72)
+  name:       z.string().trim().min(2).max(80),
+  email:      z.string().trim().toLowerCase().email(),
+  ptcglNick:  z.string().trim().min(2, "Nick do PTCG Live deve ter ao menos 2 caracteres.").max(60),
+  password:   z.string().min(8).max(72),
+  inviteCode: z.string().trim().regex(/^\d{6}$/, "O código de convite deve ter 6 dígitos.")
 });
 
 export async function registerWithCredentials(
@@ -21,17 +23,25 @@ export async function registerWithCredentials(
   formData: FormData
 ): Promise<FormState | undefined> {
   const parsed = registerSchema.safeParse({
-    name:      formData.get("name"),
-    email:     formData.get("email"),
-    ptcglNick: formData.get("ptcglNick"),
-    password:  formData.get("password")
+    name:       formData.get("name"),
+    email:      formData.get("email"),
+    ptcglNick:  formData.get("ptcglNick"),
+    password:   formData.get("password"),
+    inviteCode: formData.get("inviteCode")
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Preencha todos os campos corretamente." };
   }
 
-  const { name, email, ptcglNick, password } = parsed.data;
+  const { name, email, ptcglNick, password, inviteCode } = parsed.data;
+
+  // Código de convite é obrigatório e precisa pertencer a um jogador existente.
+  const inviter = await prisma.player.findUnique({
+    where: { inviteCode },
+    select: { id: true }
+  });
+  if (!inviter) return { error: "Código de convite inválido. Peça o código de 6 dígitos de um jogador para criar sua conta." };
 
   // Verifica unicidade do email
   const existingEmail = await prisma.user.findUnique({ where: { email } });
@@ -45,17 +55,24 @@ export async function registerWithCredentials(
 
   const passwordHash = await hashPassword(password);
 
-  // Cria usuário + jogador + kit de boas-vindas em uma única transação
+  // Código de convite único do novo jogador (ele também poderá convidar outros).
+  const newInviteCode = await generateUniqueInviteCode(prisma);
+
+  // Cria usuário + jogador + kit de boas-vindas em uma única transação.
+  // Conta criada via código de convite válido já entra ATIVA (aprovada na hora).
   await prisma.$transaction(async (tx) => {
     const newUser = await tx.user.create({
       data: {
         name,
         email,
         passwordHash,
+        status: "ACTIVE",
         player: {
           create: {
             displayName: name,
-            ptcglNick
+            ptcglNick,
+            inviteCode: newInviteCode,
+            invitedByPlayerId: inviter.id
           }
         }
       },

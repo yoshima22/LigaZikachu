@@ -65,9 +65,22 @@ export function RegisterForm({
           placeholder="Mínimo de 8 caracteres" />
       </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-slate-200" htmlFor="inviteCode">
+          Código de convite
+        </label>
+        <input id="inviteCode" name="inviteCode" type="text" inputMode="numeric" required
+          maxLength={6} pattern="\d{6}"
+          className="h-11 w-full rounded-xl border border-border bg-slate-950/60 px-3 text-sm tracking-[0.3em] text-white outline-none transition focus:border-primary"
+          placeholder="000000" />
+        <p className="text-[11px] text-slate-500">
+          Código de 6 dígitos de um jogador da liga. Peça o código de quem te convidou — ele fica na tela de configuração de conta dele.
+        </p>
+      </div>
+
       {state?.error && <p className="text-sm text-rose-300">{state.error}</p>}
       <p className="text-xs text-slate-400">
-        Após o cadastro, o acesso fica pendente até aprovação do admin.
+        Com um código de convite válido, sua conta é aprovada na hora.
       </p>
       <SubmitButton />
     </form>

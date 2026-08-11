@@ -294,6 +294,11 @@ model Player {
   mascotSpritePreference      String                         @default("ANIMATED")
   megaSpritePreference        String                         @default("ANIMATED")
   hideLeagueResults           Boolean                        @default(false)
+  // Código de convite único (6 dígitos) e quem convidou este jogador.
+  inviteCode                  String?                        @unique
+  invitedByPlayerId           String?
+  invitedBy                   Player?                        @relation("PlayerInvites", fields: [invitedByPlayerId], references: [id], onDelete: SetNull)
+  invitedPlayers              Player[]                       @relation("PlayerInvites")
   supporterPasses             SupporterPass[]
   sentMessages                DirectMessage[]                @relation("SentMessages")
   receivedMessages            DirectMessage[]                @relation("ReceivedMessages")

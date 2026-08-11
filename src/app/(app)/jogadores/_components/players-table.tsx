@@ -28,6 +28,7 @@ export interface PlayerRow {
   image: string | null;
   whatsapp: string | null;
   notes: string | null;
+  invitedByName: string | null;
   wins: number;
   losses: number;
 }
@@ -203,6 +204,7 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
               <th className="px-4 py-3">Jogador</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Nick PTCGL</th>
+              {canAdmin && <th className="px-4 py-3">Convidado por</th>}
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-center">V / D</th>
               {canAdmin && <th className="px-4 py-3 text-right">Ações</th>}
@@ -228,6 +230,7 @@ export function PlayersTable({ players, seasonId, currentUserId, currentUserRole
                 </td>
                 <td className="px-4 py-3 text-slate-300">{p.email}</td>
                 <td className="px-4 py-3 text-slate-400">{p.ptcglNick ?? "—"}</td>
+                {canAdmin && <td className="px-4 py-3 text-slate-400">{p.invitedByName ?? "—"}</td>}
                 <td className="px-4 py-3">{userStatusBadge(p.status)}</td>
                 <td className="px-4 py-3 text-center text-slate-300">
                   <span className="text-emerald-400">{p.wins}</span>

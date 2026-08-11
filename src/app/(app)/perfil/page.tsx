@@ -11,6 +11,8 @@ import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
+import { InviteCodeCard } from "./_components/invite-code-card";
+import { ensurePlayerInviteCode } from "@/lib/invite-code";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { PokemonWishlist } from "@/components/profile/pokemon-wishlist";
@@ -198,6 +200,8 @@ export default async function PerfilPage() {
       casualMode: true,
       mascotSpritePreference: true,
       megaSpritePreference: true,
+      inviteCode: true,
+      _count: { select: { invitedPlayers: true } },
       user: { select: { image: true, status: true, role: true } },
       seasonEntries: {
         where: { isActive: true },
@@ -493,6 +497,11 @@ export default async function PerfilPage() {
         <h2 className="mb-4 text-sm font-semibold text-white">Editar perfil e senha</h2>
         <EditProfileForm player={{ ...player, standbyUntil: getStandbyUntilFromNotes(player.notes), casualMode: player.casualMode }} />
       </Card>
+
+      <InviteCodeCard
+        code={player.inviteCode ?? (await ensurePlayerInviteCode(prisma, player.id))}
+        invitedCount={player._count.invitedPlayers}
+      />
 
       <PokemonWishlist
         initialWishlist={wishlist}

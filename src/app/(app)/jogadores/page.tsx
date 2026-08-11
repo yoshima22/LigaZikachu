@@ -64,7 +64,8 @@ export default async function PlayersPage({
           displayName: true,
           ptcglNick: true,
           whatsapp: true,
-          notes: true
+          notes: true,
+          invitedBy: { select: { displayName: true, ptcglNick: true } }
         }
       }
     },
@@ -99,6 +100,7 @@ export default async function PlayersPage({
         image: u.image,
         whatsapp: p.whatsapp,
         notes: p.notes,
+        invitedByName: p.invitedBy ? (p.invitedBy.ptcglNick || p.invitedBy.displayName) : null,
         wins: stats?.wins ?? 0,
         losses: stats?.losses ?? 0
       };
