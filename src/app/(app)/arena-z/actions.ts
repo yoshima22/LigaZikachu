@@ -91,6 +91,9 @@ export async function createArenaTeamAction(mascotIds: string[], name: string, r
     const playerId = await getCurrentPlayerId();
     const { ARENA_ROOMS } = await import("@/lib/arena-z");
     if (!isTraining && !ARENA_ROOMS.includes(roomLevel as typeof ARENA_ROOMS[number])) return { error: "Sala inválida." };
+    const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
+    const [division, mascots] = await Promise.all([getBattleModeDivision("ARENA_Z"), prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true } })]);
+    const divisionCheck = validateBattleDivision(mascots, division); if (!divisionCheck.valid) return { error: divisionCheck.message };
     await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number], combatRoles, isTraining);
     revalidateTag("arena-active-teams");
     return {};

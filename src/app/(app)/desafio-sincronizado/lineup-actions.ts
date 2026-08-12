@@ -181,7 +181,9 @@ export async function lockLineupAction(): Promise<{ error?: string }> {
       where: { id: { in: myLineup.map((entry) => entry.mascotId) }, playerId: player.id },
       select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
     });
-    const divisionCheck = validateBattleDivision(lineupMascots, "LIMITED", 3);
+    const { getBattleModeDivision } = await import("@/lib/battle-division-settings");
+    const division = await getBattleModeDivision("SYNC_CHALLENGE");
+    const divisionCheck = validateBattleDivision(lineupMascots, division, division === "LIMITED" ? 3 : null);
     if (!divisionCheck.valid) {
       return { error: `${divisionCheck.message} Remova uma mega antes de travar os 9 mascotes.` };
     }

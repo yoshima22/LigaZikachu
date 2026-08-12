@@ -31,6 +31,16 @@ function parseBrtAdminDate(value: string) {
   return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}:00-03:00`);
 }
 
+function validateRushWeek(startValue: string, endValue: string) {
+  const start = parseBrtAdminDate(startValue); const end = parseBrtAdminDate(endValue);
+  const startDay = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(start);
+  const endDay = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(end);
+  if (startDay !== "Mon" || endDay !== "Fri") return { error: "A Liga Rush deve começar em uma segunda-feira e terminar na sexta-feira da mesma semana." };
+  const days = Math.round((new Date(`${brtDate(end)}T12:00:00-03:00`).getTime() - new Date(`${brtDate(start)}T12:00:00-03:00`).getTime()) / 86400000);
+  if (days !== 4) return { error: "Escolha a sexta-feira imediatamente posterior à segunda-feira inicial." };
+  return { start, end, registrationEnds: new Date(`${addDaysDate(brtDate(start), -1)}T23:59:00-03:00`) };
+}
+
 async function requireContext(admin = false) {
   const session = await getAppSession();
   if (!session?.user) throw new Error("Não autenticado.");
@@ -69,6 +79,13 @@ function ruleData(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+type RushRepeatMode = "WEEKLY_UNIQUE" | "DAILY_UNIQUE" | "UNRESTRICTED";
+function repeatMode(rules: Record<string, unknown>, legacyUnique: boolean): RushRepeatMode {
+  const value = String(rules.repeatMode ?? "");
+  if (value === "DAILY_UNIQUE" || value === "UNRESTRICTED" || value === "WEEKLY_UNIQUE") return value;
+  return legacyUnique ? "WEEKLY_UNIQUE" : "UNRESTRICTED";
+}
+
 function mondayFor(date = new Date()) {
   const day = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(date) === "Sun" ? 0 : ["Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(date)) + 1);
   const current = new Date(`${brtDate(date)}T12:00:00-03:00`);
@@ -82,19 +99,29 @@ export async function ensureAutomaticRushLeague() {
     if (open.status === "REGISTRATION" && new Date() >= open.registrationEnds) return prisma.rushLeague.update({ where: { id: open.id }, data: { status: "ACTIVE" } });
     return open;
   }
-  const monday = mondayFor();
+  let monday = mondayFor();
+  const currentDeadline = new Date(`${addDaysDate(monday, -1)}T23:59:00-03:00`);
+  if (new Date() > currentDeadline) monday = addDaysDate(monday, 7);
   const weekNumber = Math.floor(new Date(`${monday}T12:00:00Z`).getTime() / 604800000);
   const preset = RUSH_RULE_PRESETS[Math.abs(weekNumber) % RUSH_RULE_PRESETS.length];
   const plan = RUSH_REWARD_PLANS[Math.abs(weekNumber) % RUSH_REWARD_PLANS.length];
+  const settings = await prisma.siteContent.findUnique({ where: { id: "rush-settings" }, select: { data: true } });
+  const configuredCap = Number(ruleData(settings?.data).defaultRewardCap) || 6000;
   const requiredType = preset.requiredType === "ROTATING" ? RUSH_TYPES[Math.abs(weekNumber) % RUSH_TYPES.length] : preset.requiredType;
+  const monotype = Boolean(requiredType);
+  const teamSize = monotype && weekNumber % 3 !== 0 ? Math.min(2, preset.teamSize) : preset.teamSize;
+  const automaticRepeatMode: RushRepeatMode = monotype && weekNumber % 4 !== 0 ? "UNRESTRICTED" : preset.uniqueSpecies ? "WEEKLY_UNIQUE" : weekNumber % 3 === 0 ? "DAILY_UNIQUE" : "UNRESTRICTED";
+  const personalities = ["LOYAL", "PROUD", "MISCHIEVOUS", "LAZY", "COMPETITIVE", "DRAMATIC", "PLAYFUL", "ELECTRIC", "TIMID", "CHAOTIC"];
+  const requiredPersonality = Math.abs(weekNumber) % 7 === 0 ? personalities[Math.abs(weekNumber) % personalities.length] : null;
   const friday = addDaysDate(monday, 4);
+  const previousSunday = addDaysDate(monday, -1);
   return prisma.rushLeague.upsert({ where: { weekKey: `RUSH-${monday}` }, update: {}, create: {
     name: preset.requiredType === "ROTATING" ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name,
-    weekKey: `RUSH-${monday}`, weekStart: new Date(`${monday}T00:00:00-03:00`), weekEnd: new Date(`${friday}T19:30:00-03:00`), registrationEnds: new Date(`${monday}T17:50:00-03:00`),
-    division: normalizeBattleDivision("division" in preset && preset.division ? preset.division : "LIMITED"), teamSize: preset.teamSize, maxLevel: preset.maxLevel,
-    requiredType: requiredType ?? null, uniqueSpecies: preset.uniqueSpecies,
-    ruleJson: { preset: preset.id, rewardPlanId: plan.id, automatic: true, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", freeRegistration: true },
-    rewardsJson: plan.bundles as unknown as Prisma.InputJsonValue,
+    weekKey: `RUSH-${monday}`, weekStart: new Date(`${monday}T00:00:00-03:00`), weekEnd: new Date(`${friday}T19:30:00-03:00`), registrationEnds: new Date(`${previousSunday}T23:59:00-03:00`),
+    division: normalizeBattleDivision(preset.maxLevel <= 45 ? "UNLIMITED" : ("division" in preset && preset.division ? preset.division : "LIMITED")), teamSize, maxLevel: preset.maxLevel,
+    requiredType: requiredType ?? null, uniqueSpecies: automaticRepeatMode === "WEEKLY_UNIQUE",
+    ruleJson: { preset: preset.id, rewardPlanId: plan.id, rewardCap: configuredCap, repeatMode: automaticRepeatMode, requiredPersonality, automatic: true, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória.", battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true },
+    rewardsJson: scaleRewardPlan(plan.id, configuredCap) as unknown as Prisma.InputJsonValue,
   } });
 }
 
@@ -106,8 +133,8 @@ export async function getRushDataAction() {
   await ensureAutomaticRushLeague();
   const league = await prisma.rushLeague.findFirst({
     where: { status: { in: ["REGISTRATION", "ACTIVE"] } },
-    orderBy: { weekStart: "desc" },
-    include: { participants: { orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }] }, dailyTeams: { where: { playerId: player.id } }, matches: { orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }] } },
+    orderBy: { weekStart: "asc" },
+    include: { participants: { orderBy: [{ points: "desc" }, { wins: "desc" }, { survivorsScore: "desc" }, { damageDealt: "desc" }, { damageTaken: "asc" }] }, dailyTeams: { where: { playerId: player.id } }, matches: { orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }] } },
   });
   const recent = await prisma.rushLeague.findMany({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, take: 4 });
   if (!league) return { league: null, recent, isAdmin: isAdmin(session.user.role), presets: RUSH_RULE_PRESETS, rewardPlans: RUSH_REWARD_PLANS, divisions: [] };
@@ -121,6 +148,7 @@ export async function getRushDataAction() {
     orderBy: [{ level: "desc" }, { nickname: "asc" }],
     select: {
       id: true, pokemonId: true, nickname: true, level: true, preferredCombatRole: true,
+      personality: true,
       statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
       megaEvolvedAt: true, megaEvolvedFromPokemonId: true, primaryTypeOverride: true, secondaryTypeOverride: true,
     },
@@ -178,14 +206,17 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
     if (league.requiredType && mascots.some((m) => !((m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) : getPokemonTypes(m.pokemonId)).includes(league.requiredType!)))) return { error: `Semana monotipo: todos precisam possuir o tipo ${league.requiredType}.` };
     const division = validateBattleDivision(mascots, normalizeBattleDivision(league.division));
     if (!division.valid) return { error: division.message };
-    if (league.uniqueSpecies) {
-      const otherTeams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId: league.id, playerId: player.id }, select: { id: true, mascotIdsJson: true } });
+    const rules = ruleData(league.ruleJson);
+    const requiredPersonality = typeof rules.requiredPersonality === "string" && rules.requiredPersonality ? rules.requiredPersonality : null;
+    if (requiredPersonality && mascots.some((m) => m.personality !== requiredPersonality)) return { error: `Esta semana aceita apenas mascotes de personalidade ${requiredPersonality}.` };
+    const repetition = repeatMode(rules, league.uniqueSpecies);
+    if (repetition !== "UNRESTRICTED") {
+      const otherTeams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId: league.id, playerId: player.id, ...(repetition === "DAILY_UNIQUE" ? { battleDate: input.battleDate } : {}) }, select: { id: true, mascotIdsJson: true } });
       const current = await prisma.rushLeagueDailyTeam.findUnique({ where: { leagueId_playerId_battleDate_battleSlot: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot } } });
       const otherIds = otherTeams.filter((t) => t.id !== current?.id).flatMap((t) => Array.isArray(t.mascotIdsJson) ? t.mascotIdsJson as string[] : []);
-      const usedMascots = otherIds.length ? await prisma.mascot.findMany({ where: { id: { in: otherIds } }, select: { pokemonId: true } }) : [];
-      const usedSpecies = new Set(usedMascots.map((m) => m.pokemonId));
-      const repeated = mascots.find((m) => usedSpecies.has(m.pokemonId));
-      if (repeated) return { error: `Semana sem repetição: ${repeated.nickname ?? getPokemonName(repeated.pokemonId)} já foi usado em outra equipe desta edição.` };
+      const usedMascotIds = new Set(otherIds);
+      const repeated = mascots.find((m) => usedMascotIds.has(m.id));
+      if (repeated) return { error: `${repetition === "DAILY_UNIQUE" ? "Sem repetição no dia" : "Sem repetição na semana"}: ${repeated.nickname ?? getPokemonName(repeated.pokemonId)} já foi usado em outra equipe.` };
     }
     const roles = Object.fromEntries(mascots.map((m) => [m.id, m.preferredCombatRole ?? defaultCombatRoleFor(m)]));
     await prisma.rushLeagueDailyTeam.upsert({
@@ -198,38 +229,70 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
   } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível salvar a equipe." }; }
 }
 
-export async function adminCreateRushLeagueAction(input: { name: string; weekKey: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; preset?: string; rewardPlanId?: string; rewards?: RushRewardBundle[] }) {
+export async function adminCreateRushLeagueAction(input: { name: string; weekKey: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; repeatMode?: RushRepeatMode; requiredPersonality?: string | null; preset?: string; rewardPlanId?: string; rewardCap?: number; rewards?: RushRewardBundle[] }) {
   try {
     await requireContext(true);
     if (!input.name.trim() || !input.weekKey.trim()) return { error: "Informe nome e identificador da semana." };
+    const dates = validateRushWeek(input.weekStart, input.weekEnd); if ("error" in dates) return dates;
     const plan = rewardPlan(input.rewardPlanId);
     const rewards = parseRewards(input.rewards ?? plan.bundles);
     const league = await prisma.rushLeague.create({ data: {
-      name: input.name.trim(), weekKey: input.weekKey.trim(), weekStart: parseBrtAdminDate(input.weekStart), weekEnd: parseBrtAdminDate(input.weekEnd), registrationEnds: parseBrtAdminDate(input.registrationEnds),
+      name: input.name.trim(), weekKey: input.weekKey.trim(), weekStart: dates.start, weekEnd: dates.end, registrationEnds: dates.registrationEnds,
       division: normalizeBattleDivision(input.division), teamSize: Math.min(6, Math.max(1, Math.trunc(input.teamSize))), maxLevel: input.maxLevel ? Math.max(1, Math.trunc(input.maxLevel)) : null,
-      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: Boolean(input.uniqueSpecies), ruleJson: { preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", freeRegistration: true }, rewardsJson: rewards as unknown as Prisma.InputJsonValue,
+      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: input.repeatMode === "WEEKLY_UNIQUE" || Boolean(input.uniqueSpecies), ruleJson: { preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, rewardCap: Math.max(1000, input.rewardCap ?? 6000), repeatMode: input.repeatMode ?? (input.uniqueSpecies ? "WEEKLY_UNIQUE" : "UNRESTRICTED"), requiredPersonality: input.requiredPersonality || null, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true }, rewardsJson: rewards as unknown as Prisma.InputJsonValue,
     } });
     revalidatePath(PATH);
     return { success: true, leagueId: league.id };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao criar a edição Rush." }; }
 }
 
-export async function adminUpdateRushLeagueAction(input: { leagueId: string; name: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; preset?: string; rewardPlanId?: string }) {
+export async function adminUpdateRushLeagueAction(input: { leagueId: string; name: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; repeatMode?: RushRepeatMode; requiredPersonality?: string | null; preset?: string; rewardPlanId?: string; rewardCap?: number }) {
   try {
     await requireContext(true);
     const current = await prisma.rushLeague.findUnique({ where: { id: input.leagueId } });
     if (!current) return { error: "Liga não encontrada." };
+    const dates = validateRushWeek(input.weekStart, input.weekEnd); if ("error" in dates) return dates;
     const plan = rewardPlan(input.rewardPlanId);
     await prisma.rushLeague.update({ where: { id: input.leagueId }, data: {
-      name: input.name.trim(), weekStart: parseBrtAdminDate(input.weekStart), weekEnd: parseBrtAdminDate(input.weekEnd), registrationEnds: parseBrtAdminDate(input.registrationEnds),
+      name: input.name.trim(), weekStart: dates.start, weekEnd: dates.end, registrationEnds: dates.registrationEnds,
       division: normalizeBattleDivision(input.division), teamSize: Math.min(6, Math.max(1, Math.trunc(input.teamSize))), maxLevel: input.maxLevel ? Math.max(1, Math.trunc(input.maxLevel)) : null,
-      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: Boolean(input.uniqueSpecies),
-      ruleJson: { ...ruleData(current.ruleJson), preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", freeRegistration: true },
+      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: input.repeatMode === "WEEKLY_UNIQUE" || Boolean(input.uniqueSpecies),
+      ruleJson: { ...ruleData(current.ruleJson), preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, rewardCap: Math.max(1000, input.rewardCap ?? 6000), repeatMode: input.repeatMode ?? (input.uniqueSpecies ? "WEEKLY_UNIQUE" : "UNRESTRICTED"), requiredPersonality: input.requiredPersonality || null, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true },
       rewardsJson: plan.bundles as unknown as Prisma.InputJsonValue,
     } });
     revalidatePath(PATH);
     return { success: true };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao editar a edição Rush." }; }
+}
+
+function scaleRewardPlan(planId: string | undefined, cap: number) {
+  const plan = rewardPlan(planId); const safeCap = Math.max(1000, Math.trunc(cap)); const base = Math.max(...plan.bundles.map((b) => b.estimatedValue), 1); const factor = safeCap / base;
+  return plan.bundles.map((bundle) => ({ ...bundle, estimatedValue: Math.round(bundle.estimatedValue * factor), coins: bundle.coins ? Math.round(bundle.coins * factor) : undefined }));
+}
+
+export async function adminSaveRushRewardsAction(leagueId: string, rewards: RushRewardBundle[], rewardCap: number, saveAsDefault = false) {
+  try {
+    const { session } = await requireContext(true); const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } }); if (!league) return { error: "Liga não encontrada." };
+    const parsed = parseRewards(rewards); const rules = ruleData(league.ruleJson);
+    await prisma.rushLeague.update({ where: { id: leagueId }, data: { rewardsJson: parsed as unknown as Prisma.InputJsonValue, ruleJson: { ...rules, rewardCap: Math.max(1000, Math.trunc(rewardCap)) } } });
+    if (saveAsDefault) await prisma.siteContent.upsert({ where: { id: "rush-settings" }, create: { id: "rush-settings", data: { defaultRewardCap: Math.max(1000, Math.trunc(rewardCap)) }, updatedBy: session.user.id }, update: { data: { defaultRewardCap: Math.max(1000, Math.trunc(rewardCap)) }, updatedBy: session.user.id } });
+    revalidatePath(PATH); return { success: true };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao salvar recompensas." }; }
+}
+
+export async function adminRegenerateRushRewardsAction(leagueId: string, planId: string, rewardCap: number) {
+  try { await requireContext(true); const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } }); if (!league) return { error: "Liga não encontrada." }; const rules = ruleData(league.ruleJson); await prisma.rushLeague.update({ where: { id: leagueId }, data: { rewardsJson: scaleRewardPlan(planId, rewardCap) as unknown as Prisma.InputJsonValue, ruleJson: { ...rules, rewardPlanId: planId, rewardCap: Math.max(1000, Math.trunc(rewardCap)) } } }); revalidatePath(PATH); return { success: true }; }
+  catch (error) { return { error: error instanceof Error ? error.message : "Falha ao gerar recompensas." }; }
+}
+
+export async function adminRerollRushRulesAction(leagueId: string) {
+  try {
+    await requireContext(true); const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } }); if (!league) return { error: "Liga não encontrada." };
+    const index = Math.floor(Math.random() * RUSH_RULE_PRESETS.length); const preset = RUSH_RULE_PRESETS[index]; const requiredType = preset.requiredType === "ROTATING" ? RUSH_TYPES[Math.floor(Math.random() * RUSH_TYPES.length)] : preset.requiredType;
+    const monotype = Boolean(requiredType); const teamSize = monotype && Math.random() < .7 ? Math.min(2, preset.teamSize) : preset.teamSize; const repetition: RushRepeatMode = monotype && Math.random() < .7 ? "UNRESTRICTED" : preset.uniqueSpecies ? "WEEKLY_UNIQUE" : Math.random() < .35 ? "DAILY_UNIQUE" : "UNRESTRICTED";
+    const rules = ruleData(league.ruleJson); await prisma.rushLeague.update({ where: { id: leagueId }, data: { name: requiredType ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name, maxLevel: preset.maxLevel, teamSize, division: preset.maxLevel <= 45 ? "UNLIMITED" : normalizeBattleDivision("division" in preset && preset.division ? preset.division : "LIMITED"), requiredType: requiredType ?? null, uniqueSpecies: repetition === "WEEKLY_UNIQUE", ruleJson: { ...rules, preset: preset.id, repeatMode: repetition, requiredPersonality: null, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória." } } });
+    revalidatePath(PATH); return { success: true };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao sortear novas regras." }; }
 }
 
 function circlePairings(ids: string[], roundIndex: number) {
@@ -340,7 +403,7 @@ export async function runRushLeagueAutomation(secret: string) {
   const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(now);
   const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
   if (!["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday) || date < brtDate(league.weekStart) || date > brtDate(league.weekEnd)) return { success: true, action: "idle", leagueId: league.id };
-  if (clock >= "18:55") await adminGenerateRushDayAction(league.id, date, secret);
+  if (clock >= "08:00") await adminGenerateRushDayAction(league.id, date, secret);
   const maxSlot = clock >= "19:20" ? 3 : clock >= "19:10" ? 2 : clock >= "19:00" ? 1 : 0;
   const battles = maxSlot ? await adminRunRushDayAction(league.id, date, maxSlot, secret) : { success: true, resolved: 0, skipped: 0 };
   if (weekday === "Fri" && clock >= "19:30") {

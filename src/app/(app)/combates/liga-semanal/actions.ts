@@ -644,9 +644,11 @@ export async function saveDailyTeamAction(
     // Verify mascots belong to player
     const owned = await prisma.mascot.findMany({
       where: { id: { in: mascotIds }, playerId: player.id },
-      select: { id: true },
+      select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
     });
     if (owned.length !== 6) return { error: "Algum mascote selecionado não pertence a você." };
+    const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
+    const divisionCheck = validateBattleDivision(owned, await getBattleModeDivision("WEEKLY_LEAGUE")); if (!divisionCheck.valid) return { error: divisionCheck.message };
 
     await prisma.weeklyMascotLeagueDailyTeam.upsert({
       where: {
