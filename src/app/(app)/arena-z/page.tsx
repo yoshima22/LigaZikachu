@@ -179,7 +179,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           select: {
             id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
             arenaState: true, restingUntil: true, injuredAt: true,
-            bazarListed: true, happiness: true,
+            bazarListed: true, happiness: true, preferredCombatRole: true,
             statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
             expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
           },
@@ -1069,6 +1069,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                       id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
                       level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                       statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
+                      preferredCombatRole: m.preferredCombatRole,
                       arenaState: m.arenaState, restingUntil: m.restingUntil?.toISOString() ?? null,
                       arenaEntryCooldownUntil: null,
                     }))}
@@ -1169,6 +1170,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
                 level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                 statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
+                preferredCombatRole: m.preferredCombatRole,
                 arenaState: m.arenaState, restingUntil: m.restingUntil?.toISOString() ?? null,
                 arenaEntryCooldownUntil: null,
               }))} />

@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
@@ -20,6 +20,7 @@ export interface ValidMascot {
   statVitality: number;
   statInstinct: number;
   statCharisma: number;
+  preferredCombatRole?: string | null;
   arenaState: string;
   restingUntil: string | null;
   arenaEntryCooldownUntil: string | null;
@@ -100,7 +101,9 @@ function displayName(m: ValidMascot) {
 }
 
 function recommendedRoleForMascot(m: ValidMascot): CombatRole {
-  return recommendCombatRole({
+  // Usa a postura salva pelo jogador; se não houver, a recomendada pelos stats.
+  return defaultCombatRoleFor({
+    preferredCombatRole: m.preferredCombatRole,
     statForce: m.statForce,
     statAgility: m.statAgility,
     statVitality: m.statVitality,
