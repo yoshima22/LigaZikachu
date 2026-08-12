@@ -104,20 +104,29 @@ export function recommendCombatRole(stats: {
   const i = stats.statInstinct ?? 0;
   const c = stats.statCharisma ?? 0;
 
+  // Posturas básicas usam um único atributo. As avançadas (dual-stat) recebem
+  // peso primário 0.7 + secundário 0.6, de modo que superam a básica quando o
+  // segundo atributo relevante é forte (acima de ~metade do principal). Assim a
+  // recomendação também aproveita posturas avançadas em mascotes bem distribuídos,
+  // sem deixar de recomendar a básica quando um único atributo domina.
+  const dual = (primary: number, secondary: number) => primary * 0.7 + secondary * 0.6;
   const candidates: Array<{ role: CombatRole; value: number }> = [
+    // Básicas — atributo único.
     { role: "ATTACKER", value: f },
     { role: "FLANK", value: a },
     { role: "DEFENDER", value: v },
     { role: "OPPORTUNIST", value: i },
     { role: "ENCOURAGER", value: c },
-    { role: "GUARDIAN", value: v * 0.6 + c * 0.4 },
-    { role: "DUELIST", value: f * 0.6 + i * 0.4 },
-    { role: "SABOTEUR", value: i * 0.55 + a * 0.45 },
-    { role: "HEALER", value: c * 0.6 + v * 0.4 },
-    { role: "SCOUT", value: a * 0.5 + i * 0.5 },
-    { role: "PROVOKER", value: c * 0.55 + i * 0.45 },
+    // Avançadas — dois atributos complementares (primário, secundário).
+    { role: "GUARDIAN", value: dual(v, c) },
+    { role: "DUELIST", value: dual(f, i) },
+    { role: "SABOTEUR", value: dual(i, a) },
+    { role: "HEALER", value: dual(c, v) },
+    { role: "SCOUT", value: dual(a, i) },
+    { role: "PROVOKER", value: dual(c, i) },
+    { role: "SURVIVOR", value: dual(v, i) },
+    // Especialista — para quem tem um único atributo muito dominante.
     { role: "SPECIALIST", value: Math.max(f, a, v, i, c) },
-    { role: "SURVIVOR", value: v * 0.6 + i * 0.4 },
   ];
   candidates.sort((a, b) => b.value - a.value);
   return candidates[0]?.value > 0 ? candidates[0].role : "ATTACKER";

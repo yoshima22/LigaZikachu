@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
@@ -100,8 +100,19 @@ function displayName(m: ValidMascot) {
   return m.nickname ?? getPokemonName(m.pokemonId);
 }
 
-function recommendedRoleForMascot(m: ValidMascot): CombatRole {
-  // Usa a postura salva pelo jogador; se não houver, a recomendada pelos stats.
+// Recomendação PURA pelos stats (mostrada no texto "Recomendada:").
+function pureRecommendedRole(m: ValidMascot): CombatRole {
+  return recommendCombatRole({
+    statForce: m.statForce,
+    statAgility: m.statAgility,
+    statVitality: m.statVitality,
+    statInstinct: m.statInstinct,
+    statCharisma: m.statCharisma,
+  });
+}
+
+// Postura padrão do seletor: usa a preferida salva; se não houver, a recomendada.
+function defaultRoleForMascot(m: ValidMascot): CombatRole {
   return defaultCombatRoleFor({
     preferredCombatRole: m.preferredCombatRole,
     statForce: m.statForce,
@@ -277,8 +288,8 @@ function SelectedBar({
       <div className="grid gap-2 sm:grid-cols-2">
         {selList.map((m) => {
           const overLevel = m.level > roomLevel;
-          const role = roles[m.id] ?? recommendedRoleForMascot(m);
-          const recommended = recommendedRoleForMascot(m);
+          const role = roles[m.id] ?? defaultRoleForMascot(m);
+          const recommended = pureRecommendedRole(m);
           return (
             <div key={m.id} className={`flex items-center gap-2 rounded-lg border bg-slate-950/60 p-2 ${overLevel ? "border-red-500/50" : "border-slate-700/60"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -363,7 +374,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
       }
       if (next.size >= MAX_MASCOTS) { toast.error(`Maximo ${MAX_MASCOTS} mascotes.`); return prev; }
       const mascot = mascots.find(m => m.id === id);
-      if (mascot) setRoles(current => ({ ...current, [id]: current[id] ?? recommendedRoleForMascot(mascot) }));
+      if (mascot) setRoles(current => ({ ...current, [id]: current[id] ?? defaultRoleForMascot(mascot) }));
       next.add(id);
       return next;
     });
@@ -425,7 +436,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
     startTransition(async () => {
       const rolePayload = Object.fromEntries([...selected].map(id => {
         const mascot = mascots.find(m => m.id === id);
-        return [id, roles[id] ?? (mascot ? recommendedRoleForMascot(mascot) : "ATTACKER")];
+        return [id, roles[id] ?? (mascot ? defaultRoleForMascot(mascot) : "ATTACKER")];
       }));
       const r = await createArenaTeamAction([...selected], name.trim(), roomLevel, rolePayload, isTraining);
       if (r.error) toast.error(r.error);
@@ -778,8 +789,8 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                           </span>
                         ))}
                       </div>
-                      <p className="mt-1 truncate text-[8px] text-sky-300" title={COMBAT_ROLE_OPTIONS.find(role => role.value === recommendedRoleForMascot(m))?.description}>
-                        Recomendada: {getCombatRoleLabel(recommendedRoleForMascot(m))}
+                      <p className="mt-1 truncate text-[8px] text-sky-300" title={COMBAT_ROLE_OPTIONS.find(role => role.value === pureRecommendedRole(m))?.description}>
+                        Recomendada: {getCombatRoleLabel(pureRecommendedRole(m))}
                       </p>
                     </div>
                   </button>
