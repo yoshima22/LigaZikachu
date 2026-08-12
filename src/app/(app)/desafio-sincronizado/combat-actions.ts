@@ -433,7 +433,9 @@ export async function selectRoundMascotsAction(
       where: { id: { in: mascotIds }, playerId: player.id },
       select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
     });
-    const divisionCheck = validateBattleDivision(selectedMascots, "LIMITED", 1);
+    const { getBattleModeDivision } = await import("@/lib/battle-division-settings");
+    const division = await getBattleModeDivision("SYNC_CHALLENGE");
+    const divisionCheck = validateBattleDivision(selectedMascots, division, division === "LIMITED" ? 1 : null);
     if (!divisionCheck.valid) {
       return { error: "Divisão Limitada: cada jogador pode usar no máximo 1 mega por partida (2 por dupla)." };
     }

@@ -35,6 +35,7 @@ import {
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
+import { BattleDivisionControl } from "@/components/battle-division-control";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
@@ -128,7 +129,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-slate-100">🏆 Liga Semanal dos Mascotes</h1>
+          <div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-100">🏆 Liga Semanal dos Mascotes</h1><BattleDivisionControl mode="WEEKLY_LEAGUE" isAdmin={data.player.isAdmin} initialDivision="UNLIMITED"/></div>
           <p className="text-xs text-slate-400">Liga automática de segunda a sexta · aberta a todos os jogadores</p>
           {!data.player.isAdmin && <span className="mt-1 inline-flex rounded-full border border-green-500/25 bg-green-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-green-300">Visão do jogador</span>}
         </div>

@@ -32,6 +32,7 @@ import {
   updateSyncChallengeConfigAction,
 } from "./actions";
 import { adminFormRoomsAction } from "./combat-actions";
+import { BattleDivisionControl } from "@/components/battle-division-control";
 
 export const dynamic = "force-dynamic";
 
@@ -333,7 +334,7 @@ export default async function DesafioSincronizadoPage() {
               <Sparkles size={14} /> Arena Sincronizada
             </div>
             <div>
-              <h1 className="font-pixel text-lg text-[#FFCB05]">Desafio Sincronizado</h1>
+              <div className="flex flex-wrap items-center gap-2"><h1 className="font-pixel text-lg text-[#FFCB05]">Desafio Sincronizado</h1><BattleDivisionControl mode="SYNC_CHALLENGE" isAdmin={admin} initialDivision="LIMITED" /></div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
                 Monte tickets com outros jogadores, forme uma dupla e entre em uma Arena Sincronizada unica, sem limite fixo de duplas.
                 Se uma rodada ficar impar, a dupla sem adversario enfrenta o Bot Sincronizado. Metades geradas por voce precisam circular:

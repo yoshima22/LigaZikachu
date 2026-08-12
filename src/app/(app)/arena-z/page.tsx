@@ -31,6 +31,7 @@ import {
   normalizeCombatRole,
 } from "@/lib/combat-roles";
 import { getActiveArenaDailyZcLimit } from "@/lib/timed-game-bonuses";
+import { BattleDivisionControl } from "@/components/battle-division-control";
 
 export const dynamic = "force-dynamic";
 
@@ -438,6 +439,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             </p>
             <h1 className="mt-1 flex items-center gap-3 font-pixel text-base text-[#FFCB05]">
               <Swords size={20} /> Arena Z — Salas por Nível
+              <BattleDivisionControl mode="ARENA_Z" isAdmin={admin} initialDivision="UNLIMITED" />
             </h1>
             <p className="mt-1 max-w-xl text-xs text-slate-400">
               Monte equipes, entre em salas por nível, enfrente bots e outros jogadores. Máx. {ARENA_MAX_TEAMS} equipes simultâneas.
