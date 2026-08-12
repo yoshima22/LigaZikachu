@@ -21,6 +21,7 @@ import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
 import { RouteTutorialHelpButton } from "@/components/tutorial/route-tutorial-help-button";
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
+import { MobileTitleTooltips } from "@/components/mobile-title-tooltips";
 import { LogoutButton } from "@/components/logout-button";
 import {
   ORDER_EVENT_SLUG,
@@ -197,6 +198,7 @@ export default async function AppLayout({
       />
       <MaintenanceVisibilityGuard />
       <SessionPersistenceGuard />
+      <MobileTitleTooltips />
       {shouldShowOrderIntro && (
         <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />
       )}

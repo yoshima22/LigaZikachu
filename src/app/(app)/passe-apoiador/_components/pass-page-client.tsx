@@ -315,6 +315,11 @@ function DayCard({ reward, isClaimed, isToday, isFuture, canClaim, pending, onCl
       {/* Emoji */}
       <span className="text-lg leading-none">{isClaimed ? "✅" : isFuture ? <Lock size={12} className="text-slate-600" /> : reward.emoji}</span>
 
+      {/* Texto da recompensa — visível na célula (ajuda no mobile, sem depender de hover) */}
+      <span className={`mt-0.5 text-[8px] leading-tight text-center ${isFuture ? "text-slate-600" : isClaimed ? "text-green-300/70" : "text-slate-300"}`}>
+        {reward.label}
+      </span>
+
       {/* Milestone star */}
       {reward.isMilestone && !isClaimed && (
         <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
