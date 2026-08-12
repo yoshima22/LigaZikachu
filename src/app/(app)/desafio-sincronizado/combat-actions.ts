@@ -12,6 +12,7 @@ import { toBrtDateString } from "@/lib/date-utils";
 import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
 import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
 import { applySyncRoundRewardModifier } from "@/lib/sync-modifier-rewards";
+import { validateBattleDivision } from "@/lib/battle-divisions";
 
 // ── Pokémon generation helper ─────────────────────────────────────────────────
 
@@ -428,6 +429,15 @@ export async function selectRoundMascotsAction(
     }
 
     // Verifica se mascotes já foram usados nas rodadas anteriores desta sala
+    const selectedMascots = await prisma.mascot.findMany({
+      where: { id: { in: mascotIds }, playerId: player.id },
+      select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
+    });
+    const divisionCheck = validateBattleDivision(selectedMascots, "LIMITED", 1);
+    if (!divisionCheck.valid) {
+      return { error: "Divisão Limitada: cada jogador pode usar no máximo 1 mega por partida (2 por dupla)." };
+    }
+
     const prevSelections = await prisma.syncRoundSelection.findMany({
       where: { playerId: player.id, round: { roomId: round.roomId, roundNumber: { lt: round.roundNumber } } },
       select: { mascotIds: true },
@@ -514,7 +524,20 @@ export async function adminExecuteRoundAction(roundId: string): Promise<{ error?
             const available = team.lineups
               .filter((l) => l.playerId === pid && !used.has(l.mascotId))
               .sort((a, b) => a.slot - b.slot);
-            const auto = available.slice(0, 3).map((l) => l.mascotId);
+            const availableMascots = await tx.mascot.findMany({
+              where: { id: { in: available.map((entry) => entry.mascotId) } },
+              select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
+            });
+            const megaById = new Map(availableMascots.map((mascot) => [mascot.id, Boolean(mascot.megaEvolvedAt || mascot.megaEvolvedFromPokemonId)]));
+            const auto: string[] = [];
+            let selectedMegas = 0;
+            for (const entry of available) {
+              const mega = megaById.get(entry.mascotId) ?? false;
+              if (mega && selectedMegas >= 1) continue;
+              auto.push(entry.mascotId);
+              if (mega) selectedMegas++;
+              if (auto.length === 3) break;
+            }
             if (auto.length > 0) {
               await tx.syncRoundSelection.create({
                 data: { roundId, teamId: team.id, playerId: pid, mascotIds: auto, isAuto: true },

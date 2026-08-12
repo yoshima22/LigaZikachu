@@ -27,6 +27,8 @@ interface PlayerMascot {
   statCharisma: number;
   statInstinct: number;
   statVitality: number;
+  megaEvolvedAt?: Date | string | null;
+  megaEvolvedFromPokemonId?: number | null;
 }
 
 interface Props {
@@ -60,6 +62,8 @@ export function SyncLineupPanel({
       (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase().includes(search.toLowerCase())
   );
   const sorted = [...myLineup].sort((a, b) => a.slot - b.slot);
+  const megaCount = sorted.filter((entry) => Boolean(entry.mascot.megaEvolvedAt || entry.mascot.megaEvolvedFromPokemonId)).length;
+  const megaLimitValid = megaCount <= 3;
   const myTeamStats = sorted.map((entry) => ({
     ...entry.mascot,
     name: entry.mascot.nickname ?? getPokemonName(entry.mascot.pokemonId),
@@ -104,7 +108,7 @@ export function SyncLineupPanel({
             {!myLocked && myLineup.length === SLOTS && (
               <button
                 type="button"
-                disabled={pending}
+                disabled={pending || !megaLimitValid}
                 onClick={() => act(lockLineupAction)}
                 className="flex items-center gap-1.5 rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50"
               >
@@ -116,6 +120,11 @@ export function SyncLineupPanel({
                 <CheckCircle2 size={10} /> Travada
               </span>
             )}
+          </div>
+
+          <div className={`rounded-lg border px-3 py-2 text-[10px] ${megaLimitValid ? "border-cyan-500/20 bg-cyan-500/5 text-cyan-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+            Divisão Limitada: {megaCount}/3 megas entre os 9 enviados. Em cada partida, você poderá escolher no máximo 1 mega.
+            {!megaLimitValid && " Remova uma mega para liberar o lock."}
           </div>
 
           {/* Grade de slots */}

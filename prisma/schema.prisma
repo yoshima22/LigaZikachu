@@ -1829,20 +1829,20 @@ enum ShopPromotionScope {
 }
 
 model ShopPromotion {
-  id          String             @id @default(cuid())
+  id          String              @id @default(cuid())
   name        String
   scope       ShopPromotionScope
   itemId      String?
   discountPct Int
   startsAt    DateTime
   endsAt      DateTime
-  active      Boolean            @default(true)
+  active      Boolean             @default(true)
   createdById String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  item        ShopItem?          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  item        ShopItem?           @relation(fields: [itemId], references: [id], onDelete: Cascade)
   items       ShopPromotionItem[]
-  createdBy   User?              @relation("ShopPromotionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?               @relation("ShopPromotionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([active, startsAt, endsAt])
   @@index([itemId, active])
@@ -3253,6 +3253,109 @@ model WeeklyMascotLeagueMascotStats {
   @@unique([leagueId, mascotId])
   @@index([leagueId])
   @@map("weekly_mascot_league_mascot_stats")
+}
+
+// ── Liga Rush ────────────────────────────────────────────────────────────────
+// Circuito semanal opcional. As regras vivem em ruleJson para permitir novos
+// formatos sem uma migration para cada ideia de semana.
+model RushLeague {
+  id               String             @id @default(cuid())
+  name             String
+  weekKey          String             @unique
+  weekStart        DateTime
+  weekEnd          DateTime
+  registrationEnds DateTime
+  status           WeeklyLeagueStatus @default(REGISTRATION)
+  division         String             @default("LIMITED") // LIMITED | UNLIMITED
+  teamSize         Int                @default(3)
+  maxLevel         Int?
+  requiredType     String?
+  uniqueSpecies    Boolean            @default(false)
+  ruleJson         Json               @default("{}")
+  rewardsJson      Json               @default("[]")
+  championPlayerId String?
+  rewardsGrantedAt DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  participants RushLeagueParticipant[]
+  dailyTeams   RushLeagueDailyTeam[]
+  matches      RushLeagueMatch[]
+
+  @@index([status, weekStart])
+  @@map("rush_leagues")
+}
+
+model RushLeagueParticipant {
+  id             String     @id @default(cuid())
+  leagueId       String
+  playerId       String
+  points         Int        @default(0)
+  wins           Int        @default(0)
+  losses         Int        @default(0)
+  draws          Int        @default(0)
+  survivorsScore Int        @default(0)
+  damageDealt    Int        @default(0)
+  damageTaken    Int        @default(0)
+  finalRank      Int?
+  rewardGranted  Boolean    @default(false)
+  joinedAt       DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  league         RushLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, playerId])
+  @@index([leagueId, points, wins])
+  @@index([playerId])
+  @@map("rush_league_participants")
+}
+
+model RushLeagueDailyTeam {
+  id            String     @id @default(cuid())
+  leagueId      String
+  playerId      String
+  battleDate    String
+  battleSlot    Int // 1, 2 ou 3
+  mascotIdsJson Json
+  rolesJson     Json?
+  lockedAt      DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  league        RushLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, playerId, battleDate, battleSlot])
+  @@index([leagueId, battleDate])
+  @@index([playerId])
+  @@map("rush_league_daily_teams")
+}
+
+model RushLeagueMatch {
+  id                 String            @id @default(cuid())
+  leagueId           String
+  roundNumber        Int
+  battleDate         String
+  battleSlot         Int
+  scheduledAt        DateTime
+  playerAId          String
+  playerBId          String?
+  winnerId           String?
+  loserId            String?
+  isDraw             Boolean           @default(false)
+  playerASurvivors   Int               @default(0)
+  playerBSurvivors   Int               @default(0)
+  playerADamageDealt Int               @default(0)
+  playerBDamageDealt Int               @default(0)
+  replayJson         Json?
+  resultJson         Json?
+  status             WeeklyMatchStatus @default(SCHEDULED)
+  resolvedAt         DateTime?
+  createdAt          DateTime          @default(now())
+  league             RushLeague        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, battleDate, battleSlot, playerAId])
+  @@index([leagueId, battleDate])
+  @@index([playerAId])
+  @@index([playerBId])
+  @@map("rush_league_matches")
 }
 
 // Conteúdo editável do site (textos do manual, etc.)

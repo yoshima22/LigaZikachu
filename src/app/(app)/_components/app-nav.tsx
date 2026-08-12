@@ -33,6 +33,7 @@ import {
   Footprints,
   ScrollText,
   Dna,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@supabase/supabase-js";
@@ -94,6 +95,13 @@ const combatLinks = [
     label: "Liga Semanal",
     icon: Trophy,
     adminOnly: false,
+  },
+  {
+    href: "/combates/liga-rush",
+    label: "Liga Rush",
+    icon: Zap,
+    adminOnly: false,
+    beta: true,
   },
   {
     href: "/combates/ordem-da-trapaca",

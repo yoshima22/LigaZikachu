@@ -8,6 +8,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { normalizeCombatRole, defaultCombatRoleFor } from "@/lib/combat-roles";
 import { getSyncWindowState } from "@/lib/sync-challenge";
 import type { Role } from "@prisma/client";
+import { validateBattleDivision } from "@/lib/battle-divisions";
 
 const LINEUP_SLOTS = 9;
 
@@ -61,6 +62,7 @@ export async function addLineupMascotAction(
       where: { id: mascotId },
       select: {
         id: true, playerId: true, nickname: true, pokemonId: true, preferredCombatRole: true,
+        megaEvolvedAt: true, megaEvolvedFromPokemonId: true,
         statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
       },
     });
@@ -173,6 +175,15 @@ export async function lockLineupAction(): Promise<{ error?: string }> {
     const myLineup = team.lineups.filter((l) => l.playerId === player.id);
     if (myLineup.length !== LINEUP_SLOTS) {
       return { error: `Você precisa de exatamente ${LINEUP_SLOTS} mascotes para travar (${myLineup.length}/${LINEUP_SLOTS}).` };
+    }
+
+    const lineupMascots = await prisma.mascot.findMany({
+      where: { id: { in: myLineup.map((entry) => entry.mascotId) }, playerId: player.id },
+      select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
+    });
+    const divisionCheck = validateBattleDivision(lineupMascots, "LIMITED", 3);
+    if (!divisionCheck.valid) {
+      return { error: `${divisionCheck.message} Remova uma mega antes de travar os 9 mascotes.` };
     }
 
     const newLineupA = isA ? "LOCKED" : team.lineupStatusA;
