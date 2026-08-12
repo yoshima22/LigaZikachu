@@ -25,6 +25,7 @@ import {
 } from "@/lib/mascot-egg-pools";
 import { getActiveEggRarityBonusPct } from "@/lib/timed-game-bonuses";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
+import { COMBAT_ROLE_VALUES } from "@/lib/combat-roles";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { recordPlayerActivity } from "@/lib/player-activity";
@@ -50,6 +51,55 @@ export async function setMascotPerformanceTagAction(mascotId: string, tag: strin
   if (res.count === 0) return { ok: false, error: "Mascote não encontrado." };
   revalidate(player.id);
   return { ok: true, tag: normalized };
+}
+
+// Postura de combate preferida do mascote (usada ao equipar em equipes).
+// Passar "" (vazio) volta para "Auto" (recomendada pelo maior status).
+export async function setMascotPreferredCombatRoleAction(mascotId: string, role: string): Promise<{ ok: boolean; error?: string; role?: string | null }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Não autenticado." };
+  const player = await getSessionPlayer(user.id);
+  if (!player) return { ok: false, error: "Perfil não encontrado." };
+  const trimmed = (role ?? "").trim().toUpperCase();
+  const normalized = COMBAT_ROLE_VALUES.includes(trimmed as (typeof COMBAT_ROLE_VALUES)[number]) ? trimmed : null;
+  const res = await prisma.mascot.updateMany({
+    where: { id: mascotId, playerId: player.id },
+    data: { preferredCombatRole: normalized },
+  });
+  if (res.count === 0) return { ok: false, error: "Mascote não encontrado." };
+  revalidate(player.id);
+  return { ok: true, role: normalized };
+}
+
+// Reordena a Equipe Favorita movendo um mascote para cima/baixo. O equipado é
+// sempre exibido primeiro (não entra na troca manual).
+export async function moveFavoriteAction(mascotId: string, direction: "up" | "down"): Promise<{ ok: boolean; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Não autenticado." };
+  const player = await getSessionPlayer(user.id);
+  if (!player) return { ok: false, error: "Perfil não encontrado." };
+
+  // Favoritos não-equipados, na ordem atual (favoriteOrder, depois nível como desempate).
+  const favorites = await prisma.mascot.findMany({
+    where: { playerId: player.id, isFavorite: true, isEquipped: false },
+    orderBy: [{ favoriteOrder: "asc" }, { level: "desc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  const index = favorites.findIndex((m) => m.id === mascotId);
+  if (index < 0) return { ok: false, error: "Mascote não está nos favoritos." };
+  const swapWith = direction === "up" ? index - 1 : index + 1;
+  if (swapWith < 0 || swapWith >= favorites.length) return { ok: true }; // já está na ponta
+
+  // Reescreve a ordem inteira de forma estável, aplicando a troca.
+  const reordered = [...favorites];
+  [reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]];
+  await prisma.$transaction(
+    reordered.map((m, i) =>
+      prisma.mascot.update({ where: { id: m.id }, data: { favoriteOrder: i } }),
+    ),
+  );
+  revalidate(player.id);
+  return { ok: true };
 }
 
 const BANK_MASCOT_PAGE_SIZE = 9;

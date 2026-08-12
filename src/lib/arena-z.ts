@@ -3,7 +3,7 @@ import { DEFAULT_ARENA_DAILY_ZC_LIMIT, getActiveArenaDailyZcLimit } from "@/lib/
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
-import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
@@ -1252,7 +1252,7 @@ export async function createArenaTeam(playerId: string, name: string, mascotIds:
           create: mascots.map((m, index) => ({
             mascotId: m.id,
             slot: index + 1,
-            combatRole: combatRoles?.[m.id] ? normalizeCombatRole(combatRoles[m.id]) : recommendCombatRole(m),
+            combatRole: combatRoles?.[m.id] ? normalizeCombatRole(combatRoles[m.id]) : defaultCombatRoleFor(m),
           })),
         },
       },
@@ -1302,7 +1302,7 @@ export async function addMascotToArenaTeam(playerId: string, teamId: string, mas
     if (locked.count !== 1) throw new Error("Mascote deixou de estar disponivel. Atualize a pagina e tente novamente.");
 
     const member = await tx.arenaTeamMember.create({
-      data: { teamId, mascotId: mascot.id, slot, combatRole: recommendCombatRole(mascot) },
+      data: { teamId, mascotId: mascot.id, slot, combatRole: defaultCombatRoleFor(mascot) },
     });
     return member;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

@@ -2341,6 +2341,10 @@ model Mascot {
   analysisJson              Json? // snapshot completo da última análise
   // Marcador pessoal de desempenho definido pelo jogador: FORTE, NEUTRO, RUIM, PESSIMO
   performanceTag            String                    @default("NEUTRO")
+  // Ordem manual na Equipe Favorita (menor primeiro; equipado sempre exibido antes).
+  favoriteOrder             Int                       @default(0)
+  // Postura de combate salva pelo jogador; se null, usa a recomendada pelo maior status.
+  preferredCombatRole       String?
   player                    Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions               MascotExpedition[]
   arenaTeamMembers          ArenaTeamMember[]

@@ -122,3 +122,22 @@ export function recommendCombatRole(stats: {
   candidates.sort((a, b) => b.value - a.value);
   return candidates[0]?.value > 0 ? candidates[0].role : "ATTACKER";
 }
+
+/**
+ * Postura padrão ao equipar um mascote numa equipe (Liga Semanal, Arena Z,
+ * Desafio Sincronizado e futuros). Usa a postura preferida salva pelo jogador
+ * (`preferredCombatRole`); se não houver, cai na recomendada pelo maior status.
+ * Se a query não trouxer `preferredCombatRole`, comporta-se como antes.
+ */
+export function defaultCombatRoleFor(mascot: {
+  preferredCombatRole?: string | null;
+  statForce?: number | null;
+  statAgility?: number | null;
+  statVitality?: number | null;
+  statInstinct?: number | null;
+  statCharisma?: number | null;
+}): CombatRole {
+  const preferred = mascot.preferredCombatRole;
+  if (preferred && COMBAT_ROLE_VALUES.includes(preferred as CombatRole)) return preferred as CombatRole;
+  return recommendCombatRole(mascot);
+}

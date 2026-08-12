@@ -90,7 +90,7 @@ async function fetchMascotPageData(playerId: string) {
         staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
         happiness: true, mood: true, personality: true,
         isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true, operationsLocked: true,
-        ivRating: true, ivScore: true, performanceTag: true,
+        ivRating: true, ivScore: true, performanceTag: true, preferredCombatRole: true, favoriteOrder: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
@@ -104,7 +104,8 @@ async function fetchMascotPageData(playerId: string) {
           select: { id: true, finishAt: true, status: true, rewardJson: true }
         },
       },
-      orderBy: [{ isFavorite: "desc" }, { isEquipped: "desc" }, { level: "desc" }, { id: "asc" }],
+      // Equipado sempre primeiro; depois favoritos na ordem manual (favoriteOrder).
+      orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { favoriteOrder: "asc" }, { level: "desc" }, { id: "asc" }],
     }),
     prisma.mascot.count({
       where: { playerId, isFavorite: false, isEquipped: false },
@@ -379,6 +380,7 @@ export default async function MascotesPage() {
     ivRating: m.ivRating,
     ivScore: m.ivScore,
     performanceTag: m.performanceTag,
+    preferredCombatRole: m.preferredCombatRole,
     activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({
       id: e.id, finishAt: e.finishAt, status: e.status,

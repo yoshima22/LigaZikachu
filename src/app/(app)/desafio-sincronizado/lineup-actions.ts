@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { normalizeCombatRole, recommendCombatRole } from "@/lib/combat-roles";
+import { normalizeCombatRole, defaultCombatRoleFor } from "@/lib/combat-roles";
 import { getSyncWindowState } from "@/lib/sync-challenge";
 import type { Role } from "@prisma/client";
 
@@ -60,7 +60,7 @@ export async function addLineupMascotAction(
     const mascot = await prisma.mascot.findUnique({
       where: { id: mascotId },
       select: {
-        id: true, playerId: true, nickname: true, pokemonId: true,
+        id: true, playerId: true, nickname: true, pokemonId: true, preferredCombatRole: true,
         statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
       },
     });
@@ -75,7 +75,7 @@ export async function addLineupMascotAction(
 
     const nextSlot = myLineup.length + 1;
     await prisma.syncEventLineup.create({
-      data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot, combatRole: recommendCombatRole(mascot) },
+      data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot, combatRole: defaultCombatRoleFor(mascot) },
     });
 
     // Atualiza status da dupla para LINEUP_PENDING se ainda estava COMPLETE

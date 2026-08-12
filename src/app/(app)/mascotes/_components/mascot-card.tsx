@@ -30,6 +30,8 @@ import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
 import { PerformanceTagPicker } from "./performance-tag-picker";
+import { PreferredRolePicker } from "./preferred-role-picker";
+import { FavoriteReorderButtons } from "./favorite-reorder-buttons";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } from "@/lib/mascot-data";
 
@@ -87,6 +89,7 @@ interface MascotData {
   ivRating?: string | null;
   ivScore?: number | null;
   performanceTag?: string | null;
+  preferredCombatRole?: string | null;
   activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
   expeditions: Expedition[];
@@ -927,6 +930,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           {mascot.isShiny && <span className="text-purple-300">✨ Shiny</span>}
         </div>
       )}
+      {mascot.isFavorite && !mascot.isEquipped && (
+        <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-slate-900/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#FFCB05]/70">
+          <span>★ Favorito</span>
+          <FavoriteReorderButtons mascotId={mascot.id} />
+        </div>
+      )}
       {!mascot.isEquipped && mascot.isShiny && (
         <div className="bg-purple-500/10 border-b border-purple-500/20 px-3 py-1 text-center text-[10px] font-semibold text-purple-300 uppercase tracking-wider">
           ✨ Shiny
@@ -1066,6 +1075,17 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 </span>
               ))}
               <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="md" />
+            </div>
+            {/* Postura de combate preferida (levada ao equipar em equipes) */}
+            <div className="mt-1">
+              <PreferredRolePicker
+                mascotId={mascot.id}
+                initial={mascot.preferredCombatRole}
+                stats={{
+                  statForce: mascot.statForce, statAgility: mascot.statAgility, statVitality: mascot.statVitality,
+                  statInstinct: mascot.statInstinct, statCharisma: mascot.statCharisma,
+                }}
+              />
             </div>
             {/* Battle record */}
             {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (

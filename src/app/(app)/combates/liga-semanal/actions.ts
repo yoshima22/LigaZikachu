@@ -6,7 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
-import { getCombatRoleLabel, recommendCombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, defaultCombatRoleFor } from "@/lib/combat-roles";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
@@ -60,6 +60,7 @@ function activeWeeklyPlayerWhere(now = new Date()) {
 
 type RoleRecommendMascot = {
   id: string;
+  preferredCombatRole?: string | null;
   statForce?: number | null;
   statAgility?: number | null;
   statVitality?: number | null;
@@ -68,11 +69,11 @@ type RoleRecommendMascot = {
 };
 
 function recommendedRolesForMascots(mascots: RoleRecommendMascot[]) {
-  return Object.fromEntries(mascots.map((mascot) => [mascot.id, recommendCombatRole(mascot)]));
+  return Object.fromEntries(mascots.map((mascot) => [mascot.id, defaultCombatRoleFor(mascot)]));
 }
 
 function resolveMascotRole(mascot: RoleRecommendMascot, roles?: Record<string, string>) {
-  return roles?.[mascot.id] ?? recommendCombatRole(mascot);
+  return roles?.[mascot.id] ?? defaultCombatRoleFor(mascot);
 }
 
 async function findActiveWeeklyPlayers(client: Pick<typeof prisma, "player">, now = new Date()) {
@@ -1106,7 +1107,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         orderBy: { level: "desc" },
         take: 6,
       });
-      if (favs.length >= 6) return favs.slice(0, 6).map((m, i) => toLeagueMascot(m, i + 1, recommendCombatRole(m)));
+      if (favs.length >= 6) return favs.slice(0, 6).map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
 
       const usedIds = new Set(favs.map(m => m.id));
       const rest = await prisma.mascot.findMany({
@@ -1115,7 +1116,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         take: 6 - favs.length,
       });
       const all = [...favs, ...rest];
-      return all.map((m, i) => toLeagueMascot(m, i + 1, recommendCombatRole(m)));
+      return all.map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
     }
 
     // Load items for each player
@@ -1334,7 +1335,7 @@ export async function regenerateReplaysAction(leagueId: string) {
           return ordered.map((m, i) => toLeagueMascot(m!, i + 1, resolveMascotRole(m!, roles)));
         }
         const mascots = await prisma.mascot.findMany({ where: { playerId }, orderBy: { level: "desc" }, take: 6 });
-        return mascots.map((m, i) => toLeagueMascot(m, i + 1, recommendCombatRole(m)));
+        return mascots.map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
       }
 
       const [teamA, teamB] = await Promise.all([
