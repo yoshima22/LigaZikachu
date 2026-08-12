@@ -13,7 +13,7 @@ import {
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import {
   COMBAT_ROLE_VALUES,
-  recommendCombatRole,
+  defaultCombatRoleFor,
   type CombatRole,
 } from "@/lib/combat-roles";
 import {
@@ -273,6 +273,7 @@ function fighterFromMascot(mascot: {
   statCharisma: number;
   statInstinct: number;
   statVitality: number;
+  preferredCombatRole?: string | null;
 }) {
   const maxHp = Math.max(
     10,
@@ -292,7 +293,8 @@ function fighterFromMascot(mascot: {
     charisma: mascot.statCharisma,
     instinct: mascot.statInstinct,
     vitality: mascot.statVitality,
-    role: recommendCombatRole({
+    role: defaultCombatRoleFor({
+      preferredCombatRole: mascot.preferredCombatRole,
       statForce: mascot.statForce,
       statAgility: mascot.statAgility,
       statCharisma: mascot.statCharisma,
@@ -714,6 +716,7 @@ export async function getLivePvpMatchAction(
             statInstinct: true,
             statVitality: true,
             performanceTag: true,
+            preferredCombatRole: true,
             playerId: true,
             isShiny: true,
             player: {

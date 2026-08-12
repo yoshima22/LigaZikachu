@@ -766,6 +766,11 @@ export function ArenaOnlinePregame({
                 <img
                   src={m.spriteUrl}
                   alt=""
+                  onError={(event) => {
+                    const img = event.currentTarget;
+                    const fallback = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${m.pokemonId}.png`;
+                    if (img.src !== fallback) { img.onerror = null; img.src = fallback; }
+                  }}
                   className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
                 />
                 <b className="block truncate text-[10px] text-white">
@@ -868,6 +873,11 @@ export function ArenaOnlinePregame({
                   <img
                     src={m.spriteUrl}
                     alt=""
+                    onError={(event) => {
+                      const img = event.currentTarget;
+                      const fallback = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${m.pokemonId}.png`;
+                      if (img.src !== fallback) { img.onerror = null; img.src = fallback; }
+                    }}
                     className="h-14 w-14 object-contain [image-rendering:pixelated]"
                   />
                   <div className="min-w-0 flex-1">
