@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, ZikaCoinTxType } from "@prisma/client";
+import { GiftType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
@@ -9,15 +9,12 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { defaultCombatRoleFor } from "@/lib/combat-roles";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { normalizeBattleDivision, validateBattleDivision } from "@/lib/battle-divisions";
-import { creditCoins } from "@/lib/zikacoins";
 import { MEGA_STONES } from "@/lib/mega-evolution";
-import { DEFAULT_RUSH_REWARDS, RUSH_RULE_PRESETS } from "./constants";
+import { DEFAULT_RUSH_REWARDS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
 
 const PATH = "/combates/liga-rush";
-const BATTLE_HOURS = [20, 20, 20];
+const BATTLE_HOURS = [19, 19, 19];
 const BATTLE_MINUTES = [0, 10, 20];
-
-type RewardTier = { rank: number; coins: number; label?: string; item?: "RANDOM_MEGA_STONE" | "RANDOM_MEGA_STONE_OR_ZC" };
 
 function brtDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -43,28 +40,77 @@ async function requireContext(admin = false) {
   return { session, player };
 }
 
-function parseRewards(value: unknown): RewardTier[] {
-  const source = Array.isArray(value) ? value : DEFAULT_RUSH_REWARDS;
+function parseRewards(value: unknown): RushRewardBundle[] {
+  const source = Array.isArray(value) && value.every((entry) => entry && typeof entry === "object" && "rankFrom" in entry) ? value : DEFAULT_RUSH_REWARDS;
   return source.map((entry) => {
-    const row = entry as Partial<RewardTier>;
+    const row = entry as Partial<RushRewardBundle>;
     return {
-      rank: Math.max(1, Math.trunc(Number(row.rank) || 1)),
-      coins: Math.min(10000, Math.max(0, Math.trunc(Number(row.coins) || 0))),
+      key: String(row.key ?? `rank-${row.rankFrom ?? 1}`),
+      rankFrom: Math.max(1, Math.trunc(Number(row.rankFrom) || 1)),
+      ...(row.rankTo ? { rankTo: Math.max(1, Math.trunc(Number(row.rankTo))) } : {}),
       label: String(row.label ?? ""),
-      ...(row.item ? { item: row.item } : {}),
+      estimatedValue: Math.min(6000, Math.max(0, Math.trunc(Number(row.estimatedValue) || 0))),
+      coins: Math.max(0, Math.trunc(Number(row.coins) || 0)),
+      food: Math.max(0, Math.trunc(Number(row.food) || 0)),
+      sweet: Math.max(0, Math.trunc(Number(row.sweet) || 0)),
+      creationDust: Math.max(0, Math.trunc(Number(row.creationDust) || 0)),
+      eggs: row.eggs ?? [],
+      shopItems: row.shopItems ?? [],
+      randomMegaStone: Boolean(row.randomMegaStone),
     };
-  }).sort((a, b) => a.rank - b.rank);
+  }).sort((a, b) => a.rankFrom - b.rankFrom);
 }
+
+function rewardPlan(id?: string | null) {
+  return RUSH_REWARD_PLANS.find((plan) => plan.id === id) ?? RUSH_REWARD_PLANS[0];
+}
+
+function ruleData(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function mondayFor(date = new Date()) {
+  const day = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(date) === "Sun" ? 0 : ["Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(date)) + 1);
+  const current = new Date(`${brtDate(date)}T12:00:00-03:00`);
+  current.setUTCDate(current.getUTCDate() - (day === 0 ? 6 : day - 1));
+  return brtDate(current);
+}
+
+export async function ensureAutomaticRushLeague() {
+  const open = await prisma.rushLeague.findFirst({ where: { status: { in: ["REGISTRATION", "ACTIVE"] } }, orderBy: { weekStart: "asc" } });
+  if (open) {
+    if (open.status === "REGISTRATION" && new Date() >= open.registrationEnds) return prisma.rushLeague.update({ where: { id: open.id }, data: { status: "ACTIVE" } });
+    return open;
+  }
+  const monday = mondayFor();
+  const weekNumber = Math.floor(new Date(`${monday}T12:00:00Z`).getTime() / 604800000);
+  const preset = RUSH_RULE_PRESETS[Math.abs(weekNumber) % RUSH_RULE_PRESETS.length];
+  const plan = RUSH_REWARD_PLANS[Math.abs(weekNumber) % RUSH_REWARD_PLANS.length];
+  const requiredType = preset.requiredType === "ROTATING" ? RUSH_TYPES[Math.abs(weekNumber) % RUSH_TYPES.length] : preset.requiredType;
+  const friday = addDaysDate(monday, 4);
+  return prisma.rushLeague.upsert({ where: { weekKey: `RUSH-${monday}` }, update: {}, create: {
+    name: preset.requiredType === "ROTATING" ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name,
+    weekKey: `RUSH-${monday}`, weekStart: new Date(`${monday}T00:00:00-03:00`), weekEnd: new Date(`${friday}T19:30:00-03:00`), registrationEnds: new Date(`${monday}T17:50:00-03:00`),
+    division: normalizeBattleDivision("division" in preset && preset.division ? preset.division : "LIMITED"), teamSize: preset.teamSize, maxLevel: preset.maxLevel,
+    requiredType: requiredType ?? null, uniqueSpecies: preset.uniqueSpecies,
+    ruleJson: { preset: preset.id, rewardPlanId: plan.id, automatic: true, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", freeRegistration: true },
+    rewardsJson: plan.bundles as unknown as Prisma.InputJsonValue,
+  } });
+}
+
+function addDaysDate(date: string, days: number) { const value = new Date(`${date}T12:00:00-03:00`); value.setUTCDate(value.getUTCDate() + days); return brtDate(value); }
+function getPokemonTypeLabel(type?: string | null) { const labels: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" }; return type ? labels[type] ?? type : "Livre"; }
 
 export async function getRushDataAction() {
   const { session, player } = await requireContext();
+  await ensureAutomaticRushLeague();
   const league = await prisma.rushLeague.findFirst({
     where: { status: { in: ["REGISTRATION", "ACTIVE"] } },
     orderBy: { weekStart: "desc" },
     include: { participants: { orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }] }, dailyTeams: { where: { playerId: player.id } }, matches: { orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }] } },
   });
   const recent = await prisma.rushLeague.findMany({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, take: 4 });
-  if (!league) return { league: null, recent, isAdmin: isAdmin(session.user.role), presets: RUSH_RULE_PRESETS, divisions: [] };
+  if (!league) return { league: null, recent, isAdmin: isAdmin(session.user.role), presets: RUSH_RULE_PRESETS, rewardPlans: RUSH_REWARD_PLANS, divisions: [] };
 
   const playerIds = [...new Set(league.participants.map((p) => p.playerId).concat(league.matches.flatMap((m) => [m.playerAId, m.playerBId].filter(Boolean) as string[])))];
   const players = await prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, displayName: true } });
@@ -89,6 +135,8 @@ export async function getRushDataAction() {
     mascots: mascots.map((m) => ({ ...m, name: m.nickname ?? getPokemonName(m.pokemonId), types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) : getPokemonTypes(m.pokemonId) })),
     today: brtDate(),
     rewards: parseRewards(league.rewardsJson),
+    rewardPlan: rewardPlan(String(ruleData(league.ruleJson).rewardPlanId ?? "")),
+    rewardPlans: RUSH_REWARD_PLANS,
     presets: RUSH_RULE_PRESETS,
   }));
 }
@@ -150,19 +198,38 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
   } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível salvar a equipe." }; }
 }
 
-export async function adminCreateRushLeagueAction(input: { name: string; weekKey: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; preset?: string; rewards?: RewardTier[] }) {
+export async function adminCreateRushLeagueAction(input: { name: string; weekKey: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; preset?: string; rewardPlanId?: string; rewards?: RushRewardBundle[] }) {
   try {
     await requireContext(true);
     if (!input.name.trim() || !input.weekKey.trim()) return { error: "Informe nome e identificador da semana." };
-    const rewards = parseRewards(input.rewards ?? DEFAULT_RUSH_REWARDS);
+    const plan = rewardPlan(input.rewardPlanId);
+    const rewards = parseRewards(input.rewards ?? plan.bundles);
     const league = await prisma.rushLeague.create({ data: {
       name: input.name.trim(), weekKey: input.weekKey.trim(), weekStart: parseBrtAdminDate(input.weekStart), weekEnd: parseBrtAdminDate(input.weekEnd), registrationEnds: parseBrtAdminDate(input.registrationEnds),
       division: normalizeBattleDivision(input.division), teamSize: Math.min(6, Math.max(1, Math.trunc(input.teamSize))), maxLevel: input.maxLevel ? Math.max(1, Math.trunc(input.maxLevel)) : null,
-      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: Boolean(input.uniqueSpecies), ruleJson: { preset: input.preset ?? "CUSTOM", battlesPerDay: 3, freeRegistration: true }, rewardsJson: rewards as unknown as Prisma.InputJsonValue,
+      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: Boolean(input.uniqueSpecies), ruleJson: { preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", freeRegistration: true }, rewardsJson: rewards as unknown as Prisma.InputJsonValue,
     } });
     revalidatePath(PATH);
     return { success: true, leagueId: league.id };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao criar a edição Rush." }; }
+}
+
+export async function adminUpdateRushLeagueAction(input: { leagueId: string; name: string; weekStart: string; weekEnd: string; registrationEnds: string; division: string; teamSize: number; maxLevel?: number | null; requiredType?: string | null; uniqueSpecies: boolean; preset?: string; rewardPlanId?: string }) {
+  try {
+    await requireContext(true);
+    const current = await prisma.rushLeague.findUnique({ where: { id: input.leagueId } });
+    if (!current) return { error: "Liga não encontrada." };
+    const plan = rewardPlan(input.rewardPlanId);
+    await prisma.rushLeague.update({ where: { id: input.leagueId }, data: {
+      name: input.name.trim(), weekStart: parseBrtAdminDate(input.weekStart), weekEnd: parseBrtAdminDate(input.weekEnd), registrationEnds: parseBrtAdminDate(input.registrationEnds),
+      division: normalizeBattleDivision(input.division), teamSize: Math.min(6, Math.max(1, Math.trunc(input.teamSize))), maxLevel: input.maxLevel ? Math.max(1, Math.trunc(input.maxLevel)) : null,
+      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: Boolean(input.uniqueSpecies),
+      ruleJson: { ...ruleData(current.ruleJson), preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", freeRegistration: true },
+      rewardsJson: plan.bundles as unknown as Prisma.InputJsonValue,
+    } });
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao editar a edição Rush." }; }
 }
 
 function circlePairings(ids: string[], roundIndex: number) {
@@ -181,9 +248,9 @@ export async function adminOpenRushLeagueAction(leagueId: string) {
   catch (error) { return { error: error instanceof Error ? error.message : "Falha ao abrir liga." }; }
 }
 
-export async function adminGenerateRushDayAction(leagueId: string, battleDate: string) {
+export async function adminGenerateRushDayAction(leagueId: string, battleDate: string, automationSecret?: string) {
   try {
-    await requireContext(true);
+    if (!automationSecret || automationSecret !== process.env.CRON_SECRET) await requireContext(true);
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId }, include: { participants: { orderBy: { joinedAt: "asc" } } } });
     if (!league) return { error: "Liga não encontrada." };
     if (league.participants.length < 2) return { error: "São necessários pelo menos 2 inscritos." };
@@ -199,12 +266,12 @@ export async function adminGenerateRushDayAction(leagueId: string, battleDate: s
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao gerar rodadas." }; }
 }
 
-export async function adminRunRushDayAction(leagueId: string, battleDate: string) {
+export async function adminRunRushDayAction(leagueId: string, battleDate: string, maxSlot = 3, automationSecret?: string) {
   try {
-    await requireContext(true);
+    if (!automationSecret || automationSecret !== process.env.CRON_SECRET) await requireContext(true);
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } });
     if (!league) return { error: "Liga não encontrada." };
-    const matches = await prisma.rushLeagueMatch.findMany({ where: { leagueId, battleDate, status: "SCHEDULED", playerBId: { not: null } }, orderBy: { battleSlot: "asc" } });
+    const matches = await prisma.rushLeagueMatch.findMany({ where: { leagueId, battleDate, battleSlot: { lte: Math.min(3, Math.max(1, maxSlot)) }, status: "SCHEDULED", playerBId: { not: null } }, orderBy: { battleSlot: "asc" } });
     let resolved = 0, skipped = 0;
     for (const match of matches) {
       const teams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate, battleSlot: match.battleSlot, playerId: { in: [match.playerAId, match.playerBId!] } } });
@@ -232,9 +299,9 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao executar os combates." }; }
 }
 
-export async function adminFinishRushLeagueAction(leagueId: string, championReward: "COINS" | "STONE" = "COINS") {
+export async function adminFinishRushLeagueAction(leagueId: string, automationSecret?: string) {
   try {
-    const { session } = await requireContext(true);
+    if (!automationSecret || automationSecret !== process.env.CRON_SECRET) await requireContext(true);
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId }, include: { participants: true } });
     if (!league) return { error: "Liga não encontrada." };
     if (league.rewardsGrantedAt) return { error: "As recompensas desta edição já foram distribuídas." };
@@ -242,21 +309,43 @@ export async function adminFinishRushLeagueAction(leagueId: string, championRewa
     const rewards = parseRewards(league.rewardsJson);
     await prisma.$transaction(async (tx) => {
       for (let index = 0; index < ranking.length; index++) {
-        const participant = ranking[index]; const rank = index + 1; const reward = rewards.find((r) => r.rank === rank);
+        const participant = ranking[index]; const rank = index + 1; const reward = rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));
         await tx.rushLeagueParticipant.update({ where: { id: participant.id }, data: { finalRank: rank, rewardGranted: Boolean(reward) } });
         if (!reward) continue;
-        const giveStone = rank === 1 && reward.item && (reward.item === "RANDOM_MEGA_STONE" || championReward === "STONE");
-        if (giveStone) {
+        const shopItems = [...(reward.shopItems ?? [])].map(({ type, quantity }) => ({ type, quantity }));
+        if (reward.randomMegaStone) {
           const stone = MEGA_STONES[Math.floor(Math.random() * MEGA_STONES.length)];
-          const shopItem = await tx.shopItem.findFirst({ where: { type: stone.type } });
-          if (shopItem) await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: participant.playerId, itemId: shopItem.id } }, create: { playerId: participant.playerId, itemId: shopItem.id, quantity: 1, source: "RUSH_LEAGUE" }, update: { quantity: { increment: 1 } } });
-        } else if (reward.coins > 0) {
-          await creditCoins(tx, { playerId: participant.playerId, type: ZikaCoinTxType.PARTICIPATION_REWARD, amount: reward.coins, description: `Liga Rush ${league.weekKey} — ${rank}º lugar`, adminId: session.user.id });
+          shopItems.push({ type: stone.type, quantity: 1 });
         }
+        await tx.playerGift.create({ data: {
+          playerId: participant.playerId,
+          type: GiftType.CUSTOM,
+          title: `Liga Rush · ${rank}º lugar`,
+          description: reward.label,
+          payload: { rewardKind: "TOURNAMENT_BOX", coins: reward.coins ?? 0, food: reward.food ?? 0, sweet: reward.sweet ?? 0, creationDust: reward.creationDust ?? 0, eggs: reward.eggs ?? [], shopItems, origin: `Liga Rush ${league.weekKey}` } as Prisma.InputJsonValue,
+        } });
       }
       await tx.rushLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: ranking[0]?.playerId, rewardsGrantedAt: new Date() } });
     });
     revalidatePath(PATH);
     return { success: true };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao encerrar a Rush." }; }
+}
+
+export async function runRushLeagueAutomation(secret: string) {
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) return { error: "Unauthorized" };
+  const league = await ensureAutomaticRushLeague();
+  const now = new Date();
+  const date = brtDate(now);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(now);
+  const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+  if (!["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday) || date < brtDate(league.weekStart) || date > brtDate(league.weekEnd)) return { success: true, action: "idle", leagueId: league.id };
+  if (clock >= "18:55") await adminGenerateRushDayAction(league.id, date, secret);
+  const maxSlot = clock >= "19:20" ? 3 : clock >= "19:10" ? 2 : clock >= "19:00" ? 1 : 0;
+  const battles = maxSlot ? await adminRunRushDayAction(league.id, date, maxSlot, secret) : { success: true, resolved: 0, skipped: 0 };
+  if (weekday === "Fri" && clock >= "19:30") {
+    const unresolved = await prisma.rushLeagueMatch.count({ where: { leagueId: league.id, status: "SCHEDULED" } });
+    if (unresolved === 0) await adminFinishRushLeagueAction(league.id, secret);
+  }
+  return { success: true, action: "processed", leagueId: league.id, battles };
 }
