@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getPokemonName, getShinySprite, getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonTypes, getShinySprite, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { DeliveryMapPrototype } from "./delivery-map-prototype";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,8 @@ export default async function DeliveryPrototypePage() {
           statVitality: true,
           isShiny: true,
           staticSpriteUrlOverride: true,
+          primaryTypeOverride: true,
+          secondaryTypeOverride: true,
         },
       },
     },
@@ -39,6 +41,9 @@ export default async function DeliveryPrototypePage() {
     force: mascot.statForce,
     instinct: mascot.statInstinct,
     vitality: mascot.statVitality,
+    types: [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter((type): type is string => Boolean(type)).length
+      ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter((type): type is string => Boolean(type))
+      : getPokemonTypes(mascot.pokemonId),
     spriteUrl: mascot.staticSpriteUrlOverride || (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId)),
   }));
 

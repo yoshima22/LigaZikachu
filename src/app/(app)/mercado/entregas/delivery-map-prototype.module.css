@@ -79,6 +79,23 @@
   transform: rotate(45deg);
 }
 
+.mapShell :global(.delivery-rest-icon) {
+  background: transparent;
+  border: 0;
+}
+
+.mapShell :global(.delivery-rest-pin) {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 2px solid #86efac;
+  border-radius: 12px;
+  background: rgba(6, 78, 59, 0.94);
+  font-size: 17px;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12), 0 0 20px rgba(34, 197, 94, 0.5);
+}
+
 @keyframes delivery-bob {
   from { transform: translateY(0) scale(1); }
   to { transform: translateY(-7px) scale(1.04); }
