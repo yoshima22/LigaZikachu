@@ -1,5 +1,5 @@
 export type DeliveryPoiType = "LANDMARK" | "LOCAL_STOP" | "REST_POINT" | "MIAUVADAO_BRANCH" | "TRAPACA_HIDEOUT" | "SPECIAL_POI";
-export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" };
+export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" | "MICRO" };
 
 export const DELIVERY_POIS: DeliveryPoi[] = [
   // Marcos mundiais
@@ -212,3 +212,102 @@ const LOCAL_POIS: Array<[string, string, DeliveryPoiType, number, number, string
 
 DELIVERY_POIS.forEach(poi => { poi.visibility ??= "WORLD"; });
 DELIVERY_POIS.push(...LOCAL_POIS.map(([id, name, type, lat, lng, region, visibility]) => ({ id, name, type, lat, lng, region, visibility })));
+
+// Malha cotidiana persistida no app. Ela não consulta APIs durante a navegação e
+// só aparece em zoom próximo, como uma camada de "pokéstops" para entregas locais.
+const MICRO_CITY_ANCHORS: Array<[string, string, string, number, number]> = [
+  // Brasil — capitais e polos regionais
+  ["br_rio_branco", "Rio Branco", "Acre, Brasil", -9.9754, -67.8249],
+  ["br_macapa", "Macapá", "Amapá, Brasil", 0.0349, -51.0694],
+  ["br_porto_velho", "Porto Velho", "Rondônia, Brasil", -8.7608, -63.8999],
+  ["br_boavista", "Boa Vista", "Roraima, Brasil", 2.8235, -60.6758],
+  ["br_palmas", "Palmas", "Tocantins, Brasil", -10.184, -48.3336],
+  ["br_cuiaba", "Cuiabá", "Mato Grosso, Brasil", -15.6014, -56.0979],
+  ["br_campo_grande", "Campo Grande", "Mato Grosso do Sul, Brasil", -20.4697, -54.6201],
+  ["br_vitoria", "Vitória", "Espírito Santo, Brasil", -20.3155, -40.3128],
+  ["br_sao_luis", "São Luís", "Maranhão, Brasil", -2.5307, -44.3068],
+  ["br_teresina", "Teresina", "Piauí, Brasil", -5.0919, -42.8034],
+  ["br_natal", "Natal", "Rio Grande do Norte, Brasil", -5.7945, -35.211],
+  ["br_joao_pessoa", "João Pessoa", "Paraíba, Brasil", -7.1195, -34.845],
+  ["br_maceio", "Maceió", "Alagoas, Brasil", -9.6498, -35.7089],
+  ["br_aracaju", "Aracaju", "Sergipe, Brasil", -10.9472, -37.0731],
+  ["br_florianopolis", "Florianópolis", "Santa Catarina, Brasil", -27.5949, -48.5482],
+  ["br_londrina", "Londrina", "Paraná, Brasil", -23.3045, -51.1696],
+  ["br_maringa", "Maringá", "Paraná, Brasil", -23.4205, -51.9333],
+  ["br_joinville", "Joinville", "Santa Catarina, Brasil", -26.3044, -48.8487],
+  ["br_caxias", "Caxias do Sul", "Rio Grande do Sul, Brasil", -29.1678, -51.1794],
+  ["br_uberlandia", "Uberlândia", "Minas Gerais, Brasil", -18.9146, -48.2754],
+  ["br_juiz_fora", "Juiz de Fora", "Minas Gerais, Brasil", -21.7622, -43.3434],
+  ["br_ribeirao", "Ribeirão Preto", "São Paulo, Brasil", -21.1775, -47.8103],
+  ["br_sorocaba", "Sorocaba", "São Paulo, Brasil", -23.5015, -47.4526],
+  ["br_sjc", "São José dos Campos", "São Paulo, Brasil", -23.1896, -45.8841],
+  ["br_petropolis", "Petrópolis", "Rio de Janeiro, Brasil", -22.505, -43.1786],
+  ["br_niteroi", "Niterói", "Rio de Janeiro, Brasil", -22.8832, -43.1034],
+  ["br_foz", "Foz do Iguaçu", "Paraná, Brasil", -25.5163, -54.5854],
+  ["br_santarem", "Santarém", "Pará, Brasil", -2.4385, -54.6996],
+  ["br_maraba", "Marabá", "Pará, Brasil", -5.3811, -49.1331],
+  ["br_feira", "Feira de Santana", "Bahia, Brasil", -12.2664, -38.9663],
+  ["br_campina", "Campina Grande", "Paraíba, Brasil", -7.2306, -35.8811],
+  ["br_caruaru", "Caruaru", "Pernambuco, Brasil", -8.2845, -35.9699],
+  // Estados Unidos — distribuição costeira e interior
+  ["us_boston", "Boston", "Massachusetts, EUA", 42.3601, -71.0589],
+  ["us_philadelphia", "Filadélfia", "Pensilvânia, EUA", 39.9526, -75.1652],
+  ["us_washington", "Washington", "Distrito de Columbia, EUA", 38.9072, -77.0369],
+  ["us_miami", "Miami", "Flórida, EUA", 25.7617, -80.1918],
+  ["us_atlanta", "Atlanta", "Geórgia, EUA", 33.749, -84.388],
+  ["us_nashville", "Nashville", "Tennessee, EUA", 36.1627, -86.7816],
+  ["us_detroit", "Detroit", "Michigan, EUA", 42.3314, -83.0458],
+  ["us_minneapolis", "Minneapolis", "Minnesota, EUA", 44.9778, -93.265],
+  ["us_dallas", "Dallas", "Texas, EUA", 32.7767, -96.797],
+  ["us_houston", "Houston", "Texas, EUA", 29.7604, -95.3698],
+  ["us_austin", "Austin", "Texas, EUA", 30.2672, -97.7431],
+  ["us_denver", "Denver", "Colorado, EUA", 39.7392, -104.9903],
+  ["us_phoenix", "Phoenix", "Arizona, EUA", 33.4484, -112.074],
+  ["us_las_vegas", "Las Vegas", "Nevada, EUA", 36.1699, -115.1398],
+  ["us_san_diego", "San Diego", "Califórnia, EUA", 32.7157, -117.1611],
+  ["us_los_angeles", "Los Angeles", "Califórnia, EUA", 34.0522, -118.2437],
+  ["us_sacramento", "Sacramento", "Califórnia, EUA", 38.5816, -121.4944],
+  ["us_portland", "Portland", "Oregon, EUA", 45.5152, -122.6784],
+  ["us_seattle", "Seattle", "Washington, EUA", 47.6062, -122.3321],
+  ["us_salt_lake", "Salt Lake City", "Utah, EUA", 40.7608, -111.891],
+  ["us_kansas", "Kansas City", "Missouri, EUA", 39.0997, -94.5786],
+  ["us_new_orleans", "Nova Orleans", "Louisiana, EUA", 29.9511, -90.0715],
+  // Venezuela e corredor caribenho
+  ["ve_caracas", "Caracas", "Venezuela", 10.4806, -66.9036],
+  ["ve_maracaibo", "Maracaibo", "Venezuela", 10.6545, -71.6406],
+  ["ve_valencia", "Valencia", "Venezuela", 10.1579, -67.9972],
+  ["ve_barquisimeto", "Barquisimeto", "Venezuela", 10.0678, -69.3474],
+  ["ve_maracay", "Maracay", "Venezuela", 10.2469, -67.5958],
+  ["ve_guayana", "Ciudad Guayana", "Venezuela", 8.3663, -62.6497],
+  ["ve_san_cristobal", "San Cristóbal", "Venezuela", 7.7669, -72.225],
+  ["ve_merida", "Mérida", "Venezuela", 8.5897, -71.1561],
+  ["ve_barcelona", "Barcelona", "Venezuela", 10.1446, -64.6777],
+  ["ve_maturin", "Maturín", "Venezuela", 9.7457, -63.1832],
+  ["ve_coro", "Coro", "Venezuela", 11.4045, -69.6734],
+  ["ve_barinas", "Barinas", "Venezuela", 8.6226, -70.2075],
+  // Países ainda pouco cobertos
+  ["mx_monterrey", "Monterrey", "México", 25.6866, -100.3161],
+  ["mx_guadalajara", "Guadalajara", "México", 20.6597, -103.3496],
+  ["co_medellin", "Medellín", "Colômbia", 6.2442, -75.5812],
+  ["co_cali", "Cali", "Colômbia", 3.4516, -76.532],
+  ["ar_cordoba", "Córdoba", "Argentina", -31.4201, -64.1888],
+  ["ar_mendoza", "Mendoza", "Argentina", -32.8895, -68.8458],
+  ["ec_guayaquil", "Guayaquil", "Equador", -2.1709, -79.9224],
+  ["bo_santa_cruz", "Santa Cruz de la Sierra", "Bolívia", -17.7833, -63.1821],
+  ["py_asuncion", "Assunção", "Paraguai", -25.2637, -57.5759],
+];
+
+const MICRO_DELIVERY_POIS: DeliveryPoi[] = MICRO_CITY_ANCHORS.flatMap(([id, city, region, lat, lng]) => [
+  {
+    id: `micro_${id}_community`, name: `Ponto comunitário de ${city}`, type: "LOCAL_STOP",
+    lat, lng, region, visibility: "MICRO",
+    description: `Referência cotidiana para pequenas entregas em ${city}. Abra o local para consultar informações públicas disponíveis.`,
+  },
+  {
+    id: `micro_${id}_rest`, name: `Parada de descanso de ${city}`, type: "REST_POINT",
+    lat: lat + 0.018, lng: lng + 0.018, region, visibility: "MICRO",
+    description: `Ponto seguro de pausa e recuperação nas rotas locais de ${city}.`,
+  },
+]);
+
+DELIVERY_POIS.push(...MICRO_DELIVERY_POIS);

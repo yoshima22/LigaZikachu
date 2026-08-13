@@ -351,7 +351,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       SPECIAL_POI: { className: "delivery-special-icon", html: '<div class="delivery-special-pin">!</div>', label: "Evento especial" },
     };
     DELIVERY_POIS.filter((poi) => {
-      const zoomVisible = poi.visibility === "LOCAL" ? mapZoom >= 7 : poi.visibility === "REGIONAL" ? mapZoom >= 5 : true;
+      const zoomVisible = poi.visibility === "MICRO" ? mapZoom >= 9 : poi.visibility === "LOCAL" ? mapZoom >= 7 : poi.visibility === "REGIONAL" ? mapZoom >= 5 : true;
       return zoomVisible && poiVisibility[poi.type] && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id));
     }).forEach((poi) => {
       const meta = poiMeta[poi.type];
@@ -382,10 +382,19 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       if (cancelled || !mapNodeRef.current || mapRef.current) return;
       const L = module.default ?? module;
       leafletRef.current = L;
-      const map = L.map(mapNodeRef.current, { zoomControl: true, minZoom: 3 }).setView([-15.7, -48], 4);
+      const worldBounds = L.latLngBounds([[-85.0511, -180], [85.0511, 180]]);
+      const map = L.map(mapNodeRef.current, {
+        zoomControl: true,
+        minZoom: 3,
+        maxBounds: worldBounds,
+        maxBoundsViscosity: 1,
+        worldCopyJump: false,
+      }).setView([-15.7, -48], 4);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 18,
+        bounds: worldBounds,
+        noWrap: true,
       }).addTo(map);
       mapRef.current = map;
       map.on("zoomend", () => {
