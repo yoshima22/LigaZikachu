@@ -1566,7 +1566,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={getSpriteUrl(rel.mascotB.pokemonId)} alt="" className="h-7 w-7 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-200 truncate">{name_}</p>
+                        <p className="font-semibold text-slate-200 truncate">
+                          {name_}
+                          <span className="ml-1 font-mono text-[8px] text-[#FFCB05]">#{shortMascotCode(rel.mascotB.id)}</span>
+                        </p>
                         <p className="text-slate-500 truncate">de {rel.mascotB.ownerName}</p>
                       </div>
                       <span className={`shrink-0 text-right text-[9px] font-semibold ${group === "FRIEND" ? "text-green-300" : group === "RIVAL" ? "text-red-300" : "text-slate-300"}`}>

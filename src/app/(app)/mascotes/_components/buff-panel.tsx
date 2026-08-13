@@ -113,10 +113,13 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const [results, setResults] = useState<MascotOption[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [mascotPage, setMascotPage] = useState(0);
   const searchSeq = useRef(0);
+  const comboRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const q = search.trim();
+    setMascotPage(0);
     if (!q) { setResults([]); setSearching(false); return; }
     setSearching(true);
     const seq = ++searchSeq.current;
@@ -129,6 +132,16 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  // Fecha o dropdown de busca ao clicar fora dele.
+  useEffect(() => {
+    if (!showResults) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) setShowResults(false);
+    };
+    document.addEventListener("pointerdown", onDocPointerDown);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown);
+  }, [showResults]);
 
   // ── Reorganização de itens (ordem manual + drag-and-drop) com paginação ──────
   const ITEMS_PER_PAGE = 6;
@@ -193,6 +206,11 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     ? results
     : mascots.map((m) => ({ ...m, proteinDoses: proteinDoses[m.id] ?? m.proteinDoses ?? 0, activeBuffTypes: activeBuffsByMascot[m.id] ?? m.activeBuffTypes ?? [] }));
   const mascotOptions = baseCandidates.filter(isEligible);
+  // Paginação do dropdown de busca de mascotes (9 por página).
+  const MASCOT_PAGE_SIZE = 9;
+  const mascotTotalPages = Math.max(1, Math.ceil(mascotOptions.length / MASCOT_PAGE_SIZE));
+  const mascotSafePage = Math.min(mascotPage, mascotTotalPages - 1);
+  const pagedMascotOptions = mascotOptions.slice(mascotSafePage * MASCOT_PAGE_SIZE, mascotSafePage * MASCOT_PAGE_SIZE + MASCOT_PAGE_SIZE);
   const selectedMascotDoses = selectedMascotObj?.proteinDoses ?? 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
   const selectedMascotItem = selectedMascotObj;
@@ -562,43 +580,63 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
               </button>
             </div>
           ) : (
-          <div className="relative w-full max-w-xs">
+          <div ref={comboRef} className="relative w-full max-w-xs">
             <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
               onFocus={() => setShowResults(true)}
+              onKeyDown={(e) => { if (e.key === "Escape") { setShowResults(false); (e.currentTarget as HTMLInputElement).blur(); } }}
               placeholder="Buscar mascote por nome ou código…"
               className="w-full rounded-xl border border-border bg-slate-900 py-2 pl-7 pr-8 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]"
             />
-            {searching && <Loader2 size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-500" />}
-            {showResults && (search.trim() || mascotOptions.length > 0) && (
-              <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-slate-950 shadow-xl">
-                {mascotOptions.length === 0 ? (
-                  <p className="px-3 py-2 text-[11px] text-slate-500">{searching ? "Buscando…" : "Nenhum mascote encontrado."}</p>
-                ) : mascotOptions.map((m) => {
-                  const doses = isProtein ? (m.proteinDoses ?? 0) : 0;
-                  const maxed = isProtein && doses >= PROTEIN_LIMIT;
-                  const hasBoost = isExpBuff && (m.activeBuffTypes ?? []).includes("EXP_BOOST");
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      disabled={maxed}
-                      onClick={() => pickMascot(m)}
-                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="min-w-0 truncate">
-                        {m.name}
-                        <span className="ml-1.5 font-mono text-[10px] text-[#FFCB05]">#{shortMascotCode(m.id)}</span>
-                        <span className="ml-1 text-[10px] text-slate-500">Nv.{m.level}{m.isEquipped ? " · ★" : m.isFavorite ? " · ☆" : ""}</span>
-                      </span>
-                      <span className="shrink-0 text-[9px] text-slate-500">
-                        {isProtein && doses > 0 ? `${doses}/${PROTEIN_LIMIT}` : ""}{maxed ? " MÁX" : ""}{hasBoost ? " ⚡" : ""}
-                      </span>
+            {searching ? (
+              <Loader2 size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-500" />
+            ) : search ? (
+              <button type="button" onClick={() => { setSearch(""); setShowResults(false); }} aria-label="Limpar busca" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-500 hover:text-slate-200">
+                <X size={13} />
+              </button>
+            ) : null}
+            {showResults && (
+              <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-xl border border-border bg-slate-950 shadow-xl">
+                <div className="max-h-64 overflow-y-auto">
+                  {mascotOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-slate-500">{searching ? "Buscando…" : "Nenhum mascote encontrado."}</p>
+                  ) : pagedMascotOptions.map((m) => {
+                    const doses = isProtein ? (m.proteinDoses ?? 0) : 0;
+                    const maxed = isProtein && doses >= PROTEIN_LIMIT;
+                    const hasBoost = isExpBuff && (m.activeBuffTypes ?? []).includes("EXP_BOOST");
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        disabled={maxed}
+                        onClick={() => pickMascot(m)}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span className="min-w-0 truncate">
+                          {m.name}
+                          <span className="ml-1.5 font-mono text-[10px] text-[#FFCB05]">#{shortMascotCode(m.id)}</span>
+                          <span className="ml-1 text-[10px] text-slate-500">Nv.{m.level}{m.isEquipped ? " · ★" : m.isFavorite ? " · ☆" : ""}</span>
+                        </span>
+                        <span className="shrink-0 text-[9px] text-slate-500">
+                          {isProtein && doses > 0 ? `${doses}/${PROTEIN_LIMIT}` : ""}{maxed ? " MÁX" : ""}{hasBoost ? " ⚡" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {mascotTotalPages > 1 && (
+                  <div className="flex items-center justify-between gap-2 border-t border-border bg-slate-950 px-2 py-1.5">
+                    <button type="button" disabled={mascotSafePage <= 0} onClick={() => setMascotPage(mascotSafePage - 1)} className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-slate-200 disabled:opacity-40">
+                      <ChevronLeft size={11} /> Anterior
                     </button>
-                  );
-                })}
+                    <span className="text-[10px] text-slate-500">{mascotSafePage + 1}/{mascotTotalPages}</span>
+                    <button type="button" disabled={mascotSafePage >= mascotTotalPages - 1} onClick={() => setMascotPage(mascotSafePage + 1)} className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-slate-200 disabled:opacity-40">
+                      Próxima <ChevronRight size={11} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
