@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/mascot-interactions",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/birthday-ticker",
+      "schedule": "0 */3 * * *"
     }
   ]
 }
