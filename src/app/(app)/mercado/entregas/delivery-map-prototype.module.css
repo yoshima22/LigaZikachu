@@ -114,6 +114,44 @@
   box-shadow: 0 0 16px rgba(251, 191, 36, 0.45);
 }
 
+.mapShell :global(.delivery-miau-icon),
+.mapShell :global(.delivery-trapaca-icon),
+.mapShell :global(.delivery-special-icon) {
+  background: transparent;
+  border: 0;
+}
+
+.mapShell :global(.delivery-miau-pin),
+.mapShell :global(.delivery-trapaca-pin),
+.mapShell :global(.delivery-special-pin) {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.mapShell :global(.delivery-miau-pin) {
+  border-color: #fb923c;
+  background: rgba(124, 45, 18, 0.95);
+  box-shadow: 0 0 17px rgba(249, 115, 22, 0.5);
+}
+
+.mapShell :global(.delivery-trapaca-pin) {
+  border-color: #c084fc;
+  background: rgba(46, 16, 101, 0.96);
+  color: #e9d5ff;
+  box-shadow: 0 0 19px rgba(147, 51, 234, 0.62);
+}
+
+.mapShell :global(.delivery-special-pin) {
+  border-color: #f87171;
+  background: rgba(127, 29, 29, 0.95);
+  color: white;
+}
+
 @keyframes delivery-bob {
   from { transform: translateY(0) scale(1); }
   to { transform: translateY(-7px) scale(1.04); }

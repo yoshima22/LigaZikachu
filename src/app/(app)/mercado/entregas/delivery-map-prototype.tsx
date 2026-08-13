@@ -25,6 +25,7 @@ import {
   LocateFixed,
 } from "lucide-react";
 import styles from "./delivery-map-prototype.module.css";
+import { DELIVERY_POIS, type DeliveryPoiType } from "./delivery-pois";
 
 type MascotOption = {
   id: string;
@@ -106,23 +107,13 @@ const REST_HUBS: Place[] = [
   { id: "rest-perth", name: "Porto de Perth", state: "WA", country: "Austrália", region: "Oceania", lat: -31.9523, lng: 115.8613, port: true },
   { id: "rest-tasmania", name: "Refúgio da Tasmânia", state: "TAS", country: "Austrália", region: "Oceania", lat: -42.8821, lng: 147.3272, port: true },
 ];
+const ALL_REST_HUBS: Place[] = [...REST_HUBS, ...DELIVERY_POIS.filter(poi => poi.type === "REST_POINT").map(poi => ({ id: poi.id, name: poi.name, state: "", country: poi.region, region: poi.region, lat: poi.lat, lng: poi.lng }))];
 
 const ROUTE_INFO: Record<RouteMode, { label: string; icon: typeof Plane; types: string[]; bonus: number; color: string; description: string }> = {
   AIR: { label: "Rota aérea", icon: Plane, types: ["flying"], bonus: 0.22, color: "#a78bfa", description: "Voo direto entre origem e destino. Exclusiva para o tipo Voador; Agilidade aumenta a velocidade e vento, chuva ou tempestade podem atrasar o voo." },
   WATER: { label: "Rota marítima", icon: Waves, types: ["water"], bonus: 0.28, color: "#38bdf8", description: "Segue portos, ilhas e bases costeiras. Todos podem embarcar, mas somente Água recebe velocidade no mar; Gelo reduz parte da fadiga." },
   LAND: { label: "Rota terrestre", icon: Mountain, types: ["ground", "rock", "fighting", "grass", "normal"], bonus: 0.14, color: "#84cc16", description: "Procura ruas e estradas reais, evitando oceanos. Terra e Pedra são os mais rápidos; Lutador, Grama e Normal recebem bônus menor." },
 };
-
-const TOURIST_SITES: Place[] = [
-  { id: "tour-christ", name: "Cristo Redentor", state: "RJ", country: "Brasil", region: "Turístico", lat: -22.9519, lng: -43.2105 },
-  { id: "tour-eiffel", name: "Torre Eiffel", state: "", country: "França", region: "Turístico", lat: 48.8584, lng: 2.2945 },
-  { id: "tour-liberty", name: "Estátua da Liberdade", state: "NY", country: "EUA", region: "Turístico", lat: 40.6892, lng: -74.0445 },
-  { id: "tour-machu", name: "Machu Picchu", state: "", country: "Peru", region: "Turístico", lat: -13.1631, lng: -72.545 },
-  { id: "tour-pyramids", name: "Pirâmides de Gizé", state: "", country: "Egito", region: "Turístico", lat: 29.9792, lng: 31.1342 },
-  { id: "tour-fuji", name: "Monte Fuji", state: "", country: "Japão", region: "Turístico", lat: 35.3606, lng: 138.7274 },
-  { id: "tour-opera", name: "Ópera de Sydney", state: "NSW", country: "Austrália", region: "Turístico", lat: -33.8568, lng: 151.2153 },
-  { id: "tour-colosseum", name: "Coliseu", state: "", country: "Itália", region: "Turístico", lat: 41.8902, lng: 12.4922 },
-];
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
@@ -147,7 +138,7 @@ function haversineKm(a: Place, b: Place) {
 function selectRestStops(origin: Place, destination: Place, mode: RouteMode, directDistance: number) {
   if (mode === "AIR" || directDistance < 900) return [];
   const wanted = mode === "LAND" ? Math.min(3, Math.ceil(directDistance / 2800)) : Math.min(2, Math.ceil(directDistance / 4500));
-  const candidates = mode === "WATER" ? REST_HUBS.filter((hub) => hub.port) : REST_HUBS;
+  const candidates = mode === "WATER" ? ALL_REST_HUBS.filter((hub) => hub.port) : ALL_REST_HUBS;
   const selected: Place[] = [];
   for (let index = 1; index <= wanted; index += 1) {
     const ratio = index / (wanted + 1);
@@ -214,6 +205,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [roadRoute, setRoadRoute] = useState<{ points: Array<{ lat: number; lng: number }>; distanceKm: number } | null>(null);
   const [roadError, setRoadError] = useState<string | null>(null);
   const [roadLoading, setRoadLoading] = useState(false);
+  const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
   const [weatherEnabled, setWeatherEnabled] = useState(true);
   const [weather, setWeather] = useState<WeatherSnapshot[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -337,15 +329,25 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     L.marker([origin.lat, origin.lng], { icon: cityIcon }).addTo(map).bindTooltip(`Origem: ${origin.name}`, { direction: "top" });
     L.marker([destination.lat, destination.lng], { icon: cityIcon }).addTo(map).bindTooltip(`Destino: ${destination.name}`, { direction: "top" });
     const restIcon = L.divIcon({ className: "delivery-rest-icon", html: '<div class="delivery-rest-pin">⛺</div>', iconSize: [34, 34], iconAnchor: [17, 17] });
-    restStops.forEach((stop, index) => {
+    if (poiVisibility.REST_POINT) restStops.forEach((stop, index) => {
       const condition = weather[index + 1]?.current;
       L.marker([stop.lat, stop.lng], { icon: restIcon }).addTo(map).bindTooltip(
         `${stop.name} · descanso ${condition ? `· ${weatherLabel(condition.weather_code)} ${condition.temperature_2m}°C` : ""}`,
         { direction: "top" },
       );
     });
-    const touristIcon = L.divIcon({ className: "delivery-tourist-icon", html: '<div class="delivery-tourist-pin">★</div>', iconSize: [28, 28], iconAnchor: [14, 14] });
-    TOURIST_SITES.forEach((site) => L.marker([site.lat, site.lng], { icon: touristIcon }).addTo(map).bindTooltip(`${site.name} · ponto turístico`, { direction: "top" }));
+    const poiMeta: Record<DeliveryPoiType, { className: string; html: string; label: string }> = {
+      LANDMARK: { className: "delivery-tourist-icon", html: '<div class="delivery-tourist-pin">★</div>', label: "Ponto turístico" },
+      REST_POINT: { className: "delivery-rest-icon", html: '<div class="delivery-rest-pin">⛺</div>', label: "Descanso" },
+      MIAUVADAO_BRANCH: { className: "delivery-miau-icon", html: '<div class="delivery-miau-pin">📦</div>', label: "Filial do Miauvadão" },
+      TRAPACA_HIDEOUT: { className: "delivery-trapaca-icon", html: '<div class="delivery-trapaca-pin">☠</div>', label: "Esconderijo da Ordem" },
+      SPECIAL_POI: { className: "delivery-special-icon", html: '<div class="delivery-special-pin">!</div>', label: "Evento especial" },
+    };
+    DELIVERY_POIS.filter(poi => poiVisibility[poi.type] && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id))).forEach((poi) => {
+      const meta = poiMeta[poi.type];
+      const icon = L.divIcon({ className: meta.className, html: meta.html, iconSize: [30, 30], iconAnchor: [15, 15] });
+      L.marker([poi.lat, poi.lng], { icon }).addTo(map).bindTooltip(`<b>${poi.name}</b><br>${meta.label} · ${poi.region}${poi.description ? `<br>${poi.description}` : ""}`, { direction: "top" });
+    });
 
     if (mascot) {
       const courierIcon = L.divIcon({
@@ -359,7 +361,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         .bindTooltip(`${mascot.name} · ${(progressRef.current * 100).toFixed(0)}%`, { direction: "top", offset: [0, -28] });
     }
     map.fitBounds(line.getBounds().pad(0.42), { animate: true, maxZoom: 6 });
-  }, [destination, mascot, origin, restStops, routeInfo.color, routePoints, weather]);
+  }, [destination, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, weather]);
 
   useEffect(() => {
     let cancelled = false;
@@ -554,6 +556,21 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
             <div><span className="text-slate-500">Afinidade de tipo</span><b className="mt-1 block text-emerald-300">{routeBonus ? `+${(routeBonus * 100).toFixed(0)}% velocidade` : "Sem bônus"}</b></div>
             <div><span className="text-slate-500">Penalidades</span><b className="mt-1 block text-amber-300">Carga +{(loadPenalty * 100).toFixed(0)}% · clima {weatherModifier > 0 ? "+" : ""}{(weatherModifier * 100).toFixed(0)}%</b></div>
             <div><span className="text-slate-500">Descanso e fadiga</span><b className="mt-1 block text-purple-200">+{formatDuration(restHours)} · fadiga +{(fatiguePenalty * 100).toFixed(0)}%</b></div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="mb-2 flex items-center gap-2"><Landmark size={14} className="text-yellow-300" /><p className="text-[10px] font-black uppercase tracking-widest text-slate-300">Visibilidade do mapa</p><span className="text-[9px] text-slate-500">Ative somente as camadas que deseja consultar</span></div>
+            <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
+              {([
+                ["LANDMARK", "★ Turismo", "border-yellow-400/30 bg-yellow-400/10 text-yellow-200"],
+                ["REST_POINT", "⛺ Descanso", "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"],
+                ["MIAUVADAO_BRANCH", "📦 Miauvadão", "border-orange-400/30 bg-orange-400/10 text-orange-200"],
+                ["TRAPACA_HIDEOUT", "☠ Ordem da Trapaça", "border-purple-400/30 bg-purple-400/10 text-purple-200"],
+              ] as Array<[DeliveryPoiType, string, string]>).map(([type, label, activeClass]) => {
+                const count = DELIVERY_POIS.filter(poi => poi.type === type).length;
+                return <button type="button" key={type} aria-pressed={poiVisibility[type]} onClick={() => setPoiVisibility(current => ({ ...current, [type]: !current[type] }))} className={`rounded-xl border px-2.5 py-2 text-left text-[9px] font-black transition ${poiVisibility[type] ? activeClass : "border-slate-700 bg-slate-900 text-slate-500"}`}><span className="flex items-center justify-between"><span>{label}</span><span>{count}</span></span><span className="mt-0.5 block text-[8px] font-normal opacity-70">{poiVisibility[type] ? "Visível" : "Oculto"}</span></button>;
+              })}
+            </div>
+            <p className="mt-2 text-[8px] text-slate-500">Os esconderijos estão visíveis somente como ferramenta de debug administrativo. No jogo final poderão exigir descoberta ou evento ativo.</p>
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl">
