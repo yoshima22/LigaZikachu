@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Map as LeafletMap, Marker, Polyline } from "leaflet";
+import type { Circle, Map as LeafletMap, Marker, Polyline } from "leaflet";
 import {
   Box,
   Bug,
@@ -232,7 +232,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [roadRoute, setRoadRoute] = useState<{ points: Array<{ lat: number; lng: number }>; distanceKm: number } | null>(null);
   const [roadError, setRoadError] = useState<string | null>(null);
   const [roadLoading, setRoadLoading] = useState(false);
-  const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, LOCAL_STOP: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
+  const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, LOCAL_STOP: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: true, SPECIAL_POI: false });
   const [forcedPoiType, setForcedPoiType] = useState<DeliveryPoiType | null>(null);
   const [mascotSearch, setMascotSearch] = useState("");
   const [originCountry, setOriginCountry] = useState("Todos");
@@ -249,6 +249,8 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const mapNodeRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const courierMarkerRef = useRef<Marker | null>(null);
+  const enemyMarkerRef = useRef<Marker | null>(null);
+  const flareRadiusRef = useRef<Circle | null>(null);
   const routeRef = useRef<Polyline | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const progressRef = useRef(0);
@@ -305,6 +307,9 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       .map(poi => ({ poi, distance: haversineKm({ ...origin, lat: target.lat, lng: target.lng }, { ...origin, lat: poi.lat, lng: poi.lng }) }))
       .sort((a, b) => a.distance - b.distance)[0]?.poi;
   }, [encounterAt, origin, routePoints]);
+  const encounterTarget = useMemo(() => pointAlongPath(routePoints, encounterAt), [encounterAt, routePoints]);
+  const enemyApproachRatio = clamp((12 - encounterSeconds) / 12);
+  const flareEffective = status === "INTERCEPTED" && enemyApproachRatio >= 0.58;
   const tripClass = distanceKm <= 900 ? "Curta" : distanceKm <= 3500 ? "Média" : "Longa";
   const insurance = tripClass === "Curta"
     ? { price: 550, returnMinutes: 10, refundChance: 0, refundMin: 0, refundMax: 0 }
@@ -364,6 +369,8 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     if (!L || !map) return;
     routeRef.current?.remove();
     courierMarkerRef.current?.remove();
+    enemyMarkerRef.current?.remove();
+    flareRadiusRef.current?.remove();
     map.eachLayer((layer) => {
       if ((layer as { options?: { pane?: string } }).options?.pane === "markerPane") map.removeLayer(layer);
     });
@@ -408,6 +415,17 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         .on("click", () => setSelectedPoi(poi));
     });
 
+    if (weatherEnabled) logicalRoutePoints.forEach((point, index) => {
+      const current = weather[index]?.current;
+      if (!current) return;
+      const code = current.weather_code;
+      const severeWind = current.wind_speed_10m >= 50 || current.wind_gusts_10m >= 70;
+      const symbol = code >= 95 ? "⛈" : code >= 71 && code <= 86 ? "❄" : [45, 48].includes(code) ? "🌫" : code >= 51 ? "🌧" : severeWind ? "🌪" : code <= 1 ? "☀" : "☁";
+      const warning = code >= 95 ? "Tempestade elétrica" : code >= 71 && code <= 86 ? "Nevasca/neve" : severeWind ? "Ventania severa" : weatherLabel(code);
+      const weatherIcon = L.divIcon({ className: "delivery-weather-icon", html: `<div style="display:grid;place-items:center;width:36px;height:36px;border-radius:999px;background:rgba(2,6,23,.86);border:1px solid rgba(125,211,252,.55);box-shadow:0 0 18px rgba(56,189,248,.28);font-size:19px">${symbol}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
+      L.marker([point.lat, point.lng], { icon: weatherIcon, zIndexOffset: 500 }).addTo(map).bindTooltip(`<b>${warning}</b><br>${current.temperature_2m}°C · vento ${current.wind_speed_10m} km/h${current.wind_gusts_10m ? ` · rajadas ${current.wind_gusts_10m} km/h` : ""}`, { direction: "top" });
+    });
+
     if (mascot) {
       const courierIcon = L.divIcon({
         className: "delivery-mascot-icon",
@@ -419,9 +437,19 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         .addTo(map)
         .bindTooltip(`${mascot.name} · ${(progressRef.current * 100).toFixed(0)}%`, { direction: "top", offset: [0, -28] });
     }
+    if (status === "INTERCEPTED") {
+      flareRadiusRef.current = L.circle([encounterTarget.lat, encounterTarget.lng], { radius: 45000, color: flareEffective ? "#fde047" : "#fb7185", fillColor: flareEffective ? "#facc15" : "#ef4444", fillOpacity: 0.12, weight: 2, dashArray: "7 7" }).addTo(map).bindTooltip("Alcance efetivo do sinalizador: 45 km", { direction: "top" });
+      const base = encounterBase ?? { lat: encounterTarget.lat + 0.8, lng: encounterTarget.lng + 0.8 };
+      const deltaLat = base.lat - encounterTarget.lat;
+      const deltaLng = base.lng - encounterTarget.lng;
+      const scale = Math.min(1, 0.9 / Math.max(0.001, Math.hypot(deltaLat, deltaLng)));
+      const start = { lat: encounterTarget.lat + deltaLat * scale, lng: encounterTarget.lng + deltaLng * scale };
+      const enemyIcon = L.divIcon({ className: "delivery-enemy-icon", html: `<div style="position:relative;display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:rgba(69,10,10,.92);border:2px solid #fb7185;box-shadow:0 0 28px rgba(239,68,68,.65)"><span style="font-size:27px">🥷</span><small style="position:absolute;bottom:-15px;white-space:nowrap;color:#fecaca;font-weight:900;font-size:9px">ORDEM</small></div>`, iconSize: [52, 52], iconAnchor: [26, 26] });
+      enemyMarkerRef.current = L.marker([start.lat, start.lng], { icon: enemyIcon, zIndexOffset: 1100 }).addTo(map).bindTooltip(`${encounterEnemy} · aproximando-se`, { direction: "top", offset: [0, -25] });
+    }
     if (suppressNextFitRef.current) suppressNextFitRef.current = false;
     else map.fitBounds(line.getBounds().pad(0.42), { animate: true, maxZoom: 6 });
-  }, [destination, forcedPoiType, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, weather]);
+  }, [destination, encounterBase, encounterEnemy, encounterTarget, flareEffective, forcedPoiType, logicalRoutePoints, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, status, weather, weatherEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -518,6 +546,21 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     marker.setLatLng([position.lat, position.lng]);
     marker.setTooltipContent(`${mascot?.name ?? "Mascote"} · ${(progress * 100).toFixed(0)}%`);
   }, [mascot?.name, progress, routePoints]);
+
+  useEffect(() => {
+    const enemy = enemyMarkerRef.current;
+    const circle = flareRadiusRef.current;
+    if (status !== "INTERCEPTED" || !enemy) return;
+    const base = encounterBase ?? { lat: encounterTarget.lat + 0.8, lng: encounterTarget.lng + 0.8 };
+    const deltaLat = base.lat - encounterTarget.lat;
+    const deltaLng = base.lng - encounterTarget.lng;
+    const scale = Math.min(1, 0.9 / Math.max(0.001, Math.hypot(deltaLat, deltaLng)));
+    const start = { lat: encounterTarget.lat + deltaLat * scale, lng: encounterTarget.lng + deltaLng * scale };
+    const eased = 1 - (1 - enemyApproachRatio) ** 1.5;
+    enemy.setLatLng([start.lat + (encounterTarget.lat - start.lat) * eased, start.lng + (encounterTarget.lng - start.lng) * eased]);
+    enemy.setTooltipContent(`${encounterEnemy} · ${flareEffective ? "dentro do alcance" : "aproximando-se"}`);
+    circle?.setStyle({ color: flareEffective ? "#fde047" : "#fb7185", fillColor: flareEffective ? "#facc15" : "#ef4444" });
+  }, [encounterBase, encounterEnemy, encounterTarget, enemyApproachRatio, flareEffective, status]);
 
   function reset() {
     progressRef.current = 0;
@@ -718,7 +761,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
               <div ref={mapNodeRef} className={`absolute inset-0 ${styles.mapShell}`} />
               {!mapReady && <div className="absolute inset-0 z-10 grid place-items-center bg-slate-950"><p className="animate-pulse text-sm text-cyan-200">Carregando mapa real…</p></div>}
               {status === "DELIVERED" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[500] rounded-2xl border border-emerald-300/35 bg-emerald-950/90 p-4 text-center shadow-[0_0_40px_rgba(16,185,129,.35)] backdrop-blur"><p className="font-pixel text-xs text-emerald-300">ENTREGA CONCLUÍDA!</p><p className="mt-2 text-xs text-emerald-50">{mascot?.name} chegou a {destination.name}. Nenhuma recompensa foi gerada neste protótipo.</p></div>}
-              {status === "INTERCEPTED" && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-red-300/50 bg-red-950/95 p-5 text-center shadow-[0_0_55px_rgba(239,68,68,.45)] backdrop-blur"><Siren size={30} className="mx-auto animate-pulse text-red-300" /><p className="mt-2 font-pixel text-xs text-red-200">INTERCEPTAÇÃO!</p><p className="mt-2 text-sm font-black text-white">{encounterEnemy} saiu de {encounterBase?.name ?? "uma base próxima"} e está alcançando {mascot?.name}.</p><p className="mt-1 text-xs text-red-100">Solte um sinalizador antes que a carga seja roubada · {encounterSeconds}s</p><button type="button" onClick={fireFlare} className="mt-4 rounded-xl bg-yellow-300 px-5 py-3 text-xs font-black text-slate-950 shadow-[0_0_25px_rgba(253,224,71,.5)]">🔥 SOLTAR SINALIZADOR</button><p className="mt-2 text-[9px] text-red-200">Botão temporário de debug; futuramente consumirá 1 Sinalizador enviado na carga.</p></div>}
+              {status === "INTERCEPTED" && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-red-300/50 bg-red-950/95 p-5 text-center shadow-[0_0_55px_rgba(239,68,68,.45)] backdrop-blur"><Siren size={30} className="mx-auto animate-pulse text-red-300" /><p className="mt-2 font-pixel text-xs text-red-200">INTERCEPTAÇÃO!</p><p className="mt-2 text-sm font-black text-white">{encounterEnemy} saiu de {encounterBase?.name ?? "uma base próxima"} e está alcançando {mascot?.name}.</p><p className="mt-1 text-xs text-red-100">O círculo no mapa mostra os 45 km de alcance · {encounterSeconds}s</p><p className={`mt-2 text-[10px] font-black ${flareEffective ? "text-yellow-200" : "text-slate-300"}`}>{flareEffective ? "ALVO NO ALCANCE — DISPARE AGORA!" : "Aguarde o perseguidor entrar na área do sinalizador."}</p><button type="button" disabled={!flareEffective} onClick={fireFlare} className="mt-3 rounded-xl bg-yellow-300 px-5 py-3 text-xs font-black text-slate-950 shadow-[0_0_25px_rgba(253,224,71,.5)] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-none">🔥 SOLTAR SINALIZADOR</button><p className="mt-2 text-[9px] text-red-200">Botão temporário de debug; futuramente consumirá 1 Sinalizador enviado na carga.</p></div>}
               {(status === "ROBBED" || status === "RESCUE") && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-orange-300/40 bg-slate-950/95 p-5 text-center shadow-2xl backdrop-blur"><AlertTriangle size={28} className="mx-auto text-orange-300" /><p className="mt-2 font-pixel text-xs text-orange-200">CARGA INTERCEPTADA</p><p className="mt-2 text-xs text-slate-200">{rescueMessage}</p>{status === "ROBBED" && !insured && <div className="mt-4 flex flex-wrap justify-center gap-2"><button type="button" onClick={() => startRescue("OWN")} className="flex items-center gap-2 rounded-xl bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><Users size={14} /> Enviar equipe própria</button><button type="button" onClick={() => startRescue("FRIEND")} className="flex items-center gap-2 rounded-xl border border-purple-300 bg-purple-400/15 px-3 py-2 text-xs font-black text-purple-100"><Users size={14} /> Pedir resgate a amigo</button></div>}<button type="button" onClick={reset} className="mt-3 text-[9px] font-bold text-slate-400 underline">Encerrar simulação</button></div>}
               {rescueMessage && status === "RUNNING" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[500] rounded-xl border border-yellow-300/25 bg-slate-950/90 px-4 py-3 text-center text-xs font-bold text-yellow-100 shadow-xl">{rescueMessage}</div>}
             </div>
