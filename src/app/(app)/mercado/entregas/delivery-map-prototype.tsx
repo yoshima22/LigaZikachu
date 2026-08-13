@@ -210,6 +210,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [roadLoading, setRoadLoading] = useState(false);
   const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
   const [selectedPoi, setSelectedPoi] = useState<DeliveryPoi | null>(null);
+  const [mapZoom, setMapZoom] = useState(4);
   const [weatherEnabled, setWeatherEnabled] = useState(true);
   const [weather, setWeather] = useState<WeatherSnapshot[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -222,6 +223,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const progressRef = useRef(0);
   const lastFrameRef = useRef<number | null>(null);
+  const suppressNextFitRef = useRef(false);
 
   const mascot = mascots.find((item) => item.id === mascotId) ?? mascots[0];
   const availablePlaces = useMemo(() => home ? [...PLACES, { id: "home", name: home.label, state: "", country: "Casa do jogador", region: "Pessoal", lat: home.lat, lng: home.lng }] : PLACES, [home]);
@@ -347,7 +349,10 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       TRAPACA_HIDEOUT: { className: "delivery-trapaca-icon", html: '<div class="delivery-trapaca-pin">☠</div>', label: "Esconderijo da Ordem" },
       SPECIAL_POI: { className: "delivery-special-icon", html: '<div class="delivery-special-pin">!</div>', label: "Evento especial" },
     };
-    DELIVERY_POIS.filter(poi => poiVisibility[poi.type] && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id))).forEach((poi) => {
+    DELIVERY_POIS.filter((poi) => {
+      const zoomVisible = poi.visibility === "LOCAL" ? mapZoom >= 7 : poi.visibility === "REGIONAL" ? mapZoom >= 5 : true;
+      return zoomVisible && poiVisibility[poi.type] && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id));
+    }).forEach((poi) => {
       const meta = poiMeta[poi.type];
       const icon = L.divIcon({ className: meta.className, html: meta.html, iconSize: [30, 30], iconAnchor: [15, 15] });
       L.marker([poi.lat, poi.lng], { icon }).addTo(map)
@@ -366,8 +371,9 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         .addTo(map)
         .bindTooltip(`${mascot.name} · ${(progressRef.current * 100).toFixed(0)}%`, { direction: "top", offset: [0, -28] });
     }
-    map.fitBounds(line.getBounds().pad(0.42), { animate: true, maxZoom: 6 });
-  }, [destination, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, weather]);
+    if (suppressNextFitRef.current) suppressNextFitRef.current = false;
+    else map.fitBounds(line.getBounds().pad(0.42), { animate: true, maxZoom: 6 });
+  }, [destination, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, weather]);
 
   useEffect(() => {
     let cancelled = false;
@@ -381,6 +387,11 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         maxZoom: 18,
       }).addTo(map);
       mapRef.current = map;
+      map.on("zoomend", () => {
+        const nextZoom = map.getZoom();
+        suppressNextFitRef.current = true;
+        setMapZoom(nextZoom);
+      });
       setMapReady(true);
       window.setTimeout(() => map.invalidateSize(), 100);
     });
@@ -576,7 +587,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
                 return <button type="button" key={type} aria-pressed={poiVisibility[type]} onClick={() => setPoiVisibility(current => ({ ...current, [type]: !current[type] }))} className={`rounded-xl border px-2.5 py-2 text-left text-[9px] font-black transition ${poiVisibility[type] ? activeClass : "border-slate-700 bg-slate-900 text-slate-500"}`}><span className="flex items-center justify-between"><span>{label}</span><span>{count}</span></span><span className="mt-0.5 block text-[8px] font-normal opacity-70">{poiVisibility[type] ? "Visível" : "Oculto"}</span></button>;
               })}
             </div>
-            <p className="mt-2 text-[8px] text-slate-500">Os esconderijos estão visíveis somente como ferramenta de debug administrativo. No jogo final poderão exigir descoberta ou evento ativo.</p>
+            <p className="mt-2 text-[8px] text-slate-500">Zoom atual: {mapZoom}. Hubs mundiais aparecem sempre; pontos regionais surgem no zoom 5 e locais no zoom 7. Os esconderijos continuam dependendo do filtro administrativo.</p>
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl">
