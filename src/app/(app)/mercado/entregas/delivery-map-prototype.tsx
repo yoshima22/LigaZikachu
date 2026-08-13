@@ -28,6 +28,10 @@ import {
   BookOpen,
   Search,
   Eye,
+  ShieldCheck,
+  Siren,
+  Users,
+  AlertTriangle,
 } from "lucide-react";
 import styles from "./delivery-map-prototype.module.css";
 import { DELIVERY_POIS, buildDensePoiNetwork, type DeliveryPoi, type DeliveryPoiType } from "./delivery-pois";
@@ -46,7 +50,7 @@ type MascotOption = {
 };
 
 type Place = { id: string; name: string; state: string; country: string; region: string; lat: number; lng: number; port?: boolean };
-type TripStatus = "READY" | "RUNNING" | "PAUSED" | "DELIVERED";
+type TripStatus = "READY" | "RUNNING" | "PAUSED" | "INTERCEPTED" | "ROBBED" | "RESCUE" | "DELIVERED";
 type RouteMode = "AIR" | "WATER" | "LAND";
 type WeatherSnapshot = { current?: { temperature_2m: number; apparent_temperature: number; precipitation: number; weather_code: number; wind_speed_10m: number; wind_gusts_10m: number; is_day: number } };
 
@@ -214,6 +218,12 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [status, setStatus] = useState<TripStatus>("READY");
   const [progress, setProgress] = useState(0);
   const [debugSpeed, setDebugSpeed] = useState(1);
+  const [insured, setInsured] = useState(false);
+  const [encounterAt, setEncounterAt] = useState(0.42);
+  const [encounterEnemy, setEncounterEnemy] = useState("Sneasel da Ordem");
+  const [encounterSeconds, setEncounterSeconds] = useState(0);
+  const [encounterResolved, setEncounterResolved] = useState(false);
+  const [rescueMessage, setRescueMessage] = useState<string | null>(null);
   const [simulatedAgility, setSimulatedAgility] = useState<number | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("LAND");
   const [home, setHome] = useState(initialHome);
@@ -289,6 +299,18 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const realHours = distanceKm / effectiveSpeed * (1 + loadPenalty + weatherModifier + fatiguePenalty) + restHours;
   const debugDuration = clamp(12 + distanceKm / 150 - agilityRatio * 5 + loadPenalty * 10, 8, 35);
   const remainingDebug = debugDuration * (1 - progress);
+  const encounterBase = useMemo(() => {
+    const target = pointAlongPath(routePoints, encounterAt);
+    return MAP_POIS.filter(poi => poi.type === "TRAPACA_HIDEOUT")
+      .map(poi => ({ poi, distance: haversineKm({ ...origin, lat: target.lat, lng: target.lng }, { ...origin, lat: poi.lat, lng: poi.lng }) }))
+      .sort((a, b) => a.distance - b.distance)[0]?.poi;
+  }, [encounterAt, origin, routePoints]);
+  const tripClass = distanceKm <= 900 ? "Curta" : distanceKm <= 3500 ? "Média" : "Longa";
+  const insurance = tripClass === "Curta"
+    ? { price: 550, returnMinutes: 10, refundChance: 0, refundMin: 0, refundMax: 0 }
+    : tripClass === "Média"
+      ? { price: 950, returnMinutes: 30, refundChance: 35, refundMin: 170, refundMax: 370 }
+      : { price: 1450, returnMinutes: 20, refundChance: 60, refundMin: 550, refundMax: 1050 };
 
   useEffect(() => { progressRef.current = progress; }, [progress]);
 
@@ -452,6 +474,13 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       const previous = lastFrameRef.current ?? now;
       lastFrameRef.current = now;
       const next = clamp(progressRef.current + ((now - previous) / 1000) * debugSpeed / debugDuration);
+      if (!encounterResolved && next >= encounterAt) {
+        progressRef.current = encounterAt;
+        setProgress(encounterAt);
+        setEncounterSeconds(12);
+        setStatus("INTERCEPTED");
+        return;
+      }
       progressRef.current = next;
       setProgress(next);
       if (next >= 1) {
@@ -462,7 +491,25 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [debugDuration, debugSpeed, status]);
+  }, [debugDuration, debugSpeed, encounterAt, encounterResolved, status]);
+
+  useEffect(() => {
+    if (status !== "INTERCEPTED") return;
+    if (encounterSeconds <= 0) {
+      if (insured) {
+        setStatus("RESCUE");
+        const refundWon = insurance.refundChance > 0 && Math.random() * 100 < insurance.refundChance;
+        const refund = refundWon ? Math.round(insurance.refundMin + Math.random() * (insurance.refundMax - insurance.refundMin)) : 0;
+        setRescueMessage(`Zika Seguros acionado: retorno em ${insurance.returnMinutes} minutos.${refund ? ` Reembolso sorteado: ${refund} ZC.` : ""}`);
+      } else {
+        setStatus("ROBBED");
+        setRescueMessage("Carga roubada. Escolha uma operação de resgate.");
+      }
+      return;
+    }
+    const timer = window.setTimeout(() => setEncounterSeconds(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [encounterSeconds, insurance.refundChance, insurance.refundMax, insurance.refundMin, insurance.returnMinutes, insured, status]);
 
   useEffect(() => {
     const marker = courierMarkerRef.current;
@@ -476,8 +523,35 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     progressRef.current = 0;
     setProgress(0);
     setStatus("READY");
+    setEncounterResolved(false);
+    setEncounterSeconds(0);
+    setRescueMessage(null);
     setWeatherError(null);
     lastFrameRef.current = null;
+  }
+
+  function dispatchTrip() {
+    setEncounterAt(0.28 + Math.random() * 0.44);
+    setEncounterEnemy(["Sneasel da Ordem", "Crobat contrabandista", "Weavile saqueador", "Accelgor da Trapaça"][Math.floor(Math.random() * 4)]);
+    setEncounterResolved(false);
+    setRescueMessage(null);
+    setStatus("RUNNING");
+  }
+
+  function fireFlare() {
+    setEncounterResolved(true);
+    setEncounterSeconds(0);
+    setRescueMessage(`${encounterEnemy} fugiu ao ver o sinalizador. A carga continua segura.`);
+    setStatus("RUNNING");
+  }
+
+  function startRescue(kind: "OWN" | "FRIEND") {
+    const ownMax = tripClass === "Curta" ? 3 : 6;
+    const agilityReduction = clamp((mascot?.agility ?? 0) / 250, 0, 1) * 0.55;
+    const ownHours = Math.max(0.5, ownMax * (1 - agilityReduction));
+    const hours = kind === "FRIEND" ? ownHours / 3 : ownHours;
+    setRescueMessage(kind === "FRIEND" ? `Pedido de resgate enviado a um amigo: previsão de ${formatDuration(hours)}. Limite diário usado.` : `Equipe própria enviada: previsão de ${formatDuration(hours)} baseada na Agilidade.`);
+    setStatus("RESCUE");
   }
 
   function swapRoute() {
@@ -587,10 +661,16 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
             <div><div className="mb-1 flex justify-between text-[10px]"><span>Carga</span><b>{cargoKg} kg</b></div><input type="range" min={1} max={100} value={cargoKg} onChange={(e) => setCargoKg(Number(e.target.value))} className="w-full accent-yellow-400" /></div>
             <div><div className="mb-1 flex justify-between text-[10px]"><span>Agilidade simulada</span><b>{simulatedAgility ?? "Real"}</b></div><input type="range" min={0} max={250} value={simulatedAgility ?? mascot?.agility ?? 0} onChange={(e) => setSimulatedAgility(Number(e.target.value))} className="w-full accent-cyan-400" /><button type="button" onClick={() => setSimulatedAgility(null)} className="mt-1 text-[9px] text-cyan-300 hover:underline">Usar atributo real</button></div>
             <div className="grid grid-cols-3 gap-1.5">{[1, 4, 20].map(speed => <button type="button" key={speed} onClick={() => setDebugSpeed(speed)} className={`rounded-lg border px-2 py-1.5 text-[10px] font-black ${debugSpeed === speed ? "border-yellow-400 bg-yellow-400/15 text-yellow-300" : "border-slate-700 text-slate-400"}`}>{speed}x</button>)}</div>
+            <button type="button" disabled={status !== "RUNNING" || encounterResolved} onClick={() => { setEncounterSeconds(12); setStatus("INTERCEPTED"); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/30 bg-red-400/10 px-2 py-2 text-[9px] font-black text-red-200 disabled:opacity-35"><AlertTriangle size={13} /> Forçar interceptação</button>
+          </div>
+
+          <div className="rounded-2xl border border-blue-400/20 bg-blue-400/5 p-3">
+            <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-200"><ShieldCheck size={14} /> Zika Seguros</div><p className="mt-1 text-[9px] text-slate-400">Viagem {tripClass.toLowerCase()} · cobertura de {insurance.price} ZC</p></div><button type="button" disabled={status !== "READY"} onClick={() => setInsured(value => !value)} className={`rounded-full border px-2.5 py-1 text-[9px] font-black ${insured ? "border-blue-300 bg-blue-300 text-slate-950" : "border-slate-600 text-slate-400"}`}>{insured ? "CONTRATADO" : "SEM SEGURO"}</button></div>
+            <p className="mt-2 text-[9px] leading-relaxed text-slate-300">Resgate automático em {insurance.returnMinutes} min{insurance.refundChance ? ` e ${insurance.refundChance}% de chance de reembolso entre ${insurance.refundMin} e ${insurance.refundMax} ZC` : ""}. <b className="text-yellow-300">Debug: nenhum ZC será descontado.</b></p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {status === "RUNNING" ? <button type="button" onClick={() => setStatus("PAUSED")} className="flex items-center justify-center gap-2 rounded-xl bg-yellow-400 px-3 py-2.5 text-xs font-black text-slate-950"><Pause size={15} /> Pausar</button> : <button type="button" disabled={!mascot || routeInvalid || roadLoading || status === "DELIVERED"} onClick={() => setStatus("RUNNING")} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40"><Play size={15} /> {status === "PAUSED" ? "Continuar" : "Despachar"}</button>}
+            {status === "RUNNING" ? <button type="button" onClick={() => setStatus("PAUSED")} className="flex items-center justify-center gap-2 rounded-xl bg-yellow-400 px-3 py-2.5 text-xs font-black text-slate-950"><Pause size={15} /> Pausar</button> : <button type="button" disabled={!mascot || routeInvalid || roadLoading || !["READY", "PAUSED"].includes(status)} onClick={() => status === "PAUSED" ? setStatus("RUNNING") : dispatchTrip()} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40"><Play size={15} /> {status === "PAUSED" ? "Continuar" : "Despachar"}</button>}
             <button type="button" onClick={reset} className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5 text-xs font-bold text-slate-300"><RotateCcw size={15} /> Reiniciar</button>
             <button type="button" disabled={status === "READY" || status === "DELIVERED"} onClick={() => { const next = clamp(progressRef.current + 0.25); progressRef.current = next; setProgress(next); if (next >= 1) setStatus("DELIVERED"); }} className="flex items-center justify-center gap-2 rounded-xl border border-purple-400/30 bg-purple-400/10 px-3 py-2 text-[10px] font-bold text-purple-200 disabled:opacity-40"><StepForward size={14} /> +25%</button>
             <button type="button" disabled={status === "READY" || status === "DELIVERED"} onClick={() => { progressRef.current = 1; setProgress(1); setStatus("DELIVERED"); }} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-200 disabled:opacity-40"><Sparkles size={14} /> Concluir</button>
@@ -632,12 +712,15 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
           <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="flex items-center gap-2"><MapPin size={16} className="text-cyan-300" /><div><p className="text-xs font-black text-white">{origin.name}, {origin.country} → {destination.name}, {destination.country}</p><p className="text-[9px] text-slate-500">{routeInfo.label} · {routeMode === "LAND" ? "traçado rodoviário real" : routeMode === "AIR" ? "linha direta pelo ar" : "corredor por portos e ilhas"} · {restStops.length ? restStops.map(stop => stop.name).join(" → ") : "sem paradas"}</p></div></div>
-              <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${status === "DELIVERED" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "RUNNING" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-300"}`}>{status === "READY" ? "Aguardando despacho" : status === "RUNNING" ? "Em trânsito" : status === "PAUSED" ? "Simulação pausada" : "Entrega concluída"}</span>
+              <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${status === "DELIVERED" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "INTERCEPTED" || status === "ROBBED" ? "border-red-400/40 bg-red-400/10 text-red-200" : status === "RUNNING" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-300"}`}>{status === "READY" ? "Aguardando despacho" : status === "RUNNING" ? "Em trânsito" : status === "PAUSED" ? "Simulação pausada" : status === "INTERCEPTED" ? "Tentativa de interceptação" : status === "ROBBED" ? "Carga roubada" : status === "RESCUE" ? "Resgate em andamento" : "Entrega concluída"}</span>
             </div>
             <div className="relative h-[530px] max-h-[68vh] min-h-[420px]">
               <div ref={mapNodeRef} className={`absolute inset-0 ${styles.mapShell}`} />
               {!mapReady && <div className="absolute inset-0 z-10 grid place-items-center bg-slate-950"><p className="animate-pulse text-sm text-cyan-200">Carregando mapa real…</p></div>}
               {status === "DELIVERED" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[500] rounded-2xl border border-emerald-300/35 bg-emerald-950/90 p-4 text-center shadow-[0_0_40px_rgba(16,185,129,.35)] backdrop-blur"><p className="font-pixel text-xs text-emerald-300">ENTREGA CONCLUÍDA!</p><p className="mt-2 text-xs text-emerald-50">{mascot?.name} chegou a {destination.name}. Nenhuma recompensa foi gerada neste protótipo.</p></div>}
+              {status === "INTERCEPTED" && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-red-300/50 bg-red-950/95 p-5 text-center shadow-[0_0_55px_rgba(239,68,68,.45)] backdrop-blur"><Siren size={30} className="mx-auto animate-pulse text-red-300" /><p className="mt-2 font-pixel text-xs text-red-200">INTERCEPTAÇÃO!</p><p className="mt-2 text-sm font-black text-white">{encounterEnemy} saiu de {encounterBase?.name ?? "uma base próxima"} e está alcançando {mascot?.name}.</p><p className="mt-1 text-xs text-red-100">Solte um sinalizador antes que a carga seja roubada · {encounterSeconds}s</p><button type="button" onClick={fireFlare} className="mt-4 rounded-xl bg-yellow-300 px-5 py-3 text-xs font-black text-slate-950 shadow-[0_0_25px_rgba(253,224,71,.5)]">🔥 SOLTAR SINALIZADOR</button><p className="mt-2 text-[9px] text-red-200">Botão temporário de debug; futuramente consumirá 1 Sinalizador enviado na carga.</p></div>}
+              {(status === "ROBBED" || status === "RESCUE") && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-orange-300/40 bg-slate-950/95 p-5 text-center shadow-2xl backdrop-blur"><AlertTriangle size={28} className="mx-auto text-orange-300" /><p className="mt-2 font-pixel text-xs text-orange-200">CARGA INTERCEPTADA</p><p className="mt-2 text-xs text-slate-200">{rescueMessage}</p>{status === "ROBBED" && !insured && <div className="mt-4 flex flex-wrap justify-center gap-2"><button type="button" onClick={() => startRescue("OWN")} className="flex items-center gap-2 rounded-xl bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><Users size={14} /> Enviar equipe própria</button><button type="button" onClick={() => startRescue("FRIEND")} className="flex items-center gap-2 rounded-xl border border-purple-300 bg-purple-400/15 px-3 py-2 text-xs font-black text-purple-100"><Users size={14} /> Pedir resgate a amigo</button></div>}<button type="button" onClick={reset} className="mt-3 text-[9px] font-bold text-slate-400 underline">Encerrar simulação</button></div>}
+              {rescueMessage && status === "RUNNING" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[500] rounded-xl border border-yellow-300/25 bg-slate-950/90 px-4 py-3 text-center text-xs font-bold text-yellow-100 shadow-xl">{rescueMessage}</div>}
             </div>
             <div className="border-t border-white/10 p-4">
               <div className="mb-2 flex justify-between text-[10px]"><span className="text-slate-400">Progresso da rota</span><b className="text-cyan-200">{(progress * 100).toFixed(1)}%</b></div>
