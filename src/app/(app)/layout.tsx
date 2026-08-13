@@ -22,6 +22,8 @@ import { RouteTutorialHelpButton } from "@/components/tutorial/route-tutorial-he
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
 import { MobileTitleTooltips } from "@/components/mobile-title-tooltips";
+import { isBirthdayGiftEligible } from "@/lib/birthday";
+import { BirthdayRouletteLauncher } from "./_components/birthday-roulette-launcher";
 import { LogoutButton } from "@/components/logout-button";
 import {
   ORDER_EVENT_SLUG,
@@ -103,6 +105,16 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   const admin = isStaff(user.role);
+
+  // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
+  const birthdayPlayer = await prisma.player.findUnique({
+    where: { userId: user.id },
+    select: { birthDate: true, birthdayGiftYear: true, birthdayGiftPendingKit: true },
+  }).catch(() => null);
+  const birthdayPendingKit = birthdayPlayer?.birthdayGiftPendingKit ?? null;
+  const birthdayEligible = Boolean(birthdayPlayer) && (
+    isBirthdayGiftEligible(birthdayPlayer!.birthDate, birthdayPlayer!.birthdayGiftYear) || Boolean(birthdayPendingKit)
+  );
 
   const navData = await getNavData(user.id).catch((error) => {
     console.error("[Layout] nav data failed", { userId: user.id, error });
@@ -199,6 +211,7 @@ export default async function AppLayout({
       <MaintenanceVisibilityGuard />
       <SessionPersistenceGuard />
       <MobileTitleTooltips />
+      {birthdayEligible && <BirthdayRouletteLauncher pendingKitId={birthdayPendingKit} />}
       {shouldShowOrderIntro && (
         <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />
       )}

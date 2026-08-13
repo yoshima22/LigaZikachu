@@ -299,6 +299,8 @@ model Player {
   birthDate                   DateTime?
   // Último ano em que o presente de aniversário (roleta) foi resgatado.
   birthdayGiftYear            Int?
+  // Kit sorteado aguardando escolha (ex.: pedra de mega a escolher).
+  birthdayGiftPendingKit      String?
   // Código de convite único (6 dígitos) e quem convidou este jogador.
   inviteCode                  String?                        @unique
   invitedByPlayerId           String?
