@@ -116,9 +116,23 @@
 
 .mapShell :global(.delivery-miau-icon),
 .mapShell :global(.delivery-trapaca-icon),
-.mapShell :global(.delivery-special-icon) {
+.mapShell :global(.delivery-special-icon),
+.mapShell :global(.delivery-local-icon) {
   background: transparent;
   border: 0;
+}
+
+.mapShell :global(.delivery-local-pin) {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 2px solid #7dd3fc;
+  border-radius: 999px;
+  background: rgba(7, 89, 133, 0.95);
+  color: #e0f2fe;
+  font-size: 9px;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
 }
 
 .mapShell :global(.delivery-miau-pin),

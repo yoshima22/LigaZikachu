@@ -208,7 +208,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [roadRoute, setRoadRoute] = useState<{ points: Array<{ lat: number; lng: number }>; distanceKm: number } | null>(null);
   const [roadError, setRoadError] = useState<string | null>(null);
   const [roadLoading, setRoadLoading] = useState(false);
-  const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
+  const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, LOCAL_STOP: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
   const [selectedPoi, setSelectedPoi] = useState<DeliveryPoi | null>(null);
   const [mapZoom, setMapZoom] = useState(4);
   const [weatherEnabled, setWeatherEnabled] = useState(true);
@@ -344,6 +344,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     });
     const poiMeta: Record<DeliveryPoiType, { className: string; html: string; label: string }> = {
       LANDMARK: { className: "delivery-tourist-icon", html: '<div class="delivery-tourist-pin">★</div>', label: "Ponto turístico" },
+      LOCAL_STOP: { className: "delivery-local-icon", html: '<div class="delivery-local-pin">●</div>', label: "Ponto local" },
       REST_POINT: { className: "delivery-rest-icon", html: '<div class="delivery-rest-pin">⛺</div>', label: "Descanso" },
       MIAUVADAO_BRANCH: { className: "delivery-miau-icon", html: '<div class="delivery-miau-pin">📦</div>', label: "Filial do Miauvadão" },
       TRAPACA_HIDEOUT: { className: "delivery-trapaca-icon", html: '<div class="delivery-trapaca-pin">☠</div>', label: "Esconderijo da Ordem" },
@@ -576,9 +577,10 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
             <div className="mb-2 flex items-center gap-2"><Landmark size={14} className="text-yellow-300" /><p className="text-[10px] font-black uppercase tracking-widest text-slate-300">Visibilidade do mapa</p><span className="text-[9px] text-slate-500">Ative somente as camadas que deseja consultar</span></div>
-            <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1.5 md:grid-cols-5">
               {([
                 ["LANDMARK", "★ Turismo", "border-yellow-400/30 bg-yellow-400/10 text-yellow-200"],
+                ["LOCAL_STOP", "● Pontos locais", "border-sky-400/30 bg-sky-400/10 text-sky-200"],
                 ["REST_POINT", "⛺ Descanso", "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"],
                 ["MIAUVADAO_BRANCH", "📦 Miauvadão", "border-orange-400/30 bg-orange-400/10 text-orange-200"],
                 ["TRAPACA_HIDEOUT", "☠ Ordem da Trapaça", "border-purple-400/30 bg-purple-400/10 text-purple-200"],
@@ -620,17 +622,18 @@ type WikiPoiInfo = { title: string; extract: string; thumbnail?: string; pageUrl
 
 function PoiDetailsModal({ poi, onClose }: { poi: DeliveryPoi; onClose: () => void }) {
   const [info, setInfo] = useState<WikiPoiInfo | null>(null);
-  const [loading, setLoading] = useState(poi.type === "LANDMARK" || poi.type === "REST_POINT");
-  const realPlace = poi.type === "LANDMARK" || poi.type === "REST_POINT";
+  const externalLookup = poi.type === "LANDMARK" || poi.type === "LOCAL_STOP" || poi.type === "REST_POINT" || poi.type === "MIAUVADAO_BRANCH";
+  const [loading, setLoading] = useState(externalLookup);
+  const realPlace = poi.type !== "TRAPACA_HIDEOUT" && poi.type !== "SPECIAL_POI";
   useEffect(() => {
-    if (!realPlace) return;
+    if (!externalLookup) return;
     const cacheKey = `delivery-poi-wiki-v1:${poi.id}`;
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || "null") as { savedAt: number; value: WikiPoiInfo } | null;
       if (cached && Date.now() - cached.savedAt < 7 * 86400000) { setInfo(cached.value); setLoading(false); return; }
     } catch { /* cache inválido é ignorado */ }
-    const params = new URLSearchParams({ action: "query", format: "json", origin: "*", generator: "geosearch", ggscoord: `${poi.lat}|${poi.lng}`, ggsradius: "5000", ggslimit: "8", prop: "extracts|pageimages|info", exintro: "1", explaintext: "1", piprop: "thumbnail", pithumbsize: "900", inprop: "url" });
-    void fetch(`https://pt.wikipedia.org/w/api.php?${params}`).then(response => response.json()).then((data: { query?: { pages?: Record<string, { title: string; extract?: string; thumbnail?: { source: string }; fullurl?: string }> } }) => {
+    const params = new URLSearchParams({ action: "query", format: "json", origin: "*", maxlag: "3", generator: "geosearch", ggscoord: `${poi.lat}|${poi.lng}`, ggsradius: "5000", ggslimit: "8", prop: "extracts|pageimages|info", exintro: "1", explaintext: "1", piprop: "thumbnail", pithumbsize: "900", inprop: "url" });
+    void fetch(`https://pt.wikipedia.org/w/api.php?${params}`, { headers: { "Api-User-Agent": "LigaZikachuDeliveryMap/1.0 (https://ligazikachu.com.br)" } }).then(response => response.json()).then((data: { query?: { pages?: Record<string, { title: string; extract?: string; thumbnail?: { source: string }; fullurl?: string }> } }) => {
       const pages = Object.values(data.query?.pages ?? {});
       const words = poi.name.toLocaleLowerCase("pt-BR").split(/\s+/).filter(word => word.length > 3);
       const page = pages.sort((a, b) => words.filter(word => b.title.toLocaleLowerCase("pt-BR").includes(word)).length - words.filter(word => a.title.toLocaleLowerCase("pt-BR").includes(word)).length)[0];
@@ -639,9 +642,9 @@ function PoiDetailsModal({ poi, onClose }: { poi: DeliveryPoi; onClose: () => vo
       setInfo(value);
       try { localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), value })); } catch { /* quota local indisponível */ }
     }).catch(() => null).finally(() => setLoading(false));
-  }, [poi, realPlace]);
+  }, [externalLookup, poi]);
   const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(`${poi.lat},${poi.lng}`)}`;
-  const typeLabel: Record<DeliveryPoiType, string> = { LANDMARK: "Ponto turístico", REST_POINT: "Ponto de descanso", MIAUVADAO_BRANCH: "Filial do Miauvadão", TRAPACA_HIDEOUT: "Esconderijo da Ordem da Trapaça", SPECIAL_POI: "Local especial" };
+  const typeLabel: Record<DeliveryPoiType, string> = { LANDMARK: "Ponto turístico", LOCAL_STOP: "Ponto local", REST_POINT: "Ponto de descanso", MIAUVADAO_BRANCH: "Filial do Miauvadão", TRAPACA_HIDEOUT: "Esconderijo da Ordem da Trapaça", SPECIAL_POI: "Local especial" };
   const gameText = poi.description || (poi.type === "MIAUVADAO_BRANCH" ? "Ponto mundial de coleta, entrega e transferência de encomendas do Miauvadão." : poi.type === "REST_POINT" ? "Uma parada segura para recuperar o fôlego e reduzir a fadiga da viagem." : poi.type === "TRAPACA_HIDEOUT" ? "Local clandestino. Sua presença poderá gerar interceptações e missões especiais." : "Um lugar real que pode ser registrado no diário do mensageiro.");
   return <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <article className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-cyan-400/25 bg-slate-950 shadow-[0_0_60px_rgba(34,211,238,.18)]">
@@ -657,7 +660,7 @@ function PoiDetailsModal({ poi, onClose }: { poi: DeliveryPoi; onClose: () => vo
           {realPlace && <a href={streetViewUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><ExternalLink size={14} /> Abrir Street View</a>}
           {info?.pageUrl && <a href={info.pageUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200"><ExternalLink size={14} /> Ler na Wikipedia</a>}
         </div>
-        {info && <p className="border-t border-white/5 pt-3 text-[9px] leading-relaxed text-slate-500">Texto e imagem carregados diretamente da Wikipedia/Wikimedia. Clique na fonte para consultar o artigo, autoria e licença. A Liga não hospeda nem retransmite essa mídia.</p>}
+        {info && <p className="border-t border-white/5 pt-3 text-[9px] leading-relaxed text-slate-500">{poi.type === "MIAUVADAO_BRANCH" ? "A filial é fictícia; a foto e o texto representam a região real mais próxima. " : ""}Texto e imagem carregados diretamente da Wikipedia/Wikimedia. Clique na fonte para consultar o artigo, autoria e licença. A Liga não hospeda nem retransmite essa mídia.</p>}
       </div>
     </article>
   </div>;

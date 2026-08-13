@@ -1,4 +1,4 @@
-export type DeliveryPoiType = "LANDMARK" | "REST_POINT" | "MIAUVADAO_BRANCH" | "TRAPACA_HIDEOUT" | "SPECIAL_POI";
+export type DeliveryPoiType = "LANDMARK" | "LOCAL_STOP" | "REST_POINT" | "MIAUVADAO_BRANCH" | "TRAPACA_HIDEOUT" | "SPECIAL_POI";
 export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" };
 
 export const DELIVERY_POIS: DeliveryPoi[] = [
@@ -103,6 +103,31 @@ export const DELIVERY_POIS: DeliveryPoi[] = [
 // Pontos cotidianos aparecem apenas com aproximação do mapa. São referências
 // próprias do jogo, sem consulta automática a serviços pagos.
 const LOCAL_POIS: Array<[string, string, DeliveryPoiType, number, number, string, "REGIONAL" | "LOCAL"]> = [
+  ["stop_reykjavik_harpa", "Harpa Concert Hall", "LOCAL_STOP", 64.1505, -21.9326, "Reykjavík, Islândia", "LOCAL"],
+  ["stop_reykjavik_sun", "Sun Voyager", "LOCAL_STOP", 64.1476, -21.9222, "Reykjavík, Islândia", "LOCAL"],
+  ["stop_tromso_cathedral", "Catedral do Ártico", "LOCAL_STOP", 69.6487, 18.9872, "Tromsø, Noruega", "LOCAL"],
+  ["stop_tromso_harbor", "Porto de Tromsø", "LOCAL_STOP", 69.652, 18.961, "Tromsø, Noruega", "LOCAL"],
+  ["stop_rovaniemi_square", "Praça Lordi", "LOCAL_STOP", 66.5028, 25.7294, "Rovaniemi, Finlândia", "LOCAL"],
+  ["stop_kiruna_church", "Igreja de Kiruna", "LOCAL_STOP", 67.8558, 20.2253, "Kiruna, Suécia", "LOCAL"],
+  ["stop_nuuk_museum", "Museu Nacional da Groenlândia", "LOCAL_STOP", 64.175, -51.738, "Nuuk, Groenlândia", "LOCAL"],
+  ["stop_longyearbyen_museum", "Museu de Svalbard", "LOCAL_STOP", 78.2232, 15.6469, "Longyearbyen, Svalbard", "LOCAL"],
+  ["stop_helsinki_senate", "Praça do Senado", "LOCAL_STOP", 60.1695, 24.9523, "Helsinque, Finlândia", "LOCAL"],
+  ["stop_stockholm_cityhall", "Prefeitura de Estocolmo", "LOCAL_STOP", 59.3275, 18.0543, "Estocolmo, Suécia", "LOCAL"],
+  ["stop_oslo_opera", "Ópera de Oslo", "LOCAL_STOP", 59.9075, 10.753, "Oslo, Noruega", "LOCAL"],
+  ["stop_copenhagen_nyhavn", "Nyhavn", "LOCAL_STOP", 55.6797, 12.5912, "Copenhague, Dinamarca", "LOCAL"],
+  ["stop_tallinn_square", "Praça da Prefeitura", "LOCAL_STOP", 59.437, 24.7453, "Tallinn, Estônia", "LOCAL"],
+  ["stop_riga_freedom", "Monumento da Liberdade", "LOCAL_STOP", 56.9515, 24.1133, "Riga, Letônia", "LOCAL"],
+  ["stop_vilnius_cathedral", "Praça da Catedral", "LOCAL_STOP", 54.6858, 25.2877, "Vilnius, Lituânia", "LOCAL"],
+  ["stop_krakow_square", "Praça do Mercado", "LOCAL_STOP", 50.0617, 19.9373, "Cracóvia, Polônia", "LOCAL"],
+  ["stop_prague_clock", "Relógio Astronômico", "LOCAL_STOP", 50.087, 14.4208, "Praga, Chéquia", "LOCAL"],
+  ["stop_bruges_market", "Markt de Bruges", "LOCAL_STOP", 51.2089, 3.2242, "Bruges, Bélgica", "LOCAL"],
+  ["stop_edinburgh_castle", "Castelo de Edimburgo", "LOCAL_STOP", 55.9486, -3.1999, "Edimburgo, Escócia", "LOCAL"],
+  ["stop_dublin_spire", "Spire de Dublin", "LOCAL_STOP", 53.3498, -6.2603, "Dublin, Irlanda", "LOCAL"],
+  ["stop_innsbruck_roof", "Telhado Dourado", "LOCAL_STOP", 47.268, 11.3933, "Innsbruck, Áustria", "LOCAL"],
+  ["stop_lucerne_bridge", "Ponte da Capela", "LOCAL_STOP", 47.0516, 8.3075, "Lucerna, Suíça", "LOCAL"],
+  ["stop_zermatt_station", "Estação de Zermatt", "LOCAL_STOP", 46.0233, 7.7483, "Zermatt, Suíça", "LOCAL"],
+  ["stop_banff_avenue", "Banff Avenue", "LOCAL_STOP", 51.1778, -115.5708, "Banff, Canadá", "LOCAL"],
+  ["stop_anchorage_center", "Centro de Anchorage", "LOCAL_STOP", 61.2163, -149.8948, "Alasca, EUA", "LOCAL"],
   ["rest_campinas_taquaral", "Parque Taquaral", "REST_POINT", -22.8755, -47.0587, "Campinas, Brasil", "LOCAL"],
   ["rest_santos_orla", "Jardins da Orla", "REST_POINT", -23.973, -46.328, "Santos, Brasil", "LOCAL"],
   ["rest_curitiba_barigui", "Parque Barigui", "REST_POINT", -25.4257, -49.3078, "Curitiba, Brasil", "LOCAL"],
