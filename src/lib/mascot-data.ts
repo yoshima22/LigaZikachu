@@ -963,6 +963,15 @@ export const PERSONALITIES = [
   "DRAMATIC","PLAYFUL","ELECTRIC","TIMID","CHAOTIC"
 ] as const;
 
+/**
+ * Código curto e visível de um mascote, derivado do id único (cuid).
+ * Ajuda a distinguir cópias do mesmo Pokémon ao usar itens ou negociar no bazar.
+ * Ex.: "cmpkv...q7x9z" -> "Q7X9Z".
+ */
+export function shortMascotCode(id: string): string {
+  return id.slice(-5).toUpperCase();
+}
+
 export const PERSONALITY_LABEL: Record<string, string> = {
   LOYAL:        "Leal",
   PROUD:        "Orgulhoso",

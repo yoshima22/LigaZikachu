@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Coins, Crown, Info, Search } from "lucide-react";
 import Link from "next/link";
 import { createListing, createAuctionListing } from "../actions";
-import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
+import { getSpriteUrl, getPokemonName, shortMascotCode } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import { Gavel } from "lucide-react";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
@@ -251,7 +251,8 @@ function CreateListingForm() {
                    ? available.filter(m =>
                        (m.nickname ?? "").toLowerCase().includes(q) ||
                        getPokemonName(m.pokemonId).toLowerCase().includes(q) ||
-                       String(m.pokemonId).includes(q))
+                       String(m.pokemonId).includes(q) ||
+                       shortMascotCode(m.id).toLowerCase().includes(q))
                    : available;
                  const PER_PAGE = 8;
                  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
@@ -283,7 +284,10 @@ function CreateListingForm() {
                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                <img src={getSpriteUrl(m.pokemonId)} alt="" width={40} height={40} className="object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                                <div className="min-w-0">
-                                 <p className="text-sm font-semibold text-white truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                                 <p className="text-sm font-semibold text-white truncate">
+                                   {m.nickname ?? getPokemonName(m.pokemonId)}
+                                   <span className="ml-1.5 font-mono text-[9px] text-[#FFCB05]">#{shortMascotCode(m.id)}</span>
+                                 </p>
                                  <p className="text-[10px] text-slate-500">Nv.{m.level} · #{m.pokemonId} · {m.battleWins}V</p>
                                </div>
                              </div>

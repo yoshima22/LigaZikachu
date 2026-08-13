@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRight, Sparkles, X, Zap } from "lucide-react";
-import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction } from "../actions";
+import { ArrowRight, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
+import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, searchOwnedMascotsForItemAction } from "../actions";
 import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
-import { PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { PERSONALITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
@@ -18,6 +18,8 @@ interface MascotOption {
   arenaState?: string;
   restingUntil?: Date | string | null;
   hatchedFromEggType?: string | null; hatchedFromEggOrigin?: string | null;
+  proteinDoses?: number;
+  activeBuffTypes?: string[];
 }
 
 type RainbowFeatherSnapshot = {
@@ -102,8 +104,31 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedBuff, setSelectedBuff] = useState<string>("");
-  const [selectedMascot, setSelectedMascot] = useState<string>(mascots.find(m => m.isEquipped)?.id ?? mascots.find(m => m.isFavorite)?.id ?? "");
+  // Task: só considera um mascote quando ele é escolhido de fato no campo de busca.
+  const [selectedMascot, setSelectedMascot] = useState<string>("");
+  const [selectedMascotObj, setSelectedMascotObj] = useState<MascotOption | null>(null);
   const [featherComparison, setFeatherComparison] = useState<RainbowFeatherComparison | null>(null);
+  // Busca digitável de mascotes (não só favoritos) para o uso de itens.
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<MascotOption[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchSeq = useRef(0);
+
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) { setResults([]); setSearching(false); return; }
+    setSearching(true);
+    const seq = ++searchSeq.current;
+    const timer = window.setTimeout(async () => {
+      const res = await searchOwnedMascotsForItemAction(q);
+      if (seq !== searchSeq.current) return;
+      setSearching(false);
+      if (res.error) { setResults([]); return; }
+      setResults(res.mascots ?? []);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   if (buffs.length === 0) return null;
 
@@ -128,23 +153,28 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       : originKey === "RARE" ? "RARE"
       : "COMMON";
   };
-  const eligibleMascots = mascots.filter((mascot) => {
+  const isEligible = (mascot: MascotOption) => {
     if (isWeaknessPolicy) {
       const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
       return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;
+    }
+    if (isMegaStone && selectedMegaStone) {
+      if (!(mascot.pokemonId === selectedMegaStone.compatiblePokemonId && mascot.level >= selectedMegaStone.minLevel)) return false;
     }
     if (!isRainbowFeather) return true;
     if (mascot.arenaState && mascot.arenaState !== "FREE") return false;
     if (isAdminLabFeather) return !mascot.hatchedFromEggType && !mascot.hatchedFromEggOrigin;
     if (!featherTier) return true;
     return tierRank[featherTier] >= tierRank[getOriginTier(mascot)];
-  });
-  const mascotOptions = isMegaStone && selectedMegaStone
-    ? eligibleMascots.filter((m) => m.pokemonId === selectedMegaStone.compatiblePokemonId && m.level >= selectedMegaStone.minLevel)
-    : eligibleMascots;
-  const selectedMascotDoses = selectedMascot ? (proteinDoses[selectedMascot] ?? 0) : 0;
+  };
+  // Lista base: resultados da busca digitada ou, sem busca, os favoritos/companheiro.
+  const baseCandidates: MascotOption[] = search.trim()
+    ? results
+    : mascots.map((m) => ({ ...m, proteinDoses: proteinDoses[m.id] ?? m.proteinDoses ?? 0, activeBuffTypes: activeBuffsByMascot[m.id] ?? m.activeBuffTypes ?? [] }));
+  const mascotOptions = baseCandidates.filter(isEligible);
+  const selectedMascotDoses = selectedMascotObj?.proteinDoses ?? 0;
   const proteinFull = selectedMascotDoses >= PROTEIN_LIMIT;
-  const selectedMascotItem = mascots.find((mascot) => mascot.id === selectedMascot);
+  const selectedMascotItem = selectedMascotObj;
   const originTier = selectedMascotItem ? getOriginTier(selectedMascotItem) : "RARE";
   const featherAboveOrigin = selectedBuffItem?.type === "RAINBOW_FEATHER"
     && Boolean(featherTier)
@@ -158,8 +188,23 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     : null;
 
   // Verifica se o mascote selecionado já tem EXP_BOOST ativo
-  const selectedMascotActiveBuffs = selectedMascot ? (activeBuffsByMascot[selectedMascot] ?? []) : [];
+  const selectedMascotActiveBuffs = selectedMascotObj?.activeBuffTypes ?? [];
   const mascotHasExpBoost = selectedMascotActiveBuffs.includes("EXP_BOOST");
+
+  const pickMascot = (mascot: MascotOption) => {
+    setSelectedMascot(mascot.id);
+    setSelectedMascotObj(mascot);
+    setSearch("");
+    setResults([]);
+    setShowResults(false);
+  };
+  const clearMascot = () => {
+    setSelectedMascot("");
+    setSelectedMascotObj(null);
+    setSearch("");
+    setResults([]);
+    setShowResults(false);
+  };
 
   const handleUse = () => {
     if (!selectedBuffItem) return;
@@ -167,8 +212,10 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     const isDestructive = DESTRUCTIVE_ITEMS.has(selectedBuffItem.type);
 
     if (!isPlayerLevel && !selectedMascot) { toast.error("Selecione um mascote."); return; }
-    if (isMegaStone && selectedMegaStone && !mascotOptions.some((m) => m.id === selectedMascot)) {
-      toast.error(`Selecione um ${selectedMegaStone.compatiblePokemonName} Nv.${selectedMegaStone.minLevel}+ compatível.`);
+    if (!isPlayerLevel && selectedMascotObj && !isEligible(selectedMascotObj)) {
+      toast.error(isMegaStone && selectedMegaStone
+        ? `Selecione um ${selectedMegaStone.compatiblePokemonName} Nv.${selectedMegaStone.minLevel}+ compatível.`
+        : "Este mascote não é elegível para este item.");
       return;
     }
 
@@ -176,7 +223,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       toast.error(`Este mascote já recebeu ${PROTEIN_LIMIT} doses de Proteína Zika (limite máximo).`); return;
     }
 
-    const mascotName = mascots.find(m => m.id === selectedMascot)?.name ?? "mascote";
+    const mascotName = selectedMascotObj?.name ?? "mascote";
 
     let confirmMsg: string;
     if (isDestructive) {
@@ -268,12 +315,16 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
             <button key={buff.id} type="button"
               onClick={() => {
                 setSelectedBuff(buff.id);
+                clearMascot();
                 if (buff.type === "WEAKNESS_POLICY") {
                   const firstRecoverable = mascots.find((mascot) => {
                     const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
                     return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;
                   });
-                  setSelectedMascot(firstRecoverable?.id ?? "");
+                  if (firstRecoverable) {
+                    setSelectedMascot(firstRecoverable.id);
+                    setSelectedMascotObj({ ...firstRecoverable, proteinDoses: proteinDoses[firstRecoverable.id] ?? 0, activeBuffTypes: activeBuffsByMascot[firstRecoverable.id] ?? [] });
+                  }
                 }
               }}
               className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
@@ -353,24 +404,58 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         <div className="flex flex-wrap items-center gap-3">
           {selectedBuffItem && PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type) ? (
             <p className="text-xs text-slate-400">Aplica-se automaticamente à Equipe Favorita, com até 6 mascotes livres.</p>
+          ) : selectedMascotObj ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-3 py-2 text-xs text-slate-100">
+              <span className="font-semibold">{selectedMascotObj.name}</span>
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-[#FFCB05]">#{shortMascotCode(selectedMascotObj.id)}</span>
+              <span className="text-[10px] text-slate-400">
+                Nv.{selectedMascotObj.level}{selectedMascotObj.isEquipped ? " · ★ Companheiro" : selectedMascotObj.isFavorite ? " · ☆ Favorito" : ""}
+              </span>
+              <button type="button" onClick={clearMascot} aria-label="Trocar mascote" className="ml-1 rounded-full p-0.5 text-slate-400 hover:text-white">
+                <X size={13} />
+              </button>
+            </div>
           ) : (
-          <select
-            value={selectedMascot}
-            onChange={e => setSelectedMascot(e.target.value)}
-            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]"
-          >
-            <option value="">Selecione o mascote</option>
-            {mascotOptions.map(m => {
-              const doses = isProtein ? (proteinDoses[m.id] ?? 0) : 0;
-              const maxed = isProtein && doses >= PROTEIN_LIMIT;
-              const hasBoost = isExpBuff && (activeBuffsByMascot[m.id] ?? []).includes("EXP_BOOST");
-              return (
-                <option key={m.id} value={m.id} disabled={maxed}>
-                  {m.name}{m.isEquipped ? " ★ Companheiro" : m.isFavorite ? " ☆ Equipe Favorita" : ""}{isProtein && doses > 0 ? ` (${doses}/${PROTEIN_LIMIT} doses)` : ""}{maxed ? " — MÁXIMO" : ""}{hasBoost ? " ⚡ buff ativo" : ""}
-                </option>
-              );
-            })}
-          </select>
+          <div className="relative w-full max-w-xs">
+            <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
+              onFocus={() => setShowResults(true)}
+              placeholder="Buscar mascote por nome ou código…"
+              className="w-full rounded-xl border border-border bg-slate-900 py-2 pl-7 pr-8 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]"
+            />
+            {searching && <Loader2 size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-500" />}
+            {showResults && (search.trim() || mascotOptions.length > 0) && (
+              <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-slate-950 shadow-xl">
+                {mascotOptions.length === 0 ? (
+                  <p className="px-3 py-2 text-[11px] text-slate-500">{searching ? "Buscando…" : "Nenhum mascote encontrado."}</p>
+                ) : mascotOptions.map((m) => {
+                  const doses = isProtein ? (m.proteinDoses ?? 0) : 0;
+                  const maxed = isProtein && doses >= PROTEIN_LIMIT;
+                  const hasBoost = isExpBuff && (m.activeBuffTypes ?? []).includes("EXP_BOOST");
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      disabled={maxed}
+                      onClick={() => pickMascot(m)}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span className="min-w-0 truncate">
+                        {m.name}
+                        <span className="ml-1.5 font-mono text-[10px] text-[#FFCB05]">#{shortMascotCode(m.id)}</span>
+                        <span className="ml-1 text-[10px] text-slate-500">Nv.{m.level}{m.isEquipped ? " · ★" : m.isFavorite ? " · ☆" : ""}</span>
+                      </span>
+                      <span className="shrink-0 text-[9px] text-slate-500">
+                        {isProtein && doses > 0 ? `${doses}/${PROTEIN_LIMIT}` : ""}{maxed ? " MÁX" : ""}{hasBoost ? " ⚡" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           )}
 
           {isWeaknessPolicy && mascotOptions.length === 0 && (
@@ -404,7 +489,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
             disabled={
               pending ||
               (!selectedMascot && !PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "")) ||
-              (!PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "") && !mascotOptions.some((mascot) => mascot.id === selectedMascot)) ||
+              (!PLAYER_LEVEL_ITEMS.has(selectedBuffItem?.type ?? "") && !(selectedMascotObj && isEligible(selectedMascotObj))) ||
               (isProtein && proteinFull)
             }
             onClick={handleUse}
