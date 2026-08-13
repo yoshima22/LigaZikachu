@@ -301,6 +301,9 @@ model Player {
   birthdayGiftYear            Int?
   // Kit sorteado aguardando escolha (ex.: pedra de mega a escolher).
   birthdayGiftPendingKit      String?
+  // Ultimo kit realmente concedido e kit cuja animacao ainda precisa ser concluida.
+  birthdayGiftLastKit         String?
+  birthdayGiftReplayKit       String?
   // Código de convite único (6 dígitos) e quem convidou este jogador.
   inviteCode                  String?                        @unique
   invitedByPlayerId           String?

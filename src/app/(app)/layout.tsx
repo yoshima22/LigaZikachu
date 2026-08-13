@@ -109,11 +109,19 @@ export default async function AppLayout({
   // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
   const birthdayPlayer = await prisma.player.findUnique({
     where: { userId: user.id },
-    select: { birthDate: true, birthdayGiftYear: true, birthdayGiftPendingKit: true },
+    select: {
+      birthDate: true,
+      birthdayGiftYear: true,
+      birthdayGiftPendingKit: true,
+      birthdayGiftReplayKit: true,
+    },
   }).catch(() => null);
   const birthdayPendingKit = birthdayPlayer?.birthdayGiftPendingKit ?? null;
+  const birthdayReplayKit = birthdayPlayer?.birthdayGiftReplayKit ?? null;
   const birthdayEligible = Boolean(birthdayPlayer) && (
-    isBirthdayGiftEligible(birthdayPlayer!.birthDate, birthdayPlayer!.birthdayGiftYear) || Boolean(birthdayPendingKit)
+    isBirthdayGiftEligible(birthdayPlayer!.birthDate, birthdayPlayer!.birthdayGiftYear) ||
+    Boolean(birthdayPendingKit) ||
+    Boolean(birthdayReplayKit)
   );
 
   const navData = await getNavData(user.id).catch((error) => {
@@ -211,7 +219,12 @@ export default async function AppLayout({
       <MaintenanceVisibilityGuard />
       <SessionPersistenceGuard />
       <MobileTitleTooltips />
-      {birthdayEligible && <BirthdayRouletteLauncher pendingKitId={birthdayPendingKit} />}
+      {birthdayEligible && (
+        <BirthdayRouletteLauncher
+          pendingKitId={birthdayPendingKit}
+          replayKitId={birthdayReplayKit}
+        />
+      )}
       {shouldShowOrderIntro && (
         <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />
       )}
