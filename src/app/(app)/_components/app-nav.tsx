@@ -33,6 +33,7 @@ import {
   Footprints,
   ScrollText,
   Dna,
+  MapPinned,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -151,6 +152,7 @@ const colecaoLinks = [
 
 const mercadoLinks = [
   { href: "/bazar", label: "Bazar", icon: Store, adminOnly: false },
+  { href: "/mercado/entregas", label: "Entregas pelo Mundo", icon: MapPinned, adminOnly: true, beta: true },
   { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
   { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
   { href: "/zikaloot", label: "ZikaLoot", icon: Ticket, adminOnly: false },
