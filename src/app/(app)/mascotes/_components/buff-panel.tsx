@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
 import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, searchOwnedMascotsForItemAction } from "../actions";
 import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 import { PERSONALITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
@@ -130,6 +130,27 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  // ── Reorganização de itens (ordem manual + drag-and-drop) com paginação ──────
+  const ITEMS_PER_PAGE = 6;
+  const ORDER_STORAGE_KEY = "mascot-item-order-v1";
+  const [itemOrder, setItemOrder] = useState<string[]>([]);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [page, setPage] = useState(0);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ORDER_STORAGE_KEY);
+      if (raw) setItemOrder(JSON.parse(raw) as string[]);
+    } catch { /* ignora armazenamento indisponível */ }
+  }, []);
+
+  const persistOrder = (ids: string[]) => {
+    setItemOrder(ids);
+    try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(ids)); } catch { /* ignora */ }
+  };
+
   if (buffs.length === 0) return null;
 
   const selectedBuffItem = buffs.find(b => b.id === selectedBuff);
@@ -204,6 +225,47 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     setSearch("");
     setResults([]);
     setShowResults(false);
+  };
+
+  // Ordena os itens conforme a ordem salva; itens novos entram no fim.
+  const orderedBuffs = (() => {
+    const byId = new Map(buffs.map((b) => [b.id, b]));
+    const seen = new Set<string>();
+    const out: BuffItem[] = [];
+    for (const id of itemOrder) {
+      const b = byId.get(id);
+      if (b) { out.push(b); seen.add(id); }
+    }
+    for (const b of buffs) if (!seen.has(b.id)) out.push(b);
+    return out;
+  })();
+  const totalPages = Math.max(1, Math.ceil(orderedBuffs.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageStart = safePage * ITEMS_PER_PAGE;
+  const pageBuffs = orderedBuffs.slice(pageStart, pageStart + ITEMS_PER_PAGE);
+
+  const moveItemTo = (id: string, globalIndex: number) => {
+    const ids = orderedBuffs.map((b) => b.id).filter((x) => x !== id);
+    const clamped = Math.max(0, Math.min(ids.length, globalIndex));
+    ids.splice(clamped, 0, id);
+    persistOrder(ids);
+  };
+  const nudgeItem = (id: string, delta: number) => {
+    const currentIndex = orderedBuffs.findIndex((b) => b.id === id);
+    if (currentIndex < 0) return;
+    moveItemTo(id, currentIndex + delta);
+  };
+  const onRowPointerMove = (e: React.PointerEvent) => {
+    if (!draggingId) return;
+    const y = e.clientY;
+    let targetLocal = pageBuffs.length - 1;
+    for (let i = 0; i < pageBuffs.length; i++) {
+      const el = rowRefs.current[i];
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) { targetLocal = i; break; }
+    }
+    if (pageBuffs[targetLocal]?.id !== draggingId) moveItemTo(draggingId, pageStart + targetLocal);
   };
 
   const handleUse = () => {
@@ -299,15 +361,75 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
 
   return (
     <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Zap size={16} className="text-[#FFCB05]" />
         <h2 className="font-semibold text-slate-200">Itens Especiais</h2>
         <span className="text-xs text-slate-500">— use em seus mascotes</span>
+        {orderedBuffs.length > 1 && (
+          <button
+            type="button"
+            onClick={() => { setReorderMode((v) => !v); setDraggingId(null); }}
+            className={`ml-auto rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              reorderMode ? "border-[#FFCB05]/50 bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {reorderMode ? "Concluir" : "Reorganizar"}
+          </button>
+        )}
       </div>
 
-      {/* Lista de buffs disponíveis */}
+      {reorderMode ? (
+        /* Modo de reorganização: lista arrastável (mouse e toque) com ajuste fino */
+        <div className="space-y-2">
+          <p className="text-[11px] text-slate-500">Arraste pela alça ⠿ para reordenar, ou use ▲ ▼ para mover entre páginas. A ordem fica salva neste dispositivo.</p>
+          <div className="space-y-1.5" onPointerMove={onRowPointerMove} onPointerUp={() => setDraggingId(null)} onPointerCancel={() => setDraggingId(null)}>
+            {pageBuffs.map((buff, localIndex) => {
+              const emoji = BUFF_EMOJI[buff.type] ?? (isMegaStoneType(buff.type) ? "🔮" : "✨");
+              const globalIndex = pageStart + localIndex;
+              return (
+                <div
+                  key={buff.id}
+                  ref={(el) => { rowRefs.current[localIndex] = el; }}
+                  className={`flex items-center gap-2 rounded-xl border p-2.5 transition-colors ${
+                    draggingId === buff.id ? "border-[#FFCB05]/70 bg-[#FFCB05]/10 opacity-90" : "border-border bg-slate-900/40"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onPointerDown={(e) => { setDraggingId(buff.id); (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); }}
+                    className="shrink-0 cursor-grab touch-none text-slate-500 hover:text-slate-300 active:cursor-grabbing"
+                    style={{ touchAction: "none" }}
+                    aria-label="Arrastar para reordenar"
+                  >
+                    <GripVertical size={16} />
+                  </button>
+                  {buff.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={buff.imageUrl} alt="" className="h-7 w-7 shrink-0 object-contain" />
+                  ) : (
+                    <span className="shrink-0 text-xl">{emoji}</span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-white">{buff.name}</p>
+                    <p className="text-[10px] text-[#FFCB05]">×{buff.quantity} · #{globalIndex + 1}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col">
+                    <button type="button" disabled={globalIndex === 0} onClick={() => nudgeItem(buff.id, -1)} aria-label="Mover para cima" className="rounded p-0.5 text-slate-400 hover:text-[#FFCB05] disabled:opacity-30">
+                      <ChevronUp size={13} />
+                    </button>
+                    <button type="button" disabled={globalIndex === orderedBuffs.length - 1} onClick={() => nudgeItem(buff.id, 1)} aria-label="Mover para baixo" className="rounded p-0.5 text-slate-400 hover:text-[#FFCB05] disabled:opacity-30">
+                      <ChevronDown size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+      /* Lista de buffs disponíveis (paginada) */
       <div className="grid gap-2 sm:grid-cols-2">
-        {buffs.map(buff => {
+        {pageBuffs.map(buff => {
           const emoji = BUFF_EMOJI[buff.type] ?? (isMegaStoneType(buff.type) ? "🔮" : "✨");
           const isThisProtein = buff.type === "MASCOT_BUFF_STAT";
           const areas = EXP_BUFF_AREAS[buff.type];
@@ -383,6 +505,30 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           );
         })}
       </div>
+      )}
+
+      {/* Paginação dos itens */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            disabled={safePage <= 0}
+            onClick={() => setPage(safePage - 1)}
+            className="flex items-center gap-1 rounded-lg border border-border bg-slate-900 px-2.5 py-1 text-[11px] text-slate-400 hover:text-slate-200 disabled:opacity-40"
+          >
+            <ChevronLeft size={12} /> Anterior
+          </button>
+          <span className="text-[11px] text-slate-500">Página {safePage + 1} de {totalPages}</span>
+          <button
+            type="button"
+            disabled={safePage >= totalPages - 1}
+            onClick={() => setPage(safePage + 1)}
+            className="flex items-center gap-1 rounded-lg border border-border bg-slate-900 px-2.5 py-1 text-[11px] text-slate-400 hover:text-slate-200 disabled:opacity-40"
+          >
+            Próxima <ChevronRight size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Alerta quando proteína selecionada e limite chegou */}
       {isProtein && selectedMascot && proteinFull && (
