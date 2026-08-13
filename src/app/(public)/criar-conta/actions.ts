@@ -7,6 +7,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { ensureBeginnerOnboarding } from "@/lib/beginner-onboarding";
 import { generateUniqueInviteCode } from "@/lib/invite-code";
+import { parseBirthDateInput } from "@/lib/birthday";
 
 type FormState = { error?: string };
 
@@ -15,7 +16,8 @@ const registerSchema = z.object({
   email:      z.string().trim().toLowerCase().email(),
   ptcglNick:  z.string().trim().min(2, "Nick do PTCG Live deve ter ao menos 2 caracteres.").max(60),
   password:   z.string().min(8).max(72),
-  inviteCode: z.string().trim().regex(/^\d{6}$/, "O código de convite deve ter 6 dígitos.")
+  inviteCode: z.string().trim().regex(/^\d{6}$/, "O código de convite deve ter 6 dígitos."),
+  birthDate:  z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe sua data de nascimento.")
 });
 
 export async function registerWithCredentials(
@@ -27,14 +29,17 @@ export async function registerWithCredentials(
     email:      formData.get("email"),
     ptcglNick:  formData.get("ptcglNick"),
     password:   formData.get("password"),
-    inviteCode: formData.get("inviteCode")
+    inviteCode: formData.get("inviteCode"),
+    birthDate:  formData.get("birthDate")
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Preencha todos os campos corretamente." };
   }
 
-  const { name, email, ptcglNick, password, inviteCode } = parsed.data;
+  const { name, email, ptcglNick, password, inviteCode, birthDate } = parsed.data;
+  const parsedBirthDate = parseBirthDateInput(birthDate);
+  if (!parsedBirthDate) return { error: "Data de nascimento inválida." };
 
   // Código de convite é obrigatório e precisa pertencer a um jogador existente.
   const inviter = await prisma.player.findUnique({
@@ -71,6 +76,7 @@ export async function registerWithCredentials(
           create: {
             displayName: name,
             ptcglNick,
+            birthDate: parsedBirthDate,
             inviteCode: newInviteCode,
             invitedByPlayerId: inviter.id
           }

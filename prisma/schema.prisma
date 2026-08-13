@@ -295,6 +295,10 @@ model Player {
   mascotSpritePreference      String                         @default("ANIMATED")
   megaSpritePreference        String                         @default("ANIMATED")
   hideLeagueResults           Boolean                        @default(false)
+  // Data de aniversário (preenchida uma única vez, não pode ser alterada).
+  birthDate                   DateTime?
+  // Último ano em que o presente de aniversário (roleta) foi resgatado.
+  birthdayGiftYear            Int?
   // Código de convite único (6 dígitos) e quem convidou este jogador.
   inviteCode                  String?                        @unique
   invitedByPlayerId           String?

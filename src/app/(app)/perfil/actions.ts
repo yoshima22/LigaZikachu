@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getStandbyUntilFromNotes, setStandbyUntilInNotes } from "@/lib/account-standby";
 import { retireArenaTeam } from "@/lib/arena-z";
 import { uploadAvatarToStorage } from "@/lib/avatar-storage";
+import { parseBirthDateInput } from "@/lib/birthday";
 
 const MAX_WISHLIST_POKEMON = 9;
 const MAX_WISHLIST_ITEMS = 12;
@@ -147,6 +148,22 @@ export async function setCasualModeAction(
   revalidatePath("/arena-z");
   revalidatePath("/desafio-sincronizado");
   return { success: true };
+}
+
+// Define a data de aniversário uma única vez (não pode ser alterada depois).
+export async function setBirthDateAction(birthDate: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Não autenticado." };
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true, birthDate: true } });
+  if (!player) return { ok: false, error: "Jogador não encontrado." };
+  if (player.birthDate) return { ok: false, error: "Sua data de aniversário já foi definida e não pode ser alterada." };
+  const parsed = parseBirthDateInput(birthDate);
+  if (!parsed) return { ok: false, error: "Data de nascimento inválida." };
+  // updateMany com guarda birthDate: null evita corrida (só grava se ainda estiver vazio).
+  const res = await prisma.player.updateMany({ where: { id: player.id, birthDate: null }, data: { birthDate: parsed } });
+  if (res.count === 0) return { ok: false, error: "Sua data de aniversário já foi definida e não pode ser alterada." };
+  revalidatePath("/perfil");
+  return { ok: true };
 }
 
 export async function updatePlayerProfile(input: z.infer<typeof updateProfileSchema>) {

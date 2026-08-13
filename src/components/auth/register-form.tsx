@@ -66,6 +66,17 @@ export function RegisterForm({
       </div>
 
       <div className="space-y-2">
+        <label className="text-sm font-medium text-slate-200" htmlFor="birthDate">
+          Data de aniversário
+        </label>
+        <input id="birthDate" name="birthDate" type="date" required
+          className="h-11 w-full rounded-xl border border-border bg-slate-950/60 px-3 text-sm text-white outline-none transition focus:border-primary" />
+        <p className="text-[11px] text-amber-300/80">
+          ⚠️ Atenção: a data de aniversário <strong>não poderá ser alterada</strong> depois. Preencha com cuidado.
+        </p>
+      </div>
+
+      <div className="space-y-2">
         <label className="text-sm font-medium text-slate-200" htmlFor="inviteCode">
           Código de convite
         </label>
