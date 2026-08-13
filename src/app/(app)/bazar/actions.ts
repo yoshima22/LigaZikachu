@@ -1192,6 +1192,9 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
             if (!mascot || mascot.playerId !== proposal.proposerId) {
               throw new Error("Mascote da proposta não está mais disponível.");
             }
+            if (mascot.primordialBoundPlayerId) {
+              throw new Error("Mascote vinculado pela Pena Arco-Íris Primordial não pode ser transferido.");
+            }
             await tx.mascot.update({
               where: { id: item.mascotId },
               data: { playerId: player.id, bazarListed: false, isEquipped: false },
@@ -2000,6 +2003,7 @@ async function assertMascotTradeableInBazar(
     bazarListed: boolean;
     isEquipped: boolean;
     operationsLocked: boolean;
+    primordialBoundPlayerId: string | null;
     arenaState: string;
     restingUntil: Date | null;
   },
@@ -2010,6 +2014,9 @@ async function assertMascotTradeableInBazar(
   const now = new Date();
 
   if (mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
+  if (mascot.primordialBoundPlayerId) {
+    throw new Error(`${name} foi vinculado permanentemente à conta que utilizou a Pena Arco-Íris Primordial e não pode ser negociado.`);
+  }
   if (mascot.operationsLocked) {
     throw new Error(`${name} está protegido. Desbloqueie-o na página de Mascotes antes de usar o Bazar.`);
   }
@@ -2205,6 +2212,14 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
 
   if (listing.category === "MASCOT") {
     const mascotId = payload.mascotId as string;
+    const mascot = await tx.mascot.findUnique({
+      where: { id: mascotId },
+      select: { primordialBoundPlayerId: true },
+    });
+    if (!mascot) throw new Error("Mascote anunciado não foi encontrado.");
+    if (mascot.primordialBoundPlayerId) {
+      throw new Error("Mascote vinculado pela Pena Arco-Íris Primordial não pode ser transferido.");
+    }
     await tx.mascot.update({
       where: { id: mascotId },
       data: { playerId: toBuyerId, bazarListed: false, isEquipped: false },

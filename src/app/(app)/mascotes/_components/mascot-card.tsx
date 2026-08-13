@@ -85,6 +85,7 @@ interface MascotData {
   evolutionLocked: boolean;
   expLocked: boolean;
   operationsLocked: boolean;
+  primordialBoundPlayerId?: string | null;
   isShiny: boolean;
   ivRating?: string | null;
   ivScore?: number | null;
@@ -1478,17 +1479,21 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 mascot.operationsLocked ? "text-emerald-300" : "text-slate-300"
               }`}>
                 {mascot.operationsLocked ? <Lock size={12} /> : <Unlock size={12} />}
-                {mascot.operationsLocked ? "Mascote protegido" : "Proteção desativada"}
+                {mascot.primordialBoundPlayerId
+                  ? "Vínculo primordial"
+                  : mascot.operationsLocked ? "Mascote protegido" : "Proteção desativada"}
               </p>
               <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
-                {mascot.operationsLocked
+                {mascot.primordialBoundPlayerId
+                  ? "Vinculado permanentemente à conta que utilizou a Pena Primordial. Não pode ser negociado nem reciclado."
+                  : mascot.operationsLocked
                   ? "Não pode ser enviado ao Bazar nem utilizado no Laboratório."
                   : "Pode ser negociado no Bazar e utilizado no Laboratório."}
               </p>
             </div>
             <button
               type="button"
-              disabled={pending}
+              disabled={pending || Boolean(mascot.primordialBoundPlayerId)}
               onClick={() => act(
                 () => toggleMascotOperationsLockAction(mascot.id, !mascot.operationsLocked),
                 mascot.operationsLocked ? "Proteção removida." : "Mascote protegido."
@@ -1499,7 +1504,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
               }`}
             >
-              {mascot.operationsLocked ? "Desbloquear" : "Bloquear"}
+              {mascot.primordialBoundPlayerId ? "Permanente" : mascot.operationsLocked ? "Desbloquear" : "Bloquear"}
             </button>
           </div>
         )}

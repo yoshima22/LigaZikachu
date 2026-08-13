@@ -2337,6 +2337,7 @@ model Mascot {
   expLocked                 Boolean                   @default(false)
   operationsLocked          Boolean                   @default(false) // impede envio ao Bazar e uso no Laboratório
   isShiny                   Boolean                   @default(false) // variante shiny — sprite diferente e marcador visual
+  primordialBoundPlayerId   String?                   // conta fixada pela Pena Primordial; o banco impede troca de playerId
   megaEvolvedFromPokemonId  Int?
   megaStoneItemId           String?
   megaEvolvedAt             DateTime?
@@ -2371,6 +2372,7 @@ model Mascot {
   traceRoomsAsHunter        TraceRoom[]               @relation("TraceRoomHunterMascot")
 
   @@index([playerId])
+  @@index([primordialBoundPlayerId])
   @@map("mascots")
 }
 

@@ -3063,6 +3063,8 @@ export async function repairRecentPrimordialFeatherReset(playerId: string): Prom
         ...newStats,
         hatchedFromEggType: "LAB",
         hatchedFromEggOrigin: "Origem de ovo de Laboratorio",
+        primordialBoundPlayerId: playerId,
+        operationsLocked: true,
       },
     });
     if (updated.count !== 1) throw new Error("O mascote mudou durante a recuperação da Pena Primordial.");
@@ -3097,6 +3099,7 @@ export async function repairRecentPrimordialFeatherReset(playerId: string): Prom
           hatchedFromEggType: "LAB",
           hatchedFromEggOrigin: "Origem de ovo de Laboratorio",
           adminLabFeatherUsedAt: use.createdAt.toISOString(),
+          primordialBoundPlayerId: playerId,
         },
         metadata: {
           reason: "Pena Primordial processada por Server Action anterior",
@@ -3121,6 +3124,7 @@ export async function applyRainbowFeather(
   const mascot = await db.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para usar a Pena Arco-Íris.");
+  if (mascot.bazarListed) throw new Error("Retire o mascote do Bazar antes de usar a Pena Arco-Íris.");
   if (adminLabOriginOverride && (mascot.hatchedFromEggType || mascot.hatchedFromEggOrigin)) {
     throw new Error("Esta Pena especial só pode ser usada em mascotes sem ovo de origem registrado.");
   }
@@ -3170,6 +3174,8 @@ export async function applyRainbowFeather(
         ? {
             hatchedFromEggType: "LAB" as const,
             hatchedFromEggOrigin: "Origem de ovo de Laboratorio",
+            primordialBoundPlayerId: playerId,
+            operationsLocked: true,
           }
         : {}),
     }
