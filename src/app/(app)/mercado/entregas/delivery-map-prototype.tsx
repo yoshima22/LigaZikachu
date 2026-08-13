@@ -26,9 +26,11 @@ import {
   X,
   ExternalLink,
   BookOpen,
+  Search,
+  Eye,
 } from "lucide-react";
 import styles from "./delivery-map-prototype.module.css";
-import { DELIVERY_POIS, type DeliveryPoi, type DeliveryPoiType } from "./delivery-pois";
+import { DELIVERY_POIS, buildDensePoiNetwork, type DeliveryPoi, type DeliveryPoiType } from "./delivery-pois";
 
 type MascotOption = {
   id: string;
@@ -55,10 +57,19 @@ const PLACES: Place[] = [
   { id: "brasilia", name: "Brasília", state: "DF", country: "Brasil", region: "América do Sul", lat: -15.7939, lng: -47.8828 },
   { id: "rio", name: "Rio de Janeiro", state: "RJ", country: "Brasil", region: "América do Sul", lat: -22.9068, lng: -43.1729, port: true },
   { id: "sp", name: "São Paulo", state: "SP", country: "Brasil", region: "América do Sul", lat: -23.5505, lng: -46.6333 },
+  { id: "salvador", name: "Salvador", state: "BA", country: "Brasil", region: "América do Sul", lat: -12.9777, lng: -38.5016, port: true },
+  { id: "fortaleza", name: "Fortaleza", state: "CE", country: "Brasil", region: "América do Sul", lat: -3.7319, lng: -38.5267, port: true },
+  { id: "bh", name: "Belo Horizonte", state: "MG", country: "Brasil", region: "América do Sul", lat: -19.9167, lng: -43.9345 },
+  { id: "curitiba", name: "Curitiba", state: "PR", country: "Brasil", region: "América do Sul", lat: -25.4284, lng: -49.2733 },
+  { id: "portoalegre", name: "Porto Alegre", state: "RS", country: "Brasil", region: "América do Sul", lat: -30.0346, lng: -51.2177, port: true },
   { id: "buenosaires", name: "Buenos Aires", state: "", country: "Argentina", region: "América do Sul", lat: -34.6037, lng: -58.3816, port: true },
   { id: "santiago", name: "Santiago", state: "", country: "Chile", region: "América do Sul", lat: -33.4489, lng: -70.6693 },
   { id: "lima", name: "Lima", state: "", country: "Peru", region: "América do Sul", lat: -12.0464, lng: -77.0428, port: true },
   { id: "bogota", name: "Bogotá", state: "", country: "Colômbia", region: "América do Sul", lat: 4.711, lng: -74.0721 },
+  { id: "caracas", name: "Caracas", state: "", country: "Venezuela", region: "América do Sul", lat: 10.4806, lng: -66.9036, port: true },
+  { id: "maracaibo", name: "Maracaibo", state: "Zulia", country: "Venezuela", region: "América do Sul", lat: 10.6545, lng: -71.6406, port: true },
+  { id: "valencia-ve", name: "Valencia", state: "Carabobo", country: "Venezuela", region: "América do Sul", lat: 10.1579, lng: -67.9972 },
+  { id: "guayana-ve", name: "Ciudad Guayana", state: "Bolívar", country: "Venezuela", region: "América do Sul", lat: 8.3663, lng: -62.6497, port: true },
   { id: "mexico", name: "Cidade do México", state: "", country: "México", region: "América do Norte", lat: 19.4326, lng: -99.1332 },
   { id: "miami", name: "Miami", state: "FL", country: "EUA", region: "América do Norte", lat: 25.7617, lng: -80.1918, port: true },
   { id: "newyork", name: "Nova York", state: "NY", country: "EUA", region: "América do Norte", lat: 40.7128, lng: -74.006, port: true },
@@ -110,7 +121,10 @@ const REST_HUBS: Place[] = [
   { id: "rest-perth", name: "Porto de Perth", state: "WA", country: "Austrália", region: "Oceania", lat: -31.9523, lng: 115.8613, port: true },
   { id: "rest-tasmania", name: "Refúgio da Tasmânia", state: "TAS", country: "Austrália", region: "Oceania", lat: -42.8821, lng: 147.3272, port: true },
 ];
-const ALL_REST_HUBS: Place[] = [...REST_HUBS, ...DELIVERY_POIS.filter(poi => poi.type === "REST_POINT").map(poi => ({ id: poi.id, name: poi.name, state: "", country: poi.region, region: poi.region, lat: poi.lat, lng: poi.lng }))];
+const COUNTRY_COVERAGE_ANCHORS = [...PLACES, ...REST_HUBS];
+const DENSE_COUNTRY_POIS = buildDensePoiNetwork(COUNTRY_COVERAGE_ANCHORS.map(place => ({ id: place.id, name: place.name, country: place.country, lat: place.lat, lng: place.lng })));
+const MAP_POIS = [...DELIVERY_POIS, ...DENSE_COUNTRY_POIS];
+const ALL_REST_HUBS: Place[] = [...REST_HUBS, ...MAP_POIS.filter(poi => poi.type === "REST_POINT").map(poi => ({ id: poi.id, name: poi.name, state: "", country: poi.region, region: poi.region, lat: poi.lat, lng: poi.lng }))];
 
 const ROUTE_INFO: Record<RouteMode, { label: string; icon: typeof Plane; types: string[]; bonus: number; color: string; description: string }> = {
   AIR: { label: "Rota aérea", icon: Plane, types: ["flying"], bonus: 0.22, color: "#a78bfa", description: "Voo direto entre origem e destino. Exclusiva para o tipo Voador; Agilidade aumenta a velocidade e vento, chuva ou tempestade podem atrasar o voo." },
@@ -209,6 +223,12 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [roadError, setRoadError] = useState<string | null>(null);
   const [roadLoading, setRoadLoading] = useState(false);
   const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, LOCAL_STOP: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
+  const [forcedPoiType, setForcedPoiType] = useState<DeliveryPoiType | null>(null);
+  const [mascotSearch, setMascotSearch] = useState("");
+  const [originCountry, setOriginCountry] = useState("Todos");
+  const [destinationCountry, setDestinationCountry] = useState("Todos");
+  const [originSearch, setOriginSearch] = useState("");
+  const [destinationSearch, setDestinationSearch] = useState("");
   const [selectedPoi, setSelectedPoi] = useState<DeliveryPoi | null>(null);
   const [mapZoom, setMapZoom] = useState(4);
   const [weatherEnabled, setWeatherEnabled] = useState(true);
@@ -227,6 +247,10 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
 
   const mascot = mascots.find((item) => item.id === mascotId) ?? mascots[0];
   const availablePlaces = useMemo(() => home ? [...PLACES, { id: "home", name: home.label, state: "", country: "Casa do jogador", region: "Pessoal", lat: home.lat, lng: home.lng }] : PLACES, [home]);
+  const countries = useMemo(() => ["Todos", ...Array.from(new Set(availablePlaces.map(place => place.country))).sort((a, b) => a.localeCompare(b, "pt-BR"))], [availablePlaces]);
+  const visibleMascots = useMemo(() => mascots.filter(item => `${item.name} ${item.species} ${item.types.join(" ")}`.toLocaleLowerCase("pt-BR").includes(mascotSearch.toLocaleLowerCase("pt-BR"))), [mascotSearch, mascots]);
+  const originPlaces = useMemo(() => availablePlaces.filter(place => (originCountry === "Todos" || place.country === originCountry) && `${place.name} ${place.state} ${place.country}`.toLocaleLowerCase("pt-BR").includes(originSearch.toLocaleLowerCase("pt-BR"))), [availablePlaces, originCountry, originSearch]);
+  const destinationPlaces = useMemo(() => availablePlaces.filter(place => (destinationCountry === "Todos" || place.country === destinationCountry) && `${place.name} ${place.state} ${place.country}`.toLocaleLowerCase("pt-BR").includes(destinationSearch.toLocaleLowerCase("pt-BR"))), [availablePlaces, destinationCountry, destinationSearch]);
   const origin = availablePlaces.find((item) => item.id === originId) ?? PLACES[5];
   const destination = availablePlaces.find((item) => item.id === destinationId) ?? PLACES[4];
   const agility = clamp(simulatedAgility ?? mascot?.agility ?? 0, 0, 250);
@@ -350,9 +374,10 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       TRAPACA_HIDEOUT: { className: "delivery-trapaca-icon", html: '<div class="delivery-trapaca-pin">☠</div>', label: "Esconderijo da Ordem" },
       SPECIAL_POI: { className: "delivery-special-icon", html: '<div class="delivery-special-pin">!</div>', label: "Evento especial" },
     };
-    DELIVERY_POIS.filter((poi) => {
-      const zoomVisible = poi.visibility === "MICRO" ? mapZoom >= 9 : poi.visibility === "LOCAL" ? mapZoom >= 7 : poi.visibility === "REGIONAL" ? mapZoom >= 5 : true;
-      return zoomVisible && poiVisibility[poi.type] && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id));
+    MAP_POIS.filter((poi) => {
+      const zoomVisible = forcedPoiType === poi.type || (poi.visibility === "MICRO" ? mapZoom >= 9 : poi.visibility === "LOCAL" ? mapZoom >= 7 : poi.visibility === "REGIONAL" ? mapZoom >= 5 : true);
+      const categoryVisible = forcedPoiType ? poi.type === forcedPoiType : poiVisibility[poi.type];
+      return zoomVisible && categoryVisible && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id));
     }).forEach((poi) => {
       const meta = poiMeta[poi.type];
       const icon = L.divIcon({ className: meta.className, html: meta.html, iconSize: [30, 30], iconAnchor: [15, 15] });
@@ -374,7 +399,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     }
     if (suppressNextFitRef.current) suppressNextFitRef.current = false;
     else map.fitBounds(line.getBounds().pad(0.42), { animate: true, maxZoom: 6 });
-  }, [destination, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, weather]);
+  }, [destination, forcedPoiType, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, weather]);
 
   useEffect(() => {
     let cancelled = false;
@@ -502,9 +527,11 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         <aside className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/70 p-4">
           <div>
             <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-400">Mascote entregador</label>
+            <div className="relative mb-2"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={mascotSearch} onChange={event => setMascotSearch(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-cyan-400" placeholder="Buscar por nome, espécie ou tipo..." /></div>
             <select value={mascotId} onChange={(event) => { setMascotId(event.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
-              {mascots.map((item) => <option key={item.id} value={item.id}>{item.name} · Nv.{item.level} · AGI {item.agility}</option>)}
+              {visibleMascots.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.species}) · Nv.{item.level} · AGI {item.agility} · {item.types.join("/")}</option>)}
             </select>
+            <p className="mt-1 text-[8px] text-slate-500">{visibleMascots.length} de {mascots.length} mascotes encontrados</p>
           </div>
 
           {mascot ? (
@@ -523,9 +550,9 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
           ) : <p className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-xs text-red-200">A conta admin não possui mascotes livres para simular.</p>}
 
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-            <div><label className="mb-1 block text-[9px] font-bold uppercase text-slate-500">Origem</label><select value={originId} onChange={(e) => { setOriginId(e.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs">{availablePlaces.map(p => <option value={p.id} key={p.id}>{p.name} · {p.country}</option>)}</select></div>
+            <LocationPicker label="Origem" value={originId} selectedPlace={origin} country={originCountry} search={originSearch} countries={countries} places={originPlaces} onCountry={setOriginCountry} onSearch={setOriginSearch} onChange={value => { setOriginId(value); reset(); }} />
             <button type="button" onClick={swapRoute} className="mb-0.5 rounded-xl border border-slate-700 p-2 text-cyan-300 hover:bg-cyan-400/10" title="Inverter rota"><Route size={16} /></button>
-            <div><label className="mb-1 block text-[9px] font-bold uppercase text-slate-500">Destino</label><select value={destinationId} onChange={(e) => { setDestinationId(e.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs">{availablePlaces.map(p => <option value={p.id} key={p.id}>{p.name} · {p.country}</option>)}</select></div>
+            <LocationPicker label="Destino" value={destinationId} selectedPlace={destination} country={destinationCountry} search={destinationSearch} countries={countries} places={destinationPlaces} onCountry={setDestinationCountry} onSearch={setDestinationSearch} onChange={value => { setDestinationId(value); reset(); }} />
           </div>
 
           <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-3">
@@ -594,11 +621,12 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
                 ["MIAUVADAO_BRANCH", "📦 Miauvadão", "border-orange-400/30 bg-orange-400/10 text-orange-200"],
                 ["TRAPACA_HIDEOUT", "☠ Ordem da Trapaça", "border-purple-400/30 bg-purple-400/10 text-purple-200"],
               ] as Array<[DeliveryPoiType, string, string]>).map(([type, label, activeClass]) => {
-                const count = DELIVERY_POIS.filter(poi => poi.type === type).length;
-                return <button type="button" key={type} aria-pressed={poiVisibility[type]} onClick={() => setPoiVisibility(current => ({ ...current, [type]: !current[type] }))} className={`rounded-xl border px-2.5 py-2 text-left text-[9px] font-black transition ${poiVisibility[type] ? activeClass : "border-slate-700 bg-slate-900 text-slate-500"}`}><span className="flex items-center justify-between"><span>{label}</span><span>{count}</span></span><span className="mt-0.5 block text-[8px] font-normal opacity-70">{poiVisibility[type] ? "Visível" : "Oculto"}</span></button>;
+                const count = MAP_POIS.filter(poi => poi.type === type).length;
+                const active = forcedPoiType ? forcedPoiType === type : poiVisibility[type];
+                return <div key={type} className={`rounded-xl border p-2 text-left text-[9px] font-black transition ${active ? activeClass : "border-slate-700 bg-slate-900 text-slate-500"}`}><button type="button" aria-pressed={poiVisibility[type]} onClick={() => { setForcedPoiType(null); setPoiVisibility(current => ({ ...current, [type]: !current[type] })); }} className="w-full text-left"><span className="flex items-center justify-between"><span>{label}</span><span>{count}</span></span><span className="mt-0.5 block text-[8px] font-normal opacity-70">{active ? "Visível" : "Oculto"}</span></button><button type="button" onClick={() => setForcedPoiType(current => current === type ? null : type)} className={`mt-2 flex w-full items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-[8px] ${forcedPoiType === type ? "border-white/40 bg-white/15 text-white" : "border-white/10 bg-slate-950/30"}`}><Eye size={10} />{forcedPoiType === type ? "Sair do isolamento" : "Mostrar todos"}</button></div>;
               })}
             </div>
-            <p className="mt-2 text-[8px] text-slate-500">Zoom atual: {mapZoom}. Hubs mundiais aparecem sempre; pontos regionais surgem no zoom 5 e locais no zoom 7. Os esconderijos continuam dependendo do filtro administrativo.</p>
+            <p className="mt-2 text-[8px] text-slate-500">Zoom atual: {mapZoom}. Regionais aparecem no zoom 5, locais no 7 e microparadas no 9. “Mostrar todos” esconde as demais categorias e ignora a distância da categoria escolhida.</p>
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl">
@@ -625,6 +653,20 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
 
 function Metric({ icon: Icon, label, value, detail }: { icon: typeof Box; label: string; value: string; detail?: string }) {
   return <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-500"><Icon size={13} className="text-cyan-300" />{label}</div><p className="mt-2 text-lg font-black text-white">{value}</p>{detail && <p className="mt-0.5 text-[9px] text-slate-500">{detail}</p>}</div>;
+}
+
+function LocationPicker({ label, value, selectedPlace, country, search, countries, places, onCountry, onSearch, onChange }: { label: string; value: string; selectedPlace: Place; country: string; search: string; countries: string[]; places: Place[]; onCountry: (value: string) => void; onSearch: (value: string) => void; onChange: (value: string) => void }) {
+  const selectedVisible = places.some(place => place.id === value);
+  return <div className="min-w-0 space-y-1.5">
+    <label className="block text-[9px] font-bold uppercase text-slate-500">{label}</label>
+    <select value={country} onChange={event => onCountry(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] text-white"><option value="Todos">Todos os países</option>{countries.filter(item => item !== "Todos").map(item => <option key={item} value={item}>{item}</option>)}</select>
+    <div className="relative"><Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" /><input value={search} onChange={event => onSearch(event.target.value)} placeholder="Buscar local..." className="w-full rounded-lg border border-slate-700 bg-slate-900 py-1.5 pl-7 pr-2 text-[10px] text-white outline-none focus:border-cyan-400" /></div>
+    <select value={value} onChange={event => onChange(event.target.value)} className="w-full rounded-xl border border-cyan-400/20 bg-slate-900 px-2 py-2 text-xs font-bold text-white">
+      {!selectedVisible && <option value={selectedPlace.id}>{selectedPlace.name} · {selectedPlace.country}</option>}
+      {places.map(place => <option value={place.id} key={place.id}>{place.name}{place.state ? ` (${place.state})` : ""} · {place.country}</option>)}
+    </select>
+    <p className="truncate text-[8px] text-cyan-200">{selectedPlace.name} · {selectedPlace.region}</p>
+  </div>;
 }
 
 type WikiPoiInfo = { title: string; extract: string; thumbnail?: string; pageUrl?: string };
