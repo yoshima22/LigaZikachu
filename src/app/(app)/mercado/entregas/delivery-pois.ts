@@ -1,5 +1,45 @@
 export type DeliveryPoiType = "LANDMARK" | "LOCAL_STOP" | "REST_POINT" | "MIAUVADAO_BRANCH" | "TRAPACA_HIDEOUT" | "SPECIAL_POI";
 export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" | "MICRO" };
+export type PoiCountryAnchor = { id: string; name: string; country: string; lat: number; lng: number };
+
+function stableOffset(index: number, salt: number) {
+  const angle = (index * 137.508 + salt * 43) * Math.PI / 180;
+  const ring = 0.025 + ((index * 29 + salt * 17) % 100) / 100 * 0.19;
+  return { lat: Math.sin(angle) * ring, lng: Math.cos(angle) * ring };
+}
+
+/** Gera uma malha determinística e sem chamadas externas para cada país coberto. */
+export function buildDensePoiNetwork(anchors: PoiCountryAnchor[]): DeliveryPoi[] {
+  const countries = new Map<string, PoiCountryAnchor[]>();
+  anchors.forEach(anchor => countries.set(anchor.country, [...(countries.get(anchor.country) ?? []), anchor]));
+  const points: DeliveryPoi[] = [];
+  const addSeries = (country: string, countryAnchors: PoiCountryAnchor[], type: DeliveryPoiType, amount: number, prefix: string, visibility: DeliveryPoi["visibility"], salt: number) => {
+    for (let index = 0; index < amount; index += 1) {
+      const anchor = countryAnchors[index % countryAnchors.length];
+      const offset = stableOffset(index, salt + country.length);
+      const label = type === "LOCAL_STOP" ? "Microparada" : type === "REST_POINT" ? "Posto de descanso" : type === "MIAUVADAO_BRANCH" ? "Filial do Miauvadão" : "Base suspeita da Ordem";
+      points.push({
+        id: `dense_${prefix}_${anchor.id}_${index + 1}`,
+        name: `${label} · ${anchor.name} ${index + 1}`,
+        type,
+        lat: Math.max(-84.8, Math.min(84.8, anchor.lat + offset.lat)),
+        lng: Math.max(-179.8, Math.min(179.8, anchor.lng + offset.lng)),
+        region: country,
+        visibility,
+        description: type === "TRAPACA_HIDEOUT"
+          ? `Possível ponto clandestino nos arredores de ${anchor.name}. A localização faz parte da camada de jogo.`
+          : `Ponto de apoio para entregas locais nos arredores de ${anchor.name}, ${country}.`,
+      });
+    }
+  };
+  countries.forEach((countryAnchors, country) => {
+    addSeries(country, countryAnchors, "LOCAL_STOP", 50, "local", "MICRO", 1);
+    addSeries(country, countryAnchors, "REST_POINT", 10, "rest", "LOCAL", 2);
+    addSeries(country, countryAnchors, "MIAUVADAO_BRANCH", 10, "miau", "LOCAL", 3);
+    addSeries(country, countryAnchors, "TRAPACA_HIDEOUT", 10, "trapaca", "LOCAL", 4);
+  });
+  return points;
+}
 
 export const DELIVERY_POIS: DeliveryPoi[] = [
   // Marcos mundiais
