@@ -2711,6 +2711,21 @@ export const RARITY_LABEL: Record<MascotRarity, string> = {
   COMMON: "",
 };
 
+// Lista de pokemonIds que se enquadram em cada raridade especial (COMMON não é
+// enumerável, pois cobre todo o resto). Usado para filtrar o banco por raridade.
+export function getPokemonIdsByRarity(rarity: MascotRarity): number[] {
+  if (rarity === "COMMON") return [];
+  const ids = new Set<number>([
+    ...MEGA_FORM_ID_SET,
+    ...MYTHICAL_IDS,
+    ...ULTRA_BEAST_IDS,
+    ...LEGENDARY_POOL,
+    ...PSEUDO_LEGENDARY_LINE_IDS,
+    ...PARADOX_IDS,
+  ]);
+  return [...ids].filter((id) => getMascotRarity(id) === rarity);
+}
+
 export const RARITY_COLOR: Record<MascotRarity, string> = {
   MEGA: "border-fuchsia-400/60 bg-fuchsia-500/15 text-fuchsia-200",
   LEGENDARY: "border-yellow-400/50 bg-yellow-400/10 text-yellow-300",

@@ -101,7 +101,7 @@ async function fetchMascotPageData(playerId: string) {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
           take: 1,
-          select: { id: true, finishAt: true, status: true, rewardJson: true }
+          select: { id: true, startedAt: true, finishAt: true, status: true, rewardJson: true }
         },
       },
       // Equipado sempre primeiro; depois favoritos na ordem manual (favoriteOrder).
@@ -384,7 +384,7 @@ export default async function MascotesPage() {
     preferredCombatRole: m.preferredCombatRole,
     activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({
-      id: e.id, finishAt: e.finishAt, status: e.status,
+      id: e.id, startedAt: e.startedAt, finishAt: e.finishAt, status: e.status,
       mode: (e.rewardJson as Record<string,unknown> | null)?.mode as string | undefined ?? "STANDARD",
     })),
     relations: (m.relationsAsA ?? []).map(r => ({
