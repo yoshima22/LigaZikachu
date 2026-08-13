@@ -1586,6 +1586,20 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
       : "COMMON"
     );
     const result = await prisma.$transaction(async (tx) => {
+      // Serializa o uso por mascote entre cliques, abas e instâncias da Vercel.
+      // Sem isto, duas transações podem ler o mesmo saldo antes de qualquer uma concluir.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rainbow-feather:${mascotId}`}))`;
+      const duplicateWindow = new Date(Date.now() - 2 * 60 * 1000);
+      const recentUse = await tx.mascotEvent.findFirst({
+        where: {
+          mascotId,
+          createdAt: { gte: duplicateWindow },
+          description: { startsWith: "Pena Arco-Íris usada!" },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      if (recentUse) throw new Error("Esta Pena Arco-Íris já foi processada. Aguarde dois minutos antes de tentar um novo uso neste mascote.");
       const currentInventory = await tx.playerInventory.findUnique({ where: { id: inv.id } });
       if (!currentInventory || currentInventory.quantity < 1) throw new Error("Você não tem Pena Arco-Íris no inventário.");
       if (isAdminLabFeather) {
