@@ -33,7 +33,7 @@ interface MascotData {
   arenaState: string; injuredAt: Date | null; restingUntil: Date | null;
   relations?: Array<{ type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }>;
   hatchedAt: Date; lastInteractedAt: Date | null; lastPlayedAt?: Date | null; lastPettedAt?: Date | null; lastFedAt: Date | null;
-  expeditions: { id: string; finishAt: Date; status: string; mode?: string }[];
+  expeditions: { id: string; startedAt?: Date; finishAt: Date; status: string; mode?: string }[];
   events: { id: string; emoji: string; description: string; createdAt: Date }[];
   hasFood: boolean; hasSweet: boolean;
   otherMascots?: { id: string; name: string }[];
@@ -125,6 +125,17 @@ function ExpeditionProgressCard({
   const ready = expired;
   const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
 
+  // Progresso real: quanto do tempo total (startedAt → finishAt) já passou.
+  // No início a barra fica vazia e vai enchendo até 100% ao concluir.
+  const totalMs = expedition.startedAt
+    ? new Date(expedition.finishAt).getTime() - new Date(expedition.startedAt).getTime()
+    : 0;
+  const progressPct = ready
+    ? 100
+    : totalMs > 0
+      ? Math.min(100, Math.max(0, ((totalMs - remaining) / totalMs) * 100))
+      : 0;
+
   const collectExpedition = () => {
     startTransition(async () => {
       const result = await claimExpeditionAction(expedition.id);
@@ -173,7 +184,7 @@ function ExpeditionProgressCard({
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
           <div
             className={`h-full rounded-full transition-all ${ready ? "bg-green-400" : "bg-blue-400"}`}
-            style={{ width: ready ? "100%" : "55%" }}
+            style={{ width: `${progressPct}%` }}
           />
         </div>
         <div className="mt-3 flex gap-2">

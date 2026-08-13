@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
 import {
@@ -444,6 +444,8 @@ export function MascotBankList({
   const [typeFilter, setTypeFilter] = useState("");
   const [rankFilter, setRankFilter] = useState("");
   const [perfFilter, setPerfFilter] = useState("");
+  const [rarityFilter, setRarityFilter] = useState("");
+  const [personalityFilter, setPersonalityFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -464,6 +466,8 @@ export function MascotBankList({
           ocup,
           rank: rankFilter,
           perf: perfFilter,
+          rarity: rarityFilter,
+          personality: personalityFilter,
         });
         // Uma resposta antiga nao pode sobrescrever uma busca digitada depois.
         if (requestId !== requestSequence.current) return;
@@ -477,7 +481,7 @@ export function MascotBankList({
         setPageInput("");
       })();
     });
-  }, [ocup, search, typeFilter, rankFilter, perfFilter]);
+  }, [ocup, search, typeFilter, rankFilter, perfFilter, rarityFilter, personalityFilter]);
 
   useEffect(() => {
     if (didInitialLoad.current) return;
@@ -569,6 +573,26 @@ export function MascotBankList({
           <option value="NEUTRO">⚖️ Neutro</option>
           <option value="RUIM">👎 Ruim</option>
           <option value="PESSIMO">🗑️ Péssimo</option>
+        </select>
+        <select
+          value={rarityFilter}
+          onChange={(event) => setRarityFilter(event.target.value)}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="">Raridade: todas</option>
+          {(["MEGA", "LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PSEUDO_LEGENDARY", "PARADOX"] as const).map((r) => (
+            <option key={r} value={r}>{RARITY_LABEL[r]}</option>
+          ))}
+        </select>
+        <select
+          value={personalityFilter}
+          onChange={(event) => setPersonalityFilter(event.target.value)}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="">Personalidade: todas</option>
+          {Object.entries(PERSONALITY_LABEL).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
         </select>
         <button
           type="button"

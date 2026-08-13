@@ -16,7 +16,7 @@ import {
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
-import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonName, getPokemonTypes, getSpriteUrl, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
   getEggCandidatesForGeneration,
@@ -1559,6 +1559,8 @@ export async function getBankMascotsPageAction(input?: {
   ocup?: string;
   rank?: string;
   perf?: string;
+  rarity?: string;
+  personality?: string;
 }): Promise<{
   error?: string;
   data?: {
@@ -1611,6 +1613,8 @@ export async function getBankMascotsPageAction(input?: {
     const ocup = (input?.ocup ?? "all").trim().toLowerCase();
     const rank = (input?.rank ?? "").trim();
     const perf = (input?.perf ?? "").trim();
+    const rarity = (input?.rarity ?? "").trim();
+    const personality = (input?.personality ?? "").trim().toUpperCase();
     const now = new Date();
 
     const and: Prisma.MascotWhereInput[] = [
@@ -1626,6 +1630,17 @@ export async function getBankMascotsPageAction(input?: {
 
     // Filtro de marcador de desempenho (Forte/Neutro/Ruim/Péssimo)
     if (["FORTE", "NEUTRO", "RUIM", "PESSIMO"].includes(perf)) and.push({ performanceTag: perf });
+
+    // Filtro por raridade da espécie (Lendário, Mítico, Paradoxal, etc.).
+    if (["MEGA", "LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PSEUDO_LEGENDARY", "PARADOX"].includes(rarity)) {
+      const rarityIds = getPokemonIdsByRarity(rarity as Parameters<typeof getPokemonIdsByRarity>[0]);
+      and.push(rarityIds.length > 0 ? { pokemonId: { in: rarityIds } } : { id: "__no_match__" });
+    }
+
+    // Filtro por personalidade do mascote.
+    if (["LOYAL", "PROUD", "MISCHIEVOUS", "LAZY", "COMPETITIVE", "DRAMATIC", "PLAYFUL", "ELECTRIC", "TIMID", "CHAOTIC"].includes(personality)) {
+      and.push({ personality: personality as never });
+    }
 
     if (search) {
       const pokemonIds = findPokemonIdsBySearch(search);
