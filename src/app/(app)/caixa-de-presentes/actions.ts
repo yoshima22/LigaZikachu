@@ -203,8 +203,14 @@ async function applyGiftReward(
       const item = rawItem as Record<string, unknown>;
       const type = typeof item.type === "string" ? item.type : null;
       if (!type) continue;
+      const itemName = typeof item.itemName === "string" ? item.itemName.trim() : "";
       const quantity = typeof item.quantity === "number" ? Math.max(1, Math.floor(item.quantity)) : 1;
-      const shopItem = await tx.shopItem.findFirst({ where: { type: type as import("@prisma/client").ShopItemType }, select: { id: true } });
+      const shopItem = await tx.shopItem.findFirst({
+        where: itemName
+          ? { name: { equals: itemName, mode: "insensitive" } }
+          : { type: type as import("@prisma/client").ShopItemType },
+        select: { id: true },
+      });
       if (!shopItem) continue;
       await tx.playerInventory.upsert({
         where: { playerId_itemId: { playerId, itemId: shopItem.id } },

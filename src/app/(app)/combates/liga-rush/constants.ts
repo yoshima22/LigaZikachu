@@ -8,8 +8,8 @@ export type RushRewardBundle = {
   food?: number;
   sweet?: number;
   creationDust?: number;
-  eggs?: Array<{ type: "COMMON" | "RARE" | "EVENT"; quantity: number }>;
-  shopItems?: Array<{ type: string; quantity: number; label: string }>;
+  eggs?: Array<{ type: "COMMON" | "RARE" | "EVENT" | "SPECIAL"; quantity: number }>;
+  shopItems?: Array<{ type: string; quantity: number; label: string; itemName?: string }>;
   randomMegaStone?: boolean;
 };
 
@@ -88,6 +88,42 @@ export const RUSH_REWARD_PLANS: RushRewardPlan[] = [
       { key: "third", rankFrom: 3, label: "1 Ovo Comum + 1 Ovo da Sorte + 400 ZC", estimatedValue: 2600, coins: 400, eggs: [{ type: "COMMON", quantity: 1 }], shopItems: [{ type: "LUCKY_EGG", quantity: 1, label: "Ovo da Sorte" }] },
       { key: "top6", rankFrom: 4, rankTo: 6, label: "1 Ovo Comum + 250 ZC", estimatedValue: 850, coins: 250, eggs: [{ type: "COMMON", quantity: 1 }] },
       { key: "participation", rankFrom: 7, rankTo: 9999, label: "Caixa de participação: 150 ZC, comida e Pó", estimatedValue: 350, coins: 150, food: 3, creationDust: 3 },
+    ],
+  },
+  {
+    id: "OVOS_ESPECIAIS",
+    name: "Incubadoras da Velocidade",
+    description: "Rotação com Ovos Especiais e itens que melhoram progressão, sorte e expedições.",
+    bundles: [
+      { key: "first", rankFrom: 1, label: "1 Ovo Especial + 1 Amuleto da Sorte + 600 ZC", estimatedValue: 6000, coins: 600, eggs: [{ type: "SPECIAL", quantity: 1 }], shopItems: [{ type: "MASCOT_BUFF_LUCK", quantity: 1, label: "Amuleto da Sorte" }] },
+      { key: "second", rankFrom: 2, label: "1 Ovo Raro + 1 Ovo da Sorte + 500 ZC", estimatedValue: 4300, coins: 500, eggs: [{ type: "RARE", quantity: 1 }], shopItems: [{ type: "LUCKY_EGG", quantity: 1, label: "Ovo da Sorte" }] },
+      { key: "third", rankFrom: 3, label: "1 Ovo Comum + 1 Vitamina Chocante + 500 ZC", estimatedValue: 1850, coins: 500, eggs: [{ type: "COMMON", quantity: 1 }], shopItems: [{ type: "MASCOT_BUFF_EXP", quantity: 1, label: "Vitamina Chocante" }] },
+      { key: "top6", rankFrom: 4, rankTo: 6, label: "1 Vitamina Chocante + 250 ZC", estimatedValue: 1000, coins: 250, shopItems: [{ type: "MASCOT_BUFF_EXP", quantity: 1, label: "Vitamina Chocante" }] },
+      { key: "participation", rankFrom: 7, rankTo: 9999, label: "Caixa de participação: 150 ZC, comidas e doce", estimatedValue: 350, coins: 150, food: 5, sweet: 1 },
+    ],
+  },
+  {
+    id: "ARCO_IRIS",
+    name: "Cofres Arco-Íris",
+    description: "As Penas Arco-Íris entram em rotação respeitando o nível indicado no prêmio, do Comum ao Laboratório.",
+    bundles: [
+      { key: "first", rankFrom: 1, label: "1 Pena Arco-Íris de Laboratório + 800 ZC", estimatedValue: 5000, coins: 800, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris de Laboratório", quantity: 1, label: "Pena Arco-Íris de Laboratório" }] },
+      { key: "second", rankFrom: 2, label: "1 Pena Arco-Íris Especial + 600 ZC", estimatedValue: 3700, coins: 600, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Especial", quantity: 1, label: "Pena Arco-Íris Especial" }] },
+      { key: "third", rankFrom: 3, label: "1 Pena Arco-Íris de Evento + 500 ZC", estimatedValue: 2700, coins: 500, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris de Evento", quantity: 1, label: "Pena Arco-Íris de Evento" }] },
+      { key: "top6", rankFrom: 4, rankTo: 6, label: "1 Pena Arco-Íris Rara + 250 ZC", estimatedValue: 2250, coins: 250, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Rara", quantity: 1, label: "Pena Arco-Íris Rara" }] },
+      { key: "participation", rankFrom: 7, rankTo: 9999, label: "1 Pena Arco-Íris Comum + 100 ZC", estimatedValue: 1000, coins: 100, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Comum", quantity: 1, label: "Pena Arco-Íris Comum" }] },
+    ],
+  },
+  {
+    id: "FORTUNA_E_EVOLUCAO",
+    name: "Fortuna e Evolução",
+    description: "Rotação rara com Pedra de Mega Evolução, Ovo da Sorte, Vitamina Chocante e Amuleto da Sorte.",
+    bundles: [
+      { key: "first", rankFrom: 1, label: "1 Pedra de Mega Evolução aleatória", estimatedValue: 6000, randomMegaStone: true },
+      { key: "second", rankFrom: 2, label: "1 Ovo Especial", estimatedValue: 5000, eggs: [{ type: "SPECIAL", quantity: 1 }] },
+      { key: "third", rankFrom: 3, label: "1 Ovo da Sorte + 1 Amuleto da Sorte + 300 ZC", estimatedValue: 3100, coins: 300, shopItems: [{ type: "LUCKY_EGG", quantity: 1, label: "Ovo da Sorte" }, { type: "MASCOT_BUFF_LUCK", quantity: 1, label: "Amuleto da Sorte" }] },
+      { key: "top6", rankFrom: 4, rankTo: 6, label: "1 Vitamina Chocante + 250 ZC", estimatedValue: 1000, coins: 250, shopItems: [{ type: "MASCOT_BUFF_EXP", quantity: 1, label: "Vitamina Chocante" }] },
+      { key: "participation", rankFrom: 7, rankTo: 9999, label: "Caixa de participação: 150 ZC e 5 comidas", estimatedValue: 300, coins: 150, food: 5 },
     ],
   },
 ];
