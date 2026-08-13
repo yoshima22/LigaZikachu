@@ -351,7 +351,7 @@ function scaleRewardPlan(planId: string | undefined, cap: number) {
 function describeRushReward(bundle:RushRewardBundle){
   const parts:string[]=[];
   if(bundle.randomMegaStone)parts.push("1 Pedra de Mega Evolução aleatória");
-  for(const egg of bundle.eggs??[]){const name=egg.type==="RARE"?"Ovo Raro":egg.type==="EVENT"?"Ovo de Evento":"Ovo Comum";parts.push(`${egg.quantity}× ${name}`);}
+  for(const egg of bundle.eggs??[]){const name=egg.type==="SPECIAL"?"Ovo Especial":egg.type==="RARE"?"Ovo Raro":egg.type==="EVENT"?"Ovo de Evento":"Ovo Comum";parts.push(`${egg.quantity}× ${name}`);}
   for(const item of bundle.shopItems??[])parts.push(`${item.quantity}× ${item.label}`);
   if(bundle.creationDust)parts.push(`${bundle.creationDust} Pó de Criação`);
   if(bundle.food)parts.push(`${bundle.food} comidas`);
@@ -475,6 +475,20 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId }, include: { participants: true } });
     if (!league) return { error: "Liga não encontrada." };
     if (league.rewardsGrantedAt) return { error: "As recompensas desta edição já foram distribuídas." };
+    const now = new Date();
+    if (now < league.weekEnd) {
+      const closing = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        weekday: "long",
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(league.weekEnd);
+      return { error: `As recompensas só podem ser distribuídas no fechamento oficial: ${closing}.` };
+    }
+    const unresolved = await prisma.rushLeagueMatch.count({ where: { leagueId, status: "SCHEDULED" } });
+    if (unresolved > 0) return { error: `Ainda existem ${unresolved} partida(s) agendada(s) sem resultado. As caixas não foram enviadas.` };
     const ranking = [...league.participants].sort((a, b) => b.points - a.points || b.wins - a.wins || b.survivorsScore - a.survivorsScore || b.damageDealt - a.damageDealt || a.damageTaken - b.damageTaken);
     const rewards = parseRewards(league.rewardsJson);
     await prisma.$transaction(async (tx) => {
@@ -482,7 +496,7 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
         const participant = ranking[index]; const rank = index + 1; const reward = rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));
         await tx.rushLeagueParticipant.update({ where: { id: participant.id }, data: { finalRank: rank, rewardGranted: Boolean(reward) } });
         if (!reward) continue;
-        const shopItems = [...(reward.shopItems ?? [])].map(({ type, quantity }) => ({ type, quantity }));
+        const shopItems = [...(reward.shopItems ?? [])].map(({ type, quantity, itemName }) => ({ type, quantity, ...(itemName ? { itemName } : {}) }));
         if (reward.randomMegaStone) {
           const stone = MEGA_STONES[Math.floor(Math.random() * MEGA_STONES.length)];
           shopItems.push({ type: stone.type, quantity: 1 });
