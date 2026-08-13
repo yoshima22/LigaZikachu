@@ -23,9 +23,12 @@ import {
   Home,
   Landmark,
   LocateFixed,
+  X,
+  ExternalLink,
+  BookOpen,
 } from "lucide-react";
 import styles from "./delivery-map-prototype.module.css";
-import { DELIVERY_POIS, type DeliveryPoiType } from "./delivery-pois";
+import { DELIVERY_POIS, type DeliveryPoi, type DeliveryPoiType } from "./delivery-pois";
 
 type MascotOption = {
   id: string;
@@ -206,6 +209,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [roadError, setRoadError] = useState<string | null>(null);
   const [roadLoading, setRoadLoading] = useState(false);
   const [poiVisibility, setPoiVisibility] = useState<Record<DeliveryPoiType, boolean>>({ LANDMARK: true, REST_POINT: true, MIAUVADAO_BRANCH: true, TRAPACA_HIDEOUT: false, SPECIAL_POI: false });
+  const [selectedPoi, setSelectedPoi] = useState<DeliveryPoi | null>(null);
   const [weatherEnabled, setWeatherEnabled] = useState(true);
   const [weather, setWeather] = useState<WeatherSnapshot[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -346,7 +350,9 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     DELIVERY_POIS.filter(poi => poiVisibility[poi.type] && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id))).forEach((poi) => {
       const meta = poiMeta[poi.type];
       const icon = L.divIcon({ className: meta.className, html: meta.html, iconSize: [30, 30], iconAnchor: [15, 15] });
-      L.marker([poi.lat, poi.lng], { icon }).addTo(map).bindTooltip(`<b>${poi.name}</b><br>${meta.label} · ${poi.region}${poi.description ? `<br>${poi.description}` : ""}`, { direction: "top" });
+      L.marker([poi.lat, poi.lng], { icon }).addTo(map)
+        .bindTooltip(`<b>${poi.name}</b><br>${meta.label} · ${poi.region}${poi.description ? `<br>${poi.description}` : ""}`, { direction: "top" })
+        .on("click", () => setSelectedPoi(poi));
     });
 
     if (mascot) {
@@ -590,10 +596,58 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
           </div>
         </section>
       </div>
+      {selectedPoi && <PoiDetailsModal poi={selectedPoi} onClose={() => setSelectedPoi(null)} />}
     </div>
   );
 }
 
 function Metric({ icon: Icon, label, value, detail }: { icon: typeof Box; label: string; value: string; detail?: string }) {
   return <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-slate-500"><Icon size={13} className="text-cyan-300" />{label}</div><p className="mt-2 text-lg font-black text-white">{value}</p>{detail && <p className="mt-0.5 text-[9px] text-slate-500">{detail}</p>}</div>;
+}
+
+type WikiPoiInfo = { title: string; extract: string; thumbnail?: string; pageUrl?: string };
+
+function PoiDetailsModal({ poi, onClose }: { poi: DeliveryPoi; onClose: () => void }) {
+  const [info, setInfo] = useState<WikiPoiInfo | null>(null);
+  const [loading, setLoading] = useState(poi.type === "LANDMARK" || poi.type === "REST_POINT");
+  const realPlace = poi.type === "LANDMARK" || poi.type === "REST_POINT";
+  useEffect(() => {
+    if (!realPlace) return;
+    const cacheKey = `delivery-poi-wiki-v1:${poi.id}`;
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || "null") as { savedAt: number; value: WikiPoiInfo } | null;
+      if (cached && Date.now() - cached.savedAt < 7 * 86400000) { setInfo(cached.value); setLoading(false); return; }
+    } catch { /* cache inválido é ignorado */ }
+    const params = new URLSearchParams({ action: "query", format: "json", origin: "*", generator: "geosearch", ggscoord: `${poi.lat}|${poi.lng}`, ggsradius: "5000", ggslimit: "8", prop: "extracts|pageimages|info", exintro: "1", explaintext: "1", piprop: "thumbnail", pithumbsize: "900", inprop: "url" });
+    void fetch(`https://pt.wikipedia.org/w/api.php?${params}`).then(response => response.json()).then((data: { query?: { pages?: Record<string, { title: string; extract?: string; thumbnail?: { source: string }; fullurl?: string }> } }) => {
+      const pages = Object.values(data.query?.pages ?? {});
+      const words = poi.name.toLocaleLowerCase("pt-BR").split(/\s+/).filter(word => word.length > 3);
+      const page = pages.sort((a, b) => words.filter(word => b.title.toLocaleLowerCase("pt-BR").includes(word)).length - words.filter(word => a.title.toLocaleLowerCase("pt-BR").includes(word)).length)[0];
+      if (!page) return;
+      const value = { title: page.title, extract: (page.extract || "").slice(0, 900), thumbnail: page.thumbnail?.source, pageUrl: page.fullurl };
+      setInfo(value);
+      try { localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), value })); } catch { /* quota local indisponível */ }
+    }).catch(() => null).finally(() => setLoading(false));
+  }, [poi, realPlace]);
+  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(`${poi.lat},${poi.lng}`)}`;
+  const typeLabel: Record<DeliveryPoiType, string> = { LANDMARK: "Ponto turístico", REST_POINT: "Ponto de descanso", MIAUVADAO_BRANCH: "Filial do Miauvadão", TRAPACA_HIDEOUT: "Esconderijo da Ordem da Trapaça", SPECIAL_POI: "Local especial" };
+  const gameText = poi.description || (poi.type === "MIAUVADAO_BRANCH" ? "Ponto mundial de coleta, entrega e transferência de encomendas do Miauvadão." : poi.type === "REST_POINT" ? "Uma parada segura para recuperar o fôlego e reduzir a fadiga da viagem." : poi.type === "TRAPACA_HIDEOUT" ? "Local clandestino. Sua presença poderá gerar interceptações e missões especiais." : "Um lugar real que pode ser registrado no diário do mensageiro.");
+  return <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <article className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-cyan-400/25 bg-slate-950 shadow-[0_0_60px_rgba(34,211,238,.18)]">
+      <div className="relative min-h-48 overflow-hidden bg-gradient-to-br from-cyan-950 via-slate-900 to-purple-950">
+        {info?.thumbnail ? <img src={info.thumbnail} alt={poi.name} className="h-64 w-full object-cover" referrerPolicy="no-referrer" /> : <div className="grid h-52 place-items-center text-center"><Landmark size={42} className="text-cyan-300" /><p className="mt-2 text-xs text-slate-400">{loading ? "Buscando foto livre na Wikipedia…" : "Imagem real não encontrada; usando apresentação do jogo."}</p></div>}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 to-transparent px-5 pb-4 pt-14"><span className="rounded-full border border-white/20 bg-slate-950/75 px-2 py-1 text-[9px] font-black uppercase text-cyan-200">{typeLabel[poi.type]}</span><h2 className="mt-2 text-2xl font-black text-white">{poi.name}</h2><p className="text-xs text-slate-300">{poi.region}</p></div>
+        <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-full border border-white/15 bg-slate-950/75 p-2 text-white"><X size={17} /></button>
+      </div>
+      <div className="space-y-4 p-5">
+        <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-4"><p className="text-[9px] font-black uppercase tracking-widest text-yellow-300">Na Liga Zikachu</p><p className="mt-2 text-sm leading-relaxed text-slate-200">{gameText}</p></section>
+        {info?.extract && <section><div className="flex items-center gap-2 text-xs font-black text-cyan-200"><BookOpen size={15} /> Sobre o local</div><p className="mt-2 text-xs leading-relaxed text-slate-300">{info.extract}</p></section>}
+        <div className="flex flex-wrap gap-2">
+          {realPlace && <a href={streetViewUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><ExternalLink size={14} /> Abrir Street View</a>}
+          {info?.pageUrl && <a href={info.pageUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200"><ExternalLink size={14} /> Ler na Wikipedia</a>}
+        </div>
+        {info && <p className="border-t border-white/5 pt-3 text-[9px] leading-relaxed text-slate-500">Texto e imagem carregados diretamente da Wikipedia/Wikimedia. Clique na fonte para consultar o artigo, autoria e licença. A Liga não hospeda nem retransmite essa mídia.</p>}
+      </div>
+    </article>
+  </div>;
 }
