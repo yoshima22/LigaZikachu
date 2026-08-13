@@ -50,7 +50,8 @@ type MascotOption = {
 };
 
 type Place = { id: string; name: string; state: string; country: string; region: string; lat: number; lng: number; port?: boolean };
-type TripStatus = "READY" | "RUNNING" | "PAUSED" | "INTERCEPTED" | "ROBBED" | "RESCUE" | "DELIVERED";
+type TripStatus = "READY" | "RUNNING" | "PAUSED" | "INTERCEPTED" | "RETREATING" | "ROBBED" | "RESCUE" | "DELIVERED";
+type DeliveryJob = { id: string; origin: Place; destination: Place; reward: number; cargo: string };
 type RouteMode = "AIR" | "WATER" | "LAND";
 type WeatherSnapshot = { current?: { temperature_2m: number; apparent_temperature: number; precipitation: number; weather_code: number; wind_speed_10m: number; wind_gusts_10m: number; is_day: number } };
 
@@ -128,6 +129,11 @@ const REST_HUBS: Place[] = [
 const COUNTRY_COVERAGE_ANCHORS = [...PLACES, ...REST_HUBS];
 const DENSE_COUNTRY_POIS = buildDensePoiNetwork(COUNTRY_COVERAGE_ANCHORS.map(place => ({ id: place.id, name: place.name, country: place.country, lat: place.lat, lng: place.lng })));
 const MAP_POIS = [...DELIVERY_POIS, ...DENSE_COUNTRY_POIS];
+const DELIVERY_JOBS: DeliveryJob[] = PLACES.slice(0, 20).map((origin, index) => {
+  const destination = PLACES[(index * 7 + 5) % PLACES.length];
+  const distance = haversineKm(origin, destination);
+  return { id: `job-${origin.id}-${destination.id}`, origin, destination, reward: Math.round(90 + Math.sqrt(distance) * 18), cargo: ["Medicamentos", "Cartas e documentos", "Peças do laboratório", "Alimentos especiais", "Encomenda lacrada"][index % 5] };
+});
 const ALL_REST_HUBS: Place[] = [...REST_HUBS, ...MAP_POIS.filter(poi => poi.type === "REST_POINT").map(poi => ({ id: poi.id, name: poi.name, state: "", country: poi.region, region: poi.region, lat: poi.lat, lng: poi.lng }))];
 
 const ROUTE_INFO: Record<RouteMode, { label: string; icon: typeof Plane; types: string[]; bonus: number; color: string; description: string }> = {
@@ -221,7 +227,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [insured, setInsured] = useState(false);
   const [encounterAt, setEncounterAt] = useState(0.42);
   const [encounterEnemy, setEncounterEnemy] = useState("Sneasel da Ordem");
-  const [encounterSeconds, setEncounterSeconds] = useState(0);
+  const [enemyApproach, setEnemyApproach] = useState(0);
   const [encounterResolved, setEncounterResolved] = useState(false);
   const [rescueMessage, setRescueMessage] = useState<string | null>(null);
   const [simulatedAgility, setSimulatedAgility] = useState<number | null>(null);
@@ -239,6 +245,9 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const [destinationCountry, setDestinationCountry] = useState("Todos");
   const [originSearch, setOriginSearch] = useState("");
   const [destinationSearch, setDestinationSearch] = useState("");
+  const [jobSearch, setJobSearch] = useState("");
+  const [customPois, setCustomPois] = useState<DeliveryPoi[]>([]);
+  const [customPoiForm, setCustomPoiForm] = useState({ name: "", type: "LOCAL_STOP" as DeliveryPoiType, lat: "", lng: "", region: "", description: "", imageUrl: "" });
   const [selectedPoi, setSelectedPoi] = useState<DeliveryPoi | null>(null);
   const [mapZoom, setMapZoom] = useState(4);
   const [weatherEnabled, setWeatherEnabled] = useState(true);
@@ -301,15 +310,19 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   const realHours = distanceKm / effectiveSpeed * (1 + loadPenalty + weatherModifier + fatiguePenalty) + restHours;
   const debugDuration = clamp(12 + distanceKm / 150 - agilityRatio * 5 + loadPenalty * 10, 8, 35);
   const remainingDebug = debugDuration * (1 - progress);
+  const runtimePois = useMemo(() => [...MAP_POIS, ...customPois], [customPois]);
   const encounterBase = useMemo(() => {
     const target = pointAlongPath(routePoints, encounterAt);
-    return MAP_POIS.filter(poi => poi.type === "TRAPACA_HIDEOUT")
+    return runtimePois.filter(poi => poi.type === "TRAPACA_HIDEOUT")
       .map(poi => ({ poi, distance: haversineKm({ ...origin, lat: target.lat, lng: target.lng }, { ...origin, lat: poi.lat, lng: poi.lng }) }))
       .sort((a, b) => a.distance - b.distance)[0]?.poi;
-  }, [encounterAt, origin, routePoints]);
+  }, [encounterAt, origin, routePoints, runtimePois]);
   const encounterTarget = useMemo(() => pointAlongPath(routePoints, encounterAt), [encounterAt, routePoints]);
-  const enemyApproachRatio = clamp((12 - encounterSeconds) / 12);
+  const enemyApproachRatio = enemyApproach;
   const flareEffective = status === "INTERCEPTED" && enemyApproachRatio >= 0.58;
+  const pursuitDistanceKm = encounterBase ? haversineKm({ ...origin, lat: encounterTarget.lat, lng: encounterTarget.lng }, { ...origin, lat: encounterBase.lat, lng: encounterBase.lng }) : 120;
+  const pursuitEtaHours = pursuitDistanceKm * (1 - enemyApproachRatio) / Math.max(1, effectiveSpeed * 0.12);
+  const visibleJobs = useMemo(() => DELIVERY_JOBS.filter(job => `${job.origin.name} ${job.origin.country} ${job.destination.name} ${job.destination.country} ${job.cargo}`.toLocaleLowerCase("pt-BR").includes(jobSearch.toLocaleLowerCase("pt-BR"))), [jobSearch]);
   const tripClass = distanceKm <= 900 ? "Curta" : distanceKm <= 3500 ? "Média" : "Longa";
   const insurance = tripClass === "Curta"
     ? { price: 550, returnMinutes: 10, refundChance: 0, refundMin: 0, refundMax: 0 }
@@ -318,6 +331,9 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       : { price: 1450, returnMinutes: 20, refundChance: 60, refundMin: 550, refundMax: 1050 };
 
   useEffect(() => { progressRef.current = progress; }, [progress]);
+  useEffect(() => {
+    try { setCustomPois(JSON.parse(localStorage.getItem("delivery-custom-pois-v1") || "[]") as DeliveryPoi[]); } catch { setCustomPois([]); }
+  }, []);
 
   const loadWeather = useCallback(async () => {
     if (!weatherEnabled) { setWeather([]); setWeatherError(null); return; }
@@ -403,7 +419,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       TRAPACA_HIDEOUT: { className: "delivery-trapaca-icon", html: '<div class="delivery-trapaca-pin">☠</div>', label: "Esconderijo da Ordem" },
       SPECIAL_POI: { className: "delivery-special-icon", html: '<div class="delivery-special-pin">!</div>', label: "Evento especial" },
     };
-    MAP_POIS.filter((poi) => {
+    runtimePois.filter((poi) => {
       const zoomVisible = forcedPoiType === poi.type || (poi.visibility === "MICRO" ? mapZoom >= 9 : poi.visibility === "LOCAL" ? mapZoom >= 7 : poi.visibility === "REGIONAL" ? mapZoom >= 5 : true);
       const categoryVisible = forcedPoiType ? poi.type === forcedPoiType : poiVisibility[poi.type];
       return zoomVisible && categoryVisible && !(poi.type === "REST_POINT" && restStops.some(stop => stop.id === poi.id));
@@ -422,8 +438,8 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       const severeWind = current.wind_speed_10m >= 50 || current.wind_gusts_10m >= 70;
       const symbol = code >= 95 ? "⛈" : code >= 71 && code <= 86 ? "❄" : [45, 48].includes(code) ? "🌫" : code >= 51 ? "🌧" : severeWind ? "🌪" : code <= 1 ? "☀" : "☁";
       const warning = code >= 95 ? "Tempestade elétrica" : code >= 71 && code <= 86 ? "Nevasca/neve" : severeWind ? "Ventania severa" : weatherLabel(code);
-      const weatherIcon = L.divIcon({ className: "delivery-weather-icon", html: `<div style="display:grid;place-items:center;width:36px;height:36px;border-radius:999px;background:rgba(2,6,23,.86);border:1px solid rgba(125,211,252,.55);box-shadow:0 0 18px rgba(56,189,248,.28);font-size:19px">${symbol}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
-      L.marker([point.lat, point.lng], { icon: weatherIcon, zIndexOffset: 500 }).addTo(map).bindTooltip(`<b>${warning}</b><br>${current.temperature_2m}°C · vento ${current.wind_speed_10m} km/h${current.wind_gusts_10m ? ` · rajadas ${current.wind_gusts_10m} km/h` : ""}`, { direction: "top" });
+      const weatherIcon = L.divIcon({ className: "delivery-weather-icon", html: `<div style="transform:translate(30px,-30px);display:grid;place-items:center;width:36px;height:36px;border-radius:999px;background:rgba(2,6,23,.86);border:1px solid rgba(125,211,252,.55);box-shadow:0 0 18px rgba(56,189,248,.28);font-size:19px">${symbol}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
+      L.marker([point.lat, point.lng], { icon: weatherIcon, zIndexOffset: 500, interactive: false }).addTo(map).bindTooltip(`<b>${warning}</b><br>${current.temperature_2m}°C · vento ${current.wind_speed_10m} km/h${current.wind_gusts_10m ? ` · rajadas ${current.wind_gusts_10m} km/h` : ""}`, { direction: "top" });
     });
 
     if (mascot) {
@@ -437,7 +453,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         .addTo(map)
         .bindTooltip(`${mascot.name} · ${(progressRef.current * 100).toFixed(0)}%`, { direction: "top", offset: [0, -28] });
     }
-    if (status === "INTERCEPTED") {
+    if (status === "INTERCEPTED" || status === "RETREATING") {
       flareRadiusRef.current = L.circle([encounterTarget.lat, encounterTarget.lng], { radius: 45000, color: flareEffective ? "#fde047" : "#fb7185", fillColor: flareEffective ? "#facc15" : "#ef4444", fillOpacity: 0.12, weight: 2, dashArray: "7 7" }).addTo(map).bindTooltip("Alcance efetivo do sinalizador: 45 km", { direction: "top" });
       const base = encounterBase ?? { lat: encounterTarget.lat + 0.8, lng: encounterTarget.lng + 0.8 };
       const deltaLat = base.lat - encounterTarget.lat;
@@ -449,7 +465,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     }
     if (suppressNextFitRef.current) suppressNextFitRef.current = false;
     else map.fitBounds(line.getBounds().pad(0.42), { animate: true, maxZoom: 6 });
-  }, [destination, encounterBase, encounterEnemy, encounterTarget, flareEffective, forcedPoiType, logicalRoutePoints, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, status, weather, weatherEnabled]);
+  }, [destination, encounterBase, encounterEnemy, encounterTarget, flareEffective, forcedPoiType, logicalRoutePoints, mapZoom, mascot, origin, poiVisibility, restStops, routeInfo.color, routePoints, runtimePois, status, weather, weatherEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -505,7 +521,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       if (!encounterResolved && next >= encounterAt) {
         progressRef.current = encounterAt;
         setProgress(encounterAt);
-        setEncounterSeconds(12);
+        setEnemyApproach(0);
         setStatus("INTERCEPTED");
         return;
       }
@@ -522,8 +538,21 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   }, [debugDuration, debugSpeed, encounterAt, encounterResolved, status]);
 
   useEffect(() => {
-    if (status !== "INTERCEPTED") return;
-    if (encounterSeconds <= 0) {
+    if (status !== "INTERCEPTED" && status !== "RETREATING") return;
+    const baseDistance = encounterBase ? Math.max(1, haversineKm({ ...origin, lat: encounterTarget.lat, lng: encounterTarget.lng }, { ...origin, lat: encounterBase.lat, lng: encounterBase.lng })) : 120;
+    const enemySpeed = effectiveSpeed * 1.12;
+    const relativeSpeed = Math.max(1, enemySpeed - effectiveSpeed);
+    const realCatchHours = baseDistance / relativeSpeed;
+    const debugCatchSeconds = clamp(realCatchHours * 0.35, 8, 45);
+    const timer = window.setInterval(() => {
+      setEnemyApproach(value => {
+        const direction = status === "RETREATING" ? -1 : 1;
+        const next = clamp(value + direction * (0.1 * debugSpeed / debugCatchSeconds));
+        if (status === "RETREATING" && next <= 0) {
+          window.setTimeout(() => setStatus("RUNNING"), 0);
+          return 0;
+        }
+        if (status === "INTERCEPTED" && next >= 1) window.setTimeout(() => {
       if (insured) {
         setStatus("RESCUE");
         const refundWon = insurance.refundChance > 0 && Math.random() * 100 < insurance.refundChance;
@@ -533,11 +562,12 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
         setStatus("ROBBED");
         setRescueMessage("Carga roubada. Escolha uma operação de resgate.");
       }
-      return;
-    }
-    const timer = window.setTimeout(() => setEncounterSeconds(value => Math.max(0, value - 1)), 1000);
-    return () => window.clearTimeout(timer);
-  }, [encounterSeconds, insurance.refundChance, insurance.refundMax, insurance.refundMin, insurance.returnMinutes, insured, status]);
+        }, 0);
+        return next;
+      });
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [debugSpeed, effectiveSpeed, encounterBase, encounterTarget, insurance.refundChance, insurance.refundMax, insurance.refundMin, insurance.returnMinutes, insured, origin, status]);
 
   useEffect(() => {
     const marker = courierMarkerRef.current;
@@ -550,7 +580,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
   useEffect(() => {
     const enemy = enemyMarkerRef.current;
     const circle = flareRadiusRef.current;
-    if (status !== "INTERCEPTED" || !enemy) return;
+    if (!["INTERCEPTED", "RETREATING"].includes(status) || !enemy) return;
     const base = encounterBase ?? { lat: encounterTarget.lat + 0.8, lng: encounterTarget.lng + 0.8 };
     const deltaLat = base.lat - encounterTarget.lat;
     const deltaLng = base.lng - encounterTarget.lng;
@@ -567,7 +597,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     setProgress(0);
     setStatus("READY");
     setEncounterResolved(false);
-    setEncounterSeconds(0);
+    setEnemyApproach(0);
     setRescueMessage(null);
     setWeatherError(null);
     lastFrameRef.current = null;
@@ -583,9 +613,8 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
 
   function fireFlare() {
     setEncounterResolved(true);
-    setEncounterSeconds(0);
     setRescueMessage(`${encounterEnemy} fugiu ao ver o sinalizador. A carga continua segura.`);
-    setStatus("RUNNING");
+    setStatus("RETREATING");
   }
 
   function startRescue(kind: "OWN" | "FRIEND") {
@@ -615,6 +644,21 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       } catch (error) { setWeatherError(error instanceof Error ? error.message : "Não foi possível salvar sua casa."); }
       finally { setHomeSaving(false); }
     }, () => { setHomeSaving(false); setWeatherError("Permissão de localização negada."); }, { enableHighAccuracy: false, timeout: 12000 });
+  }
+
+  function selectJob(job: DeliveryJob) {
+    setOriginId(job.origin.id);
+    setDestinationId(job.destination.id);
+    reset();
+  }
+
+  function saveCustomPoi() {
+    const lat = Number(customPoiForm.lat); const lng = Number(customPoiForm.lng);
+    if (!customPoiForm.name.trim() || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 85 || Math.abs(lng) > 180) { setWeatherError("Preencha nome e coordenadas válidas para o marcador."); return; }
+    const poi: DeliveryPoi = { id: `custom_${Date.now()}`, name: customPoiForm.name.trim(), type: customPoiForm.type, lat, lng, region: customPoiForm.region.trim() || "Local customizado", description: customPoiForm.description.trim(), imageUrl: customPoiForm.imageUrl.trim() || undefined, visibility: "WORLD" };
+    const next = [...customPois, poi]; setCustomPois(next);
+    localStorage.setItem("delivery-custom-pois-v1", JSON.stringify(next));
+    setCustomPoiForm({ name: "", type: "LOCAL_STOP", lat: "", lng: "", region: "", description: "", imageUrl: "" });
   }
 
   const routeInvalid = origin.id === destination.id || !routeAllowed || (routeMode === "LAND" && Boolean(roadError));
@@ -666,11 +710,17 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
             </div>
           ) : <p className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-xs text-red-200">A conta admin não possui mascotes livres para simular.</p>}
 
-          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+          <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-3">
+            <div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-yellow-300">Encomendas disponíveis</p><p className="text-[8px] text-slate-500">Retire na origem e entregue no endereço já definido.</p></div><span className="rounded-full bg-yellow-300 px-2 py-1 text-[8px] font-black text-slate-950">{visibleJobs.length}</span></div>
+            <div className="relative mt-2"><Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" /><input value={jobSearch} onChange={event => setJobSearch(event.target.value)} placeholder="Buscar cidade, país ou carga..." className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2 pl-7 pr-2 text-[10px]" /></div>
+            <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto pr-1">{visibleJobs.map(job => <button type="button" key={job.id} onClick={() => selectJob(job)} className={`w-full rounded-xl border p-2 text-left transition ${originId === job.origin.id && destinationId === job.destination.id ? "border-yellow-300 bg-yellow-300/10" : "border-slate-700 bg-slate-950/60 hover:border-slate-500"}`}><span className="flex justify-between gap-2 text-[10px] font-black text-white"><span>{job.origin.name} → {job.destination.name}</span><span className="shrink-0 text-yellow-300">{job.reward} ZC</span></span><span className="mt-1 block text-[8px] text-slate-400">📦 {job.cargo} · retirada em {job.origin.country} · entrega em {job.destination.country}</span></button>)}</div>
+          </div>
+
+          <details className="rounded-2xl border border-white/5 bg-slate-900/40 p-3"><summary className="cursor-pointer text-[9px] font-black uppercase tracking-wider text-slate-400">Debug: escolher rota manualmente</summary><div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
             <LocationPicker label="Origem" value={originId} selectedPlace={origin} country={originCountry} search={originSearch} countries={countries} places={originPlaces} onCountry={setOriginCountry} onSearch={setOriginSearch} onChange={value => { setOriginId(value); reset(); }} />
             <button type="button" onClick={swapRoute} className="mb-0.5 rounded-xl border border-slate-700 p-2 text-cyan-300 hover:bg-cyan-400/10" title="Inverter rota"><Route size={16} /></button>
             <LocationPicker label="Destino" value={destinationId} selectedPlace={destination} country={destinationCountry} search={destinationSearch} countries={countries} places={destinationPlaces} onCountry={setDestinationCountry} onSearch={setDestinationSearch} onChange={value => { setDestinationId(value); reset(); }} />
-          </div>
+          </div></details>
 
           <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-3">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-300"><Home size={14} /> Entregar na minha casa</div>
@@ -678,6 +728,8 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
             <div className="mt-2 flex gap-2"><input value={homeLabel} onChange={event => setHomeLabel(event.target.value)} maxLength={60} className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" placeholder="Ex.: Casa do Luiz" /><button type="button" disabled={homeSaving} onClick={registerCurrentLocation} className="flex items-center gap-1 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[9px] font-black text-slate-950 disabled:opacity-50"><LocateFixed size={13} />{homeSaving ? "Salvando" : "Registrar"}</button></div>
             {home && <button type="button" onClick={() => { setDestinationId("home"); reset(); }} className="mt-2 text-[9px] font-bold text-emerald-300 hover:underline">Usar “{home.label}” como destino</button>}
           </div>
+
+          <details className="rounded-2xl border border-purple-400/20 bg-purple-400/5 p-3"><summary className="cursor-pointer text-[10px] font-black uppercase tracking-wider text-purple-200">Cadastrar marcador customizado</summary><div className="mt-3 grid gap-2"><input value={customPoiForm.name} onChange={event => setCustomPoiForm(current => ({ ...current, name: event.target.value }))} placeholder="Nome do ponto" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" /><select value={customPoiForm.type} onChange={event => setCustomPoiForm(current => ({ ...current, type: event.target.value as DeliveryPoiType }))} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs"><option value="LOCAL_STOP">Ponto local</option><option value="REST_POINT">Posto de descanso</option><option value="MIAUVADAO_BRANCH">Filial do Miauvadão</option><option value="TRAPACA_HIDEOUT">Base da Ordem</option><option value="LANDMARK">Ponto turístico</option><option value="SPECIAL_POI">Ponto especial</option></select><div className="grid grid-cols-2 gap-2"><input value={customPoiForm.lat} onChange={event => setCustomPoiForm(current => ({ ...current, lat: event.target.value }))} placeholder="Latitude" inputMode="decimal" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" /><input value={customPoiForm.lng} onChange={event => setCustomPoiForm(current => ({ ...current, lng: event.target.value }))} placeholder="Longitude" inputMode="decimal" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" /></div><input value={customPoiForm.region} onChange={event => setCustomPoiForm(current => ({ ...current, region: event.target.value }))} placeholder="País ou região" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" /><textarea value={customPoiForm.description} onChange={event => setCustomPoiForm(current => ({ ...current, description: event.target.value }))} placeholder="Descrição" rows={3} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" /><input value={customPoiForm.imageUrl} onChange={event => setCustomPoiForm(current => ({ ...current, imageUrl: event.target.value }))} placeholder="URL pública da imagem" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" /><button type="button" onClick={saveCustomPoi} className="rounded-lg bg-purple-300 px-3 py-2 text-[10px] font-black text-slate-950">Adicionar ao mapa</button><p className="text-[8px] text-slate-500">Protótipo admin: os pontos ficam salvos neste navegador. A versão pública será persistida no servidor e usará upload próprio.</p></div></details>
 
           <div className="space-y-2 rounded-2xl border border-white/5 bg-slate-900/60 p-3">
             <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Escola de trajeto</label>
@@ -704,7 +756,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
             <div><div className="mb-1 flex justify-between text-[10px]"><span>Carga</span><b>{cargoKg} kg</b></div><input type="range" min={1} max={100} value={cargoKg} onChange={(e) => setCargoKg(Number(e.target.value))} className="w-full accent-yellow-400" /></div>
             <div><div className="mb-1 flex justify-between text-[10px]"><span>Agilidade simulada</span><b>{simulatedAgility ?? "Real"}</b></div><input type="range" min={0} max={250} value={simulatedAgility ?? mascot?.agility ?? 0} onChange={(e) => setSimulatedAgility(Number(e.target.value))} className="w-full accent-cyan-400" /><button type="button" onClick={() => setSimulatedAgility(null)} className="mt-1 text-[9px] text-cyan-300 hover:underline">Usar atributo real</button></div>
             <div className="grid grid-cols-3 gap-1.5">{[1, 4, 20].map(speed => <button type="button" key={speed} onClick={() => setDebugSpeed(speed)} className={`rounded-lg border px-2 py-1.5 text-[10px] font-black ${debugSpeed === speed ? "border-yellow-400 bg-yellow-400/15 text-yellow-300" : "border-slate-700 text-slate-400"}`}>{speed}x</button>)}</div>
-            <button type="button" disabled={status !== "RUNNING" || encounterResolved} onClick={() => { setEncounterSeconds(12); setStatus("INTERCEPTED"); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/30 bg-red-400/10 px-2 py-2 text-[9px] font-black text-red-200 disabled:opacity-35"><AlertTriangle size={13} /> Forçar interceptação</button>
+            <button type="button" disabled={status !== "RUNNING" || encounterResolved} onClick={() => { setEnemyApproach(0); setStatus("INTERCEPTED"); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/30 bg-red-400/10 px-2 py-2 text-[9px] font-black text-red-200 disabled:opacity-35"><AlertTriangle size={13} /> Forçar interceptação</button>
           </div>
 
           <div className="rounded-2xl border border-blue-400/20 bg-blue-400/5 p-3">
@@ -755,13 +807,14 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
           <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="flex items-center gap-2"><MapPin size={16} className="text-cyan-300" /><div><p className="text-xs font-black text-white">{origin.name}, {origin.country} → {destination.name}, {destination.country}</p><p className="text-[9px] text-slate-500">{routeInfo.label} · {routeMode === "LAND" ? "traçado rodoviário real" : routeMode === "AIR" ? "linha direta pelo ar" : "corredor por portos e ilhas"} · {restStops.length ? restStops.map(stop => stop.name).join(" → ") : "sem paradas"}</p></div></div>
-              <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${status === "DELIVERED" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "INTERCEPTED" || status === "ROBBED" ? "border-red-400/40 bg-red-400/10 text-red-200" : status === "RUNNING" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-300"}`}>{status === "READY" ? "Aguardando despacho" : status === "RUNNING" ? "Em trânsito" : status === "PAUSED" ? "Simulação pausada" : status === "INTERCEPTED" ? "Tentativa de interceptação" : status === "ROBBED" ? "Carga roubada" : status === "RESCUE" ? "Resgate em andamento" : "Entrega concluída"}</span>
+              <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${status === "DELIVERED" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "INTERCEPTED" || status === "ROBBED" ? "border-red-400/40 bg-red-400/10 text-red-200" : status === "RUNNING" || status === "RETREATING" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-300"}`}>{status === "READY" ? "Aguardando despacho" : status === "RUNNING" ? "Em trânsito" : status === "PAUSED" ? "Simulação pausada" : status === "INTERCEPTED" ? "Tentativa de interceptação" : status === "RETREATING" ? "Inimigo retornando à base" : status === "ROBBED" ? "Carga roubada" : status === "RESCUE" ? "Resgate em andamento" : "Entrega concluída"}</span>
             </div>
             <div className="relative h-[530px] max-h-[68vh] min-h-[420px]">
               <div ref={mapNodeRef} className={`absolute inset-0 ${styles.mapShell}`} />
               {!mapReady && <div className="absolute inset-0 z-10 grid place-items-center bg-slate-950"><p className="animate-pulse text-sm text-cyan-200">Carregando mapa real…</p></div>}
               {status === "DELIVERED" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[500] rounded-2xl border border-emerald-300/35 bg-emerald-950/90 p-4 text-center shadow-[0_0_40px_rgba(16,185,129,.35)] backdrop-blur"><p className="font-pixel text-xs text-emerald-300">ENTREGA CONCLUÍDA!</p><p className="mt-2 text-xs text-emerald-50">{mascot?.name} chegou a {destination.name}. Nenhuma recompensa foi gerada neste protótipo.</p></div>}
-              {status === "INTERCEPTED" && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-red-300/50 bg-red-950/95 p-5 text-center shadow-[0_0_55px_rgba(239,68,68,.45)] backdrop-blur"><Siren size={30} className="mx-auto animate-pulse text-red-300" /><p className="mt-2 font-pixel text-xs text-red-200">INTERCEPTAÇÃO!</p><p className="mt-2 text-sm font-black text-white">{encounterEnemy} saiu de {encounterBase?.name ?? "uma base próxima"} e está alcançando {mascot?.name}.</p><p className="mt-1 text-xs text-red-100">O círculo no mapa mostra os 45 km de alcance · {encounterSeconds}s</p><p className={`mt-2 text-[10px] font-black ${flareEffective ? "text-yellow-200" : "text-slate-300"}`}>{flareEffective ? "ALVO NO ALCANCE — DISPARE AGORA!" : "Aguarde o perseguidor entrar na área do sinalizador."}</p><button type="button" disabled={!flareEffective} onClick={fireFlare} className="mt-3 rounded-xl bg-yellow-300 px-5 py-3 text-xs font-black text-slate-950 shadow-[0_0_25px_rgba(253,224,71,.5)] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-none">🔥 SOLTAR SINALIZADOR</button><p className="mt-2 text-[9px] text-red-200">Botão temporário de debug; futuramente consumirá 1 Sinalizador enviado na carga.</p></div>}
+              {status === "INTERCEPTED" && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-red-300/50 bg-red-950/95 p-5 text-center shadow-[0_0_55px_rgba(239,68,68,.45)] backdrop-blur"><Siren size={30} className="mx-auto animate-pulse text-red-300" /><p className="mt-2 font-pixel text-xs text-red-200">INTERCEPTAÇÃO!</p><p className="mt-2 text-sm font-black text-white">{encounterEnemy} saiu de {encounterBase?.name ?? "uma base próxima"} e está alcançando {mascot?.name}.</p><p className="mt-1 text-xs text-red-100">Velocidade inimiga: {(effectiveSpeed * 1.12).toFixed(0)} km/h · entregador: {effectiveSpeed.toFixed(0)} km/h</p><p className="mt-1 text-[10px] text-red-200">Estimativa física de alcance: {formatDuration(pursuitEtaHours)} · círculo efetivo de 45 km</p><p className={`mt-2 text-[10px] font-black ${flareEffective ? "text-yellow-200" : "text-slate-300"}`}>{flareEffective ? "ALVO NO ALCANCE — DISPARE AGORA!" : "Aguarde o perseguidor entrar na área do sinalizador."}</p><button type="button" disabled={!flareEffective} onClick={fireFlare} className="mt-3 rounded-xl bg-yellow-300 px-5 py-3 text-xs font-black text-slate-950 shadow-[0_0_25px_rgba(253,224,71,.5)] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-none">🔥 SOLTAR SINALIZADOR</button><p className="mt-2 text-[9px] text-red-200">Botão temporário de debug; futuramente consumirá 1 Sinalizador enviado na carga.</p></div>}
+              {status === "RETREATING" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[600] rounded-xl border border-emerald-300/30 bg-emerald-950/90 p-4 text-center text-xs font-black text-emerald-100">Sinalizador disparado! {encounterEnemy} está retornando ao esconderijo.</div>}
               {(status === "ROBBED" || status === "RESCUE") && <div className="absolute inset-x-5 top-5 z-[600] rounded-2xl border border-orange-300/40 bg-slate-950/95 p-5 text-center shadow-2xl backdrop-blur"><AlertTriangle size={28} className="mx-auto text-orange-300" /><p className="mt-2 font-pixel text-xs text-orange-200">CARGA INTERCEPTADA</p><p className="mt-2 text-xs text-slate-200">{rescueMessage}</p>{status === "ROBBED" && !insured && <div className="mt-4 flex flex-wrap justify-center gap-2"><button type="button" onClick={() => startRescue("OWN")} className="flex items-center gap-2 rounded-xl bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><Users size={14} /> Enviar equipe própria</button><button type="button" onClick={() => startRescue("FRIEND")} className="flex items-center gap-2 rounded-xl border border-purple-300 bg-purple-400/15 px-3 py-2 text-xs font-black text-purple-100"><Users size={14} /> Pedir resgate a amigo</button></div>}<button type="button" onClick={reset} className="mt-3 text-[9px] font-bold text-slate-400 underline">Encerrar simulação</button></div>}
               {rescueMessage && status === "RUNNING" && <div className="pointer-events-none absolute inset-x-5 top-5 z-[500] rounded-xl border border-yellow-300/25 bg-slate-950/90 px-4 py-3 text-center text-xs font-bold text-yellow-100 shadow-xl">{rescueMessage}</div>}
             </div>
@@ -826,7 +879,7 @@ function PoiDetailsModal({ poi, onClose }: { poi: DeliveryPoi; onClose: () => vo
   return <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <article className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-cyan-400/25 bg-slate-950 shadow-[0_0_60px_rgba(34,211,238,.18)]">
       <div className="relative min-h-48 overflow-hidden bg-gradient-to-br from-cyan-950 via-slate-900 to-purple-950">
-        {info?.thumbnail ? <img src={info.thumbnail} alt={poi.name} className="h-64 w-full object-cover" referrerPolicy="no-referrer" /> : <div className="grid h-52 place-items-center text-center"><Landmark size={42} className="text-cyan-300" /><p className="mt-2 text-xs text-slate-400">{loading ? "Buscando foto livre na Wikipedia…" : "Imagem real não encontrada; usando apresentação do jogo."}</p></div>}
+        {poi.imageUrl || info?.thumbnail ? <img src={poi.imageUrl || info?.thumbnail} alt={poi.name} className="h-64 w-full object-cover" referrerPolicy="no-referrer" /> : <div className="grid h-52 place-items-center text-center"><Landmark size={42} className="text-cyan-300" /><p className="mt-2 text-xs text-slate-400">{loading ? "Buscando foto livre na Wikipedia…" : "Imagem real não encontrada; usando apresentação do jogo."}</p></div>}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 to-transparent px-5 pb-4 pt-14"><span className="rounded-full border border-white/20 bg-slate-950/75 px-2 py-1 text-[9px] font-black uppercase text-cyan-200">{typeLabel[poi.type]}</span><h2 className="mt-2 text-2xl font-black text-white">{poi.name}</h2><p className="text-xs text-slate-300">{poi.region}</p></div>
         <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-full border border-white/15 bg-slate-950/75 p-2 text-white"><X size={17} /></button>
       </div>
