@@ -1,5 +1,5 @@
 export type DeliveryPoiType = "LANDMARK" | "LOCAL_STOP" | "REST_POINT" | "MIAUVADAO_BRANCH" | "TRAPACA_HIDEOUT" | "SPECIAL_POI";
-export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" | "MICRO" };
+export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; imageUrl?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" | "MICRO" };
 export type PoiCountryAnchor = { id: string; name: string; country: string; lat: number; lng: number };
 
 function stableOffset(index: number, salt: number) {
