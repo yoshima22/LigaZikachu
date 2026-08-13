@@ -96,6 +96,24 @@
   box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12), 0 0 20px rgba(34, 197, 94, 0.5);
 }
 
+.mapShell :global(.delivery-tourist-icon) {
+  background: transparent;
+  border: 0;
+}
+
+.mapShell :global(.delivery-tourist-pin) {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #fbbf24;
+  border-radius: 999px;
+  background: rgba(120, 53, 15, 0.94);
+  color: #fde68a;
+  font-size: 13px;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.45);
+}
+
 @keyframes delivery-bob {
   from { transform: translateY(0) scale(1); }
   to { transform: translateY(-7px) scale(1.04); }

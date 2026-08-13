@@ -294,6 +294,9 @@ model Player {
   mascotBondBehavior          String                         @default("FREE")
   mascotSpritePreference      String                         @default("ANIMATED")
   megaSpritePreference        String                         @default("ANIMATED")
+  deliveryHomeLabel           String?
+  deliveryHomeLatitude        Float?
+  deliveryHomeLongitude       Float?
   hideLeagueResults           Boolean                        @default(false)
   // Data de aniversário (preenchida uma única vez, não pode ser alterada).
   birthDate                   DateTime?
