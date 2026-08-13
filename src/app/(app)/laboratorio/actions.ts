@@ -119,7 +119,7 @@ export async function getLabDataAction() {
       select: {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         isFavorite: true, arenaState: true, bazarListed: true,
-        operationsLocked: true,
+        operationsLocked: true, primordialBoundPlayerId: true,
         analyzedAt: true, ivRating: true, ivScore: true, analysisJson: true, performanceTag: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
@@ -143,7 +143,7 @@ export async function getLabDataAction() {
     // cópias da mesma espécie entram nos slots de reciclagem.
     const dust = calculateLabDust(rarity, 1);
     const inWeeklyLeague = weeklyLeagueLockedIds.has(m.id);
-    const recyclable = !m.operationsLocked && !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
+    const recyclable = !m.operationsLocked && !m.primordialBoundPlayerId && !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
 
     const savedAnalysis = m.analysisJson as { analysisVersion?: number } | null;
     const currentAnalysis = savedAnalysis?.analysisVersion === MASCOT_ANALYSIS_VERSION;
@@ -299,9 +299,10 @@ export async function recycleMascotAction(mascotId: string) {
 
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
-    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true, operationsLocked: true },
+    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true, operationsLocked: true, primordialBoundPlayerId: true },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
+  if (mascot.primordialBoundPlayerId) return { ok: false as const, error: "Este mascote está vinculado permanentemente à conta pela Pena Arco-Íris Primordial e não pode ser reciclado." };
   if (mascot.operationsLocked) return { ok: false as const, error: "Este mascote está protegido. Desbloqueie-o na página de Mascotes." };
   if (mascot.isFavorite) return { ok: false as const, error: "Nao e possivel reciclar mascotes favoritos." };
   if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes de reciclar." };
@@ -339,11 +340,14 @@ export async function recycleMascotsAction(mascotIds: string[]) {
 
   const mascots = await prisma.mascot.findMany({
     where: { id: { in: uniqueIds }, playerId: me.id },
-    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true, operationsLocked: true },
+    select: { id: true, pokemonId: true, isFavorite: true, arenaState: true, bazarListed: true, operationsLocked: true, primordialBoundPlayerId: true },
   });
 
   if (mascots.length !== uniqueIds.length) {
     return { ok: false as const, error: "Algum mascote selecionado nao foi encontrado." };
+  }
+  if (mascots.some((mascot) => mascot.primordialBoundPlayerId)) {
+    return { ok: false as const, error: "Um dos mascotes está vinculado permanentemente à conta pela Pena Arco-Íris Primordial e não pode ser reciclado." };
   }
   if (mascots.some((mascot) => mascot.operationsLocked)) {
     return { ok: false as const, error: "Um dos mascotes está protegido. Desbloqueie-o na página de Mascotes." };

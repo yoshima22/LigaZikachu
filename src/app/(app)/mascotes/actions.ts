@@ -1745,7 +1745,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
     hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null; megaStoneName: string | null;
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
-    evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; isShiny: boolean;
+    evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
@@ -1797,7 +1797,8 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         lastPlayedAt: m.lastPlayedAt,
         lastPettedAt: m.lastPettedAt,
         lastFedAt: m.lastFedAt, socialCooldownUntil: m.socialCooldownUntil,
-        evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, operationsLocked: m.operationsLocked, isShiny: m.isShiny,
+        evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, operationsLocked: m.operationsLocked,
+        primordialBoundPlayerId: m.primordialBoundPlayerId, isShiny: m.isShiny,
         ivRating: m.ivRating, ivScore: m.ivScore, performanceTag: m.performanceTag,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
@@ -1837,9 +1838,12 @@ export async function toggleMascotOperationsLockAction(mascotId: string, lock: b
     if (!player) return { error: "Perfil não encontrado." };
     const mascot = await prisma.mascot.findUnique({
       where: { id: mascotId },
-      select: { playerId: true },
+      select: { playerId: true, primordialBoundPlayerId: true },
     });
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    if (!lock && mascot.primordialBoundPlayerId) {
+      return { error: "Este mascote foi vinculado permanentemente à sua conta pela Pena Arco-Íris Primordial e não pode ser desbloqueado." };
+    }
     await prisma.mascot.update({
       where: { id: mascotId },
       data: { operationsLocked: lock },

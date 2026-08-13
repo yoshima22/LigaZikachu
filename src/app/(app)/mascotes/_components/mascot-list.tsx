@@ -24,6 +24,7 @@ interface MascotData {
   evolutionLocked: boolean;
   expLocked: boolean;
   operationsLocked: boolean;
+  primordialBoundPlayerId?: string | null;
   isShiny: boolean;
   ivRating?: string | null;
   ivScore?: number | null;
