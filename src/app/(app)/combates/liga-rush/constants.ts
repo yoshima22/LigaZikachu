@@ -21,12 +21,12 @@ export type RushRewardPlan = {
 };
 
 export const RUSH_RULE_PRESETS = [
-  { id: "RUSH_45", name: "Rush Nv.45", description: "Três mascotes por equipe e nível máximo 45.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null },
-  { id: "MONOTYPE", name: "Semana Monotipo", description: "Todos os mascotes usados precisam possuir o tipo sorteado para a semana.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: "ROTATING" },
-  { id: "NO_REPEAT", name: "Semana Sem Repetição", description: "A mesma espécie só pode lutar uma vez durante toda a semana.", maxLevel: 45, teamSize: 3, uniqueSpecies: true, requiredType: null },
-  { id: "SPRINT_30", name: "Sprint Nv.30", description: "Equipes de três, nível máximo 30 e espécies sem repetição.", maxLevel: 30, teamSize: 3, uniqueSpecies: true, requiredType: null },
-  { id: "DUO_RUSH", name: "Dupla Relâmpago", description: "Equipes de dois mascotes, nível máximo 45 e confrontos mais curtos.", maxLevel: 45, teamSize: 2, uniqueSpecies: true, requiredType: null },
-  { id: "OPEN_45", name: "Rush Livre Nv.45", description: "Três mascotes até o nível 45, sem restrição de repetição e divisão Ilimitada.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null, division: "UNLIMITED" },
+  { id: "RUSH_45", name: "Rush Nv.45", description: "Formato-base da Rush: equipes de até 3 mascotes, todos no máximo no nível 45. Como Megas só surgem a partir do nível 50, esta regra usa automaticamente a divisão Ilimitada sem criar um bloqueio inútil.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null },
+  { id: "MONOTYPE", name: "Semana Monotipo", description: "Um tipo é sorteado para a edição. Todo mascote escalado precisa possuir esse tipo como primário ou secundário. O sorteio tende a usar equipes menores e repetição mais flexível para evitar que jogadores com coleções pequenas fiquem sem opções.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: "ROTATING" },
+  { id: "NO_REPEAT", name: "Semana Sem Repetição", description: "Cada mascote individual só pode ser usado em uma das 15 partidas da semana. O jogador precisa administrar o elenco inteiro e não pode depender do mesmo favorito em todos os confrontos.", maxLevel: 45, teamSize: 3, uniqueSpecies: true, requiredType: null },
+  { id: "SPRINT_30", name: "Sprint Nv.30", description: "Formato de desenvolvimento: até 3 mascotes, nível máximo 30 e sem repetir o mesmo mascote durante a semana. Valoriza exemplares mais jovens, diversidade e planejamento de elenco.", maxLevel: 30, teamSize: 3, uniqueSpecies: true, requiredType: null },
+  { id: "DUO_RUSH", name: "Dupla Relâmpago", description: "Cada equipe possui no máximo 2 mascotes, até o nível 45. Com menos integrantes, cada postura e combinação de tipos pesa mais, e uma derrota individual altera rapidamente o combate.", maxLevel: 45, teamSize: 2, uniqueSpecies: true, requiredType: null },
+  { id: "OPEN_45", name: "Rush Livre Nv.45", description: "Até 3 mascotes por equipe, nível máximo 45 e repetição livre entre partidas. É o formato mais acessível para testar composições sem administrar uma rotação semanal extensa.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null, division: "UNLIMITED" },
 ] as const;
 
 export const RUSH_REWARD_PLANS: RushRewardPlan[] = [
