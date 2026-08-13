@@ -1,5 +1,5 @@
 export type DeliveryPoiType = "LANDMARK" | "REST_POINT" | "MIAUVADAO_BRANCH" | "TRAPACA_HIDEOUT" | "SPECIAL_POI";
-export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string };
+export type DeliveryPoi = { id: string; name: string; type: DeliveryPoiType; lat: number; lng: number; region: string; description?: string; visibility?: "WORLD" | "REGIONAL" | "LOCAL" };
 
 export const DELIVERY_POIS: DeliveryPoi[] = [
   // Marcos mundiais
@@ -99,3 +99,61 @@ export const DELIVERY_POIS: DeliveryPoi[] = [
   ["trapaca_point_nemo", "Quartel do Lugar Nenhum", "TRAPACA_HIDEOUT", -48.88, -123.39, "Pacífico Sul"],
   ["trapaca_pacific", "Estação da Rota Fantasma", "TRAPACA_HIDEOUT", 5, -150, "Pacífico Central"],
 ].map(([id, name, type, lat, lng, region, description]) => ({ id, name, type, lat, lng, region, description })) as DeliveryPoi[];
+
+// Pontos cotidianos aparecem apenas com aproximação do mapa. São referências
+// próprias do jogo, sem consulta automática a serviços pagos.
+const LOCAL_POIS: Array<[string, string, DeliveryPoiType, number, number, string, "REGIONAL" | "LOCAL"]> = [
+  ["rest_campinas_taquaral", "Parque Taquaral", "REST_POINT", -22.8755, -47.0587, "Campinas, Brasil", "LOCAL"],
+  ["rest_santos_orla", "Jardins da Orla", "REST_POINT", -23.973, -46.328, "Santos, Brasil", "LOCAL"],
+  ["rest_curitiba_barigui", "Parque Barigui", "REST_POINT", -25.4257, -49.3078, "Curitiba, Brasil", "LOCAL"],
+  ["rest_porto_alegre_farroupilha", "Parque Farroupilha", "REST_POINT", -30.0362, -51.2167, "Porto Alegre, Brasil", "LOCAL"],
+  ["rest_bh_mangabeiras", "Parque das Mangabeiras", "REST_POINT", -19.9555, -43.9024, "Belo Horizonte, Brasil", "LOCAL"],
+  ["rest_brasilia_cidade", "Parque da Cidade", "REST_POINT", -15.8018, -47.9201, "Brasília, Brasil", "LOCAL"],
+  ["rest_goiania_vaca_brava", "Parque Vaca Brava", "REST_POINT", -16.7084, -49.2718, "Goiânia, Brasil", "LOCAL"],
+  ["rest_salvador_pituaçu", "Parque de Pituaçu", "REST_POINT", -12.951, -38.409, "Salvador, Brasil", "LOCAL"],
+  ["rest_recife_jaqueira", "Parque da Jaqueira", "REST_POINT", -8.0367, -34.9045, "Recife, Brasil", "LOCAL"],
+  ["rest_fortaleza_coco", "Parque do Cocó", "REST_POINT", -3.7528, -38.4861, "Fortaleza, Brasil", "LOCAL"],
+  ["rest_belem_utinga", "Parque do Utinga", "REST_POINT", -1.4245, -48.423, "Belém, Brasil", "LOCAL"],
+  ["rest_manaus_mindu", "Parque do Mindu", "REST_POINT", -3.0805, -60.004, "Manaus, Brasil", "LOCAL"],
+  ["rest_montevideo_rodo", "Parque Rodó", "REST_POINT", -34.9137, -56.171, "Montevidéu, Uruguai", "LOCAL"],
+  ["rest_santiago_metropolitano", "Parque Metropolitano", "REST_POINT", -33.4194, -70.632, "Santiago, Chile", "LOCAL"],
+  ["rest_lima_olivar", "Bosque El Olivar", "REST_POINT", -12.099, -77.036, "Lima, Peru", "LOCAL"],
+  ["rest_bogota_simon_bolivar", "Parque Simón Bolívar", "REST_POINT", 4.658, -74.093, "Bogotá, Colômbia", "LOCAL"],
+  ["rest_toronto_high_park", "High Park", "REST_POINT", 43.6465, -79.4637, "Toronto, Canadá", "LOCAL"],
+  ["rest_chicago_lincoln", "Lincoln Park", "REST_POINT", 41.921, -87.6338, "Chicago, EUA", "LOCAL"],
+  ["rest_madrid_casa_campo", "Casa de Campo", "REST_POINT", 40.4196, -3.7497, "Madri, Espanha", "LOCAL"],
+  ["rest_amsterdam_vondel", "Vondelpark", "REST_POINT", 52.358, 4.8686, "Amsterdã, Países Baixos", "LOCAL"],
+  ["rest_vienna_prater", "Prater", "REST_POINT", 48.2167, 16.395, "Viena, Áustria", "LOCAL"],
+  ["rest_delhi_lodhi", "Lodhi Garden", "REST_POINT", 28.5931, 77.2197, "Nova Delhi, Índia", "LOCAL"],
+  ["rest_seoul_forest", "Seoul Forest", "REST_POINT", 37.5444, 127.0374, "Seul, Coreia do Sul", "LOCAL"],
+  ["rest_melbourne_royal", "Royal Park", "REST_POINT", -37.7908, 144.952, "Melbourne, Austrália", "LOCAL"],
+  ["miau_campinas", "Ponto Miauvadão Campinas", "MIAUVADAO_BRANCH", -22.9056, -47.0608, "Campinas, Brasil", "REGIONAL"],
+  ["miau_santos", "Ponto Miauvadão Santos", "MIAUVADAO_BRANCH", -23.9608, -46.3336, "Santos, Brasil", "REGIONAL"],
+  ["miau_curitiba", "Ponto Miauvadão Curitiba", "MIAUVADAO_BRANCH", -25.4284, -49.2733, "Curitiba, Brasil", "REGIONAL"],
+  ["miau_porto_alegre", "Ponto Miauvadão Porto Alegre", "MIAUVADAO_BRANCH", -30.0346, -51.2177, "Porto Alegre, Brasil", "REGIONAL"],
+  ["miau_belo_horizonte", "Ponto Miauvadão Belo Horizonte", "MIAUVADAO_BRANCH", -19.9167, -43.9345, "Belo Horizonte, Brasil", "REGIONAL"],
+  ["miau_brasilia", "Ponto Miauvadão Brasília", "MIAUVADAO_BRANCH", -15.7939, -47.8828, "Brasília, Brasil", "REGIONAL"],
+  ["miau_salvador", "Ponto Miauvadão Salvador", "MIAUVADAO_BRANCH", -12.9777, -38.5016, "Salvador, Brasil", "REGIONAL"],
+  ["miau_recife", "Ponto Miauvadão Recife", "MIAUVADAO_BRANCH", -8.0476, -34.877, "Recife, Brasil", "REGIONAL"],
+  ["miau_fortaleza", "Ponto Miauvadão Fortaleza", "MIAUVADAO_BRANCH", -3.7319, -38.5267, "Fortaleza, Brasil", "REGIONAL"],
+  ["miau_manaus", "Ponto Miauvadão Manaus", "MIAUVADAO_BRANCH", -3.119, -60.0217, "Manaus, Brasil", "REGIONAL"],
+  ["miau_montevideo", "Ponto Miauvadão Montevidéu", "MIAUVADAO_BRANCH", -34.9011, -56.1645, "Montevidéu, Uruguai", "REGIONAL"],
+  ["miau_santiago", "Ponto Miauvadão Santiago", "MIAUVADAO_BRANCH", -33.4489, -70.6693, "Santiago, Chile", "REGIONAL"],
+  ["miau_lima", "Ponto Miauvadão Lima", "MIAUVADAO_BRANCH", -12.0464, -77.0428, "Lima, Peru", "REGIONAL"],
+  ["miau_bogota", "Ponto Miauvadão Bogotá", "MIAUVADAO_BRANCH", 4.711, -74.0721, "Bogotá, Colômbia", "REGIONAL"],
+  ["trapaca_serra_mar", "Depósito da Serra Nebulosa", "TRAPACA_HIDEOUT", -23.42, -45.08, "Serra do Mar, Brasil", "LOCAL"],
+  ["trapaca_pantanal", "Hangar do Brejo Sem Fim", "TRAPACA_HIDEOUT", -17.3, -56.8, "Pantanal, Brasil", "LOCAL"],
+  ["trapaca_atacama", "Antena do Deserto Mudo", "TRAPACA_HIDEOUT", -23.2, -68.1, "Atacama, Chile", "LOCAL"],
+  ["trapaca_andes", "Túnel da Carga Fria", "TRAPACA_HIDEOUT", -32.8, -69.8, "Cordilheira dos Andes", "LOCAL"],
+  ["trapaca_yucatan", "Cenote da Nota Falsa", "TRAPACA_HIDEOUT", 20.55, -88.45, "Yucatán, México", "LOCAL"],
+  ["trapaca_rockies", "Bunker da Passagem Alta", "TRAPACA_HIDEOUT", 39.1, -106.3, "Montanhas Rochosas", "LOCAL"],
+  ["trapaca_scotland", "Castelo sem Registro", "TRAPACA_HIDEOUT", 57.1, -4.7, "Escócia", "LOCAL"],
+  ["trapaca_alps", "Cofre sob a Geleira", "TRAPACA_HIDEOUT", 46.5, 9.6, "Alpes", "LOCAL"],
+  ["trapaca_sahara", "Entreposto da Duna Móvel", "TRAPACA_HIDEOUT", 24.5, 12.5, "Saara", "LOCAL"],
+  ["trapaca_himalaya", "Mosteiro da Etiqueta Trocada", "TRAPACA_HIDEOUT", 28.1, 86.2, "Himalaia", "LOCAL"],
+  ["trapaca_borneo", "Armazém sob a Floresta", "TRAPACA_HIDEOUT", 0.8, 114.2, "Bornéu", "LOCAL"],
+  ["trapaca_outback", "Galpão da Rota Vermelha", "TRAPACA_HIDEOUT", -25.5, 134.5, "Outback Australiano", "LOCAL"],
+];
+
+DELIVERY_POIS.forEach(poi => { poi.visibility ??= "WORLD"; });
+DELIVERY_POIS.push(...LOCAL_POIS.map(([id, name, type, lat, lng, region, visibility]) => ({ id, name, type, lat, lng, region, visibility })));
