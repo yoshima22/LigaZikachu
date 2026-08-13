@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GlobalResetPanel } from "./_components/global-reset-panel";
+import { BirthdayRouletteDebug } from "./_components/birthday-roulette-debug";
 import { DeckReminderPanel } from "./_components/deck-reminder-panel";
 import { BulkSendPanel } from "./_components/bulk-send-panel";
 import { MascotSocialPanel } from "./_components/mascot-social-panel";
@@ -273,6 +274,11 @@ export default async function AdminPage() {
       <AdminCommunicationPanel initialNotice={globalNotice.message} />
       {isAdmin(currentUser.role) && <GamemasterPanel initialGamemasters={gamemasters} />}
       <RunawayRevertPanel />
+      <div className="rounded-2xl border border-border bg-slate-900/40 p-4">
+        <h2 className="mb-2 text-sm font-semibold text-slate-200">🎂 Aniversário</h2>
+        <p className="mb-3 text-xs text-slate-500">Teste a roleta de presentes de aniversário (apenas simulação — nada é entregue).</p>
+        <BirthdayRouletteDebug />
+      </div>
       <MascotSocialPanel />
       <AdminExpeditionPanel />
       <AdminMascotPanel />
