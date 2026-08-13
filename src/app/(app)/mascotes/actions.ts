@@ -366,6 +366,114 @@ function findPokemonIdsByType(type: string) {
   return POKEMON_ID_POOL.filter((id) => getPokemonTypes(id).includes(normalized));
 }
 
+/**
+ * Busca digitável de mascotes do jogador para uso de itens na página de mascotes.
+ * Procura por apelido, nome da espécie, número da Pokédex ou pelo código curto
+ * visível (últimos 5 caracteres do id). Retorna todos os mascotes (não só os
+ * favoritos), com favoritos/companheiro no topo.
+ */
+export async function searchOwnedMascotsForItemAction(query: string): Promise<{
+  error?: string;
+  mascots?: {
+    id: string;
+    name: string;
+    pokemonId: number;
+    level: number;
+    isEquipped: boolean;
+    isFavorite: boolean;
+    arenaState: string;
+    restingUntil: Date | null;
+    hatchedFromEggType: string | null;
+    hatchedFromEggOrigin: string | null;
+    proteinDoses: number;
+    activeBuffTypes: string[];
+  }[];
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const raw = (query ?? "").trim();
+    const normalized = normalizeMascotSearch(raw);
+    const and: Prisma.MascotWhereInput[] = [{ playerId: player.id }];
+
+    if (normalized) {
+      const pokemonIds = findPokemonIdsBySearch(raw);
+      // Candidatos por apelido (busca tolerante a acentos) e por código curto do id.
+      const nicknameCandidates = await prisma.mascot.findMany({
+        where: { playerId: player.id },
+        select: { id: true, nickname: true },
+      });
+      const matchedIds = nicknameCandidates
+        .filter((m) =>
+          normalizeMascotSearch(m.nickname ?? "").includes(normalized) ||
+          m.id.slice(-5).toLowerCase().includes(normalized),
+        )
+        .map((m) => m.id);
+      and.push({
+        OR: [
+          { nickname: { contains: raw, mode: "insensitive" } },
+          ...(matchedIds.length > 0 ? [{ id: { in: matchedIds } }] : []),
+          ...(pokemonIds.length > 0 ? [{ pokemonId: { in: pokemonIds } }] : []),
+        ],
+      });
+    }
+
+    const mascots = await prisma.mascot.findMany({
+      where: { AND: and },
+      select: {
+        id: true, pokemonId: true, nickname: true, level: true,
+        isEquipped: true, isFavorite: true, arenaState: true, restingUntil: true,
+        hatchedFromEggType: true, hatchedFromEggOrigin: true,
+      },
+      orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }, { id: "asc" }],
+      take: 40,
+    });
+
+    const ids = mascots.map((m) => m.id);
+    const now = new Date();
+    const [proteinGroups, activeBuffs] = ids.length > 0
+      ? await Promise.all([
+          prisma.mascotBuff.groupBy({
+            by: ["mascotId"],
+            where: { type: "STAT_BOOST", mascotId: { in: ids }, expiresAt: { gt: new Date("2090-01-01") } },
+            _count: { id: true },
+          }),
+          prisma.mascotBuff.findMany({
+            where: { mascotId: { in: ids }, expiresAt: { gt: now } },
+            select: { mascotId: true, type: true },
+          }),
+        ])
+      : [[], []];
+    const dosesByMascot = new Map(proteinGroups.map((g) => [g.mascotId, g._count.id]));
+    const buffsByMascot = new Map<string, string[]>();
+    for (const b of activeBuffs) {
+      buffsByMascot.set(b.mascotId, [...(buffsByMascot.get(b.mascotId) ?? []), b.type]);
+    }
+
+    return {
+      mascots: mascots.map((m) => ({
+        id: m.id,
+        name: m.nickname ?? getPokemonName(m.pokemonId),
+        pokemonId: m.pokemonId,
+        level: m.level,
+        isEquipped: m.isEquipped,
+        isFavorite: m.isFavorite,
+        arenaState: m.arenaState,
+        restingUntil: m.restingUntil,
+        hatchedFromEggType: m.hatchedFromEggType,
+        hatchedFromEggOrigin: m.hatchedFromEggOrigin,
+        proteinDoses: dosesByMascot.get(m.id) ?? 0,
+        activeBuffTypes: buffsByMascot.get(m.id) ?? [],
+      })),
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao buscar mascotes." };
+  }
+}
+
 export async function putEggInIncubator(eggId: string, genOverride?: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();

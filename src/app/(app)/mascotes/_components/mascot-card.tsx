@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star, ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
 import {
   getSpriteUrl, getStaticSpriteUrl, getPokemonName, getPokemonTypes, expToNextLevel as expToNext,
-  MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL,
+  MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL, shortMascotCode,
   getHungerStatus, getHappinessStatus, getChallengeStatus,
   HUNGER_LABEL, HAPPINESS_LABEL, CHALLENGE_LABEL,
   HUNGER_COLOR, HAPPINESS_COLOR, CHALLENGE_COLOR,
@@ -1042,6 +1042,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             ) : (
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-white truncate">{name}</span>
+                <span
+                  className="shrink-0 font-mono text-[9px] text-slate-600"
+                  title={`Código único deste mascote: #${shortMascotCode(mascot.id)} (id ${mascot.id})`}
+                >
+                  #{shortMascotCode(mascot.id)}
+                </span>
                 {mascot.ivRating && (
                   <span
                     className={`shrink-0 inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}

@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Coins, Crown, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
+import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
 import {
@@ -446,6 +446,7 @@ export default function BazarListingPage(): React.JSX.Element {
                 <p className="text-sm text-slate-400">
                   {pokemonName} · #{pokemonId}
                   {personality ? ` · ${PERSONALITY_LABEL[personality] ?? personality}` : ""}
+                  {payload.mascotId ? <span className="ml-1 font-mono text-xs text-[#FFCB05]">· #{shortMascotCode(payload.mascotId as string)}</span> : null}
                 </p>
               )}
             </div>
@@ -999,7 +1000,8 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
     return (
       name.toLowerCase().includes(mascotQuery) ||
       pokeName.toLowerCase().includes(mascotQuery) ||
-      String(m.pokemonId).includes(mascotQuery)
+      String(m.pokemonId).includes(mascotQuery) ||
+      shortMascotCode(m.id).toLowerCase().includes(mascotQuery)
     );
   });
 
@@ -1052,7 +1054,7 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">{label}</span>
+                      <span className="block truncate font-semibold">{label}<span className="ml-1 font-mono text-[9px] text-[#FFCB05]">#{shortMascotCode(m.id)}</span></span>
                       <span className="mt-0.5 block truncate text-[9px] text-slate-500">
                         For {m.statForce} · Agi {m.statAgility} · Vit {m.statVitality} · Ins {m.statInstinct} · Car {m.statCharisma}
                       </span>
