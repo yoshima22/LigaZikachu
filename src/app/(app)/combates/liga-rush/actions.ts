@@ -10,7 +10,7 @@ import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { normalizeBattleDivision, validateBattleDivision } from "@/lib/battle-divisions";
 import { MEGA_STONES } from "@/lib/mega-evolution";
-import { DEFAULT_RUSH_REWARDS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
+import { DEFAULT_RUSH_REWARDS, RUSH_LEVEL_OPTIONS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
 
 const PATH = "/combates/liga-rush";
 const BATTLE_HOURS = [19, 19, 19];
@@ -105,11 +105,12 @@ async function createAutomaticRushForMonday(monday:string) {
   const automaticRepeatMode: RushRepeatMode = monotype && weekNumber % 4 !== 0 ? "UNRESTRICTED" : preset.uniqueSpecies ? "WEEKLY_UNIQUE" : weekNumber % 3 === 0 ? "DAILY_UNIQUE" : "UNRESTRICTED";
   const personalities = ["LOYAL", "PROUD", "MISCHIEVOUS", "LAZY", "COMPETITIVE", "DRAMATIC", "PLAYFUL", "ELECTRIC", "TIMID", "CHAOTIC"];
   const requiredPersonality = Math.abs(weekNumber) % 7 === 0 ? personalities[Math.abs(weekNumber) % personalities.length] : null;
+  const maxLevel = RUSH_LEVEL_OPTIONS[Math.abs(weekNumber + RUSH_RULE_PRESETS.indexOf(preset)) % RUSH_LEVEL_OPTIONS.length];
   const friday = addDaysDate(monday, 4);
   return prisma.rushLeague.upsert({ where: { weekKey: `RUSH-${monday}` }, update: {}, create: {
-    name: preset.requiredType === "ROTATING" ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name,
+    name: `${preset.requiredType === "ROTATING" ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name} · Nv.${maxLevel}`,
     weekKey: `RUSH-${monday}`, weekStart: new Date(`${monday}T00:00:00-03:00`), weekEnd: new Date(`${friday}T19:30:00-03:00`), registrationEnds: new Date(`${monday}T07:50:00-03:00`),
-    division: normalizeBattleDivision(preset.maxLevel <= 45 ? "UNLIMITED" : ("division" in preset && preset.division ? preset.division : "LIMITED")), teamSize, maxLevel: preset.maxLevel,
+    division: normalizeBattleDivision(maxLevel < 50 ? "UNLIMITED" : ("division" in preset && preset.division ? preset.division : "LIMITED")), teamSize, maxLevel,
     requiredType: requiredType ?? null, uniqueSpecies: automaticRepeatMode === "WEEKLY_UNIQUE",
     ruleJson: { preset: preset.id, rewardPlanId: plan.id, rewardCap: configuredCap, repeatMode: automaticRepeatMode, requiredPersonality, automatic: true, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória.", battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true },
     rewardsJson: scaleRewardPlan(plan.id, configuredCap) as unknown as Prisma.InputJsonValue,
@@ -343,6 +344,20 @@ function scaleRewardPlan(planId: string | undefined, cap: number) {
     if(factor>=2&&index===0){
       const eggs=[...(scaled.eggs??[])];const rare=eggs.find(egg=>egg.type==="RARE");if(rare)rare.quantity+=Math.max(1,Math.floor(factor/2));else eggs.push({type:"RARE",quantity:Math.max(1,Math.floor(factor/2))});scaled.eggs=eggs;
     }
+    const addEgg=(type:"COMMON"|"RARE"|"EVENT"|"SPECIAL",quantity=1)=>{const eggs=[...(scaled.eggs??[])];const current=eggs.find(egg=>egg.type===type);if(current)current.quantity+=quantity;else eggs.push({type,quantity});scaled.eggs=eggs;};
+    const addItem=(type:string,label:string,itemName?:string)=>{const items=[...(scaled.shopItems??[])];const current=items.find(item=>item.type===type&&(!itemName||item.itemName===itemName));if(current)current.quantity+=1;else items.push({type,quantity:1,label,...(itemName?{itemName}:{})});scaled.shopItems=items;};
+    // Tetos maiores convertem parte do crescimento em variedade real, em vez de
+    // apenas multiplicar ZC e os mesmos itens do pacote-base.
+    if(safeCap>=7000&&index===0)addItem("MASCOT_BUFF_EXP","Vitamina Chocante");
+    if(safeCap>=7500&&index===1)addItem("MASCOT_BUFF_LUCK","Amuleto da Sorte");
+    if(safeCap>=8000&&index===2)addItem("LUCKY_EGG","Ovo da Sorte");
+    if(safeCap>=8500&&index===0)addEgg("SPECIAL");
+    if(safeCap>=9000&&index===1)addItem("RAINBOW_FEATHER","Pena Arco-Íris Especial","Pena Arco-Íris Especial");
+    if(safeCap>=9500&&index===2)addItem("RAINBOW_FEATHER","Pena Arco-Íris de Evento","Pena Arco-Íris de Evento");
+    if(safeCap>=10000&&index===3)addItem("RAINBOW_FEATHER","Pena Arco-Íris Rara","Pena Arco-Íris Rara");
+    if(safeCap>=11000&&index===0)addItem("RAINBOW_FEATHER","Pena Arco-Íris de Laboratório","Pena Arco-Íris de Laboratório");
+    if(safeCap>=12000&&index===0)scaled.randomMegaStone=true;
+    if(safeCap>=12000&&index===4)addItem("RAINBOW_FEATHER","Pena Arco-Íris Comum","Pena Arco-Íris Comum");
     scaled.label=describeRushReward(scaled);
     return scaled;
   });
@@ -383,7 +398,8 @@ export async function adminRerollRushRulesAction(leagueId: string) {
     const pool = alternatives.length ? alternatives : RUSH_RULE_PRESETS;
     const preset = pool[Math.floor(Math.random() * pool.length)]; const requiredType = preset.requiredType === "ROTATING" ? RUSH_TYPES[Math.floor(Math.random() * RUSH_TYPES.length)] : preset.requiredType;
     const monotype = Boolean(requiredType); const teamSize = monotype && Math.random() < .7 ? Math.min(2, preset.teamSize) : preset.teamSize; const repetition: RushRepeatMode = monotype && Math.random() < .7 ? "UNRESTRICTED" : preset.uniqueSpecies ? "WEEKLY_UNIQUE" : Math.random() < .35 ? "DAILY_UNIQUE" : "UNRESTRICTED";
-    const rules = ruleData(league.ruleJson); await prisma.rushLeague.update({ where: { id: leagueId }, data: { name: requiredType ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name, maxLevel: preset.maxLevel, teamSize, division: preset.maxLevel <= 45 ? "UNLIMITED" : normalizeBattleDivision("division" in preset && preset.division ? preset.division : "LIMITED"), requiredType: requiredType ?? null, uniqueSpecies: repetition === "WEEKLY_UNIQUE", ruleJson: { ...rules, preset: preset.id, repeatMode: repetition, requiredPersonality: null, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória." } } });
+    const maxLevel=RUSH_LEVEL_OPTIONS[Math.floor(Math.random()*RUSH_LEVEL_OPTIONS.length)];
+    const rules = ruleData(league.ruleJson); await prisma.rushLeague.update({ where: { id: leagueId }, data: { name: `${requiredType ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name} · Nv.${maxLevel}`, maxLevel, teamSize, division: maxLevel < 50 ? "UNLIMITED" : normalizeBattleDivision("division" in preset && preset.division ? preset.division : "LIMITED"), requiredType: requiredType ?? null, uniqueSpecies: repetition === "WEEKLY_UNIQUE", ruleJson: { ...rules, preset: preset.id, repeatMode: repetition, requiredPersonality: null, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória." } } });
     const updated=await prisma.rushLeague.findUnique({where:{id:leagueId}}); revalidatePath(PATH); return { success: true, league: updated };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao sortear novas regras." }; }
 }
