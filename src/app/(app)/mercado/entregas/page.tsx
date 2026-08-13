@@ -10,6 +10,9 @@ export default async function DeliveryPrototypePage() {
   const player = await prisma.player.findUnique({
     where: { userId: user.id },
     select: {
+      deliveryHomeLabel: true,
+      deliveryHomeLatitude: true,
+      deliveryHomeLongitude: true,
       mascots: {
         where: { arenaState: "FREE" },
         orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
@@ -47,5 +50,10 @@ export default async function DeliveryPrototypePage() {
     spriteUrl: mascot.staticSpriteUrlOverride || (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId)),
   }));
 
-  return <DeliveryMapPrototype mascots={mascots} />;
+  const home = player?.deliveryHomeLatitude != null && player.deliveryHomeLongitude != null ? {
+    label: player.deliveryHomeLabel || "Minha casa",
+    lat: player.deliveryHomeLatitude,
+    lng: player.deliveryHomeLongitude,
+  } : null;
+  return <DeliveryMapPrototype mascots={mascots} initialHome={home} />;
 }

@@ -20,6 +20,9 @@ import {
   Plane,
   Waves,
   Mountain,
+  Home,
+  Landmark,
+  LocateFixed,
 } from "lucide-react";
 import styles from "./delivery-map-prototype.module.css";
 
@@ -38,7 +41,7 @@ type MascotOption = {
 
 type Place = { id: string; name: string; state: string; country: string; region: string; lat: number; lng: number; port?: boolean };
 type TripStatus = "READY" | "RUNNING" | "PAUSED" | "DELIVERED";
-type RouteMode = "BALANCED" | "AIR" | "WATER" | "LAND" | "EXPRESS";
+type RouteMode = "AIR" | "WATER" | "LAND";
 type WeatherSnapshot = { current?: { temperature_2m: number; apparent_temperature: number; precipitation: number; weather_code: number; wind_speed_10m: number; wind_gusts_10m: number; is_day: number } };
 
 const PLACES: Place[] = [
@@ -86,15 +89,40 @@ const REST_HUBS: Place[] = [
   { id: "rest-colombo", name: "Estação de Colombo", state: "", country: "Sri Lanka", region: "Índico", lat: 6.9271, lng: 79.8612, port: true },
   { id: "rest-alaska", name: "Refúgio do Alasca", state: "AK", country: "EUA", region: "Pacífico Norte", lat: 61.2181, lng: -149.9003, port: true },
   { id: "rest-guam", name: "Pouso de Guam", state: "", country: "Guam", region: "Pacífico", lat: 13.4443, lng: 144.7937, port: true },
+  { id: "rest-amazon", name: "Base Amazônica", state: "AM", country: "Brasil", region: "América do Sul", lat: -3.4653, lng: -62.2159, port: true },
+  { id: "rest-andes", name: "Abrigo dos Andes", state: "", country: "Peru", region: "América do Sul", lat: -13.532, lng: -71.9675 },
+  { id: "rest-patagonia", name: "Refúgio da Patagônia", state: "", country: "Argentina", region: "América do Sul", lat: -41.1335, lng: -71.3103 },
+  { id: "rest-rockies", name: "Base das Montanhas Rochosas", state: "CO", country: "EUA", region: "América do Norte", lat: 39.7392, lng: -104.9903 },
+  { id: "rest-yucatan", name: "Pouso de Yucatán", state: "", country: "México", region: "América do Norte", lat: 20.9674, lng: -89.5926, port: true },
+  { id: "rest-greenland", name: "Abrigo da Groenlândia", state: "", country: "Groenlândia", region: "Atlântico Norte", lat: 64.1835, lng: -51.7216, port: true },
+  { id: "rest-alps", name: "Estação dos Alpes", state: "", country: "Suíça", region: "Europa", lat: 46.8182, lng: 8.2275 },
+  { id: "rest-balkans", name: "Pouso dos Bálcãs", state: "", country: "Croácia", region: "Europa", lat: 45.1, lng: 15.2, port: true },
+  { id: "rest-sahara", name: "Oásis do Saara", state: "", country: "Argélia", region: "África", lat: 25.0, lng: 8.0 },
+  { id: "rest-kilimanjaro", name: "Base Kilimanjaro", state: "", country: "Tanzânia", region: "África", lat: -3.0674, lng: 37.3556 },
+  { id: "rest-madagascar", name: "Refúgio de Madagascar", state: "", country: "Madagascar", region: "Índico", lat: -18.8792, lng: 47.5079, port: true },
+  { id: "rest-himalaya", name: "Abrigo do Himalaia", state: "", country: "Nepal", region: "Ásia", lat: 27.7172, lng: 85.324 },
+  { id: "rest-borneo", name: "Estação de Bornéu", state: "", country: "Malásia", region: "Ásia", lat: 1.5535, lng: 110.3593, port: true },
+  { id: "rest-okinawa", name: "Pouso de Okinawa", state: "", country: "Japão", region: "Pacífico", lat: 26.2124, lng: 127.6809, port: true },
+  { id: "rest-perth", name: "Porto de Perth", state: "WA", country: "Austrália", region: "Oceania", lat: -31.9523, lng: 115.8613, port: true },
+  { id: "rest-tasmania", name: "Refúgio da Tasmânia", state: "TAS", country: "Austrália", region: "Oceania", lat: -42.8821, lng: 147.3272, port: true },
 ];
 
 const ROUTE_INFO: Record<RouteMode, { label: string; icon: typeof Plane; types: string[]; bonus: number; color: string; description: string }> = {
-  BALANCED: { label: "Equilibrada", icon: Route, types: ["normal", "psychic"], bonus: 0.08, color: "#22d3ee", description: "Usa paradas seguras e aceita qualquer mascote. Normal e Psíquico recebem pequena afinidade." },
-  AIR: { label: "Rota aérea", icon: Plane, types: ["flying", "dragon", "electric"], bonus: 0.2, color: "#a78bfa", description: "Mais direta e veloz. Voador, Dragão e Elétrico aproveitam correntes de ar, mas ventos fortes pesam mais." },
-  WATER: { label: "Rota aquática", icon: Waves, types: ["water", "ice"], bonus: 0.22, color: "#38bdf8", description: "Prioriza portos e ilhas. Água e Gelo viajam melhor; chuva pode ajudar, enquanto ondas e vento acrescentam risco." },
-  LAND: { label: "Rota terrestre", icon: Mountain, types: ["ground", "rock", "fighting", "grass"], bonus: 0.16, color: "#84cc16", description: "Mais paradas e caminho mais longo. Terra, Pedra, Lutador e Grama reduzem a fadiga." },
-  EXPRESS: { label: "Expresso", icon: Zap, types: ["electric", "flying"], bonus: 0.25, color: "#facc15", description: "Sem descanso e com menor distância, mas cobra muita Vitalidade. Ideal para Elétrico e Voador resistentes." },
+  AIR: { label: "Rota aérea", icon: Plane, types: ["flying"], bonus: 0.22, color: "#a78bfa", description: "Voo direto entre origem e destino. Exclusiva para o tipo Voador; Agilidade aumenta a velocidade e vento, chuva ou tempestade podem atrasar o voo." },
+  WATER: { label: "Rota marítima", icon: Waves, types: ["water"], bonus: 0.28, color: "#38bdf8", description: "Segue portos, ilhas e bases costeiras. Todos podem embarcar, mas somente Água recebe velocidade no mar; Gelo reduz parte da fadiga." },
+  LAND: { label: "Rota terrestre", icon: Mountain, types: ["ground", "rock", "fighting", "grass", "normal"], bonus: 0.14, color: "#84cc16", description: "Procura ruas e estradas reais, evitando oceanos. Terra e Pedra são os mais rápidos; Lutador, Grama e Normal recebem bônus menor." },
 };
+
+const TOURIST_SITES: Place[] = [
+  { id: "tour-christ", name: "Cristo Redentor", state: "RJ", country: "Brasil", region: "Turístico", lat: -22.9519, lng: -43.2105 },
+  { id: "tour-eiffel", name: "Torre Eiffel", state: "", country: "França", region: "Turístico", lat: 48.8584, lng: 2.2945 },
+  { id: "tour-liberty", name: "Estátua da Liberdade", state: "NY", country: "EUA", region: "Turístico", lat: 40.6892, lng: -74.0445 },
+  { id: "tour-machu", name: "Machu Picchu", state: "", country: "Peru", region: "Turístico", lat: -13.1631, lng: -72.545 },
+  { id: "tour-pyramids", name: "Pirâmides de Gizé", state: "", country: "Egito", region: "Turístico", lat: 29.9792, lng: 31.1342 },
+  { id: "tour-fuji", name: "Monte Fuji", state: "", country: "Japão", region: "Turístico", lat: 35.3606, lng: 138.7274 },
+  { id: "tour-opera", name: "Ópera de Sydney", state: "NSW", country: "Austrália", region: "Turístico", lat: -33.8568, lng: 151.2153 },
+  { id: "tour-colosseum", name: "Coliseu", state: "", country: "Itália", region: "Turístico", lat: 41.8902, lng: 12.4922 },
+];
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
@@ -117,7 +145,7 @@ function haversineKm(a: Place, b: Place) {
 }
 
 function selectRestStops(origin: Place, destination: Place, mode: RouteMode, directDistance: number) {
-  if (mode === "EXPRESS" || directDistance < 900) return [];
+  if (mode === "AIR" || directDistance < 900) return [];
   const wanted = mode === "LAND" ? Math.min(3, Math.ceil(directDistance / 2800)) : Math.min(2, Math.ceil(directDistance / 4500));
   const candidates = mode === "WATER" ? REST_HUBS.filter((hub) => hub.port) : REST_HUBS;
   const selected: Place[] = [];
@@ -170,7 +198,7 @@ function formatDebugSeconds(seconds: number) {
   return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
 }
 
-export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
+export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: MascotOption[]; initialHome: { label: string; lat: number; lng: number } | null }) {
   const [mascotId, setMascotId] = useState(mascots[0]?.id ?? "");
   const [originId, setOriginId] = useState("sp");
   const [destinationId, setDestinationId] = useState("rio");
@@ -179,7 +207,13 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
   const [progress, setProgress] = useState(0);
   const [debugSpeed, setDebugSpeed] = useState(1);
   const [simulatedAgility, setSimulatedAgility] = useState<number | null>(null);
-  const [routeMode, setRouteMode] = useState<RouteMode>("BALANCED");
+  const [routeMode, setRouteMode] = useState<RouteMode>("LAND");
+  const [home, setHome] = useState(initialHome);
+  const [homeLabel, setHomeLabel] = useState(initialHome?.label ?? "Minha casa");
+  const [homeSaving, setHomeSaving] = useState(false);
+  const [roadRoute, setRoadRoute] = useState<{ points: Array<{ lat: number; lng: number }>; distanceKm: number } | null>(null);
+  const [roadError, setRoadError] = useState<string | null>(null);
+  const [roadLoading, setRoadLoading] = useState(false);
   const [weatherEnabled, setWeatherEnabled] = useState(true);
   const [weather, setWeather] = useState<WeatherSnapshot[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -194,30 +228,42 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
   const lastFrameRef = useRef<number | null>(null);
 
   const mascot = mascots.find((item) => item.id === mascotId) ?? mascots[0];
-  const origin = PLACES.find((item) => item.id === originId) ?? PLACES[8];
-  const destination = PLACES.find((item) => item.id === destinationId) ?? PLACES[7];
+  const availablePlaces = useMemo(() => home ? [...PLACES, { id: "home", name: home.label, state: "", country: "Casa do jogador", region: "Pessoal", lat: home.lat, lng: home.lng }] : PLACES, [home]);
+  const origin = availablePlaces.find((item) => item.id === originId) ?? PLACES[5];
+  const destination = availablePlaces.find((item) => item.id === destinationId) ?? PLACES[4];
   const agility = clamp(simulatedAgility ?? mascot?.agility ?? 0, 0, 250);
   const directDistance = useMemo(() => haversineKm(origin, destination), [origin, destination]);
   const restStops = useMemo(() => selectRestStops(origin, destination, routeMode, directDistance), [directDistance, destination, origin, routeMode]);
-  const routePoints = useMemo(() => [origin, ...restStops, destination], [destination, origin, restStops]);
-  const distanceKm = useMemo(() => routePoints.slice(0, -1).reduce((sum, point, index) => sum + haversineKm(point, routePoints[index + 1]), 0), [routePoints]);
+  const logicalRoutePoints = useMemo(() => routeMode === "AIR" ? [origin, destination] : [origin, ...restStops, destination], [destination, origin, restStops, routeMode]);
+  const routePoints = useMemo(() => routeMode === "LAND" && roadRoute?.points?.length ? roadRoute.points.map((point, index) => ({ ...point, id: `road-${index}`, name: "Estrada", state: "", country: "", region: "Terrestre" })) : logicalRoutePoints, [logicalRoutePoints, roadRoute, routeMode]);
+  const distanceKm = routeMode === "LAND" && roadRoute ? roadRoute.distanceKm : logicalRoutePoints.slice(0, -1).reduce((sum, point, index) => sum + haversineKm(point, logicalRoutePoints[index + 1]), 0);
   const agilityRatio = agility / 250;
   const loadPenalty = clamp((cargoKg - Math.min(30, (mascot?.force ?? 0) * 0.22)) / 100, 0, 0.32);
   const routeInfo = ROUTE_INFO[routeMode];
   const normalizedTypes = (mascot?.types ?? []).map((type) => type.toLowerCase());
+  const routeAllowed = routeMode !== "AIR" || normalizedTypes.includes("flying");
   const hasAffinity = normalizedTypes.some((type) => routeInfo.types.includes(type));
-  const routeBonus = hasAffinity ? routeInfo.bonus : 0;
+  const landTypeBonus = normalizedTypes.some(type => ["ground", "rock"].includes(type)) ? 0.2 : normalizedTypes.some(type => ["fighting", "grass", "normal"].includes(type)) ? 0.1 : 0;
+  const routeBonus = routeMode === "LAND" ? landTypeBonus : hasAffinity ? routeInfo.bonus : 0;
   const averageWeather = weather.length ? weather.reduce((sum, item) => sum + (item.current?.wind_speed_10m ?? 0), 0) / weather.length : 0;
   const precipitation = weather.length ? weather.reduce((sum, item) => sum + (item.current?.precipitation ?? 0), 0) / weather.length : 0;
-  const weatherModifier = !weatherEnabled || !weather.length ? 0
-    : routeMode === "AIR" && averageWeather > 35 ? 0.12
-      : routeMode === "WATER" && precipitation > 0 && hasAffinity ? -0.06
-        : precipitation > 0 && normalizedTypes.includes("fire") ? 0.1
-          : averageWeather > 45 ? 0.08 : 0;
+  const worstCode = weather.reduce((value, item) => Math.max(value, item.current?.weather_code ?? 0), 0);
+  const weatherEffects = useMemo(() => {
+    const effects: Array<{ label: string; value: number }> = [];
+    if (!weatherEnabled || !weather.length) return effects;
+    if (averageWeather >= 35) effects.push({ label: routeMode === "AIR" ? "Vento forte contra o voo" : "Vento forte no trajeto", value: routeMode === "AIR" ? 0.16 : 0.07 });
+    if (precipitation > 0) effects.push({ label: routeMode === "WATER" && normalizedTypes.includes("water") ? "Chuva favorece mascote de Água" : "Pista/visibilidade molhada", value: routeMode === "WATER" && normalizedTypes.includes("water") ? -0.05 : 0.08 });
+    if (worstCode >= 95) effects.push({ label: "Tempestade exige cautela", value: routeMode === "AIR" ? 0.22 : 0.12 });
+    if (worstCode >= 71 && worstCode <= 86) effects.push({ label: normalizedTypes.includes("ice") ? "Gelo resiste à neve" : "Neve reduz a velocidade", value: normalizedTypes.includes("ice") ? 0 : 0.1 });
+    if ([45, 48].includes(worstCode)) effects.push({ label: "Neblina reduz a visibilidade", value: 0.08 });
+    return effects;
+  }, [averageWeather, normalizedTypes, precipitation, routeMode, weather, weatherEnabled, worstCode]);
+  const weatherModifier = weatherEffects.reduce((sum, effect) => sum + effect.value, 0);
   const fatigueBase = clamp((distanceKm / 9000) * (1 - (mascot?.vitality ?? 0) / 330), 0, 0.3);
-  const fatiguePenalty = routeMode === "EXPRESS" ? fatigueBase : clamp(fatigueBase - restStops.length * 0.07, 0, 0.3);
-  const effectiveSpeed = (60 + agilityRatio * 60) * (1 + routeBonus);
-  const restHours = restStops.length * (routeMode === "LAND" ? 0.75 : 0.4);
+  const fatiguePenalty = clamp(fatigueBase - restStops.length * 0.05, 0, 0.3);
+  const baseSpeed = routeMode === "AIR" ? 115 : routeMode === "WATER" ? 65 : 48;
+  const effectiveSpeed = (baseSpeed + agilityRatio * (routeMode === "AIR" ? 85 : routeMode === "WATER" ? 55 : 45)) * (1 + routeBonus);
+  const restHours = restStops.length * (routeMode === "LAND" ? 0.6 : 0.4);
   const realHours = distanceKm / effectiveSpeed * (1 + loadPenalty + weatherModifier + fatiguePenalty) + restHours;
   const debugDuration = clamp(12 + distanceKm / 150 - agilityRatio * 5 + loadPenalty * 10, 8, 35);
   const remainingDebug = debugDuration * (1 - progress);
@@ -232,7 +278,7 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
       const response = await fetch("/api/admin/delivery-weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ points: routePoints.map((point) => ({ lat: point.lat, lng: point.lng })) }),
+        body: JSON.stringify({ points: logicalRoutePoints.map((point) => ({ lat: point.lat, lng: point.lng })) }),
       });
       const payload = await response.json() as { weather?: WeatherSnapshot[]; error?: string };
       if (!response.ok || !payload.weather) throw new Error(payload.error || "Clima indisponível.");
@@ -243,7 +289,24 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
     } finally {
       setWeatherLoading(false);
     }
-  }, [routePoints, weatherEnabled]);
+  }, [logicalRoutePoints, weatherEnabled]);
+
+  useEffect(() => {
+    if (routeMode !== "LAND" || origin.id === destination.id) { setRoadRoute(null); setRoadError(null); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setRoadLoading(true); setRoadError(null);
+      try {
+        const response = await fetch("/api/admin/delivery-route", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ origin, destination }) });
+        const payload = await response.json() as { points?: Array<{ lat: number; lng: number }>; distanceKm?: number; error?: string };
+        if (!response.ok || !payload.points || !payload.distanceKm) throw new Error(payload.error || "Rota terrestre indisponível.");
+        setRoadRoute({ points: payload.points, distanceKm: payload.distanceKm });
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") { setRoadRoute(null); setRoadError(error instanceof Error ? error.message : "Rota terrestre indisponível."); }
+      } finally { setRoadLoading(false); }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [destination.id, destination.lat, destination.lng, origin.id, origin.lat, origin.lng, routeMode]);
 
   useEffect(() => {
     if (status !== "READY") return;
@@ -281,6 +344,8 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
         { direction: "top" },
       );
     });
+    const touristIcon = L.divIcon({ className: "delivery-tourist-icon", html: '<div class="delivery-tourist-pin">★</div>', iconSize: [28, 28], iconAnchor: [14, 14] });
+    TOURIST_SITES.forEach((site) => L.marker([site.lat, site.lng], { icon: touristIcon }).addTo(map).bindTooltip(`${site.name} · ponto turístico`, { direction: "top" }));
 
     if (mascot) {
       const courierIcon = L.divIcon({
@@ -367,7 +432,21 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
     reset();
   }
 
-  const routeInvalid = origin.id === destination.id;
+  function registerCurrentLocation() {
+    if (!navigator.geolocation) { setWeatherError("Este navegador não oferece localização."); return; }
+    setHomeSaving(true);
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      try {
+        const response = await fetch("/api/delivery-home", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: homeLabel, lat: coords.latitude, lng: coords.longitude }) });
+        const payload = await response.json() as { home?: { label: string; lat: number; lng: number }; error?: string };
+        if (!response.ok || !payload.home) throw new Error(payload.error || "Não foi possível salvar.");
+        setHome(payload.home); setDestinationId("home"); reset();
+      } catch (error) { setWeatherError(error instanceof Error ? error.message : "Não foi possível salvar sua casa."); }
+      finally { setHomeSaving(false); }
+    }, () => { setHomeSaving(false); setWeatherError("Permissão de localização negada."); }, { enableHighAccuracy: false, timeout: 12000 });
+  }
+
+  const routeInvalid = origin.id === destination.id || !routeAllowed || (routeMode === "LAND" && Boolean(roadError));
 
   return (
     <div className="space-y-5">
@@ -415,9 +494,16 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
           ) : <p className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-xs text-red-200">A conta admin não possui mascotes livres para simular.</p>}
 
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-            <div><label className="mb-1 block text-[9px] font-bold uppercase text-slate-500">Origem</label><select value={originId} onChange={(e) => { setOriginId(e.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs">{PLACES.map(p => <option value={p.id} key={p.id}>{p.name} · {p.country}</option>)}</select></div>
+            <div><label className="mb-1 block text-[9px] font-bold uppercase text-slate-500">Origem</label><select value={originId} onChange={(e) => { setOriginId(e.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs">{availablePlaces.map(p => <option value={p.id} key={p.id}>{p.name} · {p.country}</option>)}</select></div>
             <button type="button" onClick={swapRoute} className="mb-0.5 rounded-xl border border-slate-700 p-2 text-cyan-300 hover:bg-cyan-400/10" title="Inverter rota"><Route size={16} /></button>
-            <div><label className="mb-1 block text-[9px] font-bold uppercase text-slate-500">Destino</label><select value={destinationId} onChange={(e) => { setDestinationId(e.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs">{PLACES.map(p => <option value={p.id} key={p.id}>{p.name} · {p.country}</option>)}</select></div>
+            <div><label className="mb-1 block text-[9px] font-bold uppercase text-slate-500">Destino</label><select value={destinationId} onChange={(e) => { setDestinationId(e.target.value); reset(); }} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-xs">{availablePlaces.map(p => <option value={p.id} key={p.id}>{p.name} · {p.country}</option>)}</select></div>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-300"><Home size={14} /> Entregar na minha casa</div>
+            <p className="mt-1 text-[9px] leading-relaxed text-slate-400">O endereço não é solicitado: guardamos apenas coordenadas aproximadas fornecidas pelo navegador e um apelido escolhido por você.</p>
+            <div className="mt-2 flex gap-2"><input value={homeLabel} onChange={event => setHomeLabel(event.target.value)} maxLength={60} className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" placeholder="Ex.: Casa do Luiz" /><button type="button" disabled={homeSaving} onClick={registerCurrentLocation} className="flex items-center gap-1 rounded-lg bg-emerald-400 px-2.5 py-1.5 text-[9px] font-black text-slate-950 disabled:opacity-50"><LocateFixed size={13} />{homeSaving ? "Salvando" : "Registrar"}</button></div>
+            {home && <button type="button" onClick={() => { setDestinationId("home"); reset(); }} className="mt-2 text-[9px] font-bold text-emerald-300 hover:underline">Usar “{home.label}” como destino</button>}
           </div>
 
           <div className="space-y-2 rounded-2xl border border-white/5 bg-slate-900/60 p-3">
@@ -425,16 +511,19 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
             <div className="grid grid-cols-2 gap-1.5">
               {(Object.entries(ROUTE_INFO) as [RouteMode, typeof ROUTE_INFO[RouteMode]][]).map(([mode, info]) => {
                 const Icon = info.icon;
-                return <button key={mode} type="button" title={info.description} onClick={() => { setRouteMode(mode); reset(); }} className={`rounded-xl border p-2 text-left transition ${routeMode === mode ? "border-cyan-300 bg-cyan-400/10" : "border-slate-700 bg-slate-950/40 hover:border-slate-500"}`}><span className="flex items-center gap-1.5 text-[10px] font-black text-white"><Icon size={13} style={{ color: info.color }} />{info.label}</span><span className="mt-1 block text-[8px] leading-relaxed text-slate-500">{info.types.map(type => type.toUpperCase()).join(" · ")}</span></button>;
+                const locked = mode === "AIR" && !normalizedTypes.includes("flying");
+                return <button key={mode} type="button" disabled={locked} title={locked ? "Somente mascotes do tipo Voador podem escolher esta rota." : info.description} onClick={() => { setRouteMode(mode); reset(); }} className={`rounded-xl border p-2 text-left transition disabled:cursor-not-allowed disabled:opacity-35 ${routeMode === mode ? "border-cyan-300 bg-cyan-400/10" : "border-slate-700 bg-slate-950/40 hover:border-slate-500"}`}><span className="flex items-center gap-1.5 text-[10px] font-black text-white"><Icon size={13} style={{ color: info.color }} />{info.label}</span><span className="mt-1 block text-[8px] leading-relaxed text-slate-500">{locked ? "BLOQUEADA · EXIGE VOADOR" : info.types.map(type => type.toUpperCase()).join(" · ")}</span></button>;
               })}
             </div>
             <p className="text-[9px] leading-relaxed text-slate-400">{routeInfo.description}</p>
             <p className={`text-[9px] font-bold ${hasAffinity ? "text-emerald-300" : "text-slate-500"}`}>{hasAffinity ? `Afinidade ativa: +${(routeBonus * 100).toFixed(0)}% de velocidade.` : "Este mascote não possui afinidade com esta rota."}</p>
+            {roadLoading && <p className="animate-pulse text-[9px] text-lime-300">Procurando o caminho com mais chão possível…</p>}
+            {roadError && <p className="text-[9px] font-bold text-red-300">{roadError} Escolha ar ou mar.</p>}
           </div>
 
           <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-3">
             <div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Clima real</p><p className="mt-0.5 text-[8px] text-slate-500">Open-Meteo · cache de 15 minutos</p></div><button type="button" onClick={() => { setWeatherEnabled(value => !value); reset(); }} className={`rounded-full border px-2.5 py-1 text-[9px] font-black ${weatherEnabled ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-slate-700 text-slate-500"}`}>{weatherEnabled ? "ATIVO" : "DESLIGADO"}</button></div>
-            {weatherLoading ? <p className="mt-2 animate-pulse text-[9px] text-cyan-300">Consultando condições da rota…</p> : weatherError ? <p className="mt-2 text-[9px] text-amber-300">{weatherError}</p> : weather[0]?.current ? <div className="mt-2 grid grid-cols-2 gap-1.5 text-[9px]"><span className="rounded-lg bg-slate-950/60 p-2">🌡️ {weather[0].current!.temperature_2m}°C</span><span className="rounded-lg bg-slate-950/60 p-2">💨 {weather[0].current!.wind_speed_10m} km/h</span><span className="col-span-2 rounded-lg bg-slate-950/60 p-2">{weatherLabel(weather[0].current!.weather_code)} · efeito no tempo: {weatherModifier > 0 ? "+" : ""}{(weatherModifier * 100).toFixed(0)}%</span></div> : null}
+            {weatherLoading ? <p className="mt-2 animate-pulse text-[9px] text-cyan-300">Consultando condições da rota…</p> : weatherError ? <p className="mt-2 text-[9px] text-amber-300">{weatherError}</p> : weather[0]?.current ? <div className="mt-2 space-y-1.5 text-[9px]"><div className="grid grid-cols-2 gap-1.5"><span className="rounded-lg bg-slate-950/60 p-2">🌡️ {weather[0].current!.temperature_2m}°C</span><span className="rounded-lg bg-slate-950/60 p-2">💨 {weather[0].current!.wind_speed_10m} km/h</span></div>{weatherEffects.length ? weatherEffects.map(effect => <div key={effect.label} className="flex justify-between rounded-lg bg-slate-950/60 p-2"><span>{effect.label}</span><b className={effect.value > 0 ? "text-amber-300" : "text-emerald-300"}>{effect.value > 0 ? "+" : ""}{(effect.value * 100).toFixed(0)}% no tempo</b></div>) : <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-300">Condições neutras: nenhum ajuste climático.</div>}<div className="flex justify-between border-t border-white/5 pt-1.5 font-black"><span>Total climático</span><span>{weatherModifier > 0 ? "+" : ""}{(weatherModifier * 100).toFixed(0)}%</span></div></div> : null}
           </div>
 
           <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/60 p-3">
@@ -445,7 +534,7 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {status === "RUNNING" ? <button type="button" onClick={() => setStatus("PAUSED")} className="flex items-center justify-center gap-2 rounded-xl bg-yellow-400 px-3 py-2.5 text-xs font-black text-slate-950"><Pause size={15} /> Pausar</button> : <button type="button" disabled={!mascot || routeInvalid || status === "DELIVERED"} onClick={() => setStatus("RUNNING")} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40"><Play size={15} /> {status === "PAUSED" ? "Continuar" : "Despachar"}</button>}
+            {status === "RUNNING" ? <button type="button" onClick={() => setStatus("PAUSED")} className="flex items-center justify-center gap-2 rounded-xl bg-yellow-400 px-3 py-2.5 text-xs font-black text-slate-950"><Pause size={15} /> Pausar</button> : <button type="button" disabled={!mascot || routeInvalid || roadLoading || status === "DELIVERED"} onClick={() => setStatus("RUNNING")} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40"><Play size={15} /> {status === "PAUSED" ? "Continuar" : "Despachar"}</button>}
             <button type="button" onClick={reset} className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5 text-xs font-bold text-slate-300"><RotateCcw size={15} /> Reiniciar</button>
             <button type="button" disabled={status === "READY" || status === "DELIVERED"} onClick={() => { const next = clamp(progressRef.current + 0.25); progressRef.current = next; setProgress(next); if (next >= 1) setStatus("DELIVERED"); }} className="flex items-center justify-center gap-2 rounded-xl border border-purple-400/30 bg-purple-400/10 px-3 py-2 text-[10px] font-bold text-purple-200 disabled:opacity-40"><StepForward size={14} /> +25%</button>
             <button type="button" disabled={status === "READY" || status === "DELIVERED"} onClick={() => { progressRef.current = 1; setProgress(1); setStatus("DELIVERED"); }} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-200 disabled:opacity-40"><Sparkles size={14} /> Concluir</button>
@@ -459,10 +548,17 @@ export function DeliveryMapPrototype({ mascots }: { mascots: MascotOption[] }) {
             <Metric icon={Clock3} label="Tempo no jogo" value={formatDuration(realHours)} detail={`${restStops.length} descanso(s) · fadiga +${(fatiguePenalty * 100).toFixed(0)}%`} />
             <Metric icon={Zap} label="Debug restante" value={formatDebugSeconds(remainingDebug / debugSpeed)} detail={`Execução em ${debugSpeed}x`} />
           </div>
+          <div className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-3 text-[10px] md:grid-cols-5">
+            <div><span className="text-slate-500">Base da modalidade</span><b className="mt-1 block text-white">{baseSpeed} km/h</b></div>
+            <div><span className="text-slate-500">Agilidade ({agility}/250)</span><b className="mt-1 block text-cyan-200">+{(effectiveSpeed / (1 + routeBonus) - baseSpeed).toFixed(0)} km/h</b></div>
+            <div><span className="text-slate-500">Afinidade de tipo</span><b className="mt-1 block text-emerald-300">{routeBonus ? `+${(routeBonus * 100).toFixed(0)}% velocidade` : "Sem bônus"}</b></div>
+            <div><span className="text-slate-500">Penalidades</span><b className="mt-1 block text-amber-300">Carga +{(loadPenalty * 100).toFixed(0)}% · clima {weatherModifier > 0 ? "+" : ""}{(weatherModifier * 100).toFixed(0)}%</b></div>
+            <div><span className="text-slate-500">Descanso e fadiga</span><b className="mt-1 block text-purple-200">+{formatDuration(restHours)} · fadiga +{(fatiguePenalty * 100).toFixed(0)}%</b></div>
+          </div>
 
           <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-              <div className="flex items-center gap-2"><MapPin size={16} className="text-cyan-300" /><div><p className="text-xs font-black text-white">{origin.name}, {origin.country} → {destination.name}, {destination.country}</p><p className="text-[9px] text-slate-500">{routeInfo.label} · {restStops.length ? restStops.map(stop => stop.name).join(" → ") : "sem paradas"}</p></div></div>
+              <div className="flex items-center gap-2"><MapPin size={16} className="text-cyan-300" /><div><p className="text-xs font-black text-white">{origin.name}, {origin.country} → {destination.name}, {destination.country}</p><p className="text-[9px] text-slate-500">{routeInfo.label} · {routeMode === "LAND" ? "traçado rodoviário real" : routeMode === "AIR" ? "linha direta pelo ar" : "corredor por portos e ilhas"} · {restStops.length ? restStops.map(stop => stop.name).join(" → ") : "sem paradas"}</p></div></div>
               <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${status === "DELIVERED" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "RUNNING" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-300"}`}>{status === "READY" ? "Aguardando despacho" : status === "RUNNING" ? "Em trânsito" : status === "PAUSED" ? "Simulação pausada" : "Entrega concluída"}</span>
             </div>
             <div className="relative h-[530px] max-h-[68vh] min-h-[420px]">
