@@ -90,9 +90,25 @@ export async function spinBirthdayRouletteAction(): Promise<
   if (!user) return { ok: false, error: "Não autenticado." };
   const player = await prisma.player.findUnique({
     where: { userId: user.id },
-    select: { id: true, birthDate: true, birthdayGiftYear: true, birthdayGiftPendingKit: true },
+    select: {
+      id: true,
+      birthDate: true,
+      birthdayGiftYear: true,
+      birthdayGiftPendingKit: true,
+      birthdayGiftReplayKit: true,
+    },
   });
   if (!player) return { ok: false, error: "Jogador não encontrado." };
+
+  // O premio ja foi concedido, mas a animacao ainda nao terminou. Reproduz o
+  // mesmo resultado sem sortear ou entregar nada novamente.
+  if (player.birthdayGiftReplayKit) {
+    return {
+      ok: true,
+      kitId: player.birthdayGiftReplayKit,
+      needsMegaChoice: player.birthdayGiftPendingKit === player.birthdayGiftReplayKit,
+    };
+  }
 
   // Se já tem uma escolha de mega pendente, re-mostra o passo da escolha.
   if (player.birthdayGiftPendingKit) {
@@ -112,7 +128,12 @@ export async function spinBirthdayRouletteAction(): Promise<
     await prisma.$transaction(async (tx) => {
       const fresh = await tx.player.findUnique({
         where: { id: player.id },
-        select: { birthDate: true, birthdayGiftYear: true, birthdayGiftPendingKit: true },
+        select: {
+          birthDate: true,
+          birthdayGiftYear: true,
+          birthdayGiftPendingKit: true,
+          birthdayGiftReplayKit: true,
+        },
       });
       if (!fresh) throw new Error("Jogador não encontrado.");
       if (fresh.birthdayGiftPendingKit) throw new Error("PENDING");
@@ -121,7 +142,12 @@ export async function spinBirthdayRouletteAction(): Promise<
       }
       await tx.player.update({
         where: { id: player.id },
-        data: { birthdayGiftYear: year, birthdayGiftPendingKit: needsMegaChoice ? kit.id : null },
+        data: {
+          birthdayGiftYear: year,
+          birthdayGiftPendingKit: needsMegaChoice ? kit.id : null,
+          birthdayGiftLastKit: kit.id,
+          birthdayGiftReplayKit: kit.id,
+        },
       });
       if (!needsMegaChoice) await grantKitContents(tx, player.id, kit.id);
     }, { isolationLevel: "Serializable" });
@@ -133,6 +159,18 @@ export async function spinBirthdayRouletteAction(): Promise<
 
   revalidatePath("/");
   return { ok: true, kitId: kit.id, needsMegaChoice };
+}
+
+/** Marca apenas a animacao como assistida. Nunca altera ou concede o premio. */
+export async function acknowledgeBirthdayRouletteReplayAction(): Promise<{ ok: boolean }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false };
+  await prisma.player.updateMany({
+    where: { userId: user.id, birthdayGiftReplayKit: { not: null } },
+    data: { birthdayGiftReplayKit: null },
+  });
+  revalidatePath("/");
+  return { ok: true };
 }
 
 /** Finaliza o kit de escolha de pedra de mega. */
@@ -161,10 +199,11 @@ export async function chooseBirthdayMegaStoneAction(megaStoneType: string): Prom
 }
 
 /** DEBUG (admin): sorteia um kit apenas para ver a roleta, SEM conceder nada. */
-export async function adminSimulateBirthdayRouletteAction(): Promise<{ ok: boolean; kitId?: string; error?: string }> {
+export async function adminSimulateBirthdayRouletteAction(requestedKitId?: string): Promise<{ ok: boolean; kitId?: string; error?: string }> {
   const user = await getSessionUser();
   if (!user) return { ok: false, error: "Não autenticado." };
   if (!isAdmin(user.role)) return { ok: false, error: "Acesso restrito." };
-  const kit = BIRTHDAY_KITS[Math.floor(Math.random() * BIRTHDAY_KITS.length)];
+  const kit = (requestedKitId ? getBirthdayKit(requestedKitId) : null)
+    ?? BIRTHDAY_KITS[Math.floor(Math.random() * BIRTHDAY_KITS.length)];
   return { ok: true, kitId: kit.id };
 }
