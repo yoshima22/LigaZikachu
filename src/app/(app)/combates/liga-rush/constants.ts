@@ -21,12 +21,12 @@ export type RushRewardPlan = {
 };
 
 export const RUSH_RULE_PRESETS = [
-  { id: "RUSH_45", name: "Rush Nv.45", description: "Formato-base da Rush: equipes de até 3 mascotes, todos no máximo no nível 45. Como Megas só surgem a partir do nível 50, esta regra usa automaticamente a divisão Ilimitada sem criar um bloqueio inútil.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null },
-  { id: "MONOTYPE", name: "Semana Monotipo", description: "Um tipo é sorteado para a edição. Todo mascote escalado precisa possuir esse tipo como primário ou secundário. O sorteio tende a usar equipes menores e repetição mais flexível para evitar que jogadores com coleções pequenas fiquem sem opções.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: "ROTATING" },
-  { id: "NO_REPEAT", name: "Semana Sem Repetição", description: "Cada mascote individual só pode ser usado em uma das 15 partidas da semana. O jogador precisa administrar o elenco inteiro e não pode depender do mesmo favorito em todos os confrontos.", maxLevel: 45, teamSize: 3, uniqueSpecies: true, requiredType: null },
-  { id: "SPRINT_30", name: "Sprint Nv.30", description: "Formato de desenvolvimento: até 3 mascotes, nível máximo 30 e sem repetir o mesmo mascote durante a semana. Valoriza exemplares mais jovens, diversidade e planejamento de elenco.", maxLevel: 30, teamSize: 3, uniqueSpecies: true, requiredType: null },
-  { id: "DUO_RUSH", name: "Dupla Relâmpago", description: "Cada equipe possui no máximo 2 mascotes, até o nível 45. Com menos integrantes, cada postura e combinação de tipos pesa mais, e uma derrota individual altera rapidamente o combate.", maxLevel: 45, teamSize: 2, uniqueSpecies: true, requiredType: null },
-  { id: "OPEN_45", name: "Rush Livre Nv.45", description: "Até 3 mascotes por equipe, nível máximo 45 e repetição livre entre partidas. É o formato mais acessível para testar composições sem administrar uma rotação semanal extensa.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null, division: "UNLIMITED" },
+  { id: "RUSH_45", name: "Rush Clássica", description: "Formato-base com equipes curtas e teto de nível configurável. Mantém todos os tipos e personalidades disponíveis, enquanto a regra de repetição e a divisão determinam quanto o jogador pode reutilizar seus principais mascotes e suas Megas.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null },
+  { id: "MONOTYPE", name: "Semana Monotipo", description: "Um tipo é escolhido para a edição e todo mascote escalado precisa possuí-lo como tipo primário ou secundário. O teto de nível continua independente do tipo; equipes menores e repetição flexível ajudam coleções com poucas opções elegíveis.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: "ROTATING" },
+  { id: "NO_REPEAT", name: "Semana Sem Repetição", description: "Cada mascote individual só pode participar uma vez durante toda a semana. O teto de nível define o grupo elegível, enquanto o jogador precisa distribuir seu elenco entre os 15 confrontos sem depender sempre dos mesmos favoritos.", maxLevel: 45, teamSize: 3, uniqueSpecies: true, requiredType: null },
+  { id: "SPRINT_30", name: "Sprint", description: "Formato de desenvolvimento com teto de nível editável e rotação ampla de elenco. Mascotes acima do limite ficam inelegíveis; os que estão dentro dele precisam ser administrados entre as partidas conforme a regra de repetição ativa.", maxLevel: 30, teamSize: 3, uniqueSpecies: true, requiredType: null },
+  { id: "DUO_RUSH", name: "Dupla Relâmpago", description: "Cada equipe possui no máximo 2 mascotes. O teto de nível é configurável e, com menos integrantes, postura, cobertura de tipos e escolha de cada participante pesam mais porque uma única eliminação altera rapidamente o combate.", maxLevel: 45, teamSize: 2, uniqueSpecies: true, requiredType: null },
+  { id: "OPEN_45", name: "Rush Livre", description: "Formato acessível com teto de nível editável e repetição livre entre partidas. Permite testar e reaproveitar composições durante a semana, respeitando apenas os demais limitadores exibidos na edição.", maxLevel: 45, teamSize: 3, uniqueSpecies: false, requiredType: null, division: "UNLIMITED" },
 ] as const;
 
 export const RUSH_REWARD_PLANS: RushRewardPlan[] = [
@@ -132,4 +132,5 @@ export const DEFAULT_RUSH_REWARDS = RUSH_REWARD_PLANS[0].bundles;
 
 export const RUSH_BATTLE_TIMES = ["19:00", "19:10", "19:20"] as const;
 export const RUSH_REWARD_TIME = "19:30";
+export const RUSH_LEVEL_OPTIONS = [30, 45, 55, 65, 75, 85, 95] as const;
 export const RUSH_TYPES = ["normal", "fire", "water", "electric", "grass", "ice", "fighting", "poison", "ground", "flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy"] as const;
