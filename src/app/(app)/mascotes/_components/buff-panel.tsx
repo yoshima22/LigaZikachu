@@ -144,7 +144,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   }, [showResults]);
 
   // ── Reorganização de itens (ordem manual + drag-and-drop) com paginação ──────
-  const ITEMS_PER_PAGE = 6;
+  const ITEMS_PER_PAGE = 12;
   const ORDER_STORAGE_KEY = "mascot-item-order-v1";
   const [itemOrder, setItemOrder] = useState<string[]>([]);
   const [reorderMode, setReorderMode] = useState(false);
