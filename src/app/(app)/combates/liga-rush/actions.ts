@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
-import { defaultCombatRoleFor } from "@/lib/combat-roles";
+import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { normalizeBattleDivision, validateBattleDivision } from "@/lib/battle-divisions";
 import { MEGA_STONES } from "@/lib/mega-evolution";
@@ -93,20 +93,7 @@ function mondayFor(date = new Date()) {
   return brtDate(current);
 }
 
-export async function ensureAutomaticRushLeague() {
-  const open = await prisma.rushLeague.findFirst({ where: { status: { in: ["REGISTRATION", "ACTIVE"] } }, orderBy: { weekStart: "asc" } });
-  if (open) {
-    const bracketAt = new Date(`${brtDate(open.weekStart)}T08:00:00-03:00`);
-    if (open.status === "REGISTRATION" && new Date() >= bracketAt) {
-      const participants = await prisma.rushLeagueParticipant.count({ where: { leagueId: open.id } });
-      if (participants < 4) return prisma.rushLeague.update({ where: { id: open.id }, data: { status: "CANCELLED", ruleJson: { ...ruleData(open.ruleJson), cancellationReason: `Edição cancelada: eram necessários pelo menos 4 inscritos, mas houve apenas ${participants}.`, cancelledAutomatically: true } } });
-      return prisma.rushLeague.update({ where: { id: open.id }, data: { status: "ACTIVE" } });
-    }
-    return open;
-  }
-  let monday = mondayFor();
-  const currentDeadline = new Date(`${monday}T07:50:00-03:00`);
-  if (new Date() > currentDeadline) monday = addDaysDate(monday, 7);
+async function createAutomaticRushForMonday(monday:string) {
   const weekNumber = Math.floor(new Date(`${monday}T12:00:00Z`).getTime() / 604800000);
   const preset = RUSH_RULE_PRESETS[Math.abs(weekNumber) % RUSH_RULE_PRESETS.length];
   const plan = RUSH_REWARD_PLANS[Math.abs(weekNumber) % RUSH_REWARD_PLANS.length];
@@ -129,6 +116,31 @@ export async function ensureAutomaticRushLeague() {
   } });
 }
 
+export async function ensureAutomaticRushLeague() {
+  const now = new Date();
+  const registrations = await prisma.rushLeague.findMany({ where: { status: "REGISTRATION" }, orderBy: { weekStart: "asc" } });
+  for (const registration of registrations) {
+    const bracketAt = new Date(`${brtDate(registration.weekStart)}T08:00:00-03:00`);
+    if (now < bracketAt) continue;
+    const participants = await prisma.rushLeagueParticipant.count({ where: { leagueId: registration.id } });
+    if (participants < 4) {
+      await prisma.rushLeague.update({ where: { id: registration.id }, data: { status: "CANCELLED", ruleJson: { ...ruleData(registration.ruleJson), cancellationReason: `Edição cancelada: eram necessários pelo menos 4 inscritos, mas houve apenas ${participants}.`, cancelledAutomatically: true } } });
+    } else {
+      await prisma.rushLeague.update({ where: { id: registration.id }, data: { status: "ACTIVE" } });
+    }
+  }
+
+  const active = await prisma.rushLeague.findFirst({ where: { status: "ACTIVE" }, orderBy: { weekStart: "asc" } });
+  const futureRegistration = await prisma.rushLeague.findFirst({ where: { status: "REGISTRATION", ...(active ? { weekStart: { gt: active.weekStart } } : {}) }, orderBy: { weekStart: "asc" } });
+  if (active && !futureRegistration) await createAutomaticRushForMonday(addDaysDate(brtDate(active.weekStart), 7));
+  if (!active && !futureRegistration) {
+    let monday = mondayFor();
+    if (now > new Date(`${monday}T07:50:00-03:00`)) monday = addDaysDate(monday, 7);
+    await createAutomaticRushForMonday(monday);
+  }
+  return prisma.rushLeague.findFirst({ where: { status: { in: ["ACTIVE", "REGISTRATION"] } }, orderBy: { weekStart: "asc" } });
+}
+
 function addDaysDate(date: string, days: number) { const value = new Date(`${date}T12:00:00-03:00`); value.setUTCDate(value.getUTCDate() + days); return brtDate(value); }
 function getPokemonTypeLabel(type?: string | null) { const labels: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" }; return type ? labels[type] ?? type : "Livre"; }
 
@@ -140,6 +152,11 @@ export async function getRushDataAction() {
     orderBy: { weekStart: "asc" },
     include: { participants: { orderBy: [{ points: "desc" }, { wins: "desc" }, { survivorsScore: "desc" }, { damageDealt: "desc" }, { damageTaken: "asc" }] }, dailyTeams: { where: { playerId: player.id } }, matches: { orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }] } },
   });
+  const upcomingRegistration = league?.status === "ACTIVE" ? await prisma.rushLeague.findFirst({
+    where: { status: "REGISTRATION", weekStart: { gt: league.weekStart } },
+    orderBy: { weekStart: "asc" },
+    include: { participants: { select: { playerId: true } } },
+  }) : null;
   const recent = await prisma.rushLeague.findMany({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, take: 4 });
   const cancellation = await prisma.rushLeague.findFirst({ where: { status: "CANCELLED" }, orderBy: { updatedAt: "desc" }, select: { name: true, weekKey: true, ruleJson: true, updatedAt: true } });
   if (!league) return { league: null, recent, cancellation, isAdmin: isStaff(session.user.role), presets: RUSH_RULE_PRESETS, rewardPlans: RUSH_REWARD_PLANS, divisions: [] };
@@ -179,7 +196,27 @@ export async function getRushDataAction() {
     presets: RUSH_RULE_PRESETS,
     cancellation,
     weekHighlights,
+    upcomingRegistration,
+    upcomingJoined: Boolean(upcomingRegistration?.participants.some((participant) => participant.playerId === player.id)),
   }));
+}
+
+export async function getRushScoutingAnalysisAction(targetPlayerId:string, matchId?:string) {
+  try {
+    const { player }=await requireContext();
+    if(targetPlayerId!==player.id){
+      const allowed=await prisma.rushLeagueMatch.findFirst({where:{...(matchId?{id:matchId}:{battleDate:brtDate()}),OR:[{playerAId:player.id,playerBId:targetPlayerId},{playerAId:targetPlayerId,playerBId:player.id}]},select:{id:true}});
+      if(!allowed)return{error:"Este confronto da Rush não permite analisar esse adversário."};
+    }
+    const {getWeeklyScoutingAnalysis}=await import("@/lib/weekly-scouting");
+    const base=await getWeeklyScoutingAnalysis(targetPlayerId);
+    const rushMatches=await prisma.rushLeagueMatch.findMany({where:{status:"RESOLVED",OR:[{playerAId:targetPlayerId},{playerBId:targetPlayerId}]},select:{id:true,playerAId:true,playerBId:true,winnerId:true,isDraw:true,playerADamageDealt:true,playerBDamageDealt:true,resolvedAt:true,replayJson:true,league:{select:{weekKey:true}}},orderBy:{resolvedAt:"desc"}});
+    const mascotUsage=new Map(base.topMascots.map(entry=>[`${entry.pokemonId}:${entry.name}`,{...entry}]));const typeUsage=new Map(base.typePreferences.map(entry=>[entry.name,entry.count]));const roleUsage=new Map(base.rolePreferences.map(entry=>[entry.name,entry.count]));let wins=base.wins,losses=base.losses,draws=base.draws,totalDamage=base.averageDamage*base.matches;
+    const opponentIds:string[]=[];const rushRecent:Array<{id:string;weekKey:string;opponentId:string|null;result:"W"|"L"|"D";damage:number;resolvedAt:Date|null}>=[];
+    for(const match of rushMatches){if(match.isDraw)draws++;else if(match.winnerId===targetPlayerId)wins++;else losses++;const damage=match.playerAId===targetPlayerId?match.playerADamageDealt:match.playerBDamageDealt;totalDamage+=damage;const opponentId=match.playerAId===targetPlayerId?match.playerBId:match.playerAId;if(opponentId)opponentIds.push(opponentId);rushRecent.push({id:match.id,weekKey:match.league.weekKey,opponentId,result:match.isDraw?"D":match.winnerId===targetPlayerId?"W":"L",damage,resolvedAt:match.resolvedAt});const seen=new Set<string>();const seenRoles=new Set<string>();for(const turn of Array.isArray(match.replayJson)?match.replayJson as any[]:[]){for(const side of ["actor","target"] as const){if(turn[`${side}OwnerId`]!==targetPlayerId||!turn[`${side}Id`])continue;const mascotId=String(turn[`${side}Id`]);const pokemonId=Number(turn[`${side}PokemonId`]??0);const name=String(turn[`${side}Name`]??getPokemonName(pokemonId));if(!seen.has(mascotId)){seen.add(mascotId);const key=`${pokemonId}:${name}`;const entry=mascotUsage.get(key)??{pokemonId,name,uses:0};entry.uses++;mascotUsage.set(key,entry);for(const pokemonType of getPokemonTypes(pokemonId))typeUsage.set(pokemonType,(typeUsage.get(pokemonType)??0)+1);}const role=String(turn[`${side}Role`]??"Atacante");const roleKey=`${mascotId}:${role}`;if(!seenRoles.has(roleKey)){seenRoles.add(roleKey);roleUsage.set(role,(roleUsage.get(role)??0)+1);}}}}
+    const opponents=opponentIds.length?await prisma.player.findMany({where:{id:{in:opponentIds}},select:{id:true,displayName:true}}):[];const opponentNames=new Map(opponents.map(entry=>[entry.id,entry.displayName]));const matches=base.matches+rushMatches.length;const analysis={...base,matches,wins,losses,draws,score:wins*3+draws,winRate:matches?Math.round(wins/matches*100):0,averageDamage:matches?Math.round(totalDamage/matches):0,topMascots:[...mascotUsage.values()].sort((a,b)=>b.uses-a.uses).slice(0,6),typePreferences:[...typeUsage].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,count])=>({name,count})),rolePreferences:[...roleUsage].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,count])=>({name,count})),recentMatches:[...rushRecent.map(entry=>({...entry,opponentName:entry.opponentId?opponentNames.get(entry.opponentId)??"Jogador":"BYE"})),...base.recentMatches].sort((a,b)=>String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0,5)};
+    return{analysis:JSON.parse(JSON.stringify(analysis))};
+  }catch(error){console.error("[rush-scouting] Falha ao carregar análise",error);return{error:"Não foi possível carregar a análise. Tente novamente."};}
 }
 
 function buildRushHighlights(matches: Array<{ replayJson: unknown; resultJson: unknown; winnerId: string | null }>, names: Record<string,string>) {
@@ -213,7 +250,7 @@ export async function leaveRushLeagueAction(leagueId: string) {
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao sair." }; }
 }
 
-export async function saveRushTeamAction(input: { leagueId: string; battleDate: string; battleSlot: number; mascotIds: string[] }) {
+export async function saveRushTeamAction(input: { leagueId: string; battleDate: string; battleSlot: number; mascotIds: string[]; roles?:Record<string,string> }) {
   try {
     const { player } = await requireContext();
     const league = await prisma.rushLeague.findUnique({ where: { id: input.leagueId }, include: { participants: { where: { playerId: player.id } } } });
@@ -239,7 +276,7 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
       const repeated = mascots.find((m) => usedMascotIds.has(m.id));
       if (repeated) return { error: `${repetition === "DAILY_UNIQUE" ? "Sem repetição no dia" : "Sem repetição na semana"}: ${repeated.nickname ?? getPokemonName(repeated.pokemonId)} já foi usado em outra equipe.` };
     }
-    const roles = Object.fromEntries(mascots.map((m) => [m.id, m.preferredCombatRole ?? defaultCombatRoleFor(m)]));
+    const roles = Object.fromEntries(mascots.map((m) => [m.id, normalizeCombatRole(input.roles?.[m.id]??m.preferredCombatRole??defaultCombatRoleFor(m))]));
     await prisma.rushLeagueDailyTeam.upsert({
       where: { leagueId_playerId_battleDate_battleSlot: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot } },
       create: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot, mascotIdsJson: input.mascotIds, rolesJson: roles, lockedAt: new Date() },
@@ -288,7 +325,39 @@ export async function adminUpdateRushLeagueAction(input: { leagueId: string; nam
 
 function scaleRewardPlan(planId: string | undefined, cap: number) {
   const plan = rewardPlan(planId); const safeCap = Math.max(1000, Math.trunc(cap)); const base = Math.max(...plan.bundles.map((b) => b.estimatedValue), 1); const factor = safeCap / base;
-  return plan.bundles.map((bundle) => { const coins=bundle.coins?Math.round(bundle.coins*factor):undefined; const label=coins&&bundle.coins?bundle.label.replace(`${bundle.coins.toLocaleString("pt-BR")} ZC`,`${coins.toLocaleString("pt-BR")} ZC`):bundle.label; return { ...bundle,label,estimatedValue:Math.round(bundle.estimatedValue*factor),coins }; });
+  const quantityFactor=Math.max(1,Math.round(Math.sqrt(factor)));
+  return plan.bundles.map((bundle,index) => {
+    const scaled:RushRewardBundle={
+      ...bundle,
+      estimatedValue:Math.round(bundle.estimatedValue*factor),
+      coins:bundle.coins?Math.max(1,Math.round(bundle.coins*factor)):undefined,
+      food:bundle.food?Math.max(1,Math.round(bundle.food*factor)):undefined,
+      sweet:bundle.sweet?Math.max(1,Math.round(bundle.sweet*factor)):undefined,
+      creationDust:bundle.creationDust?Math.max(1,Math.round(bundle.creationDust*factor)):undefined,
+      eggs:bundle.eggs?.map(egg=>({...egg,quantity:Math.max(1,egg.quantity*quantityFactor)})),
+      shopItems:bundle.shopItems?.map(item=>({...item,quantity:Math.max(1,item.quantity*quantityFactor)})),
+    };
+    if(factor>=1.5&&index<3){
+      const items=[...(scaled.shopItems??[])];const ticket=items.find(item=>item.type==="ZIKALOOT_TICKET");if(ticket)ticket.quantity+=Math.max(1,Math.floor(factor-0.5));else items.push({type:"ZIKALOOT_TICKET",quantity:Math.max(1,Math.floor(factor-0.5)),label:"Ticket ZikaLoot"});scaled.shopItems=items;
+    }
+    if(factor>=2&&index===0){
+      const eggs=[...(scaled.eggs??[])];const rare=eggs.find(egg=>egg.type==="RARE");if(rare)rare.quantity+=Math.max(1,Math.floor(factor/2));else eggs.push({type:"RARE",quantity:Math.max(1,Math.floor(factor/2))});scaled.eggs=eggs;
+    }
+    scaled.label=describeRushReward(scaled);
+    return scaled;
+  });
+}
+
+function describeRushReward(bundle:RushRewardBundle){
+  const parts:string[]=[];
+  if(bundle.randomMegaStone)parts.push("1 Pedra de Mega Evolução aleatória");
+  for(const egg of bundle.eggs??[]){const name=egg.type==="RARE"?"Ovo Raro":egg.type==="EVENT"?"Ovo de Evento":"Ovo Comum";parts.push(`${egg.quantity}× ${name}`);}
+  for(const item of bundle.shopItems??[])parts.push(`${item.quantity}× ${item.label}`);
+  if(bundle.creationDust)parts.push(`${bundle.creationDust} Pó de Criação`);
+  if(bundle.food)parts.push(`${bundle.food} comidas`);
+  if(bundle.sweet)parts.push(`${bundle.sweet} doces`);
+  if(bundle.coins)parts.push(`${bundle.coins.toLocaleString("pt-BR")} ZC`);
+  return parts.join(" + ")||"Caixa de participação";
 }
 
 export async function adminSaveRushRewardsAction(leagueId: string, rewards: RushRewardBundle[], rewardCap: number, saveAsDefault = false) {
@@ -436,6 +505,7 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
 export async function runRushLeagueAutomation(secret: string) {
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) return { error: "Unauthorized" };
   const league = await ensureAutomaticRushLeague();
+  if (!league) return { success: true, action: "idle", reason: "Nenhuma edição Rush disponível." };
   if (league.status === "CANCELLED") return { success: true, action: "cancelled", leagueId: league.id, reason: String(ruleData(league.ruleJson).cancellationReason ?? "Menos de 4 inscritos.") };
   const now = new Date();
   const date = brtDate(now);

@@ -39,7 +39,7 @@ import { BattleDivisionControl } from "@/components/battle-division-control";
 
 type Tab = "liga" | "times" | "resultados" | "colinha" | "itens" | "admin";
 
-type OpponentAnalysis = {
+export type OpponentAnalysis = {
   playerId: string; playerName: string; matches: number; wins: number; losses: number; draws: number;
   score: number; winRate: number; averageDamage: number;
   topMascots: Array<{ pokemonId: number; name: string; uses: number }>;
@@ -1065,7 +1065,7 @@ function buildMascotRecommendations(analysis: OpponentAnalysis, mascots: PageDat
   return selected;
 }
 
-function OpponentAnalysisModal({ analysis, myMascots, showRecommendations = true, onClose }: { analysis: OpponentAnalysis; myMascots: PageData["availableMascots"]; showRecommendations?: boolean; onClose: () => void }) {
+export function OpponentAnalysisModal({ analysis, myMascots, showRecommendations = true, contextLabel = "Liga Semanal", onClose }: { analysis: OpponentAnalysis; myMascots: PageData["availableMascots"]; showRecommendations?: boolean; contextLabel?:string; onClose: () => void }) {
   const maxType = Math.max(1, ...analysis.typePreferences.map((entry) => entry.count));
   const maxRole = Math.max(1, ...analysis.rolePreferences.map((entry) => entry.count));
   const recommendations = buildMascotRecommendations(analysis, myMascots);
@@ -1075,9 +1075,9 @@ function OpponentAnalysisModal({ analysis, myMascots, showRecommendations = true
       <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-cyan-400/25 bg-[#080d1c] shadow-2xl shadow-cyan-950/40" onClick={(event) => event.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-800 bg-[#080d1c]/95 p-5 backdrop-blur">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">{showRecommendations ? "Scouting do adversário do dia" : "Sua análise na Liga Semanal"}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">{showRecommendations ? `Scouting do adversário · ${contextLabel}` : `Sua análise · ${contextLabel}`}</p>
             <h2 className="mt-1 text-xl font-black text-white">{analysis.playerName}</h2>
-            <p className="text-xs text-slate-500">Histórico consolidado de todas as Ligas Semanais registradas.</p>
+            <p className="text-xs text-slate-500">Histórico competitivo consolidado para apoiar o planejamento da equipe.</p>
           </div>
           <button onClick={onClose} className="rounded-xl border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:text-white">Fechar ✕</button>
         </div>
