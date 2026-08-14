@@ -180,6 +180,9 @@ public class MainActivity extends Activity {
                 .putString("token", token)
                 .putString("refresh_version", refreshVersion)
                 .apply();
+            // O token chega depois de a primeira página terminar de carregar.
+            // Registre-o imediatamente, sem depender de uma nova navegação.
+            if (webView != null) webView.post(this::registerFcmToken);
         });
     }
 

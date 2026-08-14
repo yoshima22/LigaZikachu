@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "241254493719",
+    "project_id": "pokemon-tournament-organizer",
+    "storage_bucket": "pokemon-tournament-organizer.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241254493719:android:cd4661b1ab960cfd34f652",
+        "android_client_info": {
+          "package_name": "app.ligazikachu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWOnEHUfxhXemK39LFI5ghDQgD-G2MTQM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
