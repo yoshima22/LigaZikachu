@@ -134,6 +134,9 @@ export default function BazarListingPage(): React.JSX.Element {
   const [editPrice, setEditPrice] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editWanted, setEditWanted] = useState("");
+  const [editType, setEditType] = useState<"SALE" | "SALE_OR_TRADE" | "AUCTION">("SALE_OR_TRADE");
+  const [editMinBid, setEditMinBid] = useState("");
+  const [editAuctionDuration, setEditAuctionDuration] = useState<"12h" | "1d">("1d");
   const [bidAmount, setBidAmount] = useState("");
   const [auctionTimeLeft, setAuctionTimeLeft] = useState("");
   const [sellerWishlistOpen, setSellerWishlistOpen] = useState(false);
@@ -300,6 +303,13 @@ export default function BazarListingPage(): React.JSX.Element {
     setEditPrice(listing.priceCoins != null ? String(listing.priceCoins) : "");
     setEditDesc(listing.description ?? "");
     setEditWanted(listing.wantedDesc ?? "");
+    setEditType(
+      listing.listingType === "AUCTION" ? "AUCTION"
+        : listing.listingType === "SALE" ? "SALE"
+        : "SALE_OR_TRADE",
+    );
+    setEditMinBid(listing.minBidCoins != null ? String(listing.minBidCoins) : "");
+    setEditAuctionDuration("1d");
     setEditMode(true);
   };
 
@@ -311,6 +321,9 @@ export default function BazarListingPage(): React.JSX.Element {
         priceCoins,
         description: editDesc,
         wantedDesc: editWanted,
+        listingType: editType,
+        minBidCoins: editMinBid.trim() === "" ? null : parseInt(editMinBid),
+        auctionDuration: editAuctionDuration,
       });
       if (r.error) { toast.error(r.error); return; }
       toast.success("Anúncio atualizado!");
@@ -357,7 +370,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const pokemonName = (payload.pokemonName as string | undefined) || (pokemonId ? getPokemonName(pokemonId) : "");
   const eggOriginLabel = isMascot
     ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
-    : null;
+    : getHatchedEggLabel((payload.eggType as string | undefined) ?? null, (payload.eggOrigin as string | undefined) ?? null);
   const mascotRarity = pokemonId ? getMascotRarity(pokemonId) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
   const nickname = payload.nickname as string | undefined;
@@ -447,6 +460,11 @@ export default function BazarListingPage(): React.JSX.Element {
                   {pokemonName} · #{pokemonId}
                   {personality ? ` · ${PERSONALITY_LABEL[personality] ?? personality}` : ""}
                   {payload.mascotId ? <span className="ml-1 font-mono text-xs text-[#FFCB05]">· #{shortMascotCode(payload.mascotId as string)}</span> : null}
+                </p>
+              )}
+              {eggOriginLabel && (
+                <p className="mt-1 inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/5 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+                  🥚 Origem: {eggOriginLabel}
                 </p>
               )}
             </div>
@@ -569,11 +587,6 @@ export default function BazarListingPage(): React.JSX.Element {
               ) : (
                 <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-slate-500">
                   Este jogador ainda não publicou uma wishlist.
-                </p>
-              )}
-              {eggOriginLabel && (
-                <p className="mt-1 inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/5 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
-                  🥚 Origem: {eggOriginLabel}
                 </p>
               )}
             </div>
@@ -852,16 +865,72 @@ export default function BazarListingPage(): React.JSX.Element {
                 <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3">
                   <p className="text-xs font-semibold text-[#FFCB05]">✏️ Editar anúncio</p>
 
+                  {/* Tipo de anúncio */}
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 uppercase tracking-wide">Preço (ZC) — deixe vazio para troca</label>
-                    <input
-                      type="number" min={0} inputMode="numeric" pattern="[0-9]*"
-                      value={editPrice}
-                      onChange={e => setEditPrice(e.target.value.replace(/\D/g, ""))}
-                      placeholder="Sem preço (somente troca)"
-                      className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
-                    />
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wide">Tipo de anúncio</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([["SALE", "Venda"], ["SALE_OR_TRADE", "Venda/Troca"], ["AUCTION", "Leilão"]] as const).map(([value, label]) => {
+                        const active = editType === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={Boolean(listing.currentBidPlayerId)}
+                            onClick={() => setEditType(value)}
+                            className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                              active ? "border-[#FFCB05]/60 bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border bg-slate-900 text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {Boolean(listing.currentBidPlayerId) && (
+                      <p className="text-[10px] text-amber-400">Este leilão já recebeu lances e não pode mudar de tipo.</p>
+                    )}
                   </div>
+
+                  {editType === "AUCTION" ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wide">Lance mínimo (ZC)</label>
+                        <input
+                          type="number" min={1} inputMode="numeric" pattern="[0-9]*"
+                          value={editMinBid}
+                          disabled={Boolean(listing.currentBidPlayerId)}
+                          onChange={e => setEditMinBid(e.target.value.replace(/\D/g, ""))}
+                          placeholder="Ex.: 500"
+                          className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60 disabled:opacity-40"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wide">Duração</label>
+                        <select
+                          value={editAuctionDuration}
+                          onChange={e => setEditAuctionDuration(e.target.value as "12h" | "1d")}
+                          className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
+                        >
+                          <option value="12h">12 horas</option>
+                          <option value="1d">1 dia</option>
+                        </select>
+                      </div>
+                      <p className="col-span-2 text-[10px] text-slate-500">Ao converter para leilão, o prazo recomeça a partir de agora.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 uppercase tracking-wide">
+                        {editType === "SALE" ? "Preço (ZC)" : "Preço (ZC) — deixe vazio para somente troca"}
+                      </label>
+                      <input
+                        type="number" min={0} inputMode="numeric" pattern="[0-9]*"
+                        value={editPrice}
+                        onChange={e => setEditPrice(e.target.value.replace(/\D/g, ""))}
+                        placeholder={editType === "SALE" ? "Defina um preço" : "Sem preço (somente troca)"}
+                        className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
+                      />
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                     <label className="text-[10px] text-slate-400 uppercase tracking-wide">Descrição</label>

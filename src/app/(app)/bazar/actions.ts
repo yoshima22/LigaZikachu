@@ -27,7 +27,7 @@ import {
   SHELL_MAX_BET,
   SHELL_MIN_BET,
 } from "@/lib/miauvadao-shell-game";
-import { EggType } from "@prisma/client";
+import { EggType, Prisma } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
@@ -695,13 +695,22 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           });
           if (eggs.length < qty) throw new Error("Ovos insuficientes no inventário.");
           // Remove qty ovos do inventário (escrow)
-          const toRemove = eggs.slice(0, qty).map(e => e.id);
+          const escrowedEggs = eggs.slice(0, qty);
+          const toRemove = escrowedEggs.map(e => e.id);
+          // Captura a origem real antes de sobrescrever para "bazar:" (senão se perde).
+          const origins = [...new Set(escrowedEggs.map(e => e.origin).filter(Boolean))];
           await tx.mascotEgg.updateMany({
             where: { id: { in: toRemove } },
             data: { origin: `bazar:${player.id}` }, // marca como em bazar para não aparecer na incubadora
           });
-          // Guardar IDs dos ovos no payload para devolução
-          payload = { ...payload, escrowed_egg_ids: toRemove };
+          // Guardar IDs e origem dos ovos no payload (para devolução e exibição).
+          payload = {
+            ...payload,
+            escrowed_egg_ids: toRemove,
+            eggType: input.itemType,
+            // Só registra origem única quando todos os ovos compartilham a mesma.
+            eggOrigin: origins.length === 1 ? origins[0] : null,
+          };
         } else {
           // Item de PlayerInventory (buffs, tickets, cosméticos)
           // Usa shopItemId para localizar o item exato (escrow preciso)
@@ -833,7 +842,14 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
 
 export async function editListing(
   listingId: string,
-  fields: { priceCoins?: number | null; description?: string; wantedDesc?: string },
+  fields: {
+    priceCoins?: number | null;
+    description?: string;
+    wantedDesc?: string;
+    listingType?: "SALE" | "SALE_OR_TRADE" | "AUCTION";
+    minBidCoins?: number | null;
+    auctionDuration?: "12h" | "1d";
+  },
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -850,14 +866,53 @@ export async function editListing(
       return { error: "Preço não pode ser negativo." };
     }
 
-    await prisma.bazarListing.update({
-      where: { id: listingId },
-      data: {
-        priceCoins: fields.priceCoins,
-        description: fields.description?.trim() || null,
-        wantedDesc: fields.wantedDesc?.trim() || null,
-      },
-    });
+    const wasAuction = listing.listingType === "AUCTION";
+    const newType = fields.listingType ?? (wasAuction ? "AUCTION" : listing.listingType === "SALE" ? "SALE" : "SALE_OR_TRADE");
+    const typeChanged = newType !== listing.listingType;
+
+    // Leilão que já recebeu lances não pode mudar de tipo nem de lance mínimo.
+    if ((wasAuction || newType === "AUCTION") && listing.currentBidPlayerId && (typeChanged || newType === "AUCTION")) {
+      if (typeChanged) return { error: "Este leilão já recebeu lances e não pode mudar de tipo." };
+    }
+
+    const data: Prisma.BazarListingUpdateInput = {
+      description: fields.description?.trim() || null,
+      wantedDesc: fields.wantedDesc?.trim() || null,
+      listingType: newType,
+    };
+
+    if (newType === "AUCTION") {
+      const minBid = Math.trunc(Number(fields.minBidCoins) || 0);
+      if (minBid < 1) return { error: "Defina um lance mínimo válido (>= 1 ZC) para o leilão." };
+      if (listing.currentBidPlayerId) return { error: "Este leilão já recebeu lances; não é possível alterar o lance mínimo." };
+      data.priceCoins = null;
+      data.minBidCoins = minBid;
+      data.currentBidCoins = null;
+      data.currentBidPlayerId = null;
+      // Ao converter para leilão, inicia o prazo a partir de agora. Editar um
+      // leilão que já era leilão não reinicia o cronômetro.
+      if (!wasAuction) {
+        const durationMs = fields.auctionDuration === "12h" ? 12 * 3600_000 : 24 * 3600_000;
+        const endsAt = new Date(Date.now() + durationMs);
+        data.auctionEndsAt = endsAt;
+        data.expiresAt = endsAt;
+      }
+    } else {
+      // Venda ou Venda/Troca.
+      if (newType === "SALE" && (fields.priceCoins === undefined || fields.priceCoins === null)) {
+        return { error: "Um anúncio de venda precisa de um preço." };
+      }
+      data.priceCoins = fields.priceCoins ?? null;
+      // Ao sair de um leilão, limpa os campos de leilão.
+      if (wasAuction) {
+        data.minBidCoins = null;
+        data.currentBidCoins = null;
+        data.currentBidPlayerId = null;
+        data.auctionEndsAt = null;
+      }
+    }
+
+    await prisma.bazarListing.update({ where: { id: listingId }, data });
 
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
