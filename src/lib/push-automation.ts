@@ -24,11 +24,12 @@ async function sendOnce(eventKey: string, userIds: string[], title: string, body
 
 export async function runPushAutomation(now = new Date()) {
   const local = brt(now);
+  const recentCutoff = new Date(now.getTime() - 30 * 60_000);
   let sent = 0;
 
   // Expedições ficam ACTIVE até a coleta. O marcador por ID garante um único aviso.
   const expeditions = await prisma.mascotExpedition.findMany({
-    where: { status: "ACTIVE", finishAt: { lte: now } },
+    where: { status: "ACTIVE", finishAt: { gt: recentCutoff, lte: now } },
     take: 200,
     select: { id: true, mascot: { select: { nickname: true, pokemonId: true, player: { select: { userId: true } } } }, rewardJson: true },
   });
@@ -40,7 +41,7 @@ export async function runPushAutomation(now = new Date()) {
   }
 
   const vacations = await prisma.mascotBuff.findMany({
-    where: { type: "VACATION", expiresAt: { lte: now } }, take: 200,
+    where: { type: "VACATION", expiresAt: { gt: recentCutoff, lte: now } }, take: 200,
     select: { id: true, mascot: { select: { nickname: true, pokemonId: true, player: { select: { userId: true } } } } },
   });
   for (const vacation of vacations) {
@@ -60,7 +61,7 @@ export async function runPushAutomation(now = new Date()) {
         const missing = players.filter((player) => (counts.get(player.id)?.size ?? 0) < 3).map((player) => player.userId);
         sent += await sendOnce(`weekly-team-warning:${weekly.id}:${local.date}`, missing, "Liga Semanal: equipe pendente", "Você ainda não salvou as três equipes de hoje. Às 20h o sistema usará o time herdado.", "/combates/liga-semanal");
       }
-      if (local.minute >= 20 * 60) sent += await sendOnce(`weekly-start:${weekly.id}:${local.date}`, players.map((player) => player.userId), "Liga Semanal começou!", "Os combates de hoje começaram. Acompanhe os resultados e replays.", "/combates/liga-semanal");
+      if (local.minute >= 20 * 60 && local.minute < 20 * 60 + 30) sent += await sendOnce(`weekly-start:${weekly.id}:${local.date}`, players.map((player) => player.userId), "Liga Semanal começou!", "Os combates de hoje começaram. Acompanhe os resultados e replays.", "/combates/liga-semanal");
     }
 
     const rush = await prisma.rushLeague.findFirst({ where: { status: { in: ["REGISTRATION", "ACTIVE"] }, weekStart: { lte: now }, weekEnd: { gte: now } }, orderBy: { weekStart: "desc" }, select: { id: true, participants: { select: { playerId: true } } } });
@@ -74,7 +75,7 @@ export async function runPushAutomation(now = new Date()) {
         const missing = players.filter((player) => (counts.get(player.id)?.size ?? 0) < 3).map((player) => player.userId);
         sent += await sendOnce(`rush-team-warning:${rush.id}:${local.date}`, missing, "Liga Rush: equipe pendente", "A primeira luta é às 19h. Salve as equipes ou o sistema usará a escalação herdada/automática.", "/combates/liga-rush");
       }
-      if (local.minute >= 19 * 60) sent += await sendOnce(`rush-start:${rush.id}:${local.date}`, players.map((player) => player.userId), "Liga Rush começou!", "Os combates das 19h, 19h10 e 19h20 começaram. Acompanhe a rodada.", "/combates/liga-rush");
+      if (local.minute >= 19 * 60 && local.minute < 19 * 60 + 30) sent += await sendOnce(`rush-start:${rush.id}:${local.date}`, players.map((player) => player.userId), "Liga Rush começou!", "Os combates das 19h, 19h10 e 19h20 começaram. Acompanhe a rodada.", "/combates/liga-rush");
     }
   }
 
