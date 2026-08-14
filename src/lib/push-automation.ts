@@ -1,7 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { sendNotificationToUsers } from "@/lib/notifications";
+import { getPokemonName } from "@/lib/mascot-data";
 
 const TZ = "America/Sao_Paulo";
+const EXPEDITION_LABELS: Record<string, string> = {
+  STANDARD: "Padrão",
+  TRAINING: "Treinamento",
+  ITEMS: "Itens",
+};
+
+function mascotName(mascot: { nickname: string | null; speciesNameOverride: string | null; pokemonId: number }) {
+  return mascot.nickname?.trim() || mascot.speciesNameOverride?.trim() || getPokemonName(mascot.pokemonId);
+}
 
 function brt(now: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
@@ -31,21 +41,26 @@ export async function runPushAutomation(now = new Date()) {
   const expeditions = await prisma.mascotExpedition.findMany({
     where: { status: "ACTIVE", finishAt: { gt: recentCutoff, lte: now } },
     take: 200,
-    select: { id: true, mascot: { select: { nickname: true, pokemonId: true, player: { select: { userId: true } } } }, rewardJson: true },
+    select: { id: true, mascot: { select: { nickname: true, speciesNameOverride: true, pokemonId: true, player: { select: { userId: true } } } }, rewardJson: true },
   });
   for (const expedition of expeditions) {
     const reward = (expedition.rewardJson ?? {}) as Record<string, unknown>;
-    const type = String(reward.expeditionType ?? reward.type ?? "expedição").toLowerCase();
-    const name = expedition.mascot.nickname || `Mascote #${expedition.mascot.pokemonId}`;
-    sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Expedição concluída!", `${name} voltou da expedição de ${type}. As recompensas estão prontas.`, "/mascotes");
+    const mode = String(reward.mode ?? "STANDARD").toUpperCase();
+    const name = mascotName(expedition.mascot);
+    if (mode === "VACATION") {
+      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias com o Professor Carvalho e já pode ser recebido.`, "/mascotes");
+    } else {
+      const label = EXPEDITION_LABELS[mode] ?? "Padrão";
+      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Expedição concluída!", `${name} voltou da expedição ${label}. As recompensas estão prontas.`, "/mascotes");
+    }
   }
 
   const vacations = await prisma.mascotBuff.findMany({
     where: { type: "VACATION", expiresAt: { gt: recentCutoff, lte: now } }, take: 200,
-    select: { id: true, mascot: { select: { nickname: true, pokemonId: true, player: { select: { userId: true } } } } },
+    select: { id: true, mascot: { select: { nickname: true, speciesNameOverride: true, pokemonId: true, player: { select: { userId: true } } } } },
   });
   for (const vacation of vacations) {
-    const name = vacation.mascot.nickname || `Mascote #${vacation.mascot.pokemonId}`;
+    const name = mascotName(vacation.mascot);
     sent += await sendOnce(`vacation-ready:${vacation.id}`, [vacation.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias e já pode ser recebido.`, "/mascotes");
   }
 
