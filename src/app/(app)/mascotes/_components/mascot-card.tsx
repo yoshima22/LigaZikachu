@@ -524,6 +524,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [expeditionDuration, setExpeditionDuration] = useState<ExpeditionDuration>("1h");
   const [expeditionMode, setExpeditionMode] = useState<ExpeditionMode>("STANDARD");
   const [showLootPreview, setShowLootPreview] = useState(false);
+  const [expeditionStartError, setExpeditionStartError] = useState<string | null>(null);
   const [lootPreviewDuration, setLootPreviewDuration] = useState<ExpeditionDuration>("1h");
   const [showRelations, setShowRelations] = useState(false);
   const [showPermanentItems, setShowPermanentItems] = useState(false);
@@ -746,6 +747,23 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   return (
     <>
     {/* Expedition reward modal */}
+    {expeditionStartError && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setExpeditionStartError(null)}>
+        <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-slate-950 p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-red-500/15 p-2 text-red-300"><X size={20} /></div>
+            <div>
+              <p className="font-black text-white">Não foi possível iniciar a expedição</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">{expeditionStartError}</p>
+              {expeditionStartError.toLowerCase().includes("em andamento") && (
+                <p className="mt-2 text-xs text-slate-500">Cada jogador pode manter somente uma expedição de cada tipo em andamento. Colete ou encerre a atual antes de iniciar outra do mesmo tipo.</p>
+              )}
+            </div>
+          </div>
+          <button type="button" onClick={() => setExpeditionStartError(null)} className="mt-4 w-full rounded-xl bg-red-500 py-2.5 text-sm font-black text-white">Entendi</button>
+        </div>
+      </div>
+    )}
     {expeditionReward && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeExpeditionReward}>
         <div className="w-full max-w-xs rounded-2xl border border-[#FFCB05]/40 bg-slate-950 p-6 text-center shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
@@ -1334,7 +1352,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   onClick={() => startTransition(async () => {
                     const response = await startExpeditionAction(mascot.id, expeditionDuration, expeditionMode);
                     if (response.error) {
-                      toast.error(response.error);
+                      setExpeditionStartError(response.error);
                       return;
                     }
                     const reduction = response.result?.agilityTimeReductionPct ?? 0;

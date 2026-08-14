@@ -16,6 +16,7 @@ import {
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
+import type { ExpeditionMode } from "@/lib/mascot-data";
 import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
@@ -1064,6 +1065,108 @@ export async function claimExpeditionAction(expeditionId: string): Promise<{ err
     revalidatePath("/caixa-de-presentes");
     return { result };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export type ExpeditionRoutineResult = {
+  expeditionId: string;
+  mascotId: string;
+  mascotName: string;
+  mode: ExpeditionMode;
+  durationKey: ExpeditionDuration;
+  reward?: Awaited<ReturnType<typeof claimExpedition>>["reward"];
+  expGained?: number;
+  playMessage?: string;
+  petMessage?: string;
+  restarted: boolean;
+  error?: string;
+};
+
+/**
+ * Coleta todas as expedições prontas dos três modos regulares, tenta brincar e
+ * fazer carinho e reinicia o mesmo mascote no mesmo modo e duração. Cada etapa
+ * é registrada no servidor antes da próxima; uma falha posterior nunca desfaz
+ * uma recompensa já concedida.
+ */
+export async function collectCareAndRepeatExpeditionsAction(): Promise<{
+  error?: string;
+  results: ExpeditionRoutineResult[];
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado.", results: [] };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado.", results: [] };
+
+    const now = new Date();
+    const active = await prisma.mascotExpedition.findMany({
+      where: {
+        status: "ACTIVE",
+        finishAt: { lte: now },
+        mascot: { playerId: player.id },
+      },
+      orderBy: { finishAt: "asc" },
+      select: {
+        id: true,
+        mascotId: true,
+        rewardJson: true,
+        mascot: { select: { nickname: true, pokemonId: true } },
+      },
+    });
+
+    const regular = active.filter((expedition) => {
+      const stored = (expedition.rewardJson as Record<string, unknown> | null) ?? {};
+      const mode = (stored.mode as ExpeditionMode | undefined) ?? "STANDARD";
+      return mode === "STANDARD" || mode === "TRAINING" || mode === "ITEMS";
+    });
+    if (!regular.length) {
+      return {
+        error: "Nenhuma expedição de treinamento, padrão ou itens está pronta para coleta.",
+        results: [],
+      };
+    }
+
+    const results: ExpeditionRoutineResult[] = [];
+    for (const expedition of regular) {
+      const stored = (expedition.rewardJson as Record<string, unknown> | null) ?? {};
+      const mode = (stored.mode as ExpeditionMode | undefined) ?? "STANDARD";
+      const durationKey = (stored.durationKey as ExpeditionDuration | undefined) ?? "1h";
+      const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
+      const entry: ExpeditionRoutineResult = {
+        expeditionId: expedition.id,
+        mascotId: expedition.mascotId,
+        mascotName,
+        mode,
+        durationKey,
+        restarted: false,
+      };
+      try {
+        const claimed = await claimExpedition(player.id, expedition.id);
+        entry.reward = claimed.reward;
+        entry.expGained = claimed.expGained;
+
+        await recalculateMood(expedition.mascotId).catch(() => undefined);
+        const play = await interactWithMascot(player.id, expedition.mascotId, "PLAY");
+        const pet = await interactWithMascot(player.id, expedition.mascotId, "PET");
+        entry.playMessage = play.message;
+        entry.petMessage = pet.message;
+
+        await startExpedition(player.id, expedition.mascotId, durationKey, mode);
+        entry.restarted = true;
+      } catch (error) {
+        entry.error = error instanceof Error ? error.message : "Falha ao concluir a rotina.";
+      }
+      results.push(entry);
+    }
+
+    revalidate(player.id);
+    revalidatePath("/caixa-de-presentes");
+    return { results };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Erro ao processar as expedições.",
+      results: [],
+    };
+  }
 }
 
 export async function unequipMascotAction(mascotId: string): Promise<{ error?: string }> {

@@ -3,10 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MapPin, Search, Star } from "lucide-react";
+import { LoaderCircle, MapPin, Search, Sparkles, Star, X } from "lucide-react";
 import { getPokemonElement, getPokemonTypes, getPokemonName } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
-import { claimExpeditionAction, skipExpeditionAction } from "@/app/(app)/mascotes/actions";
+import {
+  claimExpeditionAction,
+  collectCareAndRepeatExpeditionsAction,
+  skipExpeditionAction,
+  type ExpeditionRoutineResult,
+} from "@/app/(app)/mascotes/actions";
 import { MascotBankList } from "./mascot-bank-list-demand";
 import type { BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
@@ -235,6 +240,8 @@ export function MascotList({
   const [expeditionFilter, setExpeditionFilter] = useState("ALL");
   const [companionOnly, setCompanionOnly] = useState(false);
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
+  const [routineResults, setRoutineResults] = useState<ExpeditionRoutineResult[] | null>(null);
+  const [routinePending, startRoutineTransition] = useTransition();
 
   const closeExpeditionReward = () => {
     setExpeditionReward(null);
@@ -253,6 +260,21 @@ export function MascotList({
   const visibleExpeditions = activeExpeditions.filter(expedition =>
     expeditionFilter === "ALL" || expedition.mode === expeditionFilter
   );
+  const readyRegularExpeditions = activeExpeditions.filter(expedition =>
+    ["TRAINING", "STANDARD", "ITEMS"].includes(expedition.mode) &&
+    new Date(expedition.finishAt).getTime() <= Date.now()
+  );
+
+  const runExpeditionRoutine = () => {
+    startRoutineTransition(async () => {
+      const response = await collectCareAndRepeatExpeditionsAction();
+      if (response.error && response.results.length === 0) {
+        toast.error(response.error);
+        return;
+      }
+      setRoutineResults(response.results);
+    });
+  };
 
   const isExpeditionBankMascot = (m: MascotData) =>
     !m.isEquipped && !m.isFavorite &&
@@ -314,6 +336,49 @@ export function MascotList({
         </div>
       </div>
     )}
+    {routineResults && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => { setRoutineResults(null); router.refresh(); }}>
+        <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-cyan-400/35 bg-slate-950 p-5 shadow-2xl" onClick={event => event.stopPropagation()}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-lg font-black text-white">Rotina de expedições concluída</p>
+              <p className="mt-1 text-xs text-slate-400">Recompensas, cuidados e reinício aparecem separados para cada mascote.</p>
+            </div>
+            <button type="button" onClick={() => { setRoutineResults(null); router.refresh(); }} className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-white"><X size={15} /></button>
+          </div>
+          <div className="mt-4 space-y-3">
+            {routineResults.map(result => {
+              const reward = result.reward ? rewardToDisplay(result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; durationLabel?: string; shopItemType?: string }) : null;
+              return (
+                <div key={result.expeditionId} className="rounded-xl border border-slate-800 bg-slate-900/65 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-white">{result.mascotName}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-cyan-300">{EXPEDITION_MODE_LABELS[result.mode] ?? result.mode} · {result.durationKey}</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${result.restarted ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
+                      {result.restarted ? "EXPEDIÇÃO REINICIADA" : "NÃO REINICIADA"}
+                    </span>
+                  </div>
+                  {reward && (
+                    <div className="mt-3 flex items-center gap-3 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-3">
+                      <span className="text-3xl">{reward.emoji}</span>
+                      <div><p className="text-xs font-bold text-[#FFCB05]">{reward.title}</p><p className="text-[11px] text-slate-400">{reward.description}</p></div>
+                    </div>
+                  )}
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <p className="rounded-lg bg-slate-950/70 p-2 text-[10px] text-slate-300"><b className="text-purple-300">Brincar:</b> {result.playMessage ?? "Não executado."}</p>
+                    <p className="rounded-lg bg-slate-950/70 p-2 text-[10px] text-slate-300"><b className="text-pink-300">Carinho:</b> {result.petMessage ?? "Não executado."}</p>
+                  </div>
+                  {result.error && <p className="mt-2 rounded-lg border border-red-500/25 bg-red-500/10 p-2 text-[10px] text-red-200">{result.error}</p>}
+                </div>
+              );
+            })}
+          </div>
+          <button type="button" onClick={() => { setRoutineResults(null); router.refresh(); }} className="mt-4 w-full rounded-xl bg-[#FFCB05] py-2.5 text-sm font-black text-slate-950">Fechar e atualizar</button>
+        </div>
+      </div>
+    )}
     <div className="space-y-5">
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 text-xs text-slate-400">
         <p className="font-semibold text-[#FFCB05]">Mascote Companheiro e Equipe Favorita</p>
@@ -358,7 +423,18 @@ export function MascotList({
                 Progresso separado por tipo. Cada card mostra o tipo da expedição e o mascote responsável.
               </p>
             </div>
-            <select
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={routinePending || readyRegularExpeditions.length === 0}
+                onClick={runExpeditionRoutine}
+                title="Coleta as expedições prontas, brinca, faz carinho e reinicia os mesmos trajetos."
+                className="flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {routinePending ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {routinePending ? "Processando rotina..." : `Coletar, cuidar e repetir${readyRegularExpeditions.length ? ` (${readyRegularExpeditions.length})` : ""}`}
+              </button>
+              <select
               value={expeditionFilter}
               onChange={e => setExpeditionFilter(e.target.value)}
               className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
@@ -368,7 +444,8 @@ export function MascotList({
               <option value="STANDARD">Padrao</option>
               <option value="ITEMS">Itens</option>
               <option value="VACATION">Férias</option>
-            </select>
+              </select>
+            </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visibleExpeditions.map(expedition => (
