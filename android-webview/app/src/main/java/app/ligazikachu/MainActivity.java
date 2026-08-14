@@ -1,10 +1,13 @@
 package app.ligazikachu;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
@@ -22,6 +25,7 @@ import com.google.firebase.messaging.FirebaseMessaging;
 public class MainActivity extends Activity {
     private static final String APP_URL = "https://liga-zikachu.vercel.app";
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 1002;
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
@@ -46,6 +50,8 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.setSystemUiVisibility(0);
         setContentView(webView);
+
+        requestNotificationPermissionIfNeeded();
 
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
@@ -107,12 +113,11 @@ public class MainActivity extends Activity {
         });
 
         // Verificar se abriu por notificação com URL específica
-        if (getIntent() != null && getIntent().hasExtra("url")) {
-            pendingUrl = getIntent().getStringExtra("url");
-        }
+        pendingUrl = resolveNotificationUrl(getIntent());
 
         if (savedInstanceState == null) {
-            webView.loadUrl(APP_URL);
+            webView.loadUrl(pendingUrl != null ? pendingUrl : APP_URL);
+            pendingUrl = null;
         } else {
             webView.restoreState(savedInstanceState);
         }
@@ -151,15 +156,30 @@ public class MainActivity extends Activity {
         webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                new String[] { Manifest.permission.POST_NOTIFICATIONS },
+                NOTIFICATION_PERMISSION_REQUEST
+            );
+        }
+    }
+
+    private String resolveNotificationUrl(Intent intent) {
+        if (intent == null || !intent.hasExtra("url")) return null;
+        String url = intent.getStringExtra("url");
+        if (url == null || url.isEmpty()) return null;
+        if (url.startsWith("https://") || url.startsWith("http://")) return url;
+        return APP_URL + (url.startsWith("/") ? url : "/" + url);
+    }
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (intent.hasExtra("url")) {
-            String url = intent.getStringExtra("url");
-            if (url != null && !url.isEmpty()) {
-                webView.loadUrl(url);
-            }
-        }
+        setIntent(intent);
+        String url = resolveNotificationUrl(intent);
+        if (url != null && webView != null) webView.loadUrl(url);
     }
 
     @Override
