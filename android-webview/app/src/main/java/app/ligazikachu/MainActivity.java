@@ -2,6 +2,8 @@ package app.ligazikachu;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -9,9 +11,11 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.view.View;
 import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -19,6 +23,8 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.URLUtil;
+import android.widget.Toast;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -107,6 +113,32 @@ public class MainActivity extends Activity {
             }
         });
 
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                openInExternalBrowser(url);
+                return;
+            }
+            try {
+                String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                request.setTitle(fileName);
+                request.setDescription("Baixando atualização da Liga Zikachu");
+                request.setMimeType(mimeType);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+                if (userAgent != null) request.addRequestHeader("User-Agent", userAgent);
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null && !cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
+
+                DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                if (manager == null) throw new IllegalStateException("Gerenciador de downloads indisponível");
+                manager.enqueue(request);
+                Toast.makeText(this, "Download iniciado. Acompanhe pela notificação do Android.", Toast.LENGTH_LONG).show();
+            } catch (Exception error) {
+                openInExternalBrowser(url);
+            }
+        });
+
         // Buscar/atualizar token FCM
         FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token -> {
             getSharedPreferences("fcm", MODE_PRIVATE).edit().putString("token", token).apply();
@@ -163,6 +195,14 @@ public class MainActivity extends Activity {
                 new String[] { Manifest.permission.POST_NOTIFICATIONS },
                 NOTIFICATION_PERMISSION_REQUEST
             );
+        }
+    }
+
+    private void openInExternalBrowser(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception error) {
+            Toast.makeText(this, "Não foi possível abrir o download.", Toast.LENGTH_LONG).show();
         }
     }
 

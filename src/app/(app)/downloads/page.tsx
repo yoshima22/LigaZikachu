@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { WindowsInstallButton } from "./_components/windows-install-button";
 
-const APK_PATH = "/downloads/LigaZikachu-0.7.1-fcm.apk";
-const APK_HASH = "864669FE0555A41461A7EAC75FF66C5CDBD384ED23789CE7EF0283DF8D2512EE";
+const APK_PATH = "/downloads/LigaZikachu-0.7.2-fcm-download.apk";
+const APK_HASH = "2A0250322BEFB66A71D566C266ECD971779C6909E106ED1917869E7EE3F3F11A";
 
 export default function DownloadsPage() {
   return (
@@ -74,7 +74,7 @@ export default function DownloadsPage() {
               </div>
 
               <div className="my-6 grid grid-cols-3 gap-2 text-center text-xs">
-                <InfoPill label="Versão" value="0.7.1" />
+                <InfoPill label="Versão" value="0.7.2" />
                 <InfoPill label="Tamanho" value="2,47 MB" />
                 <InfoPill label="Formato" value="APK" />
               </div>
