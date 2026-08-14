@@ -76,7 +76,7 @@ const combatLinks = [
     icon: Swords,
     adminOnly: false,
     livePvpOnly: true,
-    beta: true,
+    casual: true,
   },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
   {
@@ -225,6 +225,7 @@ type NavLink = {
   eventOnly?: boolean;
   livePvpOnly?: boolean;
   beta?: boolean;
+  casual?: boolean;
 };
 
 export function AppNav({
@@ -670,7 +671,7 @@ function NavDropdown({
             </div>
           )}
           {visibleLinks.map(
-            ({ href, label: itemLabel, icon: ItemIcon, beta }) => (
+            ({ href, label: itemLabel, icon: ItemIcon, beta, casual }) => (
               <Link
                 key={href}
                 href={href}
@@ -684,6 +685,11 @@ function NavDropdown({
                   {beta && (
                     <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[8px] font-black text-purple-200">
                       BETA
+                    </span>
+                  )}
+                  {casual && (
+                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-200">
+                      CASUAL
                     </span>
                   )}
                 </span>
@@ -801,7 +807,7 @@ function MobileNavGroup({
             </div>
           )}
           {visibleLinks.map(
-            ({ href, label: itemLabel, icon: ItemIcon, beta }) => (
+            ({ href, label: itemLabel, icon: ItemIcon, beta, casual }) => (
               <Link
                 key={href}
                 href={href}
@@ -815,6 +821,11 @@ function MobileNavGroup({
                   {beta && (
                     <span className="rounded bg-purple-500/20 px-1 py-0.5 text-[7px] font-black text-purple-200">
                       BETA
+                    </span>
+                  )}
+                  {casual && (
+                    <span className="rounded bg-cyan-500/20 px-1 py-0.5 text-[7px] font-black text-cyan-200">
+                      CASUAL
                     </span>
                   )}
                 </span>

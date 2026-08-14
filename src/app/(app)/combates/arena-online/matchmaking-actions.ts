@@ -554,7 +554,7 @@ async function requireLivePvpPlayer() {
   const config = await getLivePvpAccessConfig();
   if (!canAccessLivePvp(config, player.id, isAdmin(user.role)))
     throw new Error(
-      "Batalha de Terreno ainda não foi liberada para esta conta.",
+      "A Batalha de Terreno não está disponível para esta conta.",
     );
   return player;
 }
@@ -2675,7 +2675,7 @@ export async function joinLivePvpQueueAction(targetName?: string) {
   const config = await getLivePvpAccessConfig();
   if (target && !canAccessLivePvp(config, target.id, false))
     throw new Error(
-      "Esse jogador ainda não possui acesso à Batalha de Terreno.",
+      "Esse jogador não está disponível para a Batalha de Terreno.",
     );
 
   return prisma.$transaction(async (tx) => {

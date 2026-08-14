@@ -10,7 +10,7 @@ export type LivePvpAccessConfig = {
 };
 
 export const DEFAULT_LIVE_PVP_ACCESS: LivePvpAccessConfig = {
-  enabledGlobally: false,
+  enabledGlobally: true,
   allowedPlayerIds: [],
   biomeImages: {},
 };
@@ -36,13 +36,11 @@ export async function getLivePvpAccessConfig(): Promise<LivePvpAccessConfig> {
 }
 
 export function canAccessLivePvp(
-  config: LivePvpAccessConfig,
-  playerId: string | null | undefined,
-  admin: boolean,
+  _config: LivePvpAccessConfig,
+  _playerId: string | null | undefined,
+  _admin: boolean,
 ) {
-  return (
-    admin ||
-    config.enabledGlobally ||
-    (!!playerId && config.allowedPlayerIds.includes(playerId))
-  );
+  // A Batalha de Terreno foi liberada como modo Casual para toda conta ativa.
+  // A configuração histórica é mantida apenas para não perder imagens de bioma.
+  return true;
 }

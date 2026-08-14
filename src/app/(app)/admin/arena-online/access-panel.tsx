@@ -87,21 +87,20 @@ export function LivePvpAccessPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[.2em] text-amber-300">
-            Controle de publicação
+            Publicação do modo
           </p>
           <h2 className="font-bold text-white">Acesso à Batalha de Terreno</h2>
           <p className="mt-1 text-xs text-slate-400">
-            Administradores sempre possuem acesso. Para os demais, o modo nasce
-            desligado e invisível.
+            A Batalha de Terreno está liberada para todas as contas ativas como
+            modo Casual.
           </p>
         </div>
         <button
           type="button"
-          disabled={pending}
-          onClick={() => update({ enabledGlobally: !config.enabledGlobally })}
-          className={`rounded-lg border px-4 py-2 text-xs font-bold ${config.enabledGlobally ? "border-red-500/40 bg-red-500/10 text-red-200" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"}`}
+          disabled
+          className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-200"
         >
-          {config.enabledGlobally ? "Desligar para todos" : "Ligar para todos"}
+          Liberado para todos
         </button>
       </div>
       <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
@@ -144,7 +143,7 @@ export function LivePvpAccessPanel({
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/25 bg-red-500/5 p-3">
         <div>
-          <b className="text-sm text-white">Ranking do Beta</b>
+          <b className="text-sm text-white">Ranking casual</b>
           <p className="mt-1 text-[10px] text-slate-400">
             Partidas que envolvam ADMIN ou SUPER ADMIN não entram no ranking.
           </p>

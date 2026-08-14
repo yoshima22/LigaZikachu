@@ -1120,7 +1120,7 @@ export function ArenaOnlineSyncedBattle({
       <header className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] uppercase tracking-widest text-cyan-300">
-            Batalha de Terreno · Beta
+            Batalha de Terreno · Casual
           </p>
           <h2 className="font-black text-white">
             Rodada {battle.round} · {match.playerAName} × {match.playerBName}

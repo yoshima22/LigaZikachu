@@ -382,7 +382,7 @@ export function ArenaOnlinePregame({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[.2em] text-purple-300">
-            Batalha de Terreno · Beta
+            Batalha de Terreno · Casual
           </p>
           <h2 className="text-lg font-black text-white">
             Matchmaking e preparação
@@ -492,13 +492,13 @@ export function ArenaOnlinePregame({
         <div className="mt-4 grid gap-3 lg:grid-cols-[.9fr_1.1fr]">
           <div className="rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-4">
             <div className="flex items-center justify-between">
-              <b className="text-sm text-white">Ranking do Beta</b>
+              <b className="text-sm text-white">Ranking casual</b>
               <span className="rounded-full bg-[#FFCB05]/15 px-2 py-1 text-[9px] font-black text-[#FFCB05]">
                 SEM RECOMPENSAS
               </span>
             </div>
             <p className="mt-1 text-[10px] text-slate-400">
-              O ranking será zerado no lançamento oficial.
+              Placar recreativo do modo. Não concede qualquer recompensa.
             </p>
             <div className="mt-3 max-h-64 space-y-1 overflow-y-auto">
               {ranking.map((entry, index) => (
@@ -530,9 +530,27 @@ export function ArenaOnlinePregame({
             </summary>
             <div className="mt-4 space-y-3 text-[11px] leading-relaxed text-slate-300">
               <p>
-                <b className="text-white">Pré-jogo:</b> moeda, três banimentos
-                por jogador, draft alternado de seis mascotes e posicionamento
-                secreto.
+                <b className="text-white">1. Encontrar partida:</b> entre na fila
+                pública, desafie outro jogador diretamente pelo nick ou treine
+                contra o Professor Enguiça. A tela informa quem está na fila e
+                qual etapa o adversário está realizando.
+              </p>
+              <p>
+                <b className="text-white">2. Moeda e iniciativa:</b> um jogador
+                é sorteado para escolher Cara ou Coroa. A moeda define quem
+                escolhe a iniciativa e o resultado aparece para os dois lados.
+              </p>
+              <p>
+                <b className="text-white">3. Banimentos e draft:</b> cada lado
+                bane três mascotes do adversário. Depois, ambos escolhem
+                alternadamente seis mascotes entre os restantes. Picks já
+                confirmados e mascotes bloqueados aparecem para os dois lados.
+              </p>
+              <p>
+                <b className="text-white">4. Posicionamento:</b> cada jogador
+                posiciona seus seis mascotes somente nas casas permitidas do
+                próprio lado. A formação fica secreta até ambos confirmarem;
+                bordas e marcadores identificam o dono de cada unidade.
               </p>
               <p>
                 <b className="text-emerald-300">Movimento:</b> são 2 casas base;
@@ -599,13 +617,30 @@ export function ArenaOnlinePregame({
                 automaticamente uma equipe adversária com nível próximo ao dos
                 seis mascotes mais fortes da conta. O Professor Enguiça
                 movimenta, ataca e prepara defesa pelo servidor. O resultado
-                nunca entra no ranking do Beta.
+                nunca entra no ranking casual.
               </p>
               <p>
                 <b className="text-[#FFCB05]">Turnos e cores:</b> cada jogador
                 planeja separadamente por até dois minutos. Verde indica
-                movimento, vermelho ataque, azul área defensiva, amarelo destino
-                e âmbar aviso da névoa.
+                movimento possível, vermelho alcance ou alvo de ataque, azul
+                defesa e alcance protetor, amarelo destino planejado e âmbar
+                aviso da névoa. O marcador sobre o mascote mostra a ação já
+                escolhida. Clique no mascote e depois em Mover, Atacar, Defender
+                ou Mostrar alcance da postura; clicar fora limpa a seleção.
+              </p>
+              <p>
+                <b className="text-white">Mascotes e resolução:</b> HP, postura,
+                dono e efeitos ativos aparecem no grid. Ao confirmar o turno,
+                movimentos e ações são reproduzidos um a um; Agilidade ordena a
+                resolução. Dano, cura, buffs, debuffs, bloqueios e K.O. recebem
+                feedback visual. Uma casa nunca termina com duas unidades: se o
+                destino ficar bloqueado, o mascote para na casa válida mais próxima.
+              </p>
+              <p>
+                <b className="text-amber-200">Regra casual:</b> tudo acontece
+                somente dentro da partida. Não há ZC, EXP, itens ou prêmios; HP
+                real, SUS, repouso e disponibilidade dos mascotes permanecem
+                exatamente como estavam antes do combate.
               </p>
             </div>
           </details>

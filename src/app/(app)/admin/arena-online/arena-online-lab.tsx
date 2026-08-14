@@ -871,19 +871,24 @@ export function ArenaOnlineLab({
           <h1 className="font-pixel text-lg text-[#FFCB05]">
             Batalha de Terreno
           </h1>
-          <span className="rounded-full border border-purple-400/40 bg-purple-500/15 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-purple-200">
-            Beta
+          <span className="rounded-full border border-cyan-400/40 bg-cyan-500/15 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-cyan-200">
+            Casual
           </span>
         </div>
         <p className="mt-2 text-sm text-slate-400">
           {onlineIdentity
-            ? "Combate tático por terreno, movimentação e posturas. Durante o Beta, o modo não gera ZC, EXP ou outras recompensas e não altera o HP real dos mascotes."
+            ? "Combate tático online por terreno, movimentação e posturas."
             : "Ambiente administrativo da Batalha de Terreno. Nenhuma simulação altera os mascotes reais."}
         </p>
-        <p className="mt-1 text-xs font-bold text-purple-300">
-          O ranking será resetado no lançamento oficial.
-        </p>
       </header>
+      <div className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-r from-amber-500/20 via-red-500/10 to-cyan-500/15 p-4 shadow-[0_0_28px_rgba(251,191,36,.12)]">
+        <p className="text-sm font-black uppercase tracking-wide text-amber-200">
+          Modo casual: sem recompensas e sem ferimentos
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-slate-200">
+          Esta é uma experiência online alternativa disponibilizada no estado em que seu desenvolvimento foi encerrado. Partidas não concedem ZC, EXP, itens ou recompensas e não alteram HP, repouso, SUS, disponibilidade nem qualquer outro estado real dos mascotes.
+        </p>
+      </div>
       {!onlineIdentity && <EffectGuide />}
       {(!onlineIdentity || !onlineBattleReady) && (
         <ArenaOnlinePregame
