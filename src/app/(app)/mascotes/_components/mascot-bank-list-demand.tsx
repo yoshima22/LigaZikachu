@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search } from "lucide-react";
+import { Candy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search, Utensils } from "lucide-react";
 import { toast } from "sonner";
-import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL } from "@/lib/mascot-data";
+import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
-import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
+import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
 import {
   MascotCard,
   clearPetted,
@@ -226,6 +226,50 @@ function QuickInteractButton({
   );
 }
 
+function QuickFeedButton({
+  mascotId,
+  type,
+  label,
+  icon,
+  disabled,
+  disabledReason,
+  onFed,
+}: {
+  mascotId: string;
+  type: "FEED_FOOD" | "FEED_SWEET";
+  label: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+  disabledReason?: string;
+  onFed?: (remaining: number | null) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startTransition(async () => {
+      const r = await interactAction(mascotId, type);
+      if (r.error) { toast.error(r.error); return; }
+      if (r.result && !r.result.success) { toast.info(r.result.message); return; }
+      if (r.result) toast.success(r.result.message);
+      const remaining = typeof r.result?.inventoryRemaining === "number" ? r.result.inventoryRemaining : null;
+      if (remaining !== null) window.dispatchEvent(new CustomEvent("mascot-food-inventory", { detail: { type, remaining } }));
+      onFed?.(remaining);
+    });
+  };
+  return (
+    <button
+      type="button"
+      disabled={pending || disabled}
+      onClick={handleClick}
+      title={disabled ? disabledReason : label}
+      aria-label={label}
+      className="inline-flex items-center gap-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:cursor-not-allowed disabled:opacity-40 shrink-0"
+    >
+      {pending ? <Loader2 size={10} className="animate-spin" /> : icon} {label}
+    </button>
+  );
+}
+
 function BankRow({
   mascot,
   hasFood,
@@ -275,56 +319,72 @@ function BankRow({
   const rarity = getMascotRarity(mascot.pokemonId);
   const chips = getOccupationChips(mascot);
 
+  const inExpedition = mascot.expeditions.length > 0;
+  const arenaLocked = mascot.arenaState === "ARENA" || mascot.arenaState === "INJURED";
+  const chevron = loading
+    ? <Loader2 size={15} className="shrink-0 animate-spin text-slate-500" />
+    : open ? <ChevronUp size={15} className="shrink-0 text-slate-500" /> : <ChevronDown size={15} className="shrink-0 text-slate-500" />;
+  const statusTag = chips.length === 0
+    ? <span className="rounded border border-green-500/20 bg-green-500/10 px-1.5 py-px text-[9px] font-semibold text-green-400">Livre</span>
+    : chips.map((chip) => (
+        <span key={chip.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${chip.cls}`}>{chip.label}</span>
+      ));
+
   return (
     <div className="relative overflow-visible rounded-xl border border-border/50 bg-slate-950/40">
-      <div className="flex w-full items-center gap-2 px-3 pt-2.5 transition-colors hover:bg-slate-800/40">
-        {/* Área clicável para expandir */}
-        <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
-            alt=""
-            className={`h-9 w-9 shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
-            style={{ imageRendering: "pixelated" }}
-            loading="lazy"
-          />
-          <span className="min-w-0 flex-1 space-y-0.5">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
-              {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}
-              {mascot.ivRating && (
-                <span
-                  className={`shrink-0 inline-flex items-center rounded border px-1 py-px text-[8px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}
-                  title={`Análise: ranking ${mascot.ivRating}${typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}`}
-                >
-                  {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` ${mascot.ivScore}%` : ""}
-                </span>
-              )}
-              {rarity === "MEGA" && (
-                <span className="shrink-0 inline-flex items-center rounded border border-fuchsia-400/50 bg-fuchsia-500/15 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-fuchsia-200">
-                  Mega
-                </span>
-              )}
+      <div className="flex flex-col gap-2 px-3 py-2.5 transition-colors hover:bg-slate-800/40 sm:flex-row sm:items-center sm:gap-3">
+        {/* Nome / sprite / status (clicável para expandir) */}
+        <div className="flex min-w-0 items-center gap-2 sm:flex-1">
+          <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
+              alt=""
+              className={`h-9 w-9 shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
+              style={{ imageRendering: "pixelated" }}
+              loading="lazy"
+            />
+            <span className="min-w-0 flex-1 space-y-0.5">
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
+                <span className="shrink-0 font-mono text-[9px] text-slate-500" title={`Código único: #${shortMascotCode(mascot.id)}`}>#{shortMascotCode(mascot.id)}</span>
+                {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}
+                {mascot.ivRating && (
+                  <span
+                    className={`shrink-0 inline-flex items-center rounded border px-1 py-px text-[8px] font-bold ${IV_RATING_STYLE[mascot.ivRating] ?? IV_RATING_STYLE.C}`}
+                    title={`Análise: ranking ${mascot.ivRating}${typeof mascot.ivScore === "number" ? ` · ${mascot.ivScore}%` : ""}`}
+                  >
+                    {mascot.ivRating}{typeof mascot.ivScore === "number" ? ` ${mascot.ivScore}%` : ""}
+                  </span>
+                )}
+                {rarity === "MEGA" && (
+                  <span className="shrink-0 inline-flex items-center rounded border border-fuchsia-400/50 bg-fuchsia-500/15 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-fuchsia-200">
+                    Mega
+                  </span>
+                )}
+                {/* Status (Livre, Repouso, Expedição...) ao lado do nome */}
+                {statusTag}
+              </span>
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
+                {types.map((type) => (
+                  <span key={type} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[type] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
+                    {TYPE_LABELS[type] ?? type}
+                  </span>
+                ))}
+                <span className="text-[10px] text-slate-600">{MOOD_EMOJI[localMood] ?? "-"} {localMood}</span>
+              </span>
             </span>
-            <span className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
-              {types.map((type) => (
-                <span key={type} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[type] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
-                  {TYPE_LABELS[type] ?? type}
-                </span>
-              ))}
-              <span className="text-[10px] text-slate-600">{MOOD_EMOJI[localMood] ?? "-"} {localMood}</span>
-            </span>
-          </span>
-        </button>
-        {/* Chevron de expandir (sempre no topo, à direita) */}
-        <button type="button" onClick={handleExpand} className="shrink-0 self-start pt-0.5">
-          {loading ? <Loader2 size={15} className="shrink-0 animate-spin text-slate-500" /> : open ? <ChevronUp size={15} className="shrink-0 text-slate-500" /> : <ChevronDown size={15} className="shrink-0 text-slate-500" />}
-        </button>
-      </div>
-      {/* Ações rápidas + chips numa linha própria, para não espremer o nome */}
-      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5 pt-2">
-        <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="sm" align="left" />
+          </button>
+          {/* Chevron no mobile (ao lado do nome) */}
+          <button type="button" onClick={handleExpand} className="shrink-0 self-start pt-0.5 sm:hidden" aria-label={open ? "Recolher" : "Expandir"}>
+            {chevron}
+          </button>
+        </div>
+
+        {/* Ações rápidas — à direita no PC, abaixo no celular */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+          <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="sm" align="right" />
           <QuickInteractButton
             mascotId={mascot.id}
             type="PET"
@@ -333,7 +393,7 @@ function BankRow({
             lastPlayedAt={localLastPlayedAt}
             lastPettedAt={localLastPettedAt}
             socialCooldownUntil={mascot.socialCooldownUntil}
-            inExpedition={mascot.expeditions.length > 0}
+            inExpedition={inExpedition}
             onSuccess={(_, result) => {
               const now = new Date();
               setLocalLastPettedAt(now);
@@ -356,7 +416,7 @@ function BankRow({
             lastPlayedAt={localLastPlayedAt}
             lastPettedAt={localLastPettedAt}
             socialCooldownUntil={mascot.socialCooldownUntil}
-            inExpedition={mascot.expeditions.length > 0}
+            inExpedition={inExpedition}
             onSuccess={(_, result) => {
               const now = new Date();
               setLocalLastPlayedAt(now);
@@ -371,13 +431,27 @@ function BankRow({
               } : current);
             }}
           />
-          <span className="flex flex-wrap items-center gap-1">
-            {chips.length === 0 ? (
-              <span className="rounded border border-green-500/20 bg-green-500/10 px-1.5 py-px text-[9px] font-semibold text-green-400">Livre</span>
-            ) : chips.map((chip) => (
-              <span key={chip.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${chip.cls}`}>{chip.label}</span>
-            ))}
-          </span>
+          <QuickFeedButton
+            mascotId={mascot.id}
+            type="FEED_FOOD"
+            label="Comida"
+            icon={<Utensils size={11} />}
+            disabled={!hasFood || arenaLocked}
+            disabledReason={!hasFood ? "Sem comida no estoque" : "Indisponível (arena/ferido)"}
+          />
+          <QuickFeedButton
+            mascotId={mascot.id}
+            type="FEED_SWEET"
+            label="Doce"
+            icon={<Candy size={11} />}
+            disabled={!hasSweet || arenaLocked || inExpedition}
+            disabledReason={!hasSweet ? "Sem doces no estoque" : inExpedition ? "Em expedição" : "Indisponível (arena/ferido)"}
+          />
+          {/* Chevron no PC (final da fila de ações) */}
+          <button type="button" onClick={handleExpand} className="hidden shrink-0 self-center sm:block" aria-label={open ? "Recolher" : "Expandir"}>
+            {chevron}
+          </button>
+        </div>
       </div>
 
       {open && (
@@ -440,6 +514,21 @@ export function MascotBankList({
 }) {
   const [rows, setRows] = useState<BankMascot[]>(mascots);
   const [knownTotal, setKnownTotal] = useState(totalCount ?? mascots.length);
+  // Estoque de comida/doce reativo: desabilita os botões quando a última unidade acaba.
+  const [foodAvailable, setFoodAvailable] = useState(hasFood);
+  const [sweetAvailable, setSweetAvailable] = useState(hasSweet);
+  useEffect(() => { setFoodAvailable(hasFood); }, [hasFood]);
+  useEffect(() => { setSweetAvailable(hasSweet); }, [hasSweet]);
+  useEffect(() => {
+    const onInventory = (event: Event) => {
+      const detail = (event as CustomEvent<{ type: "FEED_FOOD" | "FEED_SWEET"; remaining: number }>).detail;
+      if (!detail) return;
+      if (detail.type === "FEED_FOOD") setFoodAvailable(detail.remaining > 0);
+      if (detail.type === "FEED_SWEET") setSweetAvailable(detail.remaining > 0);
+    };
+    window.addEventListener("mascot-food-inventory", onInventory);
+    return () => window.removeEventListener("mascot-food-inventory", onInventory);
+  }, []);
   const [search, setSearch] = useState("");
   const [ocup, setOcup] = useState<OcupFilter>("all");
   const [typeFilter, setTypeFilter] = useState("");
@@ -621,8 +710,8 @@ export function MascotBankList({
             <BankRow
               key={mascot.id}
               mascot={mascot}
-              hasFood={hasFood}
-              hasSweet={hasSweet}
+              hasFood={foodAvailable}
+              hasSweet={sweetAvailable}
               isAdmin={isAdmin}
               spritePreferences={spritePreferences}
             />
