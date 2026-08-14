@@ -13,13 +13,15 @@ async function getServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
   try {
-    // Restaurar quebras de linha na private_key (podem vir escapadas como \\n da Vercel)
-    const normalized = raw.replace(/\\n/g, "\n");
-    return JSON.parse(normalized) as {
+    const parsed = JSON.parse(raw) as {
       client_email: string;
       private_key: string;
       project_id: string;
     };
+    // A Vercel pode manter os caracteres "\\n" dentro da chave. Normalize
+    // somente o campo da chave depois de interpretar o JSON para não invalidá-lo.
+    parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    return parsed;
   } catch {
     console.error("[FCM] Falha ao parsear FIREBASE_SERVICE_ACCOUNT_JSON");
     return null;
