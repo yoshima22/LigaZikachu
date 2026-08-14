@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
     await prisma.userFcmToken.upsert({
       where: { token },
-      update: { userId: session.user.id },
+      update: { userId: session.user.id, updatedAt: new Date() },
       create: { userId: session.user.id, token }
     });
 

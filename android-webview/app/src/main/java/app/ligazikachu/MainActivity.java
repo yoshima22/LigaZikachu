@@ -28,6 +28,11 @@ import android.widget.Toast;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+
 public class MainActivity extends Activity {
     private static final String APP_URL = "https://liga-zikachu.vercel.app";
     private static final int FILE_CHOOSER_REQUEST = 1001;
@@ -153,7 +158,7 @@ public class MainActivity extends Activity {
     }
 
     private void refreshFcmTokenIfNeeded() {
-        final String refreshVersion = "firebase-app-restored-0.7.3";
+        final String refreshVersion = "firebase-app-restored-0.7.5";
         final android.content.SharedPreferences preferences =
             getSharedPreferences("fcm", MODE_PRIVATE);
 
@@ -182,7 +187,7 @@ public class MainActivity extends Activity {
                 .apply();
             // O token chega depois de a primeira página terminar de carregar.
             // Registre-o imediatamente, sem depender de uma nova navegação.
-            if (webView != null) webView.post(this::registerFcmToken);
+            if (webView != null) webView.post(() -> registerFcmToken(0));
         });
     }
 
@@ -206,6 +211,54 @@ public class MainActivity extends Activity {
     }
 
     private void registerFcmToken() {
+        registerFcmToken(0);
+    }
+
+    private void registerFcmToken(int attempt) {
+        String token = getSharedPreferences("fcm", MODE_PRIVATE).getString("token", "");
+        if (token.isEmpty()) {
+            if (attempt < 6 && webView != null) {
+                webView.postDelayed(() -> registerFcmToken(attempt + 1), 5000);
+            }
+            return;
+        }
+
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL endpoint = new URL(APP_URL + "/api/fcm-token");
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json");
+                String cookies = CookieManager.getInstance().getCookie(APP_URL);
+                if (cookies != null && !cookies.isEmpty()) {
+                    connection.setRequestProperty("Cookie", cookies);
+                }
+                String json = "{\"token\":\"" + token
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"") + "\"}";
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(json.getBytes(StandardCharsets.UTF_8));
+                }
+                int status = connection.getResponseCode();
+                if (status < 200 || status >= 300) throw new IllegalStateException("HTTP " + status);
+                getSharedPreferences("fcm", MODE_PRIVATE).edit()
+                    .putLong("registered_at", System.currentTimeMillis())
+                    .apply();
+            } catch (Exception error) {
+                if (attempt < 6 && webView != null) {
+                    webView.postDelayed(() -> registerFcmToken(attempt + 1), 5000);
+                }
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
+    }
+
+    private void registerFcmTokenViaJavascript() {
         String token = getSharedPreferences("fcm", MODE_PRIVATE).getString("token", "");
         if (token.isEmpty()) return;
 
