@@ -76,12 +76,12 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-async function sendFcmMessage(token: string, payload: NotificationPayload): Promise<void> {
+async function sendFcmMessage(token: string, payload: NotificationPayload): Promise<boolean> {
   const sa = await getServiceAccount();
-  if (!sa?.project_id) return;
+  if (!sa?.project_id) return false;
 
   const accessToken = await getAccessToken();
-  if (!accessToken) return;
+  if (!accessToken) return false;
 
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`,
@@ -114,7 +114,10 @@ async function sendFcmMessage(token: string, payload: NotificationPayload): Prom
   if (!res.ok) {
     const err = await res.text();
     console.error("[FCM] Falha ao enviar mensagem:", err);
+    return false;
   }
+
+  return true;
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
@@ -122,10 +125,10 @@ async function sendFcmMessage(token: string, payload: NotificationPayload): Prom
 export async function sendNotificationToUser(
   userId: string,
   payload: NotificationPayload
-): Promise<void> {
+): Promise<{ configured: boolean; tokenCount: number; sent: number; failed: number }> {
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     console.warn("[FCM] FIREBASE_SERVICE_ACCOUNT_JSON não configurado");
-    return;
+    return { configured: false, tokenCount: 0, sent: 0, failed: 0 };
   }
 
   let tokens: { token: string }[] = [];
@@ -136,15 +139,17 @@ export async function sendNotificationToUser(
     });
   } catch {
     console.error("[FCM] Tabela user_fcm_tokens não encontrada ou erro ao buscar tokens");
-    return;
+    return { configured: true, tokenCount: 0, sent: 0, failed: 0 };
   }
 
   if (tokens.length === 0) {
     console.log(`[FCM] Nenhum token registrado para userId=${userId}`);
-    return;
+    return { configured: true, tokenCount: 0, sent: 0, failed: 0 };
   }
 
-  await Promise.allSettled(tokens.map((t) => sendFcmMessage(t.token, payload)));
+  const results = await Promise.all(tokens.map((t) => sendFcmMessage(t.token, payload)));
+  const sent = results.filter(Boolean).length;
+  return { configured: true, tokenCount: tokens.length, sent, failed: tokens.length - sent };
 }
 
 export async function sendNotificationToPlayers(
