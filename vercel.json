@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/birthday-ticker",
       "schedule": "0 */3 * * *"
+    },
+    {
+      "path": "/api/cron/push-notifications",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

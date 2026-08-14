@@ -6,6 +6,8 @@ import { getSessionPlayer } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { revalidateTag } from "next/cache";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
+import { sendNotificationToUser } from "@/lib/notifications";
+import { after } from "next/server";
 
 async function requirePlayer() {
   const user = await getSessionUser();
@@ -138,6 +140,12 @@ export async function sendMessageAction(
 
   const [message] = await hydrateItemAttachments([msg]);
   revalidateTag(`nav-${receiver.userId}`);
+  after(() => sendNotificationToUser(receiver.userId, {
+      title: `Nova mensagem de ${me.displayName}`,
+      body: trimmed || (attachment?.type === "MASCOT" ? "Enviou um mascote." : "Enviou um item."),
+      url: `/mensagens/${me.id}`,
+      data: { source: "direct-message", senderId: me.id },
+    }).catch(() => undefined));
   return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
 }
 

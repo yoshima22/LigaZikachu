@@ -14,6 +14,7 @@ import {
   SYNC_TICKET_TYPES,
 } from "@/lib/sync-challenge";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { sendNotificationToUsers } from "@/lib/notifications";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
 
@@ -195,6 +196,21 @@ export async function publishProfessorAnnouncement(message: string): Promise<{ e
     return { message: clean };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao publicar mensagem do Professor Enguiça." };
+  }
+}
+
+export async function sendAdminPushNotification(input: { title: string; message: string; url?: string }) {
+  try {
+    await requireAdmin();
+    const title = input.title.trim().replace(/\s+/g, " ").slice(0, 80);
+    const body = input.message.trim().replace(/\s+/g, " ").slice(0, 240);
+    const url = input.url?.trim().startsWith("/") ? input.url.trim().slice(0, 180) : "/dashboard";
+    if (title.length < 2 || body.length < 3) return { error: "Preencha o título e a mensagem." };
+    const result = await sendNotificationToUsers(null, { title, body, url, data: { source: "admin" } });
+    if (!result.configured) return { error: "O Firebase não está configurado no servidor." };
+    return result;
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Falha ao enviar notificação." };
   }
 }
 

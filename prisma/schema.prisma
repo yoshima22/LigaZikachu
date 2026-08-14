@@ -2159,6 +2159,15 @@ model UserFcmToken {
   @@map("user_fcm_tokens")
 }
 
+model PushNotificationMarker {
+  id        String   @id @default(cuid())
+  eventKey  String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("push_notification_markers")
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String

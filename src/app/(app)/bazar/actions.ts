@@ -32,6 +32,8 @@ import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@p
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { createPlayerNotification } from "@/lib/nav-notifications";
+import { sendNotificationToPlayers } from "@/lib/notifications";
+import { after } from "next/server";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
@@ -1039,6 +1041,10 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
     revalidateTag(`nav-${listing.player.userId}`);
+    after(() => Promise.allSettled([
+      sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${listing.priceCoins!.toLocaleString("pt-BR")} ZC.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([player.id], { title: `Compra concluída: ${listingDisplayName(listing)}`, body: `O item foi entregue por ${listing.priceCoins!.toLocaleString("pt-BR")} ZC.`, url: `/bazar/${listingId}` }),
+    ]).then(() => undefined));
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao comprar." };
@@ -1386,6 +1392,10 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     revalidateTag(`nav-${user.id}`);
     // Notifica o proponente que sua proposta foi aceita
     revalidateTag(`nav-${proposal.proposer.userId}`);
+    after(() => Promise.allSettled([
+      sendNotificationToPlayers([proposal.proposerId], { title: `Proposta aceita: ${listingDisplayName(listing)}`, body: `${listing.player.displayName} aceitou sua proposta.`, url: `/bazar/${listing.id}` }),
+      sendNotificationToPlayers([listing.playerId], { title: `Troca concluída: ${listingDisplayName(listing)}`, body: `A proposta foi aceita e os conteúdos foram entregues.`, url: `/bazar/${listing.id}` }),
+    ]).then(() => undefined));
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -2911,6 +2921,11 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
         entityId: listingId,
         eventKey: `bazar:auction:outbid:${listingId}:${bid.prevBidderId}:${amount}`,
       });
+      after(() => sendNotificationToPlayers([bid.prevBidderId!], {
+        title: `Lance superado: ${desc}`,
+        body: `Seu lance foi coberto por ${amount.toLocaleString("pt-BR")} ZC. O valor anterior foi devolvido.`,
+        url: `/bazar/${listingId}`,
+      }));
     }
 
     revalidateBazar();
@@ -3036,6 +3051,10 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     const wonPayload = listing.payload as Record<string, unknown>;
     const wonName = listing.category === "MASCOT" ? fullMascotPayloadName(wonPayload) : String(wonPayload.displayName ?? "Item");
     await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${wonName}" com ${winnerBid} ZC. O item foi transferido para você.`);
+    after(() => Promise.allSettled([
+      sendNotificationToPlayers([winnerId], { title: `Leilão vencido: ${wonName}`, body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ZC e o item já foi entregue.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([listing.playerId], { title: `Leilão vendido: ${wonName}`, body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ZC.`, url: `/bazar/${listingId}` }),
+    ]).then(() => undefined));
 
     return { finalized: true };
   } catch (err) {

@@ -2,21 +2,25 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Coins, Megaphone, Send, Sparkles } from "lucide-react";
+import { BellRing, Coins, Megaphone, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { publishProfessorAnnouncement, sendZikaCoinsToAllPlayers, updateGlobalNotice } from "../actions";
+import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice } from "../actions";
 
 export function AdminCommunicationPanel({ initialNotice }: { initialNotice: string }) {
   const [notice, setNotice] = useState(initialNotice);
   const [coins, setCoins] = useState("");
   const [description, setDescription] = useState("Presente global da Liga");
   const [professorMessage, setProfessorMessage] = useState("");
+  const [pushTitle, setPushTitle] = useState("Liga Zikachu");
+  const [pushMessage, setPushMessage] = useState("");
+  const [pushUrl, setPushUrl] = useState("/dashboard");
   const [pendingNotice, startNotice] = useTransition();
   const [pendingCoins, startCoins] = useTransition();
   const [pendingProfessor, startProfessor] = useTransition();
+  const [pendingPush, startPush] = useTransition();
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
         <div className="flex items-center gap-2">
           <Megaphone size={16} className="text-[#FFCB05]" />
@@ -54,6 +58,27 @@ export function AdminCommunicationPanel({ initialNotice }: { initialNotice: stri
             {pendingNotice ? "Salvando..." : "Salvar aviso"}
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-br from-slate-950/70 to-violet-950/20 p-5">
+        <div className="flex items-center gap-2">
+          <BellRing size={16} className="text-violet-300" />
+          <h3 className="font-semibold text-slate-200">Notificação no aplicativo</h3>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">Envia um push para todos os aparelhos registrados automaticamente.</p>
+        <input value={pushTitle} onChange={(event) => setPushTitle(event.target.value)} maxLength={80} className="mt-3 w-full rounded-xl border border-violet-500/20 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400/60" placeholder="Título" />
+        <textarea value={pushMessage} onChange={(event) => setPushMessage(event.target.value)} maxLength={240} rows={3} className="mt-2 w-full rounded-xl border border-violet-500/20 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400/60" placeholder="Mensagem da notificação" />
+        <input value={pushUrl} onChange={(event) => setPushUrl(event.target.value)} maxLength={180} className="mt-2 w-full rounded-xl border border-violet-500/20 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-violet-400/60" placeholder="/pagina-de-destino" />
+        <Button type="button" disabled={pendingPush || pushMessage.trim().length < 3} onClick={() => {
+          if (!confirm("Enviar esta notificação para todos os aparelhos instalados?")) return;
+          startPush(async () => {
+            const result = await sendAdminPushNotification({ title: pushTitle, message: pushMessage, url: pushUrl });
+            if ("error" in result) toast.error(result.error);
+            else { toast.success(`${result.sent} aparelho(s) notificado(s).`); setPushMessage(""); }
+          });
+        }} className="mt-3 gap-2 bg-violet-300 text-slate-950 hover:bg-violet-200 disabled:opacity-40">
+          <Send size={13} /> {pendingPush ? "Enviando..." : "Enviar push"}
+        </Button>
       </div>
 
       <div className="rounded-2xl border border-cyan-500/25 bg-gradient-to-br from-slate-950/70 to-cyan-950/20 p-5">
