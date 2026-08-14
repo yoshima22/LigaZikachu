@@ -139,10 +139,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Buscar/atualizar token FCM
-        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token -> {
-            getSharedPreferences("fcm", MODE_PRIVATE).edit().putString("token", token).apply();
-        });
+        refreshFcmTokenIfNeeded();
 
         // Verificar se abriu por notificação com URL específica
         pendingUrl = resolveNotificationUrl(getIntent());
@@ -153,6 +150,37 @@ public class MainActivity extends Activity {
         } else {
             webView.restoreState(savedInstanceState);
         }
+    }
+
+    private void refreshFcmTokenIfNeeded() {
+        final String refreshVersion = "firebase-app-restored-0.7.3";
+        final android.content.SharedPreferences preferences =
+            getSharedPreferences("fcm", MODE_PRIVATE);
+
+        if (!refreshVersion.equals(preferences.getString("refresh_version", ""))) {
+            // O app Firebase foi restaurado no mesmo projeto. Tokens mantidos por
+            // instalações anteriores podem existir localmente, mas o FCM já os
+            // considera inválidos. A renovação acontece uma única vez nesta versão.
+            FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener(task -> {
+                preferences.edit().remove("token").apply();
+                requestAndStoreFcmToken(preferences, refreshVersion);
+            });
+            return;
+        }
+
+        requestAndStoreFcmToken(preferences, refreshVersion);
+    }
+
+    private void requestAndStoreFcmToken(
+        android.content.SharedPreferences preferences,
+        String refreshVersion
+    ) {
+        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token -> {
+            preferences.edit()
+                .putString("token", token)
+                .putString("refresh_version", refreshVersion)
+                .apply();
+        });
     }
 
     @Override
