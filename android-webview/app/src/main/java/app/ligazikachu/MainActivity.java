@@ -48,6 +48,14 @@ public class MainActivity extends Activity {
         public String getFcmToken() {
             return getSharedPreferences("fcm", MODE_PRIVATE).getString("token", "");
         }
+
+        @JavascriptInterface
+        public void reportFcmRegistration(int status) {
+            getSharedPreferences("fcm", MODE_PRIVATE).edit()
+                .putInt("web_http_status", status)
+                .putLong("web_attempted_at", System.currentTimeMillis())
+                .apply();
+        }
     }
 
     @Override
@@ -158,7 +166,7 @@ public class MainActivity extends Activity {
     }
 
     private void refreshFcmTokenIfNeeded() {
-        final String refreshVersion = "firebase-app-restored-0.7.5";
+        final String refreshVersion = "firebase-app-restored-0.7.6";
         final android.content.SharedPreferences preferences =
             getSharedPreferences("fcm", MODE_PRIVATE);
 
@@ -180,15 +188,19 @@ public class MainActivity extends Activity {
         android.content.SharedPreferences preferences,
         String refreshVersion
     ) {
+        preferences.edit().putString("token_status", "requesting").apply();
         FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token -> {
             preferences.edit()
                 .putString("token", token)
                 .putString("refresh_version", refreshVersion)
+                .putString("token_status", "ready")
                 .apply();
             // O token chega depois de a primeira página terminar de carregar.
             // Registre-o imediatamente, sem depender de uma nova navegação.
             if (webView != null) webView.post(() -> registerFcmToken(0));
-        });
+        }).addOnFailureListener(error -> preferences.edit()
+            .putString("token_status", "error:" + error.getClass().getSimpleName())
+            .apply());
     }
 
     @Override
@@ -223,6 +235,9 @@ public class MainActivity extends Activity {
             return;
         }
 
+        registerFcmTokenViaJavascript();
+        final String sessionCookies = CookieManager.getInstance().getCookie(APP_URL);
+
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
@@ -233,9 +248,8 @@ public class MainActivity extends Activity {
                 connection.setReadTimeout(10000);
                 connection.setDoOutput(true);
                 connection.setRequestProperty("Content-Type", "application/json");
-                String cookies = CookieManager.getInstance().getCookie(APP_URL);
-                if (cookies != null && !cookies.isEmpty()) {
-                    connection.setRequestProperty("Cookie", cookies);
+                if (sessionCookies != null && !sessionCookies.isEmpty()) {
+                    connection.setRequestProperty("Cookie", sessionCookies);
                 }
                 String json = "{\"token\":\"" + token
                     .replace("\\", "\\\\")
@@ -244,11 +258,18 @@ public class MainActivity extends Activity {
                     output.write(json.getBytes(StandardCharsets.UTF_8));
                 }
                 int status = connection.getResponseCode();
+                getSharedPreferences("fcm", MODE_PRIVATE).edit()
+                    .putInt("native_http_status", status)
+                    .putLong("native_attempted_at", System.currentTimeMillis())
+                    .apply();
                 if (status < 200 || status >= 300) throw new IllegalStateException("HTTP " + status);
                 getSharedPreferences("fcm", MODE_PRIVATE).edit()
                     .putLong("registered_at", System.currentTimeMillis())
                     .apply();
             } catch (Exception error) {
+                getSharedPreferences("fcm", MODE_PRIVATE).edit()
+                    .putString("native_error", error.getClass().getSimpleName())
+                    .apply();
                 if (attempt < 6 && webView != null) {
                     webView.postDelayed(() -> registerFcmToken(attempt + 1), 5000);
                 }
@@ -265,9 +286,11 @@ public class MainActivity extends Activity {
         // Chamar API para registrar o token (o JavaScript tem acesso aos cookies de sessão)
         String js = "fetch('/api/fcm-token', {" +
             "method: 'POST'," +
+            "credentials: 'include'," +
             "headers: {'Content-Type': 'application/json'}," +
             "body: JSON.stringify({token: '" + token.replace("'", "\\'") + "'})" +
-            "}).catch(function(){});";
+            "}).then(function(r){AndroidBridge.reportFcmRegistration(r.status);})" +
+            ".catch(function(){AndroidBridge.reportFcmRegistration(0);});";
 
         webView.post(() -> webView.evaluateJavascript(js, null));
     }
