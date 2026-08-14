@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
   const body = await request.json().catch(() => null) as RequestBody | null;
-  if (!body || (body.interactionType !== "PLAY" && body.interactionType !== "PET")) {
+  if (!body || (body.interactionType !== "PLAY" && body.interactionType !== "PET" && body.interactionType !== "FEED_FOOD" && body.interactionType !== "FEED_SWEET")) {
     return NextResponse.json({ error: "Interacao invalida." }, { status: 400 });
   }
   if (body.scope !== "ALL" && body.scope !== "FAVORITES" && body.scope !== "SELECTION") {

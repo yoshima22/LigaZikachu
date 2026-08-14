@@ -5,7 +5,7 @@ import { interactWithMascot, recalculateMood, type InteractionType } from "@/lib
 const STALE_LOCK_MS = 90_000;
 const MAX_ATTEMPTS = 3;
 
-type BulkInteractionType = Extract<InteractionType, "PLAY" | "PET">;
+type BulkInteractionType = Extract<InteractionType, "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET">;
 type BulkInteractionScope = "ALL" | "FAVORITES" | "SELECTION";
 
 export type MascotInteractionJobResult = {
@@ -17,7 +17,7 @@ export type MascotInteractionJobResult = {
 };
 
 function isBulkInteractionType(value: string): value is BulkInteractionType {
-  return value === "PLAY" || value === "PET";
+  return value === "PLAY" || value === "PET" || value === "FEED_FOOD" || value === "FEED_SWEET";
 }
 
 function isBulkInteractionScope(value: string): value is BulkInteractionScope {

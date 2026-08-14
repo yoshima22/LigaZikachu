@@ -5,7 +5,7 @@ import { Candy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRi
 import { toast } from "sonner";
 import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
-import { getBankMascotsPageAction, getMascotDetailAction, interactAction } from "../actions";
+import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
 import {
   MascotCard,
   clearPetted,
@@ -233,7 +233,6 @@ function QuickFeedButton({
   icon,
   disabled,
   disabledReason,
-  onFed,
 }: {
   mascotId: string;
   type: "FEED_FOOD" | "FEED_SWEET";
@@ -241,19 +240,21 @@ function QuickFeedButton({
   icon: React.ReactNode;
   disabled: boolean;
   disabledReason?: string;
-  onFed?: (remaining: number | null) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [accepted, setAccepted] = useState(false);
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Mesma fila persistente do Carinho/Brincar: grava no dispositivo e envia em
+    // lote. O clique não se perde mesmo fechando a aba, sem egress extra por clique.
     startTransition(async () => {
-      const r = await interactAction(mascotId, type);
-      if (r.error) { toast.error(r.error); return; }
-      if (r.result && !r.result.success) { toast.info(r.result.message); return; }
-      if (r.result) toast.success(r.result.message);
-      const remaining = typeof r.result?.inventoryRemaining === "number" ? r.result.inventoryRemaining : null;
-      if (remaining !== null) window.dispatchEvent(new CustomEvent("mascot-food-inventory", { detail: { type, remaining } }));
-      onFed?.(remaining);
+      try {
+        await queueMascotInteraction(mascotId, type);
+        setAccepted(true);
+      } catch (error) {
+        setAccepted(false);
+        toast.error(error instanceof Error ? error.message : "Falha ao registrar a interacao.");
+      }
     });
   };
   return (
@@ -261,7 +262,7 @@ function QuickFeedButton({
       type="button"
       disabled={pending || disabled}
       onClick={handleClick}
-      title={disabled ? disabledReason : label}
+      title={disabled ? disabledReason : accepted ? `${label}: enviado` : label}
       aria-label={label}
       className="inline-flex items-center gap-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:cursor-not-allowed disabled:opacity-40 shrink-0"
     >

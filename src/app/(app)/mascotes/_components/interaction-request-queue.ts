@@ -1,6 +1,10 @@
 "use client";
 
-type InteractionType = "PLAY" | "PET";
+type InteractionType = "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET";
+const INTERACTION_TYPES: InteractionType[] = ["PLAY", "PET", "FEED_FOOD", "FEED_SWEET"];
+function isInteractionType(value: unknown): value is InteractionType {
+  return value === "PLAY" || value === "PET" || value === "FEED_FOOD" || value === "FEED_SWEET";
+}
 type OutboxEntry = { id: string; mascotId: string; type: InteractionType; createdAt: number; batchId?: string };
 type OutboxWaiter = { resolve: () => void; reject: (error: Error) => void };
 
@@ -20,7 +24,7 @@ function readOutbox(): OutboxEntry[] {
       const row = entry as Partial<OutboxEntry>;
       return typeof row.id === "string"
         && typeof row.mascotId === "string"
-        && (row.type === "PLAY" || row.type === "PET")
+        && isInteractionType(row.type)
         && typeof row.createdAt === "number"
         && row.createdAt >= oldestAllowed;
     });
@@ -128,15 +132,15 @@ export function queueMascotInteraction(mascotId: string, type: InteractionType) 
 
 if (typeof window !== "undefined") {
   // Retoma automaticamente cliques preservados por um refresh/fechamento.
-  if (readOutbox().some(entry => entry.type === "PLAY")) timers.PLAY = window.setTimeout(() => void flush("PLAY"), 50);
-  if (readOutbox().some(entry => entry.type === "PET")) timers.PET = window.setTimeout(() => void flush("PET"), 50);
+  const pending = readOutbox();
+  for (const type of INTERACTION_TYPES) {
+    if (pending.some(entry => entry.type === type)) timers[type] = window.setTimeout(() => void flush(type), 50);
+  }
 
   window.addEventListener("online", () => {
-    void flush("PLAY");
-    void flush("PET");
+    for (const type of INTERACTION_TYPES) void flush(type);
   });
   window.addEventListener("pagehide", () => {
-    void flush("PLAY");
-    void flush("PET");
+    for (const type of INTERACTION_TYPES) void flush(type);
   });
 }
