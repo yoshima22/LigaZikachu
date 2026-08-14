@@ -282,10 +282,18 @@ export function TitleDisplay({
   useEffect(() => {
     if (!animate) return;
 
-    // Dispara efeito de tela inteira apenas no perfil, uma vez
+    // Dispara efeito de tela inteira apenas no perfil, uma vez por sessão.
+    // Persistir em sessionStorage evita que a animação toque de novo ao navegar
+    // para a edição do perfil (que remonta o componente).
     if (context === "profile" && entranceEffect && entranceEffect !== "NONE" && !entrancePlayed.current) {
       entrancePlayed.current = true;
-      setShowEntrance(true);
+      const entranceKey = `title-entrance-played:${name}:${entranceEffect}`;
+      let alreadyPlayed = false;
+      try { alreadyPlayed = sessionStorage.getItem(entranceKey) === "1"; } catch { /* sem storage */ }
+      if (!alreadyPlayed) {
+        try { sessionStorage.setItem(entranceKey, "1"); } catch { /* sem storage */ }
+        setShowEntrance(true);
+      }
     }
 
     // Animação inicial com stagger

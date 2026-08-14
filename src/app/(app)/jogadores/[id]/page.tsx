@@ -9,7 +9,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardTitle } from "@/components/ui/card";
-import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft, Coins, MessageSquare } from "lucide-react";
+import { Trophy, Swords, CheckCircle2, Package, BookOpen, User, ChevronLeft, Coins, MessageSquare, Cake } from "lucide-react";
 import { POKEMON_TYPE_LABELS, POKEMON_TYPE_COLORS, POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { MatchStatus, SeasonStatus } from "@prisma/client";
 import { PlayerBadgeAdminActions } from "./_components/player-badge-admin-actions";
@@ -892,6 +892,19 @@ export default async function PlayerDetailPage({
 
       {isAdminUser && (
         <div className="space-y-4">
+          <Card>
+            <CardTitle className="mb-2 flex items-center gap-2">
+              <Cake size={18} className="text-primary" /> Data de nascimento
+            </CardTitle>
+            {player.birthDate ? (
+              <p className="text-sm font-semibold text-slate-100">
+                {new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(player.birthDate))}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-500">Não informada</p>
+            )}
+            <p className="mt-1 text-xs text-slate-500">Visível apenas para a administração.</p>
+          </Card>
           {(player.user.status === "SUSPENDED" || playerStandbyActive) && (
             <AdminAccountStatusPanel
               playerId={playerId}

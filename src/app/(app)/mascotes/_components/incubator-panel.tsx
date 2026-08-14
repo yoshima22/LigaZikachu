@@ -35,6 +35,8 @@ interface Props {
   onHatched?: (pokemonId: number, name: string) => void;
   /** imageUrl por tipo de ovo vindo do shop (ex: { RARE: "https://...", SPECIAL: "https://..." }) */
   eggImages?: Record<string, string>;
+  /** Bônus de raridade de evento ativo agora (pontos percentuais). Atualiza no refresh. */
+  eventRarityBonusPct?: number;
 }
 
 const EGG_COLORS: Record<string, string> = {
@@ -105,7 +107,7 @@ const GEN_OPTIONS = [
   { value: "EGG_GEN9", label: "9️⃣ Gen 9 — Paldea · Sprigatito a Pecharunt" },
 ];
 
-export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {} }: Props) {
+export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {}, eventRarityBonusPct = 0 }: Props) {
   // Resolve a imagem: usa a do shop se disponível, senão usa o arquivo local estático
   const resolveEggImg = (type: string) =>
     eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
@@ -480,6 +482,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               {!!incubator.hatchRarityBonusPct && (
                 <p className="text-[10px] font-semibold text-purple-300">
                   +{incubator.hatchRarityBonusPct} pontos percentuais de chance de mascote de raridade elevada
+                </p>
+              )}
+              {eventRarityBonusPct > 0 && (
+                <p className="text-[10px] font-semibold text-emerald-300">
+                  🎉 Evento ativo: +{eventRarityBonusPct} ponto(s) percentuais aplicados ao abrir o ovo agora
                 </p>
               )}
               <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">

@@ -22,6 +22,7 @@ import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
+import { getActiveEggRarityBonusPct } from "@/lib/timed-game-bonuses";
 
 export const dynamic = "force-dynamic";
 
@@ -314,6 +315,10 @@ export default async function MascotesPage() {
   });
 
   const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, activeMascotBuffs, proteinBoostedMascots } = pageData;
+
+  // Bônus de raridade de evento ativo agora — recalculado a cada carregamento
+  // da página, refletindo eventos de fim de semana no painel da incubadora.
+  const eventRarityBonusPct = await getActiveEggRarityBonusPct();
 
   const eggImageByType: Record<string, string> = {};
   for (const [type, url] of Object.entries(rawEggImages)) {
@@ -654,6 +659,7 @@ export default async function MascotesPage() {
         eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin, hatchRarityBonusPct: e.hatchRarityBonusPct }))}
         canSkipIncubation={admin}
         eggImages={eggImageByType}
+        eventRarityBonusPct={eventRarityBonusPct}
       />
 
       {/* Ações em massa da Equipe Favorita */}
