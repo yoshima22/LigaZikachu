@@ -204,12 +204,14 @@ export async function getLabDataAction() {
 }
 
 // ── Trocas de comida ────────────────────────────────────────────────────────
-export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER") {
+export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER", quantity = 1) {
   const me = await requirePlayer();
   const lockReason = await getLabLockReason();
   if (lockReason) return { ok: false as const, error: lockReason };
 
-  const cost = FOOD_TRADE_COSTS[kind];
+  const qty = Math.max(1, Math.min(999, Math.trunc(Number(quantity) || 1)));
+  const unitCost = FOOD_TRADE_COSTS[kind];
+  const totalCost = unitCost * qty;
   const weekKey = getWeekKey();
   const usageField = kind === "HONEY_CANDY"
     ? "honeyCandies" as const
@@ -228,21 +230,23 @@ export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRES
         update: {},
       });
 
-      if (usageField && usage[usageField] >= FOOD_TRADE_LIMITS[usageField]) {
-        throw new Error(`Limite semanal atingido (${FOOD_TRADE_LIMITS[usageField]}x/semana).`);
+      if (usageField) {
+        const remaining = FOOD_TRADE_LIMITS[usageField] - usage[usageField];
+        if (remaining <= 0) throw new Error(`Limite semanal atingido (${FOOD_TRADE_LIMITS[usageField]}x/semana).`);
+        if (qty > remaining) throw new Error(`Você só pode fazer mais ${remaining} desta troca nesta semana.`);
       }
 
       const consumed = await tx.mascotFoodItem.updateMany({
-        where: { playerId: me.id, type: FoodType.FOOD, quantity: { gte: cost } },
-        data: { quantity: { decrement: cost } },
+        where: { playerId: me.id, type: FoodType.FOOD, quantity: { gte: totalCost } },
+        data: { quantity: { decrement: totalCost } },
       });
-      if (consumed.count !== 1) throw new Error(`Comida insuficiente. Necessário: ${cost} comidas.`);
+      if (consumed.count !== 1) throw new Error(`Comida insuficiente. Necessário: ${totalCost} comidas.`);
 
       if (kind === "SWEET") {
         await tx.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: me.id, type: FoodType.SWEET } },
-          create: { playerId: me.id, type: FoodType.SWEET, quantity: 1 },
-          update: { quantity: { increment: 1 } },
+          create: { playerId: me.id, type: FoodType.SWEET, quantity: qty },
+          update: { quantity: { increment: qty } },
         });
       } else {
         const shopItem = await tx.shopItem.findFirst({
@@ -253,34 +257,35 @@ export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRES
         if (!shopItem) throw new Error("O item desta troca ainda não está cadastrado na ZikaShop.");
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId: me.id, itemId: shopItem.id } },
-          create: { playerId: me.id, itemId: shopItem.id, quantity: 1, source: "LAB_FOOD_TRADE" },
-          update: { quantity: { increment: 1 } },
+          create: { playerId: me.id, itemId: shopItem.id, quantity: qty, source: "LAB_FOOD_TRADE" },
+          update: { quantity: { increment: qty } },
         });
       }
 
       if (usageField) {
         await tx.labWeeklyUsage.update({
           where: { id: usage.id },
-          data: { [usageField]: { increment: 1 } },
+          data: { [usageField]: { increment: qty } },
         });
       }
 
-      const rewardLabel = kind === "SWEET" ? "1 Doce" : kind === "HONEY_CANDY" ? "1 Bala de Mel" : "1 Água Fresca";
+      const rewardName = kind === "SWEET" ? "Doce" : kind === "HONEY_CANDY" ? "Bala de Mel" : "Água Fresca";
+      const rewardLabel = `${qty} ${rewardName}${qty > 1 ? "s" : ""}`;
       await recordPlayerActivity(tx, {
         playerId: me.id,
         category: "ITEM",
         action: "LAB_FOOD_TRADE",
-        summary: `Laboratório: ${cost} comidas trocadas por ${rewardLabel}`,
+        summary: `Laboratório: ${totalCost} comidas trocadas por ${rewardLabel}`,
         source: "LABORATORY",
         entityType: "labFoodTrade",
         entityId: kind,
-        amount: cost,
+        amount: totalCost,
         unit: "FOOD",
-        after: { kind, foodSpent: cost, rewardLabel, rewardQuantity: 1 },
+        after: { kind, foodSpent: totalCost, rewardLabel, rewardQuantity: qty },
       });
 
       return {
-        foodSpent: cost,
+        foodSpent: totalCost,
         rewardLabel,
       };
     }, { isolationLevel: "Serializable" });

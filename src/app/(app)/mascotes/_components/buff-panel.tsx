@@ -143,6 +143,18 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     return () => document.removeEventListener("pointerdown", onDocPointerDown);
   }, [showResults]);
 
+  // Se o item selecionado acabou (saiu do inventário), esconde a barra de uso.
+  useEffect(() => {
+    if (selectedBuff && !buffs.some((b) => b.id === selectedBuff)) {
+      setSelectedBuff("");
+      setSelectedMascot("");
+      setSelectedMascotObj(null);
+      setSearch("");
+      setResults([]);
+      setShowResults(false);
+    }
+  }, [buffs, selectedBuff]);
+
   // ── Reorganização de itens (ordem manual + drag-and-drop) com paginação ──────
   const ITEMS_PER_PAGE = 12;
   const ORDER_STORAGE_KEY = "mascot-item-order-v1";

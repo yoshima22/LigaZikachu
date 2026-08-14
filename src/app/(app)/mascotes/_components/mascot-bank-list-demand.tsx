@@ -277,7 +277,7 @@ function BankRow({
 
   return (
     <div className="relative overflow-visible rounded-xl border border-border/50 bg-slate-950/40">
-      <div className="flex w-full items-center gap-3 px-3 py-2.5 transition-colors hover:bg-slate-800/40">
+      <div className="flex w-full items-center gap-2 px-3 pt-2.5 transition-colors hover:bg-slate-800/40">
         {/* Área clicável para expandir */}
         <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -317,9 +317,14 @@ function BankRow({
             </span>
           </span>
         </button>
-        {/* Ações rápidas + chips + chevron */}
-        <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="sm" align="right" />
+        {/* Chevron de expandir (sempre no topo, à direita) */}
+        <button type="button" onClick={handleExpand} className="shrink-0 self-start pt-0.5">
+          {loading ? <Loader2 size={15} className="shrink-0 animate-spin text-slate-500" /> : open ? <ChevronUp size={15} className="shrink-0 text-slate-500" /> : <ChevronDown size={15} className="shrink-0 text-slate-500" />}
+        </button>
+      </div>
+      {/* Ações rápidas + chips numa linha própria, para não espremer o nome */}
+      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5 pt-2">
+        <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="sm" align="left" />
           <QuickInteractButton
             mascotId={mascot.id}
             type="PET"
@@ -366,17 +371,13 @@ function BankRow({
               } : current);
             }}
           />
-          <span className="flex max-w-[120px] flex-wrap items-center justify-end gap-1">
+          <span className="flex flex-wrap items-center gap-1">
             {chips.length === 0 ? (
               <span className="rounded border border-green-500/20 bg-green-500/10 px-1.5 py-px text-[9px] font-semibold text-green-400">Livre</span>
             ) : chips.map((chip) => (
               <span key={chip.label} className={`rounded border px-1.5 py-px text-[9px] font-semibold ${chip.cls}`}>{chip.label}</span>
             ))}
           </span>
-          <button type="button" onClick={handleExpand} className="ml-0.5">
-            {loading ? <Loader2 size={13} className="shrink-0 animate-spin text-slate-500" /> : open ? <ChevronUp size={13} className="shrink-0 text-slate-500" /> : <ChevronDown size={13} className="shrink-0 text-slate-500" />}
-          </button>
-        </span>
       </div>
 
       {open && (

@@ -213,19 +213,19 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
     });
   };
 
-  const handleFoodTrade = (kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER") => {
+  const handleFoodTrade = (kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER", quantity = 1) => {
     start(async () => {
-      const res = await tradeFoodInLabAction(kind);
+      const res = await tradeFoodInLabAction(kind, quantity);
       if (!res.ok) { showFeedback(false, res.error); return; }
       setFoodTrades((current) => ({
         ...current,
         food: current.food - res.foodSpent,
-        sweets: kind === "SWEET" ? current.sweets + 1 : current.sweets,
+        sweets: kind === "SWEET" ? current.sweets + quantity : current.sweets,
       }));
       if (kind === "HONEY_CANDY") {
-        setWeeklyUsage((usage) => ({ ...usage, honeyCandies: usage.honeyCandies + 1 }));
+        setWeeklyUsage((usage) => ({ ...usage, honeyCandies: usage.honeyCandies + quantity }));
       } else if (kind === "FRESH_WATER") {
-        setWeeklyUsage((usage) => ({ ...usage, freshWaters: usage.freshWaters + 1 }));
+        setWeeklyUsage((usage) => ({ ...usage, freshWaters: usage.freshWaters + quantity }));
       }
       showFeedback(true, `${res.rewardLabel} adicionado ao seu inventário!`);
     });
@@ -546,7 +546,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             cost={foodTrades.costs.SWEET}
             food={foodTrades.food}
             isPending={isPending}
-            onBuy={() => handleFoodTrade("SWEET")}
+            onBuy={(q) => handleFoodTrade("SWEET", q)}
           />
           <FoodTradeItem
             title="1 Bala de Mel"
@@ -557,7 +557,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             used={weeklyUsage.honeyCandies}
             limit={foodTrades.limits.honeyCandies}
             isPending={isPending}
-            onBuy={() => handleFoodTrade("HONEY_CANDY")}
+            onBuy={(q) => handleFoodTrade("HONEY_CANDY", q)}
           />
           <FoodTradeItem
             title="1 Água Fresca"
@@ -568,7 +568,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             used={weeklyUsage.freshWaters}
             limit={foodTrades.limits.freshWaters}
             isPending={isPending}
-            onBuy={() => handleFoodTrade("FRESH_WATER")}
+            onBuy={(q) => handleFoodTrade("FRESH_WATER", q)}
           />
           <div className="pt-2">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]">Trocas de Pó de Criação</p>
@@ -652,10 +652,17 @@ function FoodTradeItem({ title, description, emoji, cost, food, used, limit, isP
   used?: number;
   limit?: number;
   isPending: boolean;
-  onBuy: () => void;
+  onBuy: (quantity: number) => void;
 }) {
-  const atLimit = typeof limit === "number" && (used ?? 0) >= limit;
-  const canAfford = food >= cost;
+  const remaining = typeof limit === "number" ? Math.max(0, limit - (used ?? 0)) : Infinity;
+  const maxAffordable = Math.floor(food / cost);
+  const maxQty = Math.max(1, Math.min(remaining, maxAffordable || 1));
+  const [qty, setQty] = useState(1);
+  const clampedQty = Math.max(1, Math.min(qty, Number.isFinite(maxQty) ? maxQty : qty));
+  const atLimit = remaining <= 0;
+  const totalCost = cost * clampedQty;
+  const canAfford = food >= totalCost;
+
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-amber-500/20 bg-slate-900 px-4 py-3">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-xl">{emoji}</div>
@@ -663,7 +670,7 @@ function FoodTradeItem({ title, description, emoji, cost, food, used, limit, isP
         <p className="font-semibold text-white">{title}</p>
         <p className="text-xs text-slate-400">{description}</p>
         <div className="mt-1 flex items-center gap-3">
-          <span className="text-xs font-bold text-amber-300">🍖 {cost} comidas</span>
+          <span className="text-xs font-bold text-amber-300">🍖 {totalCost} comida{totalCost !== 1 ? "s" : ""}{clampedQty > 1 ? ` (${cost}×${clampedQty})` : ""}</span>
           {typeof limit === "number" ? (
             <span className={`text-[10px] ${atLimit ? "text-red-400" : "text-slate-500"}`}>{used ?? 0}/{limit} esta semana</span>
           ) : (
@@ -671,14 +678,30 @@ function FoodTradeItem({ title, description, emoji, cost, food, used, limit, isP
           )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onBuy}
-        disabled={atLimit || !canAfford || isPending}
-        className="shrink-0 rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {isPending ? <Loader2 size={14} className="animate-spin" /> : "Trocar"}
-      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-center rounded-lg border border-amber-500/30 bg-slate-950">
+          <button type="button" aria-label="Diminuir" disabled={atLimit || clampedQty <= 1} onClick={() => setQty(Math.max(1, clampedQty - 1))} className="px-2 py-1 text-sm text-amber-300 disabled:opacity-30">−</button>
+          <input
+            type="number" min={1} inputMode="numeric"
+            value={clampedQty}
+            disabled={atLimit}
+            onChange={(e) => {
+              const v = parseInt(e.target.value.replace(/\D/g, ""), 10);
+              setQty(Number.isNaN(v) ? 1 : Math.max(1, Number.isFinite(maxQty) ? Math.min(v, maxQty) : v));
+            }}
+            className="w-10 border-x border-amber-500/20 bg-transparent py-1 text-center text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <button type="button" aria-label="Aumentar" disabled={atLimit || (Number.isFinite(maxQty) && clampedQty >= maxQty)} onClick={() => setQty(clampedQty + 1)} className="px-2 py-1 text-sm text-amber-300 disabled:opacity-30">+</button>
+        </div>
+        <button
+          type="button"
+          onClick={() => onBuy(clampedQty)}
+          disabled={atLimit || !canAfford || isPending}
+          className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isPending ? <Loader2 size={14} className="animate-spin" /> : "Trocar"}
+        </button>
+      </div>
     </div>
   );
 }

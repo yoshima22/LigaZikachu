@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
-import { getSpriteUrl, getPokemonName, getPokemonElement, TYPE_ADVANTAGE } from "@/lib/mascot-data";
+import { getSpriteUrl, getPokemonName, getPokemonElement, getPokemonTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
@@ -167,6 +167,7 @@ function MascotPick({
   const clickable = !blocked && (!maxReached || selected);
   const bs = block ? BLOCK_STYLE[block.type] : null;
   const pokemonType = getPokemonElement(m.pokemonId);
+  const pokemonTypes = getPokemonTypes(m.pokemonId);
   const beats = (TYPE_ADVANTAGE[pokemonType] ?? []).slice(0, 2);
 
   let borderCls: string;
@@ -224,7 +225,7 @@ function MascotPick({
           </p>
           {!compact && (
             <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
-              <TypeBadge type={pokemonType} small />
+              {pokemonTypes.map(t => <TypeBadge key={t} type={t} small />)}
               {beats.map(b => (
                 <span key={b} className="text-[8px] text-slate-600">▶{TYPE_LABELS[b] ?? b}</span>
               ))}
@@ -387,7 +388,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
 
   // All unique types present in the mascot pool
   const availableTypes = useMemo(() => {
-    const types = new Set(mascots.filter(m => getBlock(m, now) === null).map(m => getPokemonElement(m.pokemonId)));
+    const types = new Set(mascots.filter(m => getBlock(m, now) === null).flatMap(m => getPokemonTypes(m.pokemonId)));
     return [...types].sort();
   }, [mascots, now]);
 
@@ -404,7 +405,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
       return true;
     });
     if (typeFilter) {
-      list = list.filter(m => getPokemonElement(m.pokemonId) === typeFilter);
+      list = list.filter(m => getPokemonTypes(m.pokemonId).includes(typeFilter));
     }
     const q = search.trim().toLowerCase();
     if (q) list = list.filter(m => displayName(m).toLowerCase().includes(q));
