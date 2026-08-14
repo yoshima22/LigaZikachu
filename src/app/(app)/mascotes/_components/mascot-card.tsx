@@ -518,6 +518,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     setExpeditionReward(null);
     if (expeditionRewardPendingRefresh) {
       setExpeditionRewardPendingRefresh(false);
+      onRefresh?.();
       router.refresh();
     }
   };
@@ -1242,6 +1243,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               startTransition(async () => {
                 const r = await claimExpeditionAction(expedition.id);
                 if (r.error) { toast.error(r.error); return; }
+                // Atualiza os dados do próprio card (essencial no banco, cujo
+                // detalhe é carregado sob demanda e não se refaz com router.refresh).
+                onRefresh?.();
                 if (r.result?.reward) {
                   const display = rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; shopItemType?: string });
                   if (r.result.mode === "STANDARD" && r.result.expGained > 0) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LoaderCircle, MapPin, Search, Sparkles, Star, X } from "lucide-react";
@@ -260,9 +260,23 @@ export function MascotList({
   const visibleExpeditions = activeExpeditions.filter(expedition =>
     expeditionFilter === "ALL" || expedition.mode === expeditionFilter
   );
+  // Relógio que avança para reavaliar quais expedições ficaram prontas, para que o
+  // botão "Coletar, cuidar e repetir" habilite sozinho quando o tempo acabar,
+  // sem exigir atualização manual da página.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const nextPendingFinishMs = activeExpeditions.reduce<number | null>((soonest, expedition) => {
+    const finish = new Date(expedition.finishAt).getTime();
+    return finish > nowMs && (soonest === null || finish < soonest) ? finish : soonest;
+  }, null);
+  useEffect(() => {
+    if (nextPendingFinishMs === null) return;
+    const delay = Math.max(250, nextPendingFinishMs - Date.now() + 100);
+    const timer = window.setTimeout(() => setNowMs(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [nextPendingFinishMs]);
   const readyRegularExpeditions = activeExpeditions.filter(expedition =>
     ["TRAINING", "STANDARD", "ITEMS"].includes(expedition.mode) &&
-    new Date(expedition.finishAt).getTime() <= Date.now()
+    new Date(expedition.finishAt).getTime() <= nowMs
   );
 
   const runExpeditionRoutine = () => {
