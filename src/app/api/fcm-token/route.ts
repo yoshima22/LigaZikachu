@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getAppSession } from "@/lib/session";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
+    const session = await getAppSession();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json() as { token?: string };
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 export async function GET() {
   // Endpoint de diagnóstico — apenas para desenvolvimento/admin
   try {
-    const session = await auth();
+    const session = await getAppSession();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const tokens = await prisma.userFcmToken.findMany({
@@ -53,8 +53,10 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
+    const session = await getAppSession();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { token } = await request.json() as { token: string };
-    if (token) await prisma.userFcmToken.deleteMany({ where: { token } });
+    if (token) await prisma.userFcmToken.deleteMany({ where: { token, userId: session.user.id } });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
