@@ -5,7 +5,9 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Bitmap;
@@ -36,6 +38,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
@@ -48,6 +51,16 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingUrl = null;
+    private boolean updateReceiverRegistered = false;
+    private final BroadcastReceiver updateDownloadReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
+            long completed = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
+            long expected = getSharedPreferences("app_update", MODE_PRIVATE).getLong("download_id", -2L);
+            if (completed != expected) return;
+            openDownloadedUpdate(completed);
+        }
+    };
 
     // JavaScript bridge para comunicação WebView ↔ Android
     public class AndroidBridge {
@@ -229,6 +242,52 @@ public class MainActivity extends Activity {
         checkForAppUpdate(false);
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (updateReceiverRegistered) return;
+        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(updateDownloadReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(updateDownloadReceiver, filter);
+        }
+        updateReceiverRegistered = true;
+    }
+
+    private void openDownloadedUpdate(long downloadId) {
+        try {
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            Uri apk = manager == null ? null : manager.getUriForDownloadedFile(downloadId);
+            if (apk == null) throw new IllegalStateException("Arquivo indisponível");
+            String expectedHash = getSharedPreferences("app_update", MODE_PRIVATE).getString("expected_sha256", "");
+            if (!expectedHash.isEmpty() && !expectedHash.equalsIgnoreCase(fileSha256(apk))) {
+                Toast.makeText(this, "A atualização falhou na verificação de segurança.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            Intent install = new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(apk, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(install);
+        } catch (Exception error) {
+            Toast.makeText(this, "Download concluído. Toque na notificação do Android para instalar.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String fileSha256(Uri uri) {
+        try (InputStream input = getContentResolver().openInputStream(uri)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int count;
+            while (input != null && (count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+            StringBuilder result = new StringBuilder();
+            for (byte value : digest.digest()) result.append(String.format("%02X", value));
+            return result.toString();
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
     private void checkForAppUpdate(boolean forced) {
         long checkedAt = getSharedPreferences("app_update", MODE_PRIVATE).getLong("checked_at", 0L);
         if (!forced && System.currentTimeMillis() - checkedAt < UPDATE_INTERVAL_MS) return;
@@ -314,6 +373,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onStop() {
         CookieManager.getInstance().flush();
+        if (updateReceiverRegistered) {
+            unregisterReceiver(updateDownloadReceiver);
+            updateReceiverRegistered = false;
+        }
         super.onStop();
     }
 

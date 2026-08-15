@@ -1,7 +1,7 @@
 {
-  "versionCode": 16,
-  "versionName": "0.7.9",
-  "apkUrl": "/downloads/LigaZikachu-0.7.9.apk",
-  "sha256": "59FDDD39188F73951F942C46F83E180366830D16B4CCD79CBE1AEF1614065B0D",
-  "notes": "Versão de teste do atualizador automático. Nenhum progresso do jogo será alterado."
+  "versionCode": 17,
+  "versionName": "0.7.10",
+  "apkUrl": "/downloads/LigaZikachu-0.7.10.apk",
+  "sha256": "B398938F074C8A8A86022B4319B0CD749E42E00CCE41F2DC6A1494E58B64653E",
+  "notes": "Teste da abertura automática do instalador após concluir o download."
 }
