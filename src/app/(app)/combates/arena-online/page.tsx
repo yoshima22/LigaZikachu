@@ -52,14 +52,22 @@ export default async function LivePvpPage() {
       <ArenaOnlineLab
         onlineIdentity={{ playerId: player.id, playerName: player.displayName }}
         mascots={mascots.map((mascot) => ({
-          ...mascot,
+          id: mascot.id,
+          pokemonId: mascot.pokemonId,
           name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
           ownerName: mascot.player.displayName,
           ownerAvatarUrl: mascot.player.avatarUrl,
+          performanceTag: mascot.performanceTag,
+          level: mascot.level,
           types: getPokemonTypes(mascot.pokemonId),
           spriteUrl: getPreferredSpriteUrl(mascot.pokemonId, mascot.player, {
             shiny: mascot.isShiny,
           }),
+          statForce: mascot.statForce,
+          statAgility: mascot.statAgility,
+          statCharisma: mascot.statCharisma,
+          statInstinct: mascot.statInstinct,
+          statVitality: mascot.statVitality,
           gameStatus: mascot.expeditions.length
             ? "Em expedição"
             : mascot.bazarListed

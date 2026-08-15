@@ -384,6 +384,38 @@ async function findCurrentMatch(
   return match;
 }
 
+type MatchRevisionPulse = {
+  revision: number | null;
+  playerAId: string | null;
+  playerBId: string | null;
+  hasBattle: boolean;
+  deadline: string | null;
+};
+
+/**
+ * Consulta somente pequenos campos do JSON da partida.
+ *
+ * O polling usa esta leitura antes de buscar o estado completo (mapa, equipes,
+ * logs e eventos). A partida continua persistida integralmente no servidor e,
+ * diante de qualquer inconsistência, o fluxo cai no carregamento completo.
+ */
+async function peekCurrentMatchRevision(playerId: string) {
+  const rows = await prisma.$queryRaw<MatchRevisionPulse[]>(Prisma.sql`
+    SELECT
+      NULLIF(match."value" ->> 'revision', '')::integer AS "revision",
+      match."value" ->> 'playerAId' AS "playerAId",
+      match."value" ->> 'playerBId' AS "playerBId",
+      COALESCE(match."value" -> 'battle' <> 'null'::jsonb, false) AS "hasBattle",
+      match."value" ->> 'deadline' AS "deadline"
+    FROM "app_settings" AS player_match
+    JOIN "app_settings" AS match
+      ON match."key" = ${MATCH_PREFIX} || (player_match."value" ->> 'matchId')
+    WHERE player_match."key" = ${PLAYER_MATCH_PREFIX + playerId}
+    LIMIT 1
+  `);
+  return rows[0] ?? null;
+}
+
 async function saveMatch(tx: Prisma.TransactionClient, match: MatchValue) {
   // A interface exibe apenas o trecho recente. Limitar o histórico evita que o
   // JSON persistido e cada atualização legítima cresçam durante partidas longas.
@@ -585,7 +617,7 @@ export async function getLivePvpLobbyAction(includeRanking = true) {
           key: { startsWith: QUEUE_PREFIX },
           updatedAt: { gte: cutoff },
         },
-        select: { key: true, value: true },
+        select: { key: true, value: true, updatedAt: true },
       }),
       prisma.appSetting.findUnique({
         where: { key: `${PLAYER_MATCH_PREFIX}${player.id}` },
@@ -610,7 +642,9 @@ export async function getLivePvpLobbyAction(includeRanking = true) {
   const ownQueue = queue.find(
     (entry) => entry.key === `${QUEUE_PREFIX}${player.id}`,
   );
-  if (ownQueue) {
+  // A fila expira em 90 s. Atualizar a presença a cada polling (3 s) gerava
+  // muitas escritas sem aumentar a segurança; 15 s mantém ampla margem.
+  if (ownQueue && Date.now() - ownQueue.updatedAt.getTime() >= 15_000) {
     await prisma.appSetting.update({
       where: { key: ownQueue.key },
       data: { value: ownQueue.value as Prisma.InputJsonValue },
@@ -666,6 +700,32 @@ export async function getLivePvpMatchAction(
   knownRevision?: number,
 ) {
   const player = await requireLivePvpPlayer();
+
+  if (knownRevision != null) {
+    const pulse = await peekCurrentMatchRevision(player.id);
+    const belongsToMatch =
+      pulse?.playerAId === player.id || pulse?.playerBId === player.id;
+    const deadlineMs = pulse?.deadline ? new Date(pulse.deadline).getTime() : 0;
+    const timeoutIsDue =
+      !pulse?.hasBattle && (!deadlineMs || deadlineMs <= Date.now());
+
+    // Em combate não há timeout de pré-jogo para processar nesta leitura. No
+    // pré-jogo, o pulso leve só é usado enquanto o prazo ainda não venceu.
+    if (
+      belongsToMatch &&
+      pulse?.revision === knownRevision &&
+      !timeoutIsDue
+    ) {
+      return {
+        match: null,
+        viewerId: player.id,
+        selectedMascots: [],
+        unchanged: true as const,
+        revision: knownRevision,
+      };
+    }
+  }
+
   let match = await prisma.$transaction((tx) =>
     findCurrentMatch(tx, player.id),
   );
@@ -730,16 +790,8 @@ export async function getLivePvpMatchAction(
           },
         })
       : [];
-  const participants = await prisma.player.findMany({
-    where: { id: { in: [match.playerAId, match.playerBId] } },
-    select: { id: true, displayName: true },
-  });
-  match.playerAName =
-    participants.find((entry) => entry.id === match.playerAId)?.displayName ??
-    match.playerAName;
-  match.playerBName =
-    participants.find((entry) => entry.id === match.playerBId)?.displayName ??
-    match.playerBName;
+  // Os nomes fazem parte do estado autoritativo criado no matchmaking. Evita
+  // reler os dois perfis a cada revisão e mantém a reconexão autocontida.
   const responseMatch = structuredClone(match);
   if (responseMatch.battle)
     responseMatch.battle.secretEvents = responseMatch.battle.secretEvents.map(
