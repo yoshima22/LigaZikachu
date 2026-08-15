@@ -51,11 +51,13 @@ public class LigaFirebaseService extends FirebaseMessagingService {
 
         Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra("url", url);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        int requestCode = (url + System.currentTimeMillis()).hashCode();
 
         PendingIntent pending = PendingIntent.getActivity(
-            this, 0, intent,
-            PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE
+            this, requestCode, intent,
+            PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)

@@ -101,6 +101,12 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 CookieManager.getInstance().flush();
+                if (pendingUrl != null && !url.contains("/login")) {
+                    String target = pendingUrl;
+                    pendingUrl = null;
+                    view.loadUrl(withCacheBuster(target));
+                    return;
+                }
                 // Após carregar a página, registrar o token FCM no servidor
                 registerFcmToken();
             }
@@ -157,9 +163,10 @@ public class MainActivity extends Activity {
         // Verificar se abriu por notificação com URL específica
         pendingUrl = resolveNotificationUrl(getIntent());
 
-        if (savedInstanceState == null) {
-            webView.loadUrl(pendingUrl != null ? pendingUrl : APP_URL);
-            pendingUrl = null;
+        if (pendingUrl != null) {
+            webView.loadUrl(withCacheBuster(APP_URL + "/dashboard"));
+        } else if (savedInstanceState == null) {
+            webView.loadUrl(APP_URL);
         } else {
             webView.restoreState(savedInstanceState);
         }
@@ -321,12 +328,24 @@ public class MainActivity extends Activity {
         return APP_URL + (url.startsWith("/") ? url : "/" + url);
     }
 
+    private String withCacheBuster(String url) {
+        return url + (url.contains("?") ? "&" : "?") + "push_open=" + System.currentTimeMillis();
+    }
+
+    private void openNotificationUrl(String url) {
+        pendingUrl = url;
+        if (webView == null) return;
+        webView.stopLoading();
+        webView.clearCache(false);
+        webView.loadUrl(withCacheBuster(APP_URL + "/dashboard"));
+    }
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         String url = resolveNotificationUrl(intent);
-        if (url != null && webView != null) webView.loadUrl(url);
+        if (url != null) openNotificationUrl(url);
     }
 
     @Override

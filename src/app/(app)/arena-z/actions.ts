@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
@@ -28,6 +29,7 @@ import {
   useSusShield,
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
+import { sendNotificationToUser } from "@/lib/notifications";
 
 type ArenaStaleNotice = {
   attackerName?: string | null;
@@ -156,9 +158,26 @@ export async function runBotBattleAction(teamId: string, difficulty: ArenaDiffic
 export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string, attackTeamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof runPvpBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();
+    const defenseOwner = await prisma.arenaTeam.findUnique({
+      where: { id: defenseTeamId },
+      select: { playerId: true, player: { select: { userId: true } } },
+    });
     const stale = await checkTeamStaleFromIncomingAttack(playerId, attackTeamId, attackTeamKnownUpdatedAt);
     if (stale) return { stale };
     const result = await runPvpBattle(playerId, attackTeamId, defenseTeamId);
+    if (defenseOwner && defenseOwner.playerId !== playerId && !result.isTrainingBattle) {
+      const outcome = result.result === "DEFENDER_WIN"
+        ? "Seu time venceu a defesa!"
+        : result.result === "ATTACKER_WIN"
+          ? "Seu time foi derrotado."
+          : "O combate terminou empatado.";
+      after(() => sendNotificationToUser(defenseOwner.player.userId, {
+        title: "Seu time foi atacado na Arena-Z!",
+        body: `${result.playerTeamName} atacou sua equipe. ${outcome}`,
+        url: "/arena-z",
+        data: { source: "arena-z-defense", attackTeamId, defenseTeamId },
+      }).catch(() => undefined));
+    }
     // Revalidação feita pelo cliente ao fechar o modal
     return { result };
   } catch (err) {
