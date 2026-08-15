@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Bitmap;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -358,9 +359,33 @@ public class MainActivity extends Activity {
                 .putString("expected_sha256", sha256)
                 .apply();
             Toast.makeText(this, "Atualização em download.", Toast.LENGTH_LONG).show();
+            pollUpdateDownload(id, 0);
         } catch (Exception error) {
             Toast.makeText(this, "Não foi possível iniciar a atualização.", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void pollUpdateDownload(long downloadId, int attempt) {
+        if (webView == null || attempt > 600) return;
+        webView.postDelayed(() -> {
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) return;
+            try (Cursor cursor = manager.query(new DownloadManager.Query().setFilterById(downloadId))) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int statusColumn = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+                    int status = statusColumn >= 0 ? cursor.getInt(statusColumn) : -1;
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        openDownloadedUpdate(downloadId);
+                        return;
+                    }
+                    if (status == DownloadManager.STATUS_FAILED) {
+                        Toast.makeText(this, "O download da atualização falhou.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {}
+            pollUpdateDownload(downloadId, attempt + 1);
+        }, 1000L);
     }
 
     @Override
