@@ -13,7 +13,7 @@ import {
 import { WindowsInstallButton } from "./_components/windows-install-button";
 import { AndroidUpdateButton } from "@/components/android-update";
 
-const APK_PATH = "https://github.com/yoshima22/LigaZikachu/releases/latest/download/app-debug.apk";
+const APK_PATH = "/downloads/LigaZikachu-0.7.8.apk";
 
 export default function DownloadsPage() {
   return (

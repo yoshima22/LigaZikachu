@@ -1,7 +1,7 @@
 {
   "versionCode": 15,
   "versionName": "0.7.8",
-  "apkUrl": "https://github.com/yoshima22/LigaZikachu/releases/latest/download/app-debug.apk",
-  "sha256": "63036EE72BD7ACF199154FD36BA90FC2F36A069BFB57E49FA54EA153DDF941E2",
-  "notes": "Há uma nova versão oficial da Liga Zikachu disponível."
+  "apkUrl": "/downloads/LigaZikachu-0.7.8.apk",
+  "sha256": "46F9A988E336DF1D5B03B08745A5B7BDC683683F3F5DF707C2EF4C925E51BFD3",
+  "notes": "Atualização automática e avisos de novas versões no aplicativo."
 }

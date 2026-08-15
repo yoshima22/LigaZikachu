@@ -77,7 +77,23 @@ jobs:
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
+      - name: Verify update compatibility
+        id: signing
+        shell: bash
+        run: |
+          EXPECTED="a34aa377990111d67d2994825f09bf87c636f7043870ead1654b77d6f7c3980c"
+          ACTUAL=$(apksigner verify --print-certs android-webview/app/build/outputs/apk/debug/app-debug.apk \
+            | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::warning::Assinatura incompatível. O APK não será publicado. Esperada: $EXPECTED; recebida: $ACTUAL"
+            echo "compatible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "compatible=true" >> "$GITHUB_OUTPUT"
+          cp android-webview/app/build/outputs/apk/debug/app-debug.apk LigaZikachu.apk
+
       - name: Publish signed APK release
+        if: steps.signing.outputs.compatible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_NAME: ${{ steps.android.outputs.version_name }}
@@ -85,12 +101,13 @@ jobs:
           TAG="android-v${VERSION_NAME}"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" \
-            "android-webview/app/build/outputs/apk/debug/app-debug.apk" \
+            "LigaZikachu.apk" \
             --title "Liga Zikachu Android ${VERSION_NAME}" \
             --notes "Atualização oficial do aplicativo Android da Liga Zikachu." \
             --latest
 
       - name: Update automatic-update manifest
+        if: steps.signing.outputs.compatible == 'true'
         env:
           VERSION_NAME: ${{ steps.android.outputs.version_name }}
           VERSION_CODE: ${{ steps.android.outputs.version_code }}
@@ -102,7 +119,7 @@ jobs:
           data = {
             "versionCode": int(os.environ["VERSION_CODE"]),
             "versionName": os.environ["VERSION_NAME"],
-            "apkUrl": "https://github.com/yoshima22/LigaZikachu/releases/latest/download/app-debug.apk",
+            "apkUrl": "https://github.com/yoshima22/LigaZikachu/releases/latest/download/LigaZikachu.apk",
             "sha256": os.environ["SHA256"],
             "notes": "Há uma nova versão oficial da Liga Zikachu disponível."
           }
