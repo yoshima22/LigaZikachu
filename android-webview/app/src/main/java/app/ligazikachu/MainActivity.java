@@ -5,9 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Context;
-import android.content.BroadcastReceiver;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Bitmap;
@@ -52,16 +50,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingUrl = null;
-    private boolean updateReceiverRegistered = false;
-    private final BroadcastReceiver updateDownloadReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context context, Intent intent) {
-            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) return;
-            long completed = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
-            long expected = getSharedPreferences("app_update", MODE_PRIVATE).getLong("download_id", -2L);
-            if (completed != expected) return;
-            openDownloadedUpdate(completed);
-        }
-    };
+    private long installOpenedForDownload = -1L;
 
     // JavaScript bridge para comunicação WebView ↔ Android
     public class AndroidBridge {
@@ -243,19 +232,6 @@ public class MainActivity extends Activity {
         checkForAppUpdate(false);
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (updateReceiverRegistered) return;
-        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(updateDownloadReceiver, filter, Context.RECEIVER_EXPORTED);
-        } else {
-            registerReceiver(updateDownloadReceiver, filter);
-        }
-        updateReceiverRegistered = true;
-    }
-
     private void openDownloadedUpdate(long downloadId) {
         try {
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
@@ -266,6 +242,8 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, "A atualização falhou na verificação de segurança.", Toast.LENGTH_LONG).show();
                 return;
             }
+            if (installOpenedForDownload == downloadId) return;
+            installOpenedForDownload = downloadId;
             Intent install = new Intent(Intent.ACTION_VIEW)
                 .setDataAndType(apk, "application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -398,10 +376,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onStop() {
         CookieManager.getInstance().flush();
-        if (updateReceiverRegistered) {
-            unregisterReceiver(updateDownloadReceiver);
-            updateReceiverRegistered = false;
-        }
         super.onStop();
     }
 

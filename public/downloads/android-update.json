@@ -1,7 +1,7 @@
 {
-  "versionCode": 20,
-  "versionName": "0.7.13",
-  "apkUrl": "/downloads/LigaZikachu-0.7.13.apk",
-  "sha256": "7F1B20AAC0F26F74B66D2E8FFE51366D2C50A320392D3C1374CF98C7CE84F800",
-  "notes": "Atualização neutra para testar a abertura automática do instalador pela versão 0.7.12."
+  "versionCode": 22,
+  "versionName": "0.7.15",
+  "apkUrl": "/downloads/LigaZikachu-0.7.15.apk",
+  "sha256": "5E56AE0A64E2A9267279055D85770BAC295D504690BCF2DA36E6F28916F58F4E",
+  "notes": "Atualização neutra para validar a abertura única do instalador pela versão 0.7.14."
 }
