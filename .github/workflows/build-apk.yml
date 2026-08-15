@@ -85,7 +85,7 @@ jobs:
           TAG="android-v${VERSION_NAME}"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" \
-            "android-webview/app/build/outputs/apk/debug/app-debug.apk#LigaZikachu.apk" \
+            "android-webview/app/build/outputs/apk/debug/app-debug.apk" \
             --title "Liga Zikachu Android ${VERSION_NAME}" \
             --notes "Atualização oficial do aplicativo Android da Liga Zikachu." \
             --latest
@@ -102,7 +102,7 @@ jobs:
           data = {
             "versionCode": int(os.environ["VERSION_CODE"]),
             "versionName": os.environ["VERSION_NAME"],
-            "apkUrl": "https://github.com/yoshima22/LigaZikachu/releases/latest/download/LigaZikachu.apk",
+            "apkUrl": "https://github.com/yoshima22/LigaZikachu/releases/latest/download/app-debug.apk",
             "sha256": os.environ["SHA256"],
             "notes": "Há uma nova versão oficial da Liga Zikachu disponível."
           }
