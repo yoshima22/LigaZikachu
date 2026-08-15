@@ -13,7 +13,7 @@ import {
 import { WindowsInstallButton } from "./_components/windows-install-button";
 import { AndroidUpdateButton } from "@/components/android-update";
 
-const APK_PATH = "/downloads/LigaZikachu-0.7.8.apk";
+const APK_PATH = "/downloads/LigaZikachu-0.7.9.apk";
 
 export default function DownloadsPage() {
   return (
@@ -75,7 +75,7 @@ export default function DownloadsPage() {
               </div>
 
               <div className="my-6 grid grid-cols-3 gap-2 text-center text-xs">
-                <InfoPill label="Versão" value="0.7.8" />
+                <InfoPill label="Versão" value="0.7.9" />
                 <InfoPill label="Tamanho" value="2,48 MB" />
                 <InfoPill label="Formato" value="APK" />
               </div>
