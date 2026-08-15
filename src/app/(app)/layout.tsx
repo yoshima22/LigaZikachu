@@ -43,6 +43,7 @@ import {
 } from "@/lib/live-pvp-access";
 import { getNavNotificationSnapshot } from "@/lib/nav-notifications";
 import { DesktopChatDockLoader } from "./_components/desktop-chat-dock-loader";
+import { AndroidUpdateBadge } from "@/components/android-update";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -333,10 +334,11 @@ export default async function AppLayout({
                 prefetch={false}
                 aria-label="Download"
                 title="Download"
-                className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 text-[9px] font-bold leading-none text-[#FFCB05] transition-colors hover:bg-[#FFCB05] hover:text-slate-950 sm:text-[10px]"
+                className="relative flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 text-[9px] font-bold leading-none text-[#FFCB05] transition-colors hover:bg-[#FFCB05] hover:text-slate-950 sm:text-[10px]"
               >
                 <Download size={13} className="shrink-0" />
                 <span className="hidden whitespace-nowrap lg:inline">Download</span>
+                <AndroidUpdateBadge />
               </Link>
             </div>
           </div>

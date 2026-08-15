@@ -2,6 +2,7 @@ package app.ligazikachu;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
@@ -12,6 +13,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
 import android.webkit.CookieManager;
@@ -29,14 +31,19 @@ import android.widget.Toast;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final String APP_URL = "https://liga-zikachu.vercel.app";
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 1002;
+    private static final String UPDATE_URL = APP_URL + "/downloads/android-update.json";
+    private static final long UPDATE_INTERVAL_MS = 6L * 60L * 60L * 1000L;
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
@@ -56,6 +63,10 @@ public class MainActivity extends Activity {
                 .putLong("web_attempted_at", System.currentTimeMillis())
                 .apply();
         }
+
+        @JavascriptInterface public int getAppVersionCode() { return BuildConfig.VERSION_CODE; }
+        @JavascriptInterface public String getAppVersionName() { return BuildConfig.VERSION_NAME; }
+        @JavascriptInterface public void checkForUpdate() { checkForAppUpdate(true); }
     }
 
     @Override
@@ -159,6 +170,7 @@ public class MainActivity extends Activity {
         });
 
         refreshFcmTokenIfNeeded();
+        checkForAppUpdate(false);
 
         // Verificar se abriu por notificação com URL específica
         pendingUrl = resolveNotificationUrl(getIntent());
@@ -214,6 +226,82 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+        checkForAppUpdate(false);
+    }
+
+    private void checkForAppUpdate(boolean forced) {
+        long checkedAt = getSharedPreferences("app_update", MODE_PRIVATE).getLong("checked_at", 0L);
+        if (!forced && System.currentTimeMillis() - checkedAt < UPDATE_INTERVAL_MS) return;
+        getSharedPreferences("app_update", MODE_PRIVATE).edit().putLong("checked_at", System.currentTimeMillis()).apply();
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(UPDATE_URL + "?t=" + System.currentTimeMillis()).openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setUseCaches(false);
+                if (connection.getResponseCode() != 200) throw new IllegalStateException("HTTP " + connection.getResponseCode());
+                String body = readText(connection.getInputStream());
+                JSONObject release = new JSONObject(body);
+                int versionCode = release.getInt("versionCode");
+                String versionName = release.getString("versionName");
+                String apkUrl = release.getString("apkUrl");
+                String sha256 = release.optString("sha256", "");
+                String notes = release.optString("notes", "Uma nova versão está disponível.");
+                runOnUiThread(() -> {
+                    if (versionCode > BuildConfig.VERSION_CODE) showUpdateDialog(versionName, apkUrl, sha256, notes);
+                    else if (forced) Toast.makeText(this, "Você já está usando a versão mais recente.", Toast.LENGTH_LONG).show();
+                });
+            } catch (Exception error) {
+                if (forced) runOnUiThread(() -> Toast.makeText(this, "Não foi possível verificar a atualização agora.", Toast.LENGTH_LONG).show());
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
+    }
+
+    private void showUpdateDialog(String versionName, String apkUrl, String sha256, String notes) {
+        new AlertDialog.Builder(this)
+            .setTitle("Liga Zikachu " + versionName)
+            .setMessage(notes)
+            .setNegativeButton("Depois", null)
+            .setPositiveButton("Baixar e instalar", (dialog, which) -> startUpdateDownload(apkUrl, versionName, sha256))
+            .show();
+    }
+
+    private String readText(InputStream input) throws Exception {
+        try (InputStream source = input; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = source.read(buffer)) != -1) output.write(buffer, 0, count);
+            return output.toString(StandardCharsets.UTF_8.name());
+        }
+    }
+
+    private void startUpdateDownload(String apkUrl, String versionName, String sha256) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+            Toast.makeText(this, "Autorize a Liga Zikachu a instalar atualizações e toque novamente em Atualizar.", Toast.LENGTH_LONG).show();
+            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        try {
+            Uri uri = Uri.parse(apkUrl.startsWith("http") ? apkUrl : APP_URL + apkUrl);
+            DownloadManager.Request request = new DownloadManager.Request(uri)
+                .setTitle("Liga Zikachu " + versionName)
+                .setDescription("Baixando atualização oficial")
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "LigaZikachu-" + versionName + ".apk");
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            long id = manager.enqueue(request);
+            getSharedPreferences("app_update", MODE_PRIVATE).edit()
+                .putLong("download_id", id)
+                .putString("expected_sha256", sha256)
+                .apply();
+            Toast.makeText(this, "Atualização em download.", Toast.LENGTH_LONG).show();
+        } catch (Exception error) {
+            Toast.makeText(this, "Não foi possível iniciar a atualização.", Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override

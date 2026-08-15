@@ -8,10 +8,12 @@ on:
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,15 +40,22 @@ jobs:
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android-webview/local.properties
 
-      - name: Verify google-services.json exists
+      - name: Verify Firebase configuration
+        run: test -f android-webview/app/google-services.json
+
+      - name: Restore permanent signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          if [ ! -f android-webview/app/google-services.json ]; then
-            echo "ERRO: google-services.json não encontrado!"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "ERRO: cadastre ANDROID_KEYSTORE_BASE64 nos Secrets do GitHub."
             exit 1
           fi
-          echo "google-services.json OK — project_id: $(cat android-webview/app/google-services.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["project_info"]["project_id"])')"
+          mkdir -p "$HOME/.android"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
 
-      - name: Build debug APK
+      - name: Build signed APK
         working-directory: android-webview
         run: gradle assembleDebug --no-daemon
 
@@ -56,3 +65,54 @@ jobs:
           name: liga-zikachu-apk-${{ github.run_number }}
           path: android-webview/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Read Android release metadata
+        id: android
+        shell: bash
+        run: |
+          VERSION_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' android-webview/app/build.gradle)
+          VERSION_CODE=$(sed -n 's/.*versionCode \([0-9]*\).*/\1/p' android-webview/app/build.gradle)
+          SHA256=$(sha256sum android-webview/app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Publish signed APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.android.outputs.version_name }}
+        run: |
+          TAG="android-v${VERSION_NAME}"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" \
+            "android-webview/app/build/outputs/apk/debug/app-debug.apk#LigaZikachu.apk" \
+            --title "Liga Zikachu Android ${VERSION_NAME}" \
+            --notes "Atualização oficial do aplicativo Android da Liga Zikachu." \
+            --latest
+
+      - name: Update automatic-update manifest
+        env:
+          VERSION_NAME: ${{ steps.android.outputs.version_name }}
+          VERSION_CODE: ${{ steps.android.outputs.version_code }}
+          SHA256: ${{ steps.android.outputs.sha256 }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          path = "public/downloads/android-update.json"
+          data = {
+            "versionCode": int(os.environ["VERSION_CODE"]),
+            "versionName": os.environ["VERSION_NAME"],
+            "apkUrl": "https://github.com/yoshima22/LigaZikachu/releases/latest/download/LigaZikachu.apk",
+            "sha256": os.environ["SHA256"],
+            "notes": "Há uma nova versão oficial da Liga Zikachu disponível."
+          }
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+          if git diff --quiet -- public/downloads/android-update.json; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/downloads/android-update.json
+          git commit -m "chore(android): update release manifest to ${VERSION_NAME}"
+          git push

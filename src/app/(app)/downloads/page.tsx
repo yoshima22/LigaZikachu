@@ -11,9 +11,9 @@ import {
   Zap,
 } from "lucide-react";
 import { WindowsInstallButton } from "./_components/windows-install-button";
+import { AndroidUpdateButton } from "@/components/android-update";
 
-const APK_PATH = "/downloads/LigaZikachu-0.7.6-fcm-registration.apk";
-const APK_HASH = "2A0250322BEFB66A71D566C266ECD971779C6909E106ED1917869E7EE3F3F11A";
+const APK_PATH = "https://github.com/yoshima22/LigaZikachu/releases/latest/download/LigaZikachu.apk";
 
 export default function DownloadsPage() {
   return (
@@ -51,6 +51,7 @@ export default function DownloadsPage() {
       </section>
 
       <section id="plataformas" className="scroll-mt-32">
+        <AndroidUpdateButton />
         <div className="mb-4 text-center">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FFCB05]">Escolha sua plataforma</p>
           <h2 className="mt-1 text-2xl font-black text-white">Duas formas de entrar na Liga</h2>
@@ -74,8 +75,8 @@ export default function DownloadsPage() {
               </div>
 
               <div className="my-6 grid grid-cols-3 gap-2 text-center text-xs">
-                <InfoPill label="Versão" value="0.7.6" />
-                <InfoPill label="Tamanho" value="2,47 MB" />
+                <InfoPill label="Versão" value="0.7.8" />
+                <InfoPill label="Tamanho" value="2,48 MB" />
                 <InfoPill label="Formato" value="APK" />
               </div>
 
@@ -137,7 +138,7 @@ export default function DownloadsPage() {
           <CheckCircle2 size={15} className="text-emerald-400" /> Verificação do arquivo Android
           <span className="ml-auto text-[10px] text-slate-500 group-open:hidden">mostrar</span>
         </summary>
-        <p className="mt-3 break-all font-mono text-[10px] leading-relaxed">SHA-256: {APK_HASH}</p>
+        <p className="mt-3 leading-relaxed">O aplicativo compara automaticamente o SHA-256 publicado com o arquivo baixado antes de abrir a instalação.</p>
       </details>
 
       <div className="text-center text-xs text-slate-500">
