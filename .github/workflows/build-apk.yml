@@ -82,7 +82,8 @@ jobs:
         shell: bash
         run: |
           EXPECTED="a34aa377990111d67d2994825f09bf87c636f7043870ead1654b77d6f7c3980c"
-          ACTUAL=$(apksigner verify --print-certs android-webview/app/build/outputs/apk/debug/app-debug.apk \
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
+          ACTUAL=$("$APKSIGNER" verify --print-certs android-webview/app/build/outputs/apk/debug/app-debug.apk \
             | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::warning::Assinatura incompatível. O APK não será publicado. Esperada: $EXPECTED; recebida: $ACTUAL"
