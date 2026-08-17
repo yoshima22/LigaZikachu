@@ -24,8 +24,10 @@ export function hashStr(s: string): number {
 // depois quem está mais embaixo na tabela, com desempate sorteado pelo seed.
 function pickByePlayer(players: PairingPlayer[], byeCount: Map<string, number>, seed: string): PairingPlayer | null {
   return [...players].sort((a, b) => {
-    const aByes = (a.byes ?? 0) + (byeCount.get(a.playerId) ?? 0);
-    const bByes = (b.byes ?? 0) + (byeCount.get(b.playerId) ?? 0);
+    // Vitória por W.O. vale como uma folga competitiva para não concentrar
+    // BYEs e vitórias gratuitas sempre nas mesmas contas.
+    const aByes = (a.byes ?? 0) + (a.freeWins ?? 0) + (byeCount.get(a.playerId) ?? 0);
+    const bByes = (b.byes ?? 0) + (b.freeWins ?? 0) + (byeCount.get(b.playerId) ?? 0);
     if (aByes !== bByes) return aByes - bByes;
     const scoreDiff = (a.points - b.points) || (a.wins - b.wins) || (a.damageDealt - b.damageDealt);
     if (scoreDiff !== 0) return scoreDiff;

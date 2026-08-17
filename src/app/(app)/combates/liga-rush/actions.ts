@@ -464,7 +464,7 @@ export async function adminGenerateRushDayAction(leagueId: string, battleDate: s
     for (const match of history) {
       if (match.playerBId) { if(!faced.has(match.playerAId))faced.set(match.playerAId,new Set()); if(!faced.has(match.playerBId))faced.set(match.playerBId,new Set()); faced.get(match.playerAId)!.add(match.playerBId); faced.get(match.playerBId)!.add(match.playerAId); if(match.battleDate===battleDate){if(!todayPaired.has(match.playerAId))todayPaired.set(match.playerAId,new Set());if(!todayPaired.has(match.playerBId))todayPaired.set(match.playerBId,new Set());todayPaired.get(match.playerAId)!.add(match.playerBId);todayPaired.get(match.playerBId)!.add(match.playerAId);} }
       if(match.status==="BYE") byeCount.set(match.playerAId,(byeCount.get(match.playerAId)??0)+1);
-      if(match.status==="BYE"&&match.playerAId) freeWins.set(match.playerAId,(freeWins.get(match.playerAId)??0)+1);
+      // BYE já está em byeCount; freeWins guarda apenas W.O. para não contar a folga duas vezes.
       if(match.status==="WO"&&match.winnerId) freeWins.set(match.winnerId,(freeWins.get(match.winnerId)??0)+1);
       if(match.status==="WO"&&match.loserId) woLosses.set(match.loserId,(woLosses.get(match.loserId)??0)+1);
     }

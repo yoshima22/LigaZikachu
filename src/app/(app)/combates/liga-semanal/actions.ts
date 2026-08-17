@@ -404,6 +404,15 @@ async function loadFacedOpponents(leagueId: string) {
   return faced;
 }
 
+async function loadWoFreeWins(leagueId: string) {
+  const wins = await prisma.weeklyMascotLeagueMatch.groupBy({
+    by: ["winnerId"],
+    where: { leagueId, status: "WO", winnerId: { not: null } },
+    _count: { _all: true },
+  });
+  return new Map(wins.flatMap((entry) => entry.winnerId ? [[entry.winnerId, entry._count._all] as const] : []));
+}
+
 function calculateLeagueOdds(
   pA: { points: number; wins: number; damageDealt: number },
   pB: { points: number; wins: number; damageDealt: number },
@@ -450,10 +459,12 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
       await prisma.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId, battleDate: today, status: { in: ["SCHEDULED", "BYE", "CANCELLED"] } } });
     }
 
-    const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
+    const storedParticipants = await prisma.weeklyMascotLeagueParticipant.findMany({
       where: { leagueId },
       orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
     });
+    const woFreeWins = await loadWoFreeWins(leagueId);
+    const participants = storedParticipants.map((participant) => ({ ...participant, freeWins: woFreeWins.get(participant.playerId) ?? 0 }));
 
     if (participants.length < 2) return { error: "Menos de 2 participantes" };
 
@@ -1717,10 +1728,12 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
   if (minuteOfDay >= 8 * 60) {
     const existingToday = await prisma.weeklyMascotLeagueMatch.findFirst({ where: { leagueId: league.id, battleDate } });
     if (!existingToday) {
-      const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
+      const storedParticipants = await prisma.weeklyMascotLeagueParticipant.findMany({
         where: { leagueId: league.id },
         orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }],
       });
+      const woFreeWins = await loadWoFreeWins(league.id);
+      const participants = storedParticipants.map((participant) => ({ ...participant, freeWins: woFreeWins.get(participant.playerId) ?? 0 }));
       if (participants.length >= 2) {
         const faced = await loadFacedOpponents(league.id);
         const todayPaired = new Map<string, Set<string>>();
