@@ -58,10 +58,11 @@ export function AndroidUpdateBadge() {
 
 export function AndroidUpdateButton() {
   const [android, setAndroid] = useState(false);
+  const [installedName, setInstalledName] = useState<string | null>(null);
+  const [installedCode, setInstalledCode] = useState(0);
   const [release, setRelease] = useState<Release | null>(null);
   const [checking, setChecking] = useState(true);
-  const installed = typeof window === "undefined" ? 0 : installedVersionCode();
-  const updateAvailable = Boolean(release && (installed === 0 || installed < release.versionCode));
+  const updateAvailable = Boolean(release && (installedCode === 0 || installedCode < release.versionCode));
   const check = useCallback((force = false) => {
     setChecking(true);
     void loadRelease(force).then(setRelease).catch(() => setRelease(null)).finally(() => setChecking(false));
@@ -69,6 +70,12 @@ export function AndroidUpdateButton() {
   useEffect(() => {
     const detected = isAndroidMobile();
     setAndroid(detected);
+    if (detected && window.AndroidBridge?.getAppVersionCode) {
+      try {
+        setInstalledCode(installedVersionCode());
+        setInstalledName(window.AndroidBridge.getAppVersionName?.() ?? null);
+      } catch {}
+    }
     if (detected) check(false); else setChecking(false);
   }, [check]);
   if (!android) return null;
@@ -88,6 +95,10 @@ export function AndroidUpdateButton() {
           {updateAvailable && <button type="button" onClick={beginUpdate} className="inline-flex items-center gap-2 rounded-lg bg-[#FFCB05] px-4 py-2 text-xs font-black text-slate-950"><Download size={16} /> Atualizar agora</button>}
         </div>
       </div>
+      {installedCode > 0 && <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Instalada no aparelho</p><p className="mt-1 text-sm font-black text-white">v{installedName ?? installedCode}</p></div>
+        <div className="rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-amber-300/70">Mais recente disponível</p><p className="mt-1 text-sm font-black text-amber-300">v{release?.versionName ?? "—"}</p></div>
+      </div>}
     </div>
   );
 }

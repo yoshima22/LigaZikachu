@@ -15,8 +15,8 @@ android {
         applicationId "app.ligazikachu"
         minSdk 23
         targetSdk 34
-        versionCode 22
-        versionName "0.7.15"
+        versionCode 23
+        versionName "0.7.16"
     }
 
     buildTypes {

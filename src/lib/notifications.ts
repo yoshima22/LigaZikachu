@@ -80,7 +80,6 @@ async function getAccessToken(): Promise<string | null> {
 
 async function sendFcmMessage(token: string, payload: NotificationPayload, accessToken: string, projectId: string): Promise<boolean> {
   const destination = payload.url?.startsWith("/") && !payload.url.startsWith("//") ? payload.url : "/dashboard";
-  const notificationUrl = `/api/push/open?to=${encodeURIComponent(destination)}`;
 
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -99,7 +98,7 @@ async function sendFcmMessage(token: string, payload: NotificationPayload, acces
           },
           data: {
             ...payload.data,
-            url: notificationUrl
+            url: destination
           },
           android: {
             priority: "high",

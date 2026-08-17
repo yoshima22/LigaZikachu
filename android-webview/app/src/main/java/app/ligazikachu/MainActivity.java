@@ -179,7 +179,9 @@ public class MainActivity extends Activity {
         pendingUrl = resolveNotificationUrl(getIntent());
 
         if (pendingUrl != null) {
-            webView.loadUrl(withCacheBuster(APP_URL + "/dashboard"));
+            String target = pendingUrl;
+            pendingUrl = null;
+            webView.loadUrl(withCacheBuster(target));
         } else if (savedInstanceState == null) {
             webView.loadUrl(APP_URL);
         } else {
@@ -483,11 +485,10 @@ public class MainActivity extends Activity {
     }
 
     private void openNotificationUrl(String url) {
-        pendingUrl = url;
         if (webView == null) return;
+        pendingUrl = null;
         webView.stopLoading();
-        webView.clearCache(false);
-        webView.loadUrl(withCacheBuster(APP_URL + "/dashboard"));
+        webView.loadUrl(withCacheBuster(url));
     }
 
     @Override
