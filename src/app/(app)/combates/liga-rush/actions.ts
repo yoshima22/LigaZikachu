@@ -426,7 +426,15 @@ function circlePairings(ids: string[], roundIndex: number) {
   let rest = pool.slice(1);
   for (let i = 0; i < roundIndex % Math.max(1, pool.length - 1); i++) rest = [rest[rest.length - 1], ...rest.slice(0, -1)];
   const arranged = [fixed, ...rest];
-  return Array.from({ length: arranged.length / 2 }, (_, i) => [arranged[i]!, arranged[arranged.length - 1 - i]] as [string, string | null]);
+  // Com número ímpar de inscritos existe um "null" (folga). Ele precisa ficar
+  // sempre como segundo elemento do par, porque playerAId é obrigatório no banco
+  // e playerBId é opcional. Se o null virasse o primeiro, o createMany falharia
+  // inteiro e nenhuma partida do dia seria criada.
+  return Array.from({ length: arranged.length / 2 }, (_, i) => {
+    const a = arranged[i];
+    const b = arranged[arranged.length - 1 - i];
+    return (a === null ? [b!, null] : [a, b]) as [string, string | null];
+  });
 }
 
 export async function adminOpenRushLeagueAction(leagueId: string) {
