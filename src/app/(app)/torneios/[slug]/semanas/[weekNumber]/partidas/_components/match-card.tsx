@@ -7,6 +7,7 @@ import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
 import { validateGymDeckSubmission } from "@/app/(app)/torneios/actions";
+import { SpecMatchControl } from "@/components/spec/spec-match-control";
 
 interface PlayerDeckSummary {
   id: string;
@@ -50,6 +51,7 @@ interface MatchCardProps {
   isAdmin: boolean;
   tournamentFormat?: string;
   canReportResult?: boolean;
+  specEnabled?: boolean;
   enguicaContract?: {
     key: string;
     title: string;
@@ -85,7 +87,7 @@ function formatBrtSchedule(value: string) {
   });
 }
 
-export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult, enguicaContract }: MatchCardProps) {
+export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult, specEnabled, enguicaContract }: MatchCardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
@@ -381,6 +383,9 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
           )}
         </div>
       </div>
+
+      {/* Modo SPEC: transmissão ao vivo desta partida (só aparece se ativado) */}
+      {specEnabled && match.playerBId && <SpecMatchControl matchId={match.id} canBroadcast={isParticipant || isAdmin} />}
 
       {/* Confirmation status */}
       {match.confirmations.length > 0 && (

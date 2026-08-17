@@ -12,6 +12,7 @@ import { canSubmitTournamentWeekDeck } from "@/lib/decks";
 import { buildMascotMissionOption } from "@/lib/tcg-mascot-mission";
 import { isDeckRegistrationLocked } from "@/lib/decks";
 import { EnguicaContractPanel } from "./_components/enguica-contract-panel";
+import { getSpecConfig } from "@/lib/spec/config";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -22,6 +23,7 @@ export default async function PartidasPage({ params }: Props) {
   const weekNum = Number(weekNumber);
   const user = await getSessionUser();
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  const specEnabled = (await getSpecConfig()).enabled;
 
   const tournament = await prisma.tournament.findUnique({
     where: { slug },
@@ -315,6 +317,7 @@ export default async function PartidasPage({ params }: Props) {
                   tournamentFormat={tournament.format}
                   canReportResult={canReportAnyInPersonMatch}
                   enguicaContract={enguicaContract}
+                  specEnabled={specEnabled}
                 />
               );
             })}
@@ -405,6 +408,7 @@ export default async function PartidasPage({ params }: Props) {
               tournamentFormat={tournament.format}
               canReportResult={canReportAnyInPersonMatch}
               enguicaContract={enguicaContract}
+              specEnabled={specEnabled}
             />
           );
           })}

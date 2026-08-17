@@ -32,8 +32,28 @@ export async function listActiveSpecStreamsAction() {
     where: { status: "LIVE" },
     orderBy: { startedAt: "desc" },
     select: { id: true, matchId: true, tournamentId: true, broadcasterUserId: true, startedAt: true },
-  });
+  }).catch(() => []);
   return { streams };
+}
+
+/** Estado do Modo SPEC para uma partida (usado no card de resultados). */
+export async function getSpecMatchStateAction(matchId: string): Promise<{
+  enabled: boolean;
+  stream: { id: string; status: string; mine: boolean } | null;
+}> {
+  const config = await getSpecConfig();
+  if (!config.enabled) return { enabled: false, stream: null };
+  await expireStaleStreams();
+  const session = await getAppSession();
+  const stream = await prisma.specStream.findFirst({
+    where: { matchId, status: { in: [...ACTIVE_STATUSES] } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, status: true, broadcasterUserId: true },
+  }).catch(() => null);
+  return {
+    enabled: true,
+    stream: stream ? { id: stream.id, status: stream.status, mine: stream.broadcasterUserId === session?.user?.id } : null,
+  };
 }
 
 /** Retorna a live ativa (preparando/ao vivo) de uma partida, se houver. */
@@ -45,7 +65,7 @@ export async function getSpecStreamForMatchAction(matchId: string) {
     where: { matchId, status: { in: [...ACTIVE_STATUSES] } },
     orderBy: { createdAt: "desc" },
     select: { id: true, status: true, broadcasterUserId: true, startedAt: true },
-  });
+  }).catch(() => null);
   return { stream };
 }
 
