@@ -22,7 +22,16 @@ async function cf<T>(url: string, method: "POST" | "PUT", body?: unknown): Promi
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Cloudflare Realtime ${res.status}: ${detail.slice(0, 300)}`);
+    // Resumo do que foi enviado (sem despejar o SDP inteiro) para diagnóstico.
+    let sent = "";
+    if (body && typeof body === "object") {
+      const b = body as Record<string, unknown>;
+      const sd = b.sessionDescription as { type?: unknown; sdp?: unknown } | undefined;
+      sent = ` | sent keys=[${Object.keys(b).join(",")}]`
+        + (sd ? ` sd.type=${String(sd.type)} sd.sdpLen=${typeof sd.sdp === "string" ? sd.sdp.length : `NOT_STRING(${typeof sd.sdp})`}` : " sd=MISSING")
+        + (Array.isArray(b.tracks) ? ` tracks=${b.tracks.length}` : "");
+    }
+    throw new Error(`Cloudflare Realtime ${res.status}: ${detail.slice(0, 300)}${sent}`);
   }
   return res.json() as Promise<T>;
 }
