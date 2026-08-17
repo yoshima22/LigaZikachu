@@ -19,6 +19,18 @@ export const SPEC_MAX_STREAM_MINUTES = Number(process.env.SPEC_MAX_STREAM_MINUTE
 /** Alerta interno de espectadores simultâneos (apenas referência de custo). */
 export const SPEC_SOFT_MAX_CONCURRENT_VIEWERS = Number(process.env.SPEC_SOFT_MAX_CONCURRENT_VIEWERS ?? 20);
 
+/** Máximo de transmissões AO VIVO simultâneas (limita fan-out total). */
+export const SPEC_MAX_CONCURRENT_STREAMS = Number(process.env.SPEC_MAX_CONCURRENT_STREAMS ?? 3);
+
+/** Duração média estimada de cada sessão de espectador (min) — para estimar egress. */
+export const SPEC_AVG_SESSION_MINUTES = Number(process.env.SPEC_AVG_SESSION_MINUTES ?? 30);
+
+/** Teto mensal de egress (GB). Ao estimar acima disso, o SPEC se auto-desliga. */
+export const SPEC_MONTHLY_GB_LIMIT = Number(process.env.SPEC_MONTHLY_GB_LIMIT ?? 950);
+
+/** Bitrate total considerado no cálculo de egress (Mbps): vídeo + áudio. */
+export const SPEC_TOTAL_MBPS = (SPEC_VIDEO_MAX_BITRATE + SPEC_AUDIO_TARGET_BITRATE) / 1_000_000;
+
 /** Política de quem pode abrir uma transmissão de uma partida. */
 export type SpecBroadcasterPolicy =
   | "ANY_TOURNAMENT_PARTICIPANT"

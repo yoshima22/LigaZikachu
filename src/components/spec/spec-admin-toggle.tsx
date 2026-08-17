@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { setSpecEnabledAction } from "@/app/(app)/spec/admin-actions";
 
-export function SpecAdminToggle({ enabled, providerConfigured }: { enabled: boolean; providerConfigured: boolean }) {
+export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLimit }: { enabled: boolean; providerConfigured: boolean; estimatedGb?: number; gbLimit?: number }) {
   const [pending, start] = useTransition();
   const toggle = () => start(async () => {
     const res = await setSpecEnabledAction(!enabled);
@@ -19,6 +19,11 @@ export function SpecAdminToggle({ enabled, providerConfigured }: { enabled: bool
           <p className="text-[10px] text-slate-500">
             {providerConfigured ? "Provedor de vídeo (Cloudflare) configurado." : "⚠️ Provedor de vídeo ainda não configurado — as lives não conectam até definir as credenciais da Cloudflare."}
           </p>
+          {typeof estimatedGb === "number" && typeof gbLimit === "number" && (
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              Uso estimado no mês: <span className={estimatedGb >= gbLimit ? "font-bold text-red-300" : "text-slate-400"}>{estimatedGb.toFixed(1)} GB</span> / {gbLimit} GB (auto-desliga ao atingir).
+            </p>
+          )}
         </div>
         <button type="button" onClick={toggle} disabled={pending} role="switch" aria-checked={enabled}
           className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${enabled ? "bg-[#FFCB05]" : "bg-slate-600"}`}>

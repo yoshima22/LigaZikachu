@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { endSpecStreamAction } from "@/app/(app)/spec/actions";
+import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
 
 type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" | "error";
 
@@ -49,9 +50,18 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate }: { str
       stream.getVideoTracks()[0]?.addEventListener("ended", () => { void end(true); });
 
       setState("connecting");
-      const pc = new RTCPeerConnection();
+      const pc = new RTCPeerConnection({ iceServers: SPEC_ICE_SERVERS });
       pcRef.current = pc;
-      for (const track of stream.getTracks()) pc.addTrack(track, stream);
+
+      // Cada track vira uma transceiver sendonly com um trackName próprio (que os
+      // espectadores usam para puxar). O mid liga o track ao SDP.
+      const meta: Array<{ transceiver: RTCRtpTransceiver; trackName: string; kind: "video" | "audio" }> = [];
+      for (const track of stream.getTracks()) {
+        const kind = track.kind === "audio" ? "audio" : "video";
+        const trackName = `${kind}-${Math.random().toString(36).slice(2, 10)}`;
+        const transceiver = pc.addTransceiver(track, { direction: "sendonly" });
+        meta.push({ transceiver, trackName, kind });
+      }
 
       // Limita o bitrate de vídeo (alvo/máximo). WebRTC pode adaptar para baixo.
       const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
@@ -66,11 +76,13 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate }: { str
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      await waitForIceGathering(pc);
 
+      const tracks = meta.map((m) => ({ mid: m.transceiver.mid ?? "", trackName: m.trackName, kind: m.kind }));
       const res = await fetch(`/api/spec/streams/${streamId}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerSdp: offer.sdp }),
+        body: JSON.stringify({ offerSdp: pc.localDescription?.sdp, tracks }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null) as { error?: string } | null;

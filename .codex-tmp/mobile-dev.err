@@ -1,0 +1,14 @@
+ ⨯ ReferenceError: NavAlert is not defined
+    at __TURBOPACK__module__evaluation__ (src\app\(app)\_components\nav-notification-actions.ts:9:15)
+    at __TURBOPACK__module__evaluation__ (.next-internal\server\app\(app)\dashboard\page\actions.js (server actions loader):4:1)
+    at __TURBOPACK__module__evaluation__ (C:\Users\LuizAguiar\projects\liga-zikachu\.next\server\chunks\ssr\[root-of-the-server]__6512f5bb._.js:875:877)
+    at Object.<anonymous> (C:\Users\LuizAguiar\projects\liga-zikachu\.next\server\app\(app)\dashboard\page.js:18:3)
+   7 | import { getNavNotificationSnapshot, type NavAlert, type NavNotificationSnapshot } from "@/lib/nav-notifications";
+   8 |
+>  9 | export type { NavAlert, NavNotificationSnapshot };
+     |               ^
+  10 |
+  11 | async function currentPlayer() {
+  12 |   const user = await getSessionUser(); {
+  page: '/dashboard'
+}

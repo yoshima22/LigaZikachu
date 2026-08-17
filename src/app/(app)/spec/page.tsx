@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getAppSession } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
 import { getSpecConfig } from "@/lib/spec/config";
+import { getSpecMonthlyUsage } from "@/lib/spec/usage";
+import { SPEC_MONTHLY_GB_LIMIT } from "@/lib/spec/constants";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { listActiveSpecStreamsAction } from "./actions";
 import { SpecAdminToggle } from "@/components/spec/spec-admin-toggle";
@@ -15,6 +17,7 @@ export default async function SpecPage() {
 
   const { streams } = config.enabled ? await listActiveSpecStreamsAction() : { streams: [] };
   const views = await enrichSpecStreams(streams);
+  const usage = admin ? await getSpecMonthlyUsage() : null;
 
   return (
     <main className="mx-auto max-w-4xl space-y-5 px-1 py-2">
@@ -23,7 +26,7 @@ export default async function SpecPage() {
         <p className="mt-1 text-sm text-slate-400">Assista às partidas dos torneios da Liga ao vivo. As transmissões partem dos próprios participantes.</p>
       </header>
 
-      {admin && <SpecAdminToggle enabled={config.enabled} providerConfigured={config.providerConfigured} />}
+      {admin && <SpecAdminToggle enabled={config.enabled} providerConfigured={config.providerConfigured} estimatedGb={usage?.estimatedGb} gbLimit={SPEC_MONTHLY_GB_LIMIT} />}
 
       {!config.enabled ? (
         <section className="rounded-2xl border border-border bg-slate-950/60 p-8 text-center text-sm text-slate-400">

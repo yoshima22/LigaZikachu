@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
 
 type PlayerState = "connecting" | "watching" | "ended" | "error";
 
@@ -25,10 +26,8 @@ export function SpecPlayer({ streamId }: { streamId: string }) {
     setState("connecting");
     setError(null);
     try {
-      const pc = new RTCPeerConnection();
+      const pc = new RTCPeerConnection({ iceServers: SPEC_ICE_SERVERS });
       pcRef.current = pc;
-      pc.addTransceiver("video", { direction: "recvonly" });
-      pc.addTransceiver("audio", { direction: "recvonly" });
 
       const remote = new MediaStream();
       pc.ontrack = (event) => {
@@ -41,20 +40,30 @@ export function SpecPlayer({ streamId }: { streamId: string }) {
         else if (s === "failed" || s === "closed" || s === "disconnected") setState((prev) => (prev === "ended" ? prev : "error"));
       };
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const res = await fetch(`/api/spec/streams/${streamId}/subscribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerSdp: offer.sdp }),
-      });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => null) as { error?: string } | null;
+      // 1) O backend cria a sessão do espectador e puxa as tracks: o SFU devolve
+      //    uma OFERTA que respondemos.
+      const subRes = await fetch(`/api/spec/streams/${streamId}/subscribe`, { method: "POST" });
+      if (!subRes.ok) {
+        const payload = await subRes.json().catch(() => null) as { error?: string } | null;
         throw new Error(payload?.error || "Não foi possível conectar à transmissão.");
       }
-      const { answerSdp } = await res.json() as { answerSdp: string };
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      const { spectatorSessionId, offerSdp } = await subRes.json() as { spectatorSessionId: string; offerSdp: string };
+
+      await pc.setRemoteDescription({ type: "offer", sdp: offerSdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await waitForIceGathering(pc);
+
+      // 2) Envia a resposta para o SFU concluir a negociação.
+      const renRes = await fetch(`/api/spec/streams/${streamId}/renegotiate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spectatorSessionId, answerSdp: pc.localDescription?.sdp }),
+      });
+      if (!renRes.ok) {
+        const payload = await renRes.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || "Falha ao finalizar a conexão.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao conectar.");
       setState("error");

@@ -1,0 +1,39 @@
+
+> liga-zikachu@0.1.0 dev
+> next dev --turbopack --hostname 127.0.0.1 --port 3010
+
+   ▲ Next.js 15.5.19 (Turbopack)
+   - Local:        http://127.0.0.1:3010
+   - Network:      http://127.0.0.1:3010
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · serverActions
+
+ ✓ Starting...
+ ✓ Compiled middleware in 249ms
+ ✓ Ready in 2.3s
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 5.3s
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1063ms
+ GET /dashboard 500 in 6967ms
+ ✓ Compiled in 195ms
+ ✓ Compiled /dashboard in 88ms
+ GET /dashboard 307 in 720ms
+ ✓ Compiled /login in 270ms
+ GET /login 200 in 498ms
+ GET /login 200 in 230ms
+ ✓ Compiled in 2s
+ GET /login 200 in 250ms
+ ✓ Compiled in 1798ms
+ ✓ Compiled in 247ms
+ ✓ Compiled /login in 79ms
+ GET /login 200 in 264ms
+ GET /login 200 in 178ms
+ ✓ Compiled /api/auth/manual-login in 255ms
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."users"."id", "public"."users"."email", "public"."users"."name", "public"."users"."image", "public"."users"."role"::text, "public"."users"."status"::text, "public"."users"."passwordHash" FROM "public"."users" WHERE "public"."users"."email" = $1 LIMIT $2 OFFSET $3
+prisma:query COMMIT
+ POST /api/auth/manual-login 401 in 2742ms
+[?25h

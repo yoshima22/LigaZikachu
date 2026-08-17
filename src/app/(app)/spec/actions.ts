@@ -7,7 +7,7 @@ import { isStaff } from "@/lib/auth/permissions";
 import { getSpecConfig } from "@/lib/spec/config";
 import { canStartSpecStream, canManageSpecStream, getMatchTournamentId } from "@/lib/spec/authorization";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
-import { SPEC_MAX_STREAM_MINUTES } from "@/lib/spec/constants";
+import { SPEC_MAX_STREAM_MINUTES, SPEC_MAX_CONCURRENT_STREAMS } from "@/lib/spec/constants";
 
 type ActionError = { error: string };
 
@@ -102,6 +102,12 @@ export async function startSpecStreamAction(matchId: string): Promise<ActionErro
   if (!allowed) return { error: "Você não tem permissão para transmitir esta partida." };
 
   await expireStaleStreams();
+
+  // Limite de transmissões ao vivo simultâneas (controle de custo/egress).
+  const liveCount = await prisma.specStream.count({ where: { status: "LIVE" } }).catch(() => 0);
+  if (liveCount >= SPEC_MAX_CONCURRENT_STREAMS) {
+    return { error: `Limite de ${SPEC_MAX_CONCURRENT_STREAMS} transmissões ao vivo simultâneas atingido. Tente novamente mais tarde.` };
+  }
 
   // Uma única live ativa por partida (protegido por transação contra corrida).
   try {

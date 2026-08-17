@@ -1,0 +1,1109 @@
+﻿{
+  "players": [
+    {
+      "id": "cmpzh6n8m0001l1047tem8kgi",
+      "displayName": "Glauco"
+    },
+    {
+      "id": "cmpzhgzqv0001lb042nzmtr8x",
+      "displayName": "Lukas Ps"
+    }
+  ],
+  "result": [
+    {
+      "id": "ff58990c-9026-476d-9a48-29ff3d3329e1",
+      "leagueId": "970625c0-00a2-4062-b531-47b13f3aab61",
+      "roundNumber": 2,
+      "battleDate": "2026-08-10",
+      "battleSlot": 2,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        3794,
+        0
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-08-10T23:11:46.284Z",
+      "resultJson": {
+        "rounds": 1,
+        "winner": "A",
+        "lineupA": [
+          {
+            "id": "cmr107pcn000fl104c5cwe9mu",
+            "name": "Zeka",
+            "role": "Oportunista",
+            "level": 100,
+            "maxHp": 1131,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 644
+          },
+          {
+            "id": "cmq07dkuz0003l404sslwxmbv",
+            "name": "Bola Peluda Kimordi",
+            "role": "Duelista",
+            "level": 100,
+            "maxHp": 1131,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 20
+          },
+          {
+            "id": "cmqz4drjm000hky0447pnw6ch",
+            "name": "Iron Leaves",
+            "role": "Encorajador",
+            "level": 100,
+            "maxHp": 1067,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 1010
+          },
+          {
+            "id": "cmq07upuk008kla046vqqnzay",
+            "name": "Jebachururu",
+            "role": "Cuidador",
+            "level": 100,
+            "maxHp": 1115,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 26
+          },
+          {
+            "id": "cmqt189j4003kky04v73w50p7",
+            "name": "Lasgatixu",
+            "role": "Batedor",
+            "level": 100,
+            "maxHp": 1087,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 612
+          },
+          {
+            "id": "cmqfb8tk7003pjg04udva1o5d",
+            "name": "GimmeGold",
+            "role": "Defensor",
+            "level": 100,
+            "maxHp": 1107,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 1000
+          }
+        ],
+        "lineupB": [
+          {
+            "id": "cmqa8vb1t0001l504093heu8l",
+            "name": "CAVALO MARINHO ROXO",
+            "role": "Oportunista",
+            "level": 30,
+            "maxHp": 351,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 690
+          },
+          {
+            "id": "cmq12jn0n0003jr049dtmjhan",
+            "name": "CAMARAO PORRADEIRO",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 319,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 739
+          },
+          {
+            "id": "cmrgf0h850050ld042r5s8cg3",
+            "name": "Wartortle",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 303,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 8
+          },
+          {
+            "id": "cmqpce5y900a2jv04pl6fc514",
+            "name": "DURO COMO PEDRA",
+            "role": "Defensor",
+            "level": 30,
+            "maxHp": 403,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 838
+          },
+          {
+            "id": "cmq2xr3th004cld04vwoj2ea5",
+            "name": "FANTASMINHA CAMARADA",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 319,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 93
+          },
+          {
+            "id": "cms3n6bev005jjz043m8c0izx",
+            "name": "Impidimp",
+            "role": "Flanco",
+            "level": 28,
+            "maxHp": 363,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 859
+          }
+        ]
+      },
+      "replayLength": 6,
+      "maxRound": 6,
+      "actionCounts": {
+        "ATTACK": 6
+      },
+      "last": [
+        {
+          "turn": 4,
+          "action": "ATTACK",
+          "damage": 893,
+          "effect": "Agilidade: ação extra (2/2). Encorajador: +18%. Batedor: +8%. Oportunista reduziu vitality de CAMARAO PORRADEIRO em 25%.",
+          "actorId": "cmr107pcn000fl104c5cwe9mu",
+          "targetId": "cmq12jn0n0003jr049dtmjhan",
+          "actorName": "Zeka",
+          "actorRole": "Oportunista",
+          "actorLevel": 100,
+          "multiplier": 1.3,
+          "targetName": "CAMARAO PORRADEIRO",
+          "targetRole": "Encorajador",
+          "targetLevel": 30,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "fighting",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 644,
+          "targetPokemonId": 739,
+          "advantageApplied": true
+        },
+        {
+          "turn": 5,
+          "action": "ATTACK",
+          "damage": 464,
+          "effect": "Encorajador: +18%. Batedor: +8%.",
+          "actorId": "cmqt189j4003kky04v73w50p7",
+          "targetId": "cmqa8vb1t0001l504093heu8l",
+          "actorName": "Lasgatixu",
+          "actorRole": "Batedor",
+          "actorLevel": 100,
+          "multiplier": 1,
+          "targetName": "CAVALO MARINHO ROXO",
+          "targetRole": "Oportunista",
+          "targetLevel": 30,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "poison",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 612,
+          "targetPokemonId": 690,
+          "advantageApplied": false
+        },
+        {
+          "turn": 6,
+          "action": "ATTACK",
+          "damage": 461,
+          "effect": "Agilidade: ação extra (2/2). Encorajador: +18%. Batedor: +8%.",
+          "actorId": "cmqt189j4003kky04v73w50p7",
+          "targetId": "cms3n6bev005jjz043m8c0izx",
+          "actorName": "Lasgatixu",
+          "actorRole": "Batedor",
+          "actorLevel": 100,
+          "multiplier": 1,
+          "targetName": "Impidimp",
+          "targetRole": "Flanco",
+          "targetLevel": 28,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "dark",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 612,
+          "targetPokemonId": 859,
+          "advantageApplied": false
+        }
+      ]
+    },
+    {
+      "id": "7f9b7b53-7dfa-4535-80fe-bf036043ebd1",
+      "leagueId": "47719a5a-1098-4560-8fe5-0885d8e261ca",
+      "roundNumber": 2,
+      "battleDate": "2026-08-03",
+      "battleSlot": 2,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        3073,
+        0
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-08-03T23:11:33.964Z",
+      "resultJson": {
+        "rounds": 1,
+        "winner": "A",
+        "lineupA": [
+          {
+            "id": "cmqt189j4003kky04v73w50p7",
+            "name": "Lasgatixu",
+            "role": "Flanco",
+            "level": 100,
+            "maxHp": 1087,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 612
+          },
+          {
+            "id": "cmqfb8tk7003pjg04udva1o5d",
+            "name": "GimmeGold",
+            "role": "Defensor",
+            "level": 100,
+            "maxHp": 1107,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 1000
+          },
+          {
+            "id": "cmq07dkuz0003l404sslwxmbv",
+            "name": "Bola Peluda Kimordi",
+            "role": "Atacante",
+            "level": 100,
+            "maxHp": 1131,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 20
+          },
+          {
+            "id": "cmrmqgw2g000yib045otvts7v",
+            "name": "Junin WaZarudo V.2",
+            "role": "Encorajador",
+            "level": 100,
+            "maxHp": 1107,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 893
+          },
+          {
+            "id": "cms4t2qgb002bjm04mynmwjma",
+            "name": "RayQuase",
+            "role": "Sabotador",
+            "level": 96,
+            "maxHp": 1031,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 384
+          },
+          {
+            "id": "cmqvldajt0005jx04rtlwt5cu",
+            "name": "OlhaTio",
+            "role": "Cuidador",
+            "level": 84,
+            "maxHp": 939,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 381
+          }
+        ],
+        "lineupB": [
+          {
+            "id": "cmq2xr3th004cld04vwoj2ea5",
+            "name": "FANTASMINHA CAMARADA",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 319,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 93
+          },
+          {
+            "id": "cmqpce5y900a2jv04pl6fc514",
+            "name": "DURO COMO PEDRA",
+            "role": "Defensor",
+            "level": 30,
+            "maxHp": 411,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 838
+          },
+          {
+            "id": "cmq12jn0n0003jr049dtmjhan",
+            "name": "CAMARAO PORRADEIRO",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 319,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 739
+          },
+          {
+            "id": "cmrgf0h850050ld042r5s8cg3",
+            "name": "Wartortle",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 303,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 8
+          },
+          {
+            "id": "cms3n6bev005jjz043m8c0izx",
+            "name": "Impidimp",
+            "role": "Flanco",
+            "level": 28,
+            "maxHp": 363,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 859
+          },
+          {
+            "id": "cmqjuxssk0007k104tjx9t54x",
+            "name": "Manaphy",
+            "role": "Encorajador",
+            "level": 31,
+            "maxHp": 385,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 490
+          }
+        ]
+      },
+      "replayLength": 7,
+      "maxRound": 7,
+      "actionCounts": {
+        "ATTACK": 7
+      },
+      "last": [
+        {
+          "turn": 5,
+          "action": "ATTACK",
+          "damage": 437,
+          "effect": "Encorajador: +18%.",
+          "actorId": "cms4t2qgb002bjm04mynmwjma",
+          "targetId": "cmq12jn0n0003jr049dtmjhan",
+          "actorName": "RayQuase",
+          "actorRole": "Sabotador",
+          "actorLevel": 96,
+          "multiplier": 1,
+          "targetName": "CAMARAO PORRADEIRO",
+          "targetRole": "Encorajador",
+          "targetLevel": 30,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "fighting",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 384,
+          "targetPokemonId": 739,
+          "advantageApplied": false
+        },
+        {
+          "turn": 6,
+          "action": "ATTACK",
+          "damage": 417,
+          "effect": "Agilidade: ação extra (2/2). Encorajador: +18%.",
+          "actorId": "cms4t2qgb002bjm04mynmwjma",
+          "targetId": "cmqjuxssk0007k104tjx9t54x",
+          "actorName": "RayQuase",
+          "actorRole": "Sabotador",
+          "actorLevel": 96,
+          "multiplier": 1,
+          "targetName": "Manaphy",
+          "targetRole": "Encorajador",
+          "targetLevel": 31,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "water",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 384,
+          "targetPokemonId": 490,
+          "advantageApplied": false
+        },
+        {
+          "turn": 7,
+          "action": "ATTACK",
+          "damage": 378,
+          "effect": "Encorajador: +18%.",
+          "actorId": "cmrmqgw2g000yib045otvts7v",
+          "targetId": "cms3n6bev005jjz043m8c0izx",
+          "actorName": "Junin WaZarudo V.2",
+          "actorRole": "Encorajador",
+          "actorLevel": 100,
+          "multiplier": 1,
+          "targetName": "Impidimp",
+          "targetRole": "Flanco",
+          "targetLevel": 28,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "grass",
+          "defenderType": "dark",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 893,
+          "targetPokemonId": 859,
+          "advantageApplied": false
+        }
+      ]
+    },
+    {
+      "id": "7ae6d890-7278-4a72-8b12-172f0c566616",
+      "leagueId": "0865a42e-6bb5-4014-a760-e857d5398050",
+      "roundNumber": 2,
+      "battleDate": "2026-07-27",
+      "battleSlot": 2,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        4203,
+        0
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-07-27T23:11:31.873Z",
+      "resultJson": {
+        "rounds": 1,
+        "winner": "A",
+        "lineupA": [
+          {
+            "id": "cmr107pcn000fl104c5cwe9mu",
+            "name": "Zeka",
+            "role": "Atacante",
+            "level": 100,
+            "maxHp": 1131,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 644
+          },
+          {
+            "id": "cmq07upuk008kla046vqqnzay",
+            "name": "Jebachururu",
+            "role": "Encorajador",
+            "level": 100,
+            "maxHp": 1115,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 26
+          },
+          {
+            "id": "cmrrbsfgh000lhy0aze88g4q7",
+            "name": "Giuseppe Cadura",
+            "role": "Atacante",
+            "level": 67,
+            "maxHp": 693,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 94
+          },
+          {
+            "id": "cmqax954y0045k0045kcs40mr",
+            "name": "Mega 4 Braços",
+            "role": "Oportunista",
+            "level": 100,
+            "maxHp": 1115,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 10076
+          },
+          {
+            "id": "cmq9twlfi0041jj0457b94xkb",
+            "name": "⚔️ Tadalafilado",
+            "role": "Flanco",
+            "level": 100,
+            "maxHp": 1111,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 208
+          },
+          {
+            "id": "cmpypg16c001vjm040huyftka",
+            "name": "Fimoze Baiana",
+            "role": "Defensor",
+            "level": 100,
+            "maxHp": 1131,
+            "ownerId": "cmpzh6n8m0001l1047tem8kgi",
+            "pokemonId": 36
+          }
+        ],
+        "lineupB": [
+          {
+            "id": "cmqa8vb1t0001l504093heu8l",
+            "name": "CAVALO MARINHO ROXO",
+            "role": "Oportunista",
+            "level": 30,
+            "maxHp": 351,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 690
+          },
+          {
+            "id": "cmq2xr3th004cld04vwoj2ea5",
+            "name": "FANTASMINHA CAMARADA",
+            "role": "Encorajador",
+            "level": 30,
+            "maxHp": 319,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 93
+          },
+          {
+            "id": "cmq1npb7y004xjx04osenuvls",
+            "name": "Yamper",
+            "role": "Oportunista",
+            "level": 20,
+            "maxHp": 227,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 835
+          },
+          {
+            "id": "cmq1reana0001jv04j2yz0zt3",
+            "name": "Acreano Cearense",
+            "role": "Defensor",
+            "level": 10,
+            "maxHp": 211,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 408
+          },
+          {
+            "id": "cmqpa6h9c004dju04gzmvpvcf",
+            "name": "Scorbunny",
+            "role": "Flanco",
+            "level": 10,
+            "maxHp": 207,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 813
+          },
+          {
+            "id": "cmqjpl7m40001kz04bmsi7rjg",
+            "name": "Slowbro-Galar",
+            "role": "Defensor",
+            "level": 10,
+            "maxHp": 211,
+            "ownerId": "cmpzhgzqv0001lb042nzmtr8x",
+            "pokemonId": 10165
+          }
+        ]
+      },
+      "replayLength": 8,
+      "maxRound": 8,
+      "actionCounts": {
+        "ATTACK": 8
+      },
+      "last": [
+        {
+          "turn": 6,
+          "action": "ATTACK",
+          "damage": 290,
+          "effect": "Agilidade: ação extra (2/2). Encorajador: +18%.",
+          "actorId": "cmpypg16c001vjm040huyftka",
+          "targetId": "cmq2xr3th004cld04vwoj2ea5",
+          "actorName": "Fimoze Baiana",
+          "actorRole": "Defensor",
+          "actorLevel": 100,
+          "multiplier": 1,
+          "targetName": "FANTASMINHA CAMARADA",
+          "targetRole": "Encorajador",
+          "targetLevel": 30,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "normal",
+          "defenderType": "ghost",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 36,
+          "targetPokemonId": 93,
+          "advantageApplied": false
+        },
+        {
+          "turn": 7,
+          "action": "ATTACK",
+          "damage": 380,
+          "effect": "Encorajador: +18%.",
+          "actorId": "cmq07upuk008kla046vqqnzay",
+          "targetId": "cmqa8vb1t0001l504093heu8l",
+          "actorName": "Jebachururu",
+          "actorRole": "Encorajador",
+          "actorLevel": 100,
+          "multiplier": 1.3,
+          "targetName": "CAVALO MARINHO ROXO",
+          "targetRole": "Oportunista",
+          "targetLevel": 30,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "electric",
+          "defenderType": "poison",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 26,
+          "targetPokemonId": 690,
+          "advantageApplied": true
+        },
+        {
+          "turn": 8,
+          "action": "ATTACK",
+          "damage": 301,
+          "effect": "Agilidade: ação extra (2/2). Encorajador: +18%.",
+          "actorId": "cmq07upuk008kla046vqqnzay",
+          "targetId": "cmq2xr3th004cld04vwoj2ea5",
+          "actorName": "Jebachururu",
+          "actorRole": "Encorajador",
+          "actorLevel": 100,
+          "multiplier": 1,
+          "targetName": "FANTASMINHA CAMARADA",
+          "targetRole": "Encorajador",
+          "targetLevel": 30,
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "electric",
+          "defenderType": "ghost",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 26,
+          "targetPokemonId": 93,
+          "advantageApplied": false
+        }
+      ]
+    },
+    {
+      "id": "a900ed95-612c-4909-abf1-9130ac10de90",
+      "leagueId": "62807271-9f8f-4e7d-919e-caeb1457f28f",
+      "roundNumber": 2,
+      "battleDate": "2026-07-20",
+      "battleSlot": 2,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        3399,
+        23
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-07-20T23:11:09.762Z",
+      "resultJson": {
+        "rounds": 2,
+        "winner": "A"
+      },
+      "replayLength": 9,
+      "maxRound": 9,
+      "actionCounts": {
+        "ATTACK": 9
+      },
+      "last": [
+        {
+          "turn": 7,
+          "action": "ATTACK",
+          "damage": 247,
+          "effect": "Encorajador: +15%.",
+          "actorId": "cmq0dxnks0008l5040o4hpasl",
+          "targetId": "cmq1npb7y004xjx04osenuvls",
+          "actorName": "Espeto de Sushi",
+          "actorRole": "Encorajador",
+          "multiplier": 1,
+          "targetName": "Yamper",
+          "targetRole": "Oportunista",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "water",
+          "defenderType": "electric",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 119,
+          "targetPokemonId": 835,
+          "advantageApplied": false
+        },
+        {
+          "turn": 8,
+          "action": "ATTACK",
+          "damage": 184,
+          "effect": "Encorajador: +15%. Oportunista reduziu force de Larvitar em 21%.",
+          "actorId": "cmq0v1ywp002xky0487rlncss",
+          "targetId": "cmr0nda6u000dlb04ke8n9avx",
+          "actorName": "Peri Kitho Khan Sado",
+          "actorRole": "Oportunista",
+          "multiplier": 1,
+          "targetName": "Larvitar",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "normal",
+          "defenderType": "rock",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 22,
+          "targetPokemonId": 246,
+          "advantageApplied": false
+        },
+        {
+          "turn": 9,
+          "action": "ATTACK",
+          "damage": 769,
+          "effect": "Encorajador: +15%.",
+          "actorId": "cmpzn8xbc0001l204okxob5ae",
+          "targetId": "cmr0nda6u000dlb04ke8n9avx",
+          "actorName": "Zé SocaFofo",
+          "actorRole": "Flanco",
+          "multiplier": 1.3,
+          "targetName": "Larvitar",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "fighting",
+          "defenderType": "rock",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 107,
+          "targetPokemonId": 246,
+          "advantageApplied": true
+        }
+      ]
+    },
+    {
+      "id": "5e86817a-c27f-4be8-bba8-2f22ca2d42aa",
+      "leagueId": "a55f9233-06ff-451c-8d39-54358a851e4f",
+      "roundNumber": 1,
+      "battleDate": "2026-07-13",
+      "battleSlot": 1,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        3741,
+        2
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-07-13T23:01:36.980Z",
+      "resultJson": {
+        "rounds": 2,
+        "winner": "A"
+      },
+      "replayLength": 10,
+      "maxRound": 10,
+      "actionCounts": {
+        "ATTACK": 9,
+        "HEAL": 1
+      },
+      "last": [
+        {
+          "turn": 8,
+          "action": "ATTACK",
+          "damage": 1,
+          "actorId": "cmqfc5yy30001l104nd0o1hdv",
+          "targetId": "cmq07dkuz0003l404sslwxmbv",
+          "actorName": "Abra",
+          "actorRole": "Atacante",
+          "multiplier": 1,
+          "targetName": "Bola Peluda Kimordi",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "attackerType": "psychic",
+          "defenderType": "normal",
+          "targetOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "actorPokemonId": 63,
+          "targetPokemonId": 20,
+          "advantageApplied": false
+        },
+        {
+          "turn": 9,
+          "action": "ATTACK",
+          "damage": 742,
+          "effect": "Encorajador: +14%.",
+          "actorId": "cmr107pcn000fl104c5cwe9mu",
+          "targetId": "cmqfc5yy30001l104nd0o1hdv",
+          "actorName": "Zeka",
+          "actorRole": "Atacante",
+          "multiplier": 1,
+          "targetName": "Abra",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "psychic",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 644,
+          "targetPokemonId": 63,
+          "advantageApplied": false
+        },
+        {
+          "turn": 10,
+          "action": "ATTACK",
+          "damage": 444,
+          "effect": "Encorajador: +14%.",
+          "actorId": "cmq9twlfi0041jj0457b94xkb",
+          "targetId": "cmpzk2bpr0001lb041k9befa6",
+          "actorName": "⚔️ Tadalafilado",
+          "actorRole": "Flanco",
+          "multiplier": 1,
+          "targetName": "PORRADEIRO",
+          "targetRole": "Oportunista",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "steel",
+          "defenderType": "fighting",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 208,
+          "targetPokemonId": 107,
+          "advantageApplied": false
+        }
+      ]
+    },
+    {
+      "id": "9ed2ebfb-508f-42d9-abd2-07ade48376aa",
+      "leagueId": "493c7cd3-3e27-435c-adc9-d147518be8d2",
+      "roundNumber": 2,
+      "battleDate": "2026-07-06",
+      "battleSlot": 2,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        3667,
+        3
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-07-06T23:11:24.789Z",
+      "resultJson": {
+        "rounds": 2,
+        "winner": "A"
+      },
+      "replayLength": 13,
+      "maxRound": 13,
+      "actionCounts": {
+        "ATTACK": 13
+      },
+      "last": [
+        {
+          "turn": 11,
+          "action": "ATTACK",
+          "damage": 415,
+          "effect": "Encorajador: +14%.",
+          "actorId": "cmq0c77gt002qle04ul0eff9s",
+          "targetId": "cmq2xr3th004cld04vwoj2ea5",
+          "actorName": "Patty Ingatar",
+          "actorRole": "Sabotador",
+          "multiplier": 1.3,
+          "targetName": "FANTASMINHA CAMARADA",
+          "targetRole": "Encorajador",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "poison",
+          "defenderType": "ghost",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 31,
+          "targetPokemonId": 93,
+          "advantageApplied": true
+        },
+        {
+          "turn": 12,
+          "action": "ATTACK",
+          "damage": 372,
+          "effect": "Encorajador: +14%.",
+          "actorId": "cmr107pcn000fl104c5cwe9mu",
+          "targetId": "cmqa8vb1t0001l504093heu8l",
+          "actorName": "Zeka",
+          "actorRole": "Atacante",
+          "multiplier": 1.3,
+          "targetName": "CAVALO MARINHO ROXO",
+          "targetRole": "Oportunista",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "dragon",
+          "defenderType": "poison",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 644,
+          "targetPokemonId": 690,
+          "advantageApplied": true
+        },
+        {
+          "turn": 13,
+          "action": "ATTACK",
+          "damage": 680,
+          "effect": "Encorajador: +14%.",
+          "actorId": "cmq07dkuz0003l404sslwxmbv",
+          "targetId": "cmq1npb7y004xjx04osenuvls",
+          "actorName": "Bola Peluda Kimordi",
+          "actorRole": "Atacante",
+          "multiplier": 1,
+          "targetName": "Yamper",
+          "targetRole": "Oportunista",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "normal",
+          "defenderType": "electric",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 20,
+          "targetPokemonId": 835,
+          "advantageApplied": false
+        }
+      ]
+    },
+    {
+      "id": "d0612278-51de-4e2d-9998-234bd7128a92",
+      "leagueId": "53c05abb-ec29-447d-9379-574770917412",
+      "roundNumber": 1,
+      "battleDate": "2026-06-29",
+      "battleSlot": 1,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        3788,
+        915
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-06-29T23:01:10.015Z",
+      "resultJson": {
+        "rounds": 3,
+        "winner": "A"
+      },
+      "replayLength": 24,
+      "maxRound": 24,
+      "actionCounts": {
+        "ATTACK": 22,
+        "DEFEND": 2
+      },
+      "last": [
+        {
+          "turn": 22,
+          "action": "DEFEND",
+          "damage": 0,
+          "effect": "Cuidador Jebachururu curou Bola Peluda Kimordi em 45 HP (2/5).",
+          "actorId": "cmq07upuk008kla046vqqnzay",
+          "targetId": "cmq07dkuz0003l404sslwxmbv",
+          "actorName": "Jebachururu",
+          "actorRole": "Cuidador",
+          "multiplier": 1,
+          "targetName": "Bola Peluda Kimordi",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "electric",
+          "defenderType": "normal",
+          "targetOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "actorPokemonId": 26,
+          "targetPokemonId": 20,
+          "advantageApplied": false
+        },
+        {
+          "turn": 23,
+          "action": "ATTACK",
+          "damage": 226,
+          "actorId": "cmpywic6c001bjm04deis4z74",
+          "targetId": "cmqtn3426000hlb04nnx98wkc",
+          "actorName": "Ben Gadura",
+          "actorRole": "Flanco",
+          "multiplier": 1.3,
+          "targetName": "Morgrem",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "poison",
+          "defenderType": "dark",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 24,
+          "targetPokemonId": 860,
+          "advantageApplied": true
+        },
+        {
+          "turn": 24,
+          "action": "ATTACK",
+          "damage": 588,
+          "actorId": "cmq07dkuz0003l404sslwxmbv",
+          "targetId": "cmqtn3426000hlb04nnx98wkc",
+          "actorName": "Bola Peluda Kimordi",
+          "actorRole": "Atacante",
+          "multiplier": 1,
+          "targetName": "Morgrem",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "normal",
+          "defenderType": "dark",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 20,
+          "targetPokemonId": 860,
+          "advantageApplied": false
+        }
+      ]
+    },
+    {
+      "id": "e363d8a4-6780-4b28-8e7f-c75766789491",
+      "leagueId": "9744e8e8-5bc1-4cfa-91b8-193c913fd288",
+      "roundNumber": 3,
+      "battleDate": "2026-06-22",
+      "battleSlot": 3,
+      "playerA": "Glauco",
+      "playerB": "Lukas Ps",
+      "winner": "Glauco",
+      "loser": "Lukas Ps",
+      "isDraw": false,
+      "survivors": [
+        6,
+        0
+      ],
+      "damage": [
+        1578,
+        5
+      ],
+      "status": "RESOLVED",
+      "resolvedAt": "2026-06-23T00:09:48.821Z",
+      "resultJson": {
+        "rounds": 2,
+        "winner": "A"
+      },
+      "replayLength": 10,
+      "maxRound": 10,
+      "actionCounts": {
+        "ATTACK": 10
+      },
+      "last": [
+        {
+          "turn": 8,
+          "action": "ATTACK",
+          "damage": 1,
+          "effect": "Provocador desviou o ataque!",
+          "actorId": "cmqk589kq000jl204b95d3jbd",
+          "targetId": "cmq0v1ywp002xky0487rlncss",
+          "actorName": "Zangoose",
+          "actorRole": "Atacante",
+          "multiplier": 1,
+          "targetName": "Peri Kitho Khan Sado",
+          "targetRole": "Provocador",
+          "actorOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "attackerType": "normal",
+          "defenderType": "normal",
+          "targetOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "actorPokemonId": 335,
+          "targetPokemonId": 22,
+          "advantageApplied": false
+        },
+        {
+          "turn": 9,
+          "action": "ATTACK",
+          "damage": 164,
+          "actorId": "cmpypg16c001vjm040huyftka",
+          "targetId": "cmqk589kq000jl204b95d3jbd",
+          "actorName": "Fimoze Baiana",
+          "actorRole": "Defensor",
+          "multiplier": 1,
+          "targetName": "Zangoose",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "normal",
+          "defenderType": "normal",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 36,
+          "targetPokemonId": 335,
+          "advantageApplied": false
+        },
+        {
+          "turn": 10,
+          "action": "ATTACK",
+          "damage": 373,
+          "actorId": "cmq07dkuz0003l404sslwxmbv",
+          "targetId": "cmqjwgyqk0073l5053t6xjttn",
+          "actorName": "Bola Peluda Kimordi",
+          "actorRole": "Atacante",
+          "multiplier": 1,
+          "targetName": "Cyndaquil",
+          "targetRole": "Atacante",
+          "actorOwnerId": "cmpzh6n8m0001l1047tem8kgi",
+          "attackerType": "normal",
+          "defenderType": "fire",
+          "targetOwnerId": "cmpzhgzqv0001lb042nzmtr8x",
+          "actorPokemonId": 20,
+          "targetPokemonId": 155,
+          "advantageApplied": false
+        }
+      ]
+    }
+  ]
+}

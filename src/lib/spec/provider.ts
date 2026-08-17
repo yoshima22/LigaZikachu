@@ -2,38 +2,34 @@ import { SPEC_PROVIDER } from "./constants";
 import { isSpecProviderConfigured } from "./config";
 
 // Abstração do plano de mídia (WebRTC/SFU). Toda conversa com a Cloudflare fica
-// atrás desta interface, para que componentes/rotas não dependam do provedor e
-// seja possível trocar por outro SFU no futuro sem reescrever regras de torneio.
-//
-// O signaling é baseado em SDP: o browser gera a oferta, o backend negocia com o
-// SFU usando credenciais server-only e devolve a resposta. O vídeo/áudio flui
-// direto browser <-> Cloudflare (nunca pela Vercel/Supabase).
+// atrás desta interface (server-only). O fluxo segue a API do Realtime SFU:
+// cria-se uma Session (uma PeerConnection), publicam-se tracks locais (offer do
+// cliente -> answer do SFU) e puxam-se tracks remotas (o SFU devolve uma offer
+// que o espectador responde via renegotiate). O vídeo flui direto browser<->CF.
 
-export type PublishResult = {
+export type PublishTracksInput = {
   sessionId: string;
-  answerSdp: string;
-  videoTrackId: string;
-  audioTrackId: string | null;
+  offerSdp: string;
+  tracks: Array<{ mid: string; trackName: string }>;
 };
 
-export type SubscribeResult = {
+export type PullTracksInput = {
   sessionId: string;
-  answerSdp: string;
+  remoteSessionId: string;
+  trackNames: string[];
 };
 
 export interface SpecMediaProvider {
   readonly name: string;
-  /** Cria a publicação do broadcaster a partir da oferta SDP do browser. */
-  publish(input: { streamId: string; offerSdp: string }): Promise<PublishResult>;
-  /** Cria a assinatura (pull) de um espectador para as tracks de uma live. */
-  subscribe(input: {
-    streamId: string;
-    offerSdp: string;
-    broadcastSessionId: string;
-    videoTrackId: string;
-    audioTrackId: string | null;
-  }): Promise<SubscribeResult>;
-  /** Encerra uma sessão no provedor (best-effort). */
+  /** Cria uma nova sessão (PeerConnection) no SFU. */
+  createSession(): Promise<{ sessionId: string }>;
+  /** Publica as tracks locais do broadcaster. Retorna a resposta SDP. */
+  publishTracks(input: PublishTracksInput): Promise<{ answerSdp: string }>;
+  /** Puxa tracks remotas (espectador). Retorna a oferta SDP do SFU. */
+  pullTracks(input: PullTracksInput): Promise<{ offerSdp: string; requiresImmediateRenegotiation: boolean }>;
+  /** Renegocia: o espectador envia a resposta SDP para as tracks puxadas. */
+  renegotiate(input: { sessionId: string; answerSdp: string }): Promise<void>;
+  /** Encerra uma sessão (best-effort). */
   closeSession(sessionId: string): Promise<void>;
 }
 
@@ -44,13 +40,13 @@ export class SpecProviderNotConfiguredError extends Error {
   }
 }
 
-// Stub usado enquanto não há credenciais da Cloudflare: permite construir e
-// navegar todo o control plane, mas recusa qualquer operação de mídia com uma
-// mensagem clara (em vez de falhar silenciosamente).
+// Stub usado enquanto não há credenciais da Cloudflare.
 const stubProvider: SpecMediaProvider = {
   name: "stub",
-  async publish() { throw new SpecProviderNotConfiguredError(); },
-  async subscribe() { throw new SpecProviderNotConfiguredError(); },
+  async createSession() { throw new SpecProviderNotConfiguredError(); },
+  async publishTracks() { throw new SpecProviderNotConfiguredError(); },
+  async pullTracks() { throw new SpecProviderNotConfiguredError(); },
+  async renegotiate() { throw new SpecProviderNotConfiguredError(); },
   async closeSession() { /* nada a fazer no stub */ },
 };
 
@@ -59,14 +55,12 @@ let cloudflareProvider: SpecMediaProvider | null = null;
 /** Retorna o provider ativo. Cai no stub quando não configurado. */
 export function getSpecProvider(): SpecMediaProvider {
   if (SPEC_PROVIDER === "cloudflare-realtime" && isSpecProviderConfigured()) {
-    // A implementação Cloudflare entra aqui na Fase de mídia (quando houver
-    // App ID + API token). Enquanto não existir, seguimos com o stub.
-    return cloudflareProvider ?? stubProvider;
+    if (!cloudflareProvider) {
+      // Carregamento tardio para não importar a implementação quando não usada.
+      const { createCloudflareRealtimeProvider } = require("./cloudflare-realtime") as typeof import("./cloudflare-realtime");
+      cloudflareProvider = createCloudflareRealtimeProvider();
+    }
+    return cloudflareProvider;
   }
   return stubProvider;
-}
-
-/** Injeta a implementação real (chamado pela camada Cloudflare quando pronta). */
-export function registerCloudflareSpecProvider(provider: SpecMediaProvider) {
-  cloudflareProvider = provider;
 }
