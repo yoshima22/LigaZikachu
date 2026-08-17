@@ -77,6 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: error.message }, { status: 501 });
     }
     console.error("[spec] publish falhou", error);
-    return NextResponse.json({ error: "Falha ao publicar a transmissão." }, { status: 502 });
+    const detail = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Falha ao publicar a transmissão. (${detail})` }, { status: 502 });
   }
 }
