@@ -17,3 +17,13 @@ LigaZikachuApp.zip
 
 # Backups do banco (dados sensiveis - nunca commitar)
 backups/
+
+# Diretorios de trabalho/scratch (nao versionar)
+.codex-tmp/
+.codex-tmp
+tmp/
+output/
+reports/
+pnpm-lock.yaml
+pnpm-workspace.yaml
+scripts/export-egg-pools.ts
