@@ -418,6 +418,26 @@ export async function adminDebugRushTeamAction(leagueId:string, mascotIds:string
   } catch(error){return{error:error instanceof Error?error.message:"Falha no debug da equipe."};}
 }
 
+// Odds automáticas por confronto, no mesmo esquema da Liga Semanal: usa pontos,
+// vitórias e dano acumulado de cada jogador para estimar a probabilidade.
+function calculateRushOdds(
+  pA: { points: number; wins: number; damageDealt: number },
+  pB: { points: number; wins: number; damageDealt: number },
+): { oddsA: number; oddsB: number } {
+  const scoreA = (pA.points * 10) + (pA.wins * 5) + (pA.damageDealt / 100);
+  const scoreB = (pB.points * 10) + (pB.wins * 5) + (pB.damageDealt / 100);
+  const total = scoreA + scoreB;
+  if (total === 0) return { oddsA: 1.90, oddsB: 1.90 };
+  const probA = scoreA / total;
+  const probB = scoreB / total;
+  const margin = 0.92;
+  const round5 = (v: number) => Math.round(Math.round(v / 0.05) * 5) / 100;
+  return {
+    oddsA: Math.max(1.10, round5(probA > 0.02 ? margin / probA : 8)),
+    oddsB: Math.max(1.10, round5(probB > 0.02 ? margin / probB : 8)),
+  };
+}
+
 function circlePairings(ids: string[], roundIndex: number) {
   const pool: (string | null)[] = [...ids];
   if (pool.length % 2) pool.push(null);
@@ -449,10 +469,14 @@ export async function adminGenerateRushDayAction(leagueId: string, battleDate: s
     if (!league) return { error: "Liga não encontrada." };
     if (league.participants.length < 2) return { error: "São necessários pelo menos 2 inscritos." };
     const dayOffset = Math.max(0, Math.round((new Date(`${battleDate}T12:00:00-03:00`).getTime() - league.weekStart.getTime()) / 86400000));
+    const statsOf = new Map(league.participants.map((p) => [p.playerId, { points: p.points, wins: p.wins, damageDealt: p.damageDealt }]));
     const rows: Prisma.RushLeagueMatchCreateManyInput[] = [];
     for (let slot = 1; slot <= 3; slot++) {
       const pairs = circlePairings(league.participants.map((p) => p.playerId), dayOffset * 3 + slot - 1);
-      for (const [a, b] of pairs) rows.push({ leagueId, roundNumber: dayOffset * 3 + slot, battleDate, battleSlot: slot, scheduledAt: scheduledAtFor(battleDate, slot), playerAId: a, playerBId: b, status: b ? "SCHEDULED" : "BYE" });
+      for (const [a, b] of pairs) {
+        const odds = b ? calculateRushOdds(statsOf.get(a) ?? { points: 0, wins: 0, damageDealt: 0 }, statsOf.get(b) ?? { points: 0, wins: 0, damageDealt: 0 }) : null;
+        rows.push({ leagueId, roundNumber: dayOffset * 3 + slot, battleDate, battleSlot: slot, scheduledAt: scheduledAtFor(battleDate, slot), playerAId: a, playerBId: b, status: b ? "SCHEDULED" : "BYE", ...(odds ? { resultJson: odds as unknown as Prisma.InputJsonValue } : {}) });
+      }
     }
     await prisma.rushLeagueMatch.createMany({ data: rows, skipDuplicates: true });
     revalidatePath(PATH);
