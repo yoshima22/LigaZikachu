@@ -15,9 +15,14 @@ function appPath(suffix: string) {
 
 async function cf<T>(url: string, method: "POST" | "PUT", body?: unknown): Promise<T> {
   const token = process.env.CLOUDFLARE_REALTIME_APP_TOKEN;
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  // Content-Type só quando há corpo: sessions/new é POST sem body, e mandar
+  // Content-Type: application/json com corpo vazio faz o SFU validar o schema
+  // (e reclamar de sessionDescription ausente).
+  if (body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(url, {
     method,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
@@ -41,7 +46,8 @@ export function createCloudflareRealtimeProvider(): SpecMediaProvider {
     name: "cloudflare-realtime",
 
     async createSession() {
-      const data = await cf<{ sessionId: string }>(appPath("sessions/new"), "POST", {});
+      // sessions/new é POST sem corpo (o SFU gera a sessão e devolve o id).
+      const data = await cf<{ sessionId: string }>(appPath("sessions/new"), "POST");
       return { sessionId: data.sessionId };
     },
 
