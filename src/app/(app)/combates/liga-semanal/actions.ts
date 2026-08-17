@@ -6,9 +6,10 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
+import { swissPairSlot } from "@/lib/league-pairing";
 import { getCombatRoleLabel, defaultCombatRoleFor } from "@/lib/combat-roles";
 import type { WeeklyModifier } from "./constants";
-import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType } from "@prisma/client";
+import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
 import { creditCoins } from "@/lib/zikacoins";
 import { isStandbyActive } from "@/lib/account-standby";
@@ -357,21 +358,7 @@ export async function joinLeagueAction(leagueId: string) {
 
 // ── Generate daily matchups (preview before battles) ──────────────────────
 
-// ── Swiss pairing engine ──────────────────────────────────────────────────
-
-type PairingPlayer = { playerId: string; points: number; wins: number; damageDealt: number; byes: number };
-type PairingResult = Array<{ aId: string; bId: string | null }>;
-
-function pickByePlayer(players: PairingPlayer[], byeCount: Map<string, number>, slotIndex: number) {
-  return [...players].sort((a, b) => {
-    const aTotalByes = a.byes + (byeCount.get(a.playerId) ?? 0);
-    const bTotalByes = b.byes + (byeCount.get(b.playerId) ?? 0);
-    if (aTotalByes !== bTotalByes) return aTotalByes - bTotalByes;
-    const scoreDiff = (a.points - b.points) || (a.wins - b.wins) || (a.damageDealt - b.damageDealt);
-    if (scoreDiff !== 0) return scoreDiff;
-    return (hashStr(a.playerId + "bye" + slotIndex) & 0xff) - (hashStr(b.playerId + "bye" + slotIndex) & 0xff);
-  })[0] ?? null;
-}
+// ── Chaveamento suíço: agora em @/lib/league-pairing (compartilhado com a Rush) ──
 
 export async function getWeeklyScoutingAnalysisAction(targetPlayerId: string, matchId?: string) {
   try {
@@ -399,86 +386,6 @@ export async function getWeeklyScoutingAnalysisAction(targetPlayerId: string, ma
     console.error("[weekly-scouting] Falha ao carregar análise", error);
     return { error: "Não foi possível carregar a análise. Tente novamente." };
   }
-}
-
-function swissPairSlot(
-  players: PairingPlayer[],
-  faced: Map<string, Set<string>>,
-  todayPaired: Map<string, Set<string>>,
-  byeCount: Map<string, number>,
-  slotIndex: number,
-): PairingResult {
-  const result: PairingResult = [];
-  const paired = new Set<string>();
-  const pool = [...players];
-
-  if (pool.length % 2 === 1) {
-    const byePlayer = pickByePlayer(pool, byeCount, slotIndex);
-    if (byePlayer) {
-      result.push({ aId: byePlayer.playerId, bId: null });
-      byeCount.set(byePlayer.playerId, (byeCount.get(byePlayer.playerId) ?? 0) + 1);
-      paired.add(byePlayer.playerId);
-    }
-  }
-
-  // Sort with shuffle within similar score tiers
-  const sorted = pool.sort((a, b) => {
-    const scoreDiff = (b.points - a.points) || (b.wins - a.wins);
-    if (scoreDiff !== 0) return scoreDiff;
-    // Same tier: shuffle to avoid deterministic pairing
-    return (hashStr(a.playerId + slotIndex) & 0xff) - (hashStr(b.playerId + slotIndex) & 0xff);
-  });
-
-  for (let i = 0; i < sorted.length; i++) {
-    const p = sorted[i];
-    if (paired.has(p.playerId)) continue;
-
-    const prevOpps = faced.get(p.playerId) ?? new Set();
-    const todayOpps = todayPaired.get(p.playerId) ?? new Set();
-
-    // Build candidate list: score by proximity + penalty for faced
-    const candidates: Array<{ player: PairingPlayer; score: number }> = [];
-    for (let j = 0; j < sorted.length; j++) {
-      if (j === i || paired.has(sorted[j].playerId)) continue;
-      const c = sorted[j];
-      const pointDist = Math.abs(p.points - c.points);
-      const facedBefore = prevOpps.has(c.playerId);
-      const facedToday = todayOpps.has(c.playerId);
-      // Lower score = better match
-      let score = pointDist;
-      if (facedToday) score += 1000;  // heavy penalty for same-day repeat
-      if (facedBefore) score += 200;  // moderate penalty for week repeat
-      // Slight randomness to break ties
-      score += (hashStr(p.playerId + c.playerId + slotIndex) % 20);
-      candidates.push({ player: c, score });
-    }
-
-    candidates.sort((a, b) => a.score - b.score);
-    const opp = candidates[0]?.player ?? null;
-
-    if (opp) {
-      result.push({ aId: p.playerId, bId: opp.playerId });
-      paired.add(p.playerId);
-      paired.add(opp.playerId);
-      // Track
-      if (!todayPaired.has(p.playerId)) todayPaired.set(p.playerId, new Set());
-      if (!todayPaired.has(opp.playerId)) todayPaired.set(opp.playerId, new Set());
-      todayPaired.get(p.playerId)!.add(opp.playerId);
-      todayPaired.get(opp.playerId)!.add(p.playerId);
-    } else {
-      // Fallback defensivo: só deve ocorrer se todos os candidatos estiverem indisponíveis.
-      result.push({ aId: p.playerId, bId: null });
-      byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
-      paired.add(p.playerId);
-    }
-  }
-  return result;
-}
-
-function hashStr(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
 }
 
 async function loadFacedOpponents(leagueId: string) {
@@ -529,7 +436,7 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
     // Delete existing SCHEDULED (not yet resolved) if regenerating
     const existing = await prisma.weeklyMascotLeagueMatch.findMany({ where: { leagueId, battleDate: today } });
     const hasResolved = existing.some(m => m.status === "RESOLVED" || m.status === "WO");
-    if (hasResolved && !forceRegenerate) return { error: "Já existem combates resolvidos hoje. Use 'Refazer Chave' para forçar." };
+    if (hasResolved) return { error: "A chave de hoje já possui resultados ou W.O. e não pode ser refeita sem alterar a competição." };
 
     if (existing.length > 0) {
       // Revert BYE points before deleting
@@ -540,7 +447,7 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
           data: { points: { decrement: 3 }, byes: { decrement: 1 }, updatedAt: new Date() },
         });
       }
-      await prisma.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId, battleDate: today } });
+      await prisma.weeklyMascotLeagueMatch.deleteMany({ where: { leagueId, battleDate: today, status: { in: ["SCHEDULED", "BYE", "CANCELLED"] } } });
     }
 
     const participants = await prisma.weeklyMascotLeagueParticipant.findMany({
@@ -557,7 +464,7 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
     let created = 0;
 
     for (const battleSlot of [1, 2, 3]) {
-      const pairings = swissPairSlot(participants, faced, todayPaired, byeCount, battleSlot);
+      const pairings = swissPairSlot(participants, faced, todayPaired, byeCount, `${leagueId}:${today}:${battleSlot}`);
 
       for (const pair of pairings) {
         if (pair.bId) {
@@ -1135,8 +1042,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       const woPlayer = teamAMascots.length < 6 ? pair.aId : pair.bId!;
       const winPlayer = woPlayer === pair.aId ? pair.bId! : pair.aId;
       const woAvailable = woPlayer === pair.aId ? teamAMascots.length : teamBMascots.length;
-      await prisma.weeklyMascotLeagueMatch.create({
-        data: {
+      const woData: Prisma.WeeklyMascotLeagueMatchUncheckedCreateInput = {
           id: createId(), leagueId, roundNumber, battleDate: today, battleSlot,
           scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId,
           winnerId: winPlayer, loserId: woPlayer, status: "WO", resolvedAt: new Date(),
@@ -1147,8 +1053,9 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
             availableMascots: woAvailable,
             reason: woAvailable === 0 ? "NO_MASCOTS" : "INSUFFICIENT_MASCOTS",
           },
-        },
-      });
+      };
+      if (pair.existingMatchId) await prisma.weeklyMascotLeagueMatch.update({ where: { id: pair.existingMatchId }, data: { winnerId: winPlayer, loserId: woPlayer, status: "WO", resolvedAt: new Date(), resultJson: woData.resultJson } });
+      else await prisma.weeklyMascotLeagueMatch.create({ data: woData });
       await prisma.weeklyMascotLeagueParticipant.updateMany({
         where: { leagueId, playerId: winPlayer },
         data: { points: { increment: 3 }, wins: { increment: 1 }, updatedAt: new Date() },
@@ -1821,7 +1728,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
         const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId: league.id } });
 
         for (const battleSlot of [1, 2, 3]) {
-          const pairings = swissPairSlot(participants, faced, todayPaired, byeCount, battleSlot);
+          const pairings = swissPairSlot(participants, faced, todayPaired, byeCount, `${league.id}:${battleDate}:${battleSlot}`);
           for (const pair of pairings) {
             if (pair.bId) {
               const pA = participants.find(p => p.playerId === pair.aId)!;

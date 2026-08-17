@@ -9,6 +9,7 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { normalizeBattleDivision, validateBattleDivision } from "@/lib/battle-divisions";
+import { swissPairSlot, type PairingPlayer } from "@/lib/league-pairing";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { DEFAULT_RUSH_REWARDS, RUSH_LEVEL_OPTIONS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
 
@@ -159,8 +160,12 @@ export async function getRushDataAction() {
     include: { participants: { select: { playerId: true } } },
   }) : null;
   const recent = await prisma.rushLeague.findMany({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, take: 4 });
+  const previousLeague = await prisma.rushLeague.findFirst({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, include: { participants: { orderBy: [{ finalRank: "asc" }, { points: "desc" }], take: 3 } } });
+  const previousPlayerIds = previousLeague?.participants.map((participant) => participant.playerId) ?? [];
+  const previousPlayers = previousPlayerIds.length ? await prisma.player.findMany({ where: { id: { in: previousPlayerIds } }, select: { id: true, displayName: true } }) : [];
+  const previousPodium = previousLeague ? { weekKey: previousLeague.weekKey, participants: previousLeague.participants, names: Object.fromEntries(previousPlayers.map((entry) => [entry.id, entry.displayName])) } : null;
   const cancellation = await prisma.rushLeague.findFirst({ where: { status: "CANCELLED" }, orderBy: { updatedAt: "desc" }, select: { name: true, weekKey: true, ruleJson: true, updatedAt: true } });
-  if (!league) return { league: null, recent, cancellation, isAdmin: isStaff(session.user.role), presets: RUSH_RULE_PRESETS, rewardPlans: RUSH_REWARD_PLANS, divisions: [] };
+  if (!league) return { league: null, recent, previousPodium, cancellation, isAdmin: isStaff(session.user.role), presets: RUSH_RULE_PRESETS, rewardPlans: RUSH_REWARD_PLANS, divisions: [] };
 
   const playerIds = [...new Set(league.participants.map((p) => p.playerId).concat(league.matches.flatMap((m) => [m.playerAId, m.playerBId].filter(Boolean) as string[])))];
   const players = await prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, displayName: true } });
@@ -187,6 +192,7 @@ export async function getRushDataAction() {
   return JSON.parse(JSON.stringify({
     league,
     recent,
+    previousPodium,
     isAdmin: staff,
     playerId: player.id,
     joined,
@@ -441,25 +447,6 @@ function calculateRushOdds(
   };
 }
 
-function circlePairings(ids: string[], roundIndex: number) {
-  const pool: (string | null)[] = [...ids];
-  if (pool.length % 2) pool.push(null);
-  if (pool.length < 2) return [] as Array<[string, string | null]>;
-  const fixed = pool[0];
-  let rest = pool.slice(1);
-  for (let i = 0; i < roundIndex % Math.max(1, pool.length - 1); i++) rest = [rest[rest.length - 1], ...rest.slice(0, -1)];
-  const arranged = [fixed, ...rest];
-  // Com número ímpar de inscritos existe um "null" (folga). Ele precisa ficar
-  // sempre como segundo elemento do par, porque playerAId é obrigatório no banco
-  // e playerBId é opcional. Se o null virasse o primeiro, o createMany falharia
-  // inteiro e nenhuma partida do dia seria criada.
-  return Array.from({ length: arranged.length / 2 }, (_, i) => {
-    const a = arranged[i];
-    const b = arranged[arranged.length - 1 - i];
-    return (a === null ? [b!, null] : [a, b]) as [string, string | null];
-  });
-}
-
 export async function adminOpenRushLeagueAction(leagueId: string) {
   try { await requireContext(true); await prisma.rushLeague.update({ where: { id: leagueId }, data: { status: "ACTIVE" } }); revalidatePath(PATH); return { success: true }; }
   catch (error) { return { error: error instanceof Error ? error.message : "Falha ao abrir liga." }; }
@@ -468,20 +455,33 @@ export async function adminOpenRushLeagueAction(leagueId: string) {
 export async function adminGenerateRushDayAction(leagueId: string, battleDate: string, automationSecret?: string) {
   try {
     if (!automationSecret || automationSecret !== process.env.CRON_SECRET) await requireContext(true);
-    const league = await prisma.rushLeague.findUnique({ where: { id: leagueId }, include: { participants: { orderBy: { joinedAt: "asc" } } } });
+    const league = await prisma.rushLeague.findUnique({ where: { id: leagueId }, include: { participants: { orderBy: [{ points: "desc" }, { wins: "desc" }, { damageDealt: "desc" }] } } });
     if (!league) return { error: "Liga não encontrada." };
     if (league.participants.length < 2) return { error: "São necessários pelo menos 2 inscritos." };
     const dayOffset = Math.max(0, Math.round((new Date(`${battleDate}T12:00:00-03:00`).getTime() - league.weekStart.getTime()) / 86400000));
+    const history = await prisma.rushLeagueMatch.findMany({ where: { leagueId }, select: { battleDate:true, battleSlot:true, playerAId:true, playerBId:true, winnerId:true, loserId:true, status:true } });
+    const faced = new Map<string, Set<string>>(), todayPaired = new Map<string, Set<string>>(), byeCount = new Map<string, number>(), freeWins = new Map<string, number>(), woLosses = new Map<string, number>();
+    for (const match of history) {
+      if (match.playerBId) { if(!faced.has(match.playerAId))faced.set(match.playerAId,new Set()); if(!faced.has(match.playerBId))faced.set(match.playerBId,new Set()); faced.get(match.playerAId)!.add(match.playerBId); faced.get(match.playerBId)!.add(match.playerAId); if(match.battleDate===battleDate){if(!todayPaired.has(match.playerAId))todayPaired.set(match.playerAId,new Set());if(!todayPaired.has(match.playerBId))todayPaired.set(match.playerBId,new Set());todayPaired.get(match.playerAId)!.add(match.playerBId);todayPaired.get(match.playerBId)!.add(match.playerAId);} }
+      if(match.status==="BYE") byeCount.set(match.playerAId,(byeCount.get(match.playerAId)??0)+1);
+      if(match.status==="BYE"&&match.playerAId) freeWins.set(match.playerAId,(freeWins.get(match.playerAId)??0)+1);
+      if(match.status==="WO"&&match.winnerId) freeWins.set(match.winnerId,(freeWins.get(match.winnerId)??0)+1);
+      if(match.status==="WO"&&match.loserId) woLosses.set(match.loserId,(woLosses.get(match.loserId)??0)+1);
+    }
+    const pairingPlayers:PairingPlayer[]=league.participants.map(p=>({playerId:p.playerId,points:p.points,wins:p.wins,damageDealt:p.damageDealt,byes:0,freeWins:freeWins.get(p.playerId)??0,woLosses:woLosses.get(p.playerId)??0}));
     const statsOf = new Map(league.participants.map((p) => [p.playerId, { points: p.points, wins: p.wins, damageDealt: p.damageDealt }]));
     const rows: Prisma.RushLeagueMatchCreateManyInput[] = [];
     for (let slot = 1; slot <= 3; slot++) {
-      const pairs = circlePairings(league.participants.map((p) => p.playerId), dayOffset * 3 + slot - 1);
-      for (const [a, b] of pairs) {
+      if(history.some(match=>match.battleDate===battleDate&&match.battleSlot===slot)) continue;
+      const pairs = swissPairSlot(pairingPlayers, faced, todayPaired, byeCount, `${leagueId}:${battleDate}:${slot}`);
+      for (const pair of pairs) {
+        const a=pair.aId,b=pair.bId;
         const odds = b ? calculateRushOdds(statsOf.get(a) ?? { points: 0, wins: 0, damageDealt: 0 }, statsOf.get(b) ?? { points: 0, wins: 0, damageDealt: 0 }) : null;
         rows.push({ leagueId, roundNumber: dayOffset * 3 + slot, battleDate, battleSlot: slot, scheduledAt: scheduledAtFor(battleDate, slot), playerAId: a, playerBId: b, status: b ? "SCHEDULED" : "BYE", ...(odds ? { resultJson: odds as unknown as Prisma.InputJsonValue } : {}) });
       }
     }
     await prisma.rushLeagueMatch.createMany({ data: rows, skipDuplicates: true });
+    for(const row of rows.filter(row=>row.status==="BYE")) await prisma.rushLeagueParticipant.update({where:{leagueId_playerId:{leagueId,playerId:row.playerAId}},data:{points:{increment:3}}});
     revalidatePath(PATH);
     return { success: true, matches: rows.length };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao gerar rodadas." }; }
