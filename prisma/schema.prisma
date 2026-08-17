@@ -3799,3 +3799,37 @@ model UserRaidNotification {
   @@index([userId, seenAt])
   @@map("user_raid_notifications")
 }
+
+// ── Modo SPEC: transmissão de partidas TCG (metadados apenas) ─────────────────
+// Isolado: sem relações com tabelas existentes. O vídeo/áudio NÃO passa pelo
+// banco nem pela Vercel — só metadados leves da live. Referências (matchId,
+// tournamentId, broadcasterUserId) são texto simples para não alterar Match/
+// Tournament/User. O tráfego pesado fica na Cloudflare Realtime SFU (WebRTC).
+enum SpecStreamStatus {
+  PREPARING
+  LIVE
+  ENDED
+  FAILED
+}
+
+model SpecStream {
+  id                 String           @id @default(cuid())
+  matchId            String
+  tournamentId       String
+  broadcasterUserId  String
+  status             SpecStreamStatus @default(PREPARING)
+  provider           String           @default("stub")
+  videoTrackId       String?
+  audioTrackId       String?
+  broadcastSessionId String?
+  startedAt          DateTime?
+  endedAt            DateTime?
+  lastSeenAt         DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([status])
+  @@index([tournamentId, status])
+  @@index([matchId])
+  @@map("spec_streams")
+}
