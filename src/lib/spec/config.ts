@@ -2,8 +2,10 @@ import { prisma } from "@/lib/prisma";
 import {
   SPEC_SETTINGS_KEY,
   SPEC_DEFAULT_BROADCASTER_POLICY,
+  SPEC_DEFAULT_RESOLUTION,
   SPEC_PROVIDER,
   type SpecBroadcasterPolicy,
+  type SpecResolution,
 } from "./constants";
 
 // Feature flag + política do Modo SPEC, guardada em AppSetting (mesmo padrão do
@@ -12,11 +14,16 @@ import {
 export type SpecConfig = {
   enabled: boolean;
   broadcasterPolicy: SpecBroadcasterPolicy;
+  resolution: SpecResolution;
   providerConfigured: boolean;
 };
 
 function isPolicy(value: unknown): value is SpecBroadcasterPolicy {
   return value === "ANY_TOURNAMENT_PARTICIPANT" || value === "MATCH_PLAYERS_ONLY" || value === "ADMIN_ONLY";
+}
+
+function isResolution(value: unknown): value is SpecResolution {
+  return value === "720" || value === "1080";
 }
 
 /** Verdadeiro somente quando a Cloudflare Realtime estiver realmente configurada. */
@@ -34,6 +41,7 @@ export async function getSpecConfig(): Promise<SpecConfig> {
   return {
     enabled: value?.enabled === true,
     broadcasterPolicy: isPolicy(value?.broadcasterPolicy) ? value.broadcasterPolicy : SPEC_DEFAULT_BROADCASTER_POLICY,
+    resolution: isResolution(value?.resolution) ? value.resolution : SPEC_DEFAULT_RESOLUTION,
     providerConfigured: isSpecProviderConfigured(),
   };
 }

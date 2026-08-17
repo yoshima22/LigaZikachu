@@ -31,6 +31,17 @@ export const SPEC_MONTHLY_GB_LIMIT = Number(process.env.SPEC_MONTHLY_GB_LIMIT ??
 /** Bitrate total considerado no cálculo de egress (Mbps): vídeo + áudio. */
 export const SPEC_TOTAL_MBPS = (SPEC_VIDEO_MAX_BITRATE + SPEC_AUDIO_TARGET_BITRATE) / 1_000_000;
 
+/** Resolução da transmissão, definida pelo admin ao ativar o Modo SPEC. */
+export type SpecResolution = "720" | "1080";
+
+export const SPEC_DEFAULT_RESOLUTION: SpecResolution = "1080";
+
+/** Perfil de captura por resolução: dimensões-alvo + teto de bitrate de vídeo (bps). */
+export const SPEC_RESOLUTION_PROFILES: Record<SpecResolution, { width: number; height: number; maxVideoBitrate: number; label: string }> = {
+  "720":  { width: 1280, height: 720,  maxVideoBitrate: 1_500_000, label: "720p" },
+  "1080": { width: 1920, height: 1080, maxVideoBitrate: SPEC_VIDEO_MAX_BITRATE, label: "1080p" },
+};
+
 /** Política de quem pode abrir uma transmissão de uma partida. */
 export type SpecBroadcasterPolicy =
   | "ANY_TOURNAMENT_PARTICIPANT"

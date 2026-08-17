@@ -13,7 +13,9 @@ export function SpecPlayer({ streamId }: { streamId: string }) {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const [state, setState] = useState<PlayerState>("connecting");
   const [error, setError] = useState<string | null>(null);
-  const [muted, setMuted] = useState(true);
+  // Som ligado por padrão; se o navegador bloquear o autoplay com áudio,
+  // caímos para mudo e o espectador ativa o som com um clique.
+  const [muted, setMuted] = useState(false);
 
   const cleanup = useCallback(() => {
     pcRef.current?.getSenders().forEach((s) => s.track?.stop());
@@ -32,7 +34,14 @@ export function SpecPlayer({ streamId }: { streamId: string }) {
       const remote = new MediaStream();
       pc.ontrack = (event) => {
         remote.addTrack(event.track);
-        if (videoRef.current) videoRef.current.srcObject = remote;
+        if (videoRef.current) {
+          videoRef.current.srcObject = remote;
+          // Tenta tocar com som; se o navegador bloquear, muta e tenta de novo.
+          videoRef.current.play?.().catch(() => {
+            setMuted(true);
+            videoRef.current?.play?.().catch(() => null);
+          });
+        }
       };
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;

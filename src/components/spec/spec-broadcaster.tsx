@@ -11,7 +11,9 @@ type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" 
 // Broadcaster: captura de tela (getDisplayMedia) + publicação WebRTC. Envia uma
 // única publicação ao SFU; o fan-out para espectadores é da Cloudflare. Mostra
 // só o preview local (não puxa o próprio stream do SFU, para não gastar egress).
-export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate }: { streamId: string; matchLabel: string; maxVideoBitrate: number }) {
+export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, resolutionLabel }: {
+  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; resolutionLabel: string;
+}) {
   const router = useRouter();
   const previewRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -39,7 +41,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate }: { str
     setState("requesting");
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30, max: 30 } },
+        video: { frameRate: { ideal: 30, max: 30 }, width: { ideal: width }, height: { ideal: height } },
         audio: true,
       });
       streamRef.current = stream;
@@ -119,7 +121,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate }: { str
           <span className={`rounded-full px-2 py-1 font-bold ${state === "live" ? "bg-red-500/15 text-red-300" : "bg-slate-800 text-slate-400"}`}>
             {state === "live" ? "🔴 AO VIVO" : state === "connecting" ? "Conectando…" : state === "requesting" ? "Escolhendo tela…" : state === "ended" ? "Encerrada" : "Pronto"}
           </span>
-          {state === "live" && <span className="text-slate-500">Qualidade alvo: 1080p30 · vídeo {hasAudio ? "+ áudio" : "sem áudio"}</span>}
+          {state === "live" && <span className="text-slate-500">Qualidade alvo: {resolutionLabel}30 · vídeo {hasAudio ? "+ áudio do sistema" : "sem áudio"}</span>}
         </div>
       </div>
 

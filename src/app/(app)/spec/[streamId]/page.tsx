@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { SpecPlayer } from "@/components/spec/spec-player";
+import { SpecStands } from "@/components/spec/spec-stands";
 
 export const dynamic = "force-dynamic";
 
@@ -37,15 +38,18 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
     <main className="mx-auto max-w-3xl space-y-4 px-1 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-red-400">{isLive ? "🔴 Ao vivo" : "Transmissão"}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-red-400">{isLive ? "🔴 Ao vivo · Zika TV" : "Zika TV"}</p>
           <h1 className="truncate text-xl font-black text-white">{view?.matchLabel ?? "Partida"}</h1>
-          <p className="text-xs text-slate-400">{view?.tournamentName} · Transmitido por {view?.broadcasterName}</p>
+          <p className="text-xs text-slate-400">{view?.tournamentName} · {view?.weekTitle} · Transmitido por {view?.broadcasterName}</p>
         </div>
-        <Link href="/spec" className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Lista</Link>
+        <Link href="/spec" className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Zika TV</Link>
       </div>
 
       {isLive ? (
-        <SpecPlayer streamId={stream.id} />
+        <>
+          <SpecPlayer streamId={stream.id} />
+          <SpecStands streamId={stream.id} sendPresence />
+        </>
       ) : (
         <div className="rounded-2xl border border-border bg-slate-950/60 p-8 text-center text-sm text-slate-500">
           Esta transmissão não está mais ao vivo.

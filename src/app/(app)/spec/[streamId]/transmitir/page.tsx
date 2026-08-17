@@ -3,8 +3,9 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
-import { SPEC_VIDEO_MAX_BITRATE } from "@/lib/spec/constants";
+import { SPEC_RESOLUTION_PROFILES } from "@/lib/spec/constants";
 import { SpecBroadcaster } from "@/components/spec/spec-broadcaster";
+import { SpecStands } from "@/components/spec/spec-stands";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +32,23 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
   }
 
   const [view] = await enrichSpecStreams([stream]);
+  const profile = SPEC_RESOLUTION_PROFILES[config.resolution];
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-1 py-3">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-black text-white">Transmitir partida</h1>
-        <Link href="/spec" className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Modo SPEC</Link>
+        <h1 className="text-xl font-black text-white">Transmitir na Zika TV</h1>
+        <Link href="/spec" className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Zika TV</Link>
       </div>
-      <SpecBroadcaster streamId={stream.id} matchLabel={view?.matchLabel ?? "Partida"} maxVideoBitrate={SPEC_VIDEO_MAX_BITRATE} />
+      <SpecBroadcaster
+        streamId={stream.id}
+        matchLabel={view?.title ?? view?.matchLabel ?? "Partida"}
+        maxVideoBitrate={profile.maxVideoBitrate}
+        width={profile.width}
+        height={profile.height}
+        resolutionLabel={profile.label}
+      />
+      {stream.status === "LIVE" && <SpecStands streamId={stream.id} sendPresence={false} />}
     </main>
   );
 }

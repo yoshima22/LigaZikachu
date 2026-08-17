@@ -3833,3 +3833,52 @@ model SpecStream {
   @@index([matchId])
   @@map("spec_streams")
 }
+
+// Presença na "Arquibancada": quem está assistindo uma transmissão agora.
+// O cliente manda heartbeat periódico; consideramos online quem foi visto há pouco.
+model SpecSpectator {
+  id          String   @id @default(cuid())
+  streamId    String
+  userId      String
+  displayName String
+  joinedAt    DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([streamId, userId])
+  @@index([streamId, lastSeenAt])
+  @@map("spec_spectators")
+}
+
+enum SpecPollStatus {
+  OPEN
+  CLOSED
+}
+
+// Enquete criada pelo dono da transmissão / GameMaster / Admin para a arquibancada.
+model SpecPoll {
+  id              String         @id @default(cuid())
+  streamId        String
+  question        String
+  options         Json           // string[] com as alternativas
+  status          SpecPollStatus @default(OPEN)
+  createdByUserId String
+  createdAt       DateTime       @default(now())
+  closedAt        DateTime?
+  votes           SpecPollVote[]
+
+  @@index([streamId, status])
+  @@map("spec_polls")
+}
+
+model SpecPollVote {
+  id          String   @id @default(cuid())
+  pollId      String
+  userId      String
+  optionIndex Int
+  createdAt   DateTime @default(now())
+  poll        SpecPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([pollId])
+  @@map("spec_poll_votes")
+}

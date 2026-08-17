@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Plus, Trophy } from "lucide-react";
 import type { TournamentStatus } from "@prisma/client";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
+import { ZikaTvTabs } from "@/components/spec/zika-tv-tabs";
+import { getSpecConfig } from "@/lib/spec/config";
 
 const STATUS_FILTER_LABELS: Record<string, string> = {
   ALL:               "Todos",
@@ -41,6 +43,11 @@ export default async function TourneiosPage({
         ? { OR: [{ status: { not: "DRAFT" as const } }, { status: "DRAFT" as const, createdById: user.id }] }
         : { status: { not: "DRAFT" as const } };
 
+  const specConfig = await getSpecConfig();
+  const liveNow = specConfig.enabled
+    ? (await prisma.specStream.count({ where: { status: "LIVE" } }).catch(() => 0)) > 0
+    : false;
+
   const statusFilterEntries = Object.entries(STATUS_FILTER_LABELS);
 
   const tournaments = await prisma.tournament.findMany({
@@ -60,6 +67,7 @@ export default async function TourneiosPage({
   return (
     <div className="space-y-6">
       <TutorialManager pageId="torneios" isAdmin={admin} />
+      <ZikaTvTabs active="torneios" liveNow={liveNow} />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>

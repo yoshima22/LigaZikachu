@@ -2,7 +2,9 @@ import { prisma } from "@/lib/prisma";
 
 export type SpecStreamView = {
   id: string;
-  matchLabel: string;
+  matchLabel: string;       // "Jogador 1 Vs Jogador 2"
+  weekTitle: string;        // "Semana 3" ou o rótulo do dia/semana
+  title: string;            // "Torneio - Semana - A Vs B"
   tournamentName: string;
   tournamentSlug: string | null;
   broadcasterName: string;
@@ -23,22 +25,39 @@ export async function enrichSpecStreams(
   const [matches, tournaments, users] = await Promise.all([
     prisma.match.findMany({
       where: { id: { in: matchIds } },
-      select: { id: true, playerA: { select: { displayName: true } }, playerB: { select: { displayName: true } } },
+      select: {
+        id: true,
+        playerA: { select: { displayName: true } },
+        playerB: { select: { displayName: true } },
+        tournamentWeek: { select: { label: true, weekNumber: true } },
+      },
     }),
     prisma.tournament.findMany({ where: { id: { in: tournamentIds } }, select: { id: true, name: true, slug: true } }),
     prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
   ]);
 
-  const matchMap = new Map(matches.map((m) => [m.id, `${m.playerA?.displayName ?? "?"} vs ${m.playerB?.displayName ?? "Folga"}`]));
+  const matchMap = new Map(matches.map((m) => [m.id, {
+    label: `${m.playerA?.displayName ?? "?"} Vs ${m.playerB?.displayName ?? "Folga"}`,
+    weekTitle: m.tournamentWeek?.label?.trim()
+      || (typeof m.tournamentWeek?.weekNumber === "number" ? `Semana ${m.tournamentWeek.weekNumber}` : "Rodada"),
+  }]));
   const tourMap = new Map(tournaments.map((t) => [t.id, { name: t.name, slug: t.slug }]));
   const userMap = new Map(users.map((u) => [u.id, u.name ?? "—"]));
 
-  return rows.map((r) => ({
-    id: r.id,
-    matchLabel: matchMap.get(r.matchId) ?? "Partida",
-    tournamentName: tourMap.get(r.tournamentId)?.name ?? "Torneio",
-    tournamentSlug: tourMap.get(r.tournamentId)?.slug ?? null,
-    broadcasterName: userMap.get(r.broadcasterUserId) ?? "—",
-    startedAt: r.startedAt ?? null,
-  }));
+  return rows.map((r) => {
+    const m = matchMap.get(r.matchId);
+    const matchLabel = m?.label ?? "Partida";
+    const weekTitle = m?.weekTitle ?? "Rodada";
+    const tournamentName = tourMap.get(r.tournamentId)?.name ?? "Torneio";
+    return {
+      id: r.id,
+      matchLabel,
+      weekTitle,
+      title: `${tournamentName} - ${weekTitle} - ${matchLabel}`,
+      tournamentName,
+      tournamentSlug: tourMap.get(r.tournamentId)?.slug ?? null,
+      broadcasterName: userMap.get(r.broadcasterUserId) ?? "—",
+      startedAt: r.startedAt ?? null,
+    };
+  });
 }

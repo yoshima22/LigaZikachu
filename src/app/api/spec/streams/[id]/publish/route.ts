@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { getSpecConfig } from "@/lib/spec/config";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
+import { enrichSpecStreams } from "@/lib/spec/data";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +39,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   const stream = await prisma.specStream.findUnique({
     where: { id },
-    select: { id: true, broadcasterUserId: true, status: true },
+    select: { id: true, matchId: true, tournamentId: true, broadcasterUserId: true, status: true },
   });
   if (!stream) return NextResponse.json({ error: "Transmissão não encontrada." }, { status: 404 });
   if (stream.broadcasterUserId !== session.user.id) {
@@ -70,6 +72,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         lastSeenAt: new Date(),
       },
     });
+    // Professor Enguiça anuncia no ticker que a partida entrou ao vivo na Zika TV.
+    try {
+      const [view] = await enrichSpecStreams([{
+        id: stream.id, matchId: stream.matchId, tournamentId: stream.tournamentId, broadcasterUserId: stream.broadcasterUserId,
+      }]);
+      if (view) {
+        await publishLeagueTicker({
+          type: "spec_live",
+          message: `📺 Tá pegando fogo, bicho! ${view.matchLabel} acabou de entrar AO VIVO na Zika TV (${view.tournamentName} · ${view.weekTitle}). Corre pra arquibancada!`,
+          href: `/spec/${stream.id}`,
+          eventKey: `spec-live-${stream.id}`,
+          priority: 5,
+          ttlHours: 3,
+        });
+      }
+    } catch (e) {
+      console.error("[spec] falha ao anunciar no ticker", e);
+    }
+
     return NextResponse.json({ answerSdp }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     await prisma.specStream.update({ where: { id }, data: { status: "FAILED", endedAt: new Date() } }).catch(() => null);
