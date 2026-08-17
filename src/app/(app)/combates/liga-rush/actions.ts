@@ -493,30 +493,58 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } });
     if (!league) return { error: "Liga não encontrada." };
     const matches = await prisma.rushLeagueMatch.findMany({ where: { leagueId, battleDate, battleSlot: { lte: Math.min(3, Math.max(1, maxSlot)) }, status: "SCHEDULED", playerBId: { not: null } }, orderBy: { battleSlot: "asc" } });
-    let resolved = 0, skipped = 0;
+    let resolved = 0, walkovers = 0, skipped = 0;
     for (const match of matches) {
       const teams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate, battleSlot: match.battleSlot, playerId: { in: [match.playerAId, match.playerBId!] } } });
       const teamA = teams.find((t) => t.playerId === match.playerAId); const teamB = teams.find((t) => t.playerId === match.playerBId);
-      if (!teamA || !teamB) { skipped++; continue; }
-      const idsA = teamA.mascotIdsJson as string[]; const idsB = teamB.mascotIdsJson as string[];
+      const idsA = Array.isArray(teamA?.mascotIdsJson) ? teamA.mascotIdsJson as string[] : [];
+      const idsB = Array.isArray(teamB?.mascotIdsJson) ? teamB.mascotIdsJson as string[] : [];
       const mascots = await prisma.mascot.findMany({ where: { id: { in: [...idsA, ...idsB] } } });
       const map = new Map(mascots.map((m) => [m.id, m]));
-      const rolesA = (teamA.rolesJson ?? {}) as Record<string, string>; const rolesB = (teamB.rolesJson ?? {}) as Record<string, string>;
+      const validA = idsA.length > 0 && idsA.every((id) => map.get(id)?.playerId === match.playerAId);
+      const validB = idsB.length > 0 && idsB.every((id) => map.get(id)?.playerId === match.playerBId);
+      if (!validA || !validB) {
+        const winnerId = validA ? match.playerAId : validB ? match.playerBId : null;
+        const loserId = validA === validB ? null : validA ? match.playerBId : match.playerAId;
+        const applied = await prisma.$transaction(async (tx) => {
+          const claimed = await tx.rushLeagueMatch.updateMany({
+            where: { id: match.id, status: "SCHEDULED" },
+            data: {
+              status: "WO", winnerId, loserId, isDraw: false, resolvedAt: new Date(),
+              resultJson: { reason: winnerId ? "MISSING_VALID_TEAM" : "BOTH_MISSING_VALID_TEAM", validTeamA: validA, validTeamB: validB } as Prisma.InputJsonValue,
+            },
+          });
+          if (!claimed.count) return false;
+          for (const playerId of [match.playerAId, match.playerBId!]) {
+            const won = playerId === winnerId;
+            await tx.rushLeagueParticipant.update({
+              where: { leagueId_playerId: { leagueId, playerId } },
+              data: { points: { increment: won ? 3 : 0 }, wins: { increment: won ? 1 : 0 }, losses: { increment: won ? 0 : 1 } },
+            });
+          }
+          return true;
+        });
+        if (applied) walkovers++; else skipped++;
+        continue;
+      }
+      const rolesA = (teamA!.rolesJson ?? {}) as Record<string, string>; const rolesB = (teamB!.rolesJson ?? {}) as Record<string, string>;
       const a = idsA.map((id, i) => toLeagueMascot(map.get(id)!, i + 1, rolesA[id]));
       const b = idsB.map((id, i) => toLeagueMascot(map.get(id)!, i + 1, rolesB[id]));
       const result = runLeagueCombat(a, b);
       const winnerId = result.winner === "A" ? match.playerAId : result.winner === "B" ? match.playerBId : null;
       const loserId = winnerId ? (winnerId === match.playerAId ? match.playerBId : match.playerAId) : null;
-      await prisma.$transaction(async (tx) => {
-        await tx.rushLeagueMatch.update({ where: { id: match.id }, data: { status: "RESOLVED", winnerId, loserId, isDraw: result.winner === "DRAW", playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors, playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt, replayJson: result.log as unknown as Prisma.InputJsonValue, resultJson: { rounds: result.rounds, lineupA: result.lineupA, lineupB: result.lineupB } as unknown as Prisma.InputJsonValue, resolvedAt: new Date() } });
+      const applied = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.rushLeagueMatch.updateMany({ where: { id: match.id, status: "SCHEDULED" }, data: { status: "RESOLVED", winnerId, loserId, isDraw: result.winner === "DRAW", playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors, playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt, replayJson: result.log as unknown as Prisma.InputJsonValue, resultJson: { rounds: result.rounds, lineupA: result.lineupA, lineupB: result.lineupB } as unknown as Prisma.InputJsonValue, resolvedAt: new Date() } });
+        if (!claimed.count) return false;
         for (const side of [{ id: match.playerAId, won: winnerId === match.playerAId, lost: loserId === match.playerAId, survivors: result.teamASurvivors, dealt: result.teamADamageDealt, taken: result.teamBDamageDealt }, { id: match.playerBId!, won: winnerId === match.playerBId, lost: loserId === match.playerBId, survivors: result.teamBSurvivors, dealt: result.teamBDamageDealt, taken: result.teamADamageDealt }]) {
           await tx.rushLeagueParticipant.update({ where: { leagueId_playerId: { leagueId, playerId: side.id } }, data: { points: { increment: side.won ? 3 : (!side.lost ? 1 : 0) }, wins: { increment: side.won ? 1 : 0 }, losses: { increment: side.lost ? 1 : 0 }, draws: { increment: !side.won && !side.lost ? 1 : 0 }, survivorsScore: { increment: side.survivors }, damageDealt: { increment: side.dealt }, damageTaken: { increment: side.taken } } });
         }
+        return true;
       });
-      resolved++;
+      if (applied) resolved++; else skipped++;
     }
     revalidatePath(PATH);
-    return { success: true, resolved, skipped };
+    return { success: true, resolved, walkovers, skipped };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao executar os combates." }; }
 }
 
