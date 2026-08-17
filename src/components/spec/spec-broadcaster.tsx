@@ -11,8 +11,8 @@ type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" 
 // Broadcaster: captura de tela (getDisplayMedia) + publicação WebRTC. Envia uma
 // única publicação ao SFU; o fan-out para espectadores é da Cloudflare. Mostra
 // só o preview local (não puxa o próprio stream do SFU, para não gastar egress).
-export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, resolutionLabel }: {
-  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; resolutionLabel: string;
+export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, fps, resolutionLabel }: {
+  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; resolutionLabel: string;
 }) {
   const router = useRouter();
   const previewRef = useRef<HTMLVideoElement>(null);
@@ -41,11 +41,16 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
     setState("requesting");
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30, max: 30 }, width: { ideal: width }, height: { ideal: height } },
+        video: { frameRate: { ideal: fps, max: fps }, width: { ideal: width }, height: { ideal: height } },
         audio: true,
       });
       streamRef.current = stream;
       setHasAudio(stream.getAudioTracks().length > 0);
+
+      // Dica ao encoder: conteúdo com detalhes/texto (cartas), prioriza nitidez
+      // sobre fluidez — combina com o frame rate baixo e reduz bitrate.
+      const vTrack = stream.getVideoTracks()[0];
+      if (vTrack) { try { vTrack.contentHint = "detail"; } catch { /* nem todo navegador suporta */ } }
       if (previewRef.current) previewRef.current.srcObject = stream;
 
       // Encerra a live se o usuário parar o compartilhamento pelo navegador.
@@ -72,6 +77,9 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
           const params = videoSender.getParameters();
           if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
           params.encodings[0].maxBitrate = maxVideoBitrate;
+          params.encodings[0].maxFramerate = fps;
+          // Prioriza manter a resolução (texto legível) e derrubar frames no movimento.
+          (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = "maintain-resolution";
           await videoSender.setParameters(params);
         } catch { /* alguns navegadores não suportam; segue sem o limite */ }
       }

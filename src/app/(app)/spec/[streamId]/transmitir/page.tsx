@@ -3,7 +3,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
-import { SPEC_RESOLUTION_PROFILES } from "@/lib/spec/constants";
+import { SPEC_RESOLUTION_PROFILES, SPEC_TARGET_FPS } from "@/lib/spec/constants";
 import { SpecBroadcaster } from "@/components/spec/spec-broadcaster";
 import { SpecStands } from "@/components/spec/spec-stands";
 
@@ -46,6 +46,7 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
         maxVideoBitrate={profile.maxVideoBitrate}
         width={profile.width}
         height={profile.height}
+        fps={SPEC_TARGET_FPS}
         resolutionLabel={profile.label}
       />
       {stream.status === "LIVE" && <SpecStands streamId={stream.id} sendPresence={false} />}
