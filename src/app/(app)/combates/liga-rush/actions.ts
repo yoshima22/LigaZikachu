@@ -13,7 +13,7 @@ import { MEGA_STONES } from "@/lib/mega-evolution";
 import { DEFAULT_RUSH_REWARDS, RUSH_LEVEL_OPTIONS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
 
 const PATH = "/combates/liga-rush";
-const BATTLE_HOURS = [19, 19, 19];
+const BATTLE_HOURS = [18, 18, 18];
 const BATTLE_MINUTES = [0, 10, 20];
 
 function brtDate(date = new Date()) {
@@ -109,10 +109,10 @@ async function createAutomaticRushForMonday(monday:string) {
   const friday = addDaysDate(monday, 4);
   return prisma.rushLeague.upsert({ where: { weekKey: `RUSH-${monday}` }, update: {}, create: {
     name: `${preset.requiredType === "ROTATING" ? `${preset.name} · ${getPokemonTypeLabel(requiredType)}` : preset.name} · Nv.${maxLevel}`,
-    weekKey: `RUSH-${monday}`, weekStart: new Date(`${monday}T00:00:00-03:00`), weekEnd: new Date(`${friday}T19:30:00-03:00`), registrationEnds: new Date(`${monday}T07:50:00-03:00`),
+    weekKey: `RUSH-${monday}`, weekStart: new Date(`${monday}T00:00:00-03:00`), weekEnd: new Date(`${friday}T18:30:00-03:00`), registrationEnds: new Date(`${monday}T07:50:00-03:00`),
     division: normalizeBattleDivision(maxLevel < 50 ? "UNLIMITED" : ("division" in preset && preset.division ? preset.division : "LIMITED")), teamSize, maxLevel,
     requiredType: requiredType ?? null, uniqueSpecies: automaticRepeatMode === "WEEKLY_UNIQUE",
-    ruleJson: { preset: preset.id, rewardPlanId: plan.id, rewardCap: configuredCap, repeatMode: automaticRepeatMode, requiredPersonality, automatic: true, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória.", battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true },
+    ruleJson: { preset: preset.id, rewardPlanId: plan.id, rewardCap: configuredCap, repeatMode: automaticRepeatMode, requiredPersonality, automatic: true, automaticRuleNotes: "Semanas monotipo tendem a ter equipes menores e repetição mais flexível; a combinação não é obrigatória.", battlesPerDay: 3, battleTimes: ["18:00", "18:10", "18:20"], rewardTime: "18:30", bracketRevealTime: "08:00", freeRegistration: true },
     rewardsJson: scaleRewardPlan(plan.id, configuredCap) as unknown as Prisma.InputJsonValue,
   } });
 }
@@ -298,7 +298,7 @@ export async function adminCreateRushLeagueAction(input: { name: string; weekKey
     const league = await prisma.rushLeague.create({ data: {
       name: input.name.trim(), weekKey: input.weekKey.trim(), weekStart: dates.start, weekEnd: dates.end, registrationEnds: dates.registrationEnds,
       division: normalizeBattleDivision(input.division), teamSize: Math.min(6, Math.max(1, Math.trunc(input.teamSize))), maxLevel: input.maxLevel ? Math.max(1, Math.trunc(input.maxLevel)) : null,
-      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: input.repeatMode === "WEEKLY_UNIQUE" || Boolean(input.uniqueSpecies), ruleJson: { preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, rewardCap: Math.max(1000, input.rewardCap ?? 6000), repeatMode: input.repeatMode ?? (input.uniqueSpecies ? "WEEKLY_UNIQUE" : "UNRESTRICTED"), requiredPersonality: input.requiredPersonality || null, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true }, rewardsJson: rewards as unknown as Prisma.InputJsonValue,
+      requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: input.repeatMode === "WEEKLY_UNIQUE" || Boolean(input.uniqueSpecies), ruleJson: { preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, rewardCap: Math.max(1000, input.rewardCap ?? 6000), repeatMode: input.repeatMode ?? (input.uniqueSpecies ? "WEEKLY_UNIQUE" : "UNRESTRICTED"), requiredPersonality: input.requiredPersonality || null, battlesPerDay: 3, battleTimes: ["18:00", "18:10", "18:20"], rewardTime: "18:30", bracketRevealTime: "08:00", freeRegistration: true }, rewardsJson: rewards as unknown as Prisma.InputJsonValue,
     } });
     revalidatePath(PATH);
     return { success: true, leagueId: league.id };
@@ -316,7 +316,7 @@ export async function adminUpdateRushLeagueAction(input: { leagueId: string; nam
       name: input.name.trim(), weekStart: dates.start, weekEnd: dates.end, registrationEnds: dates.registrationEnds,
       division: normalizeBattleDivision(input.division), teamSize: Math.min(6, Math.max(1, Math.trunc(input.teamSize))), maxLevel: input.maxLevel ? Math.max(1, Math.trunc(input.maxLevel)) : null,
       requiredType: input.requiredType?.trim().toLowerCase() || null, uniqueSpecies: input.repeatMode === "WEEKLY_UNIQUE" || Boolean(input.uniqueSpecies),
-      ruleJson: { ...ruleData(current.ruleJson), preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, rewardCap: Math.max(1000, input.rewardCap ?? 6000), repeatMode: input.repeatMode ?? (input.uniqueSpecies ? "WEEKLY_UNIQUE" : "UNRESTRICTED"), requiredPersonality: input.requiredPersonality || null, battlesPerDay: 3, battleTimes: ["19:00", "19:10", "19:20"], rewardTime: "19:30", bracketRevealTime: "08:00", freeRegistration: true },
+      ruleJson: { ...ruleData(current.ruleJson), preset: input.preset ?? "CUSTOM", rewardPlanId: plan.id, rewardCap: Math.max(1000, input.rewardCap ?? 6000), repeatMode: input.repeatMode ?? (input.uniqueSpecies ? "WEEKLY_UNIQUE" : "UNRESTRICTED"), requiredPersonality: input.requiredPersonality || null, battlesPerDay: 3, battleTimes: ["18:00", "18:10", "18:20"], rewardTime: "18:30", bracketRevealTime: "08:00", freeRegistration: true },
       rewardsJson: plan.bundles as unknown as Prisma.InputJsonValue,
     } });
     revalidatePath(PATH);
@@ -519,6 +519,14 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
       for (let index = 0; index < ranking.length; index++) {
         const participant = ranking[index]; const rank = index + 1; const reward = rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));
         await tx.rushLeagueParticipant.update({ where: { id: participant.id }, data: { finalRank: rank, rewardGranted: Boolean(reward) } });
+        // Ovo de Evento de participação para todos os inscritos, independente da colocação.
+        await tx.playerGift.create({ data: {
+          playerId: participant.playerId,
+          type: GiftType.CUSTOM,
+          title: "Liga Rush · Participação",
+          description: "Ovo de Evento por participar da edição desta semana.",
+          payload: { rewardKind: "TOURNAMENT_BOX", coins: 0, food: 0, sweet: 0, creationDust: 0, eggs: [{ type: "EVENT", quantity: 1 }], shopItems: [], origin: `Liga Rush ${league.weekKey} · participação` } as Prisma.InputJsonValue,
+        } });
         if (!reward) continue;
         const shopItems = [...(reward.shopItems ?? [])].map(({ type, quantity, itemName }) => ({ type, quantity, ...(itemName ? { itemName } : {}) }));
         if (reward.randomMegaStone) {
@@ -551,9 +559,9 @@ export async function runRushLeagueAutomation(secret: string) {
   const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
   if (!["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday) || date < brtDate(league.weekStart) || date > brtDate(league.weekEnd)) return { success: true, action: "idle", leagueId: league.id };
   if (clock >= "08:00") await adminGenerateRushDayAction(league.id, date, secret);
-  const maxSlot = clock >= "19:20" ? 3 : clock >= "19:10" ? 2 : clock >= "19:00" ? 1 : 0;
+  const maxSlot = clock >= "18:20" ? 3 : clock >= "18:10" ? 2 : clock >= "18:00" ? 1 : 0;
   const battles = maxSlot ? await adminRunRushDayAction(league.id, date, maxSlot, secret) : { success: true, resolved: 0, skipped: 0 };
-  if (weekday === "Fri" && clock >= "19:30") {
+  if (weekday === "Fri" && clock >= "18:30") {
     const unresolved = await prisma.rushLeagueMatch.count({ where: { leagueId: league.id, status: "SCHEDULED" } });
     if (unresolved === 0) await adminFinishRushLeagueAction(league.id, secret);
   }
