@@ -167,6 +167,8 @@ export async function getRushDataAction() {
   const names = Object.fromEntries(players.map((p) => [p.id, p.displayName]));
   const joined = league.participants.some((p) => p.playerId === player.id);
   const staff = isStaff(session.user.role);
+  // Preferência compartilhada com a Liga Semanal (mesmo campo do jogador).
+  const prefs = await prisma.player.findUnique({ where: { id: player.id }, select: { hideLeagueResults: true } });
   const mascots = joined || staff ? await prisma.mascot.findMany({
     where: { playerId: player.id },
     orderBy: [{ level: "desc" }, { nickname: "asc" }],
@@ -199,6 +201,7 @@ export async function getRushDataAction() {
     weekHighlights,
     upcomingRegistration,
     upcomingJoined: Boolean(upcomingRegistration?.participants.some((participant) => participant.playerId === player.id)),
+    hideResults: Boolean(prefs?.hideLeagueResults),
   }));
 }
 
