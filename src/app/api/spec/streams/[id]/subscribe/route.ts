@@ -4,7 +4,7 @@ import { getAppSession } from "@/lib/session";
 import { getSpecConfig } from "@/lib/spec/config";
 import { canWatchSpecStream } from "@/lib/spec/authorization";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
-import { recordSpectatorJoinAndCheck } from "@/lib/spec/usage";
+import { isSpecOverMonthlyLimit } from "@/lib/spec/usage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,9 +30,9 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "Transmissão não está ao vivo." }, { status: 409 });
   }
 
-  // Corte de segurança: estima o egress do mês e recusa se passar do teto.
-  const { overLimit } = await recordSpectatorJoinAndCheck();
-  if (overLimit) {
+  // Corte de segurança: recusa se o egress estimado do mês já passou do teto.
+  // A contagem de audiência é acumulada pelos heartbeats de presença.
+  if (await isSpecOverMonthlyLimit()) {
     return NextResponse.json({ error: "Limite mensal de transmissão atingido. O Modo SPEC foi pausado." }, { status: 429 });
   }
 

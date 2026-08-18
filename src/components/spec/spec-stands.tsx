@@ -9,6 +9,13 @@ import {
 
 type Stands = Awaited<ReturnType<typeof getSpecStandsAction>>;
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 // Arquibancada (lista de espectadores) + enquetes. `sendPresence` = o usuário
 // entra na arquibancada (watch); no painel do transmissor fica false (ele não é
 // espectador, mas vê a lista e gerencia enquetes).
@@ -47,18 +54,31 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
     <div className="space-y-4">
       <PollSection stands={stands} streamId={streamId} onChange={refresh} />
 
-      <div className="rounded-2xl border border-border bg-slate-950/60 p-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]/70">
-          🪑 Arquibancada · {stands.count} {stands.count === 1 ? "pessoa" : "pessoas"}
-        </p>
+      <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-slate-900/80 to-slate-950/60">
+        <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-slate-950/40 px-4 py-2.5">
+          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-[#FFCB05]/80">
+            🪑 Arquibancada
+          </p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+            {stands.count} online
+          </span>
+        </div>
         {stands.spectators.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-500">Ninguém na arquibancada ainda.</p>
+          <p className="px-4 py-6 text-center text-xs text-slate-500">A arquibancada está vazia. Chame a galera pra assistir! 🎟️</p>
         ) : (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
             {stands.spectators.map((s) => (
-              <span key={s.userId} className="rounded-full border border-border bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-300">
-                {s.name}
-              </span>
+              <div key={s.userId} className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-900/60 px-2.5 py-2">
+                <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05]/30 to-purple-500/30 text-xs font-black text-white">
+                  {initials(s.name)}
+                  <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-900 bg-emerald-400" />
+                </span>
+                <span className="min-w-0 truncate text-xs font-semibold text-slate-200">{s.name}</span>
+              </div>
             ))}
           </div>
         )}

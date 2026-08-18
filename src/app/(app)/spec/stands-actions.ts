@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
 import { getSpecConfig } from "@/lib/spec/config";
+import { recordSpectatorWatchAndCheck } from "@/lib/spec/usage";
+import { SPEC_PRESENCE_HEARTBEAT_SECONDS } from "@/lib/spec/constants";
 
 // Janela para considerar um espectador "online" na arquibancada (ms).
 const PRESENCE_WINDOW_MS = 30_000;
@@ -45,6 +47,8 @@ export async function heartbeatSpecPresenceAction(streamId: string): Promise<{ o
     create: { streamId, userId: session.user.id, displayName: name, lastSeenAt: new Date() },
     update: { lastSeenAt: new Date(), displayName: name },
   }).catch(() => null);
+  // Acumula o tempo real de audiência para a estimativa de egress (corte de custo).
+  await recordSpectatorWatchAndCheck(SPEC_PRESENCE_HEARTBEAT_SECONDS).catch(() => null);
   return { ok: true };
 }
 

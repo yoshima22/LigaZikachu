@@ -22,8 +22,18 @@ export const SPEC_SOFT_MAX_CONCURRENT_VIEWERS = Number(process.env.SPEC_SOFT_MAX
 /** Máximo de transmissões AO VIVO simultâneas (limita fan-out total). */
 export const SPEC_MAX_CONCURRENT_STREAMS = Number(process.env.SPEC_MAX_CONCURRENT_STREAMS ?? 3);
 
-/** Duração média estimada de cada sessão de espectador (min) — para estimar egress. */
+/** Duração média estimada de cada sessão de espectador (min) — legado. */
 export const SPEC_AVG_SESSION_MINUTES = Number(process.env.SPEC_AVG_SESSION_MINUTES ?? 30);
+
+/** Intervalo do heartbeat de presença do espectador (s). Espelha o cliente. */
+export const SPEC_PRESENCE_HEARTBEAT_SECONDS = Number(process.env.SPEC_PRESENCE_HEARTBEAT_SECONDS ?? 15);
+
+/**
+ * Fator de utilização do bitrate no cálculo de egress. Conteúdo de tela (cartas,
+ * pouco movimento) codifica bem abaixo do teto, então o consumo real fica em
+ * torno de metade do teto configurado. Ajustável por env.
+ */
+export const SPEC_BITRATE_UTILIZATION = Number(process.env.SPEC_BITRATE_UTILIZATION ?? 0.5);
 
 /** Teto mensal de egress (GB). Ao estimar acima disso, o SPEC se auto-desliga. */
 export const SPEC_MONTHLY_GB_LIMIT = Number(process.env.SPEC_MONTHLY_GB_LIMIT ?? 950);
