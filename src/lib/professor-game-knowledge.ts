@@ -1,5 +1,6 @@
 import { COMBAT_ROLE_DESCRIPTIONS, COMBAT_ROLE_LABELS } from "@/lib/combat-roles";
 import { getPokemonName, PERSONALITY_DESCRIPTION } from "@/lib/mascot-data";
+import { PERSONALITY_DESIGN, STAT_LABEL, DEBUFF_RESISTANCE } from "@/lib/personality-design";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 
@@ -55,6 +56,27 @@ PERSONALIDADES:
 ${Object.entries(PERSONALITY_DESCRIPTION).map(([key, description]) => `- ${key}: ${description}`).join("\n")}
 `;
 
+const PERSONALITY_KNOWLEDGE = `
+REFORMULACAO DAS PERSONALIDADES (ativa no jogo)
+- Cada personalidade tem afinidade de atributos (muito util / util) que guia o crescimento no level-up (muito util x1,15, util x1,08) e efeitos inteligentes. Caotico nao tem afinidade fixa e concentra pontos (build instavel).
+- As tres personalidades novas sao Curioso, Guloso e Sereno; ja entram no sorteio de novos mascotes.
+- Os efeitos de combate valem na Arena Z, na Liga Semanal, na Liga Rush e na Arena Sincronizada. Os resultados aleatorios sao rolados uma vez e ficam gravados no replay (reassistir nunca refaz sorteios).
+- Resistencia de buff/debuff: a forca do debuff usa o Instinto de quem aplica; a resistencia do alvo usa ${Math.round(DEBUFF_RESISTANCE.targetInstinctWeight * 100)}% de Instinto + ${Math.round(DEBUFF_RESISTANCE.targetVitalityWeight * 100)}% de Vitalidade; o efeito fica entre ${Math.round(DEBUFF_RESISTANCE.minEffect * 100)}% e ${Math.round(DEBUFF_RESISTANCE.maxEffect * 100)}%.
+- No Laboratorio, ate 26/08/2026, mascotes Caoticos podem fazer um re-roll caotico de status (uso unico): redistribui o total atual pela regra caotica nivel a nivel, sem inflar.
+AFINIDADE E EFEITOS POR PERSONALIDADE:
+${PERSONALITY_DESIGN.map((p) => `- ${p.label}${p.isNew ? " (nova)" : ""}: afinidade ${p.affinity.veryUseful ? STAT_LABEL[p.affinity.veryUseful] : "sem preferencia"}/${p.affinity.useful ? STAT_LABEL[p.affinity.useful] : "sem preferencia"}. Interacoes: ${p.interactions} Expedicoes: ${p.expeditions} Combate: ${p.combat}${p.limitation ? ` Limitacao: ${p.limitation}` : ""}`).join("\n")}
+`;
+
+const WEEKLY_LEAGUE_KNOWLEDGE = `
+LIGA SEMANAL DOS MASCOTES
+- Liga automatica de segunda a sexta, aberta a todos os jogadores ativos (nao-casuais). Tres combates por dia (20:00, 20:10, 20:20), equipes de 6 mascotes.
+- O jogador monta ate 3 times por dia; pode salvar ate 10 presets de equipe (mascotes + ordem + posturas) reutilizaveis, tambem disponiveis na Arena Z. Um mascote nao pode estar em dois times ao mesmo tempo no dia.
+- Pareamento suico: pareia por proximidade na tabela e evita repetir o mesmo adversario no dia e revanches na semana.
+- Desempate: pontos, depois vitorias. BYE (folga) e W/O valem 3 pontos e 0 vitorias, entao pesam menos que uma vitoria real.
+- Quem terminar a edicao com todas as partidas em W/O nao recebe recompensas e entra no modo casual (pode desligar depois).
+- As personalidades e posturas dos mascotes se aplicam no combate. As transmissoes ao vivo ficam na Zika TV.
+`;
+
 const ECONOMY_KNOWLEDGE = `
 OVOS, BAZAR E ECONOMIA
 - Todo tipo de ovo pode gerar qualquer raridade de mascote permitida por suas chances; a raridade do ovo define chances e faixa de atributos, enquanto a geracao limita a especie. Somente formas iniciais nascem.
@@ -84,6 +106,8 @@ export function buildProfessorGameKnowledge(query: string) {
   if (wantsAll || /laboratorio|analise|nota|rank|sss|score|potencial|atributo|status|crescimento|maturidade/.test(q)) sections.push(LAB_KNOWLEDGE);
   if (wantsAll || /expedicao|loot|treino|itens|agilidade|pedra|cesta/.test(q)) sections.push(EXPEDITION_KNOWLEDGE);
   if (wantsAll || /mascote|pokemon|personalidade|humor|amigo|rival|laco|exp|nivel|favorito/.test(q)) sections.push(MASCOT_KNOWLEDGE);
+  if (wantsAll || /personalidade|afinidade|caotico|guloso|sereno|curioso|leal|orgulhoso|travesso|preguicoso|competitivo|dramatico|brincalhao|eletrico|timid|re-roll|reroll/.test(q)) sections.push(PERSONALITY_KNOWLEDGE);
+  if (wantsAll || /liga semanal|preset|pareamento|bye|w\/o|wo|casual/.test(q)) sections.push(WEEKLY_LEAGUE_KNOWLEDGE);
   if (wantsAll || /ovo|bazar|miauvadao|cofre|compra|venda|leilao/.test(q)) sections.push(ECONOMY_KNOWLEDGE);
   if (wantsAll || /tcg|deck|baralho|carta|standard|rotacao|meta|torneio|insignia/.test(q)) sections.push(TCG_KNOWLEDGE);
   return sections.join("\n");

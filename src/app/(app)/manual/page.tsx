@@ -498,12 +498,14 @@ export default async function ManualPage() {
         </Sub>
 
         {/* ── Reformulação: Personalidades com impacto real ─────────────────── */}
-        <Sub title="Reformulação: personalidades com impacto real (em implementação)">
+        <Sub title="Reformulação: personalidades com impacto real (ativa)">
           <Note>
-            Estamos ativando por fases um sistema em que a personalidade muda decisões reais em interações, expedições e
-            combate — com vantagens, limitações e efeitos visuais claros. As <strong>afinidades</strong> e as <strong>3 novas
-            personalidades</strong> já entraram; os efeitos de combate/expedição/interação estão sendo ligados aos poucos.
-            Afinidades e atributos já existentes dos seus mascotes são preservados (nada é recalculado retroativamente).
+            A personalidade agora muda decisões reais em <strong>interações, expedições e combate</strong> — com vantagens e
+            limitações claras. As <strong>afinidades</strong> guiam o crescimento, e os efeitos de combate valem na Arena Z,
+            Liga Semanal, Liga Rush e Arena Sincronizada (os sorteios ficam gravados no replay). Foram adicionadas 3 novas
+            personalidades (Curioso, Guloso, Sereno). Afinidades e atributos já existentes são preservados (nada é recalculado
+            retroativamente). Dica: no Laboratório, até <strong>26/08/2026</strong>, mascotes Caóticos podem fazer um
+            <strong> re-roll caótico de status</strong> (uso único).
           </Note>
         </Sub>
 

@@ -110,7 +110,8 @@ function calcSlotDust(slots: LabMascot[]): { total: number; breakdown: { mascot:
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, initialMonthlyUsage, weeklyEvolutionStone, limits, costs, monthlyCosts, initialFoodTrades, initialCoinBalance, analysisCost }: Props) {
-  const [tab, setTab] = useState<"recycle" | "shop" | "analyze">("recycle");
+  const [tab, setTab] = useState<"recycle" | "shop" | "analyze" | "caotico">("recycle");
+  const rerollOpen = Date.now() < new Date("2026-08-27T00:00:00-03:00").getTime();
   const [dust, setDust] = useState(initialDust);
   const [coinBalance, setCoinBalance] = useState(initialCoinBalance);
   const [mascots, setMascots] = useState(initialMascots);
@@ -248,11 +249,6 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
         </div>
       </div>
 
-      {/* Re-roll caótico (tempo limitado) */}
-      <div className="mb-5">
-        <ChaoticRerollPanel />
-      </div>
-
       {/* Guide sections */}
       <div className="mb-5 space-y-2">
         <GuideSection icon="🧫" title="Como funciona o Pó de Criação?">
@@ -314,18 +310,21 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
 
       {/* Tabs */}
       <div className="mb-6 flex flex-wrap gap-2">
-        {(["recycle", "shop", "analyze"] as const).map((t) => (
+        {(["recycle", "shop", "analyze", ...(rerollOpen ? ["caotico"] as const : [])] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : "border border-border text-slate-400 hover:text-white"
+              tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : t === "caotico" ? "border border-purple-400/50 text-purple-200 hover:text-white" : "border border-border text-slate-400 hover:text-white"
             }`}
           >
             {t === "recycle" ? <><FlaskConical size={15} /> Reciclar Mascotes</>
               : t === "shop" ? <><ShoppingBag size={15} /> Loja de Pó de Criação</>
-              : <><Microscope size={15} /> Análise de Mascote</>}
+              : t === "analyze" ? <><Microscope size={15} /> Análise de Mascote</>
+              : <>🌀 Re-roll Caótico</>}
           </button>
         ))}
       </div>
+
+      {tab === "caotico" && <ChaoticRerollPanel />}
 
       {/* ── ANALYZE TAB ── */}
       {tab === "analyze" && (
