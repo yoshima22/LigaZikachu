@@ -93,24 +93,64 @@ export function swissPairSlot(
     const opp = candidates[0]?.player ?? null;
 
     if (opp) {
+      // Não grava em todayPaired/faced aqui: o passe de reparo abaixo pode
+      // trocar parceiros. Só marcamos como pareados neste slot.
       result.push({ aId: p.playerId, bId: opp.playerId });
       paired.add(p.playerId);
       paired.add(opp.playerId);
-      if (!todayPaired.has(p.playerId)) todayPaired.set(p.playerId, new Set());
-      if (!todayPaired.has(opp.playerId)) todayPaired.set(opp.playerId, new Set());
-      todayPaired.get(p.playerId)!.add(opp.playerId);
-      todayPaired.get(opp.playerId)!.add(p.playerId);
-      // Registra também no "faced" da semana para os próximos rounds/dias.
-      if (!faced.has(p.playerId)) faced.set(p.playerId, new Set());
-      if (!faced.has(opp.playerId)) faced.set(opp.playerId, new Set());
-      faced.get(p.playerId)!.add(opp.playerId);
-      faced.get(opp.playerId)!.add(p.playerId);
     } else {
       // Defensivo: só ocorre se todos os candidatos estiverem indisponíveis.
       result.push({ aId: p.playerId, bId: null });
       byeCount.set(p.playerId, (byeCount.get(p.playerId) ?? 0) + 1);
       paired.add(p.playerId);
     }
+  }
+
+  // ── Passe de reparo: elimina repetições do MESMO dia ────────────────────
+  // O pareamento guloso (de baixo para cima) pode forçar o último par restante
+  // a ser uma revanche do dia (ex.: os dois melhores da tabela sobram juntos em
+  // todo slot). Aqui trocamos parceiros com outro par para desfazer isso, desde
+  // que exista uma troca sem criar outra repetição do dia.
+  const isTodayRepeat = (x: string, y: string) => todayPaired.get(x)?.has(y) ?? false;
+  const isWeekRepeat = (x: string, y: string) => faced.get(x)?.has(y) ?? false;
+  const realPairs = result.filter((r): r is { aId: string; bId: string } => Boolean(r.bId));
+  for (let i = 0; i < realPairs.length; i++) {
+    const A = realPairs[i];
+    if (!isTodayRepeat(A.aId, A.bId)) continue;
+    // Procura um par B para trocar; prefere trocas que também evitem revanche da semana.
+    let best: { j: number; mode: 1 | 2; weekClean: boolean } | null = null;
+    for (let j = 0; j < realPairs.length; j++) {
+      if (j === i) continue;
+      const B = realPairs[j];
+      // Modo 1: A=(A.a, B.b) e B=(B.a, A.b)
+      if (!isTodayRepeat(A.aId, B.bId) && !isTodayRepeat(B.aId, A.bId)) {
+        const weekClean = !isWeekRepeat(A.aId, B.bId) && !isWeekRepeat(B.aId, A.bId);
+        if (!best || (weekClean && !best.weekClean)) best = { j, mode: 1, weekClean };
+      }
+      // Modo 2: A=(A.a, B.a) e B=(A.b, B.b)
+      if (!isTodayRepeat(A.aId, B.aId) && !isTodayRepeat(A.bId, B.bId)) {
+        const weekClean = !isWeekRepeat(A.aId, B.aId) && !isWeekRepeat(A.bId, B.bId);
+        if (!best || (weekClean && !best.weekClean)) best = { j, mode: 2, weekClean };
+      }
+      if (best?.weekClean) break;
+    }
+    if (best) {
+      const B = realPairs[best.j];
+      if (best.mode === 1) { const t = A.bId; A.bId = B.bId; B.bId = t; }
+      else { const t = A.bId; A.bId = B.aId; B.aId = t; }
+    }
+  }
+
+  // Registra os pares finais (pós-reparo) em todayPaired e faced.
+  for (const r of realPairs) {
+    if (!todayPaired.has(r.aId)) todayPaired.set(r.aId, new Set());
+    if (!todayPaired.has(r.bId)) todayPaired.set(r.bId, new Set());
+    todayPaired.get(r.aId)!.add(r.bId);
+    todayPaired.get(r.bId)!.add(r.aId);
+    if (!faced.has(r.aId)) faced.set(r.aId, new Set());
+    if (!faced.has(r.bId)) faced.set(r.bId, new Set());
+    faced.get(r.aId)!.add(r.bId);
+    faced.get(r.bId)!.add(r.aId);
   }
   return result;
 }
