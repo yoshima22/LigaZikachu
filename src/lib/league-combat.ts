@@ -1,5 +1,6 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
+import { PERSONALITY_AFFINITY } from "./personality-design";
 import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
@@ -63,9 +64,9 @@ function alive(team: LeagueMascot[], hp: Map<string, number>) {
 
 function statTotal(m: LeagueMascot) { return m.force + m.agility + m.instinct + m.vitality + m.charisma; }
 
-// Multiplicador ofensivo por personalidade do atacante (depende de HP atual).
-// Determinístico dado o estado — roda uma vez no combate e fica gravado no log.
-function personalityOffenseMult(actor: LeagueMascot, target: LeagueMascot, hp: Map<string, number>) {
+// Multiplicador ofensivo por personalidade do atacante (depende de HP atual e
+// de estado com memória). O combate roda uma vez; o resultado fica no log.
+function personalityOffenseMult(actor: LeagueMascot, target: LeagueMascot, hp: Map<string, number>, hitTaken: Set<string>) {
   const hpPct = (hp.get(actor.id) ?? 0) / actor.hp;
   switch (actor.personality) {
     case "PROUD":       return hpPct > 0.70 ? 1.06 : 1;                                   // acima de 70% de HP
@@ -73,14 +74,17 @@ function personalityOffenseMult(actor: LeagueMascot, target: LeagueMascot, hp: M
     case "SERENE":      return 0.96;                                                       // -4% de dano direto
     case "COMPETITIVE": return (target.level > actor.level || statTotal(target) > statTotal(actor)) ? 1.07 : 1;
     case "CURIOUS":     return statTotal(target) >= statTotal(actor) ? 1.05 : 1;          // foco na maior ameaça
+    case "TIMID":       return hitTaken.has(actor.id) ? 1.05 : 1;                         // +Instinto após o 1º golpe
+    case "CHAOTIC":     return 0.92 + Math.random() * 0.20;                               // volatilidade -8% a +12%
     default:            return 1;
   }
 }
 
 // Multiplicador defensivo por personalidade do alvo (dano recebido).
-function personalityDefenseMult(target: LeagueMascot, hp: Map<string, number>) {
+function personalityDefenseMult(target: LeagueMascot, hp: Map<string, number>, hitTaken: Set<string>) {
   const hpPct = (hp.get(target.id) ?? 0) / target.hp;
   if (target.personality === "LAZY" && hpPct > 0.50) return 0.92;                          // protegido quando descansado
+  if (target.personality === "TIMID" && !hitTaken.has(target.id)) return 0.90;             // -10% antes do 1º golpe
   return 1;
 }
 
@@ -351,6 +355,10 @@ export function runLeagueCombat(
   const lastMascotBoostUsed = new Set<"A" | "B">();
   let midBattleRerolled = false;
   const duelistLock = new Map<string, string>();
+  // Estado para efeitos de personalidade com memória:
+  const hitTaken = new Set<string>();                 // mascote já sofreu o 1º golpe (Tímido)
+  const dramaticSaveUsed = new Set<string>();          // Dramático já usou a sobrevivência (1x/batalha)
+  const travessoFirstHit = new Set<string>();          // "actorId:targetId" já teve o 1º ataque (Travesso)
   let round = 1;
   let actionNum = 1;
   let totalDmgA = 0;
@@ -506,8 +514,8 @@ export function runLeagueCombat(
       const survivorDef = target.combatRole === "SURVIVOR" && ((hp.get(target.id) ?? 0) / target.hp) < 0.3 ? 0.75 : 1;
 
       const roleMult = roleDamageMult(actor, target);
-      const persOff = personalityOffenseMult(actor, target, hp);
-      const persDef = personalityDefenseMult(target, hp);
+      const persOff = personalityOffenseMult(actor, target, hp, hitTaken);
+      const persDef = personalityDefenseMult(target, hp, hitTaken);
       const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12))
         * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff;
       const mitigation = vitality * 0.8 + target.level;
@@ -538,8 +546,20 @@ export function runLeagueCombat(
         }
       }
 
+      // Dramático: 1x por batalha, 25% de chance de sobreviver a um golpe fatal com 1 HP.
+      let dramaticEffect: string | null = null;
+      if (target.personality === "DRAMATIC" && !dramaticSaveUsed.has(target.id)) {
+        const cur = hp.get(target.id) ?? 0;
+        if (cur - damage <= 0 && Math.random() < 0.25) {
+          damage = cur - 1;
+          dramaticSaveUsed.add(target.id);
+          dramaticEffect = `Dramático ${target.name} fez um último ato e sobreviveu com 1 HP!`;
+        }
+      }
+
       const newHp = Math.max(0, (hp.get(target.id) ?? 0) - damage);
       hp.set(target.id, newHp);
+      if (damage > 0) hitTaken.add(target.id); // marca o 1º golpe (Tímido)
       if (entry.side === "A") totalDmgA += damage; else totalDmgB += damage;
 
       // Opportunist debuff
@@ -556,11 +576,29 @@ export function runLeagueCombat(
         }
       }
 
+      // Travesso: no 1º ataque contra cada inimigo, 15% de chance de reduzir em 8%
+      // o atributo mais útil do alvo por 1 round (beneficia toda a equipe ao atacá-lo).
+      let travessoEffect: string | null = null;
+      const travessoKey = `${actor.id}:${target.id}`;
+      if (actor.personality === "MISCHIEVOUS" && !travessoFirstHit.has(travessoKey)) {
+        travessoFirstHit.add(travessoKey);
+        if (Math.random() < 0.15) {
+          const debuffable = ["force", "agility", "instinct", "vitality"] as const;
+          const aff = PERSONALITY_AFFINITY[target.personality ?? ""]?.veryUseful;
+          const stat = (aff && (debuffable as readonly string[]).includes(aff))
+            ? aff as typeof debuffable[number]
+            : debuffable.reduce((best, s) => (target[s] > target[best] ? s : best), "force");
+          const cur = debuffs.get(target.id) ?? {};
+          debuffs.set(target.id, { ...cur, [stat]: Math.max(cur[stat] ?? 0, 0.08) });
+          travessoEffect = `Travessura de ${actor.name}: -8% de ${stat} de ${target.name}.`;
+        }
+      }
+
       const effects = [
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador: +${Math.round(encourage * 100)}%.` : null,
         scoutBonus > 0 ? `Batedor: +${Math.round(scoutBonus * 100)}%.` : null,
-        debuffEffect, guardianEffect, survivorEffect,
+        debuffEffect, guardianEffect, survivorEffect, dramaticEffect, travessoEffect,
         provoked ? `Provocador desviou o ataque!` : null,
         chaosCritical ? "Instinto Confuso: acerto crítico de +50% de dano!" : null,
         persOff !== 1 && actor.personality ? `Personalidade ${PERSONALITY_LABEL[actor.personality] ?? actor.personality}: ${persOff > 1 ? "+" : ""}${Math.round((persOff - 1) * 100)}% de dano.` : null,
