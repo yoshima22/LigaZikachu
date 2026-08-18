@@ -7,7 +7,8 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import { swissPairSlot } from "@/lib/league-pairing";
-import { getCombatRoleLabel, defaultCombatRoleFor } from "@/lib/combat-roles";
+import { getCombatRoleLabel, defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
+import { getPokemonName } from "@/lib/mascot-data";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { settleWeeklyLeagueBets } from "@/app/(app)/zikabet/actions";
@@ -610,6 +611,122 @@ export async function saveDailyTeamAction(
   } catch (err) {
     return { error: `Erro ao salvar time: ${String(err).slice(0, 200)}` };
   }
+}
+
+// ── Presets de equipe (até 10 por jogador) ────────────────────────────────
+const MAX_WEEKLY_PRESETS = 10;
+
+type PresetMascot = {
+  id: string; pokemonId: number; nickname: string | null; preferredCombatRole: string | null;
+  megaEvolvedAt: Date | null; megaEvolvedFromPokemonId: number | null;
+  statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma: number;
+};
+
+// Aplica as MESMAS regras da montagem de time (6 mascotes, posse, divisão/Megas)
+// e normaliza as posturas usando a preferência salva do jogador como fallback.
+async function validatePresetMascots(playerId: string, mascotIds: unknown, roles: Record<string, string>) {
+  if (!Array.isArray(mascotIds) || mascotIds.length !== 6 || new Set(mascotIds).size !== 6) {
+    return { error: "Selecione exatamente 6 mascotes diferentes." as string };
+  }
+  const ids = mascotIds as string[];
+  const owned = await prisma.mascot.findMany({
+    where: { id: { in: ids }, playerId },
+    select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
+  });
+  if (owned.length !== 6) return { error: "Algum mascote selecionado não pertence a você." as string };
+  const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
+  const divisionCheck = validateBattleDivision(owned, await getBattleModeDivision("WEEKLY_LEAGUE"));
+  if (!divisionCheck.valid) return { error: divisionCheck.message as string };
+  const map = new Map<string, PresetMascot>(owned.map((m) => [m.id, m]));
+  const normalizedRoles = Object.fromEntries(ids.map((id) => [id, normalizeCombatRole(roles?.[id] ?? map.get(id)!.preferredCombatRole ?? defaultCombatRoleFor(map.get(id)!))]));
+  return { ids, map, normalizedRoles };
+}
+
+export async function listWeeklyPresetsAction() {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+  const presets = await prisma.weeklyLeagueTeamPreset.findMany({ where: { playerId: player.id }, orderBy: { createdAt: "asc" } });
+  return { presets: presets.map((p) => ({ id: p.id, name: p.name, mascotIds: (p.mascotIdsJson as string[]) ?? [], roles: (p.rolesJson as Record<string, string>) ?? {} })) };
+}
+
+export async function saveWeeklyPresetAction(input: { presetId?: string; name: string; mascotIds: string[]; roles?: Record<string, string> }) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+  const name = input.name?.trim();
+  if (!name) return { error: "Dê um nome ao preset." };
+  if (name.length > 40) return { error: "Nome muito longo (máximo 40 caracteres)." };
+  const v = await validatePresetMascots(player.id, input.mascotIds, input.roles ?? {});
+  if ("error" in v) return { error: v.error };
+  try {
+    if (input.presetId) {
+      const existing = await prisma.weeklyLeagueTeamPreset.findFirst({ where: { id: input.presetId, playerId: player.id }, select: { id: true } });
+      if (!existing) return { error: "Preset não encontrado." };
+      await prisma.weeklyLeagueTeamPreset.update({ where: { id: input.presetId }, data: { name, mascotIdsJson: v.ids, rolesJson: v.normalizedRoles } });
+    } else {
+      const count = await prisma.weeklyLeagueTeamPreset.count({ where: { playerId: player.id } });
+      if (count >= MAX_WEEKLY_PRESETS) return { error: `Você já tem ${MAX_WEEKLY_PRESETS} presets. Exclua um para salvar outro.` };
+      await prisma.weeklyLeagueTeamPreset.create({ data: { playerId: player.id, name, mascotIdsJson: v.ids, rolesJson: v.normalizedRoles } });
+    }
+    revalidatePath(PATH);
+    return { success: true };
+  } catch (err) {
+    return { error: `Erro ao salvar preset: ${String(err).slice(0, 160)}` };
+  }
+}
+
+export async function deleteWeeklyPresetAction(presetId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+  await prisma.weeklyLeagueTeamPreset.deleteMany({ where: { id: presetId, playerId: player.id } });
+  revalidatePath(PATH);
+  return { success: true };
+}
+
+export async function equipWeeklyPresetAction(leagueId: string, battleSlot: number, presetId: string) {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado" };
+  const player = await getSessionPlayer(session.user.id);
+  if (!player) return { error: "Jogador não encontrado" };
+  if (battleSlot < 1 || battleSlot > 3) return { error: "Slot inválido." };
+
+  const preset = await prisma.weeklyLeagueTeamPreset.findFirst({ where: { id: presetId, playerId: player.id } });
+  if (!preset) return { error: "Preset não encontrado." };
+  const mascotIds = (preset.mascotIdsJson as string[]) ?? [];
+  const roles = (preset.rolesJson as Record<string, string>) ?? {};
+
+  const editWindow = getWeeklyTeamEditWindow();
+  if (editWindow.locked) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
+  const battleDate = editWindow.battleDate;
+
+  const resolvedMatch = await prisma.weeklyMascotLeagueMatch.findFirst({ where: { leagueId, battleDate, battleSlot, status: { in: ["RESOLVED", "WO"] } }, select: { id: true } });
+  if (resolvedMatch) return { error: "Este combate já aconteceu e o time está travado." };
+
+  // Revalida posse/divisão (os mascotes podem ter mudado desde que o preset foi salvo).
+  const v = await validatePresetMascots(player.id, mascotIds, roles);
+  if ("error" in v) return { error: `Não é possível equipar "${preset.name}": ${v.error}` };
+
+  // Um mascote não pode estar em duas equipes do mesmo dia ao mesmo tempo.
+  const otherTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({ where: { leagueId, playerId: player.id, battleDate, battleSlot: { not: battleSlot } } });
+  const usedIds = new Set(otherTeams.flatMap((t) => (t.mascotIdsJson as string[]) ?? []));
+  const conflictingIds = v.ids.filter((id) => usedIds.has(id));
+  if (conflictingIds.length) {
+    const names = conflictingIds.map((id) => { const m = v.map.get(id); return m ? (m.nickname ?? getPokemonName(m.pokemonId)) : "mascote"; });
+    return { error: `Não é possível equipar "${preset.name}": ${names.join(", ")} já ${names.length > 1 ? "estão" : "está"} em outro time de hoje. Um mascote não pode estar em duas equipes ao mesmo tempo — troque o outro time ou ajuste o preset.` };
+  }
+
+  await prisma.weeklyMascotLeagueDailyTeam.upsert({
+    where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate, battleSlot } },
+    create: { id: createId(), leagueId, playerId: player.id, battleDate, battleSlot, source: "MANUAL", mascotIdsJson: v.ids, rolesJson: v.normalizedRoles, lockedAt: new Date(), updatedAt: new Date() },
+    update: { mascotIdsJson: v.ids, rolesJson: v.normalizedRoles, source: "MANUAL", lockedAt: new Date(), updatedAt: new Date() },
+  });
+  revalidatePath(PATH);
+  return { success: true };
 }
 
 // ── Clear single team slot ───────────────────────────────────────────────

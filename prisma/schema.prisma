@@ -3161,6 +3161,21 @@ model WeeklyMascotLeagueDailyTeam {
   @@map("weekly_mascot_league_daily_teams")
 }
 
+// Presets de equipe da Liga Semanal: o jogador salva até 10 combinações
+// reutilizáveis (mascotes + ordem dos slots + posturas) para equipar rápido.
+model WeeklyLeagueTeamPreset {
+  id            String   @id @default(cuid())
+  playerId      String
+  name          String
+  mascotIdsJson Json     // string[] ordenado por slot
+  rolesJson     Json     // Record<mascotId, CombatRole>
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([playerId])
+  @@map("weekly_league_team_presets")
+}
+
 model WeeklyMascotLeagueMatch {
   id                 String                         @id @default(cuid())
   leagueId           String

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
@@ -32,6 +32,10 @@ import {
   getWeeklyScoutingAnalysisAction,
   setHideLeagueResultsAction,
   revealLeagueMatchResultAction,
+  listWeeklyPresetsAction,
+  saveWeeklyPresetAction,
+  deleteWeeklyPresetAction,
+  equipWeeklyPresetAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
@@ -615,6 +619,102 @@ const ALL_TYPES = ["fire","water","grass","electric","ice","fighting","poison","
 
 const MASCOTS_PER_PAGE = 12;
 
+function PresetsPanel({ data, refresh }: { data: PageData; refresh: () => void }) {
+  const [presets, setPresets] = useState<Array<{ id: string; name: string; mascotIds: string[]; roles: Record<string, string> }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [pending, start] = useTransition();
+  const [equipSlot, setEquipSlot] = useState<Record<string, number>>({});
+
+  const load = useCallback(async () => {
+    const res = await listWeeklyPresetsAction();
+    if (!("error" in res) && res.presets) setPresets(res.presets);
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const nameOf = (id: string) => {
+    const m = data.availableMascots.find((x: any) => x.id === id);
+    return m ? (m.nickname ?? m.name ?? getPokemonName(m.pokemonId)) : "mascote removido";
+  };
+
+  const equip = (presetId: string) => start(async () => {
+    const slot = equipSlot[presetId] ?? 1;
+    const res = await equipWeeklyPresetAction(data.currentLeague.id, slot, presetId);
+    if ("error" in res && res.error) { toast.error(res.error, { duration: 9000 }); return; }
+    toast.success(`Preset equipado no Time ${slot}.`);
+    refresh();
+  });
+
+  const saveSlotAsPreset = (slot: number) => {
+    const team = data.myTeams.find((t: any) => t.battleSlot === slot);
+    const ids = (team?.mascotIdsJson as string[]) ?? [];
+    if (ids.length !== 6) { toast.error(`O Time ${slot} precisa ter 6 mascotes para virar preset.`); return; }
+    const name = window.prompt(`Nome do preset (a partir do Time ${slot}):`, `Time ${slot}`);
+    if (!name || !name.trim()) return;
+    start(async () => {
+      const res = await saveWeeklyPresetAction({ name: name.trim(), mascotIds: ids, roles: (team?.rolesJson as Record<string, string>) ?? {} });
+      if ("error" in res && res.error) { toast.error(res.error); return; }
+      toast.success("Preset salvo!");
+      load();
+    });
+  };
+
+  const del = (id: string, name: string) => {
+    if (!confirm(`Excluir o preset "${name}"?`)) return;
+    start(async () => {
+      const res = await deleteWeeklyPresetAction(id);
+      if ("error" in res && res.error) { toast.error(res.error); return; }
+      load();
+    });
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-purple-500/25 bg-purple-950/10 p-3">
+      <p className="text-[11px] font-black uppercase tracking-widest text-purple-200">🧩 Presets de equipe ({presets.length}/10)</p>
+      <p className="text-[11px] text-slate-400">Salve combinações prontas (mascotes, ordem e posturas) e equipe num time da liga sem montar tudo de novo. Um mascote pode estar em vários presets, mas não em dois times ao mesmo tempo.</p>
+      <div className="flex flex-wrap gap-1.5">
+        {[1, 2, 3].map((slot) => (
+          <button key={slot} onClick={() => saveSlotAsPreset(slot)} disabled={pending || presets.length >= 10}
+            className="rounded-lg border border-purple-400/40 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-200 hover:bg-purple-500/20 disabled:opacity-50">
+            + Salvar Time {slot} como preset
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <p className="text-xs text-slate-500">Carregando presets…</p>
+      ) : presets.length === 0 ? (
+        <p className="text-xs text-slate-500">Nenhum preset salvo ainda.</p>
+      ) : (
+        <div className="space-y-2">
+          {presets.map((p) => (
+            <div key={p.id} className="rounded-lg border border-border bg-slate-950/50 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-bold text-white">{p.name}</p>
+                <button onClick={() => del(p.id, p.name)} disabled={pending} className="shrink-0 text-[10px] text-red-300 underline hover:text-red-200">Excluir</button>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {p.mascotIds.map((id) => (
+                  <span key={id} className="rounded-full border border-border bg-slate-900 px-2 py-0.5 text-[10px] text-slate-300">{nameOf(id)}</span>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-slate-500">Equipar no</span>
+                {[1, 2, 3].map((slot) => (
+                  <button key={slot} onClick={() => setEquipSlot((s) => ({ ...s, [p.id]: slot }))}
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${(equipSlot[p.id] ?? 1) === slot ? "bg-[#FFCB05] text-[#1A1A2E]" : "border border-border text-slate-300"}`}>
+                    Time {slot}
+                  </button>
+                ))}
+                <button onClick={() => equip(p.id)} disabled={pending} className="ml-auto rounded-lg bg-[#FFCB05] px-3 py-1 text-[10px] font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">Equipar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   const [pending, startTransition] = useTransition();
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
@@ -877,6 +977,8 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-400">Monte até 3 times por dia (6 mascotes cada, sem repetição entre times).</p>
+
+      <PresetsPanel data={data} refresh={refresh} />
 
       <div className={`rounded-xl border px-3 py-2 text-xs ${
         data.teamSelection.locked
