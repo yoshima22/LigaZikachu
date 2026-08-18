@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   adminCreateRushLeagueAction, adminFinishRushLeagueAction, adminGenerateRushDayAction,
   adminOpenRushLeagueAction, adminRunRushDayAction, adminUpdateRushLeagueAction,
+  getRushTimesAction, adminSetRushTimesAction,
   adminRegenerateRushRewardsAction, adminRerollRushRulesAction, adminSaveRushRewardsAction,
   adminDebugRushTeamAction, getRushDataAction, getRushScoutingAnalysisAction,
   joinRushLeagueAction, leaveRushLeagueAction, saveRushTeamAction,
@@ -84,7 +85,7 @@ export function RushLeagueClient({initialData}:{initialData:Data}) {
     {tab==="teams"&&!data.joined&&<section className={cardClass}><p className="text-sm text-slate-400">Inscreva-se para montar as equipes desta semana.</p></section>}
     {tab==="results"&&<Matches matches={league.matches} names={names} playerId={data.playerId} mascots={data.mascots??[]} today={data.today} initialHideResults={data.hideResults}/>}
     {tab==="rules"&&<RushManual/>}
-    {tab==="admin"&&data.isAdmin&&<><AdminPanel league={league} data={data} run={run} pending={pending}/><RushTeamDebugger league={league} mascots={data.mascots??[]}/><CreatePanel data={data} run={run} pending={pending}/></>}
+    {tab==="admin"&&data.isAdmin&&<><AdminPanel league={league} data={data} run={run} pending={pending}/><RushTimesEditor pending={pending}/><RushTeamDebugger league={league} mascots={data.mascots??[]}/><CreatePanel data={data} run={run} pending={pending}/></>}
   </main>;
 }
 
@@ -227,6 +228,15 @@ function RuleFields({form,setForm,presets,rewardPlans}:{form:any;setForm:(v:any)
     <label className={labelClass}>Teto de referência da premiação<input type="number" min={1000} step={100} className={inputClass} value={form.rewardCap} onChange={e=>setForm({...form,rewardCap:Number(e.target.value)})}/><span className="block normal-case tracking-normal text-slate-500">A partir de 7.000 ZC entram novos itens progressivamente; Ovo Especial em 8.500, Penas entre 9.000 e 12.000 e Pedra aleatória em 12.000.</span></label>
     <p className="self-end rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-[10px] leading-relaxed text-cyan-100">Semanas com tipo restrito tendem a permitir repetição e usar equipes menores, mas isso é uma tendência do sorteio, não uma obrigação.</p>
   </div>;
+}
+
+function RushTimesEditor({pending}:{pending:boolean}){
+  const [times,setTimes]=useState<string[]>(["19:00","19:10","19:20"]);
+  const [reward,setReward]=useState("19:30");
+  const [saving,setSaving]=useState(false);
+  useEffect(()=>{getRushTimesAction().then(r=>{if(r&&"battleTimes"in r){setTimes(r.battleTimes);setReward(r.rewardTime);}}).catch(()=>null);},[]);
+  const save=()=>{setSaving(true);adminSetRushTimesAction({battleTimes:times,rewardTime:reward}).then(r=>{if(r&&"error"in r&&r.error)toast.error(r.error);else toast.success("Horários salvos.");}).finally(()=>setSaving(false));};
+  return <section className="mt-4 rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4"><h3 className="font-black text-cyan-200">Horários das partidas</h3><p className="mt-1 text-xs text-slate-400">Horário BRT de cada round e da distribuição de recompensas (sexta). A automação passa a usar estes horários.</p><div className="mt-3 flex flex-wrap items-end gap-3">{[0,1,2].map(i=><label key={i} className="text-[11px] font-bold text-slate-300">Round {i+1}<input type="time" value={times[i]} onChange={e=>setTimes(t=>t.map((v,j)=>j===i?e.target.value:v))} className="mt-1 block rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-sm text-white"/></label>)}<label className="text-[11px] font-bold text-yellow-300">Recompensas (sex)<input type="time" value={reward} onChange={e=>setReward(e.target.value)} className="mt-1 block rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-sm text-white"/></label><button disabled={pending||saving} onClick={save} className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-50">{saving?"Salvando…":"Salvar horários"}</button></div></section>;
 }
 
 function AdminPanel({league,data,run,pending}:{league:League;data:Data;run:(job:()=>Promise<{error?:string;success?:boolean}>)=>void;pending:boolean}){

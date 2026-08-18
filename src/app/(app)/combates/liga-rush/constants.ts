@@ -130,7 +130,7 @@ export const RUSH_REWARD_PLANS: RushRewardPlan[] = [
 
 export const DEFAULT_RUSH_REWARDS = RUSH_REWARD_PLANS[0].bundles;
 
-export const RUSH_BATTLE_TIMES = ["18:00", "18:10", "18:20"] as const;
-export const RUSH_REWARD_TIME = "18:30";
+export const RUSH_BATTLE_TIMES = ["19:00", "19:10", "19:20"] as const;
+export const RUSH_REWARD_TIME = "19:30";
 export const RUSH_LEVEL_OPTIONS = [30, 45, 55, 65, 75, 85, 95] as const;
 export const RUSH_TYPES = ["normal", "fire", "water", "electric", "grass", "ice", "fighting", "poison", "ground", "flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy"] as const;
