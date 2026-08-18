@@ -322,8 +322,8 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
     const roles = Object.fromEntries(mascots.map((m) => [m.id, normalizeCombatRole(input.roles?.[m.id]??m.preferredCombatRole??defaultCombatRoleFor(m))]));
     await prisma.rushLeagueDailyTeam.upsert({
       where: { leagueId_playerId_battleDate_battleSlot: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot } },
-      create: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot, mascotIdsJson: input.mascotIds, rolesJson: roles, lockedAt: new Date() },
-      update: { mascotIdsJson: input.mascotIds, rolesJson: roles, lockedAt: new Date() },
+      create: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot, source: "MANUAL", mascotIdsJson: input.mascotIds, rolesJson: roles, lockedAt: new Date() },
+      update: { mascotIdsJson: input.mascotIds, rolesJson: roles, source: "MANUAL", lockedAt: new Date() },
     });
     revalidatePath(PATH);
     return { success: true };
@@ -516,6 +516,24 @@ export async function adminGenerateRushDayAction(leagueId: string, battleDate: s
     }
     await prisma.rushLeagueMatch.createMany({ data: rows, skipDuplicates: true });
     for(const row of rows.filter(row=>row.status==="BYE")) await prisma.rushLeagueParticipant.update({where:{leagueId_playerId:{leagueId,playerId:row.playerAId}},data:{points:{increment:3}}});
+
+    // Herda os times do dia anterior (mesmo slot) para hoje, quando o jogador
+    // ainda não montou. Semanas SEM repetição na semana (WEEKLY_UNIQUE) não podem
+    // herdar, pois reusariam os mesmos mascotes já usados.
+    const repetition = repeatMode(ruleData(league.ruleJson), league.uniqueSpecies);
+    if (dayOffset > 0 && repetition !== "WEEKLY_UNIQUE") {
+      const prevDate = addDaysDate(battleDate, -1);
+      const [prevTeams, todayTeams] = await Promise.all([
+        prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate: prevDate } }),
+        prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate }, select: { playerId: true, battleSlot: true } }),
+      ]);
+      const existing = new Set(todayTeams.map((t) => `${t.playerId}:${t.battleSlot}`));
+      const inherited = prevTeams
+        .filter((t) => Array.isArray(t.mascotIdsJson) && (t.mascotIdsJson as unknown[]).length > 0 && !existing.has(`${t.playerId}:${t.battleSlot}`))
+        .map((t) => ({ leagueId, playerId: t.playerId, battleDate, battleSlot: t.battleSlot, source: "INHERITED", mascotIdsJson: t.mascotIdsJson as Prisma.InputJsonValue, rolesJson: (t.rolesJson ?? {}) as Prisma.InputJsonValue }));
+      if (inherited.length) await prisma.rushLeagueDailyTeam.createMany({ data: inherited, skipDuplicates: true });
+    }
+
     revalidatePath(PATH);
     return { success: true, matches: rows.length };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao gerar rodadas." }; }

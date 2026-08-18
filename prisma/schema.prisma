@@ -3357,6 +3357,7 @@ model RushLeagueDailyTeam {
   playerId      String
   battleDate    String
   battleSlot    Int // 1, 2 ou 3
+  source        String     @default("MANUAL") // MANUAL | INHERITED (time herdado do dia anterior)
   mascotIdsJson Json
   rolesJson     Json?
   lockedAt      DateTime?
