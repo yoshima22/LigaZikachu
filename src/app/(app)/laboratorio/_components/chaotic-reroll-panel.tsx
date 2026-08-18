@@ -27,6 +27,7 @@ export function ChaoticRerollPanel() {
   const [running, setRunning] = useState(false);
   const [display, setDisplay] = useState<Snapshot | null>(null);
   const [results, setResults] = useState<Result[]>([]);
+  const [resultsPage, setResultsPage] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -53,6 +54,7 @@ export function ChaoticRerollPanel() {
           setDisplay(prog[prog.length - 1]);
           setRunning(false);
           setResults((prev) => [{ id: cand.id, name: cand.name, pokemonId: cand.pokemonId, before, final }, ...prev.filter((r) => r.id !== cand.id)]);
+          setResultsPage(0);
           setSelected(null); setDisplay(null);
           toast.success(`${cand.name}: re-roll concluído!`);
           load();
@@ -142,36 +144,51 @@ export function ChaoticRerollPanel() {
         </div>
       )}
 
-      {/* Resultados (antes → depois), mantidos na tela para conferência */}
-      {results.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[11px] font-black uppercase tracking-widest text-purple-200">Resultados (antes → depois)</p>
-          {results.map((r) => (
-            <div key={r.id} className="rounded-xl border border-border bg-slate-950/50 p-3">
-              <div className="flex items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getStaticSpriteUrl(r.pokemonId)} alt="" className="h-8 w-8 object-contain [image-rendering:pixelated]" />
-                <p className="text-xs font-bold text-white">{r.name} <span className="font-mono text-[9px] text-slate-500">#{shortMascotCode(r.id)}</span></p>
-                <span className="ml-auto text-[10px] text-slate-500">Σ {sum(r.before)} → {sum(r.final)}</span>
-              </div>
-              <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {STATS.map((s) => {
-                  const b = r.before[s.key]; const a = r.final[s.key]; const d = a - b;
-                  return (
-                    <div key={s.key} className="flex items-center gap-2 text-[11px]">
-                      <span className="w-20 shrink-0 text-slate-400">{s.label}</span>
-                      <span className="font-mono text-slate-500">{b}</span>
-                      <span className="text-slate-600">→</span>
-                      <span className="font-mono font-bold text-white">{a}</span>
-                      <span className={`ml-auto font-mono text-[10px] ${d > 0 ? "text-green-400" : d < 0 ? "text-red-400" : "text-slate-600"}`}>{d > 0 ? `+${d}` : d}</span>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* Histórico de sorteios (antes → depois), com paginação */}
+      {results.length > 0 && (() => {
+        const RES_PAGE = 3;
+        const resPages = Math.max(1, Math.ceil(results.length / RES_PAGE));
+        const page = Math.min(resultsPage, resPages - 1);
+        const shownResults = results.slice(page * RES_PAGE, page * RES_PAGE + RES_PAGE);
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-black uppercase tracking-widest text-purple-200">Histórico de sorteios ({results.length})</p>
+              {resPages > 1 && (
+                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                  <button disabled={page === 0} onClick={() => setResultsPage(page - 1)} className="rounded border border-border px-2 py-0.5 disabled:opacity-30">←</button>
+                  <span>{page + 1}/{resPages}</span>
+                  <button disabled={page >= resPages - 1} onClick={() => setResultsPage(page + 1)} className="rounded border border-border px-2 py-0.5 disabled:opacity-30">→</button>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+            {shownResults.map((r) => (
+              <div key={r.id} className="rounded-xl border border-border bg-slate-950/50 p-3">
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={getStaticSpriteUrl(r.pokemonId)} alt="" className="h-8 w-8 object-contain [image-rendering:pixelated]" />
+                  <p className="text-xs font-bold text-white">{r.name} <span className="font-mono text-[9px] text-slate-500">#{shortMascotCode(r.id)}</span></p>
+                  <span className="ml-auto text-[10px] text-slate-500">Σ {sum(r.before)} → {sum(r.final)}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                  {STATS.map((s) => {
+                    const b = r.before[s.key]; const a = r.final[s.key]; const d = a - b;
+                    return (
+                      <div key={s.key} className="grid grid-cols-[70px_28px_14px_28px_1fr] items-center text-[11px]">
+                        <span className="text-slate-400">{s.label}</span>
+                        <span className="text-right font-mono text-slate-500">{b}</span>
+                        <span className="text-center text-slate-600">→</span>
+                        <span className="text-right font-mono font-bold text-white">{a}</span>
+                        <span className={`text-right font-mono text-[10px] ${d > 0 ? "text-green-400" : d < 0 ? "text-red-400" : "text-slate-600"}`}>{d > 0 ? `+${d}` : d}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

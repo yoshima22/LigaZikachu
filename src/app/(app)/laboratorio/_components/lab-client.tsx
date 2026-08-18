@@ -308,18 +308,18 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="mb-6 flex flex-wrap gap-1.5">
+      {/* Tabs — preenchem a largura, alinhados com o conteúdo acima, sem scroll */}
+      <div className="mb-6 flex gap-1.5">
         {(["recycle", "shop", "analyze", ...(rerollOpen ? ["caotico"] as const : [])] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
               tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : t === "caotico" ? "border border-purple-400/50 text-purple-200 hover:text-white" : "border border-border text-slate-400 hover:text-white"
             }`}
           >
             {t === "recycle" ? <><FlaskConical size={13} /> Reciclar</>
               : t === "shop" ? <><ShoppingBag size={13} /> Loja de Pó</>
               : t === "analyze" ? <><Microscope size={13} /> Análise</>
-              : <>🌀 Re-roll Caótico</>}
+              : <>🌀 <span className="hidden sm:inline">Re-roll </span>Caótico</>}
           </button>
         ))}
       </div>
