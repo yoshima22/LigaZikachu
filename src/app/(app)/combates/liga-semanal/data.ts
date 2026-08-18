@@ -393,7 +393,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     try {
       const allMatches = await (prisma as any).weeklyMascotLeagueMatch.findMany({
         where: { leagueId: (currentLeague as any).id, status: "RESOLVED" },
-        select: { replayJson: true, playerAId: true, playerBId: true, winnerId: true },
+        select: { replayJson: true, resultJson: true, playerAId: true, playerBId: true, winnerId: true },
       });
       // Compute per-mascot stats from replay logs
       const mascotStats = new Map<string, { id: string; name: string; pokemonId: number; ownerId: string; role: string; damageDealt: number; damageTaken: number; kosDealt: number; heals: number; attackActions: number; matches: number; wins: number }>();
@@ -401,6 +401,12 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       for (const match of allMatches as any[]) {
         if (!match.replayJson || !Array.isArray(match.replayJson)) continue;
         const hpTracker = new Map<string, number>();
+        // Inicializa o HP de cada mascote pelo maxHp do lineup — sem isso os KOs
+        // nunca eram detectados (o placeholder anterior começava em 9999).
+        const rj = (match.resultJson as any) ?? {};
+        for (const f of [...(Array.isArray(rj.lineupA) ? rj.lineupA : []), ...(Array.isArray(rj.lineupB) ? rj.lineupB : [])]) {
+          if (f?.id) hpTracker.set(f.id, Number(f.maxHp) || Number(f.hp) || 0);
+        }
         const seen = new Map<string, { name: string; pokemonId?: number; ownerId?: string; role?: string }>();
 
         for (const t of match.replayJson as any[]) {
