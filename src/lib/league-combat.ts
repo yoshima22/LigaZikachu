@@ -1,5 +1,5 @@
 import type { ArenaTurnLog } from "./arena-z";
-import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName } from "./mascot-data";
+import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
 import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
@@ -21,6 +21,7 @@ export type LeagueMascot = {
   hp: number;
   combatRole: CombatRole;
   slot: number;
+  personality?: string | null;
 };
 
 export type LeagueBattleResult = {
@@ -60,6 +61,29 @@ function alive(team: LeagueMascot[], hp: Map<string, number>) {
   return team.filter(m => (hp.get(m.id) ?? 0) > 0);
 }
 
+function statTotal(m: LeagueMascot) { return m.force + m.agility + m.instinct + m.vitality + m.charisma; }
+
+// Multiplicador ofensivo por personalidade do atacante (depende de HP atual).
+// Determinístico dado o estado — roda uma vez no combate e fica gravado no log.
+function personalityOffenseMult(actor: LeagueMascot, target: LeagueMascot, hp: Map<string, number>) {
+  const hpPct = (hp.get(actor.id) ?? 0) / actor.hp;
+  switch (actor.personality) {
+    case "PROUD":       return hpPct > 0.70 ? 1.06 : 1;                                   // acima de 70% de HP
+    case "DRAMATIC":    return hpPct < 0.35 ? 1.10 : 1;                                   // perigoso com pouca vida
+    case "SERENE":      return 0.96;                                                       // -4% de dano direto
+    case "COMPETITIVE": return (target.level > actor.level || statTotal(target) > statTotal(actor)) ? 1.07 : 1;
+    case "CURIOUS":     return statTotal(target) >= statTotal(actor) ? 1.05 : 1;          // foco na maior ameaça
+    default:            return 1;
+  }
+}
+
+// Multiplicador defensivo por personalidade do alvo (dano recebido).
+function personalityDefenseMult(target: LeagueMascot, hp: Map<string, number>) {
+  const hpPct = (hp.get(target.id) ?? 0) / target.hp;
+  if (target.personality === "LAZY" && hpPct > 0.50) return 0.92;                          // protegido quando descansado
+  return 1;
+}
+
 // ── Build mascot from DB data ──────────────────────────────────────────────
 
 export function toLeagueMascot(m: {
@@ -76,12 +100,14 @@ export function toLeagueMascot(m: {
   speciesNameOverride?: string | null;
   primaryTypeOverride?: string | null;
   secondaryTypeOverride?: string | null;
+  personality?: string | null;
 }, slot: number, role?: string | null): LeagueMascot {
   const combatRole = normalizeCombatRole(role);
   return {
     id: m.id,
     ownerId: m.playerId,
     pokemonId: m.pokemonId,
+    personality: m.personality ?? null,
     name: m.nickname || m.speciesNameOverride || getPokemonName(m.pokemonId),
     types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(m.pokemonId),
     level: m.level,
@@ -480,10 +506,12 @@ export function runLeagueCombat(
       const survivorDef = target.combatRole === "SURVIVOR" && ((hp.get(target.id) ?? 0) / target.hp) < 0.3 ? 0.75 : 1;
 
       const roleMult = roleDamageMult(actor, target);
+      const persOff = personalityOffenseMult(actor, target, hp);
+      const persDef = personalityDefenseMult(target, hp);
       const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12))
-        * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg;
+        * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff;
       const mitigation = vitality * 0.8 + target.level;
-      let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef));
+      let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
       if (chaosCritical) damage = Math.max(1, Math.round(damage * 1.5));
       if (provoked) damage = Math.round(damage * 0.92);
 
@@ -535,6 +563,8 @@ export function runLeagueCombat(
         debuffEffect, guardianEffect, survivorEffect,
         provoked ? `Provocador desviou o ataque!` : null,
         chaosCritical ? "Instinto Confuso: acerto crítico de +50% de dano!" : null,
+        persOff !== 1 && actor.personality ? `Personalidade ${PERSONALITY_LABEL[actor.personality] ?? actor.personality}: ${persOff > 1 ? "+" : ""}${Math.round((persOff - 1) * 100)}% de dano.` : null,
+        persDef !== 1 && target.personality ? `Personalidade ${PERSONALITY_LABEL[target.personality] ?? target.personality}: ${Math.round((persDef - 1) * 100)}% de dano recebido.` : null,
       ].filter(Boolean).join(" ") || undefined;
 
       log.push({

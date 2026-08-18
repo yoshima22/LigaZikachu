@@ -80,7 +80,8 @@ async function applyGiftReward(
       data: {
         playerId,
         type: payload.eggType,
-        origin: typeof payload.origin === "string" ? payload.origin : gift.title
+        origin: typeof payload.origin === "string" ? payload.origin : gift.title,
+        hatchRarityBonusPct: typeof payload.hatchRarityBonusPct === "number" ? payload.hatchRarityBonusPct : 0,
       }
     });
     return {};

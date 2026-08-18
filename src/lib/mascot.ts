@@ -1151,7 +1151,7 @@ function rollBuffItemType(durationKey: ExpeditionDuration): string {
 }
 
 async function rollExpeditionReward(
-  mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
+  mascot: { id: string; level: number; statInstinct: number; statCharisma: number; personality?: string | null },
   durationKey: ExpeditionDuration = "1h",
   allyCount = 0,
   picnicBonusPct = 0,
@@ -1165,6 +1165,17 @@ async function rollExpeditionReward(
   const allyBonus = Math.min(20, allyCount * 4);
   const odds = getExpeditionOdds({ duration: durationKey, mode: "STANDARD", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff: hasLuckBuff });
   const luck = odds.luck;
+  // Personalidade (redistribuição limitada, mantém o total ≤ 100):
+  // Travesso desloca 10% da comida comum para doce e ovo; Guloso converte parte
+  // do item especial (resto → BUFF_ITEM) em comida e doce.
+  if (mascot.personality === "MISCHIEVOUS") {
+    const moved = odds.food * 0.10;
+    odds.food -= moved; odds.sweet += moved * 0.5; odds.egg += moved * 0.5;
+  } else if (mascot.personality === "GLUTTON") {
+    const leftover = Math.max(0, 100 - (odds.nothing + odds.egg + odds.sweet + odds.food + odds.coins));
+    const add = Math.min(7, leftover);
+    odds.food += add * 0.6; odds.sweet += add * 0.4;
+  }
   const roll = Math.random() * 100;
 
   // Ovo: a raridade é SORTEADA com pesos que crescem com a sorte (ver
@@ -1199,7 +1210,7 @@ async function rollExpeditionReward(
 }
 
 async function rollItemExpeditionReward(
-  mascot: { id: string; level: number; statInstinct: number; statCharisma: number },
+  mascot: { id: string; level: number; statInstinct: number; statCharisma: number; personality?: string | null },
   durationKey: ExpeditionDuration = "1h",
   allyCount = 0,
   picnicBonusPct = 0,
@@ -1212,6 +1223,15 @@ async function rollItemExpeditionReward(
   const odds = getExpeditionOdds({ duration: durationKey, mode: "ITEMS", level: mascot.level, instinct: mascot.statInstinct, allyCount, luckBuff: !!luckBuff });
   const luck = odds.luck;
   const allyBonus = Math.min(20, allyCount * 4);
+  // Personalidade (mesma lógica limitada do modo padrão).
+  if (mascot.personality === "MISCHIEVOUS") {
+    const moved = odds.food * 0.10;
+    odds.food -= moved; odds.sweet += moved * 0.5; odds.egg += moved * 0.5;
+  } else if (mascot.personality === "GLUTTON") {
+    const leftover = Math.max(0, 100 - (odds.megaStone + odds.egg + odds.sweet + odds.food));
+    const add = Math.min(7, leftover);
+    odds.food += add * 0.6; odds.sweet += add * 0.4;
+  }
 
   const roll = Math.random() * 100;
 
@@ -1378,7 +1398,9 @@ export async function startExpedition(
   const secondHalfMs = dur.ms / 2;
   const agilityAdjustedDurationMs = firstHalfMs + secondHalfMs * (1 - agilityTimeReductionPct / 100);
   const picnicTimeReductionPct = picnicSpeedBuff ? 30 : 0;
-  const effectiveDurationMs = Math.round(agilityAdjustedDurationMs * (1 - picnicTimeReductionPct / 100));
+  // Elétrico: reduz um pouco mais o tempo de expedições curtas (30min e 1h).
+  const electricTimeReductionPct = mascot.personality === "ELECTRIC" && (durationKey === "30min" || durationKey === "1h") ? 8 : 0;
+  const effectiveDurationMs = Math.round(agilityAdjustedDurationMs * (1 - picnicTimeReductionPct / 100) * (1 - electricTimeReductionPct / 100));
   const finishAt = new Date(Date.now() + effectiveDurationMs);
   return prisma.$transaction(async (tx) => {
     const expedition = await tx.mascotExpedition.create({
@@ -1390,6 +1412,7 @@ export async function startExpedition(
           mode,
           agilityTimeReductionPct,
           picnicTimeReductionPct,
+          electricTimeReductionPct,
           totalTimeReductionPct: 100 * (1 - effectiveDurationMs / dur.ms),
           baseDurationMs: dur.ms,
           effectiveDurationMs,
@@ -1452,7 +1475,9 @@ async function claimExpeditionLegacy(
 
     // Aplica recompensa
     if (reward.type === "EGG") {
-      await tx.mascotEgg.create({ data: { playerId, type: reward.eggType as EggType, origin: "Expedição" } });
+      // Legado (sempre modo Padrão): Preguiçoso e Brincalhão dão +1pp de raridade.
+      const eggRarityBonus = (expedition.mascot.personality === "LAZY" || expedition.mascot.personality === "PLAYFUL") ? 1 : 0;
+      await tx.mascotEgg.create({ data: { playerId, type: reward.eggType as EggType, origin: "Expedição", hatchRarityBonusPct: eggRarityBonus } });
     } else if (reward.type === "FOOD") {
       await tx.mascotFoodItem.upsert({
         where: { playerId_type: { playerId, type: reward.foodType } },
@@ -1606,6 +1631,12 @@ export async function claimExpedition(
     await ensureMegaStoneShopItems(false);
   }
   const gift = mode === "TRAINING" ? null : await describeExpeditionReward(reward);
+  // Preguiçoso (qualquer expedição) e Brincalhão (Padrão): o ovo recebido nasce
+  // com +1 ponto percentual na chance de raridade do mascote ao chocar.
+  if (gift && reward.type === "EGG") {
+    const eggRarityBonus = pers === "LAZY" ? 1 : (pers === "PLAYFUL" && mode === "STANDARD") ? 1 : 0;
+    if (eggRarityBonus > 0) (gift.payload as Record<string, unknown>).hatchRarityBonusPct = eggRarityBonus;
+  }
   const storedRewardJson: Record<string, Prisma.InputJsonValue> = {
     ...reward,
     mode,
