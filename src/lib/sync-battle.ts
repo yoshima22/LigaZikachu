@@ -73,6 +73,7 @@ type MascotRow = {
   happiness: number;
   mood: string;
   combatRole?: CombatRole | string | null;
+  personality?: string | null;
   playerId?: string;
   [key: string]: unknown;
 };
