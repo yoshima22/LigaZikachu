@@ -27,6 +27,12 @@ import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getSpeciesSnapshot } from "@/lib/species-registry";
+import { PERSONALITY_AFFINITY, type StatKey } from "@/lib/personality-design";
+
+// Afinidade usa chaves "force/agility/..."; o crescimento usa "statForce/...".
+const STAT_KEY_TO_WEIGHT: Record<StatKey, "statForce" | "statAgility" | "statInstinct" | "statVitality" | "statCharisma"> = {
+  force: "statForce", agility: "statAgility", instinct: "statInstinct", vitality: "statVitality", charisma: "statCharisma",
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -440,9 +446,21 @@ function levelStatBonuses(
     statVitality: softWeight(mascot.statVitality),
   };
 
-  if (mascot.personality === "COMPETITIVE") weights.statForce *= 1.15;
-  if (mascot.personality === "LOYAL") weights.statCharisma *= 1.15;
+  // Crescimento guiado pela afinidade da personalidade: o atributo "muito útil"
+  // recebe viés forte (×1,15) e o "útil" um viés leve (×1,08). Vale para todas as
+  // personalidades (o Caótico não tem afinidade fixa — ver concentração abaixo).
+  const aff = PERSONALITY_AFFINITY[mascot.personality];
+  if (aff?.veryUseful) weights[STAT_KEY_TO_WEIGHT[aff.veryUseful]] *= 1.15;
+  if (aff?.useful) weights[STAT_KEY_TO_WEIGHT[aff.useful]] *= 1.08;
+  // Limitação preservada do Dramático: -15% no crescimento de Vitalidade.
   if (mascot.personality === "DRAMATIC") weights.statVitality *= 0.85;
+  // Caótico: instabilidade — concentra a maior parte da subida num atributo
+  // sorteado (com um segundo atributo secundário), gerando builds imprevisíveis.
+  if (mascot.personality === "CHAOTIC") {
+    const keys = Object.keys(weights) as MascotStatKey[];
+    weights[keys[randomInt(0, keys.length - 1)]] *= 8;
+    weights[keys[randomInt(0, keys.length - 1)]] *= 2.5;
+  }
 
   (Object.keys(weights) as MascotStatKey[]).forEach((key, index) => {
     const wobble = 0.92 + (((mascot.pokemonId * (index + 3) + mascot.level * 11) % 17) / 100);

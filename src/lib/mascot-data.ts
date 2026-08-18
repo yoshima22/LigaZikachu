@@ -960,7 +960,8 @@ export const CHALLENGE_COLOR: Record<ChallengeStatus, string> = {
 
 export const PERSONALITIES = [
   "LOYAL","PROUD","MISCHIEVOUS","LAZY","COMPETITIVE",
-  "DRAMATIC","PLAYFUL","ELECTRIC","TIMID","CHAOTIC"
+  "DRAMATIC","PLAYFUL","ELECTRIC","TIMID","CHAOTIC",
+  "CURIOUS","GLUTTON","SERENE"
 ] as const;
 
 /**
