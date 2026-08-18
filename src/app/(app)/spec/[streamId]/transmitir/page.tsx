@@ -3,7 +3,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
-import { SPEC_RESOLUTION_PROFILES, SPEC_TARGET_FPS } from "@/lib/spec/constants";
+import { SPEC_RESOLUTION_PROFILES, SPEC_TARGET_FPS, SPEC_P2P_PROFILE } from "@/lib/spec/constants";
 import { SpecBroadcaster } from "@/components/spec/spec-broadcaster";
 import { SpecBroadcasterP2P } from "@/components/spec/spec-broadcaster-p2p";
 import { SpecStands } from "@/components/spec/spec-stands";
@@ -45,11 +45,11 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
         <SpecBroadcasterP2P
           streamId={stream.id}
           matchLabel={view?.title ?? view?.matchLabel ?? "Partida"}
-          maxVideoBitrate={profile.maxVideoBitrate}
-          width={profile.width}
-          height={profile.height}
-          fps={SPEC_TARGET_FPS}
-          resolutionLabel={profile.label}
+          maxVideoBitrate={SPEC_P2P_PROFILE.maxVideoBitrate}
+          width={SPEC_P2P_PROFILE.width}
+          height={SPEC_P2P_PROFILE.height}
+          fps={SPEC_P2P_PROFILE.fps}
+          resolutionLabel={SPEC_P2P_PROFILE.label}
         />
       ) : (
         <SpecBroadcaster

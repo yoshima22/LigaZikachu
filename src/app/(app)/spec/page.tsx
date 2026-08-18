@@ -8,6 +8,7 @@ import { enrichSpecStreams } from "@/lib/spec/data";
 import { listActiveSpecStreamsAction } from "./actions";
 import { SpecAdminToggle } from "@/components/spec/spec-admin-toggle";
 import { SpecStandaloneButton } from "@/components/spec/spec-standalone-button";
+import { SpecRefreshButton } from "@/components/spec/spec-refresh-button";
 import { ZikaTvTabs } from "@/components/spec/zika-tv-tabs";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +26,13 @@ export default async function SpecPage() {
     <main className="mx-auto max-w-4xl space-y-5 px-1 py-2">
       <ZikaTvTabs active="zikatv" liveNow={views.length > 0} />
       <header className="rounded-2xl border border-[#FFCB05]/25 bg-gradient-to-r from-[#1a1a2e] via-slate-950 to-purple-950/20 p-5">
-        <h1 className="text-2xl font-black text-white">📺 Zika TV</h1>
-        <p className="mt-1 text-sm text-slate-400">Assista às partidas dos torneios da Liga ao vivo. As transmissões partem dos próprios participantes.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black text-white">📺 Zika TV</h1>
+            <p className="mt-1 text-sm text-slate-400">Assista às partidas dos torneios da Liga ao vivo. As transmissões partem dos próprios participantes.</p>
+          </div>
+          <SpecRefreshButton />
+        </div>
       </header>
 
       {admin && <SpecAdminToggle enabled={config.enabled} providerConfigured={config.providerConfigured} estimatedGb={usage?.estimatedGb} gbLimit={SPEC_MONTHLY_GB_LIMIT} resolution={config.resolution} mode={config.mode} />}

@@ -63,6 +63,19 @@ export const SPEC_RESOLUTION_PROFILES: Record<SpecResolution, { width: number; h
   "1080": { width: 1920, height: 1080, maxVideoBitrate: 1_500_000, label: "1080p" },
 };
 
+/**
+ * Perfil do modo P2P mesh: mais enxuto que a Cloudflare porque o broadcaster
+ * codifica UM stream por espectador (CPU cresce com a audiência). 540p/10fps com
+ * bitrate baixo mantém a leitura das cartas e reduz muito o custo de encode.
+ */
+export const SPEC_P2P_PROFILE = {
+  width: Number(process.env.SPEC_P2P_WIDTH ?? 960),
+  height: Number(process.env.SPEC_P2P_HEIGHT ?? 540),
+  fps: Number(process.env.SPEC_P2P_FPS ?? 10),
+  maxVideoBitrate: Number(process.env.SPEC_P2P_BITRATE ?? 700_000),
+  label: "540p",
+};
+
 /** Política de quem pode abrir uma transmissão de uma partida. */
 export type SpecBroadcasterPolicy =
   | "ANY_TOURNAMENT_PARTICIPANT"

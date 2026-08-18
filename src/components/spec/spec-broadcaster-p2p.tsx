@@ -50,7 +50,21 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
     peersRef.current.get(viewerId)?.close();
 
     const pc = new RTCPeerConnection({ iceServers: SPEC_ICE_SERVERS });
-    for (const track of stream.getTracks()) pc.addTransceiver(track, { direction: "sendonly" });
+    for (const track of stream.getTracks()) {
+      const transceiver = pc.addTransceiver(track, { direction: "sendonly" });
+      // Preferir VP8: bem mais barato de codificar que VP9/AV1 (padrão do Chrome
+      // para screen share). Crucial para aguentar vários espectadores no mesh.
+      if (track.kind === "video") {
+        try {
+          const caps = RTCRtpSender.getCapabilities("video");
+          if (caps) {
+            const vp8 = caps.codecs.filter((c) => c.mimeType.toLowerCase() === "video/vp8");
+            const rest = caps.codecs.filter((c) => c.mimeType.toLowerCase() !== "video/vp8");
+            if (vp8.length) transceiver.setCodecPreferences([...vp8, ...rest]);
+          }
+        } catch { /* nem todo navegador suporta */ }
+      }
+    }
 
     const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
     if (videoSender) {
