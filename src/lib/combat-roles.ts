@@ -16,6 +16,13 @@ export const COMBAT_ROLE_VALUES = [
 
 export type CombatRole = typeof COMBAT_ROLE_VALUES[number];
 
+// Posturas consideradas "suporte" em todo o jogo: Provocador, Encorajador e
+// Cuidador. Usadas, por exemplo, nas reduções do Sabotador.
+export const SUPPORT_ROLES: CombatRole[] = ["PROVOKER", "ENCOURAGER", "HEALER"];
+export function isSupportRole(role: string): boolean {
+  return (SUPPORT_ROLES as string[]).includes(role);
+}
+
 export const COMBAT_ROLE_LABELS: Record<CombatRole, string> = {
   DEFENDER: "Defensor",
   ATTACKER: "Atacante",

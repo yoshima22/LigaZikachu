@@ -16,7 +16,7 @@ const KIND_STYLE: Record<EffectKind, { emoji: string; cls: string }> = {
 
 // Ordem importa: a primeira regra que casar define a categoria da frase.
 const RULES: Array<{ kind: EffectKind; re: RegExp }> = [
-  { kind: "personality", re: /personalidade|instinto confuso|último ato|dramático .*(sobreviv|hp)|volatilidade/i },
+  { kind: "personality", re: /personalidade|instinto confuso|último ato|dramático .*(sobreviv|hp)|volatilidade|leal .*(protege|defende)/i },
   { kind: "debuff",      re: /travessura|reduziu|resistência aplicada|sabotador|bloqueou|debuff|menos \d/i },
   { kind: "protection",  re: /guardião|absorveu|protegeu|sobrevivente|desviou|preparou defesa|interceptou|resistiu ao golpe/i },
   { kind: "buff",        re: /encorajador|batedor|curou|cuidador|impulso|precisão|ação extra|agilidade: ação|\+\d+%/i },

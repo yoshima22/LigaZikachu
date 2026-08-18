@@ -3,7 +3,7 @@ import { DEFAULT_ARENA_DAILY_ZC_LIMIT, getActiveArenaDailyZcLimit } from "@/lib/
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
-import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, isSupportRole, type CombatRole } from "@/lib/combat-roles";
 import { personalityOffenseMult, personalityDefenseMult, debuffResistanceFactor, personalityAgilityMult, rollPlayfulTeamBuff, rollTravessoDebuff } from "@/lib/personality-combat";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
@@ -371,7 +371,7 @@ function chooseRoleTarget(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<
   if (actor.combatRole === "OPPORTUNIST") return [...opponents].sort((a, b) => a.instinct - b.instinct)[0] ?? pick(opponents);
   if (actor.combatRole === "DUELIST") return [...opponents].sort((a, b) => b.force - a.force)[0] ?? pick(opponents);
   if (actor.combatRole === "SABOTEUR") {
-    const encouragers = opponents.filter(m => m.combatRole === "ENCOURAGER" || m.combatRole === "HEALER");
+    const encouragers = opponents.filter(m => isSupportRole(m.combatRole));
     if (encouragers.length > 0) return pick(encouragers);
   }
   if (actor.combatRole === "PROVOKER") return [...opponents].sort((a, b) => b.force - a.force)[0] ?? pick(opponents);
@@ -423,7 +423,7 @@ function trySaboteurDisrupt(actor: ArenaMascot, opponents: ArenaMascot[], hp: Ma
   if (actor.combatRole !== "SABOTEUR") return null;
   const chance = Math.min(0.55, 0.18 + (actor.instinct + actor.agility) / 400);
   if (Math.random() > chance) return null;
-  const encouragers = opponents.filter(m => (m.combatRole === "ENCOURAGER" || m.combatRole === "HEALER") && (hp.get(m.id) ?? 0) > 0);
+  const encouragers = opponents.filter(m => isSupportRole(m.combatRole) && (hp.get(m.id) ?? 0) > 0);
   if (encouragers.length === 0) return `Sabotador ${actor.name} interferiu no ritmo inimigo.`;
   const target = pick(encouragers);
   return `Sabotador ${actor.name} bloqueou efeitos de suporte de ${target.name} neste turno.`;
@@ -502,6 +502,13 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
   const dramaticSaveUsed = new Set<string>();
   const travessoFirstHit = new Set<string>();
   const playfulTeamBuff: Record<"A" | "D", boolean> = { A: rollPlayfulTeamBuff(attackers), D: rollPlayfulTeamBuff(defenders) };
+  // Leal: escolhe um aliado para proteger (maior Carisma do time, exceto ele).
+  const loyalAlly = new Map<string, ArenaMascot>();
+  for (const team of [attackers, defenders]) for (const m of team) {
+    if (m.personality !== "LOYAL") continue;
+    const mate = team.filter(x => x.id !== m.id).sort((x, y) => y.charisma - x.charisma)[0];
+    if (mate) loyalAlly.set(m.id, mate);
+  }
   let turn = 1;
   let round = 1;
   let guard: { team: "A" | "D"; reduction: number } | null = null;
@@ -591,8 +598,16 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
 
       const persOff = personalityOffenseMult(actor, target, hp, hitTaken);
       const persDef = personalityDefenseMult(target, hp, hitTaken);
+      // Leal: +5% enquanto o aliado protegido estiver vivo e abaixo de 35% de HP.
+      const loyalMate = loyalAlly.get(actor.id);
+      let loyalMult = 1; let loyalNote: string | null = null;
+      if (loyalMate) {
+        const mateHp = hp.get(loyalMate.id) ?? 0;
+        if (mateHp > 0 && mateHp / loyalMate.hp < 0.35) { loyalMult = 1.05; loyalNote = `🤝 Leal ${actor.name} defende ${loyalMate.name} em perigo (+5%).`; }
+        else loyalNote = `🤝 Leal ${actor.name} protege ${loyalMate.name}.`;
+      }
       const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12))
-        * (1 + encourage + scoutBonus) * roleDamageMultiplier(actor, target) * duelistBonus * survivorDmgBonus * persOff;
+        * (1 + encourage + scoutBonus) * roleDamageMultiplier(actor, target) * duelistBonus * survivorDmgBonus * persOff * loyalMult;
       const mitigation = vitality * 0.8 + target.level;
       const guarded = guard && guard.team !== entry.side ? guard.reduction : 0;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * (1 - guarded) * survivorDefBonus * persDef));
@@ -640,6 +655,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador ativo: +${Math.round(encourage * 100)}% impulso.` : null,
         scoutBonus > 0 ? `Batedor ativo: +${Math.round(scoutBonus * 100)}% precisão.` : null,
+        loyalNote,
         debuffEffect,
         travessoEffect,
         dramaticEffect,

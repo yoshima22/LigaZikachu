@@ -1,7 +1,7 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
 import { PERSONALITY_AFFINITY, DEBUFF_RESISTANCE } from "./personality-design";
-import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, type CombatRole } from "./combat-roles";
+import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, isSupportRole, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 
@@ -376,6 +376,13 @@ export function runLeagueCombat(
   // Brincalhão: ao entrar, 12% de chance de dar +5% de Agilidade ao time por 2 rounds.
   const playfulRoll = (team: LeagueMascot[]) => team.filter(m => m.personality === "PLAYFUL").some(() => Math.random() < 0.12);
   const playfulTeamBuff: Record<"A" | "B", boolean> = { A: playfulRoll(a), B: playfulRoll(b) };
+  // Leal: escolhe um aliado para proteger (maior Carisma do time, exceto ele).
+  const loyalAlly = new Map<string, LeagueMascot>();
+  for (const team of [a, b]) for (const m of team) {
+    if (m.personality !== "LOYAL") continue;
+    const mate = team.filter(x => x.id !== m.id).sort((x, y) => y.charisma - x.charisma)[0];
+    if (mate) loyalAlly.set(m.id, mate);
+  }
   let round = 1;
   let actionNum = 1;
   let totalDmgA = 0;
@@ -461,7 +468,8 @@ export function runLeagueCombat(
           if (wounded.length > 0) {
             wounded.sort((x, y) => (hp.get(x.id) ?? 0) - (hp.get(y.id) ?? 0));
             const target = wounded[0];
-            const heal = getHealerHealAmount(actor);
+            const healSupp = saboteurSuppression(opponents, hp);
+            const heal = Math.max(1, Math.round(getHealerHealAmount(actor) * (1 - healSupp)));
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({
@@ -494,7 +502,7 @@ export function runLeagueCombat(
       let provoked = false;
       if (provokers.length > 0) {
         const p = provokers[0];
-        const chance = Math.min(0.55, 0.2 + p.charisma / 300 + p.instinct / 400);
+        const chance = Math.min(0.55, 0.2 + p.charisma / 300 + p.instinct / 400) * (1 - saboteurSuppression(allies, hp));
         if (Math.random() < chance) { target = p; provoked = true; }
       }
 
@@ -538,8 +546,17 @@ export function runLeagueCombat(
       const roleMult = roleDamageMult(actor, target);
       const persOff = personalityOffenseMult(actor, target, hp, hitTaken);
       const persDef = personalityDefenseMult(target, hp, hitTaken);
+      // Leal: enquanto o aliado protegido estiver vivo e abaixo de 35% de HP,
+      // recebe +5%. Sempre mostra claramente quem é o aliado no replay.
+      const loyalMate = loyalAlly.get(actor.id);
+      let loyalMult = 1; let loyalNote: string | null = null;
+      if (loyalMate) {
+        const mateHp = hp.get(loyalMate.id) ?? 0;
+        if (mateHp > 0 && mateHp / loyalMate.hp < 0.35) { loyalMult = 1.05; loyalNote = `🤝 Leal ${actor.name} defende ${loyalMate.name} em perigo (+5%).`; }
+        else loyalNote = `🤝 Leal ${actor.name} protege ${loyalMate.name}.`;
+      }
       const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12))
-        * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff;
+        * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
       if (chaosCritical) damage = Math.max(1, Math.round(damage * 1.5));
@@ -624,6 +641,7 @@ export function runLeagueCombat(
         debuffEffect, guardianEffect, survivorEffect, dramaticEffect, travessoEffect,
         provoked ? `Provocador desviou o ataque!` : null,
         chaosCritical ? "Instinto Confuso: acerto crítico de +50% de dano!" : null,
+        loyalNote,
         persOff !== 1 && actor.personality ? `Personalidade ${PERSONALITY_LABEL[actor.personality] ?? actor.personality}: ${persOff > 1 ? "+" : ""}${Math.round((persOff - 1) * 100)}% de dano.` : null,
         persDef !== 1 && target.personality ? `Personalidade ${PERSONALITY_LABEL[target.personality] ?? target.personality}: ${Math.round((persDef - 1) * 100)}% de dano recebido.` : null,
       ].filter(Boolean).join(" ") || undefined;
@@ -688,7 +706,7 @@ function selectTarget(actor: LeagueMascot, opponents: LeagueMascot[], hp: Map<st
   if (actor.combatRole === "OPPORTUNIST")
     return [...opponents].sort((a, b) => a.instinct - b.instinct)[0] ?? pick(opponents);
   if (actor.combatRole === "SABOTEUR") {
-    const supp = opponents.filter(m => ["ENCOURAGER", "HEALER"].includes(m.combatRole));
+    const supp = opponents.filter(m => isSupportRole(m.combatRole));
     if (supp.length > 0) return pick(supp);
   }
   return pick(opponents);
@@ -716,14 +734,20 @@ function roleDamageMult(actor: LeagueMascot, target: LeagueMascot) {
   return mult;
 }
 
+// Supressão do Sabotador: reduz a eficácia dos SUPORTES inimigos (Provocador,
+// Encorajador e Cuidador). Escala com Instinto + Agilidade do melhor sabotador.
+function saboteurSuppression(opponents: LeagueMascot[], hp: Map<string, number>) {
+  const saboteurs = opponents.filter(m => m.combatRole === "SABOTEUR" && (hp.get(m.id) ?? 0) > 0);
+  if (saboteurs.length === 0) return 0;
+  const best = saboteurs.sort((a, b) => (b.instinct + b.agility) - (a.instinct + a.agility))[0];
+  return Math.min(0.40, 0.15 + (best.instinct + best.agility) / 800);
+}
+
 function aliveEncourageBonus(team: LeagueMascot[], hp: Map<string, number>, opponents: LeagueMascot[]) {
   const enc = team.filter(m => m.combatRole === "ENCOURAGER" && (hp.get(m.id) ?? 0) > 0);
   if (enc.length === 0) return 0;
   const charisma = enc.reduce((s, m) => s + m.charisma, 0);
-  const saboteurs = opponents.filter(m => m.combatRole === "SABOTEUR" && (hp.get(m.id) ?? 0) > 0);
-  const bestSaboteur = saboteurs.sort((a, b) => (b.instinct + b.agility) - (a.instinct + a.agility))[0];
-  const suppression = bestSaboteur ? Math.min(0.40, 0.15 + (bestSaboteur.instinct + bestSaboteur.agility) / 800) : 0;
-  return Math.min(0.18, 0.04 + charisma / 650) * (1 - suppression);
+  return Math.min(0.18, 0.04 + charisma / 650) * (1 - saboteurSuppression(opponents, hp));
 }
 
 function aliveScoutBonus(team: LeagueMascot[], hp: Map<string, number>) {

@@ -546,6 +546,12 @@ export default async function ManualPage() {
             aplicação renova a duração; modificadores de atributos diferentes podem coexistir. Cada modificador guarda origem, fonte,
             alvo, atributos usados, valor base, resistência, valor final, duração e regra de acúmulo.
           </Note>
+          <Note>
+            <strong>Suportes:</strong> em todos os combates, consideram-se suportes o <strong>Provocador</strong>, o
+            <strong> Encorajador</strong> e o <strong>Cuidador</strong>. O <strong>Sabotador</strong> prioriza esses suportes e
+            reduz a eficácia deles (menos impulso do Encorajador, menos cura do Cuidador e menor chance de redirecionamento do
+            Provocador), conforme seu Instinto + Agilidade.
+          </Note>
           <Table
             headers={["Postura (fonte)", "Atributos principais do efeito"]}
             rows={Object.entries(ROLE_EFFECT_ATTRIBUTES).map(([role, attrs]) => [COMBAT_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role, attrs])}
