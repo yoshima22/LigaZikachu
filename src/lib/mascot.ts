@@ -931,7 +931,8 @@ export async function interactWithMascot(
   switch (type) {
     case "PLAY": {
       const playHappy = 8 + lvlBonus * 2 + (mascot.personality === "PLAYFUL" ? 3 : 0);
-      const playExpBase = EXP_REWARDS.PLAY_WITH + lvlBonus * 3;
+      // Competitivo: +10% de EXP ao brincar (humor competitivo é ativado noutro sistema).
+      const playExpBase = (EXP_REWARDS.PLAY_WITH + lvlBonus * 3) * (mascot.personality === "COMPETITIVE" ? 1.10 : 1);
       expGained = calcFinalExp(playExpBase);
       happinessChange = playHappy;
       newMood = mascot.personality === "LAZY" ? "TIRED" : "HAPPY";
@@ -941,21 +942,29 @@ export async function interactWithMascot(
       break;
     }
     case "PET": {
-      if (mascot.personality === "TIMID" && mascot.happiness < 40) {
+      // Tímido: recusa carinho abaixo de 30 de felicidade (antes 40).
+      if (mascot.personality === "TIMID" && mascot.happiness < 30) {
         refused = true;
         message = `${mascotName} é muito tímido e está com a felicidade baixa (${mascot.happiness}/100) — recusou o carinho.`;
         break;
       }
-      if (mascot.mood === "ANGRY") {
+      // Sereno pode acalmar a raiva com carinho; as demais precisam esperar passar.
+      if (mascot.mood === "ANGRY" && mascot.personality !== "SERENE") {
         refused = true;
         message = `${mascotName} está com raiva agora. Espere a raiva passar antes de tentar o carinho!`;
         break;
       }
-      const petHappy = 5 + lvlBonus + (mascot.personality === "LOYAL" ? 2 : 0);
+      // Leal +2; Tímido +3 quando já confia (felicidade ≥ 60).
+      const petHappy = 5 + lvlBonus
+        + (mascot.personality === "LOYAL" ? 2 : 0)
+        + (mascot.personality === "TIMID" && mascot.happiness >= 60 ? 3 : 0);
       const petExpBase = EXP_REWARDS.PET + lvlBonus;
       expGained = calcFinalExp(petExpBase);
       happinessChange = petHappy;
+      // Sereno: o carinho remove Irritado (raiva) e Cansado.
+      const serenePacify = mascot.personality === "SERENE" && (mascot.mood === "ANGRY" || mascot.mood === "TIRED");
       newMood = mascot.happiness + petHappy >= 80 ? "HAPPY" :
+                serenePacify ? "NEUTRAL" :
                 mascot.mood === "TIRED" ? "NEUTRAL" :
                 mascot.mood === "NEEDY" ? "NEUTRAL" : undefined;
       message = mascot.personality === "PROUD"
@@ -974,8 +983,11 @@ export async function interactWithMascot(
       }
       const food = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "FOOD" } }, select: { quantity: true } });
       inventoryRemaining = food?.quantity ?? 0;
-      happinessChange = 25;
-      expGained = calcFinalExp(EXP_REWARDS.FEED_FOOD);
+      // Preguiçoso e Guloso: comida gera +50% de felicidade.
+      happinessChange = Math.round(25 * ((mascot.personality === "LAZY" || mascot.personality === "GLUTTON") ? 1.5 : 1));
+      // Leal +10% de EXP ao alimentar; Guloso +15% (comida e doces).
+      const foodExpMult = mascot.personality === "GLUTTON" ? 1.15 : mascot.personality === "LOYAL" ? 1.10 : 1;
+      expGained = calcFinalExp(EXP_REWARDS.FEED_FOOD * foodExpMult);
       newMood = "HAPPY";
       message = `${mascotName} comeu e está satisfeito! (+${expGained} EXP)`;
       break;
@@ -991,8 +1003,10 @@ export async function interactWithMascot(
       }
       const sweet = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "SWEET" } }, select: { quantity: true } });
       inventoryRemaining = sweet?.quantity ?? 0;
-      happinessChange = 35;
-      expGained = calcFinalExp(EXP_REWARDS.FEED_SWEET);
+      happinessChange = Math.round(35 * (mascot.personality === "GLUTTON" ? 1.5 : 1));
+      // Guloso: comida e doces dão +15% de EXP. (O +3% de Vitalidade temporária do
+      // doce é um buff de combate — entra na fase de combate.)
+      expGained = calcFinalExp(EXP_REWARDS.FEED_SWEET * (mascot.personality === "GLUTTON" ? 1.15 : 1));
       newMood = "EXCITED";
       message = `${mascotName} amou o doce! Olha aquela energia! (+${expGained} EXP)`;
       break;
@@ -1001,6 +1015,11 @@ export async function interactWithMascot(
 
   if (refused) {
     return { success: false, message, happinessChange: 0, expGained: 0, refused: true };
+  }
+
+  // Dramático: mudanças de felicidade (positivas ou negativas) são 20% maiores.
+  if (mascot.personality === "DRAMATIC" && happinessChange !== 0) {
+    happinessChange = Math.round(happinessChange * 1.2);
   }
 
   const newHappiness = Math.min(100, Math.max(0, mascot.happiness + happinessChange + picnicHappyBonus));
