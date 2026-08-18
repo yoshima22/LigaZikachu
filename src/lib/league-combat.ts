@@ -72,7 +72,9 @@ function debuffResistanceFactor(source: LeagueMascot, target: LeagueMascot) {
   const resist = target.instinct * DEBUFF_RESISTANCE.targetInstinctWeight + target.vitality * DEBUFF_RESISTANCE.targetVitalityWeight;
   const ratio = power / (power + Math.max(1, resist)); // 0..1 (0,5 ≈ neutro)
   const factor = DEBUFF_RESISTANCE.minEffect + (DEBUFF_RESISTANCE.maxEffect - DEBUFF_RESISTANCE.minEffect) * ratio;
-  return Math.max(DEBUFF_RESISTANCE.minEffect, Math.min(DEBUFF_RESISTANCE.maxEffect, factor));
+  const clamped = Math.max(DEBUFF_RESISTANCE.minEffect, Math.min(DEBUFF_RESISTANCE.maxEffect, factor));
+  // Guloso reduz a intensidade de controle recebido (provocar/debuffs longos).
+  return clamped * (target.personality === "GLUTTON" ? 0.6 : 1);
 }
 
 // Multiplicador ofensivo por personalidade do atacante (depende de HP atual e
@@ -87,6 +89,7 @@ function personalityOffenseMult(actor: LeagueMascot, target: LeagueMascot, hp: M
     case "CURIOUS":     return statTotal(target) >= statTotal(actor) ? 1.05 : 1;          // foco na maior ameaça
     case "TIMID":       return hitTaken.has(actor.id) ? 1.05 : 1;                         // +Instinto após o 1º golpe
     case "CHAOTIC":     return 0.92 + Math.random() * 0.20;                               // volatilidade -8% a +12%
+    case "GLUTTON":     return 0.96;                                                       // -4% de dano direto (resiste a controle)
     default:            return 1;
   }
 }

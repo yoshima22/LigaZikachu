@@ -651,3 +651,54 @@ export async function getStoredAnalysisAction(
   revalidateTag(`player-mascots-${me.id}`);
   return { ok: true as const, analysis };
 }
+
+// ── Re-roll caótico de status (Laboratório, disponível até 26/08/2026) ─────────
+// Só mascotes CAÓTICOS que nunca usaram. Redistribui o TOTAL atual de status pela
+// regra de crescimento caótico nível a nível (sem inflar), preservando o total.
+const CHAOTIC_REROLL_CUTOFF = new Date("2026-08-27T00:00:00-03:00"); // fim de 26/08 BRT
+
+export async function getChaoticRerollStateAction() {
+  const me = await requirePlayer();
+  const open = Date.now() < CHAOTIC_REROLL_CUTOFF.getTime();
+  const candidates = open ? await prisma.mascot.findMany({
+    where: { playerId: me.id, personality: "CHAOTIC", chaoticRerollUsedAt: null, arenaState: "FREE", bazarListed: false },
+    orderBy: [{ level: "desc" }, { nickname: "asc" }],
+    select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
+  }) : [];
+  return {
+    open,
+    closesAt: CHAOTIC_REROLL_CUTOFF.toISOString(),
+    candidates: candidates.map((m) => ({
+      id: m.id, pokemonId: m.pokemonId, name: m.nickname ?? getPokemonName(m.pokemonId), level: m.level,
+      total: m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality,
+    })),
+  };
+}
+
+export async function chaoticStatRerollAction(mascotId: string) {
+  const me = await requirePlayer();
+  if (Date.now() >= CHAOTIC_REROLL_CUTOFF.getTime()) return { ok: false as const, error: "O re-roll caótico foi encerrado (disponível até 26/08/2026)." };
+
+  const mascot = await prisma.mascot.findUnique({
+    where: { id: mascotId, playerId: me.id },
+    select: { id: true, pokemonId: true, personality: true, level: true, chaoticRerollUsedAt: true, arenaState: true, bazarListed: true, operationsLocked: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
+  });
+  if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
+  if (mascot.personality !== "CHAOTIC") return { ok: false as const, error: "Só mascotes de personalidade Caótica podem fazer o re-roll." };
+  if (mascot.chaoticRerollUsedAt) return { ok: false as const, error: "Este mascote já usou o re-roll caótico (uso único)." };
+  if (mascot.arenaState && mascot.arenaState !== "FREE") return { ok: false as const, error: "O mascote está em batalha ou descansando." };
+  if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes do re-roll." };
+
+  const before = { statForce: mascot.statForce, statAgility: mascot.statAgility, statCharisma: mascot.statCharisma, statInstinct: mascot.statInstinct, statVitality: mascot.statVitality };
+  const currentTotal = before.statForce + before.statAgility + before.statCharisma + before.statInstinct + before.statVitality;
+
+  const { computeChaoticRerollProgression } = await import("@/lib/mascot");
+  const { progression, final } = computeChaoticRerollProgression(mascot.pokemonId, mascot.level, currentTotal);
+
+  await prisma.mascot.update({
+    where: { id: mascot.id },
+    data: { ...final, chaoticRerollUsedAt: new Date() },
+  });
+  revalidateTag(`player-mascots-${me.id}`);
+  return { ok: true as const, before, final, progression };
+}

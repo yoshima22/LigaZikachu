@@ -2361,6 +2361,7 @@ model Mascot {
   restingUntil              DateTime? // repouso pós-SUS (RESTING) ou cooldown arena (FREE)
   // A primeira análise de IV/potencial custa 100 ZC; simulações seguintes são gratuitas.
   analyzedAt                DateTime? // última vez que foi analisado no Lab
+  chaoticRerollUsedAt       DateTime? // re-roll caótico de status no Lab (uso único)
   ivScore                   Int? // 0-100 (potencial futuro)
   ivRating                  String? // SSS, SS, S, A, B, C, D ou E
   analysisJson              Json? // snapshot completo da última análise

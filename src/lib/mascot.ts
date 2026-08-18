@@ -528,6 +528,54 @@ export function computeProceduralStats(
   };
 }
 
+export type StatSnapshot = { level: number } & Record<MascotStatKey, number>;
+
+/**
+ * Re-roll caótico do Laboratório: simula o crescimento CAÓTICO (concentração)
+ * de nível 1 até `targetLevel`, capturando o estado a cada nível para animação, e
+ * então ESCALA o resultado para preservar o TOTAL de status atual do mascote —
+ * evitando qualquer "super turbinada" (redistribui, não infla). Base 8–14.
+ */
+export function computeChaoticRerollProgression(
+  pokemonId: number,
+  targetLevel: number,
+  currentTotal: number,
+): { progression: StatSnapshot[]; final: Record<MascotStatKey, number> } {
+  const level = Math.max(1, Math.min(100, targetLevel));
+  const cur: Record<MascotStatKey, number> & { pokemonId: number; level: number; personality: MascotPersonality } = {
+    pokemonId, level: 1, personality: "CHAOTIC",
+    statForce: randomInt(8, 14), statAgility: randomInt(8, 14), statCharisma: randomInt(8, 14),
+    statInstinct: randomInt(8, 14), statVitality: randomInt(8, 14),
+  };
+  const snap = (): StatSnapshot => ({ level: cur.level, statForce: cur.statForce, statAgility: cur.statAgility, statCharisma: cur.statCharisma, statInstinct: cur.statInstinct, statVitality: cur.statVitality });
+  const progression: StatSnapshot[] = [snap()];
+  for (let lvl = 1; lvl < level; lvl++) {
+    const bonuses = levelStatBonuses({ ...cur, level: lvl }, 1);
+    cur.level = lvl + 1;
+    (Object.keys(bonuses) as MascotStatKey[]).forEach((k) => { cur[k] += bonuses[k]; });
+    progression.push(snap());
+  }
+
+  // Escala para preservar o total investido (sem inflar nem reduzir o total).
+  const simTotal = cur.statForce + cur.statAgility + cur.statCharisma + cur.statInstinct + cur.statVitality;
+  const scale = simTotal > 0 ? currentTotal / simTotal : 1;
+  const scaleSnap = (s: StatSnapshot): StatSnapshot => ({
+    level: s.level,
+    statForce: Math.max(1, Math.round(s.statForce * scale)),
+    statAgility: Math.max(1, Math.round(s.statAgility * scale)),
+    statCharisma: Math.max(1, Math.round(s.statCharisma * scale)),
+    statInstinct: Math.max(1, Math.round(s.statInstinct * scale)),
+    statVitality: Math.max(1, Math.round(s.statVitality * scale)),
+  });
+  const scaled = progression.map(scaleSnap);
+  const finalSnap = scaled[scaled.length - 1];
+  const final: Record<MascotStatKey, number> = {
+    statForce: finalSnap.statForce, statAgility: finalSnap.statAgility, statCharisma: finalSnap.statCharisma,
+    statInstinct: finalSnap.statInstinct, statVitality: finalSnap.statVitality,
+  };
+  return { progression: scaled, final };
+}
+
 export async function addExp(
   mascotId: string,
   amount: number,

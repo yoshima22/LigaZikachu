@@ -6,6 +6,7 @@ import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, t
 import type { MascotRarity } from "../rarity";
 import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
+import { ChaoticRerollPanel } from "./chaotic-reroll-panel";
 import { PERFORMANCE_META, normalizePerformanceTag } from "@/lib/mascot-performance";
 
 type LabMascot = {
@@ -245,6 +246,11 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
           <span className="text-base font-bold text-[#FFCB05]">{dust}</span>
           <span className="text-xs text-slate-400">Pó de Criação</span>
         </div>
+      </div>
+
+      {/* Re-roll caótico (tempo limitado) */}
+      <div className="mb-5">
+        <ChaoticRerollPanel />
       </div>
 
       {/* Guide sections */}
