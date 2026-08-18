@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Candy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search, Utensils } from "lucide-react";
 import { toast } from "sonner";
-import { getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
+import { getHungerStatus, getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
+import { mascotOriginIcon, HUNGER_ICON_URL } from "@/lib/mascot-origin-icons";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
 import {
@@ -317,6 +318,8 @@ function BankRow({
 
   const name = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
   const types = mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId);
+  const originIcon = mascotOriginIcon(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin);
+  const hungry = ["HUNGRY", "STARVING"].includes(getHungerStatus(mascot.lastFedAt, false));
   const rarity = getMascotRarity(mascot.pokemonId);
   const chips = getOccupationChips(mascot);
 
@@ -348,6 +351,14 @@ function BankRow({
             <span className="min-w-0 flex-1 space-y-0.5">
               <span className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
+                {originIcon && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={originIcon.url} alt={originIcon.label} title={`Origem: ${originIcon.label}`} className="h-4 w-4 shrink-0 object-contain" />
+                )}
+                {hungry && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={HUNGER_ICON_URL} alt="Com fome" title="Este mascote está com fome" className="h-4 w-4 shrink-0 object-contain" />
+                )}
                 <span className="shrink-0 font-mono text-[9px] text-slate-500" title={`Código único: #${shortMascotCode(mascot.id)}`}>#{shortMascotCode(mascot.id)}</span>
                 {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}
                 {mascot.ivRating && (

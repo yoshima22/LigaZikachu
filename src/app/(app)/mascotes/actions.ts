@@ -1805,6 +1805,9 @@ export async function getBankMascotsPageAction(input?: {
       bazarListed: boolean;
       injuredAt: Date | null;
       restingUntil: Date | null;
+      hatchedFromEggType: string | null;
+      hatchedFromEggOrigin: string | null;
+      lastFedAt: Date | null;
       lastInteractedAt: Date | null;
       lastPlayedAt: Date | null;
       lastPettedAt: Date | null;
@@ -1945,6 +1948,7 @@ export async function getBankMascotsPageAction(input?: {
           speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
           staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
           arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
+          hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true,
           lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
           ivRating: true, ivScore: true, performanceTag: true,
           statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,

@@ -24,6 +24,9 @@ export type BankMascot = {
   bazarListed: boolean;
   injuredAt: Date | null;
   restingUntil: Date | null;
+  hatchedFromEggType: string | null;
+  hatchedFromEggOrigin: string | null;
+  lastFedAt: Date | null;
   expeditions: { id: string; finishAt: Date; status: string }[];
   buffs: { id: string }[];
   lastInteractedAt: Date | null;

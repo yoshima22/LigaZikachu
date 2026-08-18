@@ -12,6 +12,7 @@ import {
   HUNGER_COLOR, HAPPINESS_COLOR, CHALLENGE_COLOR,
 } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
+import { mascotOriginIcon } from "@/lib/mascot-origin-icons";
 import {
   interactAction, equipMascotAction, unequipMascotAction,
   renameMascotAction, startExpeditionAction, claimExpeditionAction,
@@ -578,6 +579,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     permanentItems.push({ key: "MEGA_STONE", emoji: "💎", label: mascot.megaStoneName, quantity: 1 });
   }
   const hatchedEggLabel = getHatchedEggLabel(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin);
+  const originIcon = mascotOriginIcon(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin);
   const expedition = expeditions.find(e => e.status === "ACTIVE");
   // useTimerExpiry: atualiza automaticamente quando a expedição termina
   const expeditionExpiry = useTimerExpiry(expedition?.finishAt ?? null);
@@ -1120,8 +1122,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               </div>
             )}
             {hatchedEggLabel && (
-              <div className="text-[9px] text-slate-600" title={`Nasceu de ${hatchedEggLabel}`}>
-                🥚 Nasceu de {hatchedEggLabel}
+              <div className="flex items-center gap-1 text-[9px] text-slate-600" title={`Nasceu de ${hatchedEggLabel}`}>
+                {originIcon
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={originIcon.url} alt={originIcon.label} className="h-3.5 w-3.5 shrink-0 object-contain" />
+                  : <span>🥚</span>}
+                Nasceu de {hatchedEggLabel}
               </div>
             )}
 
