@@ -4,17 +4,18 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAppSession } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
-import { SPEC_SETTINGS_KEY, type SpecResolution } from "@/lib/spec/constants";
+import { SPEC_SETTINGS_KEY, type SpecResolution, type SpecMode } from "@/lib/spec/constants";
 import { getSpecConfig } from "@/lib/spec/config";
 import { endSpecStreamAction } from "./actions";
 
 // Persiste o objeto de config completo (preservando os campos não alterados).
-async function saveSpecConfig(patch: { enabled?: boolean; resolution?: SpecResolution }) {
+async function saveSpecConfig(patch: { enabled?: boolean; resolution?: SpecResolution; mode?: SpecMode }) {
   const current = await getSpecConfig();
   const value = {
     enabled: patch.enabled ?? current.enabled,
     broadcasterPolicy: current.broadcasterPolicy,
     resolution: patch.resolution ?? current.resolution,
+    mode: patch.mode ?? current.mode,
   };
   await prisma.appSetting.upsert({
     where: { key: SPEC_SETTINGS_KEY },
@@ -39,6 +40,15 @@ export async function setSpecResolutionAction(resolution: SpecResolution): Promi
   if (!session?.user || !isStaff(session.user.role)) return { ok: false, error: "Acesso restrito." };
   if (resolution !== "720" && resolution !== "1080") return { ok: false, error: "Resolução inválida." };
   await saveSpecConfig({ resolution });
+  return { ok: true };
+}
+
+// Define o modo de transmissão ativo (Cloudflare SFU ou P2P mesh econômico).
+export async function setSpecModeAction(mode: SpecMode): Promise<{ ok: boolean; error?: string }> {
+  const session = await getAppSession();
+  if (!session?.user || !isStaff(session.user.role)) return { ok: false, error: "Acesso restrito." };
+  if (mode !== "cloudflare-realtime" && mode !== "p2p-mesh") return { ok: false, error: "Modo inválido." };
+  await saveSpecConfig({ mode });
   return { ok: true };
 }
 

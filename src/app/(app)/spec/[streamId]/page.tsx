@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { SpecPlayer } from "@/components/spec/spec-player";
+import { SpecPlayerP2P } from "@/components/spec/spec-player-p2p";
 import { SpecStands } from "@/components/spec/spec-stands";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
   const config = await getSpecConfig();
   const stream = config.enabled ? await prisma.specStream.findUnique({
     where: { id: streamId },
-    select: { id: true, matchId: true, tournamentId: true, broadcasterUserId: true, status: true, startedAt: true },
+    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true, startedAt: true },
   }).catch(() => null) : null;
 
   if (!config.enabled || !stream) {
@@ -47,7 +48,9 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
 
       {isLive ? (
         <>
-          <SpecPlayer streamId={stream.id} />
+          {config.mode === "p2p-mesh"
+            ? <SpecPlayerP2P streamId={stream.id} broadcasterUserId={stream.broadcasterUserId} />
+            : <SpecPlayer streamId={stream.id} />}
           <SpecStands streamId={stream.id} sendPresence />
         </>
       ) : (

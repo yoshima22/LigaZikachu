@@ -2,10 +2,10 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { setSpecEnabledAction, setSpecResolutionAction } from "@/app/(app)/spec/admin-actions";
-import type { SpecResolution } from "@/lib/spec/constants";
+import { setSpecEnabledAction, setSpecResolutionAction, setSpecModeAction } from "@/app/(app)/spec/admin-actions";
+import type { SpecResolution, SpecMode } from "@/lib/spec/constants";
 
-export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLimit, resolution }: { enabled: boolean; providerConfigured: boolean; estimatedGb?: number; gbLimit?: number; resolution: SpecResolution }) {
+export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLimit, resolution, mode }: { enabled: boolean; providerConfigured: boolean; estimatedGb?: number; gbLimit?: number; resolution: SpecResolution; mode: SpecMode }) {
   const [pending, start] = useTransition();
   const toggle = () => start(async () => {
     const res = await setSpecEnabledAction(!enabled);
@@ -16,6 +16,11 @@ export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLi
     const res = await setSpecResolutionAction(value);
     if (!res.ok) toast.error(res.error ?? "Falha ao salvar.");
     else toast.success(`Transmissões em ${value}p.`);
+  });
+  const setMode = (value: SpecMode) => start(async () => {
+    const res = await setSpecModeAction(value);
+    if (!res.ok) toast.error(res.error ?? "Falha ao salvar.");
+    else toast.success(value === "p2p-mesh" ? "Modo P2P econômico ativado." : "Modo Cloudflare ativado.");
   });
   return (
     <div className="rounded-xl border border-purple-500/30 bg-purple-950/10 p-3">
@@ -35,6 +40,22 @@ export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLi
           className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${enabled ? "bg-[#FFCB05]" : "bg-slate-600"}`}>
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${enabled ? "left-[22px]" : "left-0.5"}`} />
         </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-purple-500/20 pt-3">
+        <span className="text-[11px] font-bold text-purple-200">Modo de transmissão:</span>
+        {([["cloudflare-realtime", "Cloudflare (plateia grande)"], ["p2p-mesh", "P2P econômico"]] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setMode(value)}
+            disabled={pending || mode === value}
+            className={`rounded-lg border px-3 py-1 text-[11px] font-black transition-colors disabled:opacity-100 ${mode === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-300 hover:border-slate-500"}`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="w-full text-[10px] text-slate-500">P2P: vídeo direto entre navegadores (egress zero), ideal para poucas dezenas de pessoas. Cloudflare: usa o SFU (1TB grátis/mês), melhor para plateias grandes.</span>
       </div>
 
       <div className="mt-3 flex items-center gap-2 border-t border-purple-500/20 pt-3">

@@ -3829,8 +3829,9 @@ enum SpecStreamStatus {
 
 model SpecStream {
   id                 String           @id @default(cuid())
-  matchId            String
-  tournamentId       String
+  matchId            String?          // nulo em lives avulsas (fora de partida)
+  tournamentId       String?          // nulo em lives avulsas
+  title              String?          // título livre das lives avulsas
   broadcasterUserId  String
   status             SpecStreamStatus @default(PREPARING)
   provider           String           @default("stub")
@@ -3847,6 +3848,23 @@ model SpecStream {
   @@index([tournamentId, status])
   @@index([matchId])
   @@map("spec_streams")
+}
+
+// Sinalização WebRTC ponto-a-ponto (modo P2P mesh). Só o aperto de mão
+// (SDP/ICE) passa por aqui; a mídia vai direto entre navegadores. Linhas são
+// efêmeras (limpas ao encerrar a live).
+model SpecSignal {
+  id         String   @id @default(cuid())
+  seq        Int      @default(autoincrement())
+  streamId   String
+  fromUserId String
+  toUserId   String
+  kind       String   // JOIN | OFFER | ANSWER | BYE
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([streamId, toUserId, seq])
+  @@map("spec_signals")
 }
 
 // Presença na "Arquibancada": quem está assistindo uma transmissão agora.

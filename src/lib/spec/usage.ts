@@ -63,7 +63,7 @@ export async function recordSpectatorWatchAndCheck(seconds: number): Promise<{ o
 
   if (estimateGb(watchSeconds, await currentBitrateBps()) >= SPEC_MONTHLY_GB_LIMIT) {
     const config = await getSpecConfig();
-    const disabled = { enabled: false, broadcasterPolicy: config.broadcasterPolicy, resolution: config.resolution };
+    const disabled = { enabled: false, broadcasterPolicy: config.broadcasterPolicy, resolution: config.resolution, mode: config.mode };
     await prisma.appSetting.upsert({
       where: { key: SPEC_SETTINGS_KEY },
       create: { key: SPEC_SETTINGS_KEY, value: disabled },

@@ -41,6 +41,10 @@ export const SPEC_MONTHLY_GB_LIMIT = Number(process.env.SPEC_MONTHLY_GB_LIMIT ??
 /** Bitrate total considerado no cálculo de egress (Mbps): vídeo + áudio. */
 export const SPEC_TOTAL_MBPS = (SPEC_VIDEO_MAX_BITRATE + SPEC_AUDIO_TARGET_BITRATE) / 1_000_000;
 
+/** Modo de transmissão ativo (selecionável pelo admin). */
+export type SpecMode = "cloudflare-realtime" | "p2p-mesh";
+export const SPEC_DEFAULT_MODE: SpecMode = SPEC_PROVIDER === "cloudflare-realtime" ? "cloudflare-realtime" : "cloudflare-realtime";
+
 /** Resolução da transmissão, definida pelo admin ao ativar o Modo SPEC. */
 export type SpecResolution = "720" | "1080";
 

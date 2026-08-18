@@ -8,6 +8,8 @@ import { getSpecConfig } from "@/lib/spec/config";
 import { canStartSpecStream, canManageSpecStream, getMatchTournamentId } from "@/lib/spec/authorization";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
 import { SPEC_MAX_STREAM_MINUTES, SPEC_MAX_CONCURRENT_STREAMS } from "@/lib/spec/constants";
+import { enrichSpecStreams } from "@/lib/spec/data";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 type ActionError = { error: string };
 
@@ -31,7 +33,7 @@ export async function listActiveSpecStreamsAction() {
   const streams = await prisma.specStream.findMany({
     where: { status: "LIVE" },
     orderBy: { startedAt: "desc" },
-    select: { id: true, matchId: true, tournamentId: true, broadcasterUserId: true, startedAt: true },
+    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, startedAt: true },
   }).catch(() => []);
   return { streams };
 }
@@ -132,6 +134,66 @@ export async function startSpecStreamAction(matchId: string): Promise<ActionErro
   }
 }
 
+/**
+ * Cria uma transmissão AVULSA (fora de partida/torneio). Apenas staff. Retorna o
+ * id para o broadcaster seguir com a captura de tela.
+ */
+export async function startStandaloneSpecStreamAction(title: string): Promise<ActionError | { streamId: string }> {
+  const config = await getSpecConfig();
+  if (!config.enabled) return { error: "O Modo SPEC está desativado." };
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado." };
+  if (!isStaff(session.user.role)) return { error: "Apenas a equipe pode abrir transmissões avulsas." };
+  const clean = title.trim().slice(0, 80);
+  if (clean.length < 3) return { error: "Dê um título com pelo menos 3 caracteres." };
+
+  await expireStaleStreams();
+  const liveCount = await prisma.specStream.count({ where: { status: "LIVE" } }).catch(() => 0);
+  if (liveCount >= SPEC_MAX_CONCURRENT_STREAMS) {
+    return { error: `Limite de ${SPEC_MAX_CONCURRENT_STREAMS} transmissões ao vivo simultâneas atingido. Tente novamente mais tarde.` };
+  }
+
+  const created = await prisma.specStream.create({
+    data: { title: clean, broadcasterUserId: session.user.id, status: "PREPARING", provider: config.mode },
+    select: { id: true },
+  });
+  revalidatePath("/spec");
+  return { streamId: created.id };
+}
+
+/**
+ * Marca a live como LIVE no modo P2P mesh (não há SDP no servidor). Apenas o dono.
+ * Anuncia no ticker, como o publish da Cloudflare.
+ */
+export async function markSpecStreamLiveAction(streamId: string): Promise<ActionError | { ok: true }> {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado." };
+  const stream = await prisma.specStream.findUnique({
+    where: { id: streamId },
+    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true },
+  });
+  if (!stream) return { error: "Transmissão não encontrada." };
+  if (stream.broadcasterUserId !== session.user.id) return { error: "Apenas o dono pode iniciar esta transmissão." };
+  if (stream.status !== "PREPARING" && stream.status !== "LIVE") return { error: "Esta transmissão não está disponível." };
+
+  await prisma.specStream.update({ where: { id: streamId }, data: { status: "LIVE", startedAt: new Date(), lastSeenAt: new Date() } });
+  try {
+    const [view] = await enrichSpecStreams([stream]);
+    if (view) {
+      await publishLeagueTicker({
+        type: "spec_live",
+        message: `📺 Tá pegando fogo, bicho! ${view.matchLabel} acabou de entrar AO VIVO na Zika TV. Corre pra arquibancada!`,
+        href: `/spec/${stream.id}`,
+        eventKey: `spec-live-${stream.id}`,
+        priority: 5,
+        ttlHours: 3,
+      });
+    }
+  } catch (e) { console.error("[spec] falha ao anunciar no ticker (p2p)", e); }
+  revalidatePath("/spec");
+  return { ok: true };
+}
+
 /** Encerra uma transmissão (dono ou admin). */
 export async function endSpecStreamAction(streamId: string): Promise<ActionError | { ok: true }> {
   const session = await getAppSession();
@@ -154,6 +216,9 @@ export async function endSpecStreamAction(streamId: string): Promise<ActionError
     });
   }
   await prisma.specStream.update({ where: { id: streamId }, data: { status: "ENDED", endedAt: new Date() } });
+  // Limpa sinais P2P e presença efêmeros desta live.
+  await prisma.specSignal.deleteMany({ where: { streamId } }).catch(() => null);
+  await prisma.specSpectator.deleteMany({ where: { streamId } }).catch(() => null);
   revalidatePath("/spec");
   return { ok: true };
 }

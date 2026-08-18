@@ -3,9 +3,11 @@ import {
   SPEC_SETTINGS_KEY,
   SPEC_DEFAULT_BROADCASTER_POLICY,
   SPEC_DEFAULT_RESOLUTION,
+  SPEC_DEFAULT_MODE,
   SPEC_PROVIDER,
   type SpecBroadcasterPolicy,
   type SpecResolution,
+  type SpecMode,
 } from "./constants";
 
 // Feature flag + política do Modo SPEC, guardada em AppSetting (mesmo padrão do
@@ -15,6 +17,7 @@ export type SpecConfig = {
   enabled: boolean;
   broadcasterPolicy: SpecBroadcasterPolicy;
   resolution: SpecResolution;
+  mode: SpecMode;
   providerConfigured: boolean;
 };
 
@@ -24,6 +27,10 @@ function isPolicy(value: unknown): value is SpecBroadcasterPolicy {
 
 function isResolution(value: unknown): value is SpecResolution {
   return value === "720" || value === "1080";
+}
+
+function isMode(value: unknown): value is SpecMode {
+  return value === "cloudflare-realtime" || value === "p2p-mesh";
 }
 
 /** Verdadeiro somente quando a Cloudflare Realtime estiver realmente configurada. */
@@ -42,6 +49,7 @@ export async function getSpecConfig(): Promise<SpecConfig> {
     enabled: value?.enabled === true,
     broadcasterPolicy: isPolicy(value?.broadcasterPolicy) ? value.broadcasterPolicy : SPEC_DEFAULT_BROADCASTER_POLICY,
     resolution: isResolution(value?.resolution) ? value.resolution : SPEC_DEFAULT_RESOLUTION,
+    mode: isMode(value?.mode) ? value.mode : SPEC_DEFAULT_MODE,
     providerConfigured: isSpecProviderConfigured(),
   };
 }

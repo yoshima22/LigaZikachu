@@ -15,15 +15,15 @@ export type SpecStreamView = {
 // As referências são texto simples no SpecStream (sem relação), então buscamos
 // os nomes em lote aqui.
 export async function enrichSpecStreams(
-  rows: Array<{ id: string; matchId: string; tournamentId: string; broadcasterUserId: string; startedAt?: Date | null }>,
+  rows: Array<{ id: string; matchId: string | null; tournamentId: string | null; title?: string | null; broadcasterUserId: string; startedAt?: Date | null }>,
 ): Promise<SpecStreamView[]> {
   if (rows.length === 0) return [];
-  const matchIds = [...new Set(rows.map((r) => r.matchId))];
-  const tournamentIds = [...new Set(rows.map((r) => r.tournamentId))];
+  const matchIds = [...new Set(rows.map((r) => r.matchId).filter((v): v is string => Boolean(v)))];
+  const tournamentIds = [...new Set(rows.map((r) => r.tournamentId).filter((v): v is string => Boolean(v)))];
   const userIds = [...new Set(rows.map((r) => r.broadcasterUserId))];
 
   const [matches, tournaments, users] = await Promise.all([
-    prisma.match.findMany({
+    matchIds.length ? prisma.match.findMany({
       where: { id: { in: matchIds } },
       select: {
         id: true,
@@ -31,8 +31,8 @@ export async function enrichSpecStreams(
         playerB: { select: { displayName: true } },
         tournamentWeek: { select: { label: true, weekNumber: true } },
       },
-    }),
-    prisma.tournament.findMany({ where: { id: { in: tournamentIds } }, select: { id: true, name: true, slug: true } }),
+    }) : [],
+    tournamentIds.length ? prisma.tournament.findMany({ where: { id: { in: tournamentIds } }, select: { id: true, name: true, slug: true } }) : [],
     prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
   ]);
 
@@ -45,17 +45,31 @@ export async function enrichSpecStreams(
   const userMap = new Map(users.map((u) => [u.id, u.name ?? "—"]));
 
   return rows.map((r) => {
+    // Live avulsa (sem partida): usa o título livre.
+    if (!r.matchId) {
+      const label = r.title?.trim() || "Transmissão avulsa";
+      return {
+        id: r.id,
+        matchLabel: label,
+        weekTitle: "Ao vivo",
+        title: label,
+        tournamentName: "Zika TV",
+        tournamentSlug: null,
+        broadcasterName: userMap.get(r.broadcasterUserId) ?? "—",
+        startedAt: r.startedAt ?? null,
+      };
+    }
     const m = matchMap.get(r.matchId);
     const matchLabel = m?.label ?? "Partida";
     const weekTitle = m?.weekTitle ?? "Rodada";
-    const tournamentName = tourMap.get(r.tournamentId)?.name ?? "Torneio";
+    const tournamentName = (r.tournamentId ? tourMap.get(r.tournamentId)?.name : null) ?? "Torneio";
     return {
       id: r.id,
       matchLabel,
       weekTitle,
       title: `${tournamentName} - ${weekTitle} - ${matchLabel}`,
       tournamentName,
-      tournamentSlug: tourMap.get(r.tournamentId)?.slug ?? null,
+      tournamentSlug: (r.tournamentId ? tourMap.get(r.tournamentId)?.slug : null) ?? null,
       broadcasterName: userMap.get(r.broadcasterUserId) ?? "—",
       startedAt: r.startedAt ?? null,
     };
