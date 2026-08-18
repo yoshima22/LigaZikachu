@@ -671,6 +671,7 @@ export async function getChaoticRerollStateAction() {
     candidates: candidates.map((m) => ({
       id: m.id, pokemonId: m.pokemonId, name: m.nickname ?? getPokemonName(m.pokemonId), level: m.level,
       total: m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality,
+      statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma, statInstinct: m.statInstinct, statVitality: m.statVitality,
     })),
   };
 }

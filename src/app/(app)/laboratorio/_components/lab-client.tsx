@@ -309,16 +309,16 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
       )}
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-6 flex flex-wrap gap-1.5">
         {(["recycle", "shop", "analyze", ...(rerollOpen ? ["caotico"] as const : [])] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
               tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : t === "caotico" ? "border border-purple-400/50 text-purple-200 hover:text-white" : "border border-border text-slate-400 hover:text-white"
             }`}
           >
-            {t === "recycle" ? <><FlaskConical size={15} /> Reciclar Mascotes</>
-              : t === "shop" ? <><ShoppingBag size={15} /> Loja de Pó de Criação</>
-              : t === "analyze" ? <><Microscope size={15} /> Análise de Mascote</>
+            {t === "recycle" ? <><FlaskConical size={13} /> Reciclar</>
+              : t === "shop" ? <><ShoppingBag size={13} /> Loja de Pó</>
+              : t === "analyze" ? <><Microscope size={13} /> Análise</>
               : <>🌀 Re-roll Caótico</>}
           </button>
         ))}

@@ -13,6 +13,7 @@ import { AdminCommunicationPanel } from "./_components/admin-communication-panel
 import { RunawayRevertPanel } from "./_components/runaway-revert-panel";
 import { GamemasterPanel } from "./_components/gamemaster-panel";
 import { TimedGameBonusPanel } from "./_components/timed-game-bonus-panel";
+import { CombatTestPanel } from "./_components/combat-test-panel";
 import {
   AlertTriangle,
   BarChart3,
@@ -279,6 +280,7 @@ export default async function AdminPage() {
         <p className="mb-3 text-xs text-slate-500">Teste a roleta de presentes de aniversário (apenas simulação — nada é entregue).</p>
         <BirthdayRouletteDebug />
       </div>
+      <CombatTestPanel />
       <MascotSocialPanel />
       <AdminExpeditionPanel />
       <AdminMascotPanel />

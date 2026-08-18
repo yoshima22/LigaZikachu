@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { getStaticSpriteUrl, shortMascotCode } from "@/lib/mascot-data";
 import { getChaoticRerollStateAction, chaoticStatRerollAction } from "../actions";
 
-type Candidate = { id: string; pokemonId: number; name: string; level: number; total: number };
+type Candidate = { id: string; pokemonId: number; name: string; level: number; total: number } & Stats;
 type Stats = { statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number };
 type Snapshot = { level: number } & Stats;
 type Result = { id: string; name: string; pokemonId: number; before: Stats; final: Stats };
@@ -68,7 +68,12 @@ export function ChaoticRerollPanel() {
   const totalPages = Math.max(1, Math.ceil(state.candidates.length / PAGE));
   const pageItems = state.candidates.slice(page * PAGE, page * PAGE + PAGE);
   const selCand = state.candidates.find((c) => c.id === selected) ?? null;
-  const maxBar = display ? Math.max(display.statForce, display.statAgility, display.statCharisma, display.statInstinct, display.statVitality, 1) : 1;
+  // Antes de sortear, o card mostra os status ATUAIS do mascote; durante/depois,
+  // mostra o snapshot animado.
+  const shown: Snapshot | null = display ?? (selCand
+    ? { level: selCand.level, statForce: selCand.statForce, statAgility: selCand.statAgility, statCharisma: selCand.statCharisma, statInstinct: selCand.statInstinct, statVitality: selCand.statVitality }
+    : null);
+  const maxBar = shown ? Math.max(shown.statForce, shown.statAgility, shown.statCharisma, shown.statInstinct, shown.statVitality, 1) : 1;
 
   return (
     <div className="space-y-4">
@@ -113,24 +118,27 @@ export function ChaoticRerollPanel() {
       {selCand && (
         <div className="rounded-2xl border border-purple-500/30 bg-slate-950/60 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-bold text-slate-200">{selCand.name} <span className="font-mono text-[9px] text-slate-500">#{shortMascotCode(selCand.id)}</span> · {display ? `Nv.${display.level}` : `Nv.${selCand.level}`}</p>
-            <button onClick={() => run(selCand)} disabled={running} className="rounded-lg bg-purple-500 px-3 py-1.5 text-[11px] font-black text-white hover:bg-purple-400 disabled:opacity-50">
-              {running ? "Re-rolando…" : "🌀 Re-rolar"}
+            <p className="text-xs font-bold text-slate-200">{selCand.name} <span className="font-mono text-[9px] text-slate-500">#{shortMascotCode(selCand.id)}</span> · {shown ? `Nv.${shown.level}` : `Nv.${selCand.level}`}</p>
+            <button onClick={() => run(selCand)} disabled={running}
+              className="rounded-lg bg-purple-500 px-4 py-1.5 text-xs font-black text-white hover:bg-purple-400 disabled:opacity-50"
+              style={{ textShadow: "0 0 3px rgba(0,0,0,0.9), 0 1px 1px rgba(0,0,0,0.9)" }}>
+              {running ? "Sorteando…" : "🎲 Sortear"}
             </button>
           </div>
+          <p className="mt-1 text-[10px] text-purple-300">{selCand.total} pontos serão sorteados e redistribuídos (total preservado).</p>
           <div className="mt-2 space-y-1.5">
             {STATS.map((s) => {
-              const v = display ? (display[s.key] as number) : 0;
+              const v = shown ? (shown[s.key] as number) : 0;
               return (
                 <div key={s.key} className="flex items-center gap-2">
                   <span className="w-20 shrink-0 text-[10px] text-slate-400">{s.label}</span>
-                  <div className="h-3 flex-1 overflow-hidden rounded bg-slate-800"><div className={`h-full ${s.color} transition-all duration-75`} style={{ width: `${display ? Math.round((v / maxBar) * 100) : 0}%` }} /></div>
+                  <div className="h-3 flex-1 overflow-hidden rounded bg-slate-800"><div className={`h-full ${s.color} transition-all duration-75`} style={{ width: `${shown ? Math.round((v / maxBar) * 100) : 0}%` }} /></div>
                   <span className="w-9 shrink-0 text-right text-[11px] font-mono font-bold text-white">{v || "—"}</span>
                 </div>
               );
             })}
           </div>
-          <p className="mt-2 text-[10px] text-slate-500">{running ? "Simulando o crescimento caótico nível a nível…" : "Clique em Re-rolar para redistribuir os status (total preservado)."}</p>
+          <p className="mt-2 text-[10px] text-slate-500">{running ? "Simulando o crescimento caótico nível a nível…" : "Clique em Sortear para redistribuir os status."}</p>
         </div>
       )}
 
