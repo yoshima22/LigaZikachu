@@ -235,7 +235,7 @@ function MascotPick({
       </div>
 
       {!compact && (
-        <div className="px-2 pb-2 grid grid-cols-5 gap-0.5 text-center text-[9px]">
+        <div className="px-2 pb-2 grid grid-cols-5 gap-0.5 text-center text-[10px] sm:text-[9px]">
           {[
             { k: "For", v: m.statForce,    c: "text-red-400" },
             { k: "Vel", v: m.statAgility,  c: "text-yellow-400" },
@@ -303,7 +303,7 @@ function SelectedBar({
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-[11px] font-semibold text-slate-100">{displayName(m)}</p>
+                  <p className="truncate text-[13px] sm:text-[11px] font-semibold text-slate-100">{displayName(m)}</p>
                   <button type="button" onClick={() => onRemove(m.id)} className="rounded px-1 text-[10px] font-black text-slate-500 hover:bg-red-500/10 hover:text-red-300">x</button>
                 </div>
                 <p className="text-[9px] text-slate-500">
@@ -313,7 +313,7 @@ function SelectedBar({
                   <select
                     value={role}
                     onChange={(event) => onRoleChange(m.id, event.target.value as CombatRole)}
-                    className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 outline-none hover:border-[#FFCB05]/40"
+                    className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 sm:py-1 text-[12px] sm:text-[10px] font-semibold text-slate-200 outline-none hover:border-[#FFCB05]/40"
                     title="Postura deste mascote na equipe"
                   >
                     {COMBAT_ROLE_OPTIONS.map((option) => (
@@ -783,7 +783,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[10px] font-semibold text-slate-200">{displayName(m)}</p>
                       <p className="text-[9px] text-slate-500">Nv.{m.level} · Σ{totalStats(m)}</p>
-                      <div className="mt-1 grid grid-cols-5 gap-0.5 text-center text-[8px]">
+                      <div className="mt-1 grid grid-cols-5 gap-0.5 text-center text-[10px] sm:text-[8px]">
                         {[["FOR", m.statForce], ["AGI", m.statAgility], ["VIT", m.statVitality], ["INS", m.statInstinct], ["CAR", m.statCharisma]].map(([label, value]) => (
                           <span key={String(label)} className="rounded bg-slate-800/80 px-0.5 py-0.5 text-slate-400">
                             <b className="block text-[7px] text-slate-600">{label}</b>{value}

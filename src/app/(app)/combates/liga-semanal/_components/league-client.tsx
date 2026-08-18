@@ -850,28 +850,29 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           </div>
         </div>
 
-        {/* Slot grid (selected mascots) */}
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {/* Slot grid (selected mascots) — em telas pequenas usa 2 colunas largas
+            (mais espaço para status/postura); a partir de sm mantém 6 colunas. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           {Array.from({ length: 6 }, (_, i) => {
             const m = selectedMascots[i] as any;
             const currentRole = m ? (roles[m.id] ?? "ATTACKER") as CombatRole : null;
             const recRole = m ? recommendCombatRole(m as any) : null;
             return (
-              <div key={i} className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[120px] ${m ? "bg-[#FFCB05]/10 border-[#FFCB05]/30" : "border-dashed border-slate-700"}`}>
+              <div key={i} className={`relative rounded-xl border p-2 flex flex-col items-center gap-1 min-h-[128px] sm:min-h-[120px] ${m ? "bg-[#FFCB05]/10 border-[#FFCB05]/30" : "border-dashed border-slate-700"}`}>
                 <span className="absolute top-1 left-1.5 text-[10px] text-slate-500 font-mono font-bold">{i + 1}</span>
                 {m ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
-                    <p className="text-[10px] font-semibold text-slate-200 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
-                    <p className="text-[9px] text-slate-400">Nv.{m.level}</p>
+                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-14 w-14 sm:h-10 sm:w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <p className="text-xs sm:text-[10px] font-semibold text-slate-200 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                    <p className="text-[10px] sm:text-[9px] text-slate-400">Nv.{m.level}</p>
                     <div className="flex w-full items-center gap-1">
                       <select
                         value={currentRole ?? "ATTACKER"}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => setRoles(prev => ({ ...prev, [m.id]: e.target.value }))}
                         title={currentRole ? COMBAT_ROLE_DESCRIPTIONS[currentRole] : ""}
-                        className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[9px] font-semibold text-yellow-300 outline-none hover:border-yellow-500/50"
+                        className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-1.5 py-1 sm:py-0.5 text-[11px] sm:text-[9px] font-semibold text-yellow-300 outline-none hover:border-yellow-500/50"
                       >
                         {COMBAT_ROLE_OPTIONS.map(r => (
                           <option key={r.value} value={r.value} title={r.description}>
@@ -879,10 +880,10 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                           </option>
                         ))}
                       </select>
-                      <CombatRoleHelpButton role={currentRole} stats={m} teamStats={selectedMascots as any[]} mode="LEAGUE" className="h-5 w-5" />
+                      <CombatRoleHelpButton role={currentRole} stats={m} teamStats={selectedMascots as any[]} mode="LEAGUE" className="h-6 w-6 sm:h-5 sm:w-5" />
                     </div>
                     {recRole && currentRole !== recRole && (
-                      <p className="text-[8px] text-cyan-400">Sugerido: {getCombatRoleLabel(recRole)}</p>
+                      <p className="text-[10px] sm:text-[8px] text-cyan-400">Sugerido: {getCombatRoleLabel(recRole)}</p>
                     )}
                     <button onClick={() => toggleMascot(m.id)} className="absolute top-0.5 right-0.5 rounded-full p-1 text-slate-500 hover:text-red-400 text-xs">✕</button>
                   </>
@@ -1052,7 +1053,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
               </div>
             </div>
             {hasTeam && (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
                 {mascotIds.map((id: string, i: number) => {
                   const m = data.availableMascots.find((x: any) => x.id === id) as any;
                   if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
@@ -1075,13 +1076,13 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                     >
                       <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
-                      <p className="text-[8px] text-slate-300 truncate w-full text-center">{mascotName}</p>
-                      <p className="text-[8px] text-slate-500">Nv.{m.level}</p>
-                      <div className="flex gap-0.5">
-                        {types.map(t => <span key={t} className={`rounded-full px-1 py-px text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
+                      <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-12 w-12 sm:h-9 sm:w-9 object-contain" style={{ imageRendering: "pixelated" }} />
+                      <p className="text-[11px] sm:text-[8px] text-slate-300 truncate w-full text-center">{mascotName}</p>
+                      <p className="text-[10px] sm:text-[8px] text-slate-500">Nv.{m.level}</p>
+                      <div className="flex flex-wrap justify-center gap-0.5">
+                        {types.map(t => <span key={t} className={`rounded-full px-1.5 py-px text-[9px] sm:text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
                       </div>
-                      <p className={`text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
+                      <p className={`text-[11px] sm:text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
                     </button>
                   );
                 })}
