@@ -1,6 +1,6 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
-import { PERSONALITY_AFFINITY } from "./personality-design";
+import { PERSONALITY_AFFINITY, DEBUFF_RESISTANCE } from "./personality-design";
 import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
@@ -63,6 +63,17 @@ function alive(team: LeagueMascot[], hp: Map<string, number>) {
 }
 
 function statTotal(m: LeagueMascot) { return m.force + m.agility + m.instinct + m.vitality + m.charisma; }
+
+// Resistência de buff/debuff (design pág. 8): a força usa o Instinto da fonte; a
+// resistência do alvo usa 60% de Instinto + 40% de Vitalidade. O confronto ajusta
+// a intensidade do efeito entre 60% e 135% (reduz, não vira falha total).
+function debuffResistanceFactor(source: LeagueMascot, target: LeagueMascot) {
+  const power = Math.max(1, source.instinct);
+  const resist = target.instinct * DEBUFF_RESISTANCE.targetInstinctWeight + target.vitality * DEBUFF_RESISTANCE.targetVitalityWeight;
+  const ratio = power / (power + Math.max(1, resist)); // 0..1 (0,5 ≈ neutro)
+  const factor = DEBUFF_RESISTANCE.minEffect + (DEBUFF_RESISTANCE.maxEffect - DEBUFF_RESISTANCE.minEffect) * ratio;
+  return Math.max(DEBUFF_RESISTANCE.minEffect, Math.min(DEBUFF_RESISTANCE.maxEffect, factor));
+}
 
 // Multiplicador ofensivo por personalidade do atacante (depende de HP atual e
 // de estado com memória). O combate roda uma vez; o resultado fica no log.
@@ -359,6 +370,9 @@ export function runLeagueCombat(
   const hitTaken = new Set<string>();                 // mascote já sofreu o 1º golpe (Tímido)
   const dramaticSaveUsed = new Set<string>();          // Dramático já usou a sobrevivência (1x/batalha)
   const travessoFirstHit = new Set<string>();          // "actorId:targetId" já teve o 1º ataque (Travesso)
+  // Brincalhão: ao entrar, 12% de chance de dar +5% de Agilidade ao time por 2 rounds.
+  const playfulRoll = (team: LeagueMascot[]) => team.filter(m => m.personality === "PLAYFUL").some(() => Math.random() < 0.12);
+  const playfulTeamBuff: Record<"A" | "B", boolean> = { A: playfulRoll(a), B: playfulRoll(b) };
   let round = 1;
   let actionNum = 1;
   let totalDmgA = 0;
@@ -420,7 +434,12 @@ export function runLeagueCombat(
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
       const actor = entry.mascot;
       const enemyTeam = entry.side === "A" ? b : a;
-      const actionProfile = getCombatActionsPerRound(actor.agility, alive(enemyTeam, hp).map((m) => m.agility));
+      // Agilidade efetiva para as ações extras: Elétrico (mais no 1º round) e
+      // Brincalhão (buff de time nos 2 primeiros rounds).
+      let effAgility = actor.agility;
+      if (actor.personality === "ELECTRIC") effAgility *= round === 1 ? 1.12 : 1.05;
+      if (round <= 2 && playfulTeamBuff[entry.side]) effAgility *= 1.05;
+      const actionProfile = getCombatActionsPerRound(effAgility, alive(enemyTeam, hp).map((m) => m.agility));
 
       for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
       // Uma ação anterior do ciclo pode alterar o estado da luta. Nunca deixe
@@ -567,12 +586,12 @@ export function runLeagueCombat(
       if (actor.combatRole === "OPPORTUNIST") {
         const chance = Math.min(0.62, 0.22 + actor.instinct / 220);
         if (Math.random() < chance) {
-          const amount = Math.min(0.25, 0.08 + actor.instinct / 500);
+          const amount = Math.min(0.25, 0.08 + actor.instinct / 500) * debuffResistanceFactor(actor, target);
           const stats: Array<"force" | "agility" | "instinct" | "vitality"> = ["force", "agility", "instinct", "vitality"];
           const stat = stats[rand(0, 3)];
           const cur = debuffs.get(target.id) ?? {};
           debuffs.set(target.id, { ...cur, [stat]: Math.max(cur[stat] ?? 0, amount) });
-          debuffEffect = `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}%.`;
+          debuffEffect = `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% (resistência aplicada).`;
         }
       }
 
@@ -588,9 +607,10 @@ export function runLeagueCombat(
           const stat = (aff && (debuffable as readonly string[]).includes(aff))
             ? aff as typeof debuffable[number]
             : debuffable.reduce((best, s) => (target[s] > target[best] ? s : best), "force");
+          const amount = 0.08 * debuffResistanceFactor(actor, target);
           const cur = debuffs.get(target.id) ?? {};
-          debuffs.set(target.id, { ...cur, [stat]: Math.max(cur[stat] ?? 0, 0.08) });
-          travessoEffect = `Travessura de ${actor.name}: -8% de ${stat} de ${target.name}.`;
+          debuffs.set(target.id, { ...cur, [stat]: Math.max(cur[stat] ?? 0, amount) });
+          travessoEffect = `Travessura de ${actor.name}: -${Math.round(amount * 100)}% de ${stat} de ${target.name}.`;
         }
       }
 
