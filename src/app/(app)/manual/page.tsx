@@ -5,6 +5,7 @@ import { getManualContent } from "@/lib/manual-content";
 import { EditableText } from "./_components/EditableText";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
+import { PERSONALITY_DESIGN, STAT_LABEL, DEBUFF_RESISTANCE, ROLE_EFFECT_ATTRIBUTES } from "@/lib/personality-design";
 
 function Section({ id, title, emoji, children }: { id: string; title: string; emoji: string; children: React.ReactNode }) {
   return (
@@ -494,6 +495,68 @@ export default async function ManualPage() {
             ]}
           />
           <Note>Personalidade não muda a espécie nem garante vitória. Ela inclina crescimento, humor e eventos sociais. O melhor mascote ainda depende de atributos, postura, nível, itens, laços e modo de jogo.</Note>
+        </Sub>
+
+        {/* ── Reformulação: Personalidades com impacto real ─────────────────── */}
+        <Sub title="Reformulação: personalidades com impacto real (em implementação)">
+          <Note>
+            Estamos ativando por fases um sistema em que a personalidade muda decisões reais em interações, expedições e
+            combate — com vantagens, limitações e efeitos visuais claros. As <strong>afinidades</strong> e as <strong>3 novas
+            personalidades</strong> já entraram; os efeitos de combate/expedição/interação estão sendo ligados aos poucos.
+            Afinidades e atributos já existentes dos seus mascotes são preservados (nada é recalculado retroativamente).
+          </Note>
+        </Sub>
+
+        <Sub title="Afinidade de atributos por personalidade">
+          <Table
+            headers={["Personalidade", "Muito útil", "Útil"]}
+            rows={PERSONALITY_DESIGN.map((p) => [
+              p.label + (p.isNew ? " (nova)" : ""),
+              p.affinity.veryUseful ? STAT_LABEL[p.affinity.veryUseful] : "Sem preferência fixa",
+              p.affinity.useful ? STAT_LABEL[p.affinity.useful] : "Sem preferência fixa",
+            ])}
+          />
+          <Note>Ao receber um efeito que busca um atributo &quot;útil&quot; ou &quot;muito útil&quot; (crescimento, buffs, debuffs inteligentes), o jogo consulta esta afinidade — priorizando candidatos e evitando apagar o atributo central da personalidade. O Caótico é a exceção: não respeita preferência fixa.</Note>
+        </Sub>
+
+        <Sub title="Efeitos por personalidade">
+          <div className="space-y-2">
+            {PERSONALITY_DESIGN.map((p) => (
+              <div key={p.key} className="rounded-xl border border-border/60 bg-slate-900/40 p-3">
+                <p className="text-sm font-bold text-slate-100">
+                  {p.label}{p.isNew && <span className="ml-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300">Nova</span>}
+                </p>
+                <p className="mt-1 text-xs text-slate-300"><span className="font-semibold text-[#FFCB05]">Interações:</span> {p.interactions}</p>
+                <p className="mt-0.5 text-xs text-slate-300"><span className="font-semibold text-[#FFCB05]">Expedições:</span> {p.expeditions}</p>
+                <p className="mt-0.5 text-xs text-slate-300"><span className="font-semibold text-[#FFCB05]">Combate:</span> {p.combat}</p>
+                {p.limitation && <p className="mt-0.5 text-xs text-amber-300/90"><span className="font-semibold">Limitação:</span> {p.limitation}</p>}
+              </div>
+            ))}
+          </div>
+        </Sub>
+
+        <Sub title="Resistência de buff/debuff">
+          <Note>
+            A força de um debuff usa principalmente o <strong>Instinto</strong> de quem aplica. A resistência do alvo usa{" "}
+            {Math.round(DEBUFF_RESISTANCE.targetInstinctWeight * 100)}% de Instinto + {Math.round(DEBUFF_RESISTANCE.targetVitalityWeight * 100)}% de Vitalidade.
+            O confronto ajusta o efeito base entre {Math.round(DEBUFF_RESISTANCE.minEffect * 100)}% e {Math.round(DEBUFF_RESISTANCE.maxEffect * 100)}% —
+            resistência reduz a intensidade em vez de virar falha total. Efeitos iguais não somam: o mais forte prevalece e uma nova
+            aplicação renova a duração; modificadores de atributos diferentes podem coexistir. Cada modificador guarda origem, fonte,
+            alvo, atributos usados, valor base, resistência, valor final, duração e regra de acúmulo.
+          </Note>
+          <Table
+            headers={["Postura (fonte)", "Atributos principais do efeito"]}
+            rows={Object.entries(ROLE_EFFECT_ATTRIBUTES).map(([role, attrs]) => [COMBAT_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role, attrs])}
+          />
+        </Sub>
+
+        <Sub title="Ícones e leitura nos replays">
+          <p className="flex flex-wrap gap-2 text-xs">
+            {[["Buff", "bg-green-500/20 text-green-300 border-green-500/30"], ["Debuff", "bg-red-500/20 text-red-300 border-red-500/30"], ["Proteção", "bg-blue-500/20 text-blue-300 border-blue-500/30"], ["Personalidade", "bg-purple-500/20 text-purple-300 border-purple-500/30"], ["Item", "bg-yellow-400/20 text-yellow-300 border-yellow-400/30"]].map(([label, cls]) => (
+              <span key={label} className={`rounded-full border px-2 py-0.5 font-semibold ${cls}`}>{label}</span>
+            ))}
+          </p>
+          <Note>Ao tocar/passar o mouse num efeito, o replay mostra nome e origem, alvo (individual ou equipe), condição, duração restante, valor base, resistência aplicada, valor final, atributo responsável e regra de acúmulo. Assistir de novo nunca refaz sorteios: o resultado fica gravado no combate.</Note>
         </Sub>
       </Section>
 

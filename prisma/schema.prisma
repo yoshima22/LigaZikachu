@@ -2231,6 +2231,9 @@ enum MascotPersonality {
   ELECTRIC
   TIMID
   CHAOTIC
+  CURIOUS
+  GLUTTON
+  SERENE
 }
 
 enum ExpeditionStatus {

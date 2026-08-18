@@ -983,6 +983,9 @@ export const PERSONALITY_LABEL: Record<string, string> = {
   ELECTRIC:     "Elétrico",
   TIMID:        "Tímido",
   CHAOTIC:      "Caótico",
+  CURIOUS:      "Curioso",
+  GLUTTON:      "Guloso",
+  SERENE:       "Sereno",
 };
 
 export const MOOD_LABEL: Record<string, string> = {
@@ -2301,6 +2304,9 @@ export const PERSONALITY_DESCRIPTION: Record<string, string> = {
   ELECTRIC:    "Elétrico. Tem energia para brincar e expedições curtas, com menor chance de cansar.",
   TIMID:       "Tímido. Começa devagar no carinho, mas aprende a confiar e cria laços fortes.",
   CHAOTIC:     "Caótico. Pode gerar eventos raros e imprevisíveis, especialmente com Instinto alto.",
+  CURIOUS:     "Curioso. Investiga expedições e marca a maior ameaça do combate.",
+  GLUTTON:     "Guloso. Transforma alimentação em felicidade, EXP e proteção; sofre quando está com fome.",
+  SERENE:      "Sereno. Remove humores negativos e resiste a controle, causando um pouco menos de dano.",
 };
 
 // ── Balão de diálogo ──────────────────────────────────────────────────────────
@@ -2639,6 +2645,9 @@ export function generateMascotSpeech(params: MascotSpeechParams): string {
     CHAOTIC:     ["Tenho um plano. Ele muda a cada segundo. 🌀","A ordem é superestimada. 💥","Se der errado, pelo menos foi divertido. 😅","BOOOM! 💥"],
     LOYAL:       ["Eu fico do seu lado. 🤝","Se você chamar, eu venho. 💪","Time bom é time junto. 🫂","Sempre estarei do seu lado! 🤝"],
     PROUD:       ["Eu tenho uma reputação a manter. 👑","Minha pose não é por acaso. 😎","Orgulho também treina. 💪","Ninguém tem mais classe que eu! 👑"],
+    CURIOUS:     ["O que será que tem na próxima expedição? 🔎","Deixa eu investigar isso. 🧐","Adoro um mistério novo. ✨","Anotei tudo pra depois! 📓"],
+    GLUTTON:     ["Já deu hora do lanche? 🍗","Luto melhor de barriga cheia. 😋","Tem doce por aí? 🍬","Comida é minha estratégia. 🍽️"],
+    SERENE:      ["Tudo no seu tempo. 🍃","Respira fundo, vai dar certo. 😌","Calma também é força. 🧘","Sem pressa, sem estresse. 🌊"],
   };
   if (personalityLines[params.personality]) return pick(personalityLines[params.personality]);
 
